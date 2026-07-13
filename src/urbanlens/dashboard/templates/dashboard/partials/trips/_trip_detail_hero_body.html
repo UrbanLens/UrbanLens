@@ -1,0 +1,13 @@
+{% comment %}
+Hero body for trip_header_partial.html. Expects trip in context.
+{% endcomment %}
+<h1 class="ul-page-hero__title">{{ trip.name }}</h1>
+{% if trip.description %}
+<p class="ul-page-hero__subtitle">{{ trip.description }}</p>
+{% endif %}
+{% if trip.effective_start_date %}
+<div class="trip-detail-dates">
+    <i class="material-symbols-outlined">event</i>
+    {{ trip.effective_start_date|date:"M j, Y" }}{% if trip.effective_end_date %} - {{ trip.effective_end_date|date:"M j, Y" }}{% endif %}
+</div>
+{% endif %}

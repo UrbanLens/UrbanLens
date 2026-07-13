@@ -1,29 +1,19 @@
 {% extends 'dashboard/themes/base.html' %}
 
 {% block content %}
+{% url 'site_admin_home' as admin_home_url %}
+{% include "dashboard/partials/ui/_page_hero.html" with icon="bar_chart" title="Site Statistics" subtitle="Usage metrics and server health at a glance." back_url=admin_home_url back_label="Admin Home" %}
 <div class="site-admin-page page-content">
-    <div class="site-admin-header">
-        <div class="site-admin-breadcrumb">
-            <a href="{% url 'site_admin_home' %}" class="site-admin-breadcrumb__link">
-                <i class="material-symbols-outlined">arrow_back</i>
-                Admin Home
-            </a>
-        </div>
-        <h1 class="site-admin-title">
-            <i class="material-symbols-outlined">bar_chart</i>
-            Site Statistics
-        </h1>
-        <p class="site-admin-subtitle">Usage metrics and server health at a glance.</p>
-        <div style="display:flex;gap:.75rem;flex-wrap:wrap;align-items:center;margin-top:.5rem">
-            <span class="stats-timestamp">
-                <i class="material-icons" style="font-size:.9rem;vertical-align:-.1em">schedule</i>
-                {{ server_time|date:"N j, Y  g:i A" }} UTC
-            </span>
-            <span class="stats-refresh-badge" id="stats-refresh-badge">
-                <i class="material-icons" style="font-size:.85rem;vertical-align:-.1em">autorenew</i>
-                Auto-refreshes every 60s
-            </span>
-        </div>
+
+    <div class="api-limits-toolbar">
+        <span class="stats-timestamp">
+            <i class="material-icons" style="font-size:.9rem;vertical-align:-.1em">schedule</i>
+            {{ server_time|date:"N j, Y  g:i A" }} UTC
+        </span>
+        <span class="stats-refresh-badge" id="stats-refresh-badge">
+            <i class="material-icons" style="font-size:.85rem;vertical-align:-.1em">autorenew</i>
+            Auto-refreshes every 60s
+        </span>
     </div>
 
     {# -- KPI cards (HTMX, lazy + polling) ----------------------------------- #}

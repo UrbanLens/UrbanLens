@@ -284,7 +284,7 @@ class PinShareDetailView(LoginRequiredMixin, View):
         return render(
             request,
             "dashboard/pages/pin_share/detail.html",
-            {"share": share, "pin": share.pin, "bundled_shares": share.bundled_shares.all()},
+            {"share": share, "pin": share.pin, "bundled_shares": share.bundled_shares.all(), "show_map_footer": True},
         )
 
 

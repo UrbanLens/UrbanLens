@@ -164,3 +164,18 @@
     </div>
 
 </div>
+<script>
+(function () {
+    // Fallback for browsers without CSS field-sizing support (see .pan-note-textarea
+    // in _profile.scss). This whole panel is swapped via htmx on every note/trust/badge
+    // action, so the listener is attached fresh each time rather than once on page load.
+    document.querySelectorAll('#profile-annotation-inner .pan-note-textarea').forEach(function (el) {
+        var resize = function () {
+            el.style.height = 'auto';
+            el.style.height = el.scrollHeight + 'px';
+        };
+        resize();
+        el.addEventListener('input', resize);
+    });
+}());
+</script>

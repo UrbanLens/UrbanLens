@@ -37,6 +37,8 @@ Context:
             {% map_layers_panel "street,satellite" panel_id="photo-pin-confirm-layers" extra_class="map-layers-panel--inline" %}
         </div>
     </div>
+    {# Replaces Leaflet's on-map attribution control (attributionControl: false in photos.html). #}
+    <p class="form-hint" id="photo-pin-confirm-attribution" aria-live="polite"></p>
 
     <form class="photo-pin-confirm-form"
           hx-post="{% url 'memories.photos.action' image.pk 'create-pin' %}"

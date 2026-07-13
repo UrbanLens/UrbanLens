@@ -641,6 +641,7 @@
         </div>
       </div>
       <div class="dialog-footer">
+        <span class="cmc-attribution" id="cmc-attribution" aria-live="polite"></span>
         <button type="button" class="btn btn--ghost" id="comment-map-composer-cancel">Cancel</button>
         <button type="button" class="btn btn--primary" id="comment-map-composer-save">Attach map</button>
       </div>
@@ -853,7 +854,12 @@
 
             var mapEl = document.getElementById('comment-map-composer-map');
             if (!_composerMap) {
-                _composerMap = L.map(mapEl, { zoomControl: true });
+                // attributionControl: false - the required attribution text is
+                // rendered in the dialog-footer (#cmc-attribution) instead of
+                // floating over the map, matching the main map's page-footer
+                // attribution rather than an on-map overlay.
+                _composerMap = L.map(mapEl, { zoomControl: true, attributionControl: false });
+                var cmcAttributionEl = document.getElementById('cmc-attribution');
                 // Shared layers engine bound to the strip rendered by
                 // {% templatetag openblock %} map_layers_panel variant="strip" {% templatetag closeblock %} in this dialog.
                 _composerLayers = window.MapLayers.create(_composerMap, {
@@ -861,6 +867,9 @@
                     onStateChange: function (state) {
                         _composerLayerMode = state.base;
                         _composerShowBorders = state.borders;
+                    },
+                    onAttribution: function (text) {
+                        if (cmcAttributionEl) cmcAttributionEl.textContent = text;
                     },
                 });
                 _composerMarkupLayer = L.layerGroup().addTo(_composerMap);
@@ -1073,6 +1082,24 @@
             });
         });
 
+        // Wire the read-only viewer's Edit button: seeds the shared composer
+        // with this map's own snapshot (already embedded on the page via
+        // json_script - no extra request needed) and saves the result as a
+        // brand-new MarkupMap. The map being viewed is never mutated, so a
+        // shared/received map stays exactly as its owner left it.
+        document.addEventListener('click', function (e) {
+            var editBtn = e.target.closest('.comment-map-edit-btn');
+            if (!editBtn || !window._openCommentMapComposer) return;
+            var mapId = editBtn.dataset.mapId;
+            var script = document.getElementById('comment-map-data-' + mapId);
+            var data = null;
+            if (script) { try { data = JSON.parse(script.textContent); } catch (_) {} }
+            if (!data) { toastr.error("Couldn't load this map to edit."); return; }
+            var dlg = document.getElementById('comment-map-dialog-' + mapId);
+            if (dlg && dlg.open) dlg.close();
+            window._openCommentMapComposer({ existingData: data });
+        });
+
         // Wire chip buttons (event delegation - forms are dynamic via HTMX)
         document.addEventListener('click', function (e) {
             if (e.target.closest('.comment-map-chip-remove')) {
@@ -1245,13 +1272,19 @@
             el.style.height = Math.round(window.innerHeight * 0.6) + 'px';
             el.style.minHeight = '300px';
 
-            var viewMap = L.map(el);
+            // attributionControl: false - shown in the dialog's own toolbar
+            // (#comment-map-attribution-<id>) instead of floating over the map.
+            var viewMap = L.map(el, { attributionControl: false });
+            var viewAttributionEl = document.getElementById('comment-map-attribution-' + commentId);
             // The layer strip is server-rendered inside the dialog by the
             // shared _map_view_dialog.html partial ({% templatetag openblock %} map_layers_panel {% templatetag closeblock %}).
             var viewLayers = window.MapLayers.create(viewMap, {
                 root: dlg.querySelector('.map-layers-strip'),
                 defaultBase: data.layer_mode || 'street',
                 initialOverlays: data.show_borders ? ['borders'] : [],
+                onAttribution: function (text) {
+                    if (viewAttributionEl) viewAttributionEl.textContent = text;
+                },
             });
             _fitMapToMarkup(viewMap, data);
 

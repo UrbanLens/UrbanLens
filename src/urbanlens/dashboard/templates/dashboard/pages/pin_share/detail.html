@@ -114,11 +114,19 @@
   const lat = {{ pin.effective_latitude|default:'null' }};
   const lng = {{ pin.effective_longitude|default:'null' }};
   if (lat === null || lng === null) return;
-  const map = L.map('shared-pin-map').setView([lat, lng], 16);
+  const map = L.map('shared-pin-map', { attributionControl: false }).setView([lat, lng], 16);
   // Read by the shared top-right toolbar's screenshot tool (window._openMapToolbarScreenshot, themes/base.html).
   window.map = map;
   // Shared layers engine + panel - the exact same component as the main map.
-  window.MapLayers.create(map, { root: document.getElementById('shared-pin-map-layers') });
+  // Attribution renders in the page footer (show_map_footer=True) instead of
+  // an on-map overlay - attributionControl is disabled above.
+  window.MapLayers.create(map, {
+    root: document.getElementById('shared-pin-map-layers'),
+    onAttribution: function (text) {
+      const el = document.getElementById('page-footer-attribution-text');
+      if (el) el.textContent = text;
+    },
+  });
   L.marker([lat, lng]).addTo(map).bindPopup('{{ shared_name|escapejs }}').openPopup();
 })();
 </script>

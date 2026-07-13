@@ -4,17 +4,7 @@
 {% block page_title %}Lists - {{ site_title|default:"UrbanLens" }}{% endblock %}
 
 {% block content %}
-<section class="pin-lists-header">
-    <div class="pin-lists-header-inner">
-        <p class="pin-lists-eyebrow">Your collections</p>
-        <h1 class="pin-lists-title">Lists</h1>
-        <p class="pin-lists-subtitle">
-            Group pins into named collections - manual or "smart" ones that keep themselves
-            up to date. Turn a list into a trip or a markup map in one click.
-        </p>
-    </div>
-</section>
-
+{% include "dashboard/partials/ui/_page_hero.html" with icon="bookmarks" title="Lists" subtitle="Group pins into named collections - manual or \"smart\" ones that keep themselves up to date. Turn a list into a trip or a markup map in one click." %}
 <div class="pin-lists-page page-content">
     <div class="pin-lists-toolbar">
         <input type="search" id="pin-lists-search" class="pin-lists-search" placeholder="Search lists..."

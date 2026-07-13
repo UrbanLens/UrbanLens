@@ -489,6 +489,14 @@
     border-radius: 10px;
     overflow: hidden;
     position: relative;
+    // Leaflet's internal panes carry their own z-index (up to 700, for
+    // popups) that would otherwise escape this box - position:relative alone
+    // doesn't contain them, since it only creates a new stacking context when
+    // paired with a z-index. `isolation: isolate` forces that containment so
+    // the live thumbnail map can never paint over sibling UI floated outside
+    // it (e.g. the DM bubble's menu button/timestamp, or this card's own
+    // edit/bookmark buttons).
+    isolation: isolate;
 }
 
 .comment-map-thumb {
@@ -551,6 +559,17 @@
 // open the larger read-only viewer.
 .comment-map-preview--clickable {
     cursor: pointer;
+}
+
+// Replaces Leaflet's on-map attribution control (disabled via
+// attributionControl: false) - kept in the dialog's own toolbar instead of
+// floating over the map, same principle as the main map's page-footer
+// attribution. Text is filled in by MapLayers' onAttribution callback.
+.comment-map-attribution {
+    margin-left: auto;
+    font-size: .68rem;
+    color: var(--ul-grey-5);
+    white-space: nowrap;
 }
 
 // -- Comment map composer dialog -----------------------------------------------
@@ -658,6 +677,17 @@
     font-style: italic;
     white-space: nowrap;
     pointer-events: none;
+}
+
+// Replaces Leaflet's on-map attribution control in the composer (see
+// .comment-map-attribution for the read-only viewer's equivalent). Sits in
+// the dialog-footer, which is otherwise right-aligned - margin-right: auto
+// pins this to the opposite side from the Cancel/Attach buttons.
+.cmc-attribution {
+    margin-right: auto;
+    font-size: .68rem;
+    color: var(--ul-grey-5);
+    white-space: nowrap;
 }
 
 .map-layers-strip-btn,

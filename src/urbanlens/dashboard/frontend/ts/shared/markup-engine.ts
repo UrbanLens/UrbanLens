@@ -101,7 +101,13 @@ function renderShape(s: ShapeSpec, group: L.LayerGroup, zoom?: number): void {
     const strokeC = hasBorder ? bc! : color;
 
     function shapeOpts(): L.PathOptions {
-        return { color: strokeC, weight: hasBorder ? weight : 2, fillColor: color, fillOpacity: fillOp, opacity: borderOp };
+        // Non-interactive: these shapes are purely visual (no popup/tooltip is
+        // ever bound to them), and an interactive vector layer intercepts its
+        // own click events rather than letting them bubble to the surrounding
+        // .comment-map-preview container - which otherwise breaks "click
+        // anywhere on the preview to expand" whenever the click lands on a
+        // rendered shape instead of empty map background.
+        return { color: strokeC, weight: hasBorder ? weight : 2, fillColor: color, fillOpacity: fillOp, opacity: borderOp, interactive: false };
     }
 
     switch (s.type) {

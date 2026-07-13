@@ -17,6 +17,9 @@ Optional:
                           markup entirely (e.g. a status badge, a live-updating
                           title span, or a subtitle with a link); rendered with
                           the including template's full context
+  back_url              - if set, renders a back-link above the title (e.g. back
+                          to a section's home page)
+  back_label            - label for back_url; defaults to "Back"
   modifier              - extra BEM modifier class, e.g. "wide" for a wider hero
                           that doesn't need to bleed out of an ambient page padding
 
@@ -26,6 +29,12 @@ Usage:
 {% endcomment %}
 <section class="ul-page-hero{% if modifier %} ul-page-hero--{{ modifier }}{% endif %}">
     <div class="ul-page-hero__inner">
+        {% if back_url %}
+        <a href="{{ back_url }}" class="ul-page-hero__back">
+            <i class="material-symbols-outlined">arrow_back</i>
+            {{ back_label|default:"Back" }}
+        </a>
+        {% endif %}
         {% if body_template %}
         {% include body_template %}
         {% else %}

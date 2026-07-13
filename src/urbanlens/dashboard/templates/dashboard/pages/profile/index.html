@@ -661,7 +661,14 @@ function panToggleEdit(noteId) {
     var isEditing = !edit.hidden;
     body.hidden = !isEditing;
     edit.hidden = isEditing;
-    if (!isEditing) edit.querySelector('textarea').focus();
+    if (!isEditing) {
+        var textarea = edit.querySelector('textarea');
+        textarea.focus();
+        // scrollHeight reads 0 while the edit box was hidden, so the CSS
+        // field-sizing/JS-fallback resize on load couldn't size it correctly.
+        textarea.style.height = 'auto';
+        textarea.style.height = textarea.scrollHeight + 'px';
+    }
 }
 </script>
 {% endblock %}

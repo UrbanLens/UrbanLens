@@ -157,6 +157,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                     ("plywood", "Plywood", pin.plywood),
                     ("locked", "Locked", pin.locked),
                 ],
+                "show_map_footer": True,
             },
         )
 

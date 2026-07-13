@@ -201,6 +201,7 @@ class LocationWikiView(LoginRequiredMixin, View):
                     ("plywood", "Plywood", wiki.plywood),
                     ("locked", "Locked", wiki.locked),
                 ],
+                "show_map_footer": True,
             },
         )
 

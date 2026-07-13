@@ -135,7 +135,15 @@
         confirmMap = L.map(mapEl, { attributionControl: false }).setView([lat, lng], 15);
         // Shared layers engine + panel - the exact same component as the main map
         // (see {% templatetag openblock %} map_layers_panel {% templatetag closeblock %} in _photo_pin_confirm.html).
-        window.MapLayers.create(confirmMap, { root: document.getElementById('photo-pin-confirm-layers') });
+        // Attribution renders below the map (#photo-pin-confirm-attribution)
+        // instead of an on-map overlay - attributionControl is disabled above.
+        window.MapLayers.create(confirmMap, {
+            root: document.getElementById('photo-pin-confirm-layers'),
+            onAttribution: function (text) {
+                var el = document.getElementById('photo-pin-confirm-attribution');
+                if (el) el.textContent = text;
+            },
+        });
         var marker = L.marker([lat, lng], { draggable: true }).addTo(confirmMap);
         nearbyPinsLayer = L.layerGroup().addTo(confirmMap);
 

@@ -7,56 +7,6 @@
     padding-bottom: 3rem;
 }
 
-// -- Hero header (mirrors the Thanks page's .attr-hero gradient treatment) --
-.pin-lists-header {
-    padding: 2.5rem 1.25rem 2rem;
-    text-align: center;
-    background: linear-gradient(135deg, rgba(31, 111, 235, 0.20), rgba(23, 185, 120, 0.15));
-    color: var(--ul-grey-8);
-    margin: -1.5rem -1.25rem 1.75rem;
-
-    @include up($breakpoint-sm) {
-        padding: 3.5rem 1.5rem 2.75rem;
-        margin: -2rem -2rem 2rem;
-    }
-}
-
-.pin-lists-header-inner {
-    max-width: 640px;
-    margin: 0 auto;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: .6rem;
-}
-
-.pin-lists-eyebrow {
-    margin: 0;
-    font-size: .75rem;
-    font-weight: 700;
-    letter-spacing: .09em;
-    text-transform: uppercase;
-    color: var(--ul-grey-6);
-}
-
-.pin-lists-title {
-    margin: 0;
-    font-size: 1.9rem;
-    font-weight: 800;
-    color: var(--ul-grey-8);
-
-    @include up($breakpoint-sm) {
-        font-size: 2.4rem;
-    }
-}
-
-.pin-lists-subtitle {
-    margin: 0 0 .5rem;
-    color: var(--ul-grey-7);
-    font-size: .92rem;
-    max-width: 34rem;
-}
-
 // -- Toolbar ------------------------------------------------------------
 .pin-lists-toolbar {
     display: flex;
@@ -245,55 +195,6 @@
     }
 }
 
-.pin-list-detail-header {
-    margin-bottom: 1.5rem;
-}
-
-.pin-list-detail-header-top {
-    margin-bottom: .75rem;
-}
-
-.pin-list-back-link {
-    display: inline-flex;
-    align-items: center;
-    gap: .3rem;
-    color: var(--ul-grey-6);
-    text-decoration: none;
-    font-size: .85rem;
-
-    &:hover { color: $color-blue-500; }
-}
-
-.pin-list-detail-header-main {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-
-    @include up($breakpoint-sm) {
-        flex-direction: row;
-        align-items: flex-start;
-        justify-content: space-between;
-    }
-}
-
-.pin-list-detail-title {
-    display: flex;
-    align-items: center;
-    gap: .5rem;
-    flex-wrap: wrap;
-    margin: 0 0 .35rem;
-    font-size: 1.6rem;
-    font-weight: 800;
-    color: var(--ul-grey-8);
-}
-
-.pin-list-detail-description {
-    margin: 0 0 .35rem;
-    color: var(--ul-grey-6);
-    font-size: .9rem;
-    max-width: 40rem;
-}
-
 .pin-list-detail-count {
     margin: 0;
     color: var(--ul-grey-5);
@@ -303,8 +204,10 @@
 .pin-list-detail-actions {
     display: flex;
     flex-wrap: wrap;
+    justify-content: flex-end;
     gap: .5rem;
     align-items: center;
+    margin-bottom: 1.5rem;
 }
 
 .pin-list-trip-actions {

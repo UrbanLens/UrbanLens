@@ -1,20 +1,9 @@
 {% extends 'dashboard/themes/base.html' %}
 
 {% block content %}
+{% url 'site_admin_home' as admin_home_url %}
+{% include "dashboard/partials/ui/_page_hero.html" with icon="tune" title="Site Settings" subtitle="Configure site-wide behaviour, branding, and security." back_url=admin_home_url back_label="Admin Home" %}
 <div class="site-admin-page page-content">
-    <div class="site-admin-header">
-        <div class="site-admin-breadcrumb">
-            <a href="{% url 'site_admin_home' %}" class="site-admin-breadcrumb__link">
-                <i class="material-symbols-outlined">arrow_back</i>
-                Admin Home
-            </a>
-        </div>
-        <h1 class="site-admin-title">
-            <i class="material-symbols-outlined">tune</i>
-            Site Settings
-        </h1>
-        <p class="site-admin-subtitle">Configure site-wide behaviour, branding, and security.</p>
-    </div>
 
     {% if saved %}
     <div class="site-admin-notice site-admin-notice--success">

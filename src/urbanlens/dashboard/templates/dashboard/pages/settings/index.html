@@ -808,6 +808,8 @@
                 <label class="settings-label" title="Drag or zoom to adjust">Preview</label>
                 <div id="map-center-preview" style="height:300px;border-radius:8px;overflow:hidden;border:1px solid var(--color-border,#ddd)"></div>
                 <p class="settings-help" style="margin-top:4px">The zoom level you leave this map at will be used as your default zoom.</p>
+                {# Replaces Leaflet's on-map attribution control (attributionControl: false below). #}
+                <p class="form-hint" id="map-center-preview-attribution" aria-live="polite"></p>
             </div>
 
             <div class="settings-field">
@@ -1485,15 +1487,25 @@ function applyGuidancePreview(level) {
 
     // Initialise the preview Leaflet map. Tiles come from the shared
     // window.MapLayers factory so the preview always matches the real maps.
-    var previewMap = L.map('map-center-preview').setView([previewLat, previewLng], previewZoom);
+    var previewMap = L.map('map-center-preview', { attributionControl: false }).setView([previewLat, previewLng], previewZoom);
     window.__settingsPreviewMap = previewMap;
     var _previewTileLayer = window.MapLayers.tileLayer(_currentMapViewTile).addTo(previewMap);
+
+    // Replaces Leaflet's on-map attribution control (disabled above) - reads
+    // the attribution straight off the active tile layer's own options
+    // rather than duplicating each source's attribution string here.
+    function _updatePreviewAttribution() {
+        var el = document.getElementById('map-center-preview-attribution');
+        if (el) el.innerHTML = _previewTileLayer.options.attribution || '';
+    }
+    _updatePreviewAttribution();
 
     // Switch the preview tile layer when the user picks a different map view.
     document.querySelectorAll('input[name="default_map_view"]').forEach(function (radio) {
         radio.addEventListener('change', function () {
             previewMap.removeLayer(_previewTileLayer);
             _previewTileLayer = window.MapLayers.tileLayer(radio.value).addTo(previewMap);
+            _updatePreviewAttribution();
         });
     });
 

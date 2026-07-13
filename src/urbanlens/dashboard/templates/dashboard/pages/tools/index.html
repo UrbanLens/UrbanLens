@@ -239,8 +239,11 @@
             <div class="ul-card-body">
                 <p class="tools-card-desc">
                     Scan a folder of photos or videos on your device for geotagged locations.
-                    Nothing is uploaded while scanning - only the folder is read in your browser.
-                    When you're ready, upload the results to turn them into pin suggestions you can review.
+                    Nothing is uploaded while scanning - your files are only seen by your browser.
+                    When you're ready, upload any locations found to turn them into pins you can review.
+                    Your browser's folder picker may say &quot;Upload&quot; and warn about uploading files -
+                    that's standard browser wording for letting a site read local files, not something this
+                    tool controls. No files are sent anywhere until you click &quot;Upload results&quot; below.
                 </p>
 
                 <div
@@ -274,7 +277,7 @@
                     </div>
 
                     <ul class="photo-scan-results" id="photo-scan-results"></ul>
-                    <p class="photo-scan-empty" id="photo-scan-empty">No results yet.</p>
+                    <p class="photo-scan-empty" id="photo-scan-empty" hidden>No results yet.</p>
                 </div>
             </div>
         </div>
@@ -366,23 +369,6 @@
     max-width: 1000px;
     margin: 0 auto;
     padding: 2rem 1.5rem;
-}
-
-.tools-header {
-    margin-bottom: 2rem;
-}
-
-.tools-title {
-    font-size: 1.75rem;
-    font-weight: 700;
-    margin: 0 0 .35rem;
-    color: var(--ul-grey-9);
-}
-
-.tools-subtitle {
-    margin: 0;
-    color: var(--ul-grey-6);
-    font-size: .95rem;
 }
 
 .tools-grid {
@@ -798,6 +784,11 @@
     margin-bottom: 1rem;
 }
 
+/* .btn sets display:inline-flex, which otherwise overrides the HTML [hidden] attribute - be explicit */
+.photo-scan-controls .btn[hidden] {
+    display: none;
+}
+
 .photo-scan-progress {
     margin-bottom: 1rem;
 }
@@ -805,9 +796,22 @@
 .photo-scan-progress-label {
     display: flex;
     justify-content: space-between;
+    gap: .5rem;
     font-size: .82rem;
     color: var(--ul-grey-6);
     margin-bottom: .3rem;
+}
+
+#photo-scan-progress-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+#photo-scan-progress-count {
+    flex-shrink: 0;
+    white-space: nowrap;
 }
 
 .photo-scan-progress-track {

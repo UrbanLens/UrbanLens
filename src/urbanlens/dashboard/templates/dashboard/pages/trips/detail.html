@@ -624,13 +624,19 @@
     }
 
     function _initMap() {
-        _map = L.map('trip-map', {contextmenu: false});
+        _map = L.map('trip-map', {contextmenu: false, attributionControl: false});
         // Read by the shared top-right toolbar's screenshot tool (window._openMapToolbarScreenshot, themes/base.html).
         window.map = _map;
         // Shared layers engine + panel - the exact same component as the main
         // map (see {% templatetag openblock %} map_layers_panel {% templatetag closeblock %} in this page's map wrapper).
+        // Attribution renders in the page footer (show_map_footer=True) instead
+        // of an on-map overlay - attributionControl is disabled above.
         window.MapLayers.create(_map, {
             root: document.getElementById('trip-map-layers'),
+            onAttribution: function (text) {
+                var el = document.getElementById('page-footer-attribution-text');
+                if (el) el.textContent = text;
+            },
         });
         _markersGroup = L.layerGroup().addTo(_map);
 
@@ -1241,34 +1247,7 @@ function _initCalDragDrop(calEl) {
     });
 }
 
-// -- Status pill toggle helper --------------------------------------------
 // -- Trip dates: hidden until "Add dates" is clicked ----------------------
-// The edit-trip form's inputs are only ever populated from server-rendered
-// context at initial page load - if the trip's name/dates changed since then
-// via some other path (e.g. confirming an activity auto-expands the trip's
-// date range), reopening this dialog would silently show the stale pre-change
-// values. Resync from the header's data attributes (kept current by every
-// #trip-header swap) right before showing the dialog.
-function _tripOpenEditDialog() {
-    var header = document.getElementById('trip-header')?.querySelector('.trip-detail-header');
-    if (header) {
-        var nameInput = document.getElementById('edit-trip-name');
-        if (nameInput) nameInput.value = header.dataset.tripName || '';
-        var descInput = document.getElementById('edit-trip-description');
-        if (descInput) descInput.value = header.dataset.tripDescription || '';
-        var startInput = document.getElementById('edit-trip-start');
-        if (startInput) startInput.value = header.dataset.tripStartDate || '';
-        var endInput = document.getElementById('edit-trip-end');
-        if (endInput) endInput.value = header.dataset.tripEndDate || '';
-        var hasDates = !!(header.dataset.tripStartDate || header.dataset.tripEndDate);
-        var row = document.getElementById('edit-trip-dates-row');
-        var toggle = document.getElementById('edit-trip-dates-toggle');
-        if (row) row.hidden = !hasDates;
-        if (toggle) toggle.hidden = hasDates;
-    }
-    document.getElementById('edit-trip-dialog').showModal();
-}
-
 function _tripRevealDates(prefix) {
     var row = document.getElementById(prefix + '-dates-row');
     var toggle = document.getElementById(prefix + '-dates-toggle');

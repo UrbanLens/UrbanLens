@@ -12,61 +12,44 @@
 {% block page_title %}{{ pin_list.name }} - Lists - {{ site_title|default:"UrbanLens" }}{% endblock %}
 
 {% block content %}
+{% url 'lists.list' as lists_index_url %}
+{% include "dashboard/partials/ui/_page_hero.html" with body_template="dashboard/partials/pin_lists/_detail_hero_body.html" back_url=lists_index_url back_label="Lists" %}
 <div class="pin-lists-page page-content pin-list-detail-page">
 
-    <section class="pin-list-detail-header">
-        <div class="pin-list-detail-header-top">
-            <a href="{% url 'lists.list' %}" class="pin-list-back-link">
-                <i class="material-symbols-outlined">arrow_back</i> Lists
-            </a>
-        </div>
-        <div class="pin-list-detail-header-main">
-            <div>
-                <h1 class="pin-list-detail-title" id="pin-list-title-display">
-                    {{ pin_list.name }}
-                    {% if pin_list.is_smart %}<span class="pin-list-card-badge">Smart</span>{% endif %}
-                </h1>
-                {% if pin_list.description %}
-                <p class="pin-list-detail-description" id="pin-list-description-display">{{ pin_list.description }}</p>
-                {% endif %}
-                <p class="pin-list-detail-count">{{ pin_list.pin_count }} pin{{ pin_list.pin_count|pluralize }}</p>
-            </div>
-            <div class="pin-list-detail-actions">
-                <button type="button" class="btn btn--primary" onclick="document.getElementById('add-pins-dialog').showModal()">
-                    <i class="material-symbols-outlined">add_location_alt</i> Add Pins
+    <div class="pin-list-detail-actions">
+        <button type="button" class="btn btn--primary" onclick="document.getElementById('add-pins-dialog').showModal()">
+            <i class="material-symbols-outlined">add_location_alt</i> Add Pins
+        </button>
+        <button type="button" class="btn btn--secondary" onclick="pinListCreateMarkupMap()"
+                {% if not pin_list.pin_count and not pin_list.markup_map_id %}disabled title="Add pins to this list first"{% endif %}>
+            <i class="material-symbols-outlined">draw</i>
+            {% if pin_list.markup_map_id %}Edit Markup Map{% else %}Create Markup Map{% endif %}
+        </button>
+        <div class="pin-list-more-menu">
+            <button type="button" class="btn btn--icon pin-list-more-btn" id="pin-list-more-btn"
+                    aria-haspopup="true" aria-expanded="false" aria-label="More list actions" title="More actions"
+                    onclick="pinListToggleMoreMenu()">
+                <i class="material-symbols-outlined">more_vert</i>
+            </button>
+            <div class="pin-list-more-menu-panel" id="pin-list-more-menu-panel" hidden>
+                <button type="button" onclick="pinListCloseMoreMenu(); document.getElementById('edit-list-dialog').showModal()">
+                    <i class="material-symbols-outlined">edit</i> Edit list
                 </button>
-                <button type="button" class="btn btn--secondary" onclick="pinListCreateMarkupMap()"
-                        {% if not pin_list.pin_count and not pin_list.markup_map_id %}disabled title="Add pins to this list first"{% endif %}>
-                    <i class="material-symbols-outlined">draw</i>
-                    {% if pin_list.markup_map_id %}Edit Markup Map{% else %}Create Markup Map{% endif %}
+                <button type="button" onclick="pinListCloseMoreMenu(); pinListCreateTrip()"
+                        {% if not pin_list.pin_count %}disabled title="Add pins to this list first"{% endif %}>
+                    <i class="material-symbols-outlined">flight_takeoff</i> Create trip
                 </button>
-                <div class="pin-list-more-menu">
-                    <button type="button" class="btn btn--icon pin-list-more-btn" id="pin-list-more-btn"
-                            aria-haspopup="true" aria-expanded="false" aria-label="More list actions" title="More actions"
-                            onclick="pinListToggleMoreMenu()">
-                        <i class="material-symbols-outlined">more_vert</i>
-                    </button>
-                    <div class="pin-list-more-menu-panel" id="pin-list-more-menu-panel" hidden>
-                        <button type="button" onclick="pinListCloseMoreMenu(); document.getElementById('edit-list-dialog').showModal()">
-                            <i class="material-symbols-outlined">edit</i> Edit list
-                        </button>
-                        <button type="button" onclick="pinListCloseMoreMenu(); pinListCreateTrip()"
-                                {% if not pin_list.pin_count %}disabled title="Add pins to this list first"{% endif %}>
-                            <i class="material-symbols-outlined">flight_takeoff</i> Create trip
-                        </button>
-                        <button type="button" onclick="pinListCloseMoreMenu(); document.getElementById('add-to-trip-dialog').showModal()"
-                                {% if not pin_list.pin_count %}disabled title="Add pins to this list first"{% endif %}>
-                            <i class="material-symbols-outlined">luggage</i> Add to trip
-                        </button>
-                        <div class="pin-list-more-menu-divider"></div>
-                        <button type="button" class="pin-list-more-menu-danger" onclick="pinListCloseMoreMenu(); pinListDelete()">
-                            <i class="material-symbols-outlined">delete</i> Delete list
-                        </button>
-                    </div>
-                </div>
+                <button type="button" onclick="pinListCloseMoreMenu(); document.getElementById('add-to-trip-dialog').showModal()"
+                        {% if not pin_list.pin_count %}disabled title="Add pins to this list first"{% endif %}>
+                    <i class="material-symbols-outlined">luggage</i> Add to trip
+                </button>
+                <div class="pin-list-more-menu-divider"></div>
+                <button type="button" class="pin-list-more-menu-danger" onclick="pinListCloseMoreMenu(); pinListDelete()">
+                    <i class="material-symbols-outlined">delete</i> Delete list
+                </button>
             </div>
         </div>
-    </section>
+    </div>
 
     {# -- Smart list configuration ------------------------------------------- #}
     {# Starts collapsed once a list already has pins in it - it's configuration

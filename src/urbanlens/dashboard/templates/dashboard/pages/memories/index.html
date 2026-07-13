@@ -147,7 +147,15 @@
     window.map = map;
     // Shared layers engine + panel - the exact same component as the main map
     // (see {% templatetag openblock %} map_layers_panel {% templatetag closeblock %} above).
-    window.MapLayers.create(map, { root: document.getElementById('memories-map-layers') });
+    // Attribution renders in the page footer (show_map_footer=True) instead of
+    // an on-map overlay - attributionControl is disabled above.
+    window.MapLayers.create(map, {
+        root: document.getElementById('memories-map-layers'),
+        onAttribution: function (text) {
+            var el = document.getElementById('page-footer-attribution-text');
+            if (el) el.textContent = text;
+        },
+    });
 
     var routesPane = map.createPane('memoriesRoutesPane');
     routesPane.style.zIndex = 410;

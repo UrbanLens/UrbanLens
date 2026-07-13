@@ -1,12 +1,9 @@
 {% extends 'dashboard/themes/base.html' %}
 {% load dashboard_tags %}
 {% block content %}
+{% url 'site_admin_home' as admin_home_url %}
+{% include "dashboard/partials/ui/_page_hero.html" with body_template="dashboard/partials/admin/_users_hero_body.html" back_url=admin_home_url back_label="Admin Home" %}
 <div class="site-admin-page page-content users-admin-page">
-  <div class="site-admin-header">
-    <h1 class="site-admin-title"><i class="material-symbols-outlined">group</i> Users</h1>
-    <p class="site-admin-subtitle">{{ total_users }} registered user{{ total_users|pluralize }}.</p>
-    <div class="site-admin-breadcrumb"><a href="{% url 'site_admin_home' %}" class="site-admin-breadcrumb__link"><i class="material-symbols-outlined">arrow_back</i> Admin Home</a></div>
-  </div>
 
   <div class="ul-notice ul-notice--info users-admin-privacy-notice">
     <i class="material-symbols-outlined">shield_lock</i>

@@ -35,6 +35,26 @@
         max-width: 760px;
     }
 
+    &__back {
+        display: inline-flex;
+        align-items: center;
+        gap: .3rem;
+        font-size: .82rem;
+        font-weight: 500;
+        color: var(--ul-grey-6);
+        text-decoration: none;
+        transition: color .15s;
+        margin-bottom: .25rem;
+
+        .material-symbols-outlined {
+            font-size: 1rem;
+        }
+
+        &:hover {
+            color: $color-blue-500;
+        }
+    }
+
     &__eyebrow {
         font-size: .7rem;
         font-weight: 700;

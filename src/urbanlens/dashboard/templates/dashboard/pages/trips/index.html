@@ -1,42 +1,33 @@
 {% extends 'dashboard/themes/base.html' %}
 
 {% block content %}
+{% include "dashboard/partials/ui/_page_hero.html" with icon="flight_takeoff" title="Plan" title_suffix_template="dashboard/partials/trips/_plan_hero_suffix.html" subtitle="Your trips, routes, and shared plans in one place." %}
 <div class="trips-page page-content">
 
-    <div class="trips-header">
-        <div class="trips-header-left">
-            <h1 class="trips-title">
-                <i class="material-symbols-outlined">flight_takeoff</i>
-                Plan
-                {% include "dashboard/partials/ui/_tooltip_help.html" with text="Create trips, invite friends, attach pins, and track activities along your route." wide=True %}
-            </h1>
-            <p class="trips-subtitle">Your trips, routes, and shared plans in one place.</p>
-        </div>
-        <div class="trips-header-right">
-            {% if calendar_account %}
-            <button type="button" class="btn btn--secondary"
-                    title="Import events from your Google Calendar as trips"
-                    hx-get="{% url 'trips.calendar.import' %}"
-                    hx-target="#calendar-import-dialog"
-                    hx-swap="innerHTML"
-                    hx-on::after-request="if(event.detail.successful){document.getElementById('calendar-import-dialog').showModal()}">
-                <i class="material-symbols-outlined">calendar_month</i>
-                Google Calendar
-                <span class="htmx-indicator"><i class="material-icons rotating">refresh</i></span>
-            </button>
-            {% else %}
-            <a href="{% url 'trips.calendar.connect' %}" class="btn btn--secondary"
-               title="Connect your own Google Calendar to import events as trips and export trips as events">
-                <i class="material-symbols-outlined">calendar_month</i>
-                Connect Google Calendar
-            </a>
-            {% endif %}
-            <button type="button" class="btn btn--primary"
-                    onclick="document.getElementById('create-trip-dialog').showModal()">
-                <i class="material-symbols-outlined">add</i>
-                New Trip
-            </button>
-        </div>
+    <div class="trips-header-right trips-actions-row">
+        {% if calendar_account %}
+        <button type="button" class="btn btn--secondary"
+                title="Import events from your Google Calendar as trips"
+                hx-get="{% url 'trips.calendar.import' %}"
+                hx-target="#calendar-import-dialog"
+                hx-swap="innerHTML"
+                hx-on::after-request="if(event.detail.successful){document.getElementById('calendar-import-dialog').showModal()}">
+            <i class="material-symbols-outlined">calendar_month</i>
+            Google Calendar
+            <span class="htmx-indicator"><i class="material-icons rotating">refresh</i></span>
+        </button>
+        {% else %}
+        <a href="{% url 'trips.calendar.connect' %}" class="btn btn--secondary"
+           title="Connect your own Google Calendar to import events as trips and export trips as events">
+            <i class="material-symbols-outlined">calendar_month</i>
+            Connect Google Calendar
+        </a>
+        {% endif %}
+        <button type="button" class="btn btn--primary"
+                onclick="document.getElementById('create-trip-dialog').showModal()">
+            <i class="material-symbols-outlined">add</i>
+            New Trip
+        </button>
     </div>
 
     {# -- View toggle + sort controls ---------------------------------------- #}

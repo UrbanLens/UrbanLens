@@ -649,6 +649,7 @@
     display: flex;
     flex-direction: column;
     word-break: break-word;
+    transition: margin-bottom .12s ease;
 
     // A message that directly continues the previous bubble (same sender,
     // same day, sent within MESSAGE_GROUP_GAP_SECONDS) sits closer to it and
@@ -671,6 +672,10 @@
         position: absolute;
         top: 50%;
         transform: translateY(-50%);
+        // Above the map preview's isolated stacking context (see
+        // .comment-map-preview) and above neighboring grouped bubbles so it's
+        // never painted over when it floats past this bubble's own edge.
+        z-index: 2;
         width: 1.5rem;
         height: 1.5rem;
         display: inline-flex;
@@ -713,6 +718,7 @@
     &__time {
         position: absolute;
         bottom: -.9rem;
+        z-index: 2;
         font-size: .64rem;
         color: var(--ul-grey-6);
         white-space: nowrap;
@@ -736,9 +742,17 @@
     }
 
     // Reveal the action button + timestamp on hover, keyboard focus, or tap.
+    // Grouped bubbles sit almost flush against each other (margin-top: -.35rem
+    // above), leaving no room for the floating time/menu-btn/reaction-add
+    // affordances (which sit up to 1rem below the bubble's own box) without
+    // overlapping the next bubble - so pushing the following sibling down via
+    // margin-bottom (added on top of #dm-messages' flex `gap`) makes room for
+    // them only while they're actually visible.
     &:hover,
     &:focus-within,
     &--peek {
+        margin-bottom: 1.1rem;
+
         .dm-bubble__menu-btn {
             opacity: .9;
             pointer-events: auto;
@@ -1038,6 +1052,7 @@
 .dm-reaction-add-wrap {
     position: absolute;
     bottom: -1rem;
+    z-index: 2;
     display: inline-flex;
     opacity: 0;
     pointer-events: none;

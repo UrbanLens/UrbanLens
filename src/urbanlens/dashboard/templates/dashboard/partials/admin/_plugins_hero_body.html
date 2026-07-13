@@ -1,0 +1,13 @@
+{% comment %}
+Hero body for site_admin_plugins.html. No extra context required beyond the
+including template's.
+{% endcomment %}
+<h1 class="ul-page-hero__title">
+    <i class="material-symbols-outlined">extension</i>
+    Plugins
+</h1>
+<p class="ul-page-hero__subtitle">
+    External integrations discovered for this install. Runtime per-service toggles live on
+    <a href="{% url 'site_admin_api_limits' %}">API Limits</a>; to disable a plugin entirely,
+    list its name in the <code>UL_DISABLED_PLUGINS</code> environment setting and restart.
+</p>

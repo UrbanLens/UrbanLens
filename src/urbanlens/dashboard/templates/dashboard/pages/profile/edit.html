@@ -19,6 +19,8 @@
 {% endif %}
 {% endwith %}
 
+{% url 'profile.view' as profile_view_url %}
+{% include "dashboard/partials/ui/_page_hero.html" with icon="edit" title="Edit Profile" back_url=profile_view_url back_label="Back to Profile" %}
 <div class="edit-profile-page page-content">
 
     {# -- Setup / welcome banner (shown to all new users until they complete setup) -- #}
@@ -34,13 +36,6 @@
         </button>
     </div>
     {% endif %}
-
-    <div class="edit-profile-header">
-        <a href="{% url 'profile.view' %}" class="edit-back-link">
-            <i class="material-symbols-outlined">arrow_back</i> Back to Profile
-        </a>
-        <h1 class="edit-profile-title">Edit Profile</h1>
-    </div>
 
     {# -- Profile info -------------------------------------------------------- #}
     <section class="edit-card ul-section">

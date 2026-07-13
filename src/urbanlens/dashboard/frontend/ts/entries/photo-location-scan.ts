@@ -13,7 +13,7 @@
 import exifr from "exifr";
 import { getCsrfToken } from "../shared/csrf";
 import { toast } from "../shared/dialogs";
-import { addHitToClusters, partitionByCachedPins, type PhotoCluster, type PhotoHit } from "../shared/photo-location-cluster";
+import { addHitToClusters, clusterHits, partitionByCachedPins, type PhotoCluster, type PhotoHit } from "../shared/photo-location-cluster";
 import { readCachedPinLocations } from "../shared/pin-cache";
 
 const IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "heic", "heif", "tif", "tiff"]);
@@ -88,6 +88,14 @@ class PhotoLocationScanApp {
     private readonly profileUuid: string;
 
     private clusters: PhotoCluster[] = [];
+    /**
+     * Every raw GPS hit found so far, never merged or discarded - `clusters`
+     * above is a live, order-dependent grouping kept only to render a
+     * manageable-length list while scanning. The final grouping used for
+     * upload is recomputed from this full set right before the request goes
+     * out, so nothing is lost to the incremental display clustering.
+     */
+    private allHits: PhotoHit[] = [];
     private abortController: AbortController | null = null;
     private scanning = false;
 
@@ -183,6 +191,7 @@ class PhotoLocationScanApp {
             this.setProgress(`Scanning ${file.name}...`, scanned, total);
             const hit = await extractHit(file);
             if (hit) {
+                this.allHits.push(hit);
                 this.clusters = addHitToClusters(this.clusters, hit);
                 this.renderResults();
             }
@@ -198,17 +207,18 @@ class PhotoLocationScanApp {
         this.scanning = scanning;
         this.startBtn.hidden = scanning;
         this.stopBtn.hidden = !scanning;
-        this.progressWrap.hidden = !scanning;
-        this.uploadBtn.hidden = scanning && this.clusters.length === 0;
+        if (scanning) this.progressWrap.hidden = false;
+        this.uploadBtn.hidden = scanning || this.clusters.length === 0;
+        this.updateEmptyMessage();
     }
 
     private finishScan(): void {
+        const stopped = this.abortController?.signal.aborted ?? false;
         this.setScanning(false);
         this.startBtn.textContent = "";
         this.startBtn.innerHTML = '<i class="material-symbols-outlined">folder_open</i><span>Scan another folder</span>';
-        this.uploadBtn.hidden = this.clusters.length === 0;
         this.uploadBtn.disabled = this.clusters.length === 0;
-        this.setProgress(`Done - found ${this.clusters.length} location(s).`, 1, 1);
+        this.setProgress(`${stopped ? "Stopped" : "Done"} - found ${this.clusters.length} location(s).`, 1, 1);
     }
 
     private setProgress(text: string, current: number, total: number): void {
@@ -218,12 +228,16 @@ class PhotoLocationScanApp {
         this.progressBar.style.width = `${pct}%`;
     }
 
+    private updateEmptyMessage(): void {
+        this.emptyMsg.hidden = !this.scanning || this.clusters.length > 0;
+    }
+
     private renderResults(): void {
         const cachedPins = readCachedPinLocations(this.profileUuid).map((p) => ({ lat: p.latitude, lng: p.longitude }));
         const { fresh, existing } = partitionByCachedPins(this.clusters, cachedPins);
 
         this.resultsList.innerHTML = "";
-        this.emptyMsg.hidden = this.clusters.length > 0;
+        this.updateEmptyMessage();
 
         for (const cluster of fresh) this.resultsList.appendChild(this.renderCard(cluster, false));
         if (existing.length > 0) {
@@ -261,14 +275,20 @@ class PhotoLocationScanApp {
     }
 
     private async upload(): Promise<void> {
-        if (this.clusters.length === 0 || !this.uploadUrl) return;
+        if (this.allHits.length === 0 || !this.uploadUrl) return;
         this.uploadBtn.disabled = true;
         try {
+            // Regroup from the full, un-merged hit list rather than reusing the
+            // live display clusters - the display grouping is order-dependent
+            // (it locks in whichever cluster a hit met first while scanning),
+            // so recomputing fresh from every raw coordinate gives a more
+            // accurate final grouping now that the whole set is known.
+            const finalClusters = clusterHits(this.allHits);
             const response = await fetch(this.uploadUrl, {
                 method: "POST",
                 headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
                 body: JSON.stringify({
-                    clusters: this.clusters.map((cluster) => ({
+                    clusters: finalClusters.map((cluster) => ({
                         latitude: cluster.lat,
                         longitude: cluster.lng,
                         dates: cluster.dates,
@@ -286,6 +306,7 @@ class PhotoLocationScanApp {
             const total = (data.matched_suggestions ?? 0) + (data.new_pin_suggestions ?? 0);
             toast.success(`Uploaded - found ${total} suggestion(s). Review them in Memories.`);
             this.clusters = [];
+            this.allHits = [];
             this.renderResults();
             this.uploadBtn.hidden = true;
         } catch {

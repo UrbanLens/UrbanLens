@@ -1,0 +1,8 @@
+{% comment %}
+Hero body for site_admin_users.html. Expects total_users in context.
+{% endcomment %}
+<h1 class="ul-page-hero__title">
+    <i class="material-symbols-outlined">group</i>
+    Users
+</h1>
+<p class="ul-page-hero__subtitle">{{ total_users }} registered user{{ total_users|pluralize }}.</p>

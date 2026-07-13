@@ -901,36 +901,6 @@
 // -- Edit profile page --------------------------------------------------------
 
 
-.edit-profile-header {
-    margin-bottom: 1.75rem;
-}
-
-.edit-back-link {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    font-size: 0.875rem;
-    color: var(--ul-grey-6);
-    text-decoration: none;
-    margin-bottom: 0.5rem;
-
-    .material-symbols-outlined,
-    .material-icons {
-        font-size: 1rem;
-    }
-
-    &:hover {
-        color: var(--primary-color);
-    }
-}
-
-.edit-profile-title {
-    font-size: 1.75rem;
-    font-weight: 700;
-    color: var(--ul-grey-8);
-    margin: 0;
-}
-
 .edit-profile-autosave-hint {
     font-size: 0.8rem;
     color: var(--ul-grey-6);
@@ -1742,7 +1712,8 @@ body div.container .profile-annotation-notes {
 .pan-note-textarea {
     width: 100%;
     min-height: 70px;
-    resize: vertical;
+    resize: none;
+    overflow-y: hidden;
     border: 1px solid var(--ul-grey-1a);
     border-radius: $radius-sm;
     background: var(--ul-grey-0);
@@ -1752,6 +1723,11 @@ body div.container .profile-annotation-notes {
     box-sizing: border-box;
     font-family: inherit;
     line-height: 1.5;
+
+    // Grow to fit content instead of scrolling internally. JS fallback for
+    // browsers without field-sizing support lives in profile_annotation_content.html,
+    // since it must re-run after every htmx swap of this panel.
+    field-sizing: content;
 
     &:focus {
         outline: none;
@@ -1780,13 +1756,6 @@ body div.container .profile-annotation-notes {
 }
 
 // -- Friends page: invite button + dialog --------------------------------------
-
-.friends-page-header {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 0.75rem;
-}
 
 .invite-dialog {
     @include dialog-base(460px);
@@ -2645,39 +2614,6 @@ a.profile-stat--link {
     display: flex;
     flex-direction: column;
     gap: 1.25rem;
-}
-
-.friends-page-header {
-    display: flex;
-    flex-direction: column;
-    gap: .5rem;
-}
-
-.friends-back-link {
-    display: inline-flex;
-    align-items: center;
-    gap: .25rem;
-    font-size: .85rem;
-    color: $text-muted;
-    text-decoration: none;
-
-    .material-symbols-outlined,
-    .material-icons {
-        font-size: 1rem;
-    }
-
-    &:hover {
-        color: $text-primary;
-    }
-}
-
-.friends-page-title {
-    font-size: 1.4rem;
-    font-weight: 700;
-    margin: 0;
-    display: flex;
-    align-items: center;
-    gap: .5rem;
 }
 
 .friends-page-count {

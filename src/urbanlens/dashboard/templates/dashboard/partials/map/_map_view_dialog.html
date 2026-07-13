@@ -35,9 +35,18 @@ or render a custom preview that calls _expandCommentMap('<map_id>').
         <span class="cmc-toolbar-label">Layer:</span>
         {% map_layers_panel "street,satellite,terrain,borders" variant="strip" panel_id="comment-map-layers-"|add:map_id_str %}
         <button type="button" class="btn btn--ghost btn--sm comment-map-download-btn"
-                data-map-id="{{ map_id_str }}" title="Download this map as a JPEG">
-            <i class="material-symbols-outlined">download</i> Download
+                data-map-id="{{ map_id_str }}" title="Download this map as a JPEG" aria-label="Download this map as a JPEG">
+            <i class="material-symbols-outlined">download</i>
         </button>
+        {% if user.is_authenticated %}
+        {# Seeds the shared composer with this map's current snapshot and saves the result as a #}
+        {# brand-new MarkupMap - the viewed map itself is never mutated (see MarkupMapCreateView). #}
+        <button type="button" class="btn btn--ghost btn--sm comment-map-edit-btn"
+                data-map-id="{{ map_id_str }}" title="Edit a copy of this map" aria-label="Edit a copy of this map">
+            <i class="material-symbols-outlined">edit</i>
+        </button>
+        {% endif %}
+        <span class="comment-map-attribution" id="comment-map-attribution-{{ map_id_str }}" aria-live="polite"></span>
         {% with directions_url=map_data|first_pin_directions_url %}
         {% if directions_url %}
         <a href="{{ directions_url }}" target="_blank" rel="noopener" class="btn btn--ghost btn--sm">

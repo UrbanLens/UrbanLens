@@ -599,32 +599,6 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     //padding: 0 1rem;
 }
 
-.site-admin-header {
-    margin-bottom: 1.5rem;
-}
-
-.site-admin-title {
-    font-size: 1.5rem;
-    font-weight: 700;
-    display: flex;
-    align-items: center;
-    gap: .4rem;
-    color: var(--ul-grey-8);
-    margin: 0 0 .25rem;
-
-    .material-symbols-outlined,
-    .material-icons {
-        font-size: 1.6rem;
-        color: $color-blue-500;
-    }
-}
-
-.site-admin-subtitle {
-    color: var(--ul-grey-7);
-    font-size: .9rem;
-    margin: 0;
-}
-
 .site-admin-notice {
     display: flex;
     align-items: center;
@@ -1058,32 +1032,6 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     display: inline-flex;
     align-items: center;
     gap: .25rem;
-}
-
-// -- Admin breadcrumb ----------------------------------------------------------
-
-.site-admin-breadcrumb {
-    margin-bottom: .75rem;
-}
-
-.site-admin-breadcrumb__link {
-    display: inline-flex;
-    align-items: center;
-    gap: .3rem;
-    font-size: .82rem;
-    font-weight: 500;
-    color: var(--ul-grey-6);
-    text-decoration: none;
-    transition: color .15s;
-
-    .material-symbols-outlined,
-    .material-icons {
-        font-size: 1rem;
-    }
-
-    &:hover {
-        color: $color-blue-500;
-    }
 }
 
 // -- Admin homepage ------------------------------------------------------------

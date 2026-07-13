@@ -494,24 +494,6 @@
 </script>
 {% endblock %}
 
-{% block footer %}
-<footer class="page-footer page-footer--map">
-    {% if app_version %}
-    <span class="page-footer__version" aria-label="Application version">UrbanLens v{{ app_version }}</span>
-    {% endif %}
-    <div class="page-footer__meta">
-        <p class="page-footer__attribution" id="map-footer-attribution" aria-live="polite">
-            <span class="page-footer__attribution-text" id="map-footer-attribution-text"></span>
-            <a href="{% url 'thanks' %}" class="page-footer__attribution-more">More info</a>
-        </p>
-        <p class="page-footer__github">
-            <i class="material-icons" aria-hidden="true">code</i>
-            <span class="page-footer__github-text">This project is open source. Check out our</span> <a href="https://github.com/UrbanLens/UrbanLens">Github page</a>
-        </p>
-    </div>
-</footer>
-{% endblock %}
-
 {% block scripts %}
 <script>
     // -- Constants -------------------------------------------------------------
@@ -1847,9 +1829,10 @@
         defaultBase: _DEFAULT_MAP_VIEW,
         storageKey: _LAYER_CACHE_KEY,
         loadingTarget: document.getElementById('map'),
-        // Footer attribution replaces Leaflet's on-map control (see {% templatetag openblock %} block footer {% templatetag closeblock %}).
+        // Footer attribution replaces Leaflet's on-map control (see the shared
+        // partials/layout/footer.html, rendered via show_map_footer=True).
         onAttribution: function (text) {
-            const el = document.getElementById('map-footer-attribution-text');
+            const el = document.getElementById('page-footer-attribution-text');
             if (el) el.textContent = text;
         },
         // Persist dark mode to the server so the preference survives page refresh.

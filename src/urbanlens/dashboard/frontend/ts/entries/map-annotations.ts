@@ -110,7 +110,9 @@ function init(): void {
         window._openCommentMapComposer({ context, initialView: { lat: center.lat, lng: center.lng, zoom: map.getZoom() } });
     };
 
-    const map = L.map("map", { scrollWheelZoom: false }).setView([mapCenterLat, mapCenterLng], 15);
+    // attributionControl: false - required attribution renders in the page
+    // footer instead (show_map_footer=True; see createMapLayers' onAttribution below).
+    const map = L.map("map", { scrollWheelZoom: false, attributionControl: false }).setView([mapCenterLat, mapCenterLng], 15);
     window.map = map;
 
     // Dedicated panes keep markup shapes clickable even when a boundary
@@ -207,6 +209,10 @@ function init(): void {
         root: document.getElementById("detail-map-layers"),
         apiKey: cfg.openweathermapApiKey || null,
         defaultBase: cfg.defaultMapView,
+        onAttribution: (text) => {
+            const el = document.getElementById("page-footer-attribution-text");
+            if (el) el.textContent = text;
+        },
         custom: {
             details: {
                 isActive: () => map.hasLayer(detailsLayer),

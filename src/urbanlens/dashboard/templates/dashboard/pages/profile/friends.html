@@ -1,22 +1,17 @@
 {% extends 'dashboard/themes/base.html' %}
 
 {% block content %}
+{% url 'profile.view_user' profile.slug as profile_back_url %}
+{% if is_own_profile %}
+{% include "dashboard/partials/ui/_page_hero.html" with body_template="dashboard/partials/profile/_friends_hero_body.html" back_url=profile_back_url back_label="My Profile" %}
+{% else %}
+{% include "dashboard/partials/ui/_page_hero.html" with body_template="dashboard/partials/profile/_friends_hero_body.html" back_url=profile_back_url back_label=profile.full_name|default:profile.username|add:"'s Profile" %}
+{% endif %}
 <div class="friends-page page-content">
 
-    {# -- Page header ------------------------------------------------------------ #}
-    <div class="friends-page-header">
-        <a href="{% url 'profile.view_user' profile.slug %}" class="friends-back-link">
-            <i class="material-symbols-outlined">arrow_back</i>
-            {% if is_own_profile %}My Profile{% else %}{{ profile.full_name|default:profile.username }}'s Profile{% endif %}
-        </a>
-        <h1 class="friends-page-title">
-            {% if is_own_profile %}Your Friends{% else %}{{ profile.full_name|default:profile.username }}'s Friends{% endif %}
-            <span class="friends-page-count" id="friends-page-count">{{ friends|length }}</span>
-        </h1>
-        {% if is_own_profile %}
-        {% include "dashboard/partials/profile/_invite_friend_button.html" %}
-        {% endif %}
-    </div>
+    {% if is_own_profile %}
+    {% include "dashboard/partials/profile/_invite_friend_button.html" %}
+    {% endif %}
 
     {% if is_own_profile %}
     {% include "dashboard/partials/profile/_invite_friend_dialog.html" %}

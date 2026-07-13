@@ -178,6 +178,9 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 "map_default_zoom": (profile.remembered_map_zoom if profile.map_center_mode == MapCenterMode.REMEMBER and profile.remembered_map_zoom else profile.map_default_zoom or 13),
                 "default_map_view": profile.default_map_view,
                 "map_dark_mode": profile.map_dark_mode,
+                # Live-updated by JS as the user switches layers - see the shared
+                # footer partial's `show_map_footer` doc comment.
+                "show_map_footer": True,
             },
         )
 
