@@ -2,7 +2,7 @@ import {
   confirmAction,
   getCsrfToken,
   toast
-} from "./categories-cm6bs6jx.js";
+} from "./map-annotations-9jdqkrz7.js";
 
 // src/urbanlens/dashboard/frontend/ts/shared/map-layers.ts
 var TILE_DEFS = {
@@ -471,7 +471,7 @@ function init() {
     const center = map.getCenter();
     window._openCommentMapComposer({ context, initialView: { lat: center.lat, lng: center.lng, zoom: map.getZoom() } });
   };
-  const map = L.map("map", { scrollWheelZoom: false }).setView([mapCenterLat, mapCenterLng], 15);
+  const map = L.map("map", { scrollWheelZoom: false, attributionControl: false }).setView([mapCenterLat, mapCenterLng], 15);
   window.map = map;
   map.createPane("markupPane").style.zIndex = "550";
   map.createPane("boundaryPane").style.zIndex = "540";
@@ -537,6 +537,11 @@ function init() {
     root: document.getElementById("detail-map-layers"),
     apiKey: cfg.openweathermapApiKey || null,
     defaultBase: cfg.defaultMapView,
+    onAttribution: (text) => {
+      const el = document.getElementById("page-footer-attribution-text");
+      if (el)
+        el.textContent = text;
+    },
     custom: {
       details: {
         isActive: () => map.hasLayer(detailsLayer),

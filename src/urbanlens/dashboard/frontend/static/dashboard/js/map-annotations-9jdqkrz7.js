@@ -6,6 +6,11 @@ var __require = /* @__PURE__ */ ((x) => typeof require !== "undefined" ? require
   throw Error('Dynamic require of "' + x + '" is not supported');
 });
 
+// src/urbanlens/dashboard/frontend/ts/shared/csrf.ts
+function getCsrfToken() {
+  return window.csrftoken ?? "";
+}
+
 // src/urbanlens/dashboard/frontend/ts/shared/dialogs.ts
 async function confirmAction(options) {
   if (window.confirmDialog) {
@@ -31,9 +36,4 @@ function htmxProcess(element) {
   window.htmx?.process(element);
 }
 
-// src/urbanlens/dashboard/frontend/ts/shared/csrf.ts
-function getCsrfToken() {
-  return window.csrftoken ?? "";
-}
-
-export { __require, confirmAction, toast, htmxProcess, getCsrfToken };
+export { __require, getCsrfToken, confirmAction, toast, htmxProcess };

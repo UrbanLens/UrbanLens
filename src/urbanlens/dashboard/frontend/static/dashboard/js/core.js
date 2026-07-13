@@ -1466,7 +1466,7 @@
     const hasBorder = !!bc;
     const strokeC = hasBorder ? bc : color;
     function shapeOpts() {
-      return { color: strokeC, weight: hasBorder ? weight : 2, fillColor: color, fillOpacity: fillOp, opacity: borderOp };
+      return { color: strokeC, weight: hasBorder ? weight : 2, fillColor: color, fillOpacity: fillOp, opacity: borderOp, interactive: false };
     }
     switch (s.type) {
       case "line":

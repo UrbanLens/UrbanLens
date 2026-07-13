@@ -2,7 +2,7 @@ import {
   __require,
   getCsrfToken,
   toast
-} from "./categories-cm6bs6jx.js";
+} from "./map-annotations-9jdqkrz7.js";
 
 // node_modules/exifr/dist/full.esm.mjs
 var e = typeof self != "undefined" ? self : global;
@@ -1664,6 +1664,12 @@ function addHitToClusters(clusters, hit, radiusM = DEFAULT_CLUSTER_RADIUS_M) {
   clusters.push({ lat: hit.lat, lng: hit.lng, count: 1, dates: hit.date ? [hit.date] : [], label: hit.fileName });
   return clusters;
 }
+function clusterHits(hits, radiusM = DEFAULT_CLUSTER_RADIUS_M) {
+  let clusters = [];
+  for (const hit of hits)
+    clusters = addHitToClusters(clusters, hit, radiusM);
+  return clusters;
+}
 function isNearCachedPin(cluster, pins, radiusM = EXISTING_PIN_RADIUS_M) {
   return pins.some((pin) => haversineMeters(cluster, pin) <= radiusM);
 }
@@ -1768,6 +1774,7 @@ class PhotoLocationScanApp {
   uploadUrl;
   profileUuid;
   clusters = [];
+  allHits = [];
   abortController = null;
   scanning = false;
   constructor(root) {
@@ -1861,6 +1868,7 @@ class PhotoLocationScanApp {
       this.setProgress(`Scanning ${file.name}...`, scanned, total);
       const hit = await extractHit(file);
       if (hit) {
+        this.allHits.push(hit);
         this.clusters = addHitToClusters(this.clusters, hit);
         this.renderResults();
       }
@@ -1874,16 +1882,18 @@ class PhotoLocationScanApp {
     this.scanning = scanning;
     this.startBtn.hidden = scanning;
     this.stopBtn.hidden = !scanning;
-    this.progressWrap.hidden = !scanning;
-    this.uploadBtn.hidden = scanning && this.clusters.length === 0;
+    if (scanning)
+      this.progressWrap.hidden = false;
+    this.uploadBtn.hidden = scanning || this.clusters.length === 0;
+    this.updateEmptyMessage();
   }
   finishScan() {
+    const stopped = this.abortController?.signal.aborted ?? false;
     this.setScanning(false);
     this.startBtn.textContent = "";
     this.startBtn.innerHTML = '<i class="material-symbols-outlined">folder_open</i><span>Scan another folder</span>';
-    this.uploadBtn.hidden = this.clusters.length === 0;
     this.uploadBtn.disabled = this.clusters.length === 0;
-    this.setProgress(`Done - found ${this.clusters.length} location(s).`, 1, 1);
+    this.setProgress(`${stopped ? "Stopped" : "Done"} - found ${this.clusters.length} location(s).`, 1, 1);
   }
   setProgress(text, current, total) {
     this.progressText.textContent = text;
@@ -1891,11 +1901,14 @@ class PhotoLocationScanApp {
     const pct = total > 0 ? Math.round(current / total * 100) : 0;
     this.progressBar.style.width = `${pct}%`;
   }
+  updateEmptyMessage() {
+    this.emptyMsg.hidden = !this.scanning || this.clusters.length > 0;
+  }
   renderResults() {
     const cachedPins = readCachedPinLocations(this.profileUuid).map((p2) => ({ lat: p2.latitude, lng: p2.longitude }));
     const { fresh, existing } = partitionByCachedPins(this.clusters, cachedPins);
     this.resultsList.innerHTML = "";
-    this.emptyMsg.hidden = this.clusters.length > 0;
+    this.updateEmptyMessage();
     for (const cluster of fresh)
       this.resultsList.appendChild(this.renderCard(cluster, false));
     if (existing.length > 0) {
@@ -1929,15 +1942,16 @@ class PhotoLocationScanApp {
     return item;
   }
   async upload() {
-    if (this.clusters.length === 0 || !this.uploadUrl)
+    if (this.allHits.length === 0 || !this.uploadUrl)
       return;
     this.uploadBtn.disabled = true;
     try {
+      const finalClusters = clusterHits(this.allHits);
       const response = await fetch(this.uploadUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
         body: JSON.stringify({
-          clusters: this.clusters.map((cluster) => ({
+          clusters: finalClusters.map((cluster) => ({
             latitude: cluster.lat,
             longitude: cluster.lng,
             dates: cluster.dates,
@@ -1955,6 +1969,7 @@ class PhotoLocationScanApp {
       const total = (data.matched_suggestions ?? 0) + (data.new_pin_suggestions ?? 0);
       toast.success(`Uploaded - found ${total} suggestion(s). Review them in Memories.`);
       this.clusters = [];
+      this.allHits = [];
       this.renderResults();
       this.uploadBtn.hidden = true;
     } catch {
