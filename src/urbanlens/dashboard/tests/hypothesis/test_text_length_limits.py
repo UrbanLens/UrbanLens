@@ -202,6 +202,7 @@ class WikiEditDescriptionLengthTests(TestCase):
         self.client = Client()
         self.client.force_login(self.user)
         self.location, self.wiki = _location_with_wiki()
+        baker.make(Pin, profile=self.user.profile, location=self.location)
 
     def test_oversized_description_rejected(self) -> None:
         resp = self.client.post(

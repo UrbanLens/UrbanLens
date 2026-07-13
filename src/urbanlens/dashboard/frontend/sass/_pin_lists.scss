@@ -242,7 +242,11 @@
     border: 1px solid var(--ul-grey-1a);
     border-radius: 10px;
     box-shadow: 0 6px 20px rgba(0, 0, 0, .18);
-    z-index: 50;
+    // Above the map's own controls/toolbar (z-index 1000, see .map-buttons /
+    // .map-layers-panel) - this menu sits earlier in the DOM than the map
+    // section but must still render on top of it when both occupy the same
+    // area of the page.
+    z-index: 1200;
     padding: .35rem;
     display: flex;
     flex-direction: column;
@@ -293,6 +297,7 @@
 
 // -- Overview map of every pin on the list -----------------------------------
 .pin-list-map-section {
+    position: relative;
     margin-bottom: 1.5rem;
 
     &[hidden] { display: none; }
@@ -577,13 +582,6 @@
     margin-left: auto;
     font-size: .75rem;
     color: var(--ul-grey-5);
-}
-
-// -- Pin detail page "Add to a list" button ------------------------------
-.pin-add-to-list-btn {
-    width: 100%;
-    justify-content: center;
-    margin-top: .5rem;
 }
 
 // -- Filters tab ------------------------------------------------------------

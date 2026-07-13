@@ -82,6 +82,13 @@ class SearchForm(forms.Form):
         """
         super().__init__(*args, **kwargs)
         self.custom_fields: list[CustomField] = []
+        visible_badges = Badge.objects.visible_to(profile).ordered() if profile else Badge.objects.global_only().ordered()
+        tags_field = self.fields["tags"]
+        exclude_tags_field = self.fields["exclude_tags"]
+        if isinstance(tags_field, forms.ModelMultipleChoiceField):
+            tags_field.queryset = visible_badges
+        if isinstance(exclude_tags_field, forms.ModelMultipleChoiceField):
+            exclude_tags_field.queryset = visible_badges
         if profile is None:
             return
         self.custom_fields = list(CustomField.objects.for_entity(profile, CustomFieldEntity.PIN))

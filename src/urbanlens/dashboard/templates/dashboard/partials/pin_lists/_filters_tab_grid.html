@@ -17,7 +17,7 @@
             <button type="button" class="btn btn--ghost btn--sm"
                     hx-get="{% url 'saved_filters.edit' filter.uuid %}"
                     hx-target="#saved-filter-form-dialog" hx-swap="innerHTML"
-                    hx-on::after-request="if(event.detail.successful){document.getElementById('saved-filter-form-dialog').showModal()}">
+                    hx-on::after-request="if(event.detail.successful){savedFilterOpenDialog()}">
                 <i class="material-symbols-outlined">edit</i> Edit
             </button>
             <button type="button" class="btn btn--ghost btn--sm saved-filter-delete-btn" onclick="savedFilterDelete('{{ filter.uuid }}', '{{ filter.name|escapejs }}')">

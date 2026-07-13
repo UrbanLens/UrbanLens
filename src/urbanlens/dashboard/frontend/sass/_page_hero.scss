@@ -10,26 +10,56 @@
 // rendered in base.html's `{% block hero %}`, above and outside `.container`
 // entirely (see .ul-page-subnav below) - there's no padded parent to cancel
 // out, so it only bleeds horizontally and never pulls upward into the header.
+//
+// The default/--top box uses a fixed `height` (not `min-height`) with the
+// inner content vertically centered, so every page built from short,
+// developer-authored copy (a title, maybe a subtitle) renders at exactly the
+// same height - switching between pages (or tabs on a shared subnav, e.g.
+// Profile | Edit) never shifts where the subnav/content below it lands.
+// --wide and --profile carry their own sizing: --wide's copy is long-form and
+// one-off (Thanks & Credits only), and --profile's is user-generated (bio,
+// name) so it's bounded with a line-clamp instead - see _profile.scss.
 .ul-page-hero {
+    display: flex;
+    align-items: center;
+    justify-content: center;
     text-align: center;
     padding: 2.5rem 1.25rem 2rem;
     background: linear-gradient(135deg, rgba(31, 111, 235, 0.20), rgba(23, 185, 120, 0.15));
     margin: -1.5rem -1.25rem 1.75rem;
-    min-height: 13.2rem;
+    height: 13.2rem;
 
     @include up($breakpoint-sm) {
         padding: 3.5rem 1.5rem 2.75rem;
         margin: -2rem -2rem 2rem;
+        height: 14.5rem;
     }
 
     &--wide {
         margin: 0;
+        height: auto;
+        min-height: 13.2rem;
     }
 
     &--top {
         margin-top: 0;
         margin-left: 0;
         margin-right: 0;
+    }
+
+    &--profile {
+        margin-top: 0;
+        margin-left: 0;
+        margin-right: 0;
+        height: 20rem;
+
+        @include up($breakpoint-xs) {
+            height: 8.5rem;
+        }
+
+        @include up($breakpoint-sm) {
+            height: 9rem;
+        }
     }
 
     // A subnav directly follows this hero (see .ul-page-subnav below) - drop
@@ -49,6 +79,22 @@
 
     &--wide &__inner {
         max-width: 760px;
+    }
+
+    // Profile | Edit hero body: avatar beside identity, matching the old
+    // standalone .profile-hero card's layout (see _profile.scss).
+    &--profile &__inner {
+        max-width: 900px;
+        width: 100%;
+        flex-direction: row;
+        align-items: center;
+        text-align: left;
+        gap: 1.75rem;
+
+        @include down($breakpoint-xs) {
+            flex-direction: column;
+            text-align: center;
+        }
     }
 
     &__back {

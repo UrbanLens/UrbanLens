@@ -341,7 +341,7 @@ div.section {
         @include panel-header-grid;
         border-radius: $radius-sm $radius-sm 0 0;
 
-        > span:not(.badge):not(.visit-count) {
+        > span:not(.badge):not(.visit-count):not(.ul-explainer-anchor) {
             grid-area: header-title;
             margin: 0;
             font-size: .95rem;

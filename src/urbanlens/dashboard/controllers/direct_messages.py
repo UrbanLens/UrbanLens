@@ -36,6 +36,7 @@ from urbanlens.dashboard.services.direct_messages import (
     mark_thread_open,
     reaction_summary,
     search_direct_messages,
+    thread_page,
     toggle_reaction,
 )
 from urbanlens.dashboard.services.text_limits import MAX_DIRECT_MESSAGE_LENGTH
@@ -106,11 +107,36 @@ def _trigger_msg_badge_refresh(response: HttpResponse) -> HttpResponse:
     return response
 
 
+def _visible_key_events(profile: Profile, partner: Profile, messages: list[DirectMessage]) -> list[dict]:
+    """Restrict key-change notices to the time span actually covered by `messages`.
+
+    ``key_change_events_for`` returns every key rotation across the whole
+    conversation's history; a single paginated page only wants the ones that
+    fall between its own oldest and newest loaded message, so a notice never
+    renders detached from the messages it explains.
+
+    Args:
+        profile: One participant.
+        partner: The other participant.
+        messages: The currently loaded page of messages (any order).
+
+    Returns:
+        Key-change events whose timestamp falls within `messages`' span, or
+        an empty list when `messages` is empty.
+    """
+    if not messages:
+        return []
+    created_times = [message.created for message in messages]
+    start, end = min(created_times), max(created_times)
+    return [event for event in key_change_events_for(profile, partner) if start <= event["created"] <= end]
+
+
 def _thread_context(profile: Profile, partner: Profile) -> dict:
     """Build the template context for one conversation thread.
 
     Marks the partner's unread messages as read - rendering the thread is the
-    act of reading it.
+    act of reading it. Only the most recent page of history is loaded here;
+    older messages are fetched on demand (see ``ConversationOlderMessagesView``).
 
     Args:
         profile: The viewing profile.
@@ -122,26 +148,8 @@ def _thread_context(profile: Profile, partner: Profile) -> dict:
     DirectMessage.objects.between(profile, partner).filter(recipient=profile).mark_read()
     clear_email_debounce(partner.pk, profile.pk)
     mark_thread_open(profile.pk, partner.pk)
-    thread_messages = list(
-        DirectMessage.objects.between(profile, partner)
-        .select_related(
-            "sender",
-            "sender__user",
-            "recipient",
-            "recipient__user",
-            "reply_to",
-            "reply_to__sender",
-            "share",
-            "share__pin_share",
-            "share__pin_share__pin",
-            "share__trip",
-            "share__trip_membership",
-            "share__recommended_profile",
-            "markup_map",
-        )
-        .prefetch_related("images", "reactions__profile", "markup_map__items"),
-    )
-    timeline = build_thread_timeline(thread_messages, key_change_events_for(profile, partner))
+    thread_messages, has_more_older = thread_page(profile, partner)
+    timeline = build_thread_timeline(thread_messages, _visible_key_events(profile, partner, thread_messages))
     identity = display_identity_for(profile, partner)
     partner_online = False
     if not identity["is_anonymized"] and Profile.visibility_permits(partner.online_status_visibility, partner, profile):
@@ -158,6 +166,8 @@ def _thread_context(profile: Profile, partner: Profile) -> dict:
         "partner_online": partner_online,
         "image_permission_status": _image_permission_status(profile, partner),
         "partner_e2ee_enrolled": _e2ee_enrolled(partner),
+        "has_more_older": has_more_older,
+        "oldest_message_id": thread_messages[0].pk if thread_messages else None,
         **identity,
     }
 
@@ -304,6 +314,50 @@ class ConversationSendView(LoginRequiredMixin, View):
             return HttpResponseForbidden(str(exc))
         response = render(request, "dashboard/partials/messages/_thread.html", _thread_context(profile, partner))
         return _trigger_msg_badge_refresh(response)
+
+
+class ConversationOlderMessagesView(LoginRequiredMixin, View):
+    """GET /messages/<profile_slug>/older/?before=<id> - one older page of a conversation.
+
+    Powers infinite-scroll-up in the thread pane: the oldest bubble currently
+    loaded carries a sentinel that HTMX fires once it's scrolled into view
+    (see ``_thread.html`` / ``_thread_messages_page.html``), which lands here
+    and returns the next page of history to prepend.
+    """
+
+    def get(self, request: HttpRequest, profile_slug: str) -> HttpResponse:
+        """Return the page of messages immediately older than ``before``.
+
+        Args:
+            request: The incoming request. Reads ``before`` (a message pk).
+            profile_slug: Slug of the conversation partner.
+
+        Returns:
+            The message-items partial for that page, or 400 if ``before`` is
+            missing or not an integer.
+        """
+        profile = _get_profile(request)
+        partner = _get_partner(profile, profile_slug)
+        before_raw = request.GET.get("before", "")
+        if not before_raw.isdigit():
+            return HttpResponseBadRequest("A valid message id is required.")
+
+        messages, has_more_older = thread_page(profile, partner, before_id=int(before_raw))
+        timeline = build_thread_timeline(messages, _visible_key_events(profile, partner, messages))
+        return render(
+            request,
+            "dashboard/partials/messages/_thread_messages_page.html",
+            {
+                "partner": partner,
+                "timeline": timeline,
+                "viewer_id": profile.pk,
+                "my_slug": profile.slug or "",
+                "reaction_picker_emojis": REACTION_PICKER_EMOJIS,
+                "image_permission_status": _image_permission_status(profile, partner),
+                "has_more_older": has_more_older,
+                "oldest_message_id": messages[0].pk if messages else None,
+            },
+        )
 
 
 class DirectMessageImageUploadView(LoginRequiredMixin, View):

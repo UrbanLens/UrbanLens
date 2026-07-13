@@ -10,10 +10,10 @@ Valkey/Redis connection.
 
 from __future__ import annotations
 
-import asyncio
 import json
 import uuid
 
+from asgiref.sync import async_to_sync
 from channels.testing import WebsocketCommunicator
 from django.contrib.auth.models import AnonymousUser
 from django.test import TransactionTestCase, override_settings
@@ -25,7 +25,19 @@ _IN_MEMORY_CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryCha
 
 
 def _run(coro):
-    return asyncio.run(coro)
+    """Run *coro* via async_to_sync, not a bare asyncio.run().
+
+    database_sync_to_async's thread-sensitive mode needs the
+    CurrentThreadExecutor that only async_to_sync's sync->async->sync bridge
+    sets up; a coroutine driven by plain asyncio.run() has nothing pumping
+    that queue, so any consumer DB access (e.g. SafetyCheckinChatConsumer's
+    _resolve()/_create_message()) hangs forever instead of completing.
+    """
+
+    async def _wrap():
+        return await coro
+
+    return async_to_sync(_wrap)()
 
 
 @override_settings(CHANNEL_LAYERS=_IN_MEMORY_CHANNEL_LAYERS)

@@ -8,8 +8,7 @@ lands in the DOM (handled via the htmx:afterSwap listener there).
 {% endcomment %}
 <div class="form-row saved-filter-region-field">
     <div class="saved-filter-region-header">
-        <label>Geographic regions <span class="saved-filter-region-optional">(optional)</span></label>
-        {% include "dashboard/partials/ui/_tooltip_help.html" with text="Restrict this filter to pins inside (include) or outside (exclude) the regions you draw. Overlapping regions of the same type merge into one automatically." %}
+        <label>Geographic regions</label>
     </div>
     <div class="saved-filter-region-mode-toggle" role="group" aria-label="Choose region type to draw">
         <button type="button" class="btn btn--secondary saved-filter-region-mode-btn saved-filter-region-mode-btn--active saved-filter-region-mode-btn--include"

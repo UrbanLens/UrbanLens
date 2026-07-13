@@ -41,24 +41,36 @@
 
         <div class="form-row">
             <label>Visited?</label>
-            {{ form.has_visits }}
+            <input type="hidden" name="has_visits" id="sf-visits-hidden" value="{{ criteria.has_visits|default:'' }}">
+            <div class="fp-visits-row">
+                <div class="fp-chips" id="sf-visits-chips">
+                    <label class="fp-chip" id="sf-visits-chip-yes"><input type="radio" name="has_visits_ui" value="yes">Visited</label>
+                    <label class="fp-chip" id="sf-visits-chip-no"><input type="radio" name="has_visits_ui" value="no">Never visited</label>
+                </div>
+                <button type="button" class="fp-visits-reset" id="sf-visits-reset" style="display:none"
+                        title="Clear visit filter" onclick="savedFilterResetVisits()">
+                    <i class="material-symbols-outlined">close</i>
+                </button>
+            </div>
+            <div class="fp-date-block" id="sf-visits-dates" style="display:none">
+                <div class="fp-date-row">
+                    <span class="fp-date-label">After</span>
+                    <input type="date" name="visited_after" id="sf-visited-after" class="fp-date-input" value="{{ criteria.visited_after|date:'Y-m-d'|default:'' }}">
+                </div>
+                <div class="fp-date-row">
+                    <span class="fp-date-label">Before</span>
+                    <input type="date" name="visited_before" id="sf-visited-before" class="fp-date-input" value="{{ criteria.visited_before|date:'Y-m-d'|default:'' }}">
+                </div>
+            </div>
         </div>
 
         <div class="saved-filter-date-grid">
             <div class="form-row">
-                <label for="id_visited_after">Visited after</label>
-                <input type="date" name="visited_after" id="id_visited_after" value="{{ criteria.visited_after|date:'Y-m-d'|default:'' }}">
-            </div>
-            <div class="form-row">
-                <label for="id_visited_before">Visited before</label>
-                <input type="date" name="visited_before" id="id_visited_before" value="{{ criteria.visited_before|date:'Y-m-d'|default:'' }}">
-            </div>
-            <div class="form-row">
-                <label for="id_created_after">Created after</label>
+                <label for="id_created_after">Pinned after</label>
                 <input type="date" name="created_after" id="id_created_after" value="{{ criteria.created_after|date:'Y-m-d'|default:'' }}">
             </div>
             <div class="form-row">
-                <label for="id_created_before">Created before</label>
+                <label for="id_created_before">Pinned before</label>
                 <input type="date" name="created_before" id="id_created_before" value="{{ criteria.created_before|date:'Y-m-d'|default:'' }}">
             </div>
         </div>

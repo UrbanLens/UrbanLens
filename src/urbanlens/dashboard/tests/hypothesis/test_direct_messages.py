@@ -32,6 +32,7 @@ from urbanlens.dashboard.services.direct_messages import (
     create_direct_message,
     has_used_direct_messages,
     is_safe_reaction_emoji,
+    thread_page,
 )
 from urbanlens.dashboard.services.text_limits import MAX_DIRECT_MESSAGE_LENGTH
 
@@ -439,7 +440,81 @@ class DirectMessageEndpointTests(TestCase):
         message = DirectMessage.objects.create(sender=self.partner, recipient=self.me, body="hi")
         response = self.client.post(
             reverse("messages.react", kwargs={"profile_slug": self.partner.slug, "message_id": message.pk}),
-            {"emoji": '<img src>'},
+            {"emoji": "<img src>"},
         )
         self.assertEqual(response.status_code, 400)
         self.assertFalse(message.reactions.exists())
+
+
+class ConversationPaginationTests(TestCase):
+    """Long conversations load a bounded page of history, not the entire thread."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.me = _profile()
+        self.partner = _profile()
+        _set_dm_visibility(self.partner, VisibilityChoice.ANYONE)
+        self.me.ensure_slug()
+        self.partner.ensure_slug()
+        self.client.force_login(self.me.user)
+
+    def _create_messages(self, count: int) -> list[DirectMessage]:
+        return [DirectMessage.objects.create(sender=self.me, recipient=self.partner, body=f"msg {i}") for i in range(count)]
+
+    def test_thread_page_caps_at_limit_and_flags_more(self) -> None:
+        messages = self._create_messages(5)
+        page, has_more_older = thread_page(self.me, self.partner, limit=3)
+        self.assertEqual([m.pk for m in page], [m.pk for m in messages[-3:]])
+        self.assertTrue(has_more_older)
+
+    def test_thread_page_reports_no_more_when_everything_fits(self) -> None:
+        messages = self._create_messages(3)
+        page, has_more_older = thread_page(self.me, self.partner, limit=10)
+        self.assertEqual([m.pk for m in page], [m.pk for m in messages])
+        self.assertFalse(has_more_older)
+
+    def test_thread_page_before_id_paginates_backwards(self) -> None:
+        messages = self._create_messages(5)
+        newest_page, _ = thread_page(self.me, self.partner, limit=2)
+        self.assertEqual([m.pk for m in newest_page], [m.pk for m in messages[-2:]])
+        older_page, has_more_older = thread_page(self.me, self.partner, before_id=newest_page[0].pk, limit=2)
+        self.assertEqual([m.pk for m in older_page], [m.pk for m in messages[1:3]])
+        self.assertTrue(has_more_older)
+
+    def test_conversation_view_only_renders_latest_page(self) -> None:
+        self._create_messages(60)
+        response = self.client.get(reverse("messages.conversation", kwargs={"profile_slug": self.partner.slug}))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "msg 0<")
+        self.assertContains(response, "msg 59<")
+        self.assertContains(response, 'id="dm-load-older-sentinel"')
+
+    def test_conversation_view_omits_sentinel_when_history_fits(self) -> None:
+        self._create_messages(5)
+        response = self.client.get(reverse("messages.conversation", kwargs={"profile_slug": self.partner.slug}))
+        self.assertEqual(response.status_code, 200)
+        # The identifier alone also appears in the page's inline JS (which checks
+        # `elt.id` regardless of whether the sentinel element is ever rendered),
+        # so assert against the element's actual markup, not the bare id string.
+        self.assertNotContains(response, 'id="dm-load-older-sentinel"')
+
+    def test_older_messages_endpoint_returns_earlier_page(self) -> None:
+        self._create_messages(60)
+        first_page, _ = thread_page(self.me, self.partner)
+        response = self.client.get(
+            reverse("messages.older", kwargs={"profile_slug": self.partner.slug}),
+            {"before": first_page[0].pk},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "msg 9<")
+        self.assertNotContains(response, "msg 10<")
+        self.assertNotContains(response, "msg 59<")
+
+    def test_older_messages_endpoint_requires_valid_before(self) -> None:
+        response = self.client.get(reverse("messages.older", kwargs={"profile_slug": self.partner.slug}), {"before": "nope"})
+        self.assertEqual(response.status_code, 400)
+
+    def test_older_messages_endpoint_requires_login(self) -> None:
+        self.client.logout()
+        response = self.client.get(reverse("messages.older", kwargs={"profile_slug": self.partner.slug}), {"before": "1"})
+        self.assertEqual(response.status_code, 302)

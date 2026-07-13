@@ -23,7 +23,7 @@ Context:
     <button type="button" class="btn btn--primary btn--lg"
             hx-get="{% url 'saved_filters.new' %}"
             hx-target="#saved-filter-form-dialog" hx-swap="innerHTML"
-            hx-on::after-request="if(event.detail.successful){document.getElementById('saved-filter-form-dialog').showModal()}">
+            hx-on::after-request="if(event.detail.successful){savedFilterOpenDialog()}">
         <i class="material-symbols-outlined">add</i>
         New Filter
     </button>
@@ -32,12 +32,11 @@ Context:
     {% include "dashboard/partials/pin_lists/_filters_tab_grid.html" %}
 </div>
 
-{# -- Create/edit saved filter dialog - body is always HTMX-loaded (see New Filter / Edit buttons above and in _filters_tab_grid.html) #}
-<dialog id="saved-filter-form-dialog" class="ul-dialog saved-filter-form-dialog"></dialog>
+{# -- Create/edit saved filter dialog - body is always HTMX-loaded (see New Filter / Edit buttons above and in _filters_tab_grid.html). #}
+{# Markup+JS shared with the pin list detail page - see _saved_filter_dialog_scripts.html. Redirects back to this tab on save/delete. #}
+<dialog id="saved-filter-form-dialog" class="ul-dialog saved-filter-form-dialog" data-success-redirect="{% url 'organize.index' %}?tab=filters"></dialog>
 
 <script>
-    const CSRF = document.querySelector('input[name=csrfmiddlewaretoken]')?.value || '{{ csrf_token }}';
-
     function savedFiltersFilterCards(query) {
         const q = (query || '').trim().toLowerCase();
         document.querySelectorAll('#saved-filters-grid .saved-filter-card').forEach((card) => {
@@ -45,173 +44,5 @@ Context:
             card.style.display = match ? '' : 'none';
         });
     }
-
-    // -- Saved filter create/edit dialog --------------------------------------
-    window.savedFilterFormSubmit = function (event) {
-        event.preventDefault();
-        const form = event.target;
-        const action = form.dataset.action;
-        const body = new FormData(form);
-        fetch(action, { method: 'POST', headers: { 'X-CSRFToken': CSRF }, body })
-            .then((r) => r.text().then((text) => {
-                if (r.ok) return;
-                let message = text;
-                try {
-                    const data = text ? JSON.parse(text) : {};
-                    if (data.error) message = data.error;
-                } catch (e) { /* plain-text error body from the create endpoint */ }
-                return Promise.reject(message || 'Could not save this filter.');
-            }))
-            .then(() => { window.location.href = "{% url 'organize.index' %}?tab=filters"; })
-            .catch((message) => { if (typeof toastr !== 'undefined') toastr.error(String(message)); });
-        return false;
-    };
-
-    const SAVED_FILTER_DELETE_URL_TEMPLATE = "{% url 'saved_filters.delete' '00000000-0000-0000-0000-000000000000' %}";
-    window.savedFilterDelete = function (uuid, name) {
-        if (!confirm('Delete the saved filter "' + name + '"?')) return;
-        const url = SAVED_FILTER_DELETE_URL_TEMPLATE.replace('00000000-0000-0000-0000-000000000000', uuid);
-        fetch(url, { method: 'POST', headers: { 'X-CSRFToken': CSRF } })
-            .then((r) => {
-                if (!r.ok) return Promise.reject('Could not delete this filter.');
-                window.location.href = "{% url 'organize.index' %}?tab=filters";
-            })
-            .catch((message) => { if (typeof toastr !== 'undefined') toastr.error(String(message)); });
-    };
-
-    // -- Saved filter region map (include/exclude polygons) ------------------
-    let _sfRegionMap = null;
-    let _sfRegionLayers = null;
-    let _sfActiveRegionMode = 'include';
-    const REGION_SEARCH_URL = "{% url 'region_search.search' %}";
-
-    window.savedFilterSetRegionMode = function (mode) {
-        _sfActiveRegionMode = mode;
-        document.querySelectorAll('.saved-filter-region-mode-btn').forEach((btn) => {
-            btn.classList.toggle('saved-filter-region-mode-btn--active', btn.dataset.regionMode === mode);
-        });
-    };
-
-    function _sfRegionStyle(mode) {
-        return mode === 'exclude'
-            ? { color: '#c62828', fillColor: '#c62828', fillOpacity: 0.25, weight: 2 }
-            : { color: '#2e7d32', fillColor: '#2e7d32', fillOpacity: 0.25, weight: 2 };
-    }
-
-    function _sfSaveRegions() {
-        const includeCoords = [];
-        const excludeCoords = [];
-        _sfRegionLayers.eachLayer((layer) => {
-            const geojson = layer.toGeoJSON().geometry;
-            const target = layer.options.regionType === 'exclude' ? excludeCoords : includeCoords;
-            if (geojson.type === 'Polygon') target.push(geojson.coordinates);
-            else if (geojson.type === 'MultiPolygon') geojson.coordinates.forEach((c) => target.push(c));
-        });
-        const includeInput = document.getElementById('saved-filter-include-regions');
-        const excludeInput = document.getElementById('saved-filter-exclude-regions');
-        if (includeInput) includeInput.value = includeCoords.length ? JSON.stringify({ type: 'MultiPolygon', coordinates: includeCoords }) : '';
-        if (excludeInput) excludeInput.value = excludeCoords.length ? JSON.stringify({ type: 'MultiPolygon', coordinates: excludeCoords }) : '';
-    }
-
-    function _sfAddRegionLayer(geojson, mode) {
-        if (!_sfRegionLayers) return;
-        const layers = L.geoJSON(geojson).getLayers();
-        layers.forEach((layer) => {
-            layer.options.regionType = mode;
-            layer.setStyle(_sfRegionStyle(mode));
-            _sfRegionLayers.addLayer(layer);
-        });
-        if (layers.length && _sfRegionMap) _sfRegionMap.fitBounds(_sfRegionLayers.getBounds());
-    }
-
-    window.initSavedFilterRegionMap = function () {
-        const mapEl = document.getElementById('saved-filter-region-map');
-        if (!mapEl || typeof L === 'undefined') return;
-
-        const centerLat = {{ map_center_lat|default:39.8283 }};
-        const centerLng = {{ map_center_lng|default:-98.5795 }};
-        const map = L.map(mapEl, { attributionControl: false }).setView([centerLat, centerLng], 4);
-        _sfRegionMap = map;
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-
-        const drawnItems = new L.FeatureGroup().addTo(map);
-        _sfRegionLayers = drawnItems;
-
-        const includeInput = document.getElementById('saved-filter-include-regions');
-        const excludeInput = document.getElementById('saved-filter-exclude-regions');
-        try { if (includeInput.value) _sfAddRegionLayer(JSON.parse(includeInput.value), 'include'); } catch (e) { /* malformed stored geometry - ignore */ }
-        try { if (excludeInput.value) _sfAddRegionLayer(JSON.parse(excludeInput.value), 'exclude'); } catch (e) { /* malformed stored geometry - ignore */ }
-
-        const drawControl = new L.Control.Draw({
-            draw: { polygon: { shapeOptions: _sfRegionStyle('include') }, marker: false, circle: false, circlemarker: false, rectangle: false, polyline: false },
-            edit: { featureGroup: drawnItems, remove: true },
-        });
-        map.addControl(drawControl);
-
-        map.on(L.Draw.Event.CREATED, (e) => {
-            e.layer.options.regionType = _sfActiveRegionMode;
-            e.layer.setStyle(_sfRegionStyle(_sfActiveRegionMode));
-            drawnItems.addLayer(e.layer);
-            _sfSaveRegions();
-        });
-        map.on(L.Draw.Event.EDITED, _sfSaveRegions);
-        map.on(L.Draw.Event.DELETED, _sfSaveRegions);
-
-        savedFilterSetRegionMode('include');
-        setTimeout(() => map.invalidateSize(), 0);
-    };
-
-    window.savedFilterSearchRegion = function () {
-        const input = document.getElementById('saved-filter-region-search-input');
-        const query = (input.value || '').trim();
-        const resultsEl = document.getElementById('saved-filter-region-search-results');
-        const messageEl = document.getElementById('saved-filter-region-search-message');
-        resultsEl.hidden = true;
-        resultsEl.innerHTML = '';
-        messageEl.hidden = true;
-        if (!query) return;
-        fetch(REGION_SEARCH_URL + '?q=' + encodeURIComponent(query))
-            .then((r) => r.json())
-            .then((data) => {
-                const results = data.results || [];
-                if (!results.length) {
-                    messageEl.textContent = 'No area boundary found for that place - try a broader name, like a city or neighborhood, or draw the region manually.';
-                    messageEl.hidden = false;
-                    return;
-                }
-                if (results.length === 1) {
-                    _sfAddRegionLayer(results[0].geojson, _sfActiveRegionMode);
-                    _sfSaveRegions();
-                    return;
-                }
-                results.forEach((result) => {
-                    const item = document.createElement('button');
-                    item.type = 'button';
-                    item.className = 'saved-filter-region-result';
-                    item.textContent = result.display_name;
-                    item.onclick = () => {
-                        _sfAddRegionLayer(result.geojson, _sfActiveRegionMode);
-                        _sfSaveRegions();
-                        resultsEl.hidden = true;
-                    };
-                    resultsEl.appendChild(item);
-                });
-                resultsEl.hidden = false;
-            })
-            .catch(() => {
-                messageEl.textContent = 'Could not search for that place right now.';
-                messageEl.hidden = false;
-            });
-    };
-
-    // The dialog's body (including the region map container) only exists after
-    // an HTMX swap - (re)initialize the map each time fresh content lands.
-    document.body.addEventListener('htmx:afterSwap', (e) => {
-        if (e.detail.target && e.detail.target.id === 'saved-filter-form-dialog') {
-            _sfRegionMap = null;
-            _sfRegionLayers = null;
-            window.initSavedFilterRegionMap();
-        }
-    });
 </script>
-{% include "dashboard/partials/ui/_dual_range_slider_script.html" %}
+{% include "dashboard/partials/pin_lists/_saved_filter_dialog_scripts.html" %}

@@ -21,10 +21,13 @@ Optional:
                           to a section's home page)
   back_label            - label for back_url; defaults to "Back"
   modifier              - extra BEM modifier class: "wide" for a wider hero that
-                          doesn't need to bleed out of an ambient page padding, or
+                          doesn't need to bleed out of an ambient page padding,
                           "top" when rendered in base.html's block hero (outside
                           .container, right below the header) - see the
-                          .ul-page-subnav notes in _page_hero.scss
+                          .ul-page-subnav notes in _page_hero.scss - or
+                          "profile" for the Profile | Edit avatar+identity
+                          layout (also renders in block hero; see
+                          partials/profile/_profile_hero_body.html)
   id                    - id attribute on the outer <section>, so a page whose
                           hero content can change after load (e.g. an edit
                           dialog) can target it for an out-of-band HTMX swap

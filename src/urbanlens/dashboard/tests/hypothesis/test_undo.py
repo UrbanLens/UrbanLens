@@ -260,6 +260,7 @@ class DeleteViewsStashUndoTests(TestCase):
         parent_location = baker.make("dashboard.Location")
         parent_wiki = _make_wiki(location=parent_location)
         child = _make_wiki(name="Child Marker", parent_wiki=parent_wiki)
+        baker.make(Pin, profile=self.profile, location=parent_location)
         self.client.delete(reverse("location.wiki.detail_pin.edit", args=[parent_location.slug, child.uuid]))
         self.assertTrue(UndoAction.objects.filter(profile=self.profile, model_label="wiki").exists())
 

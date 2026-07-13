@@ -33,6 +33,12 @@ logger = logging.getLogger(__name__)
 #: Common emoji offered by the quick "add a reaction" picker on each message.
 REACTION_PICKER_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🙏", "🔥", "🎉"]
 
+#: Maximum number of messages loaded per page of a conversation thread. Both
+#: the initial thread view (most recent page) and each "load older history"
+#: fetch pull this many at a time, so a years-long conversation never has to
+#: query and render its entire history just to open the thread.
+THREAD_PAGE_SIZE = 50
+
 #: Characters a reaction "emoji" must never contain. Reactions are broadcast
 #: verbatim to the other participant and rendered into their DOM, so a value
 #: carrying HTML/JS metacharacters (or plain letters that spell a tag/handler)
@@ -826,6 +832,53 @@ def key_change_events_for(profile: Profile, partner: Profile) -> list[dict[str, 
     low, high = ConversationKey.canonical_pair(profile, partner)
     rows = ConversationKey.objects.filter(profile_low=low, profile_high=high, version__gt=1).order_by("version")
     return [{"kind": "key_change", "created": row.created, "version": row.version} for row in rows]
+
+
+def thread_page(profile: Profile, partner: Profile, *, before_id: int | None = None, limit: int = THREAD_PAGE_SIZE) -> tuple[list[DirectMessage], bool]:
+    """Return one page of a conversation, most recent messages first page by default.
+
+    Pages are keyed off ``id`` rather than ``created`` - equivalent ordering
+    for this insert-only, auto-incrementing table, but ``id`` is what the
+    "load older history" cursor (``before_id``) needs to filter on.
+
+    Args:
+        profile: One participant.
+        partner: The other participant.
+        before_id: When given, only messages with a smaller pk are considered
+            (paginating further into the past); None loads the most recent page.
+        limit: Maximum number of messages to return.
+
+    Returns:
+        A tuple of ``(messages, has_more_older)``: messages oldest-first,
+        ready to render in a timeline; ``has_more_older`` is True when at
+        least one older message exists beyond this page.
+    """
+    queryset = (
+        DirectMessage.objects.between(profile, partner)
+        .select_related(
+            "sender",
+            "sender__user",
+            "recipient",
+            "recipient__user",
+            "reply_to",
+            "reply_to__sender",
+            "share",
+            "share__pin_share",
+            "share__pin_share__pin",
+            "share__trip",
+            "share__trip_membership",
+            "share__recommended_profile",
+            "markup_map",
+        )
+        .prefetch_related("images", "reactions__profile", "markup_map__items")
+    )
+    if before_id is not None:
+        queryset = queryset.filter(pk__lt=before_id)
+    page = list(queryset.order_by("-id")[: limit + 1])
+    has_more_older = len(page) > limit
+    page = page[:limit]
+    page.reverse()
+    return page, has_more_older
 
 
 def build_thread_timeline(messages: list[DirectMessage], key_events: list[dict[str, Any]]) -> list[dict[str, Any]]:

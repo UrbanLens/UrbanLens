@@ -393,6 +393,7 @@ class MarkupMapEndpointTests(TestCase):
     def test_create_with_location_slug_uses_wiki_named_default_title(self) -> None:
         location = baker.make("dashboard.Location")
         baker.make("dashboard.Wiki", location=location, name="Curated Mill")
+        baker.make("dashboard.Pin", profile=self.profile, location=location)
         response = self.client.post(
             reverse("markup_map.create"),
             data=json.dumps(_snapshot(location_slug=location.slug)),

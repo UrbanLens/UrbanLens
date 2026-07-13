@@ -1122,6 +1122,7 @@ urlpatterns = [
                 path("<slug:profile_slug>/", direct_messages.ConversationView.as_view(), name="messages.conversation"),
                 path("<slug:profile_slug>/send/", direct_messages.ConversationSendView.as_view(), name="messages.send"),
                 path("<slug:profile_slug>/read/", direct_messages.ConversationReadView.as_view(), name="messages.read"),
+                path("<slug:profile_slug>/older/", direct_messages.ConversationOlderMessagesView.as_view(), name="messages.older"),
                 path("<slug:profile_slug>/search/", direct_messages.ConversationSearchView.as_view(), name="messages.conversation_search"),
                 path("<slug:profile_slug>/react/<int:message_id>/", direct_messages.MessageReactionToggleView.as_view(), name="messages.react"),
                 path("<slug:profile_slug>/delete/<int:message_id>/", direct_messages.MessageDeleteView.as_view(), name="messages.delete"),

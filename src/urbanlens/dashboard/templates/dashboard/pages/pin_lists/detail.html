@@ -11,6 +11,27 @@
 
 {% block page_title %}{{ pin_list.name }} - Lists - {{ site_title|default:"UrbanLens" }}{% endblock %}
 
+{% block subnav %}
+<div class="ul-page-subnav">
+    <div class="ul-page-subnav__inner">
+        <nav class="ul-subnav-tabs" aria-label="Organize sections">
+            <a href="{% url 'organize.index' %}?tab=tags" class="ul-subnav-tab">
+                <i class="material-symbols-outlined">sell</i>
+                <span>Badges</span>
+            </a>
+            <a href="{% url 'organize.index' %}?tab=lists" class="ul-subnav-tab is-active" aria-current="page">
+                <i class="material-symbols-outlined">bookmarks</i>
+                <span>Lists</span>
+            </a>
+            <a href="{% url 'organize.index' %}?tab=filters" class="ul-subnav-tab">
+                <i class="material-symbols-outlined">filter_alt</i>
+                <span>Filters</span>
+            </a>
+        </nav>
+    </div>
+</div>
+{% endblock %}
+
 {% block content %}
 {% url 'organize.index' as organize_url %}
 {% include "dashboard/partials/ui/_page_hero.html" with body_template="dashboard/partials/pin_lists/_detail_hero_body.html" back_url=organize_url|add:"?tab=lists" back_label="Lists" %}
@@ -19,11 +40,6 @@
     <div class="pin-list-detail-actions">
         <button type="button" class="btn btn--primary" onclick="document.getElementById('add-pins-dialog').showModal()">
             <i class="material-symbols-outlined">add_location_alt</i> Add Pins
-        </button>
-        <button type="button" class="btn btn--secondary" onclick="pinListCreateMarkupMap()"
-                {% if not pin_list.pin_count and not pin_list.markup_map_id %}disabled title="Add pins to this list first"{% endif %}>
-            <i class="material-symbols-outlined">draw</i>
-            {% if pin_list.markup_map_id %}Edit Markup Map{% else %}Create Markup Map{% endif %}
         </button>
         <div class="pin-list-more-menu">
             <button type="button" class="btn btn--icon pin-list-more-btn" id="pin-list-more-btn"
@@ -54,6 +70,9 @@
     {# -- Map of all pins currently on this list ------------------------------ #}
     <section class="pin-list-map-section" id="pin-list-map-section" {% if not items %}hidden{% endif %}>
         <div id="pin-list-map" class="pin-list-map"></div>
+        {# Shared toolbar/layers components - same as the main map. #}
+        {% map_toolbar "screenshot" panel_id="pin-list-map-buttons" %}
+        {% map_layers_panel "street,terrain,satellite,borders" panel_id="pin-list-map-layers" %}
     </section>
 
     {# -- Smart list configuration ------------------------------------------- #}
@@ -74,7 +93,10 @@
             <div class="pin-list-smart-row">
                 <div class="pin-list-boundary-header">
                     <label for="pin-list-saved-filter-select">Match pins from a saved filter</label>
-                    <button type="button" class="btn btn--ghost btn--sm" onclick="document.getElementById('create-filter-dialog').showModal()">
+                    <button type="button" class="btn btn--ghost btn--sm"
+                            hx-get="{% url 'saved_filters.new' %}"
+                            hx-target="#saved-filter-form-dialog" hx-swap="innerHTML"
+                            hx-on::after-request="if(event.detail.successful){savedFilterOpenDialog()}">
                         <i class="material-symbols-outlined">add</i> New filter
                     </button>
                 </div>
@@ -86,14 +108,10 @@
                     {% endfor %}
                 </select>
                 {% else %}
-                <p class="pin-list-smart-hint">You don't have any saved filters yet - create one above, or save one from the map's filter panel.</p>
+                <p class="pin-list-smart-hint">You don't have any saved filters yet - create one above.</p>
                 {% endif %}
             </div>
-            <div class="pin-list-smart-row" id="pin-list-boundary-add-row" {% if pin_list.smart_boundary %}hidden{% endif %}>
-                <button type="button" class="btn btn--ghost btn--sm" onclick="pinListShowBoundaryFilter()">
-                    <i class="material-symbols-outlined">add</i> Add a boundary filter
-                </button>
-            </div>
+            {# A boundary can only be cleared here once set - new ones are drawn from the "Geographic regions" field in the New Filter dialog above. #}
             <div class="pin-list-smart-row" id="pin-list-boundary-row" {% if not pin_list.smart_boundary %}hidden{% endif %}>
                 <div class="pin-list-boundary-header">
                     <label>Match pins inside a boundary</label>
@@ -166,36 +184,9 @@
     </div>
 </dialog>
 
-{# -- Create a saved filter inline (used by the Smart list panel) -------------#}
-<dialog id="create-filter-dialog" class="ul-dialog">
-    {% include "dashboard/partials/ui/_dialog_header.html" with title="Create a Saved Filter" %}
-    <div class="ul-dialog-body">
-        <form onsubmit="return pinListCreateSavedFilter(event)">
-            <div class="form-row">
-                <label for="create-filter-name">Filter name <span class="required">*</span></label>
-                <input type="text" id="create-filter-name" required maxlength="100" placeholder="e.g. Unvisited 4-star spots" autocomplete="off">
-            </div>
-            <div class="form-row">
-                <label for="create-filter-name-contains">Pin name contains</label>
-                <input type="text" id="create-filter-name-contains" maxlength="150" autocomplete="off">
-            </div>
-            <div class="form-row">
-                <label for="create-filter-min-rating">Minimum rating</label>
-                <select id="create-filter-min-rating">
-                    <option value="">Any</option>
-                    {% for n in "12345" %}
-                    <option value="{{ n }}">{{ n }}+ stars</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <p class="pin-list-smart-hint">Need to filter by badges or visits too? Use the "Save filter" option in the map's filter panel instead.</p>
-            <div class="form-actions">
-                <button type="submit" class="btn btn--primary btn--lg">Create Filter</button>
-                <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
-            </div>
-        </form>
-    </div>
-</dialog>
+{# -- Create/edit saved filter dialog - markup+JS shared with Organize's Filters tab (see _saved_filter_dialog_scripts.html). #}
+{# No data-success-redirect set - saving/deleting here just reloads this page so the "Match pins from a saved filter" select picks up the change. #}
+<dialog id="saved-filter-form-dialog" class="ul-dialog saved-filter-form-dialog"></dialog>
 
 {# -- Add to trip dialog ------------------------------------------------------#}
 <dialog id="add-to-trip-dialog" class="ul-dialog">
@@ -239,8 +230,6 @@
     const LIST_DELETE_URL = "{% url 'lists.delete' pin_list.uuid %}";
     const CREATE_TRIP_URL = "{% url 'lists.create_trip' pin_list.uuid %}";
     const ADD_TO_TRIP_URL = "{% url 'lists.add_to_trip' pin_list.uuid %}";
-    const MARKUP_MAP_URL = "{% url 'lists.markup_map' pin_list.uuid %}";
-    const SAVED_FILTER_CREATE_URL = "{% url 'saved_filters.create' %}";
     const PIN_ADD_URL = "{% url 'pin.add' %}";
     const CSRF = document.querySelector('input[name=csrfmiddlewaretoken]')?.value || '{{ csrf_token }}';
 
@@ -374,15 +363,7 @@
         _postJson(LIST_EDIT_URL, { smart_boundary: null }).then(() => {
             refreshItems();
             document.getElementById('pin-list-boundary-row').hidden = true;
-            document.getElementById('pin-list-boundary-add-row').hidden = false;
         }).catch(_toastError);
-    };
-
-    window.pinListShowBoundaryFilter = function () {
-        document.getElementById('pin-list-boundary-add-row').hidden = true;
-        document.getElementById('pin-list-boundary-row').hidden = false;
-        _initBoundaryMap();
-        if (_boundaryMap) setTimeout(() => _boundaryMap.invalidateSize(), 0);
     };
 
     function refreshItems() {
@@ -457,23 +438,6 @@
             .catch(_toastError);
     };
 
-    // -- Create a saved filter inline (Smart list panel) -------------------------
-    window.pinListCreateSavedFilter = function (event) {
-        event.preventDefault();
-        const name = document.getElementById('create-filter-name').value.trim();
-        if (!name) return false;
-        const body = new URLSearchParams();
-        body.append('filter_name', name);
-        const nameContains = document.getElementById('create-filter-name-contains').value.trim();
-        if (nameContains) body.append('name', nameContains);
-        const minRating = document.getElementById('create-filter-min-rating').value;
-        if (minRating) body.append('min_rating', minRating);
-        fetch(SAVED_FILTER_CREATE_URL, { method: 'POST', headers: { 'X-CSRFToken': CSRF }, body })
-            .then((r) => (r.ok ? window.location.reload() : r.text().then((t) => Promise.reject(t || 'Could not create filter.'))))
-            .catch(_toastError);
-        return false;
-    };
-
     // -- Create / add to trip ------------------------------------------------
     window.pinListCreateTrip = function () {
         _postJson(CREATE_TRIP_URL, {}).then((data) => { if (data.ok) window.location = data.redirect; }).catch(_toastError);
@@ -490,16 +454,11 @@
         });
     };
 
-    // -- Markup map -----------------------------------------------------------
-    window.pinListCreateMarkupMap = function () {
-        _postJson(MARKUP_MAP_URL, {}).then((data) => { if (data.ok) window.location = data.redirect; }).catch(_toastError);
-    };
-
     // -- Boundary drawing mini-map --------------------------------------------
     // Only rendered once the "Match pins inside a boundary" row is actually
-    // visible (either it already has a saved boundary, or the user opted in
-    // via pinListShowBoundaryFilter) - Leaflet can't size itself correctly
-    // against a hidden (zero-size) container.
+    // visible (it already has a saved boundary - new ones are drawn from the
+    // "Geographic regions" field in the New Filter dialog instead) - Leaflet
+    // can't size itself correctly against a hidden (zero-size) container.
     let _boundaryLayers = { clearLayers: function () {} };
     let _boundaryMap = null;
     function _initBoundaryMap() {
@@ -544,25 +503,80 @@
     {% if pin_list.smart_boundary %}_initBoundaryMap();{% endif %}
 
     // -- Overview map of every pin currently on this list --------------------
-    // Reads coordinates straight off the (already server-rendered, and later
-    // HTMX/fetch-refreshed) #pin-list-items rows rather than a separate JSON
-    // payload, so the map re-syncs for free whenever that list changes.
-    function _escapeHtml(s) {
-        return String(s).replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' })[c]);
+    // Marker icons and popups mirror the main map's own _buildMarker/popup
+    // construction (badge icon, tag chips, rating, address, last visited) so
+    // this map looks and behaves the same - just read-only (no drag/edit/
+    // delete, which don't apply on a list summary map). Reads the JSON blob
+    // #pin-list-items-map-data embeds (see pin_lists.py's _pin_map_marker_data)
+    // rather than scraping the sidebar rows, so it re-syncs for free whenever
+    // that panel is swapped in after add/remove/reorder.
+    function _escHtml(s) {
+        return String(s == null ? '' : s).replace(/[<>&"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' })[c]);
     }
+    function _normalizeHexColor(hex) {
+        let h = String(hex).replace('#', '').toLowerCase();
+        if (h.length === 3) h = h.split('').map((c) => c + c).join('');
+        return h;
+    }
+    function _hexToRgba(hex, alpha) {
+        const h = _normalizeHexColor(hex);
+        const r = parseInt(h.slice(0, 2), 16);
+        const g = parseInt(h.slice(2, 4), 16);
+        const b = parseInt(h.slice(4, 6), 16);
+        return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
+    }
+    function _buildOverviewIcon(pt) {
+        if (!pt.icon) return null;
+        const hasColor = !!pt.color;
+        const color = hasColor ? pt.color : '#555555';
+        let iconHtml;
+        if (/^[a-z_]+$/.test(pt.icon)) {
+            iconHtml = '<i class="material-icons map-pin-icon"' + (hasColor ? '' : ' style="color:' + color + ';"') + '>' + pt.icon + '</i>';
+        } else if (/^(https?:\/\/|\/)/.test(pt.icon)) {
+            iconHtml = '<img src="' + pt.icon + '" class="map-pin-custom-img" alt="">';
+        } else {
+            iconHtml = '<span class="map-pin-emoji">' + pt.icon + '</span>';
+        }
+        if (hasColor) {
+            const circleColorClass = 'map-pin-color-circle--' + _normalizeHexColor(color);
+            iconHtml = '<span class="map-pin-with-circle"><span class="map-pin-color-circle ' + circleColorClass + '" style="background:' + _hexToRgba(color, 0.8) + ';"></span><span class="map-pin-icon-layer">' + iconHtml + '</span></span>';
+        }
+        return L.divIcon({
+            className: 'map-pin-icon-wrap',
+            html: iconHtml,
+            iconSize: hasColor ? [36, 36] : [28, 28],
+            iconAnchor: hasColor ? [18, 18] : [14, 14],
+        });
+    }
+    function _buildOverviewPopup(pt) {
+        const rating = parseInt(pt.rating) || 0;
+        const starDisplay = [1, 2, 3, 4, 5].map((i) => '<span class="popup-star ' + (i <= rating ? 'popup-star--on' : '') + '">★</span>').join('');
+        const tagChips = (pt.tags_data || []).map((t) => {
+            const bg = t.color ? t.color + '22' : 'rgba(100,120,160,0.18)';
+            const border = t.color ? t.color + '55' : 'rgba(100,120,160,0.3)';
+            return '<span class="popup-tag-chip" style="background:' + bg + ';border-color:' + border + ';">' + _escHtml(t.name) + '</span>';
+        }).join('');
+        return '' +
+            '<div class="pin-popup" data-uuid="' + pt.uuid + '">' +
+            '<div class="popup-title">' + _escHtml(pt.name) + '</div>' +
+            (pt.address ? '<div class="popup-address"><i class="material-icons" style="font-size:.7rem;vertical-align:middle;opacity:.6;">location_on</i> ' + _escHtml(pt.address) + '</div>' : '') +
+            (pt.description ? '<div class="popup-desc">' + _escHtml(pt.description) + '</div>' : '') +
+            (pt.last_visited && pt.last_visited !== 'Never' ? '<div class="popup-meta"><span class="popup-visited"><i class="material-icons" style="font-size:.75rem;vertical-align:middle;">schedule</i> ' + _escHtml(pt.last_visited) + '</span></div>' : '') +
+            '<div class="popup-stars" style="cursor:default;">' + starDisplay + '</div>' +
+            (tagChips ? '<div class="popup-tags">' + tagChips + '</div>' : '') +
+            '<div class="popup-actions"><a href="' + _escHtml(pt.url) + '" class="view-full-pin">View Details</a></div>' +
+            '</div>';
+    }
+
     const _overviewMapEl = document.getElementById('pin-list-map');
     let _overviewMap = null;
     let _overviewMarkers = null;
     function syncOverviewMap() {
         if (!_overviewMapEl) return;
         const sectionEl = document.getElementById('pin-list-map-section');
-        const points = Array.from(document.querySelectorAll('#pin-list-items .pin-list-item[data-id]')).map((el) => ({
-            lat: parseFloat(el.dataset.lat),
-            lng: parseFloat(el.dataset.lng),
-            color: el.dataset.color,
-            name: el.dataset.name,
-            url: el.dataset.url,
-        })).filter((pt) => Number.isFinite(pt.lat) && Number.isFinite(pt.lng));
+        const dataEl = document.getElementById('pin-list-items-map-data');
+        let points = [];
+        try { points = dataEl ? JSON.parse(dataEl.textContent) : []; } catch (e) { points = []; }
         if (!points.length) {
             if (sectionEl) sectionEl.hidden = true;
             return;
@@ -571,19 +585,30 @@
 
         if (!_overviewMap) {
             _overviewMap = L.map(_overviewMapEl, { attributionControl: false });
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(_overviewMap);
+            // Read by the shared top-right toolbar's screenshot tool (window._openMapToolbarScreenshot, themes/base.html).
+            window.map = _overviewMap;
+            // Shared layers engine + panel - the exact same component as the main map.
+            window.MapLayers.create(_overviewMap, {
+                root: document.getElementById('pin-list-map-layers'),
+                onAttribution: function (text) {
+                    const el = document.getElementById('page-footer-attribution-text');
+                    if (el) el.textContent = text;
+                },
+            });
             _overviewMarkers = L.layerGroup().addTo(_overviewMap);
         }
         _overviewMarkers.clearLayers();
 
-        const markers = points.map((pt) =>
-            L.circleMarker([pt.lat, pt.lng], { radius: 7, color: pt.color, weight: 2, fillColor: pt.color, fillOpacity: 0.85 })
-                .bindPopup('<a href="' + pt.url + '">' + _escapeHtml(pt.name) + '</a>')
-                .addTo(_overviewMarkers),
-        );
+        const markers = points.map((pt) => {
+            const marker = L.marker([pt.latitude, pt.longitude]);
+            const icon = _buildOverviewIcon(pt);
+            if (icon) marker.setIcon(icon);
+            marker.bindPopup(_buildOverviewPopup(pt));
+            return marker.addTo(_overviewMarkers);
+        });
 
         if (markers.length > 1) _overviewMap.fitBounds(L.featureGroup(markers).getBounds().pad(0.15));
-        else _overviewMap.setView([points[0].lat, points[0].lng], 14);
+        else _overviewMap.setView([points[0].latitude, points[0].longitude], 14);
         setTimeout(() => _overviewMap.invalidateSize(), 0);
     }
     syncOverviewMap();
@@ -600,4 +625,5 @@
     };
 })();
 </script>
+{% include "dashboard/partials/pin_lists/_saved_filter_dialog_scripts.html" %}
 {% endblock %}

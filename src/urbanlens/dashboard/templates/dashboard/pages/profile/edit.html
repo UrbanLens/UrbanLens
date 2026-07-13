@@ -1,7 +1,7 @@
 {% extends 'dashboard/themes/base.html' %}
 
 {% block hero %}
-{% include "dashboard/partials/ui/_page_hero.html" with icon="edit" title="Edit Profile" modifier="top" %}
+{% include "dashboard/partials/ui/_page_hero.html" with id="profile-hero" modifier="profile" body_template="dashboard/partials/profile/_profile_hero_body.html" edit_mode=True %}
 {% endblock %}
 
 {% block subnav %}

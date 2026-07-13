@@ -495,6 +495,7 @@ class EditProfileView(LoginRequiredMixin, View):
         import hashlib
 
         from urbanlens.dashboard.services.avatar import AvatarService
+        from urbanlens.dashboard.services.profile_preview import preview_modes
         from urbanlens.dashboard.services.social_links import URL_INPUT_PLATFORM_LABELS, get_profile_links
 
         discord_link = profile.social_links.filter(platform="discord").first()
@@ -509,6 +510,9 @@ class EditProfileView(LoginRequiredMixin, View):
             gravatar_preview_url = ""
 
         return {
+            "profile": profile,
+            "can_view_contact": True,
+            "preview_modes": preview_modes(),
             "form": form,
             "discord_form": discord_form,
             "social_links": get_profile_links(profile),

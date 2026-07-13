@@ -1,5 +1,9 @@
 {% extends 'dashboard/themes/base.html' %}
 
+{% block hero %}
+{% include "dashboard/partials/ui/_page_hero.html" with id="profile-hero" modifier="profile" body_template="dashboard/partials/profile/_profile_hero_body.html" %}
+{% endblock %}
+
 {% block subnav %}
 {% if profile.user == request.user %}
 <div class="ul-page-subnav">
@@ -13,205 +17,18 @@
 {% block content %}
 <div class="profile-page page-content">
 
-    {# -- Hero card ----------------------------------------------------------- #}
-    <div class="profile-hero ul-section">
-        <div class="profile-avatar-col">
-            <div class="profile-avatar-wrap">
-                {% if profile.avatar %}
-                    <img class="profile-avatar-img" src="{{ profile.avatar.url }}" alt="Avatar">
-                {% else %}
-                    <div class="profile-avatar-placeholder">
-                        {% if profile.first_name %}{{ profile.first_name|first|upper }}{% elif profile.username %}{{ profile.username|first|upper }}{% else %}?{% endif %}
-                    </div>
-                {% endif %}
-                {% if profile.user == request.user %}
-                <form method="post" action="{% url 'profile.view' %}" enctype="multipart/form-data" class="avatar-upload-form">
-                    {% csrf_token %}
-                    <label class="avatar-upload-btn" title="Change photo">
-                        <i class="material-symbols-outlined">photo_camera</i>
-                        <input type="file" name="avatar" onchange="this.form.submit()" style="display:none;">
-                    </label>
-                </form>
-                {% endif %}
-            </div>
-        </div>
-
-        <div class="profile-info-col">
-            <div class="profile-name-row">
-                <div{% if profile.user == request.user %} class="ul-privacy-hint-row"{% endif %}>
-                    <h1 class="profile-full-name">
-                        {% if profile.full_name %}{{ profile.full_name }}{% else %}{{ profile.username }}{% endif %}
-                        {% if profile.user == request.user %}
-                        {% include "dashboard/partials/ui/_privacy_hint.html" with label="Name, avatar & bio" value=profile.get_profile_visibility_display %}
-                        {% endif %}
-                    </h1>
-                    <p class="profile-username">@{{ profile.username }}</p>
-                </div>
-
-                {# -- Friendship actions (only when viewing another user) -- #}
-                {% if user.is_authenticated and profile.user != request.user %}
-                <div class="profile-friendship-actions">
-                    {% if friendship_status == 'accepted' %}
-                        <div class="friendship-chip friendship-chip--friend">
-                            <i class="material-symbols-outlined">people</i>
-                            Friends
-                            {% if friends_since %}
-                            <span class="friendship-since">since {{ friends_since|date:"M Y" }}</span>
-                            {% endif %}
-                        </div>
-                        <div class="friendship-btn-group">
-                            <form method="post" action="{% url 'friend.remove' profile.id %}">
-                                {% csrf_token %}
-                                <button type="submit" class="btn friendship-btn btn--ghost" title="Remove friend">
-                                    <i class="material-symbols-outlined">person_remove</i> Remove
-                                </button>
-                            </form>
-                            <form method="post" action="{% url 'friend.mute' profile.id %}">
-                                {% csrf_token %}
-                                <button type="submit" class="btn friendship-btn btn--ghost" title="Mute this user">
-                                    <i class="material-symbols-outlined">volume_off</i> Mute
-                                </button>
-                            </form>
-                            <form method="post" action="{% url 'friend.block' profile.id %}">
-                                {% csrf_token %}
-                                <button type="submit" class="btn friendship-btn btn--danger" title="Block this user"
-                                        onclick="return confirm('Block {{ profile.username }}? They will not be able to see your profile.')">
-                                    <i class="material-symbols-outlined">block</i> Block
-                                </button>
-                            </form>
-                        </div>
-                    {% elif friendship_status == 'requested' and friendship and friendship.from_profile.user == request.user %}
-                        <div class="friendship-chip friendship-chip--pending">
-                            <i class="material-symbols-outlined">hourglass_top</i> Request sent
-                        </div>
-                        <form method="post" action="{% url 'friend.remove' profile.id %}">
-                            {% csrf_token %}
-                            <button type="submit" class="btn friendship-btn btn--ghost">
-                                <i class="material-symbols-outlined">cancel</i> Cancel request
-                            </button>
-                        </form>
-                    {% elif friendship_status == 'requested' and friendship and friendship.to_profile.user == request.user %}
-                        <div class="friendship-chip friendship-chip--pending">
-                            <i class="material-symbols-outlined">person_add</i> Wants to connect
-                        </div>
-                        <div class="friendship-btn-group">
-                            <form method="post" action="{% url 'friend.accept' profile.id %}">
-                                {% csrf_token %}
-                                <button type="submit" class="btn friendship-btn btn--primary">
-                                    <i class="material-symbols-outlined">check</i> Accept
-                                </button>
-                            </form>
-                            <form method="post" action="{% url 'friend.reject' profile.id %}">
-                                {% csrf_token %}
-                                <button type="submit" class="btn friendship-btn btn--ghost">
-                                    <i class="material-symbols-outlined">close</i> Decline
-                                </button>
-                            </form>
-                            <form method="post" action="{% url 'friend.ignore' profile.id %}">
-                                {% csrf_token %}
-                                <button type="submit" class="btn friendship-btn btn--ghost" title="Decline and they won't be able to request again">
-                                    <i class="material-symbols-outlined">block</i> Decline and Ignore
-                                </button>
-                            </form>
-                        </div>
-                    {% elif friendship_status == 'muted' %}
-                        <div class="friendship-chip friendship-chip--muted">
-                            <i class="material-symbols-outlined">volume_off</i> Muted
-                        </div>
-                        <form method="post" action="{% url 'friend.request' profile.id %}">
-                            {% csrf_token %}
-                            <button type="submit" class="btn friendship-btn btn--ghost">
-                                <i class="material-symbols-outlined">volume_up</i> Unmute
-                            </button>
-                        </form>
-                    {% elif friendship_status == 'blocked' %}
-                        <div class="friendship-chip friendship-chip--blocked">
-                            <i class="material-symbols-outlined">block</i> Blocked
-                        </div>
-                        <form method="post" action="{% url 'friend.remove' profile.id %}">
-                            {% csrf_token %}
-                            <button type="submit" class="btn friendship-btn btn--ghost">
-                                <i class="material-symbols-outlined">lock_open</i> Unblock
-                            </button>
-                        </form>
-                    {% else %}
-                        <form method="post" action="{% url 'friend.request' profile.id %}">
-                            {% csrf_token %}
-                            <button type="submit" class="btn friendship-btn btn--primary">
-                                <i class="material-symbols-outlined">person_add</i> Add Friend
-                            </button>
-                        </form>
-                        <form method="post" action="{% url 'friend.block' profile.id %}">
-                            {% csrf_token %}
-                            <button type="submit" class="btn friendship-btn btn--ghost" title="Block this user">
-                                <i class="material-symbols-outlined">block</i> Block
-                            </button>
-                        </form>
-                    {% endif %}
-                </div>
-                {% endif %}
-
-                {% if profile.user == request.user %}
-                <div class="profile-owner-actions">
-                    {% if preview_modes %}
-                    <details class="profile-viewas">
-                        <summary class="btn btn--secondary" title="See your profile exactly as another user sees it">
-                            <i class="material-symbols-outlined">visibility</i> View as
-                        </summary>
-                        <div class="profile-viewas-menu">
-                            {% for mode, label in preview_modes %}
-                            <form method="post" action="{% url 'profile.preview' mode %}">
-                                {% csrf_token %}
-                                <button type="submit" class="profile-viewas-item">{{ label }}</button>
-                            </form>
-                            {% endfor %}
-                        </div>
-                    </details>
-                    {% endif %}
-                    <a href="{% url 'profile.edit' %}" class="edit-profile-btn btn btn--primary">
-                        <i class="material-symbols-outlined">edit</i> Edit Profile
-                    </a>
-                </div>
-                {% endif %}
-            </div>
-
-            {% if profile.bio %}
-            <p class="profile-bio">{{ profile.bio }}</p>
-            {% else %}
-            <p class="profile-bio empty" />
+    {# -- About (full, un-clamped bio - the hero's copy is clamped to 2 lines) #}
+    {% if profile.bio %}
+    <div class="profile-section ul-section">
+        <h3 class="profile-section-title{% if profile.user == request.user %} ul-privacy-hint-row{% endif %}">
+            About
+            {% if profile.user == request.user %}
+            {% include "dashboard/partials/ui/_privacy_hint.html" with label="Name, avatar & bio" value=profile.get_profile_visibility_display %}
             {% endif %}
-
-            <div class="profile-meta-row">
-                {% if profile.area %}
-                <span class="profile-meta-item">
-                    <i class="material-symbols-outlined">place</i>{{ profile.area }}
-                </span>
-                {% endif %}
-                {% if profile.started_exploring %}
-                <span class="profile-meta-item">
-                    <i class="material-symbols-outlined">explore</i>Exploring since {{ profile.started_exploring|date:"Y" }}
-                </span>
-                {% endif %}
-                {% if profile.email and can_view_contact %}
-                <span class="profile-meta-item{% if profile.user == request.user %} ul-privacy-hint-row{% endif %}">
-                    <i class="material-symbols-outlined">email</i>{{ profile.email }}
-                    {% if profile.user == request.user %}
-                    {% include "dashboard/partials/ui/_privacy_hint.html" with value=profile.get_contact_visibility_display %}
-                    {% endif %}
-                </span>
-                {% endif %}
-                {% if profile.user == request.user %}
-                {# Own profile - show exploring year #}
-                {% if profile.started_exploring %}
-                <div class="profile-stat ul-section">
-                    <span class="stat-value">{{ profile.started_exploring|date:"Y" }}</span>
-                    <span class="stat-label">Exploring Since</span>
-                </div>
-                {% endif %}
-                {% endif %}
-            </div>
-        </div>
+        </h3>
+        <p class="profile-bio-full">{{ profile.bio }}</p>
     </div>
+    {% endif %}
 
     {# -- Stats row ----------------------------------------------------------- #}
     {% if profile.user != request.user %}

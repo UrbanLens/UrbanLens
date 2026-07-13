@@ -367,6 +367,8 @@
 
   &.lightbox-prev { left: .6rem; }
   &.lightbox-next { right: .6rem; }
+
+  &[hidden] { display: none; }
 }
 
 .lightbox-caption {

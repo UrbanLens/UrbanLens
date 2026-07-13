@@ -1,10 +1,13 @@
 {% load dashboard_tags %}
 {# Pin or location badge membership panel (tags, categories, and statuses). #}
-{# `embedded` drops the .card wrapper/header treatment for the pin detail page's #}
-{# combined Organization section, where this panel sits as a subsection instead #}
-{# of its own card - see location/index.html and _membership_panel_ctx(). #}
+{# `embedded` drops the .card wrapper and the "Badges" header entirely for the #}
+{# pin detail page's combined Organization section: badges already have a #}
+{# universal look site-wide, so that context doesn't repeat a title for them - #}
+{# it's added/collapsed from the Organization card's own header instead. See #}
+{# location/index.html and _membership_panel_ctx(). #}
 <div class="tag-panel{% if not embedded %} card{% endif %}{% if embedded %} tag-panel--embedded{% endif %}" id="{{ panel_id }}"
-     data-collapse-scope="{{ collapse_scope }}" data-collapse-section="categories">
+     {% if not embedded %}data-collapse-scope="{{ collapse_scope }}" data-collapse-section="categories"{% endif %}>
+    {% if not embedded %}
     <div class="card-header">
         <i class="material-symbols-outlined">label</i>
         <h3>Badges</h3>
@@ -14,6 +17,7 @@
             <i class="material-symbols-outlined">add</i>
         </button>
     </div>
+    {% endif %}
 
     {% include "dashboard/partials/badges/_badge_chips.html" with badge_url_kind=badge_url_kind membership_route=membership_route obj_uuid=obj_uuid panel_id=panel_id all_badges=all_badges member_ids=member_ids empty_text=empty_text %}
 

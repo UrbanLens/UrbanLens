@@ -289,8 +289,10 @@ def trigger_development_app_reload() -> tuple[bool, str]:
     """
     logger.info("Attempting to reload the server...")
     parent_cmd = _parent_process_command()
-    sighup = getattr(signal, "SIGHUP", None)
-    if "gunicorn" in parent_cmd and sighup is not None:
+    # signal.SIGHUP isn't defined on Windows, but gunicorn (and thus this
+    # branch) only ever runs on Linux, where SIGHUP is always signal 1.
+    sighup = getattr(signal, "SIGHUP", 1)
+    if "gunicorn" in parent_cmd:
         try:
             os.kill(os.getppid(), sighup)
         except OSError:

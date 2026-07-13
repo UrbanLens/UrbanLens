@@ -8,13 +8,14 @@ from typing import TYPE_CHECKING, Any
 import uuid as uuid_lib
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db.models import Q
+from django.db.models import Prefetch, Q
 from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.views import View
 
 from urbanlens.dashboard.forms.search import SearchForm
+from urbanlens.dashboard.models.badges.model import Badge
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_list.model import PinList, PinListItem
 from urbanlens.dashboard.models.profile.model import Profile
@@ -55,9 +56,54 @@ def _default_trip_name_for_list(pin_list: PinList) -> str:
     return f'Trip from the "{pin_list.name}" list'
 
 
+def _list_items_with_badges(pin_list: PinList) -> list[PinListItem]:
+    """Ordered list items with their pin's badges prefetched (icon/color/tag chips need these).
+
+    Matches the same prefetch shape the main map's bulk pin endpoints use
+    (see maps.py) so ``Pin.effective_icon``/``effective_color`` and the tag
+    chip list resolve without N+1 queries.
+    """
+    return list(
+        pin_list.items.select_related("pin", "pin__location")
+        .prefetch_related(Prefetch("pin__badges", queryset=Badge.objects.exclude(kind="user").order_by("-order", "name")))
+        .order_by("order"),
+    )
+
+
+def _pin_map_marker_data(pin: Pin) -> dict[str, Any]:
+    """Serialize a pin for the list-detail overview map's badge-icon markers/popups.
+
+    Mirrors the field shapes the main map's markers already expect (icon,
+    tags_data, rating, last_visited as "Never" or "YYYY-MM-DD", etc. - see
+    maps.py's post-processing of ``Pin.to_json()``) so the same marker/popup
+    look carries over here. Reads ``pin.badges.all()`` (not ``.filter()``) so
+    the ``pin__badges`` prefetch in ``_list_items_with_badges`` is reused
+    instead of triggering a query per pin.
+    """
+    tags = [{"id": b.id, "name": b.name, "color": b.effective_color, "icon": b.effective_icon} for b in pin.badges.all() if b.kind == "tag"]
+    return {
+        "uuid": str(pin.uuid),
+        "name": pin.effective_name,
+        "url": reverse("pin.details", args=[pin.slug]) if pin.slug else "",
+        "icon": pin.effective_icon,
+        "color": pin.effective_color,
+        "rating": pin.rating,
+        "address": pin.effective_address or "",
+        "description": pin.description or "",
+        "last_visited": pin.last_visited.strftime("%Y-%m-%d") if pin.last_visited else "Never",
+        "latitude": pin.effective_latitude,
+        "longitude": pin.effective_longitude,
+        "tags_data": tags,
+    }
+
+
+def _items_map_data(items: list[PinListItem]) -> list[dict[str, Any]]:
+    return [_pin_map_marker_data(item.pin) for item in items if item.pin.effective_latitude and item.pin.effective_longitude]
+
+
 def _render_items_panel(request: HttpRequest, pin_list: PinList) -> HttpResponse:
-    items = list(pin_list.items.select_related("pin", "pin__location").order_by("order"))
-    return render(request, _ITEMS_PANEL_TEMPLATE, {"pin_list": pin_list, "items": items})
+    items = _list_items_with_badges(pin_list)
+    return render(request, _ITEMS_PANEL_TEMPLATE, {"pin_list": pin_list, "items": items, "items_map_data": _items_map_data(items)})
 
 
 def _parse_body(request: HttpRequest) -> dict[str, Any]:
@@ -150,7 +196,7 @@ class PinListDetailView(LoginRequiredMixin, View):
     def get(self, request: HttpRequest, list_uuid: str) -> HttpResponse:
         profile, _ = Profile.objects.get_or_create(user=request.user)
         pin_list = get_object_or_404(PinList, uuid=list_uuid, profile=profile)
-        items = list(pin_list.items.select_related("pin", "pin__location").order_by("order"))
+        items = _list_items_with_badges(pin_list)
         saved_filters = list(profile.saved_filters.all())
         trips = list(Trip.objects.filter(profiles=profile).order_by("name"))
         return render(
@@ -159,14 +205,16 @@ class PinListDetailView(LoginRequiredMixin, View):
             {
                 "pin_list": pin_list,
                 "items": items,
+                "items_map_data": _items_map_data(items),
                 "saved_filters": saved_filters,
                 "trips": trips,
                 **profile.get_map_center_template_context(),
-                # Both maps on this page (the pins overview and the boundary
-                # drawing map) only ever show the single OSM base layer, so
-                # attribution is static (see the shared footer partial's
-                # map_attribution doc comment).
-                "map_attribution": "© OpenStreetMap contributors",
+                # The pins overview map uses the shared layers component, whose
+                # base layer (and therefore attribution) can change at runtime -
+                # see the footer partial's show_map_footer doc comment. The
+                # boundary-drawing mini-map stays on a fixed OSM layer, which
+                # happens to match that component's own default attribution.
+                "show_map_footer": True,
             },
         )
 

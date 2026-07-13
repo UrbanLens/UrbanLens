@@ -12,6 +12,7 @@ from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.wiki_edit.model import WikiEdit
 
 
@@ -29,6 +30,7 @@ class WikiEditDeleteViewTests(TestCase):
         self.client.force_login(self.user)
         self.profile = self.user.profile
         self.location, self.wiki = _location_with_wiki()
+        baker.make(Pin, profile=self.profile, location=self.location)
 
     def _delete(self, edit_id: int):
         return self.client.post(reverse("location.wiki.history.delete", args=[self.location.slug, edit_id]))

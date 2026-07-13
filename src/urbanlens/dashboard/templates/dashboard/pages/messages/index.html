@@ -104,20 +104,23 @@
 {# Minimal photo lightbox for DM image attachments - reuses the shared #}
 {# gallery-lightbox CSS (see _gallery.scss) but skips the side panel (no #}
 {# captions/relevance/custom fields apply to a raw DM photo attachment). #}
+{# Prev/next cycle every photo currently loaded in the conversation (not just #}
+{# the clicked message's own attachments), backed by a thumbnail strip. #}
 <dialog id="dm-lightbox" class="gallery-lightbox ul-dialog">
-    <div class="lightbox-inner">
+    <div class="lightbox-inner dm-lightbox-inner">
         <button type="button" class="lightbox-close" onclick="document.getElementById('dm-lightbox').close()">
             <i class="material-symbols-outlined">close</i>
         </button>
         <div class="lightbox-media-area">
-            <button type="button" class="lightbox-nav lightbox-prev" onclick="window.dmLightboxNav(-1)">
+            <button type="button" class="lightbox-nav lightbox-prev" id="dm-lightbox-prev" aria-label="Previous photo" onclick="window.dmLightboxNav(-1)">
                 <i class="material-symbols-outlined">chevron_left</i>
             </button>
             <img id="dm-lightbox-img" src="" alt="" class="lightbox-img">
-            <button type="button" class="lightbox-nav lightbox-next" onclick="window.dmLightboxNav(1)">
+            <button type="button" class="lightbox-nav lightbox-next" id="dm-lightbox-next" aria-label="Next photo" onclick="window.dmLightboxNav(1)">
                 <i class="material-symbols-outlined">chevron_right</i>
             </button>
         </div>
+        <div class="dm-lightbox-thumbs" id="dm-lightbox-thumbs" role="list" hidden></div>
     </div>
 </dialog>
 
@@ -231,33 +234,81 @@
 
     // -- Photo lightbox -----------------------------------------------------------
     // Clicking a DM image attachment opens it in-place instead of a new tab.
-    // `urls` is every image in that message's own attachment group, so
-    // prev/next cycles within the same bubble (mirrors the pin/wiki gallery's
-    // per-context lightbox nav).
+    // The nav list is every image currently loaded anywhere in the
+    // conversation (not just the clicked message's own attachments), so
+    // prev/next scrolls across message boundaries; it's rebuilt fresh on each
+    // open so it reflects whatever history has been loaded (including older
+    // pages fetched since the lightbox was last opened). No wraparound: at
+    // either end the corresponding arrow just hides.
     var _dmLightboxUrls = [];
     var _dmLightboxIdx = 0;
 
     function _showDmLightbox() {
         var img = document.getElementById('dm-lightbox-img');
         if (img) img.src = _dmLightboxUrls[_dmLightboxIdx] || '';
+
+        var prevBtn = document.getElementById('dm-lightbox-prev');
+        var nextBtn = document.getElementById('dm-lightbox-next');
+        if (prevBtn) prevBtn.hidden = _dmLightboxIdx <= 0;
+        if (nextBtn) nextBtn.hidden = _dmLightboxIdx >= _dmLightboxUrls.length - 1;
+
+        var thumbs = document.getElementById('dm-lightbox-thumbs');
+        if (thumbs) {
+            Array.prototype.forEach.call(thumbs.children, function (el, i) {
+                el.classList.toggle('dm-lightbox-thumb--active', i === _dmLightboxIdx);
+            });
+            var active = thumbs.children[_dmLightboxIdx];
+            if (active && active.scrollIntoView) active.scrollIntoView({ block: 'nearest', inline: 'center' });
+        }
+    }
+
+    function _buildDmLightboxThumbs() {
+        var thumbs = document.getElementById('dm-lightbox-thumbs');
+        if (!thumbs) return;
+        thumbs.innerHTML = '';
+        thumbs.hidden = _dmLightboxUrls.length < 2;
+        _dmLightboxUrls.forEach(function (url, i) {
+            var thumbBtn = document.createElement('button');
+            thumbBtn.type = 'button';
+            thumbBtn.className = 'dm-lightbox-thumb';
+            thumbBtn.setAttribute('role', 'listitem');
+            thumbBtn.setAttribute('aria-label', 'Photo ' + (i + 1) + ' of ' + _dmLightboxUrls.length);
+            thumbBtn.addEventListener('click', function () {
+                _dmLightboxIdx = i;
+                _showDmLightbox();
+            });
+            var thumbImg = document.createElement('img');
+            thumbImg.src = url;
+            thumbImg.alt = '';
+            thumbBtn.appendChild(thumbImg);
+            thumbs.appendChild(thumbBtn);
+        });
     }
 
     window.dmOpenLightbox = function (btn) {
-        var group = btn.closest('.dm-bubble__images');
-        var imgs = Array.prototype.slice.call(group ? group.querySelectorAll('img') : []);
+        var imgs = Array.prototype.slice.call(document.querySelectorAll('#dm-messages .dm-bubble__image-link img'));
         var clicked = btn.querySelector('img');
         _dmLightboxUrls = imgs.map(function (i) { return i.src; });
         var idx = imgs.indexOf(clicked);
         _dmLightboxIdx = idx >= 0 ? idx : 0;
+        _buildDmLightboxThumbs();
         _showDmLightbox();
         document.getElementById('dm-lightbox').showModal();
     };
 
     window.dmLightboxNav = function (dir) {
-        if (!_dmLightboxUrls.length) return;
-        _dmLightboxIdx = (_dmLightboxIdx + dir + _dmLightboxUrls.length) % _dmLightboxUrls.length;
+        var next = _dmLightboxIdx + dir;
+        if (next < 0 || next >= _dmLightboxUrls.length) return;
+        _dmLightboxIdx = next;
         _showDmLightbox();
     };
+
+    document.addEventListener('keydown', function (e) {
+        var lightbox = document.getElementById('dm-lightbox');
+        if (!lightbox || !lightbox.open) return;
+        if (e.key === 'ArrowLeft') window.dmLightboxNav(-1);
+        else if (e.key === 'ArrowRight') window.dmLightboxNav(1);
+    });
 
     // -- Composer textarea: auto-expand, Enter to send / Shift+Enter for a newline --
     var COMPOSER_MAX_HEIGHT = 160; // px, matches .dm-composer textarea max-height
@@ -1431,6 +1482,36 @@
         } else if (ev.detail.target.id === 'dm-conversation-list' || ev.detail.target.closest && ev.detail.target.closest('#dm-conversation-list')) {
             decryptSidebarPreviews();
         }
+    });
+
+    // Loading older history (see _thread.html's #dm-load-older-sentinel) prepends
+    // content above the user's current scroll position. Browsers don't adjust
+    // scrollTop for content inserted above the viewport, so left alone the
+    // thread would visually "jump" to older messages the instant they load;
+    // capture the container's scrollHeight just before the request and add
+    // back the height that got inserted once the swap settles, keeping
+    // whatever the user was looking at in the same place on screen.
+    var _dmOlderMessagesPrevScrollHeight = null;
+
+    document.body.addEventListener('htmx:beforeRequest', function (evt) {
+        var elt = evt.detail.elt;
+        if (!elt || elt.id !== 'dm-load-older-sentinel') return;
+        var list = document.getElementById('dm-messages');
+        _dmOlderMessagesPrevScrollHeight = list ? list.scrollHeight : null;
+    });
+
+    document.body.addEventListener('htmx:afterSettle', function (evt) {
+        var elt = evt.detail.elt;
+        if (!elt || elt.id !== 'dm-load-older-sentinel' || _dmOlderMessagesPrevScrollHeight === null) return;
+        var list = document.getElementById('dm-messages');
+        if (list) list.scrollTop += list.scrollHeight - _dmOlderMessagesPrevScrollHeight;
+        if (window._initThumbs) window._initThumbs();
+        refreshEncryption();
+    });
+
+    document.body.addEventListener('htmx:afterRequest', function (evt) {
+        var elt = evt.detail.elt;
+        if (elt && elt.id === 'dm-load-older-sentinel') _dmOlderMessagesPrevScrollHeight = null;
     });
 
     // Sidebar last-message previews for encrypted conversations decrypt in place.

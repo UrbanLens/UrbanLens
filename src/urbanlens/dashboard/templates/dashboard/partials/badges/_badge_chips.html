@@ -20,7 +20,7 @@
     </span>
     {% endif %}
     {% endfor %}
-    {% if not member_ids %}
-    <span class="tag-chips-empty">{{ empty_text|default:"No badges yet. Click + to add one." }}</span>
+    {% if not member_ids and empty_text %}
+    <span class="tag-chips-empty">{{ empty_text }}</span>
     {% endif %}
 </div>

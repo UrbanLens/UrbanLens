@@ -120,8 +120,10 @@ class LocationAliasUseViewTests(TestCase):
     def setUp(self) -> None:
         baker.make("auth.User")  # bootstrap site admin
         self.user = baker.make("auth.User")
+        self.profile = Profile.objects.get(user=self.user)
         self.location = baker.make(Location, latitude="41.400000", longitude="-73.400000")
         self.wiki = baker.make("dashboard.Wiki", location=self.location, name="Curated Mill")
+        baker.make(Pin, profile=self.profile, location=self.location)
         self.client.force_login(self.user)
 
     def test_use_alias_renames_wiki_and_records_edit(self) -> None:
@@ -147,8 +149,10 @@ class LocationAliasNicknameTests(TestCase):
     def setUp(self) -> None:
         baker.make("auth.User")  # bootstrap site admin
         self.user = baker.make("auth.User")
+        self.profile = Profile.objects.get(user=self.user)
         self.location = baker.make(Location, latitude="41.400000", longitude="-73.400000")
         self.wiki = baker.make("dashboard.Wiki", location=self.location, name="Curated Mill")
+        baker.make(Pin, profile=self.profile, location=self.location)
         self.client.force_login(self.user)
 
     def test_create_alias_with_nickname_checkbox_sets_nickname_kind(self) -> None:

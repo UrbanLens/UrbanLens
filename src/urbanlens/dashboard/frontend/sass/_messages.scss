@@ -859,6 +859,29 @@
     gap: .55rem;
 }
 
+.dm-load-older {
+    align-self: center;
+    padding: .3rem 0 .5rem;
+}
+
+.dm-load-older__spinner {
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+    font-size: .75rem;
+    color: var(--ul-grey-6);
+
+    .material-symbols-outlined {
+        font-size: 1rem;
+        animation: dm-load-older-spin 1s linear infinite;
+    }
+}
+
+@keyframes dm-load-older-spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
 .dm-day-sep {
     align-self: center;
     margin: .6rem 0 .35rem;
@@ -1142,6 +1165,51 @@
 .dm-bubble__image--blurred {
     filter: blur(20px) brightness(0.8);
     pointer-events: none;
+}
+
+// The DM lightbox skips the shared gallery's side panel (see index.html's
+// comment on #dm-lightbox), so its column needs its own flex direction
+// instead of .lightbox-inner's default row layout.
+.dm-lightbox-inner {
+    flex-direction: column;
+}
+
+.dm-lightbox-thumbs {
+    display: flex;
+    gap: .5rem;
+    padding: .6rem .8rem;
+    overflow-x: auto;
+    background: rgba(255, 255, 255, .03);
+    border-top: 1px solid rgba(255, 255, 255, .08);
+
+    &[hidden] { display: none; }
+}
+
+.dm-lightbox-thumb {
+    flex: 0 0 auto;
+    width: 52px;
+    height: 52px;
+    padding: 0;
+    border: 2px solid transparent;
+    border-radius: 6px;
+    overflow: hidden;
+    cursor: pointer;
+    opacity: .55;
+    transition: opacity .15s, border-color .15s;
+
+    img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+    }
+
+    &:hover { opacity: .8; }
+
+    &.dm-lightbox-thumb--active {
+        opacity: 1;
+        border-color: var(--primary-color);
+    }
 }
 
 // .dm-bubble sizes itself to its content (the align-self: flex-start/flex-end

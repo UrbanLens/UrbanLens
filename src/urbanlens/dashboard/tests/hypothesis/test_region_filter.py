@@ -175,7 +175,10 @@ class FiltersTabViewRenderingTests(TestCase):
         self.profile = self.user.profile
 
     def test_lists_page_filters_tab_renders(self) -> None:
-        response = self.client.get(reverse("lists.list"), {"tab": "filters"})
+        # /lists/ only serves the HTMX fragment for HX-Request; direct
+        # navigation redirects to the equivalent Organize tab (see
+        # PinListsIndexView's docstring).
+        response = self.client.get(reverse("lists.list"), {"tab": "filters"}, HTTP_HX_REQUEST="true")
         self.assertEqual(response.status_code, 200)
 
     def test_new_filter_dialog_renders(self) -> None:
