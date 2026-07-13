@@ -3122,6 +3122,27 @@ function installOrgTabSwitching() {
     window._orgBulk?.deselect?.();
   });
 }
+function installOrgSectionSwitching() {
+  const tabs = document.querySelectorAll(".organize-section-tab");
+  const panels = document.querySelectorAll(".organize-section-panel");
+  if (!tabs.length)
+    return;
+  tabs.forEach((tab) => {
+    tab.addEventListener("click", () => {
+      const section = tab.dataset.section;
+      if (!section)
+        return;
+      tabs.forEach((t) => t.classList.toggle("is-active", t === tab));
+      panels.forEach((p) => {
+        p.hidden = p.id !== `panel-${section}`;
+      });
+      const url = new URL(window.location.href);
+      const tabParam = section === "badges" ? localStorage.getItem("organize_tab") ?? "tags" : section;
+      url.searchParams.set("tab", tabParam);
+      window.history.replaceState({}, "", url.toString());
+    });
+  });
+}
 
 // src/urbanlens/dashboard/frontend/ts/shared/tree-view.ts
 var DEFAULT_TREE_ROOT_CLASS = "tag-tree-root";
@@ -4511,6 +4532,7 @@ function init() {
   installOrgBulkToolbar();
   createOrganizeHeader(page.dataset.activeTab ?? "tags");
   installOrgTabSwitching();
+  installOrgSectionSwitching();
   initConsolidatedDialogOpener();
   initKindChangedListener();
   initPinCacheInvalidation();

@@ -1,141 +1,42 @@
-{% extends 'dashboard/themes/base.html' %}
-{% load humanize %}
+{% comment %}
+Filters tab content, lazy-loaded via HTMX into Organize's "Filters" panel (see
+organize/index.html and PinListsIndexView.get - only ever requested with an
+HX-Request header; direct navigation to /lists/ redirects to Organize instead).
 
-{% block header %}
+Loads Leaflet + Leaflet.draw itself (for the saved-filter region-drawing map) -
+Organize doesn't otherwise need them, so they're only fetched the first time
+this tab is opened, not on every Organize page load.
+
+Context:
+  saved_filters             - SavedFilter queryset for the current profile
+  map_center_lat/lng        - profile's default map center, for the region map
+{% endcomment %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
     integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
 <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
-{% endblock %}
 
-{% block page_title %}Lists - {{ site_title|default:"UrbanLens" }}{% endblock %}
-
-{% block content %}
-{% include "dashboard/partials/ui/_page_hero.html" with icon="bookmarks" title="Lists" subtitle="Group pins into named collections - manual or \"smart\" ones that keep themselves up to date. Turn a list into a trip or a markup map in one click." %}
-<div class="pin-lists-page page-content">
-
-    {# -- Lists / Filters tab toggle ------------------------------------------ #}
-    <div class="view-toggle-group lists-view-toggle" role="group" aria-label="Choose Lists or Filters">
-        <button type="button" class="btn btn--secondary view-toggle-btn {% if active_tab == 'lists' %}view-toggle-btn--active{% endif %}"
-                data-tab="lists" onclick="listsSetTab('lists')">
-            <i class="material-symbols-outlined" aria-hidden="true">bookmarks</i> Lists
-        </button>
-        <button type="button" class="btn btn--secondary view-toggle-btn {% if active_tab == 'filters' %}view-toggle-btn--active{% endif %}"
-                data-tab="filters" onclick="listsSetTab('filters')">
-            <i class="material-symbols-outlined" aria-hidden="true">filter_alt</i> Filters
-        </button>
-    </div>
-
-    {# -- Lists tab ------------------------------------------------------------ #}
-    <div class="lists-tab-panel" data-lists-tab="lists" {% if active_tab != 'lists' %}hidden{% endif %}>
-        <div class="pin-lists-toolbar">
-            <input type="search" id="pin-lists-search" class="pin-lists-search" placeholder="Search lists..."
-                   oninput="pinListsFilterCards(this.value)" autocomplete="off">
-            <div class="pin-lists-sort-control">
-                <label for="pin-lists-sort-select" class="pin-lists-sort-label">
-                    <i class="material-symbols-outlined" aria-hidden="true">sort</i>
-                    Order by
-                </label>
-                <select id="pin-lists-sort-select" onchange="window.location.search = '?tab=lists&sort=' + this.value">
-                    <option value="updated" {% if sort == 'updated' %}selected{% endif %}>Recently updated</option>
-                    <option value="name" {% if sort == 'name' %}selected{% endif %}>Name</option>
-                    <option value="pin_count" {% if sort == 'pin_count' %}selected{% endif %}>Pin count</option>
-                </select>
-            </div>
-            <button type="button" class="btn btn--primary btn--lg" onclick="document.getElementById('create-list-dialog').showModal()">
-                <i class="material-symbols-outlined">add</i>
-                New List
-            </button>
-        </div>
-
-        {% if pin_lists %}
-        <div class="pin-lists-grid" id="pin-lists-grid">
-            {% for pin_list in pin_lists %}
-            <a class="pin-list-card" href="{% url 'lists.detail' pin_list.uuid %}" data-search="{{ pin_list.name|lower }}">
-                <div class="pin-list-card-header">
-                    <span class="pin-list-card-icon"><i class="material-symbols-outlined">bookmarks</i></span>
-                    {% if pin_list.is_smart %}<span class="pin-list-card-badge">Smart</span>{% endif %}
-                </div>
-                <h2 class="pin-list-card-title">{{ pin_list.name }}</h2>
-                {% if pin_list.description %}
-                <p class="pin-list-card-description">{{ pin_list.description|truncatechars:110 }}</p>
-                {% endif %}
-                <div class="pin-list-card-footer">
-                    <span class="pin-list-card-count">
-                        <i class="material-symbols-outlined">location_on</i>
-                        {{ pin_list.pin_count }} pin{{ pin_list.pin_count|pluralize }}
-                    </span>
-                    <span class="pin-list-card-updated">Updated {{ pin_list.updated|naturaltime }}</span>
-                </div>
-            </a>
-            {% endfor %}
-        </div>
-        {% else %}
-        <div class="pin-lists-empty">
-            <i class="material-symbols-outlined">bookmarks</i>
-            <h2>No lists yet</h2>
-            <p>Create a list to start grouping pins for a trip, a project, or just to keep track of favorites.</p>
-        </div>
-        {% endif %}
-    </div>
-
-    {# -- Filters tab ------------------------------------------------------------ #}
-    <div class="lists-tab-panel" data-lists-tab="filters" {% if active_tab != 'filters' %}hidden{% endif %}>
-        <div class="pin-lists-toolbar">
-            <input type="search" id="saved-filters-search" class="pin-lists-search" placeholder="Search filters..."
-                   oninput="savedFiltersFilterCards(this.value)" autocomplete="off">
-            <button type="button" class="btn btn--primary btn--lg"
-                    hx-get="{% url 'saved_filters.new' %}"
-                    hx-target="#saved-filter-form-dialog" hx-swap="innerHTML"
-                    hx-on::after-request="if(event.detail.successful){document.getElementById('saved-filter-form-dialog').showModal()}">
-                <i class="material-symbols-outlined">add</i>
-                New Filter
-            </button>
-        </div>
-        <div id="saved-filters-tab-body">
-            {% include "dashboard/partials/pin_lists/_filters_tab_grid.html" %}
-        </div>
-    </div>
+<div class="pin-lists-toolbar">
+    <input type="search" id="saved-filters-search" class="pin-lists-search" placeholder="Search filters..."
+           oninput="savedFiltersFilterCards(this.value)" autocomplete="off">
+    <button type="button" class="btn btn--primary btn--lg"
+            hx-get="{% url 'saved_filters.new' %}"
+            hx-target="#saved-filter-form-dialog" hx-swap="innerHTML"
+            hx-on::after-request="if(event.detail.successful){document.getElementById('saved-filter-form-dialog').showModal()}">
+        <i class="material-symbols-outlined">add</i>
+        New Filter
+    </button>
 </div>
-
-<dialog id="create-list-dialog" class="ul-dialog">
-    {% include "dashboard/partials/ui/_dialog_header.html" with title="New List" %}
-    <div class="ul-dialog-body">
-        <form hx-post="{% url 'lists.create' %}" hx-swap="none"
-            hx-on::after-request="if(event.detail.successful){window.location = JSON.parse(event.detail.xhr.responseText).redirect;}">
-            {% csrf_token %}
-            <div class="form-row">
-                <label for="pin-list-name">List name <span class="required">*</span></label>
-                <input type="text" name="name" id="pin-list-name" required maxlength="100" placeholder="e.g. Ohio road trip" autocomplete="off">
-            </div>
-            <div class="form-row">
-                <label for="pin-list-description">Description</label>
-                <textarea name="description" id="pin-list-description" rows="3" placeholder="What's this list for?"></textarea>
-            </div>
-            <div class="form-actions">
-                <button type="submit" class="btn btn--primary btn--lg">Create List</button>
-                <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
-            </div>
-        </form>
-    </div>
-</dialog>
+<div id="saved-filters-tab-body">
+    {% include "dashboard/partials/pin_lists/_filters_tab_grid.html" %}
+</div>
 
 {# -- Create/edit saved filter dialog - body is always HTMX-loaded (see New Filter / Edit buttons above and in _filters_tab_grid.html) #}
 <dialog id="saved-filter-form-dialog" class="ul-dialog saved-filter-form-dialog"></dialog>
-{% endblock %}
 
-{% block scripts %}
 <script>
     const CSRF = document.querySelector('input[name=csrfmiddlewaretoken]')?.value || '{{ csrf_token }}';
-
-    function pinListsFilterCards(query) {
-        const q = (query || '').trim().toLowerCase();
-        document.querySelectorAll('#pin-lists-grid .pin-list-card').forEach((card) => {
-            const match = !q || (card.dataset.search || '').includes(q);
-            card.style.display = match ? '' : 'none';
-        });
-    }
 
     function savedFiltersFilterCards(query) {
         const q = (query || '').trim().toLowerCase();
@@ -143,18 +44,6 @@
             const match = !q || (card.dataset.search || '').includes(q);
             card.style.display = match ? '' : 'none';
         });
-    }
-
-    // -- Lists / Filters tab toggle -------------------------------------------
-    function listsSetTab(tab) {
-        document.querySelectorAll('.lists-tab-panel').forEach((el) => { el.hidden = el.dataset.listsTab !== tab; });
-        document.querySelectorAll('.lists-view-toggle .view-toggle-btn').forEach((btn) => {
-            btn.classList.toggle('view-toggle-btn--active', btn.dataset.tab === tab);
-        });
-        const url = new URL(window.location.href);
-        url.searchParams.set('tab', tab);
-        if (tab === 'lists') url.searchParams.delete('sort');
-        history.replaceState(null, '', url);
     }
 
     // -- Saved filter create/edit dialog --------------------------------------
@@ -173,7 +62,7 @@
                 } catch (e) { /* plain-text error body from the create endpoint */ }
                 return Promise.reject(message || 'Could not save this filter.');
             }))
-            .then(() => { window.location.href = "{% url 'lists.list' %}?tab=filters"; })
+            .then(() => { window.location.href = "{% url 'organize.index' %}?tab=filters"; })
             .catch((message) => { if (typeof toastr !== 'undefined') toastr.error(String(message)); });
         return false;
     };
@@ -185,7 +74,7 @@
         fetch(url, { method: 'POST', headers: { 'X-CSRFToken': CSRF } })
             .then((r) => {
                 if (!r.ok) return Promise.reject('Could not delete this filter.');
-                window.location.href = "{% url 'lists.list' %}?tab=filters";
+                window.location.href = "{% url 'organize.index' %}?tab=filters";
             })
             .catch((message) => { if (typeof toastr !== 'undefined') toastr.error(String(message)); });
     };
@@ -326,4 +215,3 @@
     });
 </script>
 {% include "dashboard/partials/ui/_dual_range_slider_script.html" %}
-{% endblock %}

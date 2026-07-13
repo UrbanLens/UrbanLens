@@ -1,0 +1,98 @@
+{% load humanize %}
+{% comment %}
+Lists tab content, lazy-loaded via HTMX into Organize's "Lists" panel (see
+organize/index.html and PinListsIndexView.get - only ever requested with an
+HX-Request header; direct navigation to /lists/ redirects to Organize instead).
+
+Context:
+  pin_lists - PinList queryset for the current profile, already sorted
+  sort      - current sort key ("updated", "name", or "pin_count")
+{% endcomment %}
+<div class="pin-lists-toolbar">
+    <input type="search" id="pin-lists-search" class="pin-lists-search" placeholder="Search lists..."
+           oninput="pinListsFilterCards(this.value)" autocomplete="off">
+    <div class="pin-lists-sort-control">
+        <label for="pin-lists-sort-select" class="pin-lists-sort-label">
+            <i class="material-symbols-outlined" aria-hidden="true">sort</i>
+            Order by
+        </label>
+        <select id="pin-lists-sort-select" onchange="organizeReloadListsPanel(this.value)">
+            <option value="updated" {% if sort == 'updated' %}selected{% endif %}>Recently updated</option>
+            <option value="name" {% if sort == 'name' %}selected{% endif %}>Name</option>
+            <option value="pin_count" {% if sort == 'pin_count' %}selected{% endif %}>Pin count</option>
+        </select>
+    </div>
+    <button type="button" class="btn btn--primary btn--lg" onclick="document.getElementById('create-list-dialog').showModal()">
+        <i class="material-symbols-outlined">add</i>
+        New List
+    </button>
+</div>
+
+{% if pin_lists %}
+<div class="pin-lists-grid" id="pin-lists-grid">
+    {% for pin_list in pin_lists %}
+    <a class="pin-list-card" href="{% url 'lists.detail' pin_list.uuid %}" data-search="{{ pin_list.name|lower }}">
+        <div class="pin-list-card-header">
+            <span class="pin-list-card-icon"><i class="material-symbols-outlined">bookmarks</i></span>
+            {% if pin_list.is_smart %}<span class="pin-list-card-badge">Smart</span>{% endif %}
+        </div>
+        <h2 class="pin-list-card-title">{{ pin_list.name }}</h2>
+        {% if pin_list.description %}
+        <p class="pin-list-card-description">{{ pin_list.description|truncatechars:110 }}</p>
+        {% endif %}
+        <div class="pin-list-card-footer">
+            <span class="pin-list-card-count">
+                <i class="material-symbols-outlined">location_on</i>
+                {{ pin_list.pin_count }} pin{{ pin_list.pin_count|pluralize }}
+            </span>
+            <span class="pin-list-card-updated">Updated {{ pin_list.updated|naturaltime }}</span>
+        </div>
+    </a>
+    {% endfor %}
+</div>
+{% else %}
+<div class="pin-lists-empty">
+    <i class="material-symbols-outlined">bookmarks</i>
+    <h2>No lists yet</h2>
+    <p>Create a list to start grouping pins for a trip, a project, or just to keep track of favorites.</p>
+</div>
+{% endif %}
+
+<dialog id="create-list-dialog" class="ul-dialog">
+    {% include "dashboard/partials/ui/_dialog_header.html" with title="New List" %}
+    <div class="ul-dialog-body">
+        <form hx-post="{% url 'lists.create' %}" hx-swap="none"
+            hx-on::after-request="if(event.detail.successful){window.location = JSON.parse(event.detail.xhr.responseText).redirect;}">
+            {% csrf_token %}
+            <div class="form-row">
+                <label for="pin-list-name">List name <span class="required">*</span></label>
+                <input type="text" name="name" id="pin-list-name" required maxlength="100" placeholder="e.g. Ohio road trip" autocomplete="off">
+            </div>
+            <div class="form-row">
+                <label for="pin-list-description">Description</label>
+                <textarea name="description" id="pin-list-description" rows="3" placeholder="What's this list for?"></textarea>
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn btn--primary btn--lg">Create List</button>
+                <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
+            </div>
+        </form>
+    </div>
+</dialog>
+
+<script>
+    function pinListsFilterCards(query) {
+        const q = (query || '').trim().toLowerCase();
+        document.querySelectorAll('#pin-lists-grid .pin-list-card').forEach((card) => {
+            const match = !q || (card.dataset.search || '').includes(q);
+            card.style.display = match ? '' : 'none';
+        });
+    }
+
+    // The sort dropdown re-fetches this same panel with the new sort applied -
+    // a fresh htmx.ajax call rather than a full page navigation, since this
+    // content now lives inside Organize instead of its own page.
+    function organizeReloadListsPanel(sort) {
+        window.htmx.ajax('GET', "{% url 'lists.list' %}?tab=lists&sort=" + sort, { target: '#panel-lists', swap: 'innerHTML' });
+    }
+</script>

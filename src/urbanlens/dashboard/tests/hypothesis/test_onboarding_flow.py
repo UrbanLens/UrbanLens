@@ -118,7 +118,7 @@ class WelcomeTosAgreementTests(TestCase):
     def _post(self, user: User, **overrides) -> object:
         self.client.force_login(user)
         data = {
-            "memories_enabled": "on",
+            "history_enabled": "on",
             "community_enabled": "on",
             "external_apis_enabled": "on",
             "tos_agreed": "on",
@@ -129,7 +129,7 @@ class WelcomeTosAgreementTests(TestCase):
     def test_missing_tos_agreement_does_not_complete_onboarding(self) -> None:
         user: User = baker.make(User)
         self.client.force_login(user)
-        data = {"memories_enabled": "on", "community_enabled": "on", "external_apis_enabled": "on"}
+        data = {"history_enabled": "on", "community_enabled": "on", "external_apis_enabled": "on"}
 
         response = self.client.post(reverse("onboarding.welcome"), data)
 

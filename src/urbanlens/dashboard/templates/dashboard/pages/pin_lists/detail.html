@@ -12,8 +12,8 @@
 {% block page_title %}{{ pin_list.name }} - Lists - {{ site_title|default:"UrbanLens" }}{% endblock %}
 
 {% block content %}
-{% url 'lists.list' as lists_index_url %}
-{% include "dashboard/partials/ui/_page_hero.html" with body_template="dashboard/partials/pin_lists/_detail_hero_body.html" back_url=lists_index_url back_label="Lists" %}
+{% url 'organize.index' as organize_url %}
+{% include "dashboard/partials/ui/_page_hero.html" with body_template="dashboard/partials/pin_lists/_detail_hero_body.html" back_url=organize_url|add:"?tab=lists" back_label="Lists" %}
 <div class="pin-lists-page page-content pin-list-detail-page">
 
     <div class="pin-list-detail-actions">
@@ -314,7 +314,7 @@
         fetch(LIST_DELETE_URL, { method: 'POST', headers: { 'X-CSRFToken': CSRF } })
             .then((r) => {
                 if (!r.ok) return Promise.reject('Could not delete this list.');
-                window.location = "{% url 'lists.list' %}";
+                window.location = "{% url 'organize.index' %}?tab=lists";
             })
             .catch(_toastError);
     };

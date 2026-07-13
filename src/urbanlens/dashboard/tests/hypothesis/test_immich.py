@@ -343,6 +343,15 @@ class ImmichLibraryScanStartViewTests(TestCase):
         enqueue.assert_called_once()
         self.assertIn(b"task-123", response.content)
 
+    def test_visit_tracking_disabled_is_400_and_never_enqueues(self) -> None:
+        ImmichAccount.objects.create(profile=self.user.profile, server_url="https://photos.example.com", api_key="k")
+        self.user.profile.track_pin_visits = False
+        self.user.profile.save(update_fields=["track_pin_visits"])
+        with mock.patch("urbanlens.dashboard.controllers.immich.safely_enqueue_task") as enqueue:
+            response = self.client.post(reverse("settings.immich.scan"))
+        self.assertEqual(response.status_code, 400)
+        enqueue.assert_not_called()
+
 
 # -- Pin detail: search -------------------------------------------------------------
 
@@ -558,6 +567,20 @@ class SweepImmichLibraryLocationsTaskTests(TestCase):
         with mock.patch("urbanlens.dashboard.tasks.update_task_progress"):
             result = tasks.sweep_immich_library_locations(self.profile.pk)
         self.assertEqual(result, {"scanned": 0, "matched_suggestions": 0, "new_pin_suggestions": 0})
+
+    def test_visit_tracking_disabled_skips_the_gateway_entirely(self) -> None:
+        from urbanlens.dashboard.models.pin_suggestions.model import PinSuggestion
+
+        self.profile.track_pin_visits = False
+        self.profile.save(update_fields=["track_pin_visits"])
+        with (
+            mock.patch.object(ImmichGateway, "iter_library_assets") as iter_assets,
+            mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
+        ):
+            result = tasks.sweep_immich_library_locations(self.profile.pk)
+        iter_assets.assert_not_called()
+        self.assertEqual(result, {"scanned": 0, "matched_suggestions": 0, "new_pin_suggestions": 0})
+        self.assertFalse(PinSuggestion.objects.exists())
 
     def test_undecryptable_account_is_a_noop_not_a_crash(self) -> None:
         """Regression test for the InvalidToken crash seen in production (see tasks.py).

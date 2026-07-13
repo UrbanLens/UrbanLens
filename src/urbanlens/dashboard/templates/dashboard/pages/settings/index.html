@@ -197,54 +197,54 @@
             </form>
         </div>
 
-        {# -- Memories (subsection) -------------------------------------------- #}
-        <div class="settings-subsection" id="memories-settings-section">
+        {# -- History (subsection) -------------------------------------------- #}
+        <div class="settings-subsection" id="history-settings-section">
             <h3 class="settings-subsection-title">
                 <i class="material-symbols-outlined">history</i>
-                Memories
+                History
             </h3>
             <p class="settings-section-desc">What visit and location history is saved.</p>
 
-            <form method="post" class="settings-form" id="memories-form">
+            <form method="post" class="settings-form" id="history-form">
                 {% csrf_token %}
-                <input type="hidden" name="section" value="memories">
+                <input type="hidden" name="section" value="history">
 
                 <div class="settings-field">
                     <label class="settings-toggle-row">
-                        {{ memories_form.track_pin_visits }}
+                        {{ history_form.track_pin_visits }}
                         <span class="settings-toggle-label">
-                            <strong>{{ memories_form.track_pin_visits.label }}</strong>
-                            <span class="settings-help">{{ memories_form.track_pin_visits.help_text }}</span>
+                            <strong>{{ history_form.track_pin_visits.label }}</strong>
+                            <span class="settings-help">{{ history_form.track_pin_visits.help_text }}</span>
                         </span>
                     </label>
                 </div>
 
                 <div class="settings-field">
                     <label class="settings-toggle-row">
-                        {{ memories_form.track_routes }}
+                        {{ history_form.track_routes }}
                         <span class="settings-toggle-label">
-                            <strong>{{ memories_form.track_routes.label }}</strong>
-                            <span class="settings-help">{{ memories_form.track_routes.help_text }}</span>
+                            <strong>{{ history_form.track_routes.label }}</strong>
+                            <span class="settings-help">{{ history_form.track_routes.help_text }}</span>
                         </span>
                     </label>
                 </div>
 
                 <div class="settings-field">
                     <label class="settings-toggle-row">
-                        {{ memories_form.track_geolocation }}
+                        {{ history_form.track_geolocation }}
                         <span class="settings-toggle-label">
-                            <strong>{{ memories_form.track_geolocation.label }}</strong>
-                            <span class="settings-help">{{ memories_form.track_geolocation.help_text }}</span>
+                            <strong>{{ history_form.track_geolocation.label }}</strong>
+                            <span class="settings-help">{{ history_form.track_geolocation.help_text }}</span>
                         </span>
                     </label>
                 </div>
 
                 <div class="settings-field">
                     <label class="settings-toggle-row">
-                        {{ memories_form.generate_photo_keywords }}
+                        {{ history_form.generate_photo_keywords }}
                         <span class="settings-toggle-label">
-                            <strong>{{ memories_form.generate_photo_keywords.label }}</strong>
-                            <span class="settings-help">{{ memories_form.generate_photo_keywords.help_text }}</span>
+                            <strong>{{ history_form.generate_photo_keywords.label }}</strong>
+                            <span class="settings-help">{{ history_form.generate_photo_keywords.help_text }}</span>
                         </span>
                     </label>
                 </div>

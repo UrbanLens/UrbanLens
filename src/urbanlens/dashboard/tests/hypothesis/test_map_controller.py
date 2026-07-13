@@ -169,6 +169,18 @@ class ViewMapContextTests(TestCase):
         self.assertIsNone(resp.context["map_center_lat"])
         self.assertIsNone(resp.context["map_center_lng"])
 
+    def test_geolocation_tracking_allowed_true_from_profile(self) -> None:
+        Profile.objects.filter(pk=self.profile.pk).update(track_geolocation=True)
+        resp = self.client.get(_MAP_URL)
+        self.assertTrue(resp.context["geolocation_tracking_allowed"])
+        self.assertIn(b"_GEOLOCATION_TRACKING_ALLOWED = true;", resp.content)
+
+    def test_geolocation_tracking_allowed_false_from_profile(self) -> None:
+        Profile.objects.filter(pk=self.profile.pk).update(track_geolocation=False)
+        resp = self.client.get(_MAP_URL)
+        self.assertFalse(resp.context["geolocation_tracking_allowed"])
+        self.assertIn(b"_GEOLOCATION_TRACKING_ALLOWED = false;", resp.content)
+
     @given(n=st.integers(min_value=0, max_value=6))
     @_db_settings
     def test_pin_count_equals_root_pin_count_for_n_pins(self, n: int) -> None:

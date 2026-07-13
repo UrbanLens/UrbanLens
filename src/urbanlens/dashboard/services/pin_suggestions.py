@@ -273,8 +273,13 @@ def ingest_location_hits(profile: Profile, hits: Iterable[LocationHit], origin: 
         origin: Which batch scan produced these hits.
 
     Returns:
-        Summary counts for the calling task/view to report.
+        Summary counts for the calling task/view to report - all zero when
+        the profile has turned off visit-history tracking, since a
+        PinSuggestion is itself a location-history trail.
     """
+    if not visit_logging_allowed(profile):
+        return IngestSummary(matched_suggestions=0, new_pin_suggestions=0, hits_processed=0)
+
     hit_list = list(hits)
     matched, unmatched = _match_hits_to_pins(profile, hit_list)
     suggestion_ids_by_key: dict[str, int] = {}

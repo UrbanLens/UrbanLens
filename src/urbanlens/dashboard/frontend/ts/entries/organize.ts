@@ -2,7 +2,7 @@ import { installGlobalOrganizeIconPicker } from "../shared/organize-icon-picker"
 import { installGlobalColorPicker } from "../shared/color-picker";
 import { installGlobalBadgeRelPicker } from "../shared/badge-rel-picker";
 import { installOrgFilterEngine } from "../shared/organize-filter-engine";
-import { installOrgBulkToolbar, installOrgTabSwitching, createOrganizeHeader, orgHeader } from "../shared/organize-header";
+import { installOrgBulkToolbar, installOrgTabSwitching, installOrgSectionSwitching, createOrganizeHeader, orgHeader } from "../shared/organize-header";
 import { OrgTabManager, type OrgTabManagerConfig } from "../shared/organize-tab-manager";
 import { initOrganizePriority } from "../shared/organize-priority";
 import { initOnboardingTour } from "../shared/onboarding-tour";
@@ -348,6 +348,7 @@ function init(): void {
     installOrgBulkToolbar();
     createOrganizeHeader(page.dataset.activeTab ?? "tags");
     installOrgTabSwitching();
+    installOrgSectionSwitching();
     initConsolidatedDialogOpener();
     initKindChangedListener();
     initPinCacheInvalidation();

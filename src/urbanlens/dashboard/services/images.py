@@ -327,11 +327,13 @@ def extract_exif_data(image_file: IO[bytes]) -> dict[str, Any] | None:
             image_file.seek(0)
 
 
-def downscale_stored_image(image: Image, max_dimension: int | None, convert_webp: bool) -> int | None:
+def downscale_stored_image(image: Image, max_dimension: int | None, convert_webp: bool, strip_gps: bool = False) -> int | None:
     """Downscale and/or re-encode an Image's stored file in place.
 
     The stored file is replaced only when processing actually shrinks it (or a
-    WebP conversion was requested); otherwise it is left untouched. The
+    WebP conversion was requested), unless ``strip_gps`` removed an embedded
+    GPS tag - that always forces a re-save regardless of the resulting size,
+    since leaving the original file in place would defeat the point. The
     caller is responsible for persisting ``image.image.name`` and the returned
     size to the database - this function only touches storage.
 
@@ -339,6 +341,10 @@ def downscale_stored_image(image: Image, max_dimension: int | None, convert_webp
         image: The Image row whose stored file to process.
         max_dimension: Longest-edge cap in pixels, or None to keep dimensions.
         convert_webp: Whether to re-encode the file as WebP.
+        strip_gps: When True, removes any embedded GPS EXIF tag from the
+            stored file's own metadata (independent of the derived
+            ``Image.latitude``/``longitude`` fields, which the caller controls
+            separately).
 
     Returns:
         The new stored size in bytes when the file was replaced, else None.
@@ -357,9 +363,16 @@ def downscale_stored_image(image: Image, max_dimension: int | None, convert_webp
             return None
         needs_resize = max_dimension is not None and max(img.size) > max_dimension
         needs_convert = convert_webp and source_format != "WEBP"
-        if not needs_resize and not needs_convert:
-            return None
         exif_bytes = img.info.get("exif")
+        has_gps = False
+        if strip_gps and exif_bytes:
+            exif = img.getexif()
+            if exif.get_ifd(0x8825):  # 34853 - GPSInfo IFD
+                del exif[0x8825]
+                exif_bytes = exif.tobytes()
+                has_gps = True
+        if not needs_resize and not needs_convert and not has_gps:
+            return None
         icc_profile = img.info.get("icc_profile")
         img.load()
 
@@ -387,8 +400,10 @@ def downscale_stored_image(image: Image, max_dimension: int | None, convert_webp
     img.save(buffer, format=target_format, **save_kwargs)
     new_size = buffer.tell()
 
-    # A pure resize that somehow grew the file is not worth keeping.
-    if not needs_convert and new_size >= old_size:
+    # A pure resize that somehow grew the file is not worth keeping - unless
+    # stripping GPS was the whole reason we're here, in which case keeping the
+    # smaller-but-still-tagged original would defeat the point.
+    if not needs_convert and not has_gps and new_size >= old_size:
         return None
 
     from django.core.files.base import ContentFile

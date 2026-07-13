@@ -1701,15 +1701,6 @@ dialog.tag-create-card.ul-dialog {
     margin: 0;
 }
 
-.organize-page-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: 1rem;
-    margin-bottom: 1.5rem;
-}
-
 .organize-page-header-actions {
     display: flex;
     align-items: center;
@@ -1721,23 +1712,95 @@ dialog.tag-create-card.ul-dialog {
     margin: 0 0 1.25rem;
 }
 
-// `.organize-tab-bar`/`.organize-tab` are bare hooks for organize.js's
-// tab-switch/filter/convert-target logic - the look comes entirely from the
-// shared `.ul-subnav-tabs`/`.ul-subnav-tab` classes (see _page_hero.scss)
-// rendered alongside them.
+// -- Badges container (Organize > Badges tab) --------------------------------
+// A visually distinct "island" for the Tags/Categories/Statuses/People/Display
+// Order sub-tabs - deliberately different from the flat underline
+// `.ul-subnav-tabs` used by the page's own Badges|Lists|Filters subnav above
+// it (see _page_hero.scss). Two identical-looking tab rows stacked would read
+// as duplicated navigation, so this is a raised, rounded card with a
+// gradient-pill segmented control instead - reads as "a tool", not "another menu".
+.organize-badges-container {
+    background: linear-gradient(160deg, var(--ul-grey-0a) 0%, var(--ul-grey-0) 55%);
+    border: 1px solid var(--ul-grey-1a);
+    border-radius: $radius-md;
+    box-shadow: var(--ul-shadow-sm);
+    padding: 1.1rem 1.25rem 1.5rem;
+}
+
+.organize-badges-container-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.organize-tab-bar {
+    display: flex;
+    align-items: center;
+    width: fit-content;
+    max-width: 100%;
+    gap: .2rem;
+    padding: .3rem;
+    background: var(--ul-grey-0);
+    border: 1px solid var(--ul-grey-1a);
+    border-radius: 999px;
+    box-shadow: var(--ul-shadow-sm);
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+
+    &::-webkit-scrollbar {
+        display: none;
+    }
+}
+
 .organize-tab {
     position: relative;
+    padding: .6rem 1.15rem;
+    font-size: .88rem;
+    font-weight: 600;
+    color: var(--ul-grey-6);
+    border: none;
+    background: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: .45rem;
+    white-space: nowrap;
+    flex-shrink: 0;
+    border-radius: 999px;
+    transition: color .15s ease, background .15s ease, box-shadow .15s ease, transform .1s ease;
 
     i {
+        font-size: 1.05rem;
         transition: transform .15s ease;
+    }
+
+    &:hover {
+        color: var(--ul-grey-9);
+        background: var(--ul-hover-bg);
     }
 
     &:active {
         transform: scale(.96);
     }
 
-    &.active i {
-        transform: scale(1.05);
+    &.active {
+        color: #fff;
+        background: linear-gradient(135deg, var(--primary-color), color-mix(in srgb, var(--primary-color) 78%, black));
+        box-shadow: 0 3px 10px color-mix(in srgb, var(--primary-color) 45%, transparent);
+
+        i {
+            transform: scale(1.05);
+        }
+
+        &:hover {
+            color: #fff;
+            background: linear-gradient(135deg, var(--primary-color), color-mix(in srgb, var(--primary-color) 78%, black));
+        }
     }
 }
 
@@ -1757,7 +1820,30 @@ dialog.tag-create-card.ul-dialog {
     border: 1px solid color-mix(in srgb, $primary-color 30%, transparent);
     transition: background .15s ease, color .15s ease, border-color .15s ease;
 
+    .organize-tab.active & {
+        background: rgba(255, 255, 255, .25);
+        color: #fff;
+        border-color: rgba(255, 255, 255, .35);
+    }
+
     &[hidden] { display: none; }
+}
+
+// Placeholder shown in the Lists/Filters sections while their content is
+// being lazy-loaded via HTMX the first time either tab is opened (see
+// organize/index.html and PinListsIndexView.get).
+.organize-section-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: .6rem;
+    padding: 4rem 1rem;
+    color: var(--ul-grey-6);
+    font-size: .95rem;
+}
+
+.organize-section-spinner {
+    @include spinner(22px);
 }
 
 .org-cross-tab-footer {
@@ -2784,9 +2870,6 @@ dialog.tag-create-card.ul-dialog {
 // -- Organize page: responsive rules ------------------------------------------
 
 @include down($breakpoint-sm) {
-    // Tab bar sizing/scroll behavior now comes from the shared
-    // `.ul-subnav-tabs`/`.ul-subnav-tab` classes (see _page_hero.scss).
-
     .organize-page-header-actions {
         width: 100%;
         margin-left: 0;

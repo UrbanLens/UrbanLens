@@ -1,9 +1,10 @@
 {% comment %}
 Geographic include/exclude region field for the saved-filter form dialog.
-Requires leaflet + leaflet-draw to already be loaded (see
-pin_lists/index.html's {% block header %}) and initSavedFilterRegionMap()
-(defined in that same template) to be called after this markup lands in the
-DOM (handled via the htmx:afterSwap listener there).
+Requires leaflet + leaflet-draw to already be loaded and initSavedFilterRegionMap()
+to be defined - both come from Organize's Filters tab
+(partials/pin_lists/_organize_filters_panel.html), which loads them the first
+time that tab is opened and calls initSavedFilterRegionMap() after this markup
+lands in the DOM (handled via the htmx:afterSwap listener there).
 {% endcomment %}
 <div class="form-row saved-filter-region-field">
     <div class="saved-filter-region-header">

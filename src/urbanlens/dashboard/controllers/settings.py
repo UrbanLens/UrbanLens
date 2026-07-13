@@ -19,10 +19,10 @@ from urbanlens.dashboard.forms.settings_form import (
     ContactSettingsForm,
     DirectMessageSettingsForm,
     ExternalApiSettingsForm,
+    HistorySettingsForm,
     MapCenterForm,
     MapDisplayForm,
     MarkupDefaultsForm,
-    MemoriesSettingsForm,
     PlacesLayerForm,
     PrivacySettingsForm,
     StyleSettingsForm,
@@ -139,7 +139,7 @@ class SettingsView(LoginRequiredMixin, View):
             "places_layer_form": PlacesLayerForm(instance=profile),
             "markup_defaults_form": MarkupDefaultsForm(instance=profile),
             "ai_form": AISettingsForm(instance=profile),
-            "memories_form": MemoriesSettingsForm(instance=profile),
+            "history_form": HistorySettingsForm(instance=profile),
             "community_form": CommunitySettingsForm(instance=profile),
             "external_api_form": ExternalApiSettingsForm(instance=profile),
             "direct_message_form": DirectMessageSettingsForm(instance=profile),
@@ -174,7 +174,7 @@ class SettingsView(LoginRequiredMixin, View):
         places_layer_form = PlacesLayerForm(instance=profile)
         markup_defaults_form = MarkupDefaultsForm(instance=profile)
         ai_form = AISettingsForm(instance=profile)
-        memories_form = MemoriesSettingsForm(instance=profile)
+        history_form = HistorySettingsForm(instance=profile)
         community_form = CommunitySettingsForm(instance=profile)
         external_api_form = ExternalApiSettingsForm(instance=profile)
         direct_message_form = DirectMessageSettingsForm(instance=profile)
@@ -252,12 +252,12 @@ class SettingsView(LoginRequiredMixin, View):
                 messages.success(request, "Map settings saved.")
                 return _settings_redirect("map-settings-section")
 
-        elif section == "memories":
-            memories_form = MemoriesSettingsForm(request.POST, instance=profile)
-            if memories_form.is_valid():
-                memories_form.save()
-                messages.success(request, "Memories settings saved.")
-                return _settings_redirect("memories-settings-section")
+        elif section == "history":
+            history_form = HistorySettingsForm(request.POST, instance=profile)
+            if history_form.is_valid():
+                history_form.save()
+                messages.success(request, "History settings saved.")
+                return _settings_redirect("history-settings-section")
 
         elif section == "community":
             community_form = CommunitySettingsForm(request.POST, instance=profile)
@@ -289,7 +289,7 @@ class SettingsView(LoginRequiredMixin, View):
             "places_layer_form": places_layer_form,
             "markup_defaults_form": markup_defaults_form,
             "ai_form": ai_form,
-            "memories_form": memories_form,
+            "history_form": history_form,
             "community_form": community_form,
             "external_api_form": external_api_form,
             "direct_message_form": direct_message_form,
@@ -311,7 +311,7 @@ class SettingsView(LoginRequiredMixin, View):
                 places_layer_form,
                 markup_defaults_form,
                 ai_form,
-                memories_form,
+                history_form,
                 community_form,
                 external_api_form,
                 direct_message_form,

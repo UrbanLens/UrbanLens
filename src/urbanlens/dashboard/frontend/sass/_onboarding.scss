@@ -2,12 +2,12 @@
 @use 'variables' as *;
 
 // -- Welcome onboarding cards --------------------------------------------------
-// Big, tappable category cards (Memories / Community / External Services) on
+// Big, tappable category cards (History / Community / External Services) on
 // the first-login /welcome/ page. Each wraps a checkbox so the whole card
 // toggles the setting; the .ul-switch in the corner shows current state.
 
 $onboarding-card-accents: (
-    'memories': $color-indigo-500,
+    'history': $color-indigo-500,
     'community': $color-teal-500,
     'external': $color-purple-500,
 );
@@ -226,7 +226,7 @@ $onboarding-card-accents: (
 // -- TOS agreement block ---------------------------------------------------
 // Plain-language snippet + required checkbox shown at the end of the /welcome/
 // form, right before the submit button. Kept visually distinct from the
-// Memories/Community/External-Services cards above since checking it isn't a
+// History/Community/External-Services cards above since checking it isn't a
 // feature toggle - it's a one-time, non-reversible agreement.
 
 .onboarding-tos {

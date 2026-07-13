@@ -128,7 +128,7 @@ class PinSearchTests(TestCase):
         self.assertIn("Old Church", titles)
         self.assertIn("Church Near Me", titles)
         self.assertLess(titles.index("Old Church"), titles.index("Church Near Me"))
-        
+
     def test_multiple_suggestions_all_returned(self):
         self.profile.map_custom_latitude = "39.10"
         self.profile.map_custom_longitude = "-84.51"
@@ -154,7 +154,7 @@ class PinSearchTests(TestCase):
         # Contains "near me"
         far_location4 = baker.make("dashboard.Location", latitude="55.50", longitude="-0.14")
         baker.make("dashboard.Pin", profile=self.profile, location=far_location4, name="Belnear Medical Center")
-        
+
         # term, (expected titles), (unexpected titles)
         terms = [
             ("factory near me",

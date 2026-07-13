@@ -1,4 +1,4 @@
-"""Tests for the Memories toggles (track_pin_visits/track_routes/track_geolocation).
+"""Tests for the History toggles (track_pin_visits/track_routes/track_geolocation).
 
 Covers the guard functions in services.visits and the call sites that must
 create zero rows when disabled - including the "no exceptions, even for

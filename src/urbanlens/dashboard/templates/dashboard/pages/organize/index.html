@@ -22,39 +22,30 @@
 {% if not standalone_mode %}
 <div class="ul-page-subnav">
     <div class="ul-page-subnav__inner">
-        <div class="organize-tab-bar ul-subnav-tabs" role="tablist">
-            <button type="button" class="organize-tab ul-subnav-tab{% if active_tab == 'tags' %} active{% endif %}"
-                    role="tab" data-tab="tags" aria-controls="panel-tags" data-filter-ns="tag">
-                <i class="material-symbols-outlined">label</i> Tags
-                <span class="org-tab-count" id="org-tab-count-tag" hidden></span>
+        <nav class="ul-subnav-tabs organize-section-tabs" aria-label="Organize sections">
+            <button type="button" class="ul-subnav-tab organize-section-tab{% if active_section == 'badges' %} is-active{% endif %}"
+                    data-section="badges" aria-controls="panel-badges">
+                <i class="material-symbols-outlined">sell</i>
+                <span>Badges</span>
             </button>
-            <button type="button" class="organize-tab ul-subnav-tab{% if active_tab == 'categories' %} active{% endif %}"
-                    role="tab" data-tab="categories" aria-controls="panel-categories" data-filter-ns="cat">
-                <i class="material-symbols-outlined">category</i> Categories
-                <span class="org-tab-count" id="org-tab-count-cat" hidden></span>
+            <button type="button" class="ul-subnav-tab organize-section-tab{% if active_section == 'lists' %} is-active{% endif %}"
+                    data-section="lists" aria-controls="panel-lists">
+                <i class="material-symbols-outlined">bookmarks</i>
+                <span>Lists</span>
             </button>
-            <button type="button" class="organize-tab ul-subnav-tab{% if active_tab == 'status' %} active{% endif %}"
-                    role="tab" data-tab="status" aria-controls="panel-status" data-filter-ns="status">
-                <i class="material-symbols-outlined">flag_circle</i> Statuses
-                <span class="org-tab-count" id="org-tab-count-status" hidden></span>
+            <button type="button" class="ul-subnav-tab organize-section-tab{% if active_section == 'filters' %} is-active{% endif %}"
+                    data-section="filters" aria-controls="panel-filters">
+                <i class="material-symbols-outlined">filter_alt</i>
+                <span>Filters</span>
             </button>
-            <button type="button" class="organize-tab ul-subnav-tab{% if active_tab == 'people' %} active{% endif %}"
-                    role="tab" data-tab="people" aria-controls="panel-people" data-filter-ns="people">
-                <i class="material-symbols-outlined">people</i> People
-                <span class="org-tab-count" id="org-tab-count-people" hidden></span>
-            </button>
-            <button type="button" class="organize-tab ul-subnav-tab{% if active_tab == 'priority' %} active{% endif %}"
-                    role="tab" data-tab="priority" aria-controls="panel-priority">
-                <i class="material-symbols-outlined">low_priority</i> Display Order
-            </button>
-        </div>
+        </nav>
     </div>
 </div>
 {% endif %}
 {% endblock %}
 
 {% block content %}
-<div class="organize-page page-content" data-active-tab="{{ active_tab }}"
+<div class="organize-page page-content" data-active-tab="{{ active_tab }}" data-active-section="{{ active_section }}"
      data-rows-url-tag="{% url 'badge.rows' badge_kind='tag' %}"
      data-rows-url-category="{% url 'badge.rows' badge_kind='category' %}"
      data-rows-url-status="{% url 'badge.rows' badge_kind='status' %}">
@@ -62,70 +53,119 @@
          data-standalone-mode="{{ standalone_mode|yesno:'1,' }}"
          data-show-onboarding-tips="{{ request.user.profile.show_onboarding_tips|yesno:'1,' }}"></div>
 
-    <div class="organize-page-header">
-        <div class="organize-page-header-actions">
-            <div class="btn-group" id="org-header-actions">
-                <div class="tag-view-toggle btn-togl" id="org-view-toggle" role="group" aria-label="View mode">
-                    <button type="button" class="btn org-header-view-btn active" data-view="list" title="List view">
-                        <i class="material-symbols-outlined">view_list</i>
-                    </button>
-                    <button type="button" class="btn org-header-view-btn" data-view="gallery" title="Gallery view">
-                        <i class="material-symbols-outlined">grid_view</i>
-                    </button>
-                    <button type="button" class="btn org-header-view-btn" data-view="tree" title="Tree view">
-                        <i class="material-symbols-outlined">account_tree</i>
-                    </button>
-                </div>
-                <div class="tag-view-toggle--sel">
-                    <button type="button" class="btn btn--secondary btn--sel" id="org-header-sel-all" title="Select all">
-                        <i class="material-symbols-outlined">checklist</i>
-                    </button>
-                </div>
-                <button type="button" class="btn btn--secondary btn--sm" id="org-header-filter-btn" title="Filter">
-                    <i class="material-symbols-outlined">filter_list</i> Filter
-                    <span class="org-filter-active-dot"></span>
+    {# ══════════════════════════════════════════════════════════════════════════ #}
+    {# BADGES SECTION: Tags/Categories/Statuses/People/Display Order, all inside  #}
+    {# one visually distinct container so it doesn't read as a second subnav      #}
+    {# stacked under the page's own Badges|Lists|Filters tabs above.              #}
+    {# ══════════════════════════════════════════════════════════════════════════ #}
+    <div class="organize-section-panel" id="panel-badges" role="tabpanel"
+         {% if not standalone_mode and active_section != 'badges' %}hidden{% endif %}>
+    <div class="organize-badges-container">
+        <div class="organize-badges-container-header">
+            {% if not standalone_mode %}
+            <div class="organize-tab-bar" role="tablist">
+                <button type="button" class="organize-tab{% if active_tab == 'tags' %} active{% endif %}"
+                        role="tab" data-tab="tags" aria-controls="panel-tags" data-filter-ns="tag">
+                    <i class="material-symbols-outlined">label</i> Tags
+                    <span class="org-tab-count" id="org-tab-count-tag" hidden></span>
                 </button>
-                <button type="button" class="btn btn--primary btn--sm" id="org-header-create-btn" type="button" title="Create">
-                    <i class="material-symbols-outlined">add</i>
+                <button type="button" class="organize-tab{% if active_tab == 'categories' %} active{% endif %}"
+                        role="tab" data-tab="categories" aria-controls="panel-categories" data-filter-ns="cat">
+                    <i class="material-symbols-outlined">category</i> Categories
+                    <span class="org-tab-count" id="org-tab-count-cat" hidden></span>
+                </button>
+                <button type="button" class="organize-tab{% if active_tab == 'status' %} active{% endif %}"
+                        role="tab" data-tab="status" aria-controls="panel-status" data-filter-ns="status">
+                    <i class="material-symbols-outlined">flag_circle</i> Statuses
+                    <span class="org-tab-count" id="org-tab-count-status" hidden></span>
+                </button>
+                <button type="button" class="organize-tab{% if active_tab == 'people' %} active{% endif %}"
+                        role="tab" data-tab="people" aria-controls="panel-people" data-filter-ns="people">
+                    <i class="material-symbols-outlined">people</i> People
+                    <span class="org-tab-count" id="org-tab-count-people" hidden></span>
+                </button>
+                <button type="button" class="organize-tab{% if active_tab == 'priority' %} active{% endif %}"
+                        role="tab" data-tab="priority" aria-controls="panel-priority">
+                    <i class="material-symbols-outlined">low_priority</i> Display Order
                 </button>
             </div>
+            {% endif %}
+
+            <div class="organize-page-header-actions">
+                <div class="btn-group" id="org-header-actions">
+                    <div class="tag-view-toggle btn-togl" id="org-view-toggle" role="group" aria-label="View mode">
+                        <button type="button" class="btn org-header-view-btn active" data-view="list" title="List view">
+                            <i class="material-symbols-outlined">view_list</i>
+                        </button>
+                        <button type="button" class="btn org-header-view-btn" data-view="gallery" title="Gallery view">
+                            <i class="material-symbols-outlined">grid_view</i>
+                        </button>
+                        <button type="button" class="btn org-header-view-btn" data-view="tree" title="Tree view">
+                            <i class="material-symbols-outlined">account_tree</i>
+                        </button>
+                    </div>
+                    <div class="tag-view-toggle--sel">
+                        <button type="button" class="btn btn--secondary btn--sel" id="org-header-sel-all" title="Select all">
+                            <i class="material-symbols-outlined">checklist</i>
+                        </button>
+                    </div>
+                    <button type="button" class="btn btn--secondary btn--sm" id="org-header-filter-btn" title="Filter">
+                        <i class="material-symbols-outlined">filter_list</i> Filter
+                        <span class="org-filter-active-dot"></span>
+                    </button>
+                    <button type="button" class="btn btn--primary btn--sm" id="org-header-create-btn" type="button" title="Create">
+                        <i class="material-symbols-outlined">add</i>
+                    </button>
+                </div>
+            </div>
         </div>
+
+        <div class="organize-badges-container-body">
+            {% include 'dashboard/partials/badges/organize_badge_panel.html' with tab='categories' ns='cat' form_id='new-category-form' filter_ns='cat' badge_url_kind='category' kind='category' singular_title='Category' plural_lower='categories' badges=categories rows_id='category-rows' rows_target='#category-rows' select_class='cat-select-cb' select_data_name='cat' empty_icon='category' name_placeholder='e.g. Hospital' desc_placeholder='What type of place is this?' empty_message='No categories yet. Create one to start organizing your pins and locations.' parent_items=priority_items selectable=True editable=True deletable=True %}
+
+            {% include 'dashboard/partials/badges/organize_badge_panel.html' with tab='tags' ns='tag' form_id='new-tag-form' filter_ns='tag' badge_url_kind='tag' kind='tag' singular_title='Tag' plural_lower='tags' badges=tags rows_id='tag-rows' rows_target='#tag-rows' select_class='tag-select-cb' select_data_name='tag' empty_icon='label' name_placeholder='e.g. Road trip' desc_placeholder='What is this tag for?' empty_message='No tags yet. Create one to start organizing your pins.' parent_items=priority_items selectable=True editable=True deletable=True %}
+
+            {% include 'dashboard/partials/badges/organize_badge_panel.html' with tab='status' ns='status' form_id='new-status-form' filter_ns='status' badge_url_kind='status' kind='status' singular_title='Status' plural_lower='statuses' badges=statuses rows_id='status-rows' rows_target='#status-rows' select_class='status-select-cb' select_data_name='status' empty_icon='flag' name_placeholder='e.g. Under renovation' desc_placeholder='What does this status mean?' empty_message='No status labels yet. Create one to get started.' parent_items=priority_items selectable=True editable=True deletable=True %}
+
+            {% if not standalone_mode %}
+            <div class="organize-panel tag-page" id="panel-priority" role="tabpanel"
+                 {% if active_tab != 'priority' %}hidden{% endif %}>
+
+                <div class="badge-header">
+                    <div>
+                        <h2 class="badge-title">Display Order
+                            {% include "dashboard/partials/ui/_page_explainer_anchor.html" with explainer_id="priority-explainer" %}
+                        </h2>
+                    </div>
+                </div>
+
+                {% include "dashboard/partials/ui/_page_explainer.html" with explainer_id="priority-explainer" modifier="priority" kicker="Map icon decision" heading="When one pin has several labels, the highest priority wins." body="Move the most visually important tags, categories, or statuses toward the top. The map uses that order to decide which icon and color should represent pins with multiple labels." visual_template="dashboard/partials/ui/_priority_visual.html" %}
+
+                {% include "dashboard/partials/badges/_priority_list.html" with priority_items=priority_items %}
+            </div>{# end #panel-priority #}
+            {% endif %}
+
+            {% include 'dashboard/partials/badges/organize_badge_panel.html' with tab='people' ns='people' form_id='new-people-form' filter_ns='people' badge_url_kind='people' kind='people' singular_title='Label' plural_lower='labels' badges=user_badges parent_items=user_badges rows_id='people-badge-rows' rows_target='#people-badge-rows' select_class='people-sel-cb' select_data_name='people' edit_target='#people-badge-edit-dialog-body' empty_icon='person' name_placeholder='e.g. Friend, Frequent Explorer' desc_placeholder='Who should this label apply to?' empty_message='No people labels yet. Create one to start organizing people.' selectable=True editable=True deletable=True %}
+        </div>{# end .organize-badges-container-body #}
+    </div>{# end .organize-badges-container #}
+    </div>{# end #panel-badges #}
+
+    {% if not standalone_mode %}
+    {# ══════════════════════════════════════════════════════════════════════════ #}
+    {# LISTS / FILTERS SECTIONS: lazy-loaded via HTMX the first time each tab is  #}
+    {# shown (see PinListsIndexView.get) - reuses the same content/JS that used   #}
+    {# to live at /lists/, which now redirects here for direct navigation.       #}
+    {# ══════════════════════════════════════════════════════════════════════════ #}
+    <div class="organize-section-panel" id="panel-lists" role="tabpanel" {% if active_section != 'lists' %}hidden{% endif %}
+         hx-get="{% url 'lists.list' %}?tab=lists" hx-trigger="revealed" hx-swap="innerHTML">
+        <div class="organize-section-loading"><span class="organize-section-spinner"></span> Loading your lists&hellip;</div>
     </div>
 
-    {# ══════════════════════════════════════════════════════════════════════════ #}
-    {# BADGE PANELS: tags, categories, and statuses share one Badge template.     #}
-    {# ══════════════════════════════════════════════════════════════════════════ #}
-    {% include 'dashboard/partials/badges/organize_badge_panel.html' with tab='categories' ns='cat' form_id='new-category-form' filter_ns='cat' badge_url_kind='category' kind='category' singular_title='Category' plural_lower='categories' badges=categories rows_id='category-rows' rows_target='#category-rows' select_class='cat-select-cb' select_data_name='cat' empty_icon='category' name_placeholder='e.g. Hospital' desc_placeholder='What type of place is this?' empty_message='No categories yet. Create one to start organizing your pins and locations.' parent_items=priority_items selectable=True editable=True deletable=True %}
-
-    {% include 'dashboard/partials/badges/organize_badge_panel.html' with tab='tags' ns='tag' form_id='new-tag-form' filter_ns='tag' badge_url_kind='tag' kind='tag' singular_title='Tag' plural_lower='tags' badges=tags rows_id='tag-rows' rows_target='#tag-rows' select_class='tag-select-cb' select_data_name='tag' empty_icon='label' name_placeholder='e.g. Road trip' desc_placeholder='What is this tag for?' empty_message='No tags yet. Create one to start organizing your pins.' parent_items=priority_items selectable=True editable=True deletable=True %}
-
-    {% include 'dashboard/partials/badges/organize_badge_panel.html' with tab='status' ns='status' form_id='new-status-form' filter_ns='status' badge_url_kind='status' kind='status' singular_title='Status' plural_lower='statuses' badges=statuses rows_id='status-rows' rows_target='#status-rows' select_class='status-select-cb' select_data_name='status' empty_icon='flag' name_placeholder='e.g. Under renovation' desc_placeholder='What does this status mean?' empty_message='No status labels yet. Create one to get started.' parent_items=priority_items selectable=True editable=True deletable=True %}
-
-    {# ══════════════════════════════════════════════════════════════════════════ #}
-    {# PRIORITY PANEL (full Organize page only)                                  #}
-    {# ══════════════════════════════════════════════════════════════════════════ #}
-    {% if not standalone_mode %}
-    <div class="organize-panel tag-page" id="panel-priority" role="tabpanel"
-         {% if active_tab != 'priority' %}hidden{% endif %}>
-
-        <div class="badge-header">
-            <div>
-                <h2 class="badge-title">Display Order
-                    {% include "dashboard/partials/ui/_page_explainer_anchor.html" with explainer_id="priority-explainer" %}
-                </h2>
-            </div>
-        </div>
-
-        {% include "dashboard/partials/ui/_page_explainer.html" with explainer_id="priority-explainer" modifier="priority" kicker="Map icon decision" heading="When one pin has several labels, the highest priority wins." body="Move the most visually important tags, categories, or statuses toward the top. The map uses that order to decide which icon and color should represent pins with multiple labels." visual_template="dashboard/partials/ui/_priority_visual.html" %}
-
-        {% include "dashboard/partials/badges/_priority_list.html" with priority_items=priority_items %}
-    </div>{# end #panel-priority #}
+    <div class="organize-section-panel" id="panel-filters" role="tabpanel" {% if active_section != 'filters' %}hidden{% endif %}
+         hx-get="{% url 'lists.list' %}?tab=filters" hx-trigger="revealed" hx-swap="innerHTML">
+        <div class="organize-section-loading"><span class="organize-section-spinner"></span> Loading your filters&hellip;</div>
+    </div>
     {% endif %}
-
-    {# ══════════════════════════════════════════════════════════════════════════ #}
-    {# PEOPLE PANEL: people labels are Badge(kind='people') too.                 #}
-    {# ══════════════════════════════════════════════════════════════════════════ #}
-    {% include 'dashboard/partials/badges/organize_badge_panel.html' with tab='people' ns='people' form_id='new-people-form' filter_ns='people' badge_url_kind='people' kind='people' singular_title='Label' plural_lower='labels' badges=user_badges parent_items=user_badges rows_id='people-badge-rows' rows_target='#people-badge-rows' select_class='people-sel-cb' select_data_name='people' edit_target='#people-badge-edit-dialog-body' empty_icon='person' name_placeholder='e.g. Friend, Frequent Explorer' desc_placeholder='Who should this label apply to?' empty_message='No people labels yet. Create one to start organizing people.' selectable=True editable=True deletable=True %}
 
 </div>{# end .organize-page #}
 

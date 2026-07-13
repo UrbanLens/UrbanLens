@@ -302,8 +302,13 @@ def create_visit_suggestion(
             there is no Location - never stored.
 
     Returns:
-        The created VisitSuggestion, or None if nothing would change for suggested_to.
+        The created VisitSuggestion, or None if nothing would change for
+        suggested_to, or if suggested_to has turned off visit-history
+        tracking - a pending suggestion is itself a location-history record.
     """
+    if not visit_logging_allowed(suggested_to):
+        return None
+
     existing_visit = find_existing_visit_on_date(suggested_to, location=location, latitude=latitude, longitude=longitude, visited_at=visited_at)
 
     mutual = _mutual_candidates(suggested_to, suggested_by, candidate_profiles)

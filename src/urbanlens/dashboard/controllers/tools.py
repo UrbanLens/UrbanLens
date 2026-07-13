@@ -36,6 +36,7 @@ from urbanlens.dashboard.services.import_data import (
     schedule_import_cleanup,
 )
 from urbanlens.dashboard.services.pin_suggestions import LocationHit, ingest_location_hits
+from urbanlens.dashboard.services.visits import visit_logging_allowed
 
 logger = logging.getLogger(__name__)
 
@@ -487,6 +488,8 @@ class PhotoLocationScanUploadView(LoginRequiredMixin, View):
             JSON summary of suggestions created/updated, or a 400 error.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
+        if not visit_logging_allowed(profile):
+            return JsonResponse({"error": "Visit-history tracking is turned off."}, status=403)
         try:
             body = json.loads(request.body)
         except (json.JSONDecodeError, TypeError, UnicodeDecodeError):

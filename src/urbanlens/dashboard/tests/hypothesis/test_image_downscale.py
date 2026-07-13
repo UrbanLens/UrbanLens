@@ -26,14 +26,20 @@ from urbanlens.dashboard.services.images import _json_safe, downscale_stored_ima
 _MEDIA_ROOT = tempfile.mkdtemp(prefix="urbanlens-test-media-")
 
 
-def _jpeg_bytes(width: int, height: int, with_exif: bool = True) -> bytes:
-    """Build an in-memory JPEG, optionally carrying EXIF Make/Model tags."""
+def _jpeg_bytes(width: int, height: int, with_exif: bool = True, with_gps: bool = False) -> bytes:
+    """Build an in-memory JPEG, optionally carrying EXIF Make/Model tags and/or a GPS IFD."""
     img = PILImage.new("RGB", (width, height), color=(120, 60, 30))
     buf = io.BytesIO()
     if with_exif:
         exif = PILImage.Exif()
         exif[0x010F] = "UrbanLens"  # Make
         exif[0x0110] = "TestCam 3000"  # Model
+        if with_gps:
+            gps_ifd = exif.get_ifd(0x8825)  # 34853 - GPSInfo IFD
+            gps_ifd[1] = "N"  # GPSLatitudeRef
+            gps_ifd[2] = (IFDRational(40, 1), IFDRational(0, 1), IFDRational(0, 1))  # GPSLatitude
+            gps_ifd[3] = "W"  # GPSLongitudeRef
+            gps_ifd[4] = (IFDRational(74, 1), IFDRational(0, 1), IFDRational(0, 1))  # GPSLongitude
         img.save(buf, format="JPEG", exif=exif.tobytes())
     else:
         img.save(buf, format="JPEG")
@@ -152,3 +158,48 @@ class DownscaleStoredImageTests(TestCase):
         PILImage.new("P", (900, 900)).save(buf, format="GIF")
         row = _make_image_row(buf.getvalue(), name="anim.gif")
         self.assertIsNone(downscale_stored_image(row, max_dimension=200, convert_webp=True))
+
+
+@override_settings(MEDIA_ROOT=_MEDIA_ROOT)
+class DownscaleStoredImageGpsStripTests(TestCase):
+    """strip_gps=True removes the embedded GPS IFD, keeping the rest of EXIF intact."""
+
+    def test_gps_removed_even_when_no_resize_needed(self):
+        row = _make_image_row(_jpeg_bytes(400, 300, with_gps=True))
+        old_size = row.image.size
+
+        new_size = downscale_stored_image(row, max_dimension=800, convert_webp=False, strip_gps=True)
+
+        self.assertIsNotNone(new_size)
+        with row.image.open("rb") as fh:
+            stored = PILImage.open(fh)
+            stored.load()
+            exif = stored.getexif()
+            self.assertFalse(exif.get_ifd(0x8825))
+            self.assertEqual(exif[0x0110], "TestCam 3000")
+        self.assertNotEqual(new_size, old_size)  # re-saved even though not shrunk on purpose
+
+    def test_no_gps_present_is_a_no_op(self):
+        row = _make_image_row(_jpeg_bytes(400, 300, with_gps=False))
+        old_name = row.image.name
+        self.assertIsNone(downscale_stored_image(row, max_dimension=800, convert_webp=False, strip_gps=True))
+        self.assertEqual(row.image.name, old_name)
+
+    def test_strip_gps_combines_with_resize(self):
+        row = _make_image_row(_jpeg_bytes(1600, 1200, with_gps=True))
+        new_size = downscale_stored_image(row, max_dimension=800, convert_webp=False, strip_gps=True)
+
+        self.assertIsNotNone(new_size)
+        with row.image.open("rb") as fh:
+            stored = PILImage.open(fh)
+            stored.load()
+            self.assertLessEqual(max(stored.size), 800)
+            self.assertFalse(stored.getexif().get_ifd(0x8825))
+
+    def test_strip_gps_false_preserves_gps(self):
+        row = _make_image_row(_jpeg_bytes(400, 300, with_gps=True))
+        self.assertIsNone(downscale_stored_image(row, max_dimension=800, convert_webp=False, strip_gps=False))
+        with row.image.open("rb") as fh:
+            stored = PILImage.open(fh)
+            stored.load()
+            self.assertTrue(stored.getexif().get_ifd(0x8825))

@@ -542,7 +542,8 @@ class Profile(abstract.PublicDashboardModel):
 
         Returns:
             Dict with ``map_center_lat``, ``map_center_lng``, ``map_center_mode``,
-            ``gps_fallback_lat``, and ``gps_fallback_lng`` keys.
+            ``gps_fallback_lat``, ``gps_fallback_lng``, and
+            ``geolocation_tracking_allowed`` keys.
         """
         map_center = self.get_map_center()
         gps_fallback: tuple[float, float] | None = None
@@ -557,6 +558,12 @@ class Profile(abstract.PublicDashboardModel):
             "map_center_mode": self.map_center_mode,
             "gps_fallback_lat": gps_fallback[0] if gps_fallback else None,
             "gps_fallback_lng": gps_fallback[1] if gps_fallback else None,
+            # The GPS fix itself is still requested for map-centering (a purely
+            # client-side convenience), but the page must not relay it to the
+            # server via _recordGeolocationVisit when the profile has live
+            # location-tracking turned off - the request body would carry the
+            # user's exact coordinates regardless of the server no-op-ing it.
+            "geolocation_tracking_allowed": self.track_geolocation,
         }
 
     @staticmethod

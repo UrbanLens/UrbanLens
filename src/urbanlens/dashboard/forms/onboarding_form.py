@@ -1,4 +1,4 @@
-"""Form for the first-login /welcome/ page: bulk Memories/Community/External-APIs toggles."""
+"""Form for the first-login /welcome/ page: bulk History/Community/External-APIs toggles."""
 
 from django import forms
 from django.utils import timezone
@@ -19,12 +19,12 @@ class WelcomeOnboardingForm(forms.ModelForm):
     for a quick first impression.
     """
 
-    memories_enabled = forms.BooleanField(
+    history_enabled = forms.BooleanField(
         required=False,
         initial=True,
         widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
-        label="Memories",
-        help_text="Disable features that allow you to record your activities. This will turn off your visit journal and the Memories page. The site will refuse to import visit or location data you upload. Metadata for photos you upload will be stripped.",
+        label="History",
+        help_text="Disable features that record your location history. This turns off your visit journal, strips GPS data from photos you upload, and the site will refuse to import GPS routes or record your live location. Memories pages that aren't about tracking - like your Maps and Sharing - are unaffected.",
     )
     community_enabled = forms.BooleanField(
         required=False,
@@ -62,10 +62,10 @@ class WelcomeOnboardingForm(forms.ModelForm):
         """
         instance = super().save(commit=False)
 
-        memories_enabled = self.cleaned_data["memories_enabled"]
-        instance.track_pin_visits = memories_enabled
-        instance.track_routes = memories_enabled
-        instance.track_geolocation = memories_enabled
+        history_enabled = self.cleaned_data["history_enabled"]
+        instance.track_pin_visits = history_enabled
+        instance.track_routes = history_enabled
+        instance.track_geolocation = history_enabled
 
         instance.community_enabled = self.cleaned_data["community_enabled"]
 

@@ -20,7 +20,9 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _PERM = "dashboard.edit_global_badge"
-_VALID_ORGANIZE_TABS = frozenset({"tags", "categories", "status", "people", "priority"})
+_BADGE_TABS = frozenset({"tags", "categories", "status", "people", "priority"})
+_SECTION_TABS = frozenset({"lists", "filters"})
+_VALID_ORGANIZE_TABS = _BADGE_TABS | _SECTION_TABS
 
 _BASE_CTX = {
     "icon_choices": ICON_CHOICES,
@@ -34,10 +36,14 @@ def build_organize_page_context(request: HttpRequest, active_tab: str = "tags") 
 
     Args:
         request: The HTTP request (used for profile and permissions).
-        active_tab: Tab to show as active (tags, categories, status, people, or priority).
+        active_tab: Tab to show as active - one of the badge tabs (tags, categories,
+            status, people, priority) or one of the top-level sections (lists, filters).
 
     Returns:
-        Context dict for dashboard/pages/organize/index.html.
+        Context dict for dashboard/pages/organize/index.html. Includes both
+        ``active_section`` (badges/lists/filters - which top-level subnav tab is
+        current) and ``active_tab`` (which badge sub-tab is current, only
+        meaningful while ``active_section == "badges"``).
     """
     if not isinstance(request.user, AuthUser):
         raise TypeError("Expected an authenticated user")
@@ -48,6 +54,9 @@ def build_organize_page_context(request: HttpRequest, active_tab: str = "tags") 
     user_badges = Badge.objects.user_badges().visible_to(profile).ordered().with_customizations_for(profile)
     priority_items = Badge.objects.visible_to(profile).exclude(kind=KIND_USER).ordered().with_pin_counts()
 
+    active_section = active_tab if active_tab in _SECTION_TABS else "badges"
+    badge_tab = active_tab if active_tab in _BADGE_TABS else "tags"
+
     return {
         **_BASE_CTX,
         "tags": tags,
@@ -55,20 +64,21 @@ def build_organize_page_context(request: HttpRequest, active_tab: str = "tags") 
         "statuses": statuses,
         "user_badges": user_badges,
         "priority_items": priority_items,
-        "active_tab": active_tab,
+        "active_tab": badge_tab,
+        "active_section": active_section,
         "can_edit_global": request.user.has_perm(_PERM),
         "standalone_mode": False,
     }
 
 
 class OrganizeIndexView(LoginRequiredMixin, View):
-    """Unified Organize page with Tags, Categories, and Priority tabs."""
+    """Unified Organize page with Badges (Tags/Categories/Statuses/People/Priority), Lists, and Filters tabs."""
 
     def get(self, request, *args, **kwargs):
         """Render the organize page.
 
         Args:
-            request: The HTTP request. Accepts ?tab=tags|categories|status|people|priority.
+            request: The HTTP request. Accepts ?tab=tags|categories|status|people|priority|lists|filters.
 
         Returns:
             Rendered organize/index.html.

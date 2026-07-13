@@ -346,6 +346,13 @@ def process_image_upload(self, image_id: int) -> bool:
     camera auto-naming convention (e.g. ``PXL_20260709_123456.jpg``), the
     uploader is assumed to be the author; any other unattributed photo is
     left blank rather than guessed at.
+
+    When the uploader has turned off visit-history tracking (``track_pin_visits``),
+    GPS is treated as sensitive rather than useful: it's never read into
+    ``Image.latitude``/``longitude`` or the ``exif_data`` snapshot, the stored
+    file's own embedded GPS EXIF tag is stripped (forcing a re-save even when
+    no downscaling would otherwise happen), and no visit suggestion is raised
+    from the photo.
     """
     from decimal import Decimal
 
@@ -364,14 +371,21 @@ def process_image_upload(self, image_id: int) -> bool:
     )
     from urbanlens.dashboard.services.memories.visits import maybe_suggest_photo_visit
     from urbanlens.dashboard.services.storage import get_downscale_policy
+    from urbanlens.dashboard.services.visits import visit_logging_allowed
 
     update_task_progress(self, current=0, total=1, message="Processing image metadata...")
     image = Image.objects.filter(pk=image_id).select_related("pin__location", "wiki__location", "profile").first()
     if image is None or not image.image:
         return False
+
+    # A profile with visit-history tracking off doesn't want its location
+    # trail reconstructible from photos either - GPS coordinates are neither
+    # extracted into the DB nor left embedded in the stored file below.
+    strip_location = image.profile is not None and not visit_logging_allowed(image.profile)
+
     try:
         with image.image.open("rb") as image_file:
-            coords = extract_gps_coords(image_file)
+            coords = None if strip_location else extract_gps_coords(image_file)
             taken_at = extract_taken_at(image_file)
             checksum = compute_checksum(image_file) if not image.checksum else None
             exif_data = extract_exif_data(image_file) if image.exif_data is None else None
@@ -382,6 +396,9 @@ def process_image_upload(self, image_id: int) -> bool:
     except (OSError, ValueError) as exc:
         logger.warning("Image metadata extraction failed for image %s: %s", image_id, exc, exc_info=True)
         return False
+
+    if strip_location and exif_data:
+        exif_data.pop("GPSInfo", None)
 
     update_fields: dict[str, object] = {}
     if coords:
@@ -426,9 +443,9 @@ def process_image_upload(self, image_id: int) -> bool:
         stored_size = image.image.size
     if image.profile is not None:
         max_dimension, convert_webp = get_downscale_policy(image.profile)
-        if max_dimension is not None or convert_webp:
+        if max_dimension is not None or convert_webp or strip_location:
             try:
-                new_size = downscale_stored_image(image, max_dimension, convert_webp)
+                new_size = downscale_stored_image(image, max_dimension, convert_webp, strip_gps=strip_location)
             except (OSError, ValueError) as exc:
                 logger.warning("Downscaling failed for image %s: %s", image_id, exc, exc_info=True)
             else:
@@ -448,7 +465,8 @@ def process_image_upload(self, image_id: int) -> bool:
     if update_fields:
         Image.objects.filter(pk=image_id).update(**update_fields)
 
-    maybe_suggest_photo_visit(image)
+    if not strip_location:
+        maybe_suggest_photo_visit(image)
 
     # Keyword generation runs as its own task so a slow provider (AI vision,
     # classifiers) never delays the metadata/downscale pipeline above; it also
@@ -633,12 +651,16 @@ def sweep_immich_library_locations(self, profile_id: int) -> dict[str, int]:
     from urbanlens.dashboard.services.apis.immich import ImmichGateway
     from urbanlens.dashboard.services.gateway import GatewayRequestError
     from urbanlens.dashboard.services.pin_suggestions import LocationHit, ingest_location_hits
+    from urbanlens.dashboard.services.visits import visit_logging_allowed
 
     empty = {"scanned": 0, "matched_suggestions": 0, "new_pin_suggestions": 0}
     profile = Profile.objects.filter(pk=profile_id).first()
     account = ImmichAccount.objects.get_for_profile(profile) if profile is not None else None
     if profile is None or account is None:
         update_task_progress(self, current=0, total=1, message="Scan failed: profile or Immich connection no longer exists.")
+        return empty
+    if not visit_logging_allowed(profile):
+        update_task_progress(self, current=0, total=1, message="Scan skipped: visit-history tracking is turned off.")
         return empty
 
     gateway = ImmichGateway(account=account)

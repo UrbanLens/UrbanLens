@@ -239,6 +239,36 @@ export function installOrgTabSwitching(): void {
     });
 }
 
+// ── Section switching (Badges | Lists | Filters) --------------------------
+// A second, independent tab tier above `.organize-tab`/`.organize-panel`:
+// switches between the three top-level sections of the Organize page. Lists
+// and Filters lazy-load their content via HTMX the first time they're shown
+// (hx-trigger="revealed" on `.organize-section-panel`, see organize/index.html) -
+// this only ever toggles which section is visible, it never touches that content.
+export function installOrgSectionSwitching(): void {
+    const tabs = document.querySelectorAll<HTMLElement>(".organize-section-tab");
+    const panels = document.querySelectorAll<HTMLElement>(".organize-section-panel");
+    if (!tabs.length) return;
+
+    tabs.forEach((tab) => {
+        tab.addEventListener("click", () => {
+            const section = tab.dataset.section;
+            if (!section) return;
+            tabs.forEach((t) => t.classList.toggle("is-active", t === tab));
+            panels.forEach((p) => {
+                p.hidden = p.id !== `panel-${section}`;
+            });
+            const url = new URL(window.location.href);
+            // "badges" isn't a real ?tab= value server-side - it's implied by
+            // whichever badge sub-tab (tags/categories/...) was last active,
+            // which installOrgTabSwitching persists to localStorage.
+            const tabParam = section === "badges" ? (localStorage.getItem("organize_tab") ?? "tags") : section;
+            url.searchParams.set("tab", tabParam);
+            window.history.replaceState({}, "", url.toString());
+        });
+    });
+}
+
 declare global {
     interface Window {
         _orgBulk: OrgBulkHandlers;

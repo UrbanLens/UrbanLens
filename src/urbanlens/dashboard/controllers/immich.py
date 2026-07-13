@@ -29,6 +29,7 @@ from urbanlens.dashboard.services.apis.immich import ImmichGateway
 from urbanlens.dashboard.services.celery import get_task_progress, safely_enqueue_task
 from urbanlens.dashboard.services.gateway import GatewayRequestError
 from urbanlens.dashboard.services.photo_import import PhotoImportMode, visit_dates_for_pin
+from urbanlens.dashboard.services.visits import visit_logging_allowed
 
 if TYPE_CHECKING:
     from django.http import HttpRequest
@@ -116,6 +117,8 @@ class ImmichLibraryScanStartView(LoginRequiredMixin, View):
             return HttpResponse('<p class="immich-import-error">Immich is not connected.</p>', status=400)
         if not profile.external_apis_enabled:
             return HttpResponse('<p class="immich-import-error">External lookups are turned off in your settings.</p>', status=400)
+        if not visit_logging_allowed(profile):
+            return HttpResponse('<p class="immich-import-error">Visit-history tracking is turned off in your settings.</p>', status=400)
 
         from urbanlens.dashboard.tasks import sweep_immich_library_locations
 

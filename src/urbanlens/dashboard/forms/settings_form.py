@@ -478,14 +478,14 @@ class AISettingsForm(forms.ModelForm):
         fields = ["ai_enabled", "ai_badge_categories", "ai_badge_tags", "ai_badge_statuses"]
 
 
-class MemoriesSettingsForm(forms.ModelForm):
+class HistorySettingsForm(forms.ModelForm):
     """Which visit/location-history categories get saved. Independently adjustable at any time."""
 
     track_pin_visits = forms.BooleanField(
         required=False,
         widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
         label="Visit History",
-        help_text="Log visits to your pins from manual entries, imports, and photo tagging.",
+        help_text="Log visits to your pins from manual entries, imports, and photo tagging. Also strips GPS data from photos you upload, and stops photo/library scans from suggesting pins based on where you've been.",
     )
     track_routes = forms.BooleanField(
         required=False,

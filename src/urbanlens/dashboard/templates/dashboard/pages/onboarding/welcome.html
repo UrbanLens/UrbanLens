@@ -19,24 +19,24 @@
             </h2>
 
             <div class="onboarding-cards">
-                <label class="onboarding-card onboarding-card--memories">
+                <label class="onboarding-card onboarding-card--history">
                     <span class="onboarding-card-corner" aria-hidden="true"><span class="onboarding-card-ribbon">Disabled</span></span>
                     <span class="onboarding-card-top">
                         <span class="onboarding-card-icon">
                             <i class="material-symbols-outlined">history</i>
                         </span>
                         <span class="ul-switch onboarding-card-switch">
-                            {{ form.memories_enabled }}
+                            {{ form.history_enabled }}
                             <span class="ul-switch__track"></span>
                         </span>
                     </span>
                     <span class="onboarding-card-title-row">
-                        <span class="onboarding-card-title">{{ form.memories_enabled.label }}</span>
-                        {% include "dashboard/partials/ui/_tooltip_help.html" with text="Turn these features off if you're concerned about someone siezing our servers to figure out where you've been. Nothing about where you've been or when gets recorded, so there's no visit history, route, or location trail tied to your account for anyone - including you later - to reconstruct." %}
+                        <span class="onboarding-card-title">{{ form.history_enabled.label }}</span>
+                        {% include "dashboard/partials/ui/_tooltip_help.html" with text="Turn these features off if you're concerned about someone siezing our servers to figure out where you've been. Nothing about where you've been or when gets recorded, so there's no visit history, route, or location trail tied to your account for anyone - including you later - to reconstruct. GPS data is stripped from photos you upload too, so they can't reveal it either. Your Maps and Sharing pages still work as usual - this only affects tracking." %}
                     </span>
-                    <span class="onboarding-card-desc" id="{{ form.memories_enabled.id_for_label }}_helptext">{{ form.memories_enabled.help_text }}</span>
-                    {% if form.memories_enabled.errors %}
-                    <span class="settings-error">{{ form.memories_enabled.errors|join:", " }}</span>
+                    <span class="onboarding-card-desc" id="{{ form.history_enabled.id_for_label }}_helptext">{{ form.history_enabled.help_text }}</span>
+                    {% if form.history_enabled.errors %}
+                    <span class="settings-error">{{ form.history_enabled.errors|join:", " }}</span>
                     {% endif %}
                 </label>
 

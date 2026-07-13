@@ -111,6 +111,30 @@ class IngestLocationHitsTests(TestCase):
         self.assertEqual(suggestion.hit_count, 2)
 
 
+class IngestLocationHitsTrackingDisabledTests(TestCase):
+    """ingest_location_hits is a no-op when the profile has visit-history tracking off."""
+
+    def setUp(self) -> None:
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+        self.profile.track_pin_visits = False
+        self.profile.save(update_fields=["track_pin_visits"])
+        self.location = baker.make_recipe("dashboard.location", latitude=_PIN_LAT, longitude=_PIN_LON)
+        self.pin = baker.make_recipe("dashboard.pin", profile=self.profile, location=self.location)
+
+    def test_matched_hit_creates_no_suggestion(self) -> None:
+        summary = ingest_location_hits(self.profile, [_hit(40.0001, -74.0, "2024-01-01")], origin=PinSuggestionOrigin.IMMICH)
+        self.assertEqual(summary.matched_suggestions, 0)
+        self.assertEqual(summary.new_pin_suggestions, 0)
+        self.assertEqual(summary.hits_processed, 0)
+        self.assertEqual(PinSuggestion.objects.count(), 0)
+
+    def test_unmatched_hit_creates_no_suggestion(self) -> None:
+        summary = ingest_location_hits(self.profile, [_hit(41.0, -76.0, "2024-02-01")], origin=PinSuggestionOrigin.LOCAL_SCAN)
+        self.assertEqual(summary.new_pin_suggestions, 0)
+        self.assertEqual(PinSuggestion.objects.count(), 0)
+
+
 class SampleAssetsAndSuggestionKeysTests(TestCase):
     """sample_assets capping/dedup and suggestion_ids_by_key reporting."""
 
@@ -451,6 +475,13 @@ class PhotoLocationScanUploadViewTests(TestCase):
     def test_invalid_json_body_is_400(self) -> None:
         response = self.client.post(reverse("tools.photo_scan.upload"), data="not json", content_type="application/json")
         self.assertEqual(response.status_code, 400)
+
+    def test_tracking_disabled_is_403(self) -> None:
+        self.profile.track_pin_visits = False
+        self.profile.save(update_fields=["track_pin_visits"])
+        response = self._post({"clusters": [{"latitude": 41.0, "longitude": -76.0, "dates": ["2024-05-01"], "count": 1}]})
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(PinSuggestion.objects.exists())
 
     def test_empty_clusters_list_is_400(self) -> None:
         response = self._post({"clusters": []})

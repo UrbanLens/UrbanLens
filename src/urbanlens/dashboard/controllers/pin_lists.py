@@ -68,13 +68,33 @@ def _parse_body(request: HttpRequest) -> dict[str, Any]:
 
 
 class PinListsIndexView(LoginRequiredMixin, View):
-    """Lists page - has "Lists" and "Filters" tabs.
+    """Lists and Filters content - lives as tabs on the Organize page.
 
     GET /lists/?tab=lists|filters
+
+    Direct browser navigation (no ``HX-Request`` header) redirects to the
+    equivalent Organize tab - this URL now only serves the HTMX fragment that
+    Organize's Lists/Filters tabs lazy-load into themselves the first time
+    they're shown (see organize/index.html and organize.py's ``active_section``).
     """
 
     def get(self, request: HttpRequest) -> HttpResponse:
+        active_tab = "filters" if request.GET.get("tab") == "filters" else "lists"
+        if not request.headers.get("HX-Request"):
+            return HttpResponseRedirect(f"{reverse('organize.index')}?tab={active_tab}")
+
         profile, _ = Profile.objects.get_or_create(user=request.user)
+        if active_tab == "filters":
+            saved_filters = list(profile.saved_filters.all())
+            return render(
+                request,
+                "dashboard/partials/pin_lists/_organize_filters_panel.html",
+                {
+                    "saved_filters": saved_filters,
+                    **profile.get_map_center_template_context(),
+                },
+            )
+
         sort = request.GET.get("sort") or "updated"
         pin_lists = PinList.objects.filter(profile=profile).prefetch_related("items__pin")
         if sort == "name":
@@ -83,17 +103,12 @@ class PinListsIndexView(LoginRequiredMixin, View):
             pin_lists = sorted(pin_lists, key=lambda pl: pl.pin_count, reverse=True)
         else:
             pin_lists = pin_lists.order_by("-updated")
-        active_tab = "filters" if request.GET.get("tab") == "filters" else "lists"
-        saved_filters = list(profile.saved_filters.all())
         return render(
             request,
-            "dashboard/pages/pin_lists/index.html",
+            "dashboard/partials/pin_lists/_organize_lists_panel.html",
             {
                 "pin_lists": pin_lists,
                 "sort": sort,
-                "active_tab": active_tab,
-                "saved_filters": saved_filters,
-                **profile.get_map_center_template_context(),
             },
         )
 
@@ -229,7 +244,7 @@ class PinListDeleteView(LoginRequiredMixin, View):
         profile, _ = Profile.objects.get_or_create(user=request.user)
         pin_list = get_object_or_404(PinList, uuid=list_uuid, profile=profile)
         pin_list.delete()
-        return HttpResponseRedirect(reverse("lists.list"))
+        return HttpResponseRedirect(f"{reverse('organize.index')}?tab=lists")
 
 
 class PinListItemsView(LoginRequiredMixin, View):

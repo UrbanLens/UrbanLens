@@ -164,8 +164,8 @@
                     {# Badge query submitted as structured JSON; falls back to tags/exclude_tags for compat #}
                     <input type="hidden" name="badge_groups" id="fp-badge-groups">
                     {# Geographic include/exclude regions carried through from an applied saved filter
-                       (dashboard/pages/pin_lists/index.html's Filters tab is the only place these are
-                       authored - there's no drawing UI here, this is just a pass-through so results
+                       (Organize's Filters tab - _organize_filters_panel.html - is the only place these
+                       are authored - there's no drawing UI here, this is just a pass-through so results
                        still narrow correctly when such a filter is applied). #}
                     <input type="hidden" name="include_regions" id="fp-include-regions">
                     <input type="hidden" name="exclude_regions" id="fp-exclude-regions">
@@ -555,6 +555,9 @@
     // Per-profile key for remembering active layers across sessions.
     const _LAYER_CACHE_KEY   = `ul_layers_v1_${_PROFILE_UUID}`;
     const _GEOLOCATION_VISIT_URL = '{% url "map.geolocation.visits" %}';
+    // GPS is still used to center the map (client-side only) even when this is
+    // false; it just stops that fix from being relayed to the server at all.
+    const _GEOLOCATION_TRACKING_ALLOWED = {{ geolocation_tracking_allowed|yesno:"true,false" }};
 
     // -- Browser-side user location cache (never sent to server) --------------
     const _USER_LOC_KEY     = 'ul_user_location_v1';
@@ -721,7 +724,9 @@
         navigator.geolocation.getCurrentPosition(
             (pos) => {
                 _cacheUserLocation(pos.coords.latitude, pos.coords.longitude);
-                _recordGeolocationVisit(pos.coords.latitude, pos.coords.longitude);
+                if (_GEOLOCATION_TRACKING_ALLOWED) {
+                    _recordGeolocationVisit(pos.coords.latitude, pos.coords.longitude);
+                }
                 _programmaticMove = true;
                 map.setView([pos.coords.latitude, pos.coords.longitude], _defaultZoom);
                 _markGeoReady();
