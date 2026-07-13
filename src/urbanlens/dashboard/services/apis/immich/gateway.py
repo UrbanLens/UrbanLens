@@ -181,11 +181,7 @@ class ImmichGateway(Gateway):
             GatewayRequestError: On a network error or non-2xx response.
         """
         markers = self._get("/map/markers", params={"isArchived": is_archived})
-        return [
-            MapMarker(id=marker["id"], lat=float(marker["lat"]), lon=float(marker["lon"]), city=marker.get("city"))
-            for marker in markers
-            if marker.get("lat") is not None and marker.get("lon") is not None
-        ]
+        return [MapMarker(id=marker["id"], lat=float(marker["lat"]), lon=float(marker["lon"]), city=marker.get("city")) for marker in markers if marker.get("lat") is not None and marker.get("lon") is not None]
 
     def _search_metadata_page(self, filters: dict[str, Any], *, page: Any = None, size: int = _DEFAULT_RECENT_LIMIT) -> tuple[list[SearchAsset], Any, int]:
         """Run one page of a ``POST /api/search/metadata`` query.

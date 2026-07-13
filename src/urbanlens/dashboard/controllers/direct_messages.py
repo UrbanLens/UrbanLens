@@ -623,12 +623,7 @@ class RecipientSearchView(LoginRequiredMixin, View):
         query = request.GET.get("q", "").strip()
         results: list[Profile] = []
         if len(query) >= 2:
-            candidates = (
-                Profile.objects.select_related("user")
-                .filter(Q(user__username__icontains=query) | Q(slug__icontains=query))
-                .exclude(pk=profile.pk)
-                .order_by("user__username")[: RECIPIENT_SEARCH_LIMIT * 4]
-            )
+            candidates = Profile.objects.select_related("user").filter(Q(user__username__icontains=query) | Q(slug__icontains=query)).exclude(pk=profile.pk).order_by("user__username")[: RECIPIENT_SEARCH_LIMIT * 4]
             results = [candidate for candidate in candidates if can_direct_message(profile, candidate)][:RECIPIENT_SEARCH_LIMIT]
             for candidate in results:
                 candidate.ensure_slug()

@@ -639,9 +639,7 @@ class TripCreateView(LoginRequiredMixin, View):
                 max_members = SiteSettings.get_current().max_trip_members
                 remaining = max_members - trip.profiles.count()
                 for friend_profile in Profile.objects.filter(id__in=selected_ids)[:remaining]:
-                    _membership, created = TripMembership.objects.get_or_create(
-                        trip=trip, profile=friend_profile, defaults={"status": TripMembership.STATUS_INVITED}
-                    )
+                    _membership, created = TripMembership.objects.get_or_create(trip=trip, profile=friend_profile, defaults={"status": TripMembership.STATUS_INVITED})
                     if created:
                         _notify_added_to_trip(profile, friend_profile, trip)
 
@@ -1183,9 +1181,7 @@ class TripMembersView(LoginRequiredMixin, View):
             )
 
         new_profile, _ = Profile.objects.get_or_create(user=user)
-        _membership, created = TripMembership.objects.get_or_create(
-            trip=trip, profile=new_profile, defaults={"status": TripMembership.STATUS_INVITED}
-        )
+        _membership, created = TripMembership.objects.get_or_create(trip=trip, profile=new_profile, defaults={"status": TripMembership.STATUS_INVITED})
         if created:
             _notify_added_to_trip(profile, new_profile, trip)
 

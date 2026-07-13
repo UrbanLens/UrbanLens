@@ -53,11 +53,11 @@ class Friendship(DashboardModel):
         if not from_profile or not to_profile:
             logger.warning("Could not find profiles")
             raise ValueError("Could not find profiles")
-        
+
         # guaranteed above, but handle case in the event code drifts.
         if not isinstance(from_profile, Profile) or not isinstance(to_profile, Profile):
             raise TypeError("Could not find profiles")
-        
+
         # A profile with Community turned off can neither send nor be sent
         # friend requests - checked here since this is the one chokepoint
         # every request path (button click, invite acceptance, pending

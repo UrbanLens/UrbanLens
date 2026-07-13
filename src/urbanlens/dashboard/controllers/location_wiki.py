@@ -161,11 +161,7 @@ class LocationWikiView(LoginRequiredMixin, View):
         if show_wiki_cover_photo:
             from urbanlens.dashboard.models.images.model import Image
 
-            wiki_cover_candidates = [
-                {"id": img.pk, "url": img.image.url}
-                for img in Image.objects.filter(wiki=wiki).exclude(pk=wiki.cover_photo_id).order_by("-created")[:20]
-                if img.image
-            ]
+            wiki_cover_candidates = [{"id": img.pk, "url": img.image.url} for img in Image.objects.filter(wiki=wiki).exclude(pk=wiki.cover_photo_id).order_by("-created")[:20] if img.image]
 
         return render(
             request,

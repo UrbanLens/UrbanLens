@@ -217,10 +217,7 @@ class PinFlickrSearchView(LoginRequiredMixin, View):
             return render(request, _PICKER_PARTIAL, {**context, "error": str(exc)})
 
         already_imported = set(Image.objects.filter(pin=pin, profile=profile, source_url__isnull=False).values_list("source_url", flat=True))
-        assets = [
-            {"id": photo.id, "thumbnail_url": photo.thumbnail_url, "already_imported": account.photo_web_url(photo.id) in already_imported}
-            for photo in photos
-        ]
+        assets = [{"id": photo.id, "thumbnail_url": photo.thumbnail_url, "already_imported": account.photo_web_url(photo.id) in already_imported} for photo in photos]
         return render(request, _PICKER_PARTIAL, {**context, "assets": assets, "empty_message": _EMPTY_MESSAGES[mode]})
 
 

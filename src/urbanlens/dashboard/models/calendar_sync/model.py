@@ -124,8 +124,7 @@ def get_calendar_account(profile: Profile) -> GoogleCalendarAccount | None:
         return GoogleCalendarAccount.objects.filter(profile=profile).first()
     except InvalidToken:
         logger.exception(
-            "GoogleCalendarAccount for profile %s has undecryptable tokens (field_encryption_key "
-            "changed?) - removing it so the user can reconnect.",
+            "GoogleCalendarAccount for profile %s has undecryptable tokens (field_encryption_key changed?) - removing it so the user can reconnect.",
             profile.id,
         )
         GoogleCalendarAccount.objects.filter(profile=profile).delete()

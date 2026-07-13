@@ -866,11 +866,7 @@ def build_thread_timeline(messages: list[DirectMessage], key_events: list[dict[s
         message = item["message"]
         already_read_before_sent = bool(previous and previous.read_at and previous.read_at <= message.created)
         message.is_grouped = bool(
-            previous
-            and previous.sender_id == message.sender_id
-            and previous.created.date() == message.created.date()
-            and (message.created - previous.created).total_seconds() < MESSAGE_GROUP_GAP_SECONDS
-            and not already_read_before_sent,
+            previous and previous.sender_id == message.sender_id and previous.created.date() == message.created.date() and (message.created - previous.created).total_seconds() < MESSAGE_GROUP_GAP_SECONDS and not already_read_before_sent,
         )
         previous = message
     return items

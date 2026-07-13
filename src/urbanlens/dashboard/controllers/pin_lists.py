@@ -305,10 +305,7 @@ class PinListAddPinsView(LoginRequiredMixin, View):
 
         base_order = pin_list.items.count()
         PinListItem.objects.bulk_create(
-            [
-                PinListItem(pin_list=pin_list, pin=pin, order=base_order + i, added_via=PinListItem.ADDED_MANUAL)
-                for i, pin in enumerate(new_pins)
-            ],
+            [PinListItem(pin_list=pin_list, pin=pin, order=base_order + i, added_via=PinListItem.ADDED_MANUAL) for i, pin in enumerate(new_pins)],
         )
         return _render_items_panel(request, pin_list)
 

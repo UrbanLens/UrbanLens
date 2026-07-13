@@ -102,7 +102,7 @@ def share_markup_map_with_profile(sender: Profile, recipient: Profile, markup_ma
 
 
 def clone_markup_map(source: MarkupMap, recipient: Profile, sender: Profile) -> MarkupMap:
-    """"Add to my maps": clone ``source`` (owned by ``sender``) into ``recipient``'s own maps.
+    """ "Add to my maps": clone ``source`` (owned by ``sender``) into ``recipient``'s own maps.
 
     Reuses ``MarkupMap.to_snapshot()``/``replace_items_from_snapshot()`` - the
     same round-trip already used by ``materialize_markup_map`` - so item

@@ -462,7 +462,7 @@ def _map_visible_to(profile: Profile, markup_map: MarkupMap) -> Profile | None:
 
 
 class MarkupMapCloneView(LoginRequiredMixin, View):
-    """"Add to my maps": clone someone else's shared map into the caller's own maps.
+    """ "Add to my maps": clone someone else's shared map into the caller's own maps.
 
     POST /markup-maps/<map_uuid>/clone/
     """

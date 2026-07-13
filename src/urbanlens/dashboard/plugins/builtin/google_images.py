@@ -59,11 +59,7 @@ class GoogleImagesPanelSource(GalleryMediaSource):
         from urbanlens.dashboard.services.apis.assets.base import MediaItem
 
         items = (data or {}).get("items") or []
-        return [
-            MediaItem(url=r["link"], thumb_url=r.get("thumbnail") or r["link"], caption=r.get("title") or "", source="Google Images", page_url=r.get("context_link") or r["link"])
-            for r in items[:_MAX_IMAGES]
-            if r.get("link")
-        ]
+        return [MediaItem(url=r["link"], thumb_url=r.get("thumbnail") or r["link"], caption=r.get("title") or "", source="Google Images", page_url=r.get("context_link") or r["link"]) for r in items[:_MAX_IMAGES] if r.get("link")]
 
 
 class GoogleImagesPlugin(UrbanLensPlugin):

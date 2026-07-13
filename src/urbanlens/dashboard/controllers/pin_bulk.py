@@ -65,7 +65,7 @@ class PinBulkDeleteView(LoginRequiredMixin, View):
         uuids, err = _parse_uuids_json(request)
         if err:
             return err
-        
+
         # Future proofing:guaranteed by _parse_uuids_json when err is None
         if uuids is None:
             return HttpResponse("No pins specified.", status=400)

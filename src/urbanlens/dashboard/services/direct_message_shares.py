@@ -86,9 +86,7 @@ def invite_to_trip_in_message(sender: Profile, recipient: Profile, trip: Trip, b
     if not trip.memberships.filter(profile=sender).exists():
         raise PermissionError("You aren't a member of that trip.")
 
-    membership, _created = TripMembership.objects.get_or_create(
-        trip=trip, profile=recipient, defaults={"status": TripMembership.STATUS_INVITED}
-    )
+    membership, _created = TripMembership.objects.get_or_create(trip=trip, profile=recipient, defaults={"status": TripMembership.STATUS_INVITED})
     message = create_direct_message(sender, recipient, body, defer_broadcast=True)
     DirectMessageShare.objects.create(message=message, kind=DirectMessageShareKind.TRIP, trip=trip, trip_membership=membership)
     broadcast_direct_message(message)

@@ -668,10 +668,7 @@ def sweep_immich_library_locations(self, profile_id: int) -> dict[str, int]:
             importance=Importance.MEDIUM,
             notification_type=NotificationType.INFO,
             title="Found new locations from your Immich library",
-            message=(
-                f"Your Immich library scan found {summary.new_pin_suggestions} possible new pin(s) and "
-                f"{summary.matched_suggestions} visit(s) to pins you already have. Review them in Memories."
-            ),
+            message=(f"Your Immich library scan found {summary.new_pin_suggestions} possible new pin(s) and {summary.matched_suggestions} visit(s) to pins you already have. Review them in Memories."),
         )
     update_task_progress(self, current=scanned, total=max(scanned, 1), message=f"Scan complete - found {total_suggestions} suggestion(s).")
     return result

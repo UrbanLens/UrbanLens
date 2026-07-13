@@ -235,8 +235,7 @@ class PhotoSearchProvider(SearchProvider):
         if parsed.date_start and parsed.date_end:
             # taken_at (EXIF capture time) when known, else upload time.
             queryset = queryset.filter(
-                Q(taken_at__date__gte=parsed.date_start, taken_at__date__lte=parsed.date_end)
-                | (Q(taken_at__isnull=True) & date_range_filter("created", parsed)),
+                Q(taken_at__date__gte=parsed.date_start, taken_at__date__lte=parsed.date_end) | (Q(taken_at__isnull=True) & date_range_filter("created", parsed)),
             )
         queryset = self.apply_text(
             queryset,
@@ -576,14 +575,7 @@ class CommentSearchProvider(SearchProvider):
                 ),
             )
 
-        trip_comment_qs = (
-            TripComment.objects.filter(trip__profiles=profile)
-            .filter(term_filter(parsed.terms, ["text"]))
-            .filter(date_range_filter("created", parsed))
-            .select_related("trip", "author__user")
-            .distinct()
-            .order_by("-created")
-        )
+        trip_comment_qs = TripComment.objects.filter(trip__profiles=profile).filter(term_filter(parsed.terms, ["text"])).filter(date_range_filter("created", parsed)).select_related("trip", "author__user").distinct().order_by("-created")
         for comment in trip_comment_qs[: max(limit - len(results), 0)]:
             results.append(
                 SearchResult(

@@ -118,10 +118,7 @@ def build_registration_options(request: HttpRequest, user: User) -> str:
             resident_key=ResidentKeyRequirement.PREFERRED,
             user_verification=UserVerificationRequirement.PREFERRED,
         ),
-        exclude_credentials=[
-            PublicKeyCredentialDescriptor(id=bytes(cred.credential_id), transports=_to_transports(cred.transports))
-            for cred in existing
-        ],
+        exclude_credentials=[PublicKeyCredentialDescriptor(id=bytes(cred.credential_id), transports=_to_transports(cred.transports)) for cred in existing],
     )
     request.session[SESSION_REGISTRATION_CHALLENGE] = bytes_to_base64url(options.challenge)
     return options_to_json(options)
@@ -193,10 +190,7 @@ def build_authentication_options(request: HttpRequest, user: User) -> str:
 
     options = generate_authentication_options(
         rp_id=_rp_id(request),
-        allow_credentials=[
-            PublicKeyCredentialDescriptor(id=bytes(cred.credential_id), transports=_to_transports(cred.transports))
-            for cred in credentials
-        ],
+        allow_credentials=[PublicKeyCredentialDescriptor(id=bytes(cred.credential_id), transports=_to_transports(cred.transports)) for cred in credentials],
         user_verification=UserVerificationRequirement.PREFERRED,
     )
     request.session[SESSION_AUTHENTICATION_CHALLENGE] = bytes_to_base64url(options.challenge)

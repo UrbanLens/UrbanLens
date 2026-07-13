@@ -675,9 +675,7 @@ class MemoriesSharingView(LoginRequiredMixin, View):
         for map_share in incoming_map_shares:
             incoming_map_shares_by_map.setdefault(map_share.markup_map_id, []).append(map_share)
 
-        incoming_map_share_groups: list[_IncomingMapShareGroup] = [
-            {"map": map_shares_for_map[0].markup_map, "shares": map_shares_for_map} for map_shares_for_map in incoming_map_shares_by_map.values()
-        ]
+        incoming_map_share_groups: list[_IncomingMapShareGroup] = [{"map": map_shares_for_map[0].markup_map, "shares": map_shares_for_map} for map_shares_for_map in incoming_map_shares_by_map.values()]
 
         return render(
             request,

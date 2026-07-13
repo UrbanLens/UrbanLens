@@ -308,11 +308,15 @@ def _export_custom_fields(profile: Any, temp_dir: str, *, base_url: str = "") ->
     """
     from urbanlens.dashboard.models.custom_fields.model import CustomField, CustomFieldEntity
 
-    fields = CustomField.objects.filter(profile=profile).order_by("entity_type", "order", "name").prefetch_related(
-        "values__pin",
-        "values__image",
-        "values__target_profile",
-        "values__markup_map",
+    fields = (
+        CustomField.objects.filter(profile=profile)
+        .order_by("entity_type", "order", "name")
+        .prefetch_related(
+            "values__pin",
+            "values__image",
+            "values__target_profile",
+            "values__markup_map",
+        )
     )
 
     rows = []
@@ -508,12 +512,7 @@ def _export_direct_messages(profile: Any, temp_dir: str, *, base_url: str = "") 
     from urbanlens.dashboard.models.direct_messages.model import DirectMessage
     from urbanlens.dashboard.services.direct_messages import display_identity_for
 
-    messages = (
-        DirectMessage.objects.involving(profile)
-        .select_related("sender", "recipient")
-        .prefetch_related("images")
-        .order_by("created")
-    )
+    messages = DirectMessage.objects.involving(profile).select_related("sender", "recipient").prefetch_related("images").order_by("created")
 
     identity_cache: dict[int, dict[str, Any]] = {}
 
@@ -680,10 +679,7 @@ def _export_pin_lists(profile: Any, temp_dir: str, *, base_url: str = "") -> Non
                 "smart_filter": pin_list.smart_filter,
                 "smart_boundary": json.loads(pin_list.smart_boundary.geojson) if pin_list.smart_boundary else None,
                 "created": str(pin_list.created),
-                "items": [
-                    {"pin_uuid": str(item.pin.uuid), "order": item.order, "added_via": item.added_via}
-                    for item in pin_list.items.all()
-                ],
+                "items": [{"pin_uuid": str(item.pin.uuid), "order": item.order, "added_via": item.added_via} for item in pin_list.items.all()],
             },
         )
 

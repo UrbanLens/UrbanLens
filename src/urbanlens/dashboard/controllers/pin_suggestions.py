@@ -47,13 +47,7 @@ _BULK_ACTIONS = [
 
 def _pending_suggestions(profile: Profile) -> QuerySet[PinSuggestion]:
     """Return the profile's pending suggestions, newest first."""
-    return (
-        PinSuggestion.objects.for_profile(profile)
-        .pending()
-        .select_related("pin", "pin__location")
-        .prefetch_related("candidate_images")
-        .order_by("-created")
-    )
+    return PinSuggestion.objects.for_profile(profile).pending().select_related("pin", "pin__location").prefetch_related("candidate_images").order_by("-created")
 
 
 def _toast(message: str, level: str = "success", *, status: int = 200, refresh_queue: bool = False) -> HttpResponse:

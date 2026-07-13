@@ -28,9 +28,5 @@ class RegionBoundarySearchView(LoginRequiredMixin, View):
 
         gateway = NominatimGateway()
         raw_results = gateway.search(query, limit=5, polygon_geojson=1)
-        results = [
-            {"display_name": result["display_name"], "geojson": result["geojson"]}
-            for result in raw_results
-            if isinstance(result.get("geojson"), dict) and result["geojson"].get("type") in _POLYGONAL_TYPES
-        ]
+        results = [{"display_name": result["display_name"], "geojson": result["geojson"]} for result in raw_results if isinstance(result.get("geojson"), dict) and result["geojson"].get("type") in _POLYGONAL_TYPES]
         return JsonResponse({"results": results})
