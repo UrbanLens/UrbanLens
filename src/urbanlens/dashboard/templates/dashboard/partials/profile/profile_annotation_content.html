@@ -5,6 +5,21 @@
         <span class="profile-annotation-title">My Private Notes</span>
     </div>
 
+    {# -- Nickname --------------------------------------------------------------- #}
+    <div class="profile-annotation-nickname">
+        <p class="profile-annotation-label">Nickname</p>
+        <input type="text"
+               class="profile-annotation-nickname-input"
+               name="nickname"
+               value="{{ nickname }}"
+               maxlength="100"
+               placeholder="Give {{ subject.username }} a private nickname..."
+               hx-post="{% url 'profile.nickname' subject.slug %}"
+               hx-trigger="keyup changed delay:700ms"
+               hx-target="#profile-annotation-inner"
+               hx-swap="outerHTML">
+    </div>
+
     {# -- Trust rating ---------------------------------------------------------- #}
     <div class="profile-annotation-trust">
         <p class="profile-annotation-label">Trust</p>

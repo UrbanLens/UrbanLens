@@ -645,6 +645,11 @@ urlpatterns = [
                     name="profile.trust",
                 ),
                 path(
+                    "<slug:profile_slug>/nickname/",
+                    userprofile.ProfileNicknameView.as_view(),
+                    name="profile.nickname",
+                ),
+                path(
                     "<slug:profile_slug>/custom-field/<int:field_id>/",
                     custom_fields.ProfileCustomFieldValueView.as_view(),
                     name="profile.custom_field_value",

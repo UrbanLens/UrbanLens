@@ -40,6 +40,7 @@ from urbanlens.dashboard.models.pin_share import PinShare, PinShareOrigin, PinSh
 from urbanlens.dashboard.models.pin_suggestions import PinSuggestion, PinSuggestionOrigin, PinSuggestionStatus
 from urbanlens.dashboard.models.profile import Profile
 from urbanlens.dashboard.models.profile.email import ProfileEmail
+from urbanlens.dashboard.models.profile.nickname import ProfileNickname
 from urbanlens.dashboard.models.profile.note import ProfileNote
 from urbanlens.dashboard.models.profile.trust import ProfileTrust
 from urbanlens.dashboard.models.reactions import Reaction

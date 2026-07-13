@@ -221,13 +221,16 @@ class ViewProfileView(LoginRequiredMixin, View):
 
             context["trips_in_common"] = Trip.objects.none()
 
-        # Private annotations (notes, user badges, trust rating) - only when viewing someone else
+        # Private annotations (notes, user badges, trust rating, nickname) - only when viewing someone else
         from urbanlens.dashboard.models.badges.model import Badge
         from urbanlens.dashboard.models.badges.profile_assignment import ProfileBadgeAssignment
+        from urbanlens.dashboard.models.profile.nickname import ProfileNickname
         from urbanlens.dashboard.models.profile.note import ProfileNote
         from urbanlens.dashboard.models.profile.trust import ProfileTrust
 
         context["viewer_notes"] = ProfileNote.objects.filter(author=my_profile, subject=profile)
+        nickname = ProfileNickname.objects.filter(author=my_profile, subject=profile).first()
+        context["nickname"] = nickname.nickname if nickname else ""
         user_badges = Badge.objects.user_badges().visible_to(my_profile).ordered()
         assigned_badge_ids = set(
             ProfileBadgeAssignment.objects.filter(author=my_profile, subject=profile).values_list(
@@ -964,6 +967,35 @@ class ProfileTrustView(LoginRequiredMixin, View):
         return _render_profile_annotation_partial(request, author, subject)
 
 
+class ProfileNicknameView(LoginRequiredMixin, View):
+    """Set or clear the viewer's private nickname for another profile (HTMX).
+
+    POST with ``nickname`` to set/update; POST with a blank ``nickname``
+    to clear an existing one.
+    """
+
+    def post(self, request: HttpRequest, profile_slug: UUID) -> HttpResponse:
+        from urbanlens.dashboard.models.profile.nickname import ProfileNickname
+
+        subject = get_object_or_404(Profile, slug=profile_slug)
+        author = _authenticated_profile(request)
+        if author == subject:
+            return HttpResponse("Cannot nickname your own profile.", status=400)
+
+        nickname = request.POST.get("nickname", "").strip()
+
+        if nickname:
+            ProfileNickname.objects.update_or_create(
+                author=author,
+                subject=subject,
+                defaults={"nickname": nickname},
+            )
+        else:
+            ProfileNickname.objects.filter(author=author, subject=subject).delete()
+
+        return _render_profile_annotation_partial(request, author, subject)
+
+
 def _render_profile_annotation_partial(
     request: HttpRequest,
     author: Profile,
@@ -983,6 +1015,7 @@ def _render_profile_annotation_partial(
     from urbanlens.dashboard.models.badges.model import KIND_USER, Badge
     from urbanlens.dashboard.models.badges.profile_assignment import ProfileBadgeAssignment
     from urbanlens.dashboard.models.custom_fields.model import CustomFieldEntity
+    from urbanlens.dashboard.models.profile.nickname import ProfileNickname
     from urbanlens.dashboard.models.profile.note import ProfileNote
     from urbanlens.dashboard.models.profile.trust import ProfileTrust
 
@@ -992,6 +1025,7 @@ def _render_profile_annotation_partial(
         ProfileBadgeAssignment.objects.filter(author=author, subject=subject).values_list("badge_id", flat=True),
     )
     trust = ProfileTrust.objects.filter(author=author, subject=subject).first()
+    nickname = ProfileNickname.objects.filter(author=author, subject=subject).first()
 
     return render(
         request,
@@ -1003,6 +1037,7 @@ def _render_profile_annotation_partial(
             "assigned_badge_ids": assigned_ids,
             "unassigned_badges": [badge for badge in user_badges if badge.id not in assigned_ids],
             "trust_rating": trust.rating if trust else 0,
+            "nickname": nickname.nickname if nickname else "",
             "custom_field_rows": rows_for_target(author, CustomFieldEntity.PROFILE, subject),
         },
     )

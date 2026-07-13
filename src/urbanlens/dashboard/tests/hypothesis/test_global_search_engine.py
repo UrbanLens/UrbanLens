@@ -133,31 +133,50 @@ class PinSearchTests(TestCase):
         self.profile.map_custom_latitude = "39.10"
         self.profile.map_custom_longitude = "-84.51"
         self.profile.save()
+        # Contains "Old factory" and is located nearby
         nearby_location = baker.make("dashboard.Location", latitude="39.11", longitude="-84.50")
         baker.make("dashboard.Pin", profile=self.profile, location=nearby_location, name="Old factory in PA")
+        # Contains "Pin" and is located nearby
+        nearby_location2 = baker.make("dashboard.Location", latitude="39.09", longitude="-84.52")
+        baker.make("dashboard.Pin", profile=self.profile, location=nearby_location2, name="Another pin I saw")
+        # Contains "Old Factory" and "Near Me"
         far_location = baker.make("dashboard.Location", latitude="51.50", longitude="-0.11")
         baker.make("dashboard.Pin", profile=self.profile, location=far_location, name="old factory that's Near Me")
-        far_location2 = baker.make("dashboard.Location", latitude="52.50", longitude="-0.12")
+        # Contains "Old Factory" and "Near Me"
+        far_location = baker.make("dashboard.Location", latitude="52.50", longitude="-0.11")
+        baker.make("dashboard.Pin", profile=self.profile, location=far_location, name="old factory Near Mellissa")
+        # Contains "Messages"
+        far_location2 = baker.make("dashboard.Location", latitude="53.50", longitude="-0.12")
         baker.make("dashboard.Pin", profile=self.profile, location=far_location2, name="messages from Sarah")
-        far_location3 = baker.make("dashboard.Location", latitude="53.50", longitude="-0.12")
+        # Contains nothing relevant
+        far_location3 = baker.make("dashboard.Location", latitude="54.50", longitude="-0.13")
         baker.make("dashboard.Pin", profile=self.profile, location=far_location3, name="church far away")
+        # Contains "near me"
+        far_location4 = baker.make("dashboard.Location", latitude="55.50", longitude="-0.14")
+        baker.make("dashboard.Pin", profile=self.profile, location=far_location4, name="Belnear Medical Center")
         
-        terms = ["factory near me", "old factory"]
-        for term in terms:
+        # term, (expected titles), (unexpected titles)
+        terms = [
+            ("factory near me", 
+                ("Old factory in PA", "old factory that's Near Me", "old factory Near Mellissa"), 
+                ("Another pin I saw", "Belnear Medical Center", "church far away", "messages from Sarah")), 
+            ("old factory", 
+                ("Old factory in PA", "old factory that's Near Me", "old factory Near Mellissa"), 
+                ("Another pin I saw", "Belnear Medical Center", "church far away", "messages from Sarah")), 
+            ("pin near me",
+                ("Another pin I saw", "Belnear Medical Center", "old factory Near Mellissa"), 
+                ("Old factory in PA", "old factory that's Near Me", "church far away", "messages from Sarah")),
+            ("messages from Sarah",
+                ("messages from Sarah"), 
+                ("Old factory in PA", "old factory that's Near Me", "church far away", "Belnear Medical Center", "old factory Near Mellissa"))
+        ]
+        for term, expected_titles, unexpected_titles in terms:
             response = GlobalSearchEngine().search(self.profile, term)
             titles = self._titles(response)
-            self.assertIn("Old factory in PA", titles)
-            self.assertIn("old factory that's Near Me", titles)
-            self.assertNotIn("messages from Sarah", titles)
-            self.assertNotIn("church far away", titles)
-            
-        response = GlobalSearchEngine().search(self.profile, "messages from Sarah")
-        titles = self._titles(response)
-        self.assertIn("messages from Sarah", titles)
-        self.assertNotIn("old factory in PA", titles)
-        self.assertNotIn("old factory that's Near Me", titles)
-        self.assertNotIn("church far away", titles)
-
+            for expected_title in expected_titles:
+                self.assertIn(expected_title, titles)
+            for unexpected_title in unexpected_titles:
+                self.assertNotIn(unexpected_title, titles)
 
 class PhotoSearchTests(TestCase):
     """Photos: caption/keyword matching and uploader scoping."""
