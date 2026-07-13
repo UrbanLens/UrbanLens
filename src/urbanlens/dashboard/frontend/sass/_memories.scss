@@ -389,17 +389,15 @@ $memories-type-colors: (
 
 // Materialize paints every bare <nav> as a 56px salmon (#ee6e73) bar and forces
 // `nav i` icons to display:block/56px. This is a plain sub-nav, so reset all of
-// that back to a normal underline tab strip.
+// that back to a normal underline tab strip. Rendered inside `.ul-page-subnav`
+// (see _page_hero.scss), which supplies the full-bleed background/divider.
 .memories-tabs {
     display: flex;
     gap: .25rem;
     width: auto;
     height: auto;
     line-height: normal;
-    background-color: var(--ul-grey-0);
     color: inherit;
-    margin-bottom: 1.25rem;
-    border-bottom: 1px solid var(--ul-grey-1a);
 }
 
 .memories-tab {

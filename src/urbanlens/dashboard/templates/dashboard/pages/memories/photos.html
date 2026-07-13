@@ -11,15 +11,24 @@
 
 {% block title %}Photos{% endblock %}
 
+{% block hero %}
+{% include "dashboard/partials/ui/_page_hero.html" with icon="photo_library" title="Photos" subtitle="Every photo you've added, and a quick way to turn them into visits." modifier="top" %}
+{% endblock %}
+
+{% block subnav %}
+<div class="ul-page-subnav">
+    <div class="ul-page-subnav__inner">
+        {% memories_tabs "photos" %}
+    </div>
+</div>
+{% endblock %}
+
 {% block content %}
-{% include "dashboard/partials/ui/_page_hero.html" with icon="photo_library" title="Photos" subtitle="Every photo you've added, and a quick way to turn them into visits." %}
 <div id="photos-page" class="memories-tab-page"
      data-upload-url="{% url 'memories.photos.upload' %}"
      data-action-base="{% url 'memories.photos' %}">
 
     <div class="page-inner">
-        {% memories_tabs "photos" %}
-
         <input type="file" id="photos-file-input" accept="image/*" multiple hidden
                onchange="photosHandleFiles(this.files); this.value='';">
 

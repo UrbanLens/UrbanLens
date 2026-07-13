@@ -1,30 +1,39 @@
 {% extends 'dashboard/themes/base.html' %}
 {% load static %}
 
-{% block content %}
-{% include "dashboard/partials/ui/_page_hero.html" with icon="settings" title="Settings" subtitle="Manage your account preferences" %}
-<div class="settings-page page-content">
+{% block hero %}
+{% include "dashboard/partials/ui/_page_hero.html" with icon="settings" title="Settings" subtitle="Manage your account preferences" modifier="top" %}
+{% endblock %}
 
-    <div class="settings-tabs" role="tablist" id="settings-tabs">
-        <button type="button" class="settings-tab active" data-tab="privacy" role="tab" aria-selected="true">
-            <i class="material-symbols-outlined">lock</i> Privacy
-        </button>
-        <button type="button" class="settings-tab" data-tab="connections" role="tab" aria-selected="false">
-            <i class="material-symbols-outlined">cable</i> Connections
-        </button>
-        <button type="button" class="settings-tab" data-tab="messages" role="tab" aria-selected="false">
-            <i class="material-symbols-outlined">chat</i> Messages
-        </button>
-        <button type="button" class="settings-tab" data-tab="security" role="tab" aria-selected="false">
-            <i class="material-symbols-outlined">passkey</i> Security
-        </button>
-        <button type="button" class="settings-tab" data-tab="map" role="tab" aria-selected="false">
-            <i class="material-symbols-outlined">map</i> Theme
-        </button>
-        <button type="button" class="settings-tab" data-tab="account" role="tab" aria-selected="false">
-            <i class="material-symbols-outlined">manage_accounts</i> Account
-        </button>
+{% block subnav %}
+<div class="ul-page-subnav">
+    <div class="ul-page-subnav__inner">
+        <div class="settings-tabs" role="tablist" id="settings-tabs">
+            <button type="button" class="settings-tab active" data-tab="privacy" role="tab" aria-selected="true">
+                <i class="material-symbols-outlined">lock</i> Privacy
+            </button>
+            <button type="button" class="settings-tab" data-tab="connections" role="tab" aria-selected="false">
+                <i class="material-symbols-outlined">cable</i> Connections
+            </button>
+            <button type="button" class="settings-tab" data-tab="messages" role="tab" aria-selected="false">
+                <i class="material-symbols-outlined">chat</i> Messages
+            </button>
+            <button type="button" class="settings-tab" data-tab="security" role="tab" aria-selected="false">
+                <i class="material-symbols-outlined">passkey</i> Security
+            </button>
+            <button type="button" class="settings-tab" data-tab="map" role="tab" aria-selected="false">
+                <i class="material-symbols-outlined">map</i> Theme
+            </button>
+            <button type="button" class="settings-tab" data-tab="account" role="tab" aria-selected="false">
+                <i class="material-symbols-outlined">manage_accounts</i> Account
+            </button>
+        </div>
     </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="settings-page page-content">
 
     {# ======================================================================= #}
     {# Privacy tab                                                             #}

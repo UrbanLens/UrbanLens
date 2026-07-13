@@ -5,12 +5,12 @@
 // as one long, overwhelming scroll. Panel content is otherwise unchanged from
 // the plain-section layout - only the show/hide chrome lives here.
 
+// Rendered inside `.ul-page-subnav` (see _page_hero.scss), which supplies the
+// full-bleed background/divider directly below the page hero.
 .settings-tabs {
     display: flex;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
-    border-bottom: 1px solid var(--ul-grey-1a);
-    margin-bottom: 1.5rem;
     scrollbar-width: thin;
 }
 

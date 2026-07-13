@@ -12,13 +12,22 @@
 
 {% block title %}Maps{% endblock %}
 
+{% block hero %}
+{% include "dashboard/partials/ui/_page_hero.html" with icon="map" title="Your maps" subtitle="Every map you've drawn - on safety check-ins, comments, and visit logs - in one place." modifier="top" %}
+{% endblock %}
+
+{% block subnav %}
+<div class="ul-page-subnav">
+    <div class="ul-page-subnav__inner">
+        {% memories_tabs "maps" %}
+    </div>
+</div>
+{% endblock %}
+
 {% block content %}
-{% include "dashboard/partials/ui/_page_hero.html" with icon="map" title="Your maps" subtitle="Every map you've drawn - on safety check-ins, comments, and visit logs - in one place." %}
 <div id="memories-maps-page">
 
     <div class="page-inner">
-        {% memories_tabs "maps" %}
-
         {% if map_cards %}
         <div class="memories-maps-grid">
             {% for card in map_cards %}

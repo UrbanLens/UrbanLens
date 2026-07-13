@@ -16,10 +16,6 @@ Context:
 {% endcomment %}
 {% if unlogged_visits %}
 <section class="memories-unlogged" id="memories-unlogged-band" aria-label="Places to log">
-    <div class="memories-unlogged-head">
-        <span class="badge">{{ unlogged_visits|length }}</span>
-        <span>place{{ unlogged_visits|length|pluralize }} marked visited without a dated visit</span>
-    </div>
     <div class="memories-unlogged-grid">
         {% for pin in unlogged_visits %}
         {% include "dashboard/partials/memories/_unlogged_visit_card.html" with pin=pin today=today %}

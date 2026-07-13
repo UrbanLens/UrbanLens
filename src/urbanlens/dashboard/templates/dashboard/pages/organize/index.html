@@ -2,20 +2,58 @@
 {% load dashboard_tags %}
 {% load static %}
 
-{% block content %}
+{% block hero %}
 {% if standalone_mode %}
     {% if active_tab == 'tags' %}
-    {% include "dashboard/partials/ui/_page_hero.html" with icon="label" title=standalone_title subtitle=standalone_subtitle %}
+    {% include "dashboard/partials/ui/_page_hero.html" with icon="label" title=standalone_title subtitle=standalone_subtitle modifier="top" %}
     {% elif active_tab == 'categories' %}
-    {% include "dashboard/partials/ui/_page_hero.html" with icon="category" title=standalone_title subtitle=standalone_subtitle %}
+    {% include "dashboard/partials/ui/_page_hero.html" with icon="category" title=standalone_title subtitle=standalone_subtitle modifier="top" %}
     {% elif active_tab == 'status' %}
-    {% include "dashboard/partials/ui/_page_hero.html" with icon="flag_circle" title=standalone_title subtitle=standalone_subtitle %}
+    {% include "dashboard/partials/ui/_page_hero.html" with icon="flag_circle" title=standalone_title subtitle=standalone_subtitle modifier="top" %}
     {% elif active_tab == 'people' %}
-    {% include "dashboard/partials/ui/_page_hero.html" with icon="people" title=standalone_title subtitle=standalone_subtitle %}
+    {% include "dashboard/partials/ui/_page_hero.html" with icon="people" title=standalone_title subtitle=standalone_subtitle modifier="top" %}
     {% endif %}
 {% else %}
-{% include "dashboard/partials/ui/_page_hero.html" with icon="tune" title="Organize" subtitle="Manage the tags, categories, statuses, and people labels used to organize your pins and locations." %}
+{% include "dashboard/partials/ui/_page_hero.html" with icon="tune" title="Organize" subtitle="Manage the tags, categories, statuses, and people labels used to organize your pins and locations." modifier="top" %}
 {% endif %}
+{% endblock %}
+
+{% block subnav %}
+{% if not standalone_mode %}
+<div class="ul-page-subnav">
+    <div class="ul-page-subnav__inner">
+        <div class="organize-tab-bar" role="tablist">
+            <button type="button" class="organize-tab{% if active_tab == 'tags' %} active{% endif %}"
+                    role="tab" data-tab="tags" aria-controls="panel-tags" data-filter-ns="tag">
+                <i class="material-symbols-outlined">label</i> Tags
+                <span class="org-tab-count" id="org-tab-count-tag" hidden></span>
+            </button>
+            <button type="button" class="organize-tab{% if active_tab == 'categories' %} active{% endif %}"
+                    role="tab" data-tab="categories" aria-controls="panel-categories" data-filter-ns="cat">
+                <i class="material-symbols-outlined">category</i> Categories
+                <span class="org-tab-count" id="org-tab-count-cat" hidden></span>
+            </button>
+            <button type="button" class="organize-tab{% if active_tab == 'status' %} active{% endif %}"
+                    role="tab" data-tab="status" aria-controls="panel-status" data-filter-ns="status">
+                <i class="material-symbols-outlined">flag_circle</i> Statuses
+                <span class="org-tab-count" id="org-tab-count-status" hidden></span>
+            </button>
+            <button type="button" class="organize-tab{% if active_tab == 'people' %} active{% endif %}"
+                    role="tab" data-tab="people" aria-controls="panel-people" data-filter-ns="people">
+                <i class="material-symbols-outlined">people</i> People
+                <span class="org-tab-count" id="org-tab-count-people" hidden></span>
+            </button>
+            <button type="button" class="organize-tab{% if active_tab == 'priority' %} active{% endif %}"
+                    role="tab" data-tab="priority" aria-controls="panel-priority">
+                <i class="material-symbols-outlined">low_priority</i> Display Order
+            </button>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block content %}
 <div class="organize-page page-content" data-active-tab="{{ active_tab }}"
      data-rows-url-tag="{% url 'badge.rows' badge_kind='tag' %}"
      data-rows-url-category="{% url 'badge.rows' badge_kind='category' %}"
@@ -53,36 +91,6 @@
             </div>
         </div>
     </div>
-
-    {# -- Tab bar (full Organize page only) -------------------------------------- #}
-    {% if not standalone_mode %}
-    <div class="organize-tab-bar" role="tablist">
-        <button type="button" class="organize-tab{% if active_tab == 'tags' %} active{% endif %}"
-                role="tab" data-tab="tags" aria-controls="panel-tags" data-filter-ns="tag">
-            <i class="material-symbols-outlined">label</i> Tags
-            <span class="org-tab-count" id="org-tab-count-tag" hidden></span>
-        </button>
-        <button type="button" class="organize-tab{% if active_tab == 'categories' %} active{% endif %}"
-                role="tab" data-tab="categories" aria-controls="panel-categories" data-filter-ns="cat">
-            <i class="material-symbols-outlined">category</i> Categories
-            <span class="org-tab-count" id="org-tab-count-cat" hidden></span>
-        </button>
-        <button type="button" class="organize-tab{% if active_tab == 'status' %} active{% endif %}"
-                role="tab" data-tab="status" aria-controls="panel-status" data-filter-ns="status">
-            <i class="material-symbols-outlined">flag_circle</i> Statuses
-            <span class="org-tab-count" id="org-tab-count-status" hidden></span>
-        </button>
-        <button type="button" class="organize-tab{% if active_tab == 'people' %} active{% endif %}"
-                role="tab" data-tab="people" aria-controls="panel-people" data-filter-ns="people">
-            <i class="material-symbols-outlined">people</i> People
-            <span class="org-tab-count" id="org-tab-count-people" hidden></span>
-        </button>
-        <button type="button" class="organize-tab{% if active_tab == 'priority' %} active{% endif %}"
-                role="tab" data-tab="priority" aria-controls="panel-priority">
-            <i class="material-symbols-outlined">low_priority</i> Display Order
-        </button>
-    </div>
-    {% endif %}
 
     {# ══════════════════════════════════════════════════════════════════════════ #}
     {# BADGE PANELS: tags, categories, and statuses share one Badge template.     #}

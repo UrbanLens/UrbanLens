@@ -6,13 +6,16 @@
 // The default variant assumes it sits at the top of a `.page-content`-padded
 // container and bleeds out to the edges to match. The --wide modifier (Thanks
 // & Credits) sits inside an already-flush container, so it skips the bleed
-// and widens the inner column instead.
+// and widens the inner column instead. The --top modifier is for heroes
+// rendered in base.html's `{% block hero %}`, above and outside `.container`
+// entirely (see .ul-page-subnav below) - there's no padded parent to cancel
+// out, so it only bleeds horizontally and never pulls upward into the header.
 .ul-page-hero {
     text-align: center;
     padding: 2.5rem 1.25rem 2rem;
     background: linear-gradient(135deg, rgba(31, 111, 235, 0.20), rgba(23, 185, 120, 0.15));
     margin: -1.5rem -1.25rem 1.75rem;
-    min-height: 13rem;
+    min-height: 13.2rem;
 
     @include up($breakpoint-sm) {
         padding: 3.5rem 1.5rem 2.75rem;
@@ -21,6 +24,18 @@
 
     &--wide {
         margin: 0;
+    }
+
+    &--top {
+        margin-top: 0;
+        margin-left: 0;
+        margin-right: 0;
+    }
+
+    // A subnav directly follows this hero (see .ul-page-subnav below) - drop
+    // the hero's own bottom margin so the two sit flush, no gap between them.
+    &:has(+ .ul-page-subnav) {
+        margin-bottom: 0;
     }
 
     &__inner {
@@ -108,5 +123,31 @@
         color: var(--ul-text-secondary);
         line-height: 1.7;
         max-width: none;
+    }
+}
+
+// Shared "flush below the hero" sub-navigation band, rendered via base.html's
+// `{% block subnav %}` (e.g. the Memories Timeline|Photos|Maps|... tabs and
+// the Settings Privacy|Connections|... tabs). It lives outside `.container`
+// so it can bleed edge-to-edge, matching `.ul-page-hero`'s own full-bleed
+// look - see `.ul-page-hero:has(+ .ul-page-subnav)` above, which removes the
+// hero's bottom margin so the two sit flush with no gap between them.
+.ul-page-subnav {
+    width: 100%;
+    background-color: var(--ul-grey-0);
+    border-bottom: 1px solid var(--ul-grey-1a);
+
+    &__inner {
+        width: 90%;
+        max-width: $breakpoint-lg;
+        margin: 0 auto;
+
+        @include up($breakpoint-sm) {
+            width: 85%;
+        }
+
+        @include up($breakpoint-md) {
+            width: 70%;
+        }
     }
 }

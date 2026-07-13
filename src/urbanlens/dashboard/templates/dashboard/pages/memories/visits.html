@@ -11,13 +11,22 @@
 
 {% block title %}Visits{% endblock %}
 
+{% block hero %}
+{% include "dashboard/partials/ui/_page_hero.html" with icon="where_to_vote" title="Log your visits" subtitle="Places you've marked visited without a date. Add a date to log them - and photos, a map, or notes if you'd like." modifier="top" %}
+{% endblock %}
+
+{% block subnav %}
+<div class="ul-page-subnav">
+    <div class="ul-page-subnav__inner">
+        {% memories_tabs "visits" %}
+    </div>
+</div>
+{% endblock %}
+
 {% block content %}
-{% include "dashboard/partials/ui/_page_hero.html" with icon="where_to_vote" title="Log your visits" subtitle="Places you've marked visited that don't have a dated visit yet. Add a date to log them - and photos, a map, or notes if you like." %}
 <div id="visits-page" class="memories-tab-page">
 
     <div class="page-inner">
-        {% memories_tabs "visits" %}
-
         {% if unlogged_visits %}
         {% include "dashboard/partials/memories/_unlogged_visits.html" %}
         {% else %}

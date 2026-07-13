@@ -35,6 +35,9 @@
     {% include 'dashboard/partials/layout/_account_deletion_banner.html' %}
     {% include 'dashboard/partials/layout/header.html' %}
 
+    {% block hero %}{% endblock %}
+    {% block subnav %}{% endblock %}
+
     <div class="container">
         {% block content %}{% endblock %}
     </div>

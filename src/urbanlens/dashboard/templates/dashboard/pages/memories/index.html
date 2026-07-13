@@ -16,8 +16,19 @@
 
 {% block title %}Memories{% endblock %}
 
+{% block hero %}
+{% include "dashboard/partials/ui/_page_hero.html" with icon="auto_awesome_motion" title="Memories" subtitle="Everywhere you've been - routes, trips, visits, and photos, on one map and timeline." modifier="top" %}
+{% endblock %}
+
+{% block subnav %}
+<div class="ul-page-subnav">
+    <div class="ul-page-subnav__inner">
+        {% memories_tabs "timeline" %}
+    </div>
+</div>
+{% endblock %}
+
 {% block content %}
-{% include "dashboard/partials/ui/_page_hero.html" with icon="auto_awesome_motion" title="Memories" subtitle="Everywhere you've been - routes, trips, visits, and photos, on one map and timeline." %}
 <div id="memories-page" class="memories-tab-page"
      data-feed-url="{% url 'memories.data' %}"
      data-visit-url-base="{% url 'memories.view' %}visit/"
@@ -26,17 +37,15 @@
      data-map-lat="{{ map_center_lat|default:'null' }}"
      data-map-lng="{{ map_center_lng|default:'null' }}">
 
-    {% if has_memory_data %}
-    <div class="memories-toolbar">
-        <button type="button" class="btn btn--secondary" id="memories-import-btn"
-                hx-get="{% url 'pin.import.form' %}?variant=memories" hx-target="#importPinsModal" hx-swap="innerHTML">
-            <i class="material-symbols-outlined">upload</i> Import routes &amp; history
-        </button>
-    </div>
-    {% endif %}
-
     <div class="page-inner">
-        {% memories_tabs "timeline" %}
+        {% if has_memory_data %}
+        <div class="memories-toolbar">
+            <button type="button" class="btn btn--secondary" id="memories-import-btn"
+                    hx-get="{% url 'pin.import.form' %}?variant=memories" hx-target="#importPinsModal" hx-swap="innerHTML">
+                <i class="material-symbols-outlined">upload</i> Import routes &amp; history
+            </button>
+        </div>
+        {% endif %}
 
         {% if not has_memory_data %}
         {% if not unlogged_visits %}

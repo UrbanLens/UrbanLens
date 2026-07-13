@@ -11,13 +11,22 @@
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 {% endblock %}
 
+{% block hero %}
+{% include "dashboard/partials/ui/_page_hero.html" with icon="travel_explore" title="Locations" subtitle="Places a photo scan found evidence of visiting. Review each one before anything is created." modifier="top" %}
+{% endblock %}
+
+{% block subnav %}
+<div class="ul-page-subnav">
+    <div class="ul-page-subnav__inner">
+        {% memories_tabs "locations" %}
+    </div>
+</div>
+{% endblock %}
+
 {% block content %}
-{% include "dashboard/partials/ui/_page_hero.html" with icon="travel_explore" title="Locations" subtitle="Places a photo scan found evidence of visiting. Review each one before anything is created." %}
 <div id="locations-page" class="memories-tab-page">
 
     <div class="page-inner">
-        {% memories_tabs "locations" %}
-
         {% if pin_suggestions_count %}
         <div class="pin-suggestions-map-wrap">
             <div id="pin-suggestions-map" data-map-data-url="{% url 'memories.locations.map_data' %}"></div>

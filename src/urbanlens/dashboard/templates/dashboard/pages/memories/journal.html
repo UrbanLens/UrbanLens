@@ -4,13 +4,22 @@
 
 {% block title %}Journal{% endblock %}
 
+{% block hero %}
+{% include "dashboard/partials/ui/_page_hero.html" with icon="auto_stories" title="Journal" subtitle="Your visit notes, ratings, and comments, all in one place." modifier="top" %}
+{% endblock %}
+
+{% block subnav %}
+<div class="ul-page-subnav">
+    <div class="ul-page-subnav__inner">
+        {% memories_tabs "journal" %}
+    </div>
+</div>
+{% endblock %}
+
 {% block content %}
-{% include "dashboard/partials/ui/_page_hero.html" with icon="auto_stories" title="Journal" subtitle="Your visit notes, ratings, and comments, all in one place." %}
 <div id="memories-journal-page" class="memories-tab-page">
 
     <div class="page-inner">
-        {% memories_tabs "journal" %}
-
         {% if journal_entries %}
         {% regroup journal_entries by occurred_at.date as day_groups %}
         <div class="memories-journal-list">

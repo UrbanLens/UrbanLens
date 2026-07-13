@@ -20,12 +20,24 @@ Optional:
   back_url              - if set, renders a back-link above the title (e.g. back
                           to a section's home page)
   back_label            - label for back_url; defaults to "Back"
-  modifier              - extra BEM modifier class, e.g. "wide" for a wider hero
-                          that doesn't need to bleed out of an ambient page padding
+  modifier              - extra BEM modifier class: "wide" for a wider hero that
+                          doesn't need to bleed out of an ambient page padding, or
+                          "top" when rendered in base.html's block hero (outside
+                          .container, right below the header) - see the
+                          .ul-page-subnav notes in _page_hero.scss
 
 Usage:
   {% include "dashboard/partials/ui/_page_hero.html" with icon="emergency" title="Safety" subtitle="..." %}
   {% include "dashboard/partials/ui/_page_hero.html" with body_template="dashboard/partials/safety/_detail_hero_body.html" %}
+
+  Page with a subnav tab strip directly below the hero (see memories/*.html):
+    {% block hero %}
+    {% include "dashboard/partials/ui/_page_hero.html" with icon="..." title="..." modifier="top" %}
+    {% endblock %}
+
+    {% block subnav %}
+    <div class="ul-page-subnav"><div class="ul-page-subnav__inner">...tabs...</div></div>
+    {% endblock %}
 {% endcomment %}
 <section class="ul-page-hero{% if modifier %} ul-page-hero--{{ modifier }}{% endif %}">
     <div class="ul-page-hero__inner">

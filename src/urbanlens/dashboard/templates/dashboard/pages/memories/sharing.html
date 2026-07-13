@@ -4,13 +4,22 @@
 
 {% block title %}Sharing{% endblock %}
 
+{% block hero %}
+{% include "dashboard/partials/ui/_page_hero.html" with icon="ios_share" title="Pins & maps you've shared" subtitle="Everything you've shared with friends and received from them, and how far your own shares travelled from there." modifier="top" %}
+{% endblock %}
+
+{% block subnav %}
+<div class="ul-page-subnav">
+    <div class="ul-page-subnav__inner">
+        {% memories_tabs "sharing" %}
+    </div>
+</div>
+{% endblock %}
+
 {% block content %}
-{% include "dashboard/partials/ui/_page_hero.html" with icon="ios_share" title="Pins & maps you've shared" subtitle="Everything you've shared with friends and received from them, and how far your own shares travelled from there." %}
 <div id="memories-sharing-page" class="memories-tab-page">
 
     <div class="page-inner">
-        {% memories_tabs "sharing" %}
-
         {% if share_groups or map_share_groups or incoming_share_groups or incoming_map_share_groups %}
         <div class="view-toggle-group memories-sharing-toggle" role="group" aria-label="Choose which shares to show">
             <button type="button" class="btn btn--secondary view-toggle-btn view-toggle-btn--active" data-view="sent"
