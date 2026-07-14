@@ -26,27 +26,34 @@
     display: flex;
     gap: .65rem;
     padding: .75rem 1rem;
-    border-bottom: 1px solid var(--ul-grey-1);
+    border-bottom: 1px solid var(--ul-surface-border);
 
     &:last-child {
         border-bottom: none;
     }
 
+    // Both this modifier and .comment-replies .comment-item below represent the
+    // same role (a reply row, nested one level deeper than a top-level comment)
+    // and must stay in sync - a reply row carries both classes, and the second,
+    // higher-specificity selector always wins in the cascade. Previously these
+    // had separately hand-picked colors that agreed by coincidence in light mode
+    // but not in dark mode, so the intended dark-mode elevation bump silently
+    // never applied. --ul-surface-raised keeps them identical in both themes.
     &--reply {
-        background: var(--ul-grey-0);
+        background: var(--ul-surface-raised);
         padding-left: 1.2rem;
     }
 }
 
 .comment-replies {
     margin-top: .5rem;
-    border-left: 2px solid var(--ul-grey-1a);
+    border-left: 2px solid var(--ul-surface-border);
     margin-left: .4rem;
 
     .comment-item {
         padding-left: .75rem;
         border-bottom: none;
-        background: var(--ul-grey-0);
+        background: var(--ul-surface-raised);
         border-radius: 6px;
         margin-bottom: .3rem;
     }
@@ -204,7 +211,7 @@
 
     &:hover {
         color: $color-indigo-600;
-        background: var(--ul-grey-0);
+        background: var(--ul-hover-bg);
     }
 }
 
@@ -228,14 +235,14 @@
     gap: .2rem;
     padding: .15rem .5rem;
     border-radius: 20px;
-    background: var(--ul-grey-0);
-    border: 1px solid var(--ul-grey-1a);
+    background: var(--ul-surface-raised);
+    border: 1px solid var(--ul-surface-raised-border);
     font-size: .8rem;
     cursor: pointer;
     transition: background .1s, border-color .1s;
 
     &:hover {
-        background: var(--ul-grey-0);
+        background: var(--ul-hover-bg);
     }
 
     &--mine {
@@ -262,7 +269,7 @@
 
 .reaction-add-btn {
     background: none;
-    border: 1px solid var(--ul-grey-1a);
+    border: 1px solid var(--ul-surface-raised-border);
     border-radius: 20px;
     padding: .15rem .4rem;
     cursor: pointer;
@@ -278,7 +285,7 @@
     }
 
     &:hover {
-        background: var(--ul-grey-0);
+        background: var(--ul-hover-bg);
         color: var(--ul-grey-7);
     }
 }
@@ -287,9 +294,7 @@
     position: absolute;
     bottom: calc(100% + 4px);
     left: 0;
-    background: var(--ul-grey-0);
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: 10px;
+    @include surface($radius: 10px, $rung: null);
     box-shadow: 0 4px 16px rgba(0, 0, 0, .12);
     display: flex;
     align-items: center;
@@ -329,7 +334,7 @@
 
 .reaction-picker-divider {
     align-self: stretch;
-    border-left: 1px solid var(--ul-grey-1a);
+    border-left: 1px solid var(--ul-surface-raised-border);
     margin: 0 .2rem;
 }
 
@@ -343,7 +348,7 @@
     transition: background .1s, transform .1s;
 
     &:hover {
-        background: var(--ul-grey-0);
+        background: var(--ul-hover-bg);
         transform: scale(1.2);
     }
 }
@@ -352,7 +357,7 @@
 
 .comment-compose {
     padding: .75rem 1rem;
-    border-top: 1px solid var(--ul-grey-1);
+    border-top: 1px solid var(--ul-surface-border);
     display: flex;
     gap: .6rem;
     align-items: flex-start;
@@ -378,7 +383,7 @@
 .card {
     .comment-compose-field {
         textarea {
-            background-color: var(--ul-grey-0a);
+            background-color: var(--ul-surface-raised);
         }
     }
 }
@@ -389,7 +394,7 @@
 
 .comment-input {
     width: 100%;
-    border: 1px solid var(--ul-grey-1a);
+    border: 1px solid var(--ul-surface-raised-border);
     border-radius: 8px;
     padding: .5rem .75rem;
     font-size: .85rem;
@@ -416,7 +421,7 @@
 
 .comment-map-btn {
     background: none;
-    border: 1px solid var(--ul-grey-1a);
+    border: 1px solid var(--ul-surface-raised-border);
     border-radius: 6px;
     cursor: pointer;
     padding: .25rem .45rem;
@@ -550,7 +555,7 @@
     align-items: center;
     gap: .35rem;
     padding: .45rem .75rem;
-    border-top: 1px solid var(--ul-grey-1);
+    border-top: 1px solid var(--ul-surface-border);
     flex-shrink: 0;
     flex-wrap: wrap;
 }
@@ -620,9 +625,9 @@
     flex: 1;
     max-width: 460px;
     padding: .35rem .6rem;
-    border: 1px solid var(--ul-grey-1a);
+    border: 1px solid var(--ul-surface-raised-border);
     border-radius: 6px;
-    background: var(--ul-grey-0);
+    background: var(--ul-surface-raised);
     color: var(--ul-grey-8);
     font-size: .85rem;
 }
@@ -651,7 +656,7 @@
     align-items: center;
     gap: .35rem;
     padding: .45rem .75rem;
-    border-top: 1px solid var(--ul-grey-1);
+    border-top: 1px solid var(--ul-surface-border);
     flex-shrink: 0;
     flex-wrap: wrap;
 }
@@ -666,7 +671,7 @@
 .cmc-toolbar-sep {
     width: 1px;
     height: 20px;
-    background: var(--ul-grey-0);
+    background: var(--ul-surface-border);
     margin: 0 .1rem;
 }
 
@@ -696,7 +701,7 @@
 .cmc-clear-btn,
 .cmc-download-btn {
     background: none;
-    border: 1px solid var(--ul-grey-1a);
+    border: 1px solid var(--ul-surface-raised-border);
     border-radius: 6px;
     padding: .2rem .45rem;
     cursor: pointer;
@@ -711,7 +716,7 @@
     }
 
     &:hover {
-        background: var(--ul-grey-0);
+        background: var(--ul-hover-bg);
     }
 
     &.is-active,
@@ -814,9 +819,7 @@
     top: 100%;
     left: 0;
     right: 0;
-    background: var(--ul-grey-0);
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: 8px;
+    @include surface($radius: 8px, $rung: null);
     box-shadow: 0 4px 16px rgba(0, 0, 0, .1);
     max-height: 180px;
     overflow-y: auto;
@@ -832,7 +835,7 @@
     font-size: .84rem;
     cursor: pointer;
     color: var(--ul-grey-7);
-    border-bottom: 1px solid var(--ul-grey-0);
+    border-bottom: 1px solid var(--ul-surface);
 
     &:last-child {
         border-bottom: none;
@@ -840,7 +843,7 @@
 
     &:hover,
     &.is-selected {
-        background: var(--ul-grey-0);
+        background: var(--ul-hover-bg);
         color: $color-indigo-700;
     }
 

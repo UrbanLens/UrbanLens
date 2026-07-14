@@ -183,8 +183,8 @@
     width: 34px;
     height: 34px;
     border-radius: 6px;
-    border: 1px solid var(--ul-grey-1a);
-    background: var(--ul-grey-0);
+    border: 1px solid var(--ul-surface-raised-border);
+    background: var(--ul-surface-raised);
     cursor: pointer;
     transition: border-color .12s, background .12s;
 
@@ -195,7 +195,7 @@
     }
 
     &:hover {
-        background: var(--ul-grey-0a);
+        background: var(--ul-hover-bg);
         border-color: $color-blue-300;
     }
 
@@ -445,7 +445,7 @@
     .alias-add-input {
         flex: 1;
         padding: .35rem .6rem;
-        border: 1px solid var(--ul-grey-1a);
+        border: 1px solid var(--ul-surface-raised-border);
         border-radius: 6px;
         font-size: .85rem;
         outline: none;

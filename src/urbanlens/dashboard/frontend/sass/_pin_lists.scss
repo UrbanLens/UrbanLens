@@ -38,8 +38,8 @@
 
 .pin-lists-search {
     width: 100%;
-    border: 1px solid var(--ul-grey-1a);
-    background: var(--ul-grey-0);
+    border: 1px solid var(--ul-surface-raised-border);
+    background: var(--ul-surface-raised);
     color: var(--ul-grey-8);
     border-radius: 8px;
     padding: .5rem .75rem;
@@ -69,8 +69,8 @@
 }
 
 #pin-lists-sort-select {
-    border: 1px solid var(--ul-grey-1a);
-    background: var(--ul-grey-0);
+    border: 1px solid var(--ul-surface-raised-border);
+    background: var(--ul-surface-raised);
     color: var(--ul-grey-8);
     border-radius: 7px;
     padding: .4rem .6rem;
@@ -100,9 +100,7 @@
     flex-direction: column;
     gap: .5rem;
     padding: 1.1rem;
-    border-radius: 12px;
-    border: 1px solid var(--ul-grey-1a);
-    background: var(--ul-grey-0);
+    @include surface($radius: 12px);
     text-decoration: none;
     color: inherit;
     transition: border-color .15s, transform .15s, box-shadow .15s;
@@ -238,9 +236,7 @@
     top: calc(100% + 4px);
     right: 0;
     min-width: 180px;
-    background: var(--ul-grey-0);
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: 10px;
+    @include surface($radius: 10px, $rung: null);
     box-shadow: 0 6px 20px rgba(0, 0, 0, .18);
     // Above the map's own controls/toolbar (z-index 1000, see .map-buttons /
     // .map-layers-panel) - this menu sits earlier in the DOM than the map
@@ -283,7 +279,7 @@
 
 .pin-list-more-menu-divider {
     height: 1px;
-    background: var(--ul-grey-1a);
+    background: var(--ul-surface-border);
     margin: .3rem .2rem;
 }
 
@@ -307,7 +303,7 @@
     height: 280px;
     border-radius: 12px;
     overflow: hidden;
-    border: 1px solid var(--ul-grey-1a);
+    border: 1px solid var(--ul-surface-border);
 
     @include up($breakpoint-sm) {
         height: 360px;
@@ -316,9 +312,7 @@
 
 // -- Smart config panel -----------------------------------------------------
 .pin-list-smart-panel {
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: 12px;
-    background: var(--ul-grey-0a);
+    @include surface($radius: 12px);
     margin-bottom: 1.5rem;
     overflow: hidden;
 }
@@ -382,8 +376,8 @@
 .pin-list-smart-row select {
     width: 100%;
     max-width: 320px;
-    border: 1px solid var(--ul-grey-1a);
-    background: var(--ul-grey-0);
+    border: 1px solid var(--ul-surface-raised-border);
+    background: var(--ul-surface-raised);
     color: var(--ul-grey-8);
     border-radius: 7px;
     padding: .45rem .6rem;
@@ -407,7 +401,7 @@
     height: 280px;
     border-radius: 10px;
     overflow: hidden;
-    border: 1px solid var(--ul-grey-1a);
+    border: 1px solid var(--ul-surface-border);
 
     @include up($breakpoint-sm) {
         height: 340px;
@@ -430,9 +424,7 @@
     align-items: center;
     gap: .6rem;
     padding: .55rem .75rem;
-    border-radius: 9px;
-    border: 1px solid var(--ul-grey-1a);
-    background: var(--ul-grey-0);
+    @include surface($radius: 9px);
 
     &--ghost {
         opacity: .4;
@@ -538,8 +530,8 @@
     align-items: center;
     gap: .5rem;
     text-align: left;
-    background: var(--ul-grey-0a);
-    border: 1px solid var(--ul-grey-1a);
+    background: var(--ul-surface-raised);
+    border: 1px solid var(--ul-surface-raised-border);
     border-radius: 8px;
     padding: .5rem .7rem;
     font-size: .85rem;
@@ -553,8 +545,8 @@
 
 .pin-list-add-results-search {
     width: 100%;
-    border: 1px solid var(--ul-grey-1a);
-    background: var(--ul-grey-0);
+    border: 1px solid var(--ul-surface-raised-border);
+    background: var(--ul-surface-raised);
     color: var(--ul-grey-8);
     border-radius: 8px;
     padding: .5rem .7rem;
@@ -564,7 +556,7 @@
 .pin-list-add-results-item--new {
     cursor: default;
 
-    &:hover { border-color: var(--ul-grey-1a); }
+    &:hover { border-color: var(--ul-surface-raised-border); }
 
     input[type="text"] {
         flex: 1;
@@ -711,8 +703,8 @@
 
     input {
         flex: 1;
-        border: 1px solid var(--ul-grey-1a);
-        background: var(--ul-grey-0);
+        border: 1px solid var(--ul-surface-raised-border);
+        background: var(--ul-surface-raised);
         color: var(--ul-grey-8);
         border-radius: 7px;
         padding: .45rem .6rem;
@@ -731,8 +723,8 @@
 
 .saved-filter-region-result {
     text-align: left;
-    background: var(--ul-grey-0a);
-    border: 1px solid var(--ul-grey-1a);
+    background: var(--ul-surface-raised);
+    border: 1px solid var(--ul-surface-raised-border);
     border-radius: 7px;
     padding: .4rem .6rem;
     font-size: .82rem;

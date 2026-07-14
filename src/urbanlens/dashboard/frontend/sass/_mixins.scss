@@ -87,11 +87,11 @@ $inputs: (
 	display: block;
 	width: 100%;
 	padding: 8px 12px;
-	border: 1px solid var(--ul-grey-1a);
+	border: 1px solid var(--ul-surface-raised-border);
 	border-radius: $radius-sm;
 	font-size: .9rem;
 	color: var(--ul-grey-8);
-	background: var(--ul-grey-1);
+	background: var(--ul-surface-raised);
 	box-sizing: border-box;
 	transition: border-color .15s, box-shadow .15s;
 
@@ -110,10 +110,45 @@ $inputs: (
 }
 
 // -- Surfaces ------------------------------------------------------------------
+// See _surfaces.scss for the elevation-ladder tokens these mixins consume.
 
-@mixin surface($radius: $radius-md) {
-	background: var(--ul-grey-1b);
-	border: 1px solid var(--ul-grey-1a);
+@function surface-rung($n) {
+	@return var(--ul-surface-#{$n});
+}
+
+@function surface-rung-border($n) {
+	@return var(--ul-surface-#{$n}-border);
+}
+
+// The ladder is capped at rung 3; anything deeper reuses it rather than
+// growing without bound.
+@function surface-next-rung($n) {
+	@if $n < 3 {
+		@return $n + 1;
+	}
+	@return 3;
+}
+
+// $rung: a fixed elevation step (1-3) for a surface that's always raised the
+// same amount off the page, regardless of where it's used (cards, panels,
+// dialogs). $rung: null instead reads the ambient --ul-surface-raised pair,
+// for surfaces whose correct elevation depends on where they're triggered
+// from (e.g. a dropdown that can pop off the page, a card, or a dialog).
+@mixin surface($radius: $radius-md, $rung: 1) {
+	@if $rung {
+		$next: surface-next-rung($rung);
+		background: surface-rung($rung);
+		border: 1px solid surface-rung-border($rung);
+		--ul-surface: #{surface-rung($rung)};
+		--ul-surface-border: #{surface-rung-border($rung)};
+		--ul-surface-raised: #{surface-rung($next)};
+		--ul-surface-raised-border: #{surface-rung-border($next)};
+	} @else {
+		background: var(--ul-surface-raised);
+		border: 1px solid var(--ul-surface-raised-border);
+		--ul-surface: var(--ul-surface-raised);
+		--ul-surface-border: var(--ul-surface-raised-border);
+	}
 	border-radius: $radius;
 }
 
@@ -128,8 +163,11 @@ $inputs: (
 	container-name: map-box;
 }
 
+// Contextual: a floating menu/dropdown can be triggered from the page, a
+// card, or a dialog, so it reads the ambient --ul-surface-raised pointer
+// (@include surface($rung: null)) instead of a fixed rung.
 @mixin surface-elevated {
-	@include surface;
+	@include surface($rung: null);
 	box-shadow: var(--ul-shadow-lg);
 }
 
@@ -282,11 +320,14 @@ $inputs: (
 	align-items: center;
 	gap: $space-sm;
 	padding: $bar-padding-y $bar-padding-x;
-	border-bottom: 1px solid var(--ul-grey-1a);
 	font-weight: 600;
 	font-size: 1rem;
 	flex-shrink: 0;
-	background-color: var(--ul-grey-1a);
+	// No border-bottom here: this strip's background is already one rung
+	// past the surface it sits on (see _surfaces.scss), which is what
+	// actually separates it from the body below - a border in the same
+	// token would be identical to this element's own fill and paint nothing.
+	background-color: var(--ul-surface-border);
 	color: var(--ul-grey-8);
 
 	@if $spread {
@@ -303,8 +344,7 @@ $inputs: (
 	align-items: center;
 	gap: $space-sm;
 	padding: $bar-padding-y $bar-padding-x;
-	border-bottom: 1px solid var(--ul-grey-1a);
-	background-color: var(--ul-grey-1a);
+	background-color: var(--ul-surface-border);
 	color: var(--ul-grey-8);
 
 	i.material-symbols-outlined,
@@ -357,7 +397,8 @@ $inputs: (
 
 // $width sets the dialog's preferred width on tablet/desktop.
 // Mobile-first: fit within the viewport with dvh-aware max-height.
-@mixin dialog-base($width: 55rem) {
+@mixin dialog-base($width: 55rem, $rung: 1) {
+	$next: surface-next-rung($rung);
 	border: none;
 	border-radius: $radius-md;
 	box-shadow: $shadow-dialog;
@@ -366,8 +407,12 @@ $inputs: (
 	max-width: calc(100vw - 1rem);
 	max-height: calc(100dvh - 1rem);
 	overflow: visible;
-	background: var(--ul-grey-1b);
+	background: surface-rung($rung);
 	color: var(--ul-grey-8);
+	--ul-surface: #{surface-rung($rung)};
+	--ul-surface-border: #{surface-rung-border($rung)};
+	--ul-surface-raised: #{surface-rung($next)};
+	--ul-surface-raised-border: #{surface-rung-border($next)};
 
 	@include up($breakpoint-sm) {
 		width: min(#{$width}, 90vw);
@@ -393,7 +438,7 @@ $inputs: (
 	justify-content: flex-end;
 	gap: $space-sm;
 	padding: $bar-padding-y $bar-padding-x $space-md;
-	border-top: 1px solid var(--ul-grey-1a);
+	border-top: 1px solid var(--ul-surface-border);
 	flex-shrink: 0;
 }
 
@@ -421,8 +466,7 @@ $inputs: (
 	gap: $space-sm;
 	align-items: center;
 	padding: $bar-padding-y $bar-padding-x;
-	border-top: 1px solid var(--ul-grey-1a);
-	background: var(--ul-grey-1a);
+	background: var(--ul-surface-border);
 }
 
 @mixin empty-state {
@@ -469,7 +513,7 @@ $inputs: (
 	}
 
 	&:hover {
-		background: var(--ul-grey-1);
+		background: var(--ul-hover-bg);
 
 		.material-icons,
 		.material-symbols-outlined {

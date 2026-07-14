@@ -2,12 +2,6 @@
 @use 'variables' as *;
 @use "mixins" as *;
 
-@mixin standard-section {
-    background-color: var(--ul-grey-0a);
-    border-color: var(--ul-black);
-    box-shadow: 3px 3px 10px rgba(0,0,0,.2);
-}
-
 [data-theme="dark"] {
 
     @include input-selectors { 
@@ -99,19 +93,8 @@
         }
     }
 
-    .label-rel-popup {
-        background: var(--ul-grey-0);
-        border-color: var(--ul-grey-7b);
-    }
-
-    .label-rel-add-btn {
-        background: var(--ul-grey-0);
-        border-color: var(--ul-grey-7b);
-    }
-
     .label-rel-trash.is-active {
         border-color: var(--ul-grey-6b);
-        background: var(--ul-grey-0);
     }
 
     .icon-option {
@@ -183,13 +166,8 @@
         border-color: color.adjust($primary-color, $lightness: 10%);
     }
 
-    .edit-link-row {
-        background: var(--ul-grey-0);
-    }
-
     .edit-add-link-input {
         color: var(--ul-grey-1);
-        border-color: var(--ul-grey-7b);
     }
 
     .edit-discord-details {
@@ -257,15 +235,6 @@
         }
     }
 
-    .card {
-        @include standard-section;
-        border-radius: 10px;
-
-        .card-header {
-            background-color: var(--ul-grey-0b);
-        }
-    }
-
     .trip-weather-day {
         background-color: var(--ul-grey-1);
 
@@ -296,13 +265,7 @@
         box-shadow: 0 2px 12px rgba(0, 0, 0, .4);
     }
 
-    .profile-stat,
-    .profile-section {
-        @include standard-section;
-    }
-
     .shared-visited-item {
-        border-color: var(--ul-grey-8b);
         color: var(--ul-grey-2);
     }
 
@@ -398,12 +361,6 @@
     }
 
     .notif-item {
-        border-bottom-color: var(--ul-grey-2);
-
-        &--link:not(.notif-item--unread):hover {
-            background: var(--ul-grey-1);
-        }
-
         &__icon-wrap {
             background: rgba(255, 255, 255, .04);
 
@@ -565,11 +522,6 @@
         }
     }
 
-    .trip-card-stat {
-        background: var(--ul-grey-1);
-        border-color: var(--ul-grey-2);
-    }
-
     .trip-card-member-avatar {
         border-color: var(--ul-grey-0);
         background: $dk-navy;
@@ -588,18 +540,7 @@
         }
     }
 
-    .card-header {
-        .view-toggle-group {
-            background-color: var(--ul-grey-1);
-        }
-    }
-
     .view-toggle-btn {
-
-        &:hover {
-            background: var(--ul-grey-1);
-            color: var(--ul-grey-7);
-        }
 
         &.view-toggle-btn--active {
             color: $color-blue-500;
@@ -697,10 +638,6 @@
     .rsvp-popup-opt {
         color: var(--ul-grey-8);
 
-        &:hover {
-            background: var(--ul-grey-1);
-        }
-
         &--yes {
             color: $color-green-400;
 
@@ -752,14 +689,6 @@
     .trip-comment-input:focus {
         border-color: $color-blue-500;
         box-shadow: 0 0 0 3px rgba($color-blue-400, .12);
-    }
-
-    .comment-item {
-        border-bottom-color: var(--ul-grey-1a);
-
-        &--reply {
-            background: var(--ul-grey-1);
-        }
     }
 
     .comment-date {
@@ -911,18 +840,8 @@
         border-color: var(--ul-grey-1a);
     }
 
-    .comment-map-composer-toolbar,
-    .comment-map-view-toolbar {
-        border-color: var(--ul-grey-1a);
-    }
-
     .cmcc-label {
         color: var(--ul-grey-6);
-    }
-
-    .memories-map-card {
-        background: var(--ul-grey-0);
-        border-color: var(--ul-grey-1a);
     }
 
     .map-layers-strip-btn,
@@ -932,20 +851,12 @@
     .cmc-download-btn {
         color: var(--ul-grey-8);
 
-        &:hover {
-            background: var(--ul-hover-bg);
-        }
-
         &.is-active,
         &.active {
             background: rgba($color-indigo-700, .25);
             border-color: $color-indigo-600;
             color: $color-indigo-300;
         }
-    }
-
-    .cmc-toolbar-sep {
-        background: var(--ul-grey-1a);
     }
 
     .cmc-toolbar-label {
@@ -1029,8 +940,6 @@
     }
 
     .priority-item {
-        background-color: var(--ul-grey-0a);
-
         &:hover {
             box-shadow: 0 2px 8px rgba(0, 0, 0, .3);
         }
@@ -1335,5 +1244,27 @@
     .btn--link,
     .ul-radio-button {
         border-color: var(--ul-grey-1a);
+    }
+
+    // Static blue-accent chips (_pin-detail.scss) had no dark variant at all,
+    // so they rendered as a frozen light-blue chip regardless of theme.
+    // Follows the same tinted-accent-on-dark pattern already used by
+    // .trip-card-status--upcoming and friends.
+    .wiki-cta-link {
+        background: rgba($color-blue-500, .12);
+        border-color: rgba($color-blue-500, .3);
+        color: $color-blue-300;
+
+        &:hover {
+            background: rgba($color-blue-500, .18);
+            border-color: rgba($color-blue-500, .4);
+            color: $color-blue-200;
+        }
+    }
+
+    .pin-loc-option-badge,
+    .loc-conflict-badge {
+        background: rgba($color-blue-500, .15);
+        color: $color-blue-300;
     }
 }

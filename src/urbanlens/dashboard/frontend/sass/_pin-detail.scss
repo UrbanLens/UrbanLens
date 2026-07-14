@@ -199,7 +199,7 @@
         border-bottom: 2px solid var(--ul-grey-1a);
         padding: 0 .5rem;
         flex-shrink: 0;
-        background: var(--ul-grey-0);
+        background: var(--ul-surface-raised);
     }
 
     .tad-tab {
@@ -232,13 +232,13 @@
         width: calc(100% - 1.5rem);
         margin: .6rem .75rem;
         padding: .45rem .7rem;
-        border: 1px solid var(--ul-grey-1a);
+        border: 1px solid var(--ul-surface-raised-border);
         border-radius: 8px;
         font-size: .85rem;
         box-sizing: border-box;
         outline: none;
         flex-shrink: 0;
-        background: var(--ul-grey-0);
+        background: var(--ul-surface-raised);
         color: inherit;
 
         &:focus {
@@ -326,10 +326,6 @@
 // specific indigo accent colours need explicit dark overrides here.
 [data-theme="dark"] {
     .tag-add-dialog {
-        .tad-tabs {
-            border-bottom-color: var(--ul-grey-1a);
-        }
-
         .tad-tab {
             color: var(--ul-grey-6);
 
@@ -344,9 +340,6 @@
         }
 
         .dialog-search {
-            background: var(--ul-grey-1);
-            border-color: var(--ul-grey-1a);
-
             &:focus {
                 border-color: $color-indigo-400;
                 box-shadow: 0 0 0 3px rgba(129, 140, 248, .15);
@@ -400,7 +393,7 @@
         height: 32px;
         margin-top: .1rem;
         border-radius: 50%;
-        background: var(--ul-grey-1a);
+        background: var(--ul-surface-raised);
         color: var(--ul-grey-7);
 
         .material-symbols-outlined,
@@ -928,7 +921,7 @@
         height: 30px;
         border: 1px solid var(--ul-border);
         border-radius: 6px;
-        background: var(--ul-grey-1);
+        background: var(--ul-surface-raised);
         cursor: pointer;
         color: var(--ul-grey-7);
         transition: background .12s;
@@ -938,7 +931,7 @@
         }
 
         &:hover {
-            background: var(--ul-grey-1a);
+            background: var(--ul-hover-bg);
         }
     }
 
@@ -1050,14 +1043,14 @@
         height: 30px;
         border: 1px solid var(--ul-border);
         border-radius: 6px;
-        background: var(--ul-grey-1);
+        background: var(--ul-surface-raised);
         cursor: pointer;
         color: var(--ul-grey-7);
         transition: background .12s;
         .material-symbols-outlined,
         .material-icons { font-size: 1.15rem; }
 
-        &:hover { background: var(--ul-grey-1a); }
+        &:hover { background: var(--ul-hover-bg); }
     }
 
     .sv-meta {

@@ -66,9 +66,7 @@
 
     &__item {
         padding: .85rem;
-        background: var(--ul-grey-0);
-        border: 1px solid var(--ul-grey-1a);
-        border-radius: 10px;
+        @include surface($radius: 10px, $rung: 2);
         box-shadow: 0 4px 16px rgba(15, 23, 42, .06);
         transition: border-color .15s, box-shadow .15s;
 
@@ -124,9 +122,7 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
         gap: .75rem;
         align-items: center;
         padding: .85rem;
-        background: var(--ul-grey-0);
-        border: 1px solid var(--ul-grey-1a);
-        border-radius: 10px;
+        @include surface($radius: 10px, $rung: 2);
         box-shadow: 0 4px 16px rgba(15, 23, 42, .06);
         transition: border-color .15s, box-shadow .15s;
 
@@ -177,7 +173,7 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
         padding: 2.5rem 1rem;
         color: var(--ul-grey-6);
         font-size: .9rem;
-        background: var(--ul-grey-0);
+        background: var(--ul-surface-raised);
         border: 1px dashed var(--ul-grey-1a);
         border-radius: 10px;
 
@@ -219,11 +215,11 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     input[type="number"] {
         min-width: 5rem;
         padding: .45rem .65rem;
-        border: 1.5px solid var(--ul-grey-1a);
+        border: 1.5px solid var(--ul-surface-raised-border);
         border-radius: 8px;
         font-size: .85rem;
         color: var(--ul-grey-8);
-        background: var(--ul-grey-0);
+        background: var(--ul-surface-raised);
         outline: none;
         transition: border-color .15s;
 
@@ -263,8 +259,8 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     gap: .35rem;
     padding: .3rem .7rem;
     border-radius: $radius-full;
-    border: 1.5px solid var(--ul-grey-1a);
-    background: var(--ul-grey-0);
+    border: 1.5px solid var(--ul-surface-raised-border);
+    background: var(--ul-surface-raised);
     color: var(--ul-grey-7);
     font-size: .82rem;
     font-weight: 500;
@@ -687,9 +683,9 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
         align-items: center;
         gap: .6rem;
         padding: .5rem .65rem;
-        border: 1.5px solid var(--ul-grey-1a);
+        border: 1.5px solid var(--ul-surface-raised-border);
         border-radius: 8px;
-        background: var(--ul-grey-0);
+        background: var(--ul-surface-raised);
         cursor: grab;
 
         &:active {
@@ -764,7 +760,7 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
         }
 
         &:hover {
-            background: var(--ul-grey-1);
+            background: var(--ul-hover-bg);
             color: var(--ul-grey-8);
         }
     }
@@ -824,9 +820,7 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     display: flex;
     align-items: center;
     gap: .9rem;
-    background: var(--ul-grey-1);
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: 10px;
+    @include surface($radius: 10px);
     padding: 1rem 1.1rem;
 }
 
@@ -1065,9 +1059,7 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     font-size: .78rem;
     font-weight: 500;
     color: var(--ul-grey-6);
-    background: var(--ul-grey-0);
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: 999px;
+    @include surface($radius: 999px);
     padding: .3rem .75rem;
 
     .material-symbols-outlined,
@@ -1091,9 +1083,7 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     gap: .75rem;
     flex: 1 1 150px;
     min-width: 140px;
-    background: var(--ul-grey-1b);
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: 10px;
+    @include surface($radius: 10px);
     padding: .9rem 1.1rem;
 
     .material-symbols-outlined,
@@ -1159,11 +1149,6 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     gap: 1rem;
     margin-bottom: 2rem;
 
-    > a {
-        background-color: var(--ul-grey-1b);
-        border-color: var(--ul-grey-1a);
-    }
-
     @include up(120rem) {
         grid-template-columns: repeat(5, minmax(20rem, 1fr));
     }
@@ -1174,9 +1159,7 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     align-items: flex-start;
     gap: 1rem;
     padding: 1.25rem 1.1rem;
-    background: var(--ul-grey-1);
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: 12px;
+    @include surface($radius: 12px);
     text-decoration: none;
     color: inherit;
     transition: border-color .15s, box-shadow .15s, transform .1s;
@@ -1259,9 +1242,9 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
         align-items: center;
         gap: .5rem;
         padding: .55rem .85rem;
-        border: 1.5px solid var(--ul-grey-1a);
+        border: 1.5px solid var(--ul-surface-raised-border);
         border-radius: 8px;
-        background: var(--ul-grey-0);
+        background: var(--ul-surface-raised);
         transition: border-color .15s;
 
         &:focus-within {
@@ -1322,9 +1305,7 @@ $users-list-cols: minmax(180px, 1.3fr) minmax(170px, 1.15fr) minmax(110px, .75fr
         gap: .75rem;
         align-items: center;
         padding: .85rem;
-        background: var(--ul-grey-0);
-        border: 1px solid var(--ul-grey-1a);
-        border-radius: 10px;
+        @include surface($radius: 10px, $rung: 2);
         box-shadow: 0 4px 16px rgba(15, 23, 42, .06);
         transition: border-color .15s, box-shadow .15s;
 
@@ -1475,7 +1456,7 @@ $users-list-cols: minmax(180px, 1.3fr) minmax(170px, 1.15fr) minmax(110px, .75fr
         padding: 2.5rem 1rem;
         color: var(--ul-grey-6);
         font-size: .9rem;
-        background: var(--ul-grey-0);
+        background: var(--ul-surface-raised);
         border: 1px dashed var(--ul-grey-1a);
         border-radius: 10px;
 
@@ -1585,8 +1566,6 @@ $users-list-cols: minmax(180px, 1.3fr) minmax(170px, 1.15fr) minmax(110px, .75fr
     }
 
     .feature-toggle {
-        background: var(--ul-grey-1);
-        border-color: var(--ul-grey-3b);
         color: var(--ul-grey-7);
 
         &:has(input:checked) {
@@ -1599,8 +1578,6 @@ $users-list-cols: minmax(180px, 1.3fr) minmax(170px, 1.15fr) minmax(110px, .75fr
     .users-list {
         &__item,
         &__empty {
-            background: var(--ul-grey-1);
-            border-color: var(--ul-grey-3b);
             box-shadow: none;
 
             &:hover {
@@ -1613,28 +1590,16 @@ $users-list-cols: minmax(180px, 1.3fr) minmax(170px, 1.15fr) minmax(110px, .75fr
         }
     }
 
-    .users-admin-search__field {
-        background: var(--ul-grey-1);
-        border-color: var(--ul-grey-3b);
-
-        &:focus-within {
-            border-color: color.adjust($primary-color, $lightness: 10%);
-        }
+    .users-admin-search__field:focus-within {
+        border-color: color.adjust($primary-color, $lightness: 10%);
     }
 
     .inline-sub-form select {
-        background: var(--ul-grey-1);
-        border-color: var(--ul-grey-3b);
         color: var(--ul-grey-8);
 
         &:focus {
             border-color: color.adjust($primary-color, $lightness: 10%);
         }
-    }
-
-    .admin-home-meta-pill {
-        background: var(--ul-grey-2);
-        border-color: var(--ul-grey-3b);
     }
 
     .admin-nav-card {

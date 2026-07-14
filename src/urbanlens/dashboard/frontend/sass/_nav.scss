@@ -272,7 +272,7 @@ nav {
 // Separator
 .nav-dropdown-sep {
     height: 1px;
-    background: var(--ul-grey-1a);
+    background: var(--ul-surface-border);
     margin: 4px 0;
 }
 
@@ -299,7 +299,7 @@ nav {
         }
 
         &:hover {
-            background: var(--ul-grey-0);
+            background: var(--ul-hover-bg);
 
             .material-icons,
             .material-symbols-outlined {
@@ -588,7 +588,7 @@ nav {
     cursor: default;
     transition: background .15s ease, border-color .15s ease, opacity .15s ease;
     border-left: 3px solid transparent;
-    border-bottom: 1px solid var(--ul-grey-1a);
+    border-bottom: 1px solid var(--ul-surface-border);
     position: relative;
 
     &:last-child {
@@ -600,7 +600,7 @@ nav {
     }
 
     &--link:not(.notif-item--unread):hover {
-        background: var(--ul-grey-1);
+        background: var(--ul-hover-bg);
     }
 
     // -- Read state: quiet, receded ---------------------------------------
@@ -612,7 +612,7 @@ nav {
         display: flex;
         align-items: center;
         justify-content: center;
-        background: var(--ul-grey-1);
+        background: var(--ul-surface-border);
         margin-top: .05rem;
         transition: background .15s ease, color .15s ease;
 
@@ -732,7 +732,7 @@ nav {
     }
 
     &--unread &__icon-wrap--error {
-        background: var(--ul-grey-0a);
+        background: $color-red-100;
 
         .material-symbols-outlined,
         .material-icons {
@@ -840,23 +840,23 @@ $notif-prefs-cols: minmax(10rem, 1fr) repeat(5, 4.5rem);
     }
 
     &__row {
-        background: var(--ul-grey-1);
+        background: var(--ul-surface-raised);
 
         &:nth-child(even) {
-            background: var(--ul-grey-1b);
+            background: var(--ul-surface-raised-border);
         }
 
         &:nth-child(2),
         &:nth-child(5),
         &:nth-child(7),
         &:nth-child(10) {
-            border-top: 6px solid var(--ul-grey-0);
+            border-top: 6px solid var(--ul-surface);
         }
     }
 
     &__header {
-        background: var(--ul-grey-0);
-        border-bottom: 1px solid var(--ul-grey-1a);
+        background: var(--ul-surface);
+        border-bottom: 1px solid var(--ul-surface-border);
     }
 
     &__hdr {
@@ -872,14 +872,14 @@ $notif-prefs-cols: minmax(10rem, 1fr) repeat(5, 4.5rem);
     }
 
     &__row {
-        border-bottom: 1px solid var(--ul-grey-1);
+        border-bottom: 1px solid var(--ul-surface-border);
 
         &:last-child {
             border-bottom: none;
         }
 
         &:hover {
-            background: var(--ul-grey-0);
+            background: var(--ul-hover-bg);
         }
     }
 

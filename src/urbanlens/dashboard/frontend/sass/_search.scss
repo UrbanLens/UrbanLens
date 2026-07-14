@@ -42,9 +42,7 @@ body.gs-no-scroll {
     max-height: min(72vh, 640px);
     display: flex;
     flex-direction: column;
-    background: var(--ul-grey-0);
-    border: 1px solid var(--ul-border-strong);
-    border-radius: 16px;
+    @include surface($radius: 16px, $rung: 1);
     box-shadow: var(--ul-shadow-lg);
     overflow: hidden;
 
@@ -100,8 +98,8 @@ body.gs-no-scroll {
     font-weight: 600;
     letter-spacing: .02em;
     color: var(--ul-grey-4a);
-    background: var(--ul-grey-1);
-    border: 1px solid var(--ul-grey-1b);
+    background: var(--ul-surface-raised);
+    border: 1px solid var(--ul-surface-raised-border);
     border-bottom-width: 2px;
     border-radius: 5px;
     padding: .1rem .4rem;
@@ -185,7 +183,7 @@ body.gs-no-scroll {
 
 .gs-count {
     font-weight: 600;
-    background: var(--ul-grey-1);
+    background: var(--ul-surface-raised);
     border-radius: 9px;
     padding: 0 .45rem;
     line-height: 1.5;
@@ -244,7 +242,7 @@ body.gs-no-scroll {
     width: 38px;
     height: 38px;
     border-radius: 10px;
-    background: var(--ul-grey-1);
+    background: var(--ul-surface-raised);
     color: var(--ul-grey-5);
 
     .material-symbols-outlined {
@@ -258,7 +256,7 @@ body.gs-no-scroll {
     height: 44px;
     border-radius: 10px;
     object-fit: cover;
-    background: var(--ul-grey-1);
+    background: var(--ul-surface-raised);
 }
 
 .gs-result-body {
@@ -387,7 +385,7 @@ body.gs-no-scroll {
 
 .gs-hint {
     border: 1px dashed var(--ul-grey-2b);
-    background: var(--ul-grey-0a);
+    background: var(--ul-surface-raised);
     color: var(--ul-grey-5a);
     font-size: .8rem;
     padding: .3rem .7rem;

@@ -266,8 +266,7 @@ img.leaflet-marker-icon.is-selected {
 
 // - Map Dialogs
 .map-dialog {
-    background: var(--ul-grey-0);
-    border-radius: 8px;
+    @include surface($radius: 8px, $rung: null);
     box-shadow: 0 2px 8px rgba(0, 0, 0, .2);
     backdrop-filter: blur(4px);
     z-index: 1000;
@@ -371,8 +370,8 @@ img.leaflet-marker-icon.is-selected {
     justify-content: center;
     width: 22px;
     height: 56px;
-    background: var(--ul-grey-0);
-    border: 1px solid var(--ul-grey-1a);
+    background: var(--ul-surface-1);
+    border: 1px solid var(--ul-surface-1-border);
     border-left: none;
     border-radius: 0 10px 10px 0;
     box-shadow: 2px 0 8px rgba(0, 0, 0, .12);
@@ -387,7 +386,7 @@ img.leaflet-marker-icon.is-selected {
     }
 
     &:hover {
-        background: var(--ul-grey-1);
+        background: var(--ul-hover-bg);
         color: var(--ul-grey-9);
     }
 
@@ -686,12 +685,12 @@ img.leaflet-marker-icon.is-selected {
 .markup-form-input,
 .markup-form-select {
     padding: .3rem .5rem;
-    border: 1px solid var(--ul-grey-1a);
+    border: 1px solid var(--ul-surface-raised-border);
     border-radius: 5px;
     font-size: .8rem;
     color: var(--ul-grey-7);
     width: 100%;
-    background: var(--ul-grey-0);
+    background: var(--ul-surface-raised);
 
     &:focus {
         border-color: $color-blue-300;
@@ -890,9 +889,8 @@ img.leaflet-marker-icon.is-selected {
     align-items: center;
     justify-content: space-between;
     padding: .85rem 1.25rem;
-    border-bottom: 1px solid var(--ul-grey-1a);
     flex-shrink: 0;
-    background-color: var(--ul-grey-1);
+    background-color: var(--ul-surface-border);
 
     h2 {
         margin: 0;
@@ -912,7 +910,6 @@ img.leaflet-marker-icon.is-selected {
     display: flex;
     flex-direction: column;
     gap: .85rem;
-    background-color: var(--ul-grey-0b);
 }
 
 .apdlg-addr-wrap {
@@ -924,8 +921,7 @@ img.leaflet-marker-icon.is-selected {
     top: 100%;
     left: 0;
     right: 0;
-    background: var(--ul-grey-0);
-    border: 1.5px solid var(--ul-grey-1a);
+    @include surface($rung: null);
     border-top: none;
     border-radius: 0 0 $radius-sm $radius-sm;
     box-shadow: 0 6px 18px rgba(0, 0, 0, .1);
@@ -941,7 +937,7 @@ img.leaflet-marker-icon.is-selected {
     text-align: left;
     background: none;
     border: none;
-    border-bottom: 1px solid var(--ul-grey-1);
+    border-bottom: 1px solid var(--ul-surface-border);
     font-size: .83rem;
     color: $text-primary;
     cursor: pointer;
@@ -952,7 +948,7 @@ img.leaflet-marker-icon.is-selected {
     }
 
     &:hover {
-        background: var(--ul-grey-0a);
+        background: var(--ul-hover-bg);
         color: var(--primary-color);
     }
 }
@@ -985,9 +981,9 @@ img.leaflet-marker-icon.is-selected {
     align-items: center;
     gap: .5rem;
     padding: .55rem .65rem;
-    border: 1.5px solid var(--ul-grey-1a);
+    border: 1.5px solid var(--ul-surface-raised-border);
     border-radius: $radius-sm;
-    background: var(--ul-grey-0);
+    background: var(--ul-surface-raised);
     font-size: .88rem;
     color: var(--ul-grey-9);
 
@@ -1057,10 +1053,10 @@ img.leaflet-marker-icon.is-selected {
     display: flex;
     flex-direction: column;
     gap: .4rem;
-    border: 1px solid var(--ul-grey-1a);
+    border: 1px solid var(--ul-surface-raised-border);
     border-radius: $radius-sm;
     padding: .5rem .65rem .5rem;
-    background: var(--ul-grey-0);
+    background: var(--ul-surface-raised);
     transition: border-color .15s;
 
     &:focus-within {
@@ -1072,7 +1068,7 @@ img.leaflet-marker-icon.is-selected {
     &:focus {
         border-color: var(--ul-grey-2);
         color: var(--ul-grey-8);
-        background-color: var(--ul-grey-0b);
+        background-color: var(--ul-hover-bg);
     }
 }
 
@@ -1137,9 +1133,7 @@ img.leaflet-marker-icon.is-selected {
     left: -0.65rem;
     right: -0.65rem;
     z-index: 600;
-    background: var(--ul-grey-0);
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: $radius-md;
+    @include surface($radius: $radius-md, $rung: null);
     box-shadow: $shadow-dialog;
     max-height: 260px;
     overflow-y: auto;
@@ -1168,7 +1162,7 @@ img.leaflet-marker-icon.is-selected {
 
     &:hover,
     &:focus {
-        background: var(--ul-grey-0a);
+        background: var(--ul-hover-bg);
         outline: none;
     }
 
@@ -1198,7 +1192,7 @@ img.leaflet-marker-icon.is-selected {
     }
 
     &.apdlg-label-sugg-create {
-        border-top: 1px solid var(--ul-grey-1a);
+        border-top: 1px solid var(--ul-surface-border);
         color: var(--ul-grey-6);
         font-style: italic;
         font-size: .82rem;
@@ -1215,9 +1209,9 @@ img.leaflet-marker-icon.is-selected {
 // -- Privacy row -------------------------------------------------------------
 
 .apdlg-customize {
-    border: 1px solid var(--ul-grey-1a);
+    border: 1px solid var(--ul-surface-raised-border);
     border-radius: $radius-sm;
-    background: var(--ul-grey-0);
+    background: var(--ul-surface-raised);
 
     &[open] .apdlg-customize-arrow {
         transform: rotate(180deg);
@@ -1263,7 +1257,7 @@ img.leaflet-marker-icon.is-selected {
     flex-direction: column;
     gap: .85rem;
     padding: 0 .65rem .75rem;
-    border-top: 1px solid var(--ul-grey-1a);
+    border-top: 1px solid var(--ul-surface-raised-border);
 }
 
 .apdlg-customize-hint {
@@ -1316,7 +1310,7 @@ img.leaflet-marker-icon.is-selected {
     align-items: center;
     gap: .6rem;
     padding: .85rem 1.25rem;
-    border-top: 1px solid var(--ul-grey-1a);
+    border-top: 1px solid var(--ul-surface-border);
     flex-shrink: 0;
 }
 
@@ -1325,9 +1319,7 @@ img.leaflet-marker-icon.is-selected {
 .map-context-menu {
     position: fixed;
     z-index: 10000;
-    background: var(--ul-grey-0);
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: 8px;
+    @include surface($radius: 8px, $rung: null);
     box-shadow: 0 4px 20px rgba(0, 0, 0, .18), 0 1px 4px rgba(0, 0, 0, .12);
     min-width: 150px;
     overflow: hidden;
@@ -1354,7 +1346,7 @@ img.leaflet-marker-icon.is-selected {
         }
 
         &:hover {
-            background: var(--ul-grey-0);
+            background: var(--ul-hover-bg);
             color: $color-indigo-700;
 
             .material-symbols-outlined,
@@ -1391,7 +1383,7 @@ img.leaflet-marker-icon.is-selected {
         padding: 0.5rem 1rem;
         color: var(--ul-grey-9);
         border-bottom: 1px solid var(--ul-grey-3);
-        background: var(--ul-grey-1);
+        background: var(--ul-surface-border);
         margin-bottom: 0.5rem;
     }
 }
@@ -1696,8 +1688,8 @@ img.leaflet-marker-icon.is-selected {
     justify-content: center;
     width: 22px;
     height: 56px;
-    background: var(--ul-grey-0);
-    border: 1px solid var(--ul-grey-1a);
+    background: var(--ul-surface-1);
+    border: 1px solid var(--ul-surface-1-border);
     border-left: none;
     border-radius: 0 10px 10px 0;
     box-shadow: 2px 0 8px rgba(0, 0, 0, .12);
@@ -1712,7 +1704,7 @@ img.leaflet-marker-icon.is-selected {
     }
 
     &:hover {
-        background: var(--ul-grey-1);
+        background: var(--ul-hover-bg);
         color: var(--ul-grey-9);
     }
 
@@ -2554,9 +2546,7 @@ div.container .addr-search-bar {
 
 .addr-no-results-card {
     pointer-events: auto;
-    background: var(--ul-grey-0);
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: 12px;
+    @include surface($radius: 12px, $rung: null);
     box-shadow: 0 8px 32px rgba(0,0,0,.22);
     padding: 18px 24px 16px;
     max-width: min(340px, 90vw);
@@ -3898,9 +3888,7 @@ div.container .addr-search-bar {
     position: absolute;
     left: 0;
     bottom: calc(100% + 8px);
-    background: var(--ul-grey-0);
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: 10px;
+    @include surface($radius: 10px, $rung: null);
     box-shadow: 0 4px 20px rgba(0, 0, 0, .22);
     padding: 5px;
     display: grid;
@@ -3991,7 +3979,7 @@ div.container .addr-search-bar {
         max-height: clamp(70px, 24cqmin, 112px);
     }
 
-    &:hover { background: var(--ul-grey-1); color: var(--ul-grey-9); }
+    &:hover { background: var(--ul-hover-bg); color: var(--ul-grey-9); }
 
     &.active {
         background: rgba($color-blue-500, .1);
@@ -4011,7 +3999,7 @@ div.container .addr-search-bar {
     border-radius: 5px;
     overflow: hidden;
     flex-shrink: 0;
-    background: var(--ul-grey-2);
+    background: var(--ul-surface-border);
 
     @include up($breakpoint-xs) {
         width: clamp(30px, 14cqmin, 54px);

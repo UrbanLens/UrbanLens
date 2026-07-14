@@ -41,9 +41,7 @@ $memories-type-colors: (
 }
 
 .memories-stat-tile {
-    background: var(--ul-grey-0);
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: .75rem;
+    @include surface($radius: .75rem);
     padding: 1rem 1.1rem;
     display: flex;
     align-items: center;
@@ -148,8 +146,8 @@ $memories-type-colors: (
     input[type="date"] {
         padding: .35rem .5rem;
         border-radius: .4rem;
-        border: 1px solid var(--ul-grey-1a);
-        background: var(--ul-grey-0);
+        border: 1px solid var(--ul-surface-raised-border);
+        background: var(--ul-surface-raised);
         color: var(--ul-grey-8);
     }
 }
@@ -273,9 +271,7 @@ $memories-type-colors: (
 .memories-card {
     display: flex;
     gap: .75rem;
-    background: var(--ul-grey-0);
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: .65rem;
+    @include surface($radius: .65rem);
     padding: .75rem;
     text-decoration: none;
     color: inherit;
@@ -352,9 +348,7 @@ $memories-type-colors: (
     margin: 5rem auto;
     padding: 3rem 2rem;
     text-align: center;
-    background: var(--ul-grey-0);
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: 1rem;
+    @include surface($radius: 1rem);
 
     h2 {
         margin: 0 0 .75rem;
@@ -402,7 +396,7 @@ $memories-type-colors: (
     margin-bottom: 1.5rem;
     border: 2px dashed var(--ul-grey-2);
     border-radius: .9rem;
-    background: var(--ul-grey-0);
+    background: var(--ul-surface-1);
     color: var(--ul-grey-7);
     cursor: pointer;
     transition: border-color .15s ease, background .15s ease;
@@ -472,9 +466,7 @@ $memories-type-colors: (
     align-items: center;
     gap: .5rem;
     padding: .9rem 1rem;
-    border-radius: .75rem;
-    background: var(--ul-grey-0);
-    border: 1px solid var(--ul-grey-1a);
+    @include surface($radius: .75rem);
     color: var(--ul-grey-7);
     font-size: .9rem;
     margin: 0;
@@ -490,16 +482,14 @@ $memories-type-colors: (
     scroll-snap-align: start;
     display: flex;
     flex-direction: column;
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: .85rem;
+    @include surface($radius: .85rem);
     overflow: hidden;
-    background: var(--ul-grey-0);
 }
 
 .photo-card-thumb {
     display: block;
     aspect-ratio: 16 / 10;
-    background: var(--ul-grey-1a);
+    background: var(--ul-surface-raised);
 
     img { width: 100%; height: 100%; object-fit: cover; display: block; }
 }
@@ -559,10 +549,10 @@ $memories-type-colors: (
 .photo-pin-search-input {
     width: 100%;
     padding: .45rem .6rem;
-    border: 1px solid var(--ul-grey-2);
+    border: 1px solid var(--ul-surface-raised-border);
     border-radius: .5rem;
     font-size: .85rem;
-    background: var(--ul-grey-0);
+    background: var(--ul-surface-raised);
     color: var(--ul-grey-8);
 }
 
@@ -582,7 +572,7 @@ $memories-type-colors: (
     width: 100%;
     text-align: left;
     padding: .45rem .55rem;
-    border: 1px solid var(--ul-grey-1a);
+    border: 1px solid var(--ul-surface-raised-border);
     border-radius: .5rem;
     background: transparent;
     cursor: pointer;
@@ -629,7 +619,7 @@ $memories-type-colors: (
     width: 100%;
     border-radius: .6rem;
     overflow: hidden;
-    border: 1px solid var(--ul-grey-1a);
+    border: 1px solid var(--ul-surface-raised-border);
 }
 
 // Leaflet popup shown when the user clicks one of their own pins plotted on
@@ -650,10 +640,10 @@ $memories-type-colors: (
 
     input[type="text"] {
         padding: .5rem .6rem;
-        border: 1px solid var(--ul-grey-2);
+        border: 1px solid var(--ul-surface-raised-border);
         border-radius: .5rem;
         font-size: .9rem;
-        background: var(--ul-grey-0);
+        background: var(--ul-surface-raised);
         color: var(--ul-grey-8);
     }
 
@@ -749,7 +739,7 @@ $memories-type-colors: (
     color: var(--ul-grey-6);
     border: 1px dashed var(--ul-grey-2);
     border-radius: .9rem;
-    background: var(--ul-grey-1b);
+    background: var(--ul-surface-1);
 
     .material-symbols-outlined { font-size: 2.4rem; opacity: .6; }
     p { margin: .5rem 0 0; }
@@ -766,9 +756,7 @@ $memories-type-colors: (
     align-items: center;
     gap: .5rem;
     padding: .9rem 1rem;
-    border-radius: .75rem;
-    background: var(--ul-grey-0);
-    border: 1px solid var(--ul-grey-1a);
+    @include surface($radius: .75rem);
     color: var(--ul-grey-7);
     font-size: .9rem;
 
@@ -795,9 +783,7 @@ $memories-type-colors: (
     display: flex;
     gap: .65rem;
     padding: .85rem;
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: .85rem;
-    background: var(--ul-grey-0);
+    @include surface($radius: .85rem);
 }
 
 .unlogged-card-dismiss {
@@ -818,7 +804,7 @@ $memories-type-colors: (
 
     .material-symbols-outlined { font-size: 1.1rem; }
 
-    &:hover { background: var(--ul-grey-1a); color: var(--ul-grey-8); }
+    &:hover { background: var(--ul-hover-bg); color: var(--ul-grey-8); }
 }
 
 .unlogged-card-icon {
@@ -883,10 +869,10 @@ $memories-type-colors: (
         flex: 1 1 8rem;
         min-width: 0;
         padding: .35rem .5rem;
-        border: 1px solid var(--ul-grey-2);
+        border: 1px solid var(--ul-surface-raised-border);
         border-radius: .5rem;
         font-size: .82rem;
-        background: var(--ul-grey-0);
+        background: var(--ul-surface-raised);
         color: var(--ul-grey-8);
     }
 }
@@ -909,9 +895,7 @@ $memories-type-colors: (
     gap: .75rem;
     margin-bottom: 1.5rem;
     padding: .8rem 1rem;
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: .75rem;
-    background: var(--ul-grey-0);
+    @include surface($radius: .75rem);
     text-decoration: none;
     transition: box-shadow .15s ease, border-color .15s ease;
 
@@ -1095,9 +1079,7 @@ $memories-type-colors: (
 }
 
 .memories-map-card {
-    background: var(--ul-grey-0);
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: 12px;
+    @include surface;
     overflow: hidden;
     display: flex;
     flex-direction: column;

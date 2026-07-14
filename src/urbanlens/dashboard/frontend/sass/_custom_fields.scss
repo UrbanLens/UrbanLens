@@ -1,6 +1,8 @@
 // Custom fields: Settings > Customize panel, pin detail card, profile
 // annotation block, map filter inputs, and the lightbox value strips.
 
+@use 'variables' as *;
+
 // -- Shared inputs ------------------------------------------------------------
 
 .cf-input {
@@ -58,9 +60,7 @@
 }
 
 .cf-group {
-  background: var(--ul-grey-1);
-  border: 1px solid var(--ul-border);
-  border-radius: 10px;
+  @include surface($radius: 10px);
   padding: 1rem 1.1rem;
   display: flex;
   flex-direction: column;

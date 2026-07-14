@@ -4,9 +4,7 @@
 // -- Pin list membership panel (on pin detail page) ---------------------------
 
 .pinlist-panel {
-    background: var(--ul-grey-0);
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: $radius-md;
+    @include surface;
     overflow: hidden;
 }
 
@@ -15,8 +13,7 @@
     align-items: center;
     gap: 8px;
     padding: 0.75rem 1rem;
-    background: var(--ul-grey-1);
-    border-bottom: 1px solid var(--ul-grey-1a);
+    background: var(--ul-surface-border);
     font-weight: 600;
     font-size: 0.9rem;
     color: var(--ul-grey-8);
@@ -38,7 +35,7 @@
     align-items: center;
     gap: 10px;
     padding: 0.6rem 1rem;
-    border-bottom: 1px solid var(--ul-grey-1a);
+    border-bottom: 1px solid var(--ul-surface-border);
     transition: background 0.1s;
 
     &:last-child {
@@ -50,7 +47,7 @@
     }
 
     &.is-member {
-        background: var(--ul-grey-0);
+        background: var(--ul-hover-bg-primary);
     }
 }
 
@@ -58,7 +55,7 @@
     width: 28px;
     height: 28px;
     border-radius: 50%;
-    background: var(--ul-grey-0);
+    background: var(--ul-surface-raised);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -131,8 +128,7 @@
     font-size: 0.8rem;
     color: var(--ul-grey-6);
     text-decoration: none;
-    border-top: 1px solid var(--ul-grey-1a);
-    background: var(--ul-grey-1);
+    background: var(--ul-surface-border);
     transition: color 0.12s;
 
     i {
@@ -171,9 +167,7 @@
 
 // Create card (inline panel on legacy tag/category pages)
 .tag-create-card {
-    background: var(--ul-grey-0);
-    border: 1px solid var(--ul-grey-0b);
-    border-radius: $radius-md;
+    @include surface;
     padding: 1.5rem;
     margin-bottom: 1.5rem;
 }
@@ -226,12 +220,12 @@ dialog.tag-create-card.ul-dialog {
     height: 44px;
     flex-shrink: 0;
     border-radius: 50%;
-    border: 2px solid var(--ul-grey-1a);
+    border: 2px solid var(--ul-surface-raised-border);
     display: flex;
     align-items: center;
     justify-content: center;
     overflow: hidden;
-    background: var(--ul-grey-0);
+    background: var(--ul-surface-raised);
 
     .tag-icon-std {
         color: var(--primary-color);
@@ -306,7 +300,7 @@ dialog.tag-create-card.ul-dialog {
     background: var(--ul-grey-4);
     border-radius: 999px;
     padding: 2px 7px 2px 5px;
-    border: 1px solid var(--ul-grey-1a);
+    border: 1px solid var(--ul-surface-raised-border);
 
     i {
         font-size: 0.82rem;
@@ -352,7 +346,7 @@ dialog.tag-create-card.ul-dialog {
     font-size: 0.7rem;
     font-weight: 500;
     color: $text-muted;
-    background: var(--ul-grey-0);
+    background: var(--ul-surface-raised);
     border-radius: 4px;
     padding: 1px 5px;
 
@@ -395,9 +389,7 @@ dialog.tag-create-card.ul-dialog {
     align-items: center;
     gap: 1rem;
     padding: 0.9rem 1rem;
-    background: var(--ul-grey-2a);
-    border-radius: $radius-md;
-    border: 1px solid var(--ul-grey-1a);
+    @include surface;
 
     .tag-card-actions {
         display: flex;
@@ -421,7 +413,7 @@ dialog.tag-create-card.ul-dialog {
     width: 22px;
     height: 22px;
     border-radius: 50%;
-    background: var(--ul-grey-1a);
+    background: var(--ul-surface-raised);
     color: var(--ul-grey-6);
     font-size: 0.7rem;
     font-weight: 700;
@@ -575,8 +567,8 @@ dialog.tag-create-card.ul-dialog {
     gap: 1px;
     padding: 2px 8px 2px 5px;
     border-radius: 20px;
-    border: 1px solid var(--ul-grey-1a);
-    background: var(--ul-grey-0);
+    border: 1px solid var(--ul-surface-raised-border);
+    background: var(--ul-surface-raised);
     font-size: .76rem;
     font-weight: 600;
     color: var(--ul-grey-6);
@@ -598,9 +590,7 @@ dialog.tag-create-card.ul-dialog {
     top: calc(100% + 4px);
     right: 0;
     z-index: 500;
-    background: var(--ul-grey-0);
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: $radius-md;
+    @include surface($rung: null);
     box-shadow: $shadow-dialog;
     width: 22em;
     max-width: calc(100vw - 24px);
@@ -666,7 +656,7 @@ dialog.tag-create-card.ul-dialog {
         opacity: 1;
         margin-top: .5rem;
         border-color: var(--ul-grey-3a);
-        background: var(--ul-grey-0a);
+        background: var(--ul-surface-raised);
     }
 
     &.is-active:hover {
@@ -810,8 +800,8 @@ dialog.tag-create-card.ul-dialog {
     display: flex;
     align-items: center;
     gap: .75rem;
-    background: var(--ul-grey-1);
-    border: 1px solid var(--ul-grey-1a);
+    background: var(--ul-surface-raised);
+    border: 1px solid var(--ul-surface-raised-border);
     border-radius: $radius-sm;
     padding: .75rem 1rem;
     margin-bottom: 1rem;
@@ -846,7 +836,7 @@ dialog.tag-create-card.ul-dialog {
 .tag-merge-warning {
     font-size: .82rem;
     color: var(--ul-accent-amber-fg);
-    background: var(--ul-grey-0);
+    background: var(--ul-surface-raised);
     border: 1px solid var(--ul-accent-amber-bg);
     border-radius: $radius-sm;
     padding: .5rem .75rem;
@@ -864,9 +854,7 @@ dialog.tag-create-card.ul-dialog {
 // -- Tag membership panel (on pin detail page) ---------------------------------
 
 .tag-panel {
-    background: var(--ul-grey-0);
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: $radius-md;
+    @include surface;
     overflow: hidden;
 }
 
@@ -886,8 +874,7 @@ dialog.tag-create-card.ul-dialog {
     padding: 0.75rem 1rem;
     font-weight: 600;
     font-size: 0.9rem;
-    border-bottom: 1px solid var(--ul-grey-1a);
-    background: var(--ul-grey-1);
+    background: var(--ul-surface-border);
 
     i {
         color: var(--primary-color);
@@ -905,7 +892,7 @@ dialog.tag-create-card.ul-dialog {
     align-items: center;
     gap: 0.6rem;
     padding: 0.5rem 1rem;
-    border-bottom: 1px solid var(--ul-grey-1a);
+    border-bottom: 1px solid var(--ul-surface-border);
 
     &:last-child {
         border-bottom: none;
@@ -991,8 +978,7 @@ dialog.tag-create-card.ul-dialog {
     font-size: 0.8rem;
     color: var(--ul-grey-6);
     text-decoration: none;
-    border-top: 1px solid var(--ul-grey-1a);
-    background: var(--ul-grey-1);
+    background: var(--ul-surface-border);
     transition: color 0.12s;
 
     i {
@@ -1009,7 +995,7 @@ dialog.tag-create-card.ul-dialog {
 .import-tag-section {
     margin-top: 1rem;
     padding-top: 1rem;
-    border-top: 1px solid var(--ul-grey-1a);
+    border-top: 1px solid var(--ul-surface-border);
 }
 
 .import-tag-grid {
@@ -1024,8 +1010,8 @@ dialog.tag-create-card.ul-dialog {
     gap: 5px;
     padding: 4px 10px;
     border-radius: 20px;
-    border: 2px solid var(--ul-grey-1a);
-    background: var(--ul-grey-1);
+    border: 2px solid var(--ul-surface-raised-border);
+    background: var(--ul-surface-raised);
     font-size: 0.82rem;
     cursor: pointer;
     transition: border-color 0.12s, background 0.12s;
@@ -1091,7 +1077,7 @@ dialog.tag-create-card.ul-dialog {
 // SortableJS ghost state
 .tag-card--ghost {
     opacity: 0.4;
-    background: var(--ul-grey-0);
+    background: var(--ul-surface-raised);
     border-color: var(--primary-color);
 }
 
@@ -1230,7 +1216,7 @@ dialog.tag-create-card.ul-dialog {
         height: 18px;
         border: 2px solid var(--ul-grey-3);
         border-radius: 4px;
-        background: var(--ul-grey-0);
+        background: var(--ul-surface-raised);
         flex-shrink: 0;
         display: flex;
         align-items: center;
@@ -1283,11 +1269,8 @@ dialog.tag-create-card.ul-dialog {
     justify-content: space-between;
     gap: 1rem;
     padding: .55rem .75rem;
-    border-radius: $radius-md;
-    border: 1px solid transparent;
     margin-bottom: 1rem;
-    background: var(--ul-grey-1);
-    border-color: var(--ul-grey-1a);
+    @include surface($radius: $radius-md);
     transition: background .18s, border-color .18s;
 
     &.cat-sel-bar--active {
@@ -1322,8 +1305,8 @@ dialog.tag-create-card.ul-dialog {
     align-items: center;
     gap: .3rem;
     padding: .4rem .8rem;
-    background: var(--ul-grey-0);
-    border: 1px solid var(--ul-grey-1a);
+    background: var(--ul-surface-raised);
+    border: 1px solid var(--ul-surface-raised-border);
     border-radius: $radius-sm;
     font-size: .825rem;
     font-weight: 500;
@@ -1362,7 +1345,7 @@ dialog.tag-create-card.ul-dialog {
 
 .cat-sel-edit-btn {
     &:hover:not(:disabled) {
-        background: var(--ul-grey-0);
+        background: var(--ul-hover-bg);
         border-color: var(--primary-color);
         color: var(--primary-color);
     }
@@ -1373,7 +1356,7 @@ dialog.tag-create-card.ul-dialog {
     color: $color-red-600;
 
     &:hover:not(:disabled) {
-        background: var(--ul-grey-0);
+        background: var(--ul-hover-bg);
         border-color: $color-red-600;
         color: $color-red-700;
     }
@@ -1434,7 +1417,7 @@ dialog.tag-create-card.ul-dialog {
         content: '';
         flex: 1;
         height: 1px;
-        background: var(--ul-grey-1a);
+        background: var(--ul-surface-border);
     }
 
     i {
@@ -1455,8 +1438,8 @@ dialog.tag-create-card.ul-dialog {
     align-items: center;
     gap: .75rem;
     padding: .6rem .75rem;
-    background: var(--ul-grey-0);
-    border: 1px solid var(--ul-grey-1a);
+    background: var(--ul-surface-raised);
+    border: 1px solid var(--ul-surface-raised-border);
     border-radius: $radius-sm;
     transition: border-color .12s;
 
@@ -1562,8 +1545,8 @@ dialog.tag-create-card.ul-dialog {
     flex-direction: column;
     gap: .6rem;
     padding: .75rem;
-    background: var(--ul-grey-1);
-    border: 1px solid var(--ul-grey-1a);
+    background: var(--ul-surface-raised);
+    border: 1px solid var(--ul-surface-raised-border);
     border-radius: $radius-sm;
 
     .form-input {
@@ -1904,9 +1887,7 @@ dialog.tag-create-card.ul-dialog {
     display: flex;
     align-items: center;
     gap: .75rem;
-    background: var(--ul-grey-0);
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: $radius-md;
+    @include surface;
     padding: .6rem .85rem;
     cursor: pointer;
     transition: box-shadow .15s ease, background .12s, border-color .15s ease;
@@ -1918,7 +1899,6 @@ dialog.tag-create-card.ul-dialog {
 
     &.priority-item--ghost {
         opacity: .4;
-        background: var(--ul-grey-0);
         border-color: var(--primary-color);
     }
 }
@@ -2087,7 +2067,7 @@ dialog.tag-create-card.ul-dialog {
     color: var(--ul-grey-8);
     -webkit-text-fill-color: var(--ul-grey-8);
     caret-color: var(--ul-grey-8);
-    background: var(--ul-grey-0);
+    background: var(--ul-surface-raised);
     border: 0 solid var(--ul-color-accent);
     border-radius: 20px;
     box-shadow: none;
@@ -2262,12 +2242,12 @@ dialog.tag-create-card.ul-dialog {
             align-items: center;
             gap: .35rem;
             padding: .45rem 1rem;
-            border: 2px solid var(--ul-grey-1a);
+            border: 2px solid var(--ul-surface-raised-border);
             border-radius: $radius-sm;
             font-size: .875rem;
             font-weight: 500;
             color: var(--ul-grey-7);
-            background: var(--ul-grey-1);
+            background: var(--ul-surface-raised);
             transition: border-color .13s, background .13s, color .13s;
             height: 2.5em;
             white-space: nowrap;
@@ -2329,9 +2309,7 @@ dialog.tag-create-card.ul-dialog {
     display: flex;
     align-items: center;
     gap: .75rem;
-    background: var(--ul-grey-0a);
-    border: 1px solid var(--ul-grey-0b);
-    border-radius: $radius-md;
+    @include surface;
     padding: .6rem .85rem;
     transition: box-shadow .12s;
 
@@ -2350,7 +2328,7 @@ dialog.tag-create-card.ul-dialog {
     height: 36px;
     border-radius: $radius-sm;
     background: var(--ul-grey-4);
-    border: 1px solid var(--ul-grey-1a);
+    border: 1px solid var(--ul-surface-raised-border);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -2482,8 +2460,7 @@ dialog.tag-create-card.ul-dialog {
         align-items: flex-start;
         gap: 10px;
         padding: 14px 16px 16px;
-        background: var(--ul-grey-1);
-        border: 1px solid var(--ul-grey-1a);
+        @include surface;
         border-top: none;
         border-radius: 0 0 12px 12px;
         margin-bottom: 1rem;
@@ -2514,7 +2491,7 @@ dialog.tag-create-card.ul-dialog {
         .material-icons { font-size: 18px; }
 
         &:hover {
-            background: var(--ul-grey-1a);
+            background: var(--ul-hover-bg);
             color: var(--ul-grey-8);
         }
     }
@@ -2523,10 +2500,10 @@ dialog.tag-create-card.ul-dialog {
         flex: 1 1 220px;
         min-width: 180px;
         padding: 7px 12px 7px 36px;
-        border: 1.5px solid var(--ul-grey-1a);
+        border: 1.5px solid var(--ul-surface-raised-border);
         border-radius: 999px;
         font-size: .82rem;
-        background: var(--ul-grey-0);
+        background: var(--ul-surface-raised);
         color: inherit;
         outline: none;
         background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E");
@@ -2554,8 +2531,8 @@ dialog.tag-create-card.ul-dialog {
         gap: 4px;
         padding: 5px 11px;
         border-radius: 999px;
-        background: var(--ul-grey-0);
-        border: 1.5px solid var(--ul-grey-1a);
+        background: var(--ul-surface-raised);
+        border: 1.5px solid var(--ul-surface-raised-border);
         font-size: .75rem;
         font-weight: 500;
         cursor: pointer;
@@ -2594,8 +2571,8 @@ dialog.tag-create-card.ul-dialog {
         gap: 5px;
         align-items: center;
         padding: 4px 6px;
-        background: var(--ul-grey-0, #fff);
-        border: 1.5px solid var(--ul-grey-1a);
+        background: var(--ul-surface-raised);
+        border: 1.5px solid var(--ul-surface-raised-border);
         border-radius: 10px;
     }
 
@@ -2628,8 +2605,8 @@ dialog.tag-create-card.ul-dialog {
         cursor: pointer;
         padding: 5px 9px;
         border-radius: 999px;
-        border: 1.5px solid var(--ul-grey-1a);
-        background: var(--ul-grey-0);
+        border: 1.5px solid var(--ul-surface-raised-border);
+        background: var(--ul-surface-raised);
         transition: color .12s, border-color .12s, background .12s;
         white-space: nowrap;
 
@@ -2695,8 +2672,8 @@ dialog.tag-create-card.ul-dialog {
     width: 34px;
     height: 34px;
     border-radius: $radius-sm;
-    border: 1px solid var(--ul-grey-1a);
-    background: var(--ul-grey-0, #fff);
+    border: 1px solid var(--ul-surface-raised-border);
+    background: var(--ul-surface-raised);
     cursor: pointer;
     color: var(--ul-grey-6);
     transition: background .12s, border-color .12s, color .12s;
@@ -2981,8 +2958,4 @@ dialog.tag-create-card.ul-dialog {
     }
 }
 
-[data-theme="dark"] {
-    .tag-card-view {
-        background: var(--ul-grey-1b);
-    }
-}
+

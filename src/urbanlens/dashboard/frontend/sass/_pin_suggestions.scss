@@ -113,9 +113,7 @@
     position: relative;
     display: flex;
     gap: $space-sm;
-    background: var(--ul-grey-0a);
-    border: 1px solid var(--ul-border);
-    border-radius: $radius-md;
+    @include surface;
     padding: $space-md;
     box-shadow: var(--ul-shadow-sm);
     transition: border-color .15s ease, box-shadow .15s ease;

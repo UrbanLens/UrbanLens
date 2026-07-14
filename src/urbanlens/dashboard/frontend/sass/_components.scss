@@ -21,7 +21,7 @@
 
 .ul-card-header {
 	@include panel-header;
-	background-color: var(--ul-grey-1a);
+	background-color: var(--ul-surface-border);
 	color: var(--ul-grey-8);
 
 	.material-symbols-outlined,
@@ -44,8 +44,7 @@
 
 .ul-card-footer {
 	padding: $bar-padding-y $bar-padding-x;
-	border-top: 1px solid var(--ul-grey-1a);
-	background: var(--ul-grey-1a);
+	background: var(--ul-surface-border);
 }
 
 // -- Global dialog utility classes ---------------------------------------------
@@ -61,7 +60,7 @@
 	font-weight: 600;
 	font-size: .95rem;
 	flex-shrink: 0;
-	border-bottom: 1px solid var(--ul-grey-2b);
+	border-bottom: 1px solid var(--ul-surface-border);
 }
 
 .dialog-footer {
@@ -119,7 +118,7 @@
 
 	// Tinted header background is specific to the .ul-dialog shell.
 	.dialog-header {
-		background-color: var(--ul-grey-1a);
+		background-color: var(--ul-surface-border);
 	}
 
 	.settings-toggle-label
@@ -195,8 +194,7 @@
 	align-items: center;
 	gap: $space-sm;
 	padding: .6rem $space-md;
-	border-top: 1px solid var(--ul-grey-1a);
-	background: var(--ul-grey-1a);
+	background: var(--ul-surface-border);
 	font-size: .82rem;
 	color: var(--ul-grey-7);
 	text-decoration: none;
