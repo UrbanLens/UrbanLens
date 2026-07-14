@@ -17,9 +17,6 @@
     {# Standalone CSRF token for the check-in delete button's fetch() below - no form on this page needs one otherwise. #}
     {% csrf_token %}
 
-
-    {% include "dashboard/partials/ui/_page_explainer.html" with explainer_id="safety-explainer" kicker="How it works" heading="Pick a check-in time before you go - we'll alert your contacts if you miss it." body="Create a check-in with an expected return time and a grace period. If you haven't checked in by then, your emergency contacts are sent your plan details and last known location." %}
-
     <div class="safety-toolbar">
         {% if active_checkin %}
         <a href="{% url 'safety.checkin.detail' active_checkin.slug|default:active_checkin.uuid %}" class="btn btn--ghost" title="You already have an active check-in - only one may be active at a time">
@@ -33,6 +30,8 @@
         </a>
         {% endif %}
     </div>
+
+    {% include "dashboard/partials/ui/_page_explainer.html" with explainer_id="safety-explainer" kicker="How it works" heading="Pick a check-in time before you go - we'll alert your contacts if you miss it." body="Create a check-in with an expected return time and a grace period. If you haven't checked in by then, your emergency contacts are sent your plan details and last known location." %}
 
     {# -- Stat tiles (shared tile styling with the trips overview page) ---------- #}
     <div class="trips-stat-grid">
