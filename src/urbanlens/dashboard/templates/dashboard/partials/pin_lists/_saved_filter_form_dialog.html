@@ -15,6 +15,14 @@
                    value="{{ saved_filter.name|default:'' }}" placeholder="e.g. Unvisited 4-star spots" autocomplete="off">
         </div>
         <div class="form-row">
+            <label>Icon</label>
+            <div class="icon-picker-wrap">
+                {% with picker_id=saved_filter.uuid|default:"new" field_name="icon" show_upload=False %}
+                {% include "dashboard/partials/ui/_icon_picker.html" %}
+                {% endwith %}
+            </div>
+        </div>
+        <div class="form-row">
             <label for="saved-filter-name-contains">Pin name contains</label>
             <input type="text" name="name" id="saved-filter-name-contains" maxlength="150" autocomplete="off"
                    value="{{ criteria.name|default:'' }}">

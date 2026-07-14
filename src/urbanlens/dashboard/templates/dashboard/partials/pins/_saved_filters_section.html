@@ -11,7 +11,13 @@
                 {% for filter in saved_filters %}
                 <div class="fp-saved-filter-chip">
                     <button type="button" class="fp-saved-filter-apply" data-criteria="{{ filter.criteria_json }}" onclick="applySavedFilter(this)">
+                        {% if filter.icon|is_material_icon %}
+                        <i class="material-symbols-outlined">{{ filter.icon }}</i>
+                        {% elif filter.icon %}
+                        <span>{{ filter.icon }}</span>
+                        {% else %}
                         <i class="material-symbols-outlined">bookmark</i>
+                        {% endif %}
                         <span>{{ filter.name }}</span>
                     </button>
                     <button type="button" class="fp-saved-filter-delete" aria-label="Delete saved filter"

@@ -25,6 +25,7 @@ class SavedFilter(abstract.FrontendDashboardModel):
 
     profile = ForeignKey("dashboard.Profile", on_delete=CASCADE, related_name="saved_filters")
     name = CharField(max_length=100)
+    icon = CharField(max_length=64, blank=True, default="bookmark")
     criteria = JSONField(default=dict)
     order = IntegerField(default=0)
 

@@ -11,6 +11,7 @@ from django.shortcuts import get_object_or_404, render
 from django.views import View
 
 from urbanlens.dashboard.forms.search import SearchForm
+from urbanlens.dashboard.models.labels.meta import ICON_CATEGORIES
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.saved_filter.model import SavedFilter
 from urbanlens.dashboard.services.filter_criteria import deserialize_criteria, serialize_form_criteria
@@ -20,12 +21,23 @@ if TYPE_CHECKING:
     from django.contrib.gis.geos import MultiPolygon
 
 _SECTION_TEMPLATE = "dashboard/partials/pins/_saved_filters_section.html"
+_TOOLBAR_TEMPLATE = "dashboard/partials/map/_saved_filters_toolbar.html"
 _FORM_DIALOG_TEMPLATE = "dashboard/partials/pin_lists/_saved_filter_form_dialog.html"
 
 
 def _render_section(request, profile: Profile) -> HttpResponse:
+    """Re-render the sidebar's Saved Filters section plus an OOB update of the map's toolbar.
+
+    The bottom-right saved-filters toolbar (main map page only) mirrors the
+    same ``profile.saved_filters`` list, so every create/delete response also
+    carries an out-of-band swap of it - if the toolbar isn't in the DOM (any
+    page other than the map), the extra ``hx-swap-oob`` fragment is simply
+    ignored by htmx.
+    """
     saved_filters = list(profile.saved_filters.all())
-    return render(request, _SECTION_TEMPLATE, {"saved_filters": saved_filters})
+    section_html = render(request, _SECTION_TEMPLATE, {"saved_filters": saved_filters}).content.decode()
+    toolbar_html = render(request, _TOOLBAR_TEMPLATE, {"saved_filters": saved_filters, "oob": True}).content.decode()
+    return HttpResponse(section_html + toolbar_html)
 
 
 def _dissolve_regions(search_form: SearchForm) -> dict[str, MultiPolygon | None]:
@@ -85,7 +97,8 @@ class SavedFilterCreateView(LoginRequiredMixin, View):
         if not criteria:
             return HttpResponse("No active filters to save.", status=400)
 
-        SavedFilter.objects.create(profile=profile, name=name, criteria=criteria, order=profile.saved_filters.count())
+        icon = (request.POST.get("icon") or "bookmark").strip()
+        SavedFilter.objects.create(profile=profile, name=name, icon=icon, criteria=criteria, order=profile.saved_filters.count())
         return _render_section(request, profile)
 
 
@@ -135,6 +148,8 @@ class SavedFilterEditView(LoginRequiredMixin, View):
                 "has_label_groups": bool(saved_filter.criteria.get("label_groups")) if saved_filter else False,
                 "selected_tag_ids": initial.get("tags", []),
                 "selected_exclude_tag_ids": initial.get("exclude_tags", []),
+                "icon_categories": ICON_CATEGORIES,
+                "current_icon": saved_filter.icon if saved_filter else "bookmark",
             },
         )
 
@@ -161,8 +176,9 @@ class SavedFilterEditView(LoginRequiredMixin, View):
             return JsonResponse({"ok": False, "error": "No active filters to save."}, status=400)
 
         saved_filter.name = name
+        saved_filter.icon = (request.POST.get("icon") or "bookmark").strip()
         saved_filter.criteria = criteria
-        saved_filter.save(update_fields=["name", "criteria", "updated"])
+        saved_filter.save(update_fields=["name", "icon", "criteria", "updated"])
         return JsonResponse({"ok": True, "uuid": str(saved_filter.uuid)})
 
 

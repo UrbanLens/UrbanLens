@@ -1,0 +1,46 @@
+{% load dashboard_tags %}
+{% comment %}
+Bottom-right saved-filters toggle toolbar (main map page only). Visually
+matches the top-right {% templatetag openblock %} map_toolbar {% templatetag closeblock %}
+(same .map-buttons background/border/radius/shadow) via the
+.map-saved-filters-toolbar modifier in _layout.scss, but stays bottom-right at
+every breakpoint and its buttons toggle independently (see toggleToolbarSavedFilter()
+in map/index.html) instead of running tools.
+
+Rendered twice: once as a normal include on the map page (no `oob`), and once
+as an out-of-band fragment from controllers/saved_filters.py's _render_section()
+after any create/delete (`oob=True`) so this toolbar and the sidebar's Saved
+Filters chips never drift out of sync. On pages without this toolbar in the
+DOM, the OOB fragment is simply ignored by htmx.
+{% endcomment %}
+{% if saved_filters %}
+<div class="map-buttons map-saved-filters-toolbar" id="map-saved-filters-toolbar"{% if oob %} hx-swap-oob="true"{% endif %}>
+    <button type="button" class="sf-toolbar-nav sf-toolbar-prev" aria-label="Previous saved filters" onclick="sfToolbarPage(-1)">
+        <i class="material-symbols-outlined">chevron_left</i>
+    </button>
+    <div class="sf-toolbar-viewport">
+        <div class="sf-toolbar-track" id="sf-toolbar-track">
+            {% for filter in saved_filters %}
+            <button type="button" class="map-btn-icon sf-toolbar-btn" id="sf-toolbar-btn-{{ filter.uuid }}"
+                    data-filter-uuid="{{ filter.uuid }}" data-criteria="{{ filter.criteria_json }}"
+                    data-tooltip="{{ filter.name }}" data-tooltip-float="true" data-tooltip-pos="above"
+                    aria-label="Toggle saved filter: {{ filter.name }}"
+                    onclick="toggleToolbarSavedFilter(this)">
+                {% if filter.icon|is_material_icon %}
+                <i class="material-symbols-outlined">{{ filter.icon }}</i>
+                {% elif filter.icon %}
+                <span class="sf-toolbar-emoji">{{ filter.icon }}</span>
+                {% else %}
+                <i class="material-symbols-outlined">bookmark</i>
+                {% endif %}
+            </button>
+            {% endfor %}
+        </div>
+    </div>
+    <button type="button" class="sf-toolbar-nav sf-toolbar-next" aria-label="Next saved filters" onclick="sfToolbarPage(1)">
+        <i class="material-symbols-outlined">chevron_right</i>
+    </button>
+</div>
+{% elif oob %}
+<div id="map-saved-filters-toolbar" hx-swap-oob="true"></div>
+{% endif %}

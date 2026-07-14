@@ -28,11 +28,13 @@ from urbanlens.dashboard.models.labels.model import (
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin import Pin, PinQuerySet
 from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.models.saved_filter.model import SavedFilter
 from urbanlens.dashboard.models.site_settings.model import SiteSettings
 from urbanlens.dashboard.services.json_safety import safe_json_for_script
 from urbanlens.dashboard.services.map_pins import MapPinCache, MapPinPayloadService
 from urbanlens.dashboard.services.pagination import get_page
 from urbanlens.dashboard.services.redact import redact_secret
+from urbanlens.dashboard.services.saved_filter_cache import get_or_compute_matching_uuids
 from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)
@@ -100,6 +102,42 @@ def _expand_state_codes(states_str: str) -> str:
         return ""
     codes = [s.strip().upper() for s in states_str.split(",") if s.strip()]
     return ", ".join(_US_STATE_CODES.get(c, c) for c in codes)
+
+
+def _apply_toolbar_filters(query: PinQuerySet, profile: Profile, raw_ids: str) -> PinQuerySet:
+    """AND-narrow ``query`` by the bottom-right toolbar's active saved filters.
+
+    Each active filter is resolved and cached independently (see
+    ``services.saved_filter_cache``), then chained onto ``query`` as a
+    ``uuid__in`` restriction - equivalent to (and just as strict as) calling
+    ``filter_by_criteria`` once per filter, but reuses a warm cache when one
+    exists instead of re-running each filter's full query.
+
+    Security: ``uuid__in=ids`` is scoped to ``profile=profile``, so a uuid
+    that doesn't belong to (or doesn't exist for) this profile simply isn't
+    in ``saved_filters`` below and is silently ignored - fuzzing another
+    user's saved-filter uuid can never pull their pins into this profile's
+    results, and there is no separate error path that would reveal whether
+    a given uuid exists at all.
+
+    Args:
+        query: Already profile-scoped pin queryset to further restrict.
+        profile: The requesting user's own profile - both the filter lookup
+            and every pin query stay scoped to this profile.
+        raw_ids: Comma-separated ``SavedFilter`` uuids from the client
+            (``toolbar_filter_ids`` form/query field), or "".
+
+    Returns:
+        ``query`` further restricted by every resolvable active filter.
+    """
+    ids = [v for v in raw_ids.split(",") if v.strip()]
+    if not ids:
+        return query
+    saved_filters = SavedFilter.objects.filter(profile=profile, uuid__in=ids)
+    for saved_filter in saved_filters:
+        matching_uuids = get_or_compute_matching_uuids(profile, saved_filter)
+        query = query.filter(uuid__in=matching_uuids)
+    return query
 
 
 class MapController(LoginRequiredMixin, GenericViewSet):
@@ -451,6 +489,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             criteria["include_regions"] = search_form.parse_region_geojson("include_regions")
             criteria["exclude_regions"] = search_form.parse_region_geojson("exclude_regions")
             query = Pin.objects.filter(profile=profile).root_pins().filter_by_criteria(criteria)
+            query = _apply_toolbar_filters(query, profile, request.POST.get("toolbar_filter_ids", ""))
             map_data = self.get_map_data(request, query)
             return render(request, "dashboard/pages/map/data.html", {"map_data": map_data})
 
@@ -490,6 +529,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             criteria["exclude_regions"] = search_form.parse_region_geojson("exclude_regions")
             query = query.filter_by_criteria(criteria)
 
+        query = _apply_toolbar_filters(query, profile, request.GET.get("toolbar_filter_ids", ""))
         query = query.order_by(Lower(Coalesce("name", "location__wiki__name", "location__official_name")))
         page_obj = get_page(request, query, _PIN_LIST_PAGE_SIZE)
         return render(

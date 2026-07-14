@@ -108,6 +108,30 @@ def generate_boundaries_for_location(location_id: int) -> bool:
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def warm_saved_filter_cache(profile_id: int) -> int:
+    """Precompute and cache a profile's saved-filter matching-pin uuid lists.
+
+    Queued right after login (see ``models.profile.signals``) so the bottom-right
+    map toolbar's first filter toggle of the session hits a warm
+    ``services.saved_filter_cache`` entry instead of a cold query.
+
+    Args:
+        profile_id: PK of the ``Profile`` to warm - never a bare user-supplied
+            uuid, so this can't be used to warm (or probe) another user's data.
+
+    Returns:
+        Number of saved filters warmed, or 0 if the profile no longer exists.
+    """
+    from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.services.saved_filter_cache import warm_all_for_profile
+
+    profile = Profile.objects.filter(pk=profile_id).first()
+    if profile is None:
+        return 0
+    return warm_all_for_profile(profile)
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def push_trip_to_calendar(trip_id: int) -> int:
     """Push a trip's current state to every calendar it is auto-synced with.
 
