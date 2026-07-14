@@ -133,6 +133,8 @@ class SavedFilterEditView(LoginRequiredMixin, View):
                 "form": search_form,
                 "custom_field_values": custom_field_values,
                 "has_label_groups": bool(saved_filter.criteria.get("label_groups")) if saved_filter else False,
+                "selected_tag_ids": initial.get("tags", []),
+                "selected_exclude_tag_ids": initial.get("exclude_tags", []),
             },
         )
 

@@ -16,8 +16,10 @@ from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
+from urbanlens.dashboard.models.pin_list.model import PinList
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.saved_filter.model import SavedFilter
 from urbanlens.dashboard.services.filter_criteria import deserialize_criteria, serialize_form_criteria
@@ -216,3 +218,74 @@ class FiltersTabViewRenderingTests(TestCase):
         """map/index.html gained hidden include/exclude region inputs - confirm the page still renders."""
         response = self.client.get(reverse("map.view"))
         self.assertEqual(response.status_code, 200)
+
+
+class SavedFilterLabelPickerTests(TestCase):
+    """The Filters-tab include/exclude label pickers reuse the shared `.tag-chip`
+    styling (see _saved_filter_label_picker.html) instead of a bespoke checkbox-pill
+    style - confirm the checked/unchecked state still round-trips correctly."""
+
+    def setUp(self) -> None:
+        self.user = baker.make(User)
+        self.client.force_login(self.user)
+        self.profile = self.user.profile
+        self.selected_label = Label.objects.create(profile=self.profile, name="Abandoned", kind="tag")
+        self.other_label = Label.objects.create(profile=self.profile, name="Active", kind="tag")
+
+    def test_new_filter_dialog_renders_all_labels_unchecked(self) -> None:
+        response = self.client.get(reverse("saved_filters.new"))
+        html = response.content.decode()
+        label_grid_html = html.split("saved-filter-label-grid", 1)[1].split("form-actions", 1)[0]
+        self.assertIn(f'value="{self.selected_label.pk}"', label_grid_html)
+        self.assertIn(f'value="{self.other_label.pk}"', label_grid_html)
+        self.assertNotIn("checked", label_grid_html)
+
+    def test_edit_filter_dialog_checks_only_the_saved_labels(self) -> None:
+        saved_filter = SavedFilter.objects.create(
+            profile=self.profile,
+            name="Abandoned spots",
+            criteria={"tags": [self.selected_label.pk]},
+        )
+        response = self.client.get(reverse("saved_filters.edit", kwargs={"filter_uuid": saved_filter.uuid}))
+        html = response.content.decode()
+        self.assertEqual(response.status_code, 200)
+
+        # The selected label's checkbox is checked; the other one's is not.
+        selected_chip = html.split(f'value="{self.selected_label.pk}"', 1)[1][:40]
+        other_chip = html.split(f'value="{self.other_label.pk}"', 1)[1][:40]
+        self.assertIn("checked", selected_chip)
+        self.assertNotIn("checked", other_chip)
+
+        # Chips reuse the shared .tag-chip component, not a bespoke checkbox-pill class.
+        self.assertIn("tag-chip tag-chip--tag tag-chip--selectable", html)
+
+
+class PinListBoundaryDrawButtonTests(TestCase):
+    """A pin list with no smart_boundary yet must expose a way to draw a first one,
+    not just a "Clear" button that only appears once a boundary already exists."""
+
+    def setUp(self) -> None:
+        self.user = baker.make(User)
+        self.client.force_login(self.user)
+        self.profile = self.user.profile
+
+    def test_no_boundary_shows_draw_button_not_clear(self) -> None:
+        pin_list = PinList.objects.create(profile=self.profile, name="No boundary yet")
+        response = self.client.get(reverse("lists.detail", kwargs={"list_uuid": pin_list.uuid}))
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode()
+        draw_btn = html.split('id="pin-list-boundary-draw-btn"', 1)[1][:80]
+        clear_btn = html.split('id="pin-list-boundary-clear-btn"', 1)[1][:80]
+        self.assertNotIn("hidden", draw_btn)
+        self.assertIn("hidden", clear_btn)
+
+    def test_existing_boundary_shows_clear_button_not_draw(self) -> None:
+        boundary = MultiPolygon(_square(-74.0, 40.0, 0.01), srid=4326)
+        pin_list = PinList.objects.create(profile=self.profile, name="Has boundary", smart_boundary=boundary)
+        response = self.client.get(reverse("lists.detail", kwargs={"list_uuid": pin_list.uuid}))
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode()
+        draw_btn = html.split('id="pin-list-boundary-draw-btn"', 1)[1][:80]
+        clear_btn = html.split('id="pin-list-boundary-clear-btn"', 1)[1][:80]
+        self.assertIn("hidden", draw_btn)
+        self.assertNotIn("hidden", clear_btn)

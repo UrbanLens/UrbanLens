@@ -24,10 +24,11 @@
             Connect Google Calendar
         </a>
         {% endif %}
-        <a href="{% url 'trips.list' %}?new=1" class="btn btn--primary">
+        <button type="button" class="btn btn--primary"
+                onclick="document.getElementById('create-trip-dialog').showModal()">
             <i class="material-symbols-outlined">add</i>
             New Trip
-        </a>
+        </button>
     </div>
 
     {# -- Stat tiles ---------------------------------------------------------- #}
@@ -114,14 +115,18 @@
         </div>
         <h2 class="trips-empty-title">No trips yet</h2>
         <p class="trips-empty-text">Create a trip to plan stops, invite friends, and track your route.</p>
-        <a href="{% url 'trips.list' %}?new=1" class="btn btn--primary">
+        <button type="button" class="btn btn--primary"
+                onclick="document.getElementById('create-trip-dialog').showModal()">
             <i class="material-symbols-outlined">add</i>
             New Trip
-        </a>
+        </button>
     </div>
     {% endif %}
 
 </div>
+
+{# -- Create trip dialog --------------------------------------------------- #}
+{% include "dashboard/partials/trips/_create_trip_dialog.html" with source="overview" %}
 {% endblock %}
 
 {% block scripts %}

@@ -265,7 +265,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                     gp_service.ensure_linked_by_place_id(pin.location, google_place_id)
                     if location:
                         gp_service.ensure_linked_by_place_id(location, google_place_id)
-                    update_location_name_from_external_sources(location)
+                    update_location_name_from_external_sources(location, profile=request.user.profile)
                 except Exception as gp_exc:
                     logger.warning("Failed to link Google Place %s: %s", google_place_id, gp_exc)
 
@@ -279,7 +279,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                     refresh_pin_web_search,
                 )
 
-                safely_enqueue_task(prefetch_location_external_data, location.pk, google_place_id=google_place_id)
+                safely_enqueue_task(prefetch_location_external_data, location.pk, google_place_id=google_place_id, profile_id=request.user.profile.pk)
 
             from urbanlens.dashboard.models.subscriptions import (
                 SiteFeature,

@@ -55,6 +55,31 @@ def _settings_redirect(anchor: str) -> HttpResponse:
     return redirect(f"{reverse('settings.view')}#{anchor}")
 
 
+def _name_source_order(profile: Profile) -> list[tuple[str, str, bool]]:
+    """Build the (slug, label, ranked) rows for this profile's name-source priority picker.
+
+    Starts from the profile's own override when configured, otherwise from the
+    current site-wide default, so the picker always shows a sensible starting
+    point to customize rather than an arbitrary/empty list.
+
+    Args:
+        profile: The profile whose picker state to build.
+
+    Returns:
+        Ranked rows first (in priority order), then any remaining available
+        sources, unranked.
+    """
+    from urbanlens.dashboard.models.site_settings.model import SiteSettings
+    from urbanlens.dashboard.plugins.registry import plugin_registry
+
+    priority_slugs = profile.name_source_priority_list or SiteSettings.get_current().name_source_priority_list
+    providers_by_slug = {provider.source: provider.verbose_name for provider in plugin_registry.name_providers()}
+    name_source_order = [(slug, providers_by_slug[slug], True) for slug in priority_slugs if slug in providers_by_slug]
+    ranked_slugs = {slug for slug, _label, _ranked in name_source_order}
+    name_source_order += [(slug, label, False) for slug, label in providers_by_slug.items() if slug not in ranked_slugs]
+    return name_source_order
+
+
 def _e2ee_enrolled(profile: Profile) -> bool:
     """Return True when the profile has a direct-message encryption key bundle.
 
@@ -145,6 +170,7 @@ class SettingsView(LoginRequiredMixin, View):
             "community_form": CommunitySettingsForm(instance=profile),
             "external_api_form": ExternalApiSettingsForm(instance=profile),
             "direct_message_form": DirectMessageSettingsForm(instance=profile),
+            "name_source_order": _name_source_order(profile),
             "preview_zoom": profile.map_default_zoom or 13,
             "e2ee_enrolled": _e2ee_enrolled(profile),
             "e2ee_has_password": request.user.has_usable_password(),
@@ -312,6 +338,7 @@ class SettingsView(LoginRequiredMixin, View):
             "community_form": community_form,
             "external_api_form": external_api_form,
             "direct_message_form": direct_message_form,
+            "name_source_order": _name_source_order(profile),
             "preview_zoom": profile.map_default_zoom or 13,
             **_security_context(request.user, request),
             **self._build_map_center_context(profile),

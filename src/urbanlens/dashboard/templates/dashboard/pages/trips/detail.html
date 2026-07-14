@@ -289,14 +289,14 @@
         </div>
         <div id="edit-activity-name-wrap" hidden>
             <div class="form-row">
-                <label for="edit-activity-title">Custom Name <small>(optional)</small></label>
+                <label for="edit-activity-title">Custom Name</label>
                 <input type="text" name="title" id="edit-activity-title"
                        placeholder="e.g. Rooftop access point" maxlength="255">
             </div>
         </div>
 
         <div class="form-row">
-            <label>Location <small>(optional)</small></label>
+            <label>Location</label>
             <div class="activity-location-search-wrap">
                 {# Shared "jump to" search component - same suggestions engine as the main map. #}
                 {% map_search_bar "edit-activity-loc" placeholder="Search pins, addresses, coordinates..." show_history=False extra_class="addr-search-bar--inline" %}
@@ -314,7 +314,7 @@
         </div>
 
         <div class="form-row">
-            <label>Start <small>(optional)</small></label>
+            <label>Start</label>
             <div class="activity-datetime-row">
                 <input type="date" name="scheduled_date" id="edit-activity-date">
                 <input type="time" name="scheduled_time" id="edit-activity-time">
@@ -327,7 +327,7 @@
         </div>
 
         <div class="form-row">
-            <label>End <small>(optional)</small></label>
+            <label>End</label>
             <div class="activity-datetime-row">
                 <input type="date" name="scheduled_end_date" id="edit-activity-end-date">
                 <input type="time" name="scheduled_end_time" id="edit-activity-end-time">
@@ -339,19 +339,28 @@
             </div>
         </div>
 
-        <div class="form-row">
-            <label>Child Trip <small>(optional)</small></label>
-            <div class="activity-child-trip-wrap">
-                <input type="text" id="edit-activity-child-trip-search"
-                       placeholder="Search your trips..." autocomplete="off">
-                <input type="hidden" name="child_trip_uuid" id="edit-activity-child-trip-uuid">
-                <div id="edit-activity-child-trip-suggestions" class="location-suggestions" hidden></div>
-                <span id="edit-activity-child-trip-display" class="activity-location-display"></span>
-                <button type="button" class="btn btn--ghost activity-child-trip-clear" id="edit-activity-child-trip-clear"
-                        style="display:none;margin-top:.25rem;font-size:.8rem;padding:.2rem .5rem"
-                        onclick="_clearChildTrip('edit')">
-                    <i class="material-icons" style="font-size:.9rem;vertical-align:middle">clear</i> Remove
-                </button>
+        <div class="form-row" style="margin-bottom:.1rem">
+            <button type="button" class="btn btn--ghost" id="edit-activity-child-trip-toggle"
+                    style="font-size:.8rem;padding:.25rem .5rem"
+                    onclick="_toggleEditActivityChildTrip()">
+                <i class="material-icons" style="font-size:.95rem;vertical-align:middle">add</i> Add child trip
+            </button>
+        </div>
+        <div id="edit-activity-child-trip-wrap" hidden>
+            <div class="form-row">
+                <label>Child Trip</label>
+                <div class="activity-child-trip-wrap">
+                    <input type="text" id="edit-activity-child-trip-search"
+                           placeholder="Search your trips..." autocomplete="off">
+                    <input type="hidden" name="child_trip_uuid" id="edit-activity-child-trip-uuid">
+                    <div id="edit-activity-child-trip-suggestions" class="location-suggestions" hidden></div>
+                    <span id="edit-activity-child-trip-display" class="activity-location-display"></span>
+                    <button type="button" class="btn btn--ghost activity-child-trip-clear" id="edit-activity-child-trip-clear"
+                            style="display:none;margin-top:.25rem;font-size:.8rem;padding:.2rem .5rem"
+                            onclick="_clearChildTrip('edit')">
+                        <i class="material-icons" style="font-size:.9rem;vertical-align:middle">clear</i> Remove
+                    </button>
+                </div>
             </div>
         </div>
 
@@ -360,19 +369,14 @@
             <textarea name="notes" id="edit-activity-notes" rows="3"
                       placeholder="Any notes about this stop..."></textarea>
         </div>
-        <div class="form-row">
-            <label>Status</label>
+        <div class="form-row form-row--toggle">
             <input type="hidden" name="status" id="edit-activity-status-input" value="proposed">
-            <div class="status-pill-toggle" role="group" aria-label="Activity status">
-                <button type="button" class="status-pill-btn is-active" data-value="proposed"
-                        onclick="_setStatusPill('edit', 'proposed')">
-                    <i class="material-symbols-outlined">schedule</i> Proposed
-                </button>
-                <button type="button" class="status-pill-btn" data-value="confirmed"
-                        onclick="_setStatusPill('edit', 'confirmed')">
-                    <i class="material-symbols-outlined">check_circle</i> Confirmed
-                </button>
-            </div>
+            <label class="activity-hide-label" id="edit-activity-propose-label">
+                <input type="checkbox" id="edit-activity-propose-checkbox" onchange="_syncEditActivityStatus()">
+                <i class="material-symbols-outlined">help</i>
+                Propose for discussion
+            </label>
+            <p class="form-help">Left unchecked, the activity is confirmed. Checked, other members can vote on it first.</p>
         </div>
         <div class="form-row form-row--toggle" id="edit-activity-hide-wrap" hidden>
             <label class="activity-hide-label" id="edit-activity-hide-label">
@@ -1403,13 +1407,11 @@ function _tripHideDates(prefix) {
     if (toggle) { toggle.hidden = false; }
 }
 
-function _setStatusPill(prefix, value) {
-    var inputId  = (prefix === 'add') ? 'add-activity-status-input' : 'edit-activity-status-input';
-    var groupSel = (prefix === 'add') ? '#add-activity-dialog .status-pill-toggle' : '#edit-activity-dialog .status-pill-toggle';
-    document.getElementById(inputId).value = value;
-    document.querySelectorAll(groupSel + ' .status-pill-btn').forEach(function (btn) {
-        btn.classList.toggle('is-active', btn.dataset.value === value);
-    });
+// -- Edit-activity: "Propose for discussion" checkbox drives the status field
+// (mirrors _syncAddActivityStatus - both dialogs use the same single-checkbox control)
+function _syncEditActivityStatus() {
+    var checked = document.getElementById('edit-activity-propose-checkbox').checked;
+    document.getElementById('edit-activity-status-input').value = checked ? 'proposed' : 'confirmed';
 }
 
 // -- Add activity name toggle ---------------------------------------------
@@ -1439,6 +1441,22 @@ function _toggleEditActivityName() {
         wrap.setAttribute('hidden', '');
         btn.innerHTML = '<i class="material-icons" style="font-size:.95rem;vertical-align:middle">add</i> Add custom name';
         document.getElementById('edit-activity-title').value = '';
+    }
+}
+
+// -- Edit activity child trip toggle (mirrors the name/end-date opt-in reveal
+// pattern - see tripOpenEditDialog, which auto-opens this when one is already set)
+function _toggleEditActivityChildTrip() {
+    var wrap = document.getElementById('edit-activity-child-trip-wrap');
+    var btn  = document.getElementById('edit-activity-child-trip-toggle');
+    var hidden = wrap.hasAttribute('hidden');
+    if (hidden) {
+        wrap.removeAttribute('hidden');
+        btn.innerHTML = '<i class="material-icons" style="font-size:.95rem;vertical-align:middle">remove</i> Remove child trip';
+    } else {
+        wrap.setAttribute('hidden', '');
+        btn.innerHTML = '<i class="material-icons" style="font-size:.95rem;vertical-align:middle">add</i> Add child trip';
+        _clearChildTrip('edit');
     }
 }
 
@@ -1480,11 +1498,24 @@ function tripOpenEditDialog(li) {
     document.getElementById('edit-activity-child-trip-display').textContent = childTripName;
     document.getElementById('edit-activity-child-trip-search').value = '';
     document.getElementById('edit-activity-child-trip-clear').style.display = childTripUuid ? 'inline-flex' : 'none';
+    var childTripWrap = document.getElementById('edit-activity-child-trip-wrap');
+    var childTripToggle = document.getElementById('edit-activity-child-trip-toggle');
+    if (childTripWrap && childTripToggle) {
+        if (childTripUuid) {
+            childTripWrap.removeAttribute('hidden');
+            childTripToggle.innerHTML = '<i class="material-icons" style="font-size:.95rem;vertical-align:middle">remove</i> Remove child trip';
+        } else {
+            childTripWrap.setAttribute('hidden', '');
+            childTripToggle.innerHTML = '<i class="material-icons" style="font-size:.95rem;vertical-align:middle">add</i> Add child trip';
+        }
+    }
 
     // Store delete URL for the delete button
     document.getElementById('edit-activity-delete-btn').dataset.deleteUrl = li.dataset.deleteUrl || '';
 
-    _setStatusPill('edit', li.dataset.actStatus || 'proposed');
+    var status = li.dataset.actStatus || 'proposed';
+    document.getElementById('edit-activity-status-input').value = status;
+    document.getElementById('edit-activity-propose-checkbox').checked = (status === 'proposed');
 
     // Hide-location toggle: only shown for activity creator or trip organiser
     var hideWrap = document.getElementById('edit-activity-hide-wrap');

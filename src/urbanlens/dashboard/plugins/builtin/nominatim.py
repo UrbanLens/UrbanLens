@@ -51,7 +51,7 @@ class NominatimPanelSource(LocationCachePanelSource):
         current_name = location.official_name
         name_needs_improvement = not is_meaningful_name(current_name) or bool(current_name and is_address_derived_name(current_name, location))
         if place and place.get("name") and name_needs_improvement:
-            update_location_name_from_external_sources(location)
+            update_location_name_from_external_sources(location, profile=pin.profile)
 
 
 class NominatimPlugin(UrbanLensPlugin):

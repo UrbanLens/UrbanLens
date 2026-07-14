@@ -2048,54 +2048,6 @@ a.trip-activity-name {
     }
 }
 
-// -- Status pill toggle (replaces radio group) -----------------------------
-
-.status-pill-toggle {
-    display: inline-flex;
-    border: 1.5px solid var(--ul-surface-raised-border);
-    border-radius: 8px;
-    overflow: hidden;
-    background: var(--ul-surface-raised);
-}
-
-.status-pill-btn {
-    padding: .38rem .8rem;
-    font-size: .8rem;
-    font-weight: 600;
-    background: transparent;
-    border: none;
-    cursor: pointer;
-    color: var(--ul-grey-6);
-    transition: background .15s, color .15s;
-    display: flex;
-    align-items: center;
-    gap: .3rem;
-    white-space: nowrap;
-
-    .material-symbols-outlined,
-    .material-icons {
-        font-size: .95rem;
-    }
-
-    &+& {
-        border-left: 1.5px solid var(--ul-surface-raised-border);
-    }
-
-    &:hover {
-        color: var(--ul-grey-7);
-        background: var(--ul-hover-bg);
-    }
-
-    &.is-active[data-value="proposed"] {
-        background: var(--ul-grey-7);
-        color: var(--ul-grey-5);
-    }
-
-    &.is-active[data-value="confirmed"] {
-        background: $color-blue-500;
-        color: var(--ul-grey-5);
-    }
-}
 
 // -- Your RSVP banner ------------------------------------------------------
 
@@ -2827,6 +2779,23 @@ a.trip-activity-name {
 
         &:disabled {
             cursor: default;
+        }
+    }
+
+    // _reset.scss also draws its own fake checkbox box on any span that
+    // follows input[type=checkbox] and forces a fixed single-line height on
+    // it - that doubles up with the native checkbox above and clips text
+    // that wraps to a second line. Strip it since this dialog uses the
+    // native (accent-color) checkbox instead.
+    span:not(.lever) {
+        display: block !important;
+        height: auto !important;
+        line-height: 1.4 !important;
+        padding-left: 0 !important;
+
+        &:before,
+        &:after {
+            content: none !important;
         }
     }
 

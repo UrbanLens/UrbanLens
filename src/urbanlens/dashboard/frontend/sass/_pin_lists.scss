@@ -646,49 +646,35 @@
     border: 1px solid var(--ul-surface-raised-border);
     border-radius: 8px;
     padding: .5rem .6rem;
-    font-size: .82rem;
+}
 
-    ul {
-        display: flex;
-        flex-wrap: wrap;
-        gap: .4rem;
-        list-style: none;
-        margin: 0;
-        padding: 0;
+// Selectable variant of the shared `.tag-chip` (see _pin-detail.scss) - used by the
+// saved-filter include/exclude label pickers instead of a bespoke checkbox-pill style.
+// Muted/outlined until checked, so it reads as "pick one" rather than "already applied."
+.tag-chip--selectable {
+    cursor: pointer;
+    user-select: none;
+    background: var(--ul-surface-raised);
+    border-color: var(--ul-surface-raised-border);
+    color: var(--ul-grey-7);
+    transition: border-color .12s, background .12s, color .12s;
+
+    input[type="checkbox"] {
+        position: absolute;
+        opacity: 0;
+        pointer-events: none;
     }
 
-    li { margin: 0; }
+    &:hover {
+        border-color: var(--primary-color);
+        background: var(--ul-hover-bg);
+    }
 
-    // Checkbox-as-chip: same hidden-checkbox pill pattern as .import-tag-pill.
-    label {
-        display: inline-flex;
-        align-items: center;
-        gap: .4rem;
-        padding: .3rem .75rem;
-        border-radius: 20px;
-        border: 1px solid var(--ul-surface-raised-border);
-        background: var(--ul-surface-raised);
-        font-weight: 500;
-        color: var(--ul-grey-7);
-        cursor: pointer;
-        user-select: none;
-        transition: border-color .12s, background .12s, color .12s;
-
-        input[type="checkbox"] {
-            display: none;
-        }
-
-        &:hover {
-            border-color: var(--primary-color);
-            background: var(--ul-hover-bg);
-        }
-
-        &:has(input:checked) {
-            border-color: var(--primary-color);
-            background: color-mix(in srgb, $primary-color 12%, var(--ul-surface-raised));
-            color: var(--ul-grey-9);
-            font-weight: 600;
-        }
+    &:has(input:checked) {
+        background: color-mix(in srgb, var(--tag-color, $primary-color) 20%, transparent);
+        border-color: color-mix(in srgb, var(--tag-color, $primary-color) 45%, transparent);
+        color: var(--ul-grey-9);
+        font-weight: 600;
     }
 }
 

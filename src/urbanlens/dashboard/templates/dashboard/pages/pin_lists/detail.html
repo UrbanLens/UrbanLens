@@ -111,15 +111,19 @@
                 <p class="pin-list-smart-hint">You don't have any saved filters yet - create one above.</p>
                 {% endif %}
             </div>
-            {# A boundary can only be cleared here once set - new ones are drawn from the "Geographic regions" field in the New Filter dialog above. #}
-            <div class="pin-list-smart-row" id="pin-list-boundary-row" {% if not pin_list.smart_boundary %}hidden{% endif %}>
+            <div class="pin-list-smart-row" id="pin-list-boundary-row">
                 <div class="pin-list-boundary-header">
                     <label>Match pins inside a boundary</label>
-                    <button type="button" class="btn btn--ghost btn--sm" onclick="pinListClearBoundary()">
+                    <button type="button" class="btn btn--ghost btn--sm" id="pin-list-boundary-draw-btn"
+                            onclick="pinListStartBoundaryDraw()" {% if pin_list.smart_boundary %}hidden{% endif %}>
+                        <i class="material-symbols-outlined">draw</i> Draw boundary
+                    </button>
+                    <button type="button" class="btn btn--ghost btn--sm" id="pin-list-boundary-clear-btn"
+                            onclick="pinListClearBoundary()" {% if not pin_list.smart_boundary %}hidden{% endif %}>
                         <i class="material-symbols-outlined">close</i> Clear
                     </button>
                 </div>
-                <div id="pin-list-boundary-map" class="pin-list-boundary-map"></div>
+                <div id="pin-list-boundary-map" class="pin-list-boundary-map" {% if not pin_list.smart_boundary %}hidden{% endif %}></div>
             </div>
             <div class="pin-list-smart-row" id="pin-list-smart-enable-row" {% if not pin_list.smart_filter and not pin_list.smart_boundary and not pin_list.is_smart %}hidden{% endif %}>
                 <label class="pin-list-smart-toggle">
@@ -358,11 +362,25 @@
         _postJson(LIST_EDIT_URL, { saved_filter_uuid: savedFilterUuid }).then(() => refreshItems()).catch(_toastError);
     };
 
+    function _setBoundaryDrawingState(hasBoundary) {
+        document.getElementById('pin-list-boundary-draw-btn').hidden = hasBoundary;
+        document.getElementById('pin-list-boundary-clear-btn').hidden = !hasBoundary;
+        document.getElementById('pin-list-boundary-map').hidden = !hasBoundary;
+    }
+
+    window.pinListStartBoundaryDraw = function () {
+        _setBoundaryDrawingState(true);
+        _initBoundaryMap();
+        // Leaflet sizes itself against the container at construction time - the
+        // container was hidden until just now, so force a resize once visible.
+        requestAnimationFrame(function () { if (_boundaryMap) _boundaryMap.invalidateSize(); });
+    };
+
     window.pinListClearBoundary = function () {
         _boundaryLayers.clearLayers();
         _postJson(LIST_EDIT_URL, { smart_boundary: null }).then(() => {
             refreshItems();
-            document.getElementById('pin-list-boundary-row').hidden = true;
+            _setBoundaryDrawingState(false);
         }).catch(_toastError);
     };
 
@@ -455,10 +473,9 @@
     };
 
     // -- Boundary drawing mini-map --------------------------------------------
-    // Only rendered once the "Match pins inside a boundary" row is actually
-    // visible (it already has a saved boundary - new ones are drawn from the
-    // "Geographic regions" field in the New Filter dialog instead) - Leaflet
-    // can't size itself correctly against a hidden (zero-size) container.
+    // Initialized eagerly below when a boundary already exists; otherwise lazily
+    // via pinListStartBoundaryDraw() once the map container is actually visible
+    // (Leaflet can't size itself correctly against a hidden/zero-size container).
     let _boundaryLayers = { clearLayers: function () {} };
     let _boundaryMap = null;
     function _initBoundaryMap() {
@@ -492,6 +509,7 @@
         function saveBoundary() {
             const layers = drawnItems.getLayers();
             const geometry = layers.length === 0 ? null : { type: 'MultiPolygon', coordinates: layers.map((l) => l.toGeoJSON().geometry.coordinates) };
+            _setBoundaryDrawingState(layers.length > 0);
             if (layers.length > 0) _revealSmartEnableRow();
             _postJson(LIST_EDIT_URL, { smart_boundary: geometry }).then(() => refreshItems()).catch(_toastError);
         }

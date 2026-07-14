@@ -125,6 +125,21 @@ class TripCreateViewTests(TestCase):
         resp = client.post(reverse("trips.create"), data={"name": "Hack"})
         self.assertIn(resp.status_code, (301, 302))
 
+    def test_post_from_overview_redirects_to_new_trip_via_hx_redirect(self):
+        """The overview page's dialog has no #trip-list to swap into, so it opts into
+        an HX-Redirect straight to the new trip instead of the list-partial re-render."""
+        resp = self.client.post(
+            reverse("trips.create"),
+            data={"name": "Overview Trip", "source": "overview"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        trip = Trip.objects.get(name="Overview Trip")
+        self.assertEqual(resp["HX-Redirect"], reverse("trips.detail", kwargs={"trip_slug": trip.slug}))
+
+    def test_post_from_list_has_no_hx_redirect(self):
+        resp = self.client.post(reverse("trips.create"), data={"name": "List Trip", "source": "list"})
+        self.assertNotIn("HX-Redirect", resp)
+
 
 class TripDetailViewTests(TestCase):
     """GET /trips/<slug>/ - access control and page render."""
@@ -169,6 +184,27 @@ class TripDetailViewTests(TestCase):
         url = reverse("trips.detail", kwargs={"trip_slug": "no-such-trip-slug"})
         resp = client.get(url)
         self.assertEqual(resp.status_code, 404)
+
+    def test_edit_activity_dialog_matches_add_activity_redesign(self):
+        """Regression guard: the Edit-Activity dialog previously still had the old
+        proposed/confirmed pill toggle, "(optional)" label text, and an always-visible
+        child-trip box - all fixed to match the Add-Activity redesign."""
+        client = Client()
+        client.force_login(self.creator_user)
+        html = client.get(self._url()).content.decode()
+
+        # Single checkbox drives status now, not a two-button pill toggle.
+        self.assertIn('id="edit-activity-propose-checkbox"', html)
+        self.assertIn("Propose for discussion", html)
+        self.assertNotIn("status-pill-toggle", html)
+
+        # No parenthetical "(optional)" hints anywhere in the edit dialog.
+        edit_dialog_html = html.split('id="edit-activity-dialog"', 1)[1].split("</dialog>", 1)[0]
+        self.assertNotIn("(optional)", edit_dialog_html)
+
+        # Child trip is an opt-in toggle, not an always-visible box.
+        self.assertIn('id="edit-activity-child-trip-toggle"', html)
+        self.assertIn('id="edit-activity-child-trip-wrap" hidden', html)
 
 
 class TripDeleteViewTests(TestCase):

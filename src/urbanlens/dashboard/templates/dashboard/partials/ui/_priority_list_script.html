@@ -1,0 +1,107 @@
+{# Initializes every `.priority-list` on the page (see _priority_list.html) - safe to #}
+{# include on a page with zero, one, or several instances. #}
+<script>
+(function () {
+    function initPriorityList(list) {
+        var hidden = document.getElementById(list.dataset.hiddenId);
+        if (!hidden) return;
+
+        function isRankable(li) {
+            return li.classList.contains('priority-list__item') && !!li.dataset.slug;
+        }
+
+        function rankedItems() {
+            return Array.from(list.children).filter(function (li) {
+                return isRankable(li) && !li.classList.contains('priority-list__item--unranked');
+            });
+        }
+
+        function firstUnranked() {
+            return list.querySelector('.priority-list__item--unranked');
+        }
+
+        function renumber() {
+            rankedItems().forEach(function (li, i) {
+                var rank = li.querySelector('.priority-list__rank');
+                if (rank) rank.textContent = String(i + 1);
+            });
+            Array.from(list.children).filter(function (li) {
+                return isRankable(li) && li.classList.contains('priority-list__item--unranked');
+            }).forEach(function (li) {
+                var rank = li.querySelector('.priority-list__rank');
+                if (rank) rank.textContent = '—';
+            });
+        }
+
+        function sync() {
+            renumber();
+            hidden.value = rankedItems().map(function (li) { return li.dataset.slug; }).join(',');
+            hidden.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+
+        list.addEventListener('click', function (e) {
+            var btn = e.target.closest('.priority-list__btn');
+            if (!btn) return;
+            var li = btn.closest('.priority-list__item');
+            if (!li || li.classList.contains('priority-list__item--unranked')) return;
+            if (btn.dataset.action === 'up') {
+                var prev = li.previousElementSibling;
+                if (prev) list.insertBefore(li, prev);
+            } else if (btn.dataset.action === 'down') {
+                var next = li.nextElementSibling;
+                if (next && !next.classList.contains('priority-list__item--unranked')) {
+                    list.insertBefore(next, li);
+                }
+            }
+            sync();
+        });
+
+        list.addEventListener('change', function (e) {
+            var toggle = e.target.closest('[data-role="rank-toggle"]');
+            if (!toggle) return;
+            var li = toggle.closest('.priority-list__item');
+            if (!li) return;
+            if (toggle.checked) {
+                li.classList.remove('priority-list__item--unranked');
+                li.draggable = true;
+                list.insertBefore(li, firstUnranked());
+            } else {
+                li.classList.add('priority-list__item--unranked');
+                li.draggable = false;
+                list.appendChild(li);
+            }
+            sync();
+        });
+
+        var dragging = null;
+
+        list.addEventListener('dragstart', function (e) {
+            var li = e.target.closest('.priority-list__item');
+            if (!li || li.classList.contains('priority-list__item--unranked')) { e.preventDefault(); return; }
+            dragging = li;
+            li.classList.add('priority-list__item--dragging');
+            e.dataTransfer.effectAllowed = 'move';
+        });
+
+        list.addEventListener('dragend', function () {
+            if (dragging) dragging.classList.remove('priority-list__item--dragging');
+            dragging = null;
+            sync();
+        });
+
+        list.addEventListener('dragover', function (e) {
+            if (!dragging) return;
+            e.preventDefault();
+            var after = rankedItems().filter(function (li) { return li !== dragging; }).find(function (li) {
+                var rect = li.getBoundingClientRect();
+                return e.clientY < rect.top + rect.height / 2;
+            });
+            list.insertBefore(dragging, after || firstUnranked());
+        });
+
+        renumber();
+    }
+
+    document.querySelectorAll('.priority-list').forEach(initPriorityList);
+}());
+</script>

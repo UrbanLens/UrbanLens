@@ -98,12 +98,14 @@
 {# -- Cover photo hero banner --------------------------------------------- #}
 {{ pin_cover_candidates|json_script:"pin-cover-candidates" }}
 <div class="cover-hero" id="pin-cover-hero" style="background-image:url('{{ pin.cover_photo.image.url }}')">
+    {% if pin_cover_candidates %}
     <button type="button" class="cover-hero-nav cover-hero-prev" onclick="window._coverHeroNav('pin', -1)" title="Previous photo">
         <i class="material-symbols-outlined">chevron_left</i>
     </button>
     <button type="button" class="cover-hero-nav cover-hero-next" onclick="window._coverHeroNav('pin', 1)" title="Next photo">
         <i class="material-symbols-outlined">chevron_right</i>
     </button>
+    {% endif %}
     <button type="button" class="cover-hero-remove" onclick="window._setCoverPhoto && window._setCoverPhoto(null)" title="Remove cover photo">
         <i class="material-symbols-outlined">close</i>
     </button>

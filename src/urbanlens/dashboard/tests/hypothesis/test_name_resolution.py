@@ -270,6 +270,35 @@ class UpdateLocationNameResolutionTests(TestCase):
         loc.refresh_from_db()
         self.assertEqual(loc.official_name, "Park Name")
 
+    def test_profile_override_beats_site_default_priority(self) -> None:
+        """A profile's own name_source_priority wins over the site-wide default."""
+        settings = SiteSettings.get_current()
+        settings.default_name_source_priority = "nps,wikipedia"
+        settings.save(update_fields=["default_name_source_priority", "updated"])
+        profile = baker.make("dashboard.Profile", name_source_priority="wikipedia,nps")
+        loc, _wiki = self._location_with_wiki(wiki_name="Curated Mill", lat="41.230000", lng="-73.230000")
+        with _patch_providers(
+            _StaticProvider("wikipedia", ["Wiki Name"]),
+            _StaticProvider("nps", ["Park Name"]),
+        ):
+            update_location_name_from_external_sources(loc, profile=profile)
+        loc.refresh_from_db()
+        self.assertEqual(loc.official_name, "Wiki Name")
+
+    def test_blank_profile_override_falls_back_to_site_default(self) -> None:
+        settings = SiteSettings.get_current()
+        settings.default_name_source_priority = "nps,wikipedia"
+        settings.save(update_fields=["default_name_source_priority", "updated"])
+        profile = baker.make("dashboard.Profile", name_source_priority="")
+        loc, _wiki = self._location_with_wiki(wiki_name="Curated Mill", lat="41.240000", lng="-73.240000")
+        with _patch_providers(
+            _StaticProvider("wikipedia", ["Wiki Name"]),
+            _StaticProvider("nps", ["Park Name"]),
+        ):
+            update_location_name_from_external_sources(loc, profile=profile)
+        loc.refresh_from_db()
+        self.assertEqual(loc.official_name, "Park Name")
+
 
 # -- Current-name alias invariant ----------------------------------------------------
 
@@ -309,6 +338,39 @@ class PinNameAliasInvariantTests(TestCase):
         pin.priority = 3
         pin.save(update_fields=["priority", "updated"])
         self.assertEqual(pin.aliases.count(), 0)
+
+
+# -- Name-source priority picker UI --------------------------------------------------
+
+
+class NameSourcePriorityPickerRenderTests(TestCase):
+    """Both the site-admin and per-user pickers reuse the shared `.priority-list`
+    component (see _priority_list.html/_priority_list_script.html) - confirm each
+    page still renders after that extraction, with distinct element ids."""
+
+    def test_settings_page_renders_user_priority_picker(self) -> None:
+        from django.test import Client
+        from django.urls import reverse
+
+        user = baker.make("auth.User")
+        client = Client()
+        client.force_login(user)
+        html = client.get(reverse("settings.view")).content.decode()
+        self.assertIn('id="user-name-source-priority-list"', html)
+        self.assertIn('id="user-name-source-priority"', html)
+        self.assertIn('name="name_source_priority"', html)
+
+    def test_site_admin_page_renders_default_priority_picker(self) -> None:
+        from django.test import Client
+        from django.urls import reverse
+
+        user = baker.make("auth.User", is_superuser=True, is_staff=True)
+        client = Client()
+        client.force_login(user)
+        html = client.get(reverse("site_admin")).content.decode()
+        self.assertIn('id="name-source-priority-list"', html)
+        self.assertIn('id="default-name-source-priority"', html)
+        self.assertIn('name="default_name_source_priority"', html)
 
 
 class WikiNameAliasInvariantTests(TestCase):

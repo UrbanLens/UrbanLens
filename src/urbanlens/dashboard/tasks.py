@@ -246,7 +246,7 @@ def suggest_pin_category(self, pin_id: int) -> list[str]:
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
-def prefetch_location_external_data(location_id: int, google_place_id: str | None = None) -> None:
+def prefetch_location_external_data(location_id: int, google_place_id: str | None = None, profile_id: int | None = None) -> None:
     """Pre-warm LocationCache for a newly created Location.
 
     Runs Wikipedia and NPS lookups so that the first time a user opens the pin
@@ -258,15 +258,20 @@ def prefetch_location_external_data(location_id: int, google_place_id: str | Non
         location_id: PK of the Location to prefetch data for.
         google_place_id: Optional Google Places place_id already resolved by the
             caller; used to copy existing Django-cache data into LocationCache.
+        profile_id: PK of the profile whose action enqueued this task, if any -
+            used to honor that profile's name-source priority override.
     """
     from urbanlens.dashboard.models.cache.location_cache import LocationCache
     from urbanlens.dashboard.models.location.model import Location
+    from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.services.locations.naming import update_location_name_from_external_sources
 
     location = Location.objects.filter(pk=location_id).first()
     if not location:
         logger.info("prefetch_location_external_data: location %s no longer exists", location_id)
         return
+
+    profile = Profile.objects.filter(pk=profile_id).first() if profile_id else None
 
     lat = float(location.latitude or 0)
     lng = float(location.longitude or 0)
@@ -328,7 +333,7 @@ def prefetch_location_external_data(location_id: int, google_place_id: str | Non
     # so the plugin name providers see all fresh candidates in a single pass
     # (per-source refreshes let whichever source ran last win).
     try:
-        update_location_name_from_external_sources(location)
+        update_location_name_from_external_sources(location, profile=profile)
     except Exception:
         logger.exception("prefetch_location_external_data: name refresh failed for location %s", location_id)
 

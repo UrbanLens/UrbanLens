@@ -286,6 +286,16 @@
                 <p class="settings-help">Weather, geocoding, place-data panels, and AI features are unavailable while this is off. AI and Places sources below can still be turned back on individually.</p>
                 {% endif %}
 
+                <div class="settings-field">
+                    <label for="user-name-source-priority-list">Name source priority</label>
+                    <p class="settings-help">
+                        Your own override for which external source wins when picking a location's official
+                        name (drag to reorder, or use the arrow buttons). Leave every source unranked to use
+                        the site-wide default instead.
+                    </p>
+                    {% include "dashboard/partials/ui/_priority_list.html" with list_id="user-name-source-priority-list" hidden_id="user-name-source-priority" field_name="name_source_priority" current_value=external_api_form.instance.name_source_priority items=name_source_order empty_text="No name-provider plugins are enabled." %}
+                </div>
+
                 <div class="settings-actions">
                     <button type="submit" class="settings-save-btn">Save</button>
                 </div>
@@ -1309,6 +1319,7 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="{% static 'dashboard/js/e2ee.js' %}"></script>
 <script src="{% static 'dashboard/js/webauthn.js' %}"></script>
+{% include "dashboard/partials/ui/_priority_list_script.html" %}
 <script>
 // -- Tabs: switch panels, keep deep links (e.g. #immich-settings-section) working -----
 (function () {

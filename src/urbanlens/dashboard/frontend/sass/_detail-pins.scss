@@ -418,9 +418,9 @@
 
 .alias-add-form {
     display: flex;
-    gap: .5rem;
+    flex-direction: column;
+    gap: .4rem;
     padding: 0 1rem 1rem;
-    align-items: center;
 
     // Hidden until the header "+" button reveals it (see .is-adding below) -
     // only applies where that button exists (the pin page's own panel).
@@ -428,34 +428,21 @@
         display: none;
     }
 
-    // Icon-button toggle, matching .alias-chip-nickname-toggle's look - the
-    // checkbox itself stays functional but visually hidden.
-    .alias-nickname-toggle {
-        display: inline-flex;
+    .alias-add-row {
+        display: flex;
+        gap: .5rem;
         align-items: center;
-        justify-content: center;
-        width: 28px;
-        height: 28px;
-        border-radius: 50%;
-        border: 1px solid var(--ul-surface-border);
+    }
+
+    // Visible checkbox positioned below the name input, rather than an
+    // icon-only toggle - the nickname distinction is easy to miss otherwise.
+    .alias-nickname-checkbox {
+        display: flex;
+        align-items: center;
+        gap: .4rem;
+        font-size: .8rem;
         color: var(--ul-grey-6);
         cursor: pointer;
-        flex-shrink: 0;
-        transition: border-color .15s, background .15s, color .15s;
-
-        input[type="checkbox"] {
-            position: absolute;
-            opacity: 0;
-            pointer-events: none;
-        }
-
-        .material-symbols-outlined { font-size: 15px; }
-
-        &:has(input:checked) {
-            border-color: $color-amber-500;
-            background: color-mix(in srgb, $color-amber-500 20%, transparent);
-            color: $color-amber-700;
-        }
     }
 
     .alias-add-input {
@@ -483,7 +470,7 @@
         border-radius: 6px;
         cursor: pointer;
         transition: background .15s;
-        
+
         .material-symbols-outlined,
         .material-icons {
             font-size: 18px;

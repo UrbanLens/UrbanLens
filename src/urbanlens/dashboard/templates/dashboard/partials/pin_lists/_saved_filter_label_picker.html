@@ -1,0 +1,21 @@
+{% load dashboard_tags %}
+{# Reuses the site's shared `.tag-chip` styling (see _label_chips.html) instead of a #}
+{# bespoke checkbox-as-pill style, just swapping the remove-form for a checkbox input #}
+{# so browser-native FormData picks up the selection on submit. #}
+<div class="tag-chips-row saved-filter-label-list">
+    {% for label in labels %}
+    <label class="tag-chip tag-chip--{{ label.kind }} tag-chip--selectable" {% if label.color %}style="--tag-color:{{ label.color }}"{% endif %}>
+        <input type="checkbox" name="{{ field_name }}" value="{{ label.pk }}" {% if label.pk in selected_ids %}checked{% endif %}>
+        {% if label.icon %}
+        <span class="tag-chip-icon">
+            {% if label.icon|is_material_icon %}
+            <i class="material-icons" style="font-size:13px{% if label.color %};color:{{ label.color }}{% endif %}">{{ label.icon }}</i>
+            {% else %}{{ label.icon }}{% endif %}
+        </span>
+        {% endif %}
+        <span class="tag-chip-name">{{ label.name }}</span>
+    </label>
+    {% empty %}
+    <span class="tag-chips-empty">No labels yet.</span>
+    {% endfor %}
+</div>

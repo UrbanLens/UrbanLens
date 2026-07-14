@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from urbanlens.dashboard.models.location.model import Location
+    from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.services.locations.name_resolution import NameCandidate
 
 logger = logging.getLogger(__name__)
@@ -345,19 +346,22 @@ def external_name_candidates_for_location(
 def best_external_name_for_location(
     location: Location,
     extra_candidates: list[tuple[str, Any]] | None = None,
+    profile: Profile | None = None,
 ) -> tuple[str, str] | None:
     """Choose the best externally supplied name for a location.
 
     Candidates come from plugin name providers (plus any explicit extras) and
     the winner is picked by the configured
     :class:`~urbanlens.dashboard.services.locations.name_resolution.NameResolver`
-    - by default, two-source agreement first, then the site-admin source
-    priority order.
+    - by default, two-source agreement first, then the source priority order
+    (the acting profile's personal override when set, else the site-admin default).
 
     Args:
         location: The location to name.
         extra_candidates: Optional ``(source, raw_value)`` pairs considered
             ahead of plugin candidates.
+        profile: The profile whose action triggered this resolution, if any -
+            see :func:`default_name_resolver`.
 
     Returns:
         ``(name, source)`` for the winning candidate, or None when no
@@ -366,7 +370,7 @@ def best_external_name_for_location(
     from urbanlens.dashboard.services.locations.name_resolution import default_name_resolver
 
     candidates = external_name_candidates_for_location(location, extra_candidates=extra_candidates)
-    resolved = default_name_resolver().resolve(candidates, location)
+    resolved = default_name_resolver(profile).resolve(candidates, location)
     if resolved is None:
         return None
     return resolved.name, resolved.source
@@ -432,6 +436,7 @@ def update_location_name_from_external_sources(
     *,
     extra_candidates: list[tuple[str, Any]] | None = None,
     save: bool = True,
+    profile: Profile | None = None,
 ) -> bool:
     """Refresh a Location's official_name (and its wiki's name/aliases) from external sources.
 
@@ -447,6 +452,8 @@ def update_location_name_from_external_sources(
         extra_candidates: Optional ``(source, raw_value)`` pairs considered
             ahead of plugin candidates.
         save: Whether to persist the changes; False computes without writing.
+        profile: The profile whose action triggered this refresh, if any - see
+            :func:`~urbanlens.dashboard.services.locations.name_resolution.default_name_resolver`.
 
     Returns:
         True when the location name, wiki name, or alias list changed.
@@ -463,7 +470,7 @@ def update_location_name_from_external_sources(
 
     aliases_changed = _add_wiki_aliases(wiki, candidates)
 
-    resolved = default_name_resolver().resolve(candidates, location)
+    resolved = default_name_resolver(profile).resolve(candidates, location)
     changed_fields: set[str] = set()
     wiki_changed = False
     if resolved is not None:

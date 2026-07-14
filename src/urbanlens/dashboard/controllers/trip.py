@@ -625,6 +625,7 @@ class TripOverviewView(LoginRequiredMixin, View):
 
     def get(self, request):
         from urbanlens.dashboard.models.calendar_sync.model import get_calendar_account
+        from urbanlens.dashboard.services.connections import get_connections
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
         all_trips = list(Trip.objects.filter(profiles=profile).select_related("creator__user"))
@@ -639,6 +640,7 @@ class TripOverviewView(LoginRequiredMixin, View):
                 "recently_updated_trips": Trip.objects.recently_updated(profile, limit=self.RECENT_TRIPS_LIMIT),
                 "recently_viewed_trips": Trip.objects.recently_viewed(profile, limit=self.RECENT_TRIPS_LIMIT),
                 "calendar_account": get_calendar_account(profile),
+                "friends": get_connections(profile),
             },
         )
 
@@ -701,6 +703,8 @@ class TripCreateView(LoginRequiredMixin, View):
     """
 
     def post(self, request):
+        from django.urls import reverse
+
         from urbanlens.dashboard.services.connections import get_connections
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
@@ -711,6 +715,8 @@ class TripCreateView(LoginRequiredMixin, View):
         except (json.JSONDecodeError, ValueError):
             body = request.POST.dict()
             invite_ids = request.POST.getlist("invite_profile_ids")
+
+        source = body.get("source") or "list"
 
         name = (body.get("name") or "").strip()
         if not name:
@@ -741,6 +747,11 @@ class TripCreateView(LoginRequiredMixin, View):
                     _membership, created = TripMembership.objects.get_or_create(trip=trip, profile=friend_profile, defaults={"status": TripMembership.STATUS_INVITED})
                     if created:
                         _notify_added_to_trip(profile, friend_profile, trip)
+
+        if source == "overview":
+            response = HttpResponse("", status=200)
+            response["HX-Redirect"] = reverse("trips.detail", kwargs={"trip_slug": trip.slug})
+            return response
 
         sort, direction = _trip_list_sort_params(request)
         trips = list(_trips_for_list(profile, sort=sort, direction=direction))

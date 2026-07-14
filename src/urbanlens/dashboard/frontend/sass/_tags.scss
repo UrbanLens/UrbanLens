@@ -1711,6 +1711,8 @@ dialog.tag-create-card.ul-dialog {
 // as duplicated navigation, so this is a raised, rounded card with a
 // gradient-pill segmented control instead - reads as "a tool", not "another menu".
 .organize-labels-container {
+    --ul-surface: var(--ul-grey-0a);
+    
     background: var(--ul-surface);
     border: 1px solid var(--ul-surface-border);
     border-radius: $radius-md;
@@ -2957,4 +2959,4 @@ dialog.tag-create-card.ul-dialog {
     }
 }
 
-
+

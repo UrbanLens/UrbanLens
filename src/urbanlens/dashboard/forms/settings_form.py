@@ -541,7 +541,10 @@ class ExternalApiSettingsForm(forms.ModelForm):
         label="External Services",
         help_text="Allow UrbanLens to call external services (weather, geocoding, place data, AI) on your behalf.",
     )
+    # Rendered manually via the shared _priority_list.html partial, not the
+    # default widget - this field just needs to accept its serialized value.
+    name_source_priority = forms.CharField(required=False, widget=forms.HiddenInput())
 
     class Meta:
         model = Profile
-        fields = ["external_apis_enabled"]
+        fields = ["external_apis_enabled", "name_source_priority"]

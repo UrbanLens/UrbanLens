@@ -1089,15 +1089,15 @@
     // "@" (mirrors how other chat apps do inline mention/command menus)
     // instead of a static menu docked beside the toolbar button. Picking an
     // action removes the typed "@query" text and hands off to that action's
-    // existing flow (the share dialog for pin/trip/friend, the map composer
-    // for map) exactly as if the toolbar button had been clicked.
-    // "Draw a map" / "Attach an existing map" already have dedicated toolbar
-    // buttons (#dm-attach-map-btn / #dm-attach-existing-map-btn) - listing
-    // "map" here too would just be a second way to trigger the identical
-    // action, so this menu sticks to the three actions that only exist here.
+    // existing flow (the share dialog for pin/trip/friend, the existing-map
+    // picker for map) exactly as if the toolbar button had been clicked.
+    // "map" reuses the same #dm-attach-existing-map-btn flow (openExistingMapPicker)
+    // rather than the share-dialog flow the other three kinds use - see
+    // pickMentionAction below.
     var MENTION_ACTIONS = [
         { kind: 'pin', icon: 'location_on', label: 'Share a pin' },
         { kind: 'trip', icon: 'luggage', label: 'Invite to a trip' },
+        { kind: 'map', icon: 'folder_shared', label: 'Attach an existing map' },
         { kind: 'friend', icon: 'person_add', label: 'Recommend a friend' },
     ];
 
@@ -1214,6 +1214,7 @@
             autoExpandComposer(input);
         }
         closeMentionMenu();
+        if (kind === 'map') { openExistingMapPicker(); return; }
         openShareDialog(kind);
     }
 

@@ -15,7 +15,7 @@
 .e2ee-recovery-dialog {
     width: 100%;
     max-width: 460px;
-    background: var(--surface, #fff);
+    background: var(--ul-surface, #fff);
     color: var(--text, #1f2937);
     border-radius: 16px;
     padding: 1.75rem;
@@ -39,8 +39,8 @@
     display: block;
     padding: .85rem 1rem;
     margin-bottom: 1rem;
-    background: var(--surface-alt, #f3f4f6);
-    border: 1px dashed var(--border, #d1d5db);
+    background: var(--ul-surface-alt, #f3f4f6);
+    border: 1px dashed var(--ul-border, #d1d5db);
     border-radius: 10px;
     font-family: ui-monospace, "SF Mono", Menlo, monospace;
     font-size: 1rem;
@@ -57,15 +57,15 @@
     button {
         flex: 1;
         padding: .6rem;
-        border: 1px solid var(--border, #d1d5db);
+        border: 1px solid var(--ul-border, #d1d5db);
         border-radius: 9px;
-        background: var(--surface, #fff);
+        background: var(--ul-surface, #fff);
         color: var(--text, #1f2937);
         font-weight: 600;
         cursor: pointer;
 
         &:hover {
-            background: var(--surface-alt, #f3f4f6);
+            background: var(--ul-surface-alt, #f3f4f6);
         }
     }
 }
@@ -106,7 +106,7 @@
 .settings-e2ee-card {
     margin-top: 1.25rem;
     padding: 1.1rem 1.25rem;
-    border: 1px solid var(--border, #e5e7eb);
+    border: 1px solid var(--ul-border, #e5e7eb);
     border-radius: 12px;
 }
 

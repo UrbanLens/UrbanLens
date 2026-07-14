@@ -65,14 +65,19 @@
           hx-target="#{{ panel_id }}"
           hx-swap="outerHTML">
         {% csrf_token %}
-        <input type="text" name="name" class="alias-add-input" placeholder="Add an alias..." maxlength="255" required>
-        <label class="alias-nickname-toggle" data-tooltip="Don't use in web searches">
-            <input type="checkbox" name="is_nickname" value="1">
-            <i class="material-symbols-outlined">person</i>
+        <div class="alias-add-row">
+            <input type="text" name="name" class="alias-add-input" placeholder="Add an alias..." maxlength="255" required>
+            <button type="submit" class="alias-add-btn">
+                <i class="material-symbols-outlined">add</i>
+            </button>
+        </div>
+        <label class="alias-nickname-checkbox" title="Don't use in web searches">
+            <span class="ul-checkbox-wrap">
+                <input type="checkbox" name="is_nickname" value="1">
+                <span class="ul-checkbox"></span>
+            </span>
+            Nickname only (exclude from web searches)
         </label>
-        <button type="submit" class="alias-add-btn">
-            <i class="material-symbols-outlined">add</i>
-        </button>
     </form>
     {% if wrap_body %}</div>{% endif %}
 </div>
