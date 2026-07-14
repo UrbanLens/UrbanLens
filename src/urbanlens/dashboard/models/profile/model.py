@@ -294,6 +294,10 @@ class Profile(abstract.PublicDashboardModel):
     # letting users trade image resolution for more photos within their quota.
     image_downscale_max_dimension = IntegerField(null=True, blank=True)
 
+    # Voluntary downscale cap (height, px) for future video uploads - same
+    # tighten-only semantics as image_downscale_max_dimension above.
+    video_downscale_max_height = IntegerField(null=True, blank=True)
+
     # Places layer source preferences (only relevant when the user has the PLACES feature).
     places_google_enabled = BooleanField(default=True, help_text="Show Google historical landmarks in the Places layer.")
     places_nps_enabled = BooleanField(default=True, help_text="Show National Park Service locations in the Places layer.")

@@ -341,10 +341,10 @@ class PinSearchProvider(SearchProvider):
 class PhotoSearchProvider(SearchProvider):
     """Photos the user can see: own uploads plus images on their pins/pinned places.
 
-    Matches captions, attribution, plugin-generated keywords, and the names of
-    the pin/place each photo belongs to. This includes media materialized from
-    external providers (Yelp, Wikimedia, ...) for pins and wikis the user has
-    access to.
+    Matches captions, attribution, plugin-generated keywords, user-applied
+    media labels, and the names of the pin/place each photo belongs to. This
+    includes media materialized from external providers (Yelp, Wikimedia, ...)
+    for pins and wikis the user has access to.
     """
 
     slug = "photos"
@@ -374,6 +374,8 @@ class PhotoSearchProvider(SearchProvider):
                 "caption",
                 "author",
                 "keywords__keyword",
+                "labels__name",
+                "ocr_text",
                 "pin__name",
                 "location__official_name",
                 "location__wiki__name",

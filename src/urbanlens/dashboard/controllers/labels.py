@@ -20,11 +20,13 @@ from django.shortcuts import get_object_or_404, render
 from django.utils.html import escape
 from django.views import View
 
+from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.labels.model import (
     COLOR_CHOICES,
     ICON_CATEGORIES,
     ICON_CHOICES,
     KIND_CATEGORY,
+    KIND_MEDIA,
     KIND_STATUS,
     KIND_TAG,
     KIND_USER,
@@ -64,12 +66,14 @@ URL_KIND_TO_MODEL: dict[str, str] = {
     "status": KIND_STATUS,
     "statuses": KIND_STATUS,
     "people": KIND_USER,
+    "media": KIND_MEDIA,
 }
 MODEL_KIND_TO_URL: dict[str, str] = {
     KIND_TAG: "tag",
     KIND_CATEGORY: "category",
     KIND_STATUS: "status",
     KIND_USER: "people",
+    KIND_MEDIA: "media",
 }
 
 _BASE_CTX = {
@@ -170,6 +174,24 @@ _KIND_CONFIG: dict[str, _KindConfig] = {
         edit_target="#people-label-edit-dialog-body",
         enable_single_merge=False,
     ),
+    KIND_MEDIA: _KindConfig(
+        kind=KIND_MEDIA,
+        url_kind="media",
+        display_kind="media",
+        singular_title="Media Label",
+        rows_context_key="media_labels",
+        rows_target="#media-label-rows",
+        select_class="media-sel-cb",
+        select_data_name="media",
+        empty_icon="perm_media",
+        empty_message="No media labels yet. Create one to help you find your photos, videos, and documents in search.",
+        organize_tab="media",
+        standalone_title="Media Labels",
+        standalone_subtitle="Labels to help you find your photos, videos, and documents in site search.",
+        show_kind_toggle=False,
+        edit_target="#media-label-edit-dialog-body",
+        enable_single_merge=False,
+    ),
 }
 
 
@@ -259,6 +281,8 @@ def _queryset_for_kind(kind: str, profile: Profile) -> QuerySet[Label]:
         return Label.objects.statuses().for_profile(profile).ordered().with_pin_counts()
     if kind == KIND_USER:
         return Label.objects.user_labels().visible_to(profile).ordered()
+    if kind == KIND_MEDIA:
+        return Label.objects.media().visible_to(profile).ordered()
     msg = f"Unsupported label kind: {kind}"
     raise ValueError(msg)
 
@@ -267,6 +291,8 @@ def _parent_candidates(profile: Profile, kind: str, exclude_id: int | None = Non
     """Return labels eligible as parents for a label of the given kind."""
     if kind == KIND_USER:
         qs = Label.objects.user_labels().visible_to(profile)
+    elif kind == KIND_MEDIA:
+        qs = Label.objects.media().visible_to(profile)
     else:
         qs = Label.objects.visible_to(profile)
     if exclude_id is not None:
@@ -580,7 +606,11 @@ class LabelEditView(_LabelKindMixin, LoginRequiredMixin, View):
 
         profile = _request_profile(request)
         new_kind = request.POST.get("kind", self.kind)
-        if new_kind not in _ORGANIZE_KINDS:
+        # Kind conversion is only ever valid tag<->category<->status; a label
+        # whose OWN kind isn't one of those (people, media) must never be
+        # convertible via a crafted `kind` POST value, even though `new_kind`
+        # alone might look like a valid organize kind.
+        if new_kind not in _ORGANIZE_KINDS or self.kind not in _ORGANIZE_KINDS:
             new_kind = self.kind
 
         if new_kind != label.kind and label.is_protected:
@@ -747,6 +777,9 @@ class LabelMultiMergeView(_LabelKindMixin, LoginRequiredMixin, View):
         elif self.kind == KIND_USER:
             target = get_object_or_404(Label, id=target_id, kind=KIND_USER, profile=profile)
             sources = Label.objects.filter(id__in=source_ids, kind=KIND_USER, profile=profile).exclude(id=target_id)
+        elif self.kind == KIND_MEDIA:
+            target = get_object_or_404(Label, id=target_id, kind=KIND_MEDIA, profile=profile)
+            sources = Label.objects.filter(id__in=source_ids, kind=KIND_MEDIA, profile=profile).exclude(id=target_id)
         else:
             target = get_object_or_404(Label, id=target_id, kind=KIND_STATUS, profile=profile)
             sources = Label.objects.filter(
@@ -769,6 +802,10 @@ class LabelMultiMergeView(_LabelKindMixin, LoginRequiredMixin, View):
                         subject=assignment.subject,
                         label=target,
                     )
+                source.delete()
+        elif self.kind == KIND_MEDIA:
+            for source in sources:
+                target.images.add(*source.images.all())
                 source.delete()
         else:
             for source in sources:
@@ -965,6 +1002,11 @@ def _wiki_member_ids(wiki) -> set[int]:
     return set(wiki.labels.values_list("id", flat=True))
 
 
+def _image_member_ids(image: Image) -> set[int]:
+    """Return media label IDs assigned to a photo/video/document."""
+    return set(image.labels.values_list("id", flat=True))
+
+
 _MEMBERSHIP_PANEL = "dashboard/partials/labels/label_membership_panel.html"
 _MEMBERSHIP_URL_KIND = "category"  # URL prefix only; panel accepts all organize label kinds.
 
@@ -981,10 +1023,11 @@ def _membership_panel_ctx(
     collapse_scope: str,
     empty_text: str | None = None,
     embedded: bool = False,
+    labels_override: QuerySet[Label] | None = None,
 ) -> dict:
     """Build template context for label_membership_panel.html."""
     ctx: dict = {
-        "all_labels": _all_labels(profile),
+        "all_labels": labels_override if labels_override is not None else _all_labels(profile),
         "member_ids": member_ids,
         "panel_id": panel_id,
         "dialog_id_prefix": dialog_id_prefix,
@@ -1111,5 +1154,64 @@ class LabelLocationMembershipView(LoginRequiredMixin, View):
                 obj_uuid=location_slug,
                 collapse_scope="wiki",
                 empty_text="No labels. Click + to add one.",
+            ),
+        )
+
+
+class LabelImageMembershipView(LoginRequiredMixin, View):
+    """Add or remove media labels on a photo/video/document (HTMX panel).
+
+    Unlike pin/location membership, this is scoped to the owner's own media
+    labels (kind='media') only - media labels help find the item in search,
+    they never apply to pins or wikis.
+    """
+
+    def _get_owned_image(self, request: HttpRequest, image_uuid: str) -> Image:
+        return get_object_or_404(Image, uuid=image_uuid, profile__user=request.user)
+
+    def get(self, request: HttpRequest, image_uuid: str, *args, **kwargs) -> HttpResponse:
+        image = self._get_owned_image(request, image_uuid)
+        profile = _request_profile(request)
+        return render(
+            request,
+            _MEMBERSHIP_PANEL,
+            _membership_panel_ctx(
+                profile,
+                _image_member_ids(image),
+                panel_id="media-label-panel",
+                dialog_id_prefix="media-label-dialog-",
+                dialog_id_suffix=image_uuid,
+                membership_route="image",
+                obj_uuid=image_uuid,
+                collapse_scope="image",
+                empty_text="No media labels. Click + to add one.",
+                labels_override=Label.objects.visible_to(profile).media().ordered(),
+            ),
+        )
+
+    def post(self, request: HttpRequest, image_uuid: str, *args, **kwargs) -> HttpResponse:
+        image = self._get_owned_image(request, image_uuid)
+        profile = _request_profile(request)
+        label_id = _membership_label_id(request)
+        action = request.POST.get("action")
+        label = get_object_or_404(Label.objects.visible_to(profile), id=label_id, kind=KIND_MEDIA)
+        if action == "add":
+            image.labels.add(label)
+        elif action == "remove":
+            image.labels.remove(label)
+        return render(
+            request,
+            _MEMBERSHIP_PANEL,
+            _membership_panel_ctx(
+                profile,
+                _image_member_ids(image),
+                panel_id="media-label-panel",
+                dialog_id_prefix="media-label-dialog-",
+                dialog_id_suffix=image_uuid,
+                membership_route="image",
+                obj_uuid=image_uuid,
+                collapse_scope="image",
+                empty_text="No media labels. Click + to add one.",
+                labels_override=Label.objects.visible_to(profile).media().ordered(),
             ),
         )

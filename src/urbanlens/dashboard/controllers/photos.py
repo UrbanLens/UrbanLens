@@ -220,22 +220,41 @@ class PhotoUploadView(LoginRequiredMixin, View):
         Returns:
             The new image serialized for the gallery grid, or a 400 error.
         """
+        import posixpath
+
+        from urbanlens.dashboard.models.images.model import MediaKind
+        from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
+        from urbanlens.dashboard.services.documents import DOCUMENT_EXTENSIONS
+
         profile, _ = Profile.objects.get_or_create(user=request.user)
         image_file = request.FILES.get("image")
         if not image_file:
             return JsonResponse({"error": "No image provided."}, status=400)
-        content_type = image_file.content_type or ""
-        if content_type.startswith("video/"):
-            from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
 
+        content_type = image_file.content_type or ""
+        extension = posixpath.splitext(image_file.name or "")[1].lower()
+        if content_type.startswith("video/"):
+            media_type = MediaKind.VIDEO
             if not user_has_feature(request.user, SiteFeature.VIDEO_UPLOADS):
                 return JsonResponse({"error": "Video uploads are not enabled for your account."}, status=403)
-        elif not content_type.startswith("image/"):
-            return JsonResponse({"error": "That file is not an image or video."}, status=400)
+        elif content_type.startswith("image/"):
+            media_type = MediaKind.PHOTO
+        elif content_type == "application/pdf" or extension in DOCUMENT_EXTENSIONS:
+            media_type = MediaKind.DOCUMENT
+            if not user_has_feature(request.user, SiteFeature.DOCUMENT_UPLOADS):
+                return JsonResponse({"error": "Document uploads are not enabled for your account."}, status=403)
+        else:
+            return JsonResponse({"error": "That file is not an image, video, or supported document type."}, status=400)
+
+        from urbanlens.dashboard.services.storage import file_size_error_for_upload
+
+        size_error = file_size_error_for_upload(image_file.size)
+        if size_error:
+            return JsonResponse({"error": size_error}, status=413)
 
         checksum = compute_checksum(image_file)
         if Image.objects.filter(profile=profile, checksum=checksum).exists():
-            return JsonResponse({"error": "You already uploaded this photo."}, status=409)
+            return JsonResponse({"error": "You already uploaded this file."}, status=409)
 
         from urbanlens.dashboard.services.storage import quota_error_for_upload
 
@@ -243,7 +262,7 @@ class PhotoUploadView(LoginRequiredMixin, View):
         if quota_error:
             return JsonResponse({"error": quota_error}, status=413)
 
-        img = Image.objects.create(image=image_file, profile=profile, checksum=checksum, file_size=image_file.size)
+        img = Image.objects.create(image=image_file, profile=profile, checksum=checksum, file_size=image_file.size, media_type=media_type)
 
         from urbanlens.dashboard.services.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import process_image_upload
@@ -305,7 +324,7 @@ class PhotoActionView(LoginRequiredMixin, View):
             lng = float(image.effective_longitude) if image.effective_longitude is not None else None
         if lat is None or lng is None:
             return _render_card(request, image, toast="This photo has no location.", level="error")
-        # TODO: We must sanitize the name to prevent XSS attacks.
+        # name is sanitized in Pin.save() (see naming.sanitize_name), not here.
         _, visit = create_pin_and_log_visit(profile, image, latitude=lat, longitude=lng, name=request.POST.get("name"))
         if visit is None:
             return _toast("Pin created. Visit logging is turned off, so no visit was recorded.", "info", refresh_queue=True)

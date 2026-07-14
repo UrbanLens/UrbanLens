@@ -174,12 +174,15 @@ class Wiki(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addre
         persisted, an alias row for it is ensured. External naming refreshes
         create their attributed official alias rows *before* setting the name,
         so the ``get_or_create`` here finds them instead of mislabelling them
-        as user-provided.
+        as user-provided. ``name`` is also sanitized to a strict character set
+        before it's persisted (see ``sanitize_name``).
         """
-        from urbanlens.dashboard.services.locations.naming import is_meaningful_name
+        from urbanlens.dashboard.services.locations.naming import is_meaningful_name, sanitize_name
 
-        super().save(*args, **kwargs)
         update_fields = kwargs.get("update_fields")
+        if update_fields is None or "name" in update_fields:
+            self.name = sanitize_name(self.name) or ""
+        super().save(*args, **kwargs)
         if update_fields is not None and "name" not in update_fields:
             return
         if self.name != getattr(self, "_loaded_name", None) and is_meaningful_name(self.name):

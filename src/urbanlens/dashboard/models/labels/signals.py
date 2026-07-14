@@ -48,6 +48,15 @@ DEFAULT_TAGS: list[dict] = [
     {"name": "Dangerous", "icon": "⚠️", "color": "#F44336", "order": 20},
     {"name": "Popular", "icon": "🔥", "color": "#FF5722", "order": 10},
 ]
+# A small starter set of media labels (kind='media') - these help the user find
+# their own photos/videos/documents via the main site search; they have no
+# effect on pin icons or map filtering, unlike tag/category/status labels.
+DEFAULT_MEDIA_LABELS: list[dict] = [
+    {"name": "Interior", "icon": "🏠", "color": "#4CAF50", "order": 40},
+    {"name": "Exterior", "icon": "🌳", "color": "#8BC34A", "order": 30},
+    {"name": "Document", "icon": "📄", "color": "#607D8B", "order": 20},
+    {"name": "Video", "icon": "🎥", "color": "#9C27B0", "order": 10},
+]
 
 # Parent → child relationships established after all categories are created.
 # Children are a specialisation or sub-type of the parent, which lets users
@@ -82,10 +91,14 @@ def create_default_tags(sender: type[Profile], instance: Profile, created: bool,
     Tag labels:
         A small starter set of ordinary, user-owned tag labels. Users may edit or
         delete these exactly like tags they create themselves.
+
+    Media labels:
+        A small starter set of media labels, applied to photos/videos/documents
+        (not pins) to help the user find them via the main site search.
     """
     if not created:
         return
-    from urbanlens.dashboard.models.labels.model import KIND_CATEGORY, KIND_STATUS, KIND_TAG, KIND_USER, Label
+    from urbanlens.dashboard.models.labels.model import KIND_CATEGORY, KIND_MEDIA, KIND_STATUS, KIND_TAG, KIND_USER, Label
 
     status_defaults = [
         {"name": "Visited", "icon": "✅", "color": "#4CAF50", "order": 100, "is_protected": True},
@@ -151,5 +164,13 @@ def create_default_tags(sender: type[Profile], instance: Profile, created: bool,
             profile=instance,
             name=d["name"],
             kind=KIND_USER,
+            defaults={"icon": d["icon"], "color": d["color"], "order": d["order"]},
+        )
+
+    for d in DEFAULT_MEDIA_LABELS:
+        Label.objects.get_or_create(
+            profile=instance,
+            name=d["name"],
+            kind=KIND_MEDIA,
             defaults={"icon": d["icon"], "color": d["color"], "order": d["order"]},
         )

@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import re
 from typing import TYPE_CHECKING, Any
+import unicodedata
 
 from django.db import IntegrityError
 
@@ -137,6 +138,29 @@ _STREET_TYPE_WORDS: frozenset[str] = frozenset(
 
 _NAME_TOKEN_PATTERN = re.compile(r"[^a-z0-9]+", re.IGNORECASE)
 
+# Everyday punctuation kept as-is in sanitize_name (beyond letters/digits/space).
+# Deliberately excludes markup-significant characters (<, >, backtick, braces,
+# backslash, pipe, semicolon, ...) and symbols/emoji, which are dropped instead.
+_SAFE_NAME_PUNCTUATION: frozenset[str] = frozenset("-'.,&()/:!?\"#")
+
+# Typographic look-alikes folded to a plain-ASCII equivalent before filtering,
+# so e.g. a curly apostrophe survives sanitize_name instead of being dropped.
+_NAME_CHAR_SUBSTITUTIONS: dict[str, str] = {
+    "‘": "'",  # left single quote
+    "’": "'",  # right single quote
+    "‚": "'",  # single low-9 quote
+    "‛": "'",  # single high-reversed-9 quote
+    "“": '"',  # left double quote
+    "”": '"',  # right double quote
+    "„": '"',  # double low-9 quote
+    "‟": '"',  # double high-reversed-9 quote
+    "–": "-",  # en dash
+    "—": "-",  # em dash
+    "−": "-",  # minus sign
+}
+
+_WHITESPACE_RUN_PATTERN = re.compile(r"\s+")
+
 
 def is_coordinate_name(name: str) -> bool:
     if len(name) > _MAX_COORDINATE_NAME_LENGTH:
@@ -215,6 +239,50 @@ def is_address_derived_name(name: str, location: Location) -> bool:
             return True
 
     return False
+
+
+def sanitize_name(value: str | None) -> str | None:
+    """Sanitize a user-supplied or externally-sourced place/pin/wiki name.
+
+    Names are reused verbatim in several risky contexts - external API query
+    strings (Google, Wikipedia, Brave), AI prompts, and page templates - so
+    this normalizes to a strict allowlisted character set rather than only
+    blocking a few known-bad characters. Unicode letters and digits from any
+    script (accents, CJK, Cyrillic, Arabic, ...) are kept as-is so non-English
+    names are unaffected; curly quotes/dashes are folded to their plain-ASCII
+    equivalents; a small allowlist of everyday name punctuation is kept; and
+    everything else - markup-significant characters, control/formatting
+    characters, emoji, other symbols - is dropped.
+
+    This is invoked from the ``save()`` of every model with a user-facing name
+    field (Pin, Wiki, Location, alias rows), so it applies regardless of write
+    path (HTMX controllers, REST serializer, bulk edit, import, Django admin).
+    Length limits are enforced separately by each field's ``max_length``.
+
+    Args:
+        value: Raw name text, or ``None``.
+
+    Returns:
+        The sanitized name, or the input unchanged if it was falsy.
+    """
+    if not value:
+        return value
+
+    normalized = unicodedata.normalize("NFKC", value)
+    for bad, good in _NAME_CHAR_SUBSTITUTIONS.items():
+        normalized = normalized.replace(bad, good)
+
+    kept: list[str] = []
+    for char in normalized:
+        if char.isspace():
+            kept.append(" ")
+        elif char in _SAFE_NAME_PUNCTUATION or unicodedata.category(char)[0] in ("L", "N"):
+            kept.append(char)
+        # else: drop the character entirely - a symbol, emoji, or control/
+        # formatting character has no place in a name and is a known vector
+        # for markup injection or invisible/homograph spoofing.
+
+    return _WHITESPACE_RUN_PATTERN.sub(" ", "".join(kept)).strip()
 
 
 def _clean_candidate(value: Any) -> str | None:

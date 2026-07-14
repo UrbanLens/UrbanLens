@@ -56,10 +56,15 @@ class LabelQuerySet(abstract.FrontendDashboardQuerySet):
         # TODO: Don't hardcode 'user' string
         return self.filter(kind="user")
 
+    def media(self) -> Self:
+        """Return only items with kind='media' (attached to photos/videos/documents, not pins)."""
+        # Don't hardcode strings
+        return self.filter(kind="media")
+
     def location_labels(self) -> Self:
-        """Return only items without kind='user'."""
+        """Return only items assignable to pins/wikis (excludes 'user' and 'media', which attach elsewhere)."""
         # TODO: Don't hardcode 'user' string
-        return self.exclude(kind="user")
+        return self.exclude(kind__in=["user", "media"])
 
     def with_customizations_for(self, profile: Profile | int) -> Self:
         """Prefetch this user's LabelCustomizations into _user_customizations attr."""

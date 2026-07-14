@@ -1,6 +1,5 @@
-from urbanlens.dashboard.models.trips.queryset import TripQuerySet, TripManager
-from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripComment, TripMembership, TripActivityVote
-from urbanlens.dashboard.models.trips.viewset import TripViewSet
+from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripActivityVote, TripComment, TripMembership
+from urbanlens.dashboard.models.trips.queryset import TripManager, TripQuerySet
 from urbanlens.dashboard.models.trips.serializer import TripSerializer
 
-__all__ = ["Trip", "TripActivity", "TripComment", "TripMembership", "TripActivityVote", "TripQuerySet", "TripManager", "TripViewSet", "TripSerializer"]
+__all__ = ["Trip", "TripActivity", "TripActivityVote", "TripComment", "TripManager", "TripMembership", "TripQuerySet", "TripSerializer"]

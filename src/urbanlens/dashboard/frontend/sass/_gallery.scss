@@ -191,6 +191,31 @@
   &:hover { background: rgba(200, 0, 0, .8); }
 }
 
+.gallery-label-btn {
+  position: absolute;
+  top: 4px;
+  right: 32px;
+  background: rgba(0,0,0,.6);
+  border: none;
+  border-radius: 50%;
+  padding: 3px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity .15s;
+  display: flex;
+  align-items: center;
+
+  .material-symbols-outlined,
+  .material-icons {
+    font-size: 1rem;
+    color: var(--ul-grey-4);
+  }
+
+  &:hover { background: rgba(0, 0, 0, .85); }
+}
+
+.gallery-item:hover .gallery-label-btn { opacity: 1; }
+
 .gallery-empty {
   grid-column: 1 / -1;
   display: flex;

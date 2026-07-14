@@ -752,6 +752,9 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 "import_variant": variant,
                 "import_title": import_title,
                 "import_review_title": "Review Import",
+                # can_upload_videos/can_use_ai_features come from the
+                # add_feature_access context processor (see settings/base.py),
+                # not set explicitly here.
             },
         )
 

@@ -38,6 +38,15 @@ DOWNSCALE_DIMENSION_CHOICES: list[tuple[int, str]] = [
     (800, "800 px — web thumbnail"),
 ]
 
+# Downscale caps (height, px) offered to users for video uploads.
+VIDEO_DOWNSCALE_HEIGHT_CHOICES: list[tuple[int, str]] = [
+    (2160, "2160 px — 4K"),
+    (1440, "1440 px — 2K"),
+    (1080, "1080 px — Full HD"),
+    (720, "720 px — HD"),
+    (480, "480 px — SD"),
+]
+
 # Rough re-encoded output density, in bytes per pixel, used only for the
 # "about N more photos" estimate. JPEG at quality ~85 lands around 0.35 B/px;
 # WebP at the same visual quality around 0.22 B/px.
@@ -113,6 +122,30 @@ def quota_error_for_upload(profile: Profile, upload_size: int | None) -> str | N
     return f"This upload would exceed your storage quota ({filesizeformat(used)} of {filesizeformat(quota)} used). Delete some photos or lower your image size in Settings → Storage."
 
 
+def max_upload_file_size_bytes() -> int:
+    """Site-wide max size for a single photo/video/document upload, in bytes."""
+    return SiteSettings.get_current().max_upload_file_size_mb * 1_000_000
+
+
+def file_size_error_for_upload(upload_size: int | None) -> str | None:
+    """Check a single upload against the site-wide max file size.
+
+    Distinct from :func:`quota_error_for_upload`, which checks *total* stored
+    usage - this caps any one file regardless of how much quota is free.
+
+    Args:
+        upload_size: Size of the incoming file in bytes.
+
+    Returns:
+        A user-facing error message when the file is too large, or None.
+    """
+    max_bytes = max_upload_file_size_bytes()
+    size = upload_size or 0
+    if size <= max_bytes:
+        return None
+    return f"That file is too large ({filesizeformat(size)}). The maximum upload size is {filesizeformat(max_bytes)}."
+
+
 def get_entitled_policy(profile: Profile) -> tuple[int | None, bool]:
     """The site-imposed downscale policy for a profile, ignoring the user's own cap.
 
@@ -148,6 +181,40 @@ def get_downscale_policy(profile: Profile) -> tuple[int | None, bool]:
     entitled_dimension, convert_webp = get_entitled_policy(profile)
     dimensions = [d for d in (entitled_dimension, profile.image_downscale_max_dimension) if d]
     return (min(dimensions) if dimensions else None), convert_webp
+
+
+def get_entitled_video_policy(profile: Profile) -> int | None:
+    """The site-imposed video downscale policy for a profile, ignoring the user's own cap.
+
+    Mirrors :func:`get_entitled_policy` for photos, but videos have no WebP-
+    equivalent format toggle - only a max resolution.
+
+    Args:
+        profile: The uploading profile.
+
+    Returns:
+        Max video height in pixels the site imposes, or None for no cap.
+    """
+    settings = SiteSettings.get_current()
+    exempt = not settings.video_downscale_vip and bool(active_subscription_roles(profile.user))
+    return settings.video_downscale_max_height if settings.video_downscale_enabled and not exempt else None
+
+
+def get_video_downscale_policy(profile: Profile) -> int | None:
+    """The effective video downscale policy for a profile's future uploads.
+
+    Combines the site-imposed cap with the user's voluntary cap: the user can
+    only tighten it (the smaller height wins), never loosen it.
+
+    Args:
+        profile: The uploading profile.
+
+    Returns:
+        Max video height in pixels, or None for no cap.
+    """
+    entitled = get_entitled_video_policy(profile)
+    heights = [h for h in (entitled, profile.video_downscale_max_height) if h]
+    return min(heights) if heights else None
 
 
 def estimate_bytes_per_photo(max_dimension: int | None, convert_webp: bool) -> int:
@@ -230,6 +297,30 @@ def get_storage_settings_context(profile: Profile) -> dict:
             }
         )
 
+    entitled_video_height = get_entitled_video_policy(profile)
+    if entitled_video_height is None:
+        default_video_label = "Site default — original resolution (no downscaling)"
+    else:
+        default_video_label = f"Site default — {entitled_video_height} px"
+
+    video_options = [
+        {
+            "value": "",
+            "label": default_video_label,
+            "selected": profile.video_downscale_max_height is None,
+        }
+    ]
+    for height, label in VIDEO_DOWNSCALE_HEIGHT_CHOICES:
+        if entitled_video_height is not None and height >= entitled_video_height:
+            continue
+        video_options.append(
+            {
+                "value": str(height),
+                "label": label,
+                "selected": profile.video_downscale_max_height == height,
+            }
+        )
+
     return {
         "storage_quota_bytes": quota_bytes,
         "storage_used_bytes": used_bytes,
@@ -238,6 +329,8 @@ def get_storage_settings_context(profile: Profile) -> dict:
         "storage_entitled_dimension": entitled_dimension,
         "storage_convert_webp": convert_webp,
         "storage_downscale_options": options,
+        "storage_entitled_video_height": entitled_video_height,
+        "storage_video_downscale_options": video_options,
     }
 
 
@@ -252,3 +345,16 @@ def allowed_user_dimension_values(profile: Profile) -> set[int]:
     """
     entitled_dimension, _ = get_entitled_policy(profile)
     return {dimension for dimension, _label in DOWNSCALE_DIMENSION_CHOICES if entitled_dimension is None or dimension < entitled_dimension}
+
+
+def allowed_user_video_height_values(profile: Profile) -> set[int]:
+    """The video downscale caps a user may choose for themselves.
+
+    Args:
+        profile: The profile saving the preference.
+
+    Returns:
+        The set of permitted height values (the empty preference is always allowed).
+    """
+    entitled_height = get_entitled_video_policy(profile)
+    return {height for height, _label in VIDEO_DOWNSCALE_HEIGHT_CHOICES if entitled_height is None or height < entitled_height}

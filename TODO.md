@@ -5,7 +5,7 @@ Features planned for this release.
 * Cleanup git history, and begin using branches for dev. [UL-14]
 * Include screenshots of the app in About page, and in the README.md file. [UL-16]
 * Provide explanation of how to do a google takeout to import pins. (Possible onboarding process?) [UL-142]
-* Ensure fully sanitized user input for pin names, location names, etc, which are passed into external urls. Require strict character sets, min/max lengths, and so on. [UL-143]
+* ~~Ensure fully sanitized user input for pin names, location names, etc, which are passed into external urls. Require strict character sets, min/max lengths, and so on. [UL-143]~~ (added `naming.sanitize_name` - an allowlisted-charset sanitizer invoked from `Pin`/`Wiki`/`Location`/alias `save()`, so it applies regardless of write path; length limits were already enforced via each field's `max_length`)
 * UI: Edit category dialog [UL-146]
 * UI: Bulk edit category dialog (buttons are awful) [UL-147]
 * Add descriptions to badges that are pre-populated. [UL-245]

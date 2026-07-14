@@ -79,6 +79,12 @@ Context:
         <i class="material-symbols-outlined">delete</i>
       </button>
       {% endif %}
+      <button type="button" class="gallery-label-btn" title="Media labels (helps you find this in search)"
+              hx-get="{% url 'label.image' image_uuid=img.uuid %}"
+              hx-target="#photo-label-panel-slot" hx-swap="innerHTML"
+              hx-on::after-request="if(event.detail.successful){document.getElementById('media-label-dialog-{{ img.uuid }}').showModal()}">
+        <i class="material-symbols-outlined">sell</i>
+      </button>
       {% endif %}
       {% if img.caption %}
       <p class="gallery-caption">{{ img.caption }}</p>
@@ -103,6 +109,9 @@ Context:
   </ul>
   {% include "dashboard/partials/ui/_pagination_controls.html" %}
 </div>
+
+{# -- Media-label panel (loaded lazily for whichever photo's label icon was clicked) -- #}
+<div id="photo-label-panel-slot"></div>
 
 {% if context_type == "pin" %}
 {# -- Photo gallery multi-select floating toolbar --------------------------- #}

@@ -1153,6 +1153,22 @@
                     {% endif %}
                 </div>
 
+                {% if can_upload_videos %}
+                <div class="settings-field">
+                    <label class="settings-label" for="id_video_downscale_max_height">Video quality</label>
+                    <p class="settings-help">
+                        Videos are downscaled to this height when stored. Choosing a lower quality lets more
+                        video fit in your storage. Applies to future uploads only - existing videos are not
+                        changed.
+                    </p>
+                    <select class="settings-select browser-default" name="video_downscale_max_height" id="id_video_downscale_max_height">
+                        {% for option in storage_video_downscale_options %}
+                        <option value="{{ option.value }}"{% if option.selected %} selected{% endif %}>{{ option.label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {% endif %}
+
                 <div class="settings-actions">
                     <button type="submit" class="settings-save-btn">Save</button>
                 </div>

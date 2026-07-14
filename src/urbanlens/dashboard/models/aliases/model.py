@@ -57,6 +57,20 @@ class _AliasBase(abstract.DashboardModel):
         abstract = True
         ordering = ["name"]
 
+    def save(self, *args, **kwargs) -> None:
+        """Sanitize ``name`` to a strict character set before persisting it.
+
+        Single enforcement point for every alias creation path: the manual
+        add-alias controller, ``Pin``/``Wiki.save()``'s own alias sync, and
+        external name-provider syncs.
+        """
+        from urbanlens.dashboard.services.locations.naming import sanitize_name
+
+        update_fields = kwargs.get("update_fields")
+        if update_fields is None or "name" in update_fields:
+            self.name = sanitize_name(self.name) or ""
+        super().save(*args, **kwargs)
+
     @property
     def is_nickname(self) -> bool:
         """True when this alias is marked nickname-only (excluded from external API queries)."""

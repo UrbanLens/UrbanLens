@@ -12,7 +12,11 @@ from django.http import HttpRequest, JsonResponse
 from django.shortcuts import render
 from django.views import View
 
-from urbanlens.dashboard.models.labels.model import COLOR_CHOICES, ICON_CATEGORIES, ICON_CHOICES, KIND_USER, Label
+from urbanlens.dashboard.models.labels.model import COLOR_CHOICES, ICON_CATEGORIES, ICON_CHOICES, KIND_MEDIA, KIND_USER, Label
+
+# Kinds that never affect map icon priority, and so are excluded from the
+# Display Order tab (tag/category/status only).
+_NON_PRIORITY_KINDS = (KIND_USER, KIND_MEDIA)
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
@@ -20,7 +24,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _PERM = "dashboard.edit_global_label"
-_LABEL_TABS = frozenset({"tags", "categories", "status", "people", "priority"})
+_LABEL_TABS = frozenset({"tags", "categories", "status", "people", "media", "priority"})
 _SECTION_TABS = frozenset({"lists", "filters"})
 _VALID_ORGANIZE_TABS = _LABEL_TABS | _SECTION_TABS
 
@@ -52,7 +56,8 @@ def build_organize_page_context(request: HttpRequest, active_tab: str = "tags") 
     categories = Label.objects.categories().for_profile(profile).ordered().with_customizations_for(profile).with_pin_counts()
     statuses = Label.objects.statuses().for_profile(profile).ordered().with_customizations_for(profile).with_pin_counts()
     user_labels = Label.objects.user_labels().visible_to(profile).ordered().with_customizations_for(profile)
-    priority_items = Label.objects.visible_to(profile).exclude(kind=KIND_USER).ordered().with_pin_counts()
+    media_labels = Label.objects.media().visible_to(profile).ordered()
+    priority_items = Label.objects.visible_to(profile).exclude(kind__in=_NON_PRIORITY_KINDS).ordered().with_pin_counts()
 
     active_section = active_tab if active_tab in _SECTION_TABS else "labels"
     label_tab = active_tab if active_tab in _LABEL_TABS else "tags"
@@ -63,6 +68,7 @@ def build_organize_page_context(request: HttpRequest, active_tab: str = "tags") 
         "categories": categories,
         "statuses": statuses,
         "user_labels": user_labels,
+        "media_labels": media_labels,
         "priority_items": priority_items,
         "active_tab": label_tab,
         "active_section": active_section,
@@ -112,7 +118,7 @@ class OrganizePriorityListView(LoginRequiredMixin, View):
         if not isinstance(request.user, AuthUser):
             raise TypeError("Expected an authenticated user")
         profile: Profile = request.user.profile
-        priority_items = Label.objects.visible_to(profile).exclude(kind=KIND_USER).ordered().with_pin_counts()
+        priority_items = Label.objects.visible_to(profile).exclude(kind__in=_NON_PRIORITY_KINDS).ordered().with_pin_counts()
         return render(request, "dashboard/partials/labels/_priority_list.html", {"priority_items": priority_items})
 
 

@@ -20,7 +20,7 @@ from django.db.models import (
 )
 
 from urbanlens.dashboard.models import abstract
-from urbanlens.dashboard.models.labels.meta import COLOR_CHOICES, ICON_CATEGORIES, ICON_CHOICES, KIND_CATEGORY, KIND_CHOICES, KIND_STATUS, KIND_TAG, KIND_USER
+from urbanlens.dashboard.models.labels.meta import COLOR_CHOICES, ICON_CATEGORIES, ICON_CHOICES, KIND_CATEGORY, KIND_CHOICES, KIND_MEDIA, KIND_STATUS, KIND_TAG, KIND_USER
 from urbanlens.dashboard.models.labels.queryset import LabelManager
 
 if TYPE_CHECKING:

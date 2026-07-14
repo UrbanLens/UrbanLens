@@ -128,6 +128,28 @@ class SiteSettings(abstract.FrontendDashboardModel):
         help_text="Also downscale/convert uploads from users with an active subscription. When off, subscribers keep their original files (unless they opt into downscaling themselves).",
         verbose_name="Downscale subscriber uploads",
     )
+    max_upload_file_size_mb = IntegerField(
+        default=250,
+        help_text="Maximum size (MB) for a single photo, video, or document upload. Enforced on both the frontend and backend.",
+        verbose_name="Max upload file size (MB)",
+        validators=[MinValueValidator(1), MaxValueValidator(20_000)],
+    )
+    video_downscale_enabled = BooleanField(
+        default=True,
+        help_text="Downscale uploaded videos that exceed the maximum height below, to save storage space.",
+        verbose_name="Downscale uploaded videos",
+    )
+    video_downscale_max_height = IntegerField(
+        default=1080,
+        help_text="Vertical resolution (px) uploaded videos are downscaled to when downscaling is enabled.",
+        verbose_name="Max video height (px)",
+        validators=[MinValueValidator(240), MaxValueValidator(8_000)],
+    )
+    video_downscale_vip = BooleanField(
+        default=False,
+        help_text="Also downscale video uploads from users with an active subscription. When off, subscribers keep their original video resolution (unless they opt into downscaling themselves).",
+        verbose_name="Downscale subscriber videos",
+    )
 
     # --- Search provider ---
 
@@ -448,4 +470,6 @@ class SiteSettings(abstract.FrontendDashboardModel):
             CheckConstraint(condition=Q(email_limit_per_day__gte=0), name="email_limit_per_day_gte_0"),
             CheckConstraint(condition=Q(email_limit_per_month__gte=0), name="email_limit_per_month_gte_0"),
             CheckConstraint(condition=Q(image_downscale_max_dimension__gte=256), name="image_downscale_max_dim_gte_256"),
+            CheckConstraint(condition=Q(max_upload_file_size_mb__gte=1), name="max_upload_file_size_mb_gte_1"),
+            CheckConstraint(condition=Q(video_downscale_max_height__gte=240), name="video_downscale_max_height_gte_240"),
         ]

@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
-from django.db.models import CASCADE, SET_NULL, BigIntegerField, BooleanField, CharField, DateTimeField, DecimalField, ForeignKey, ImageField, Index, JSONField, URLField, UUIDField
+from django.db.models import CASCADE, SET_NULL, BigIntegerField, BooleanField, CharField, DateTimeField, DecimalField, ForeignKey, ImageField, Index, JSONField, ManyToManyField, TextField, URLField, UUIDField
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.abstract.choices import TextChoices
@@ -38,10 +38,25 @@ class ImageSource(TextChoices):
     GOOGLE_PHOTOS = "google_photos", "Google Photos"
 
 
+class MediaKind(TextChoices):
+    """What kind of file this Image row actually holds.
+
+    Photos, videos, and documents all share every other field on this model
+    (caption, author, location, labels, etc.) - this is only a discriminator
+    for upload-time processing (services.videos/services.documents) and
+    display (player vs. viewer vs. image tag).
+    """
+
+    PHOTO = "photo", "Photo"
+    VIDEO = "video", "Video"
+    DOCUMENT = "document", "Document"
+
+
 class Image(abstract.FrontendDashboardModel):
-    """A photo uploaded by a user, attached to a pin, community wiki, or safety check-in."""
+    """A photo, video, or document uploaded by a user, attached to a pin, community wiki, or safety check-in."""
 
     image = ImageField(upload_to="pin_images/")
+    media_type = CharField(max_length=10, choices=MediaKind.choices, default=MediaKind.PHOTO, db_index=True)
     # Provenance for the Media gallery's per-source tabs (see ImageSource). Only
     # meaningful once a row exists; almost every Image row is a plain upload.
     source = CharField(max_length=30, choices=ImageSource.choices, default=ImageSource.UPLOAD)
@@ -150,11 +165,20 @@ class Image(abstract.FrontendDashboardModel):
     # is re-encoded. Keys are human-readable tag names; values are
     # JSON-sanitized (rationals/bytes stringified).
     exif_data = JSONField(null=True, blank=True)
+    # Extracted text for a document upload: the PDF's native text layer plus
+    # OCR output from any embedded raster images (see services.documents).
+    # Searched by the Media section's search box (labels__name, caption, etc.)
+    # the same way as every other text field on this model.
+    ocr_text = TextField(null=True, blank=True)
     # Set when the user explicitly clears an unfiled photo out of the Memories
     # "needs attention" organize queue without deleting it (e.g. a photo with no
     # GPS they don't want to tie to a visit). Keeps that queue finite; the photo
     # still appears in the full gallery.
     organize_dismissed = BooleanField(default=False)
+    # Media (kind='media') labels help the user find this photo/video/document
+    # via the main site search; unlike Pin/Wiki labels, media labels have no
+    # effect on map icons or filtering.
+    labels = ManyToManyField("dashboard.Label", related_name="images", blank=True)
 
     if TYPE_CHECKING:
         pin_id: int | None

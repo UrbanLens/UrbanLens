@@ -12,6 +12,8 @@
     {% include "dashboard/partials/ui/_page_hero.html" with icon="flag_circle" title=standalone_title subtitle=standalone_subtitle modifier="top" %}
     {% elif active_tab == 'people' %}
     {% include "dashboard/partials/ui/_page_hero.html" with icon="people" title=standalone_title subtitle=standalone_subtitle modifier="top" %}
+    {% elif active_tab == 'media' %}
+    {% include "dashboard/partials/ui/_page_hero.html" with icon="perm_media" title=standalone_title subtitle=standalone_subtitle modifier="top" %}
     {% endif %}
 {% else %}
 {% include "dashboard/partials/ui/_page_hero.html" with icon="tune" title="Organize" subtitle="Manage the tags, categories, statuses, and people labels used to organize your pins and other data." modifier="top" %}
@@ -84,6 +86,11 @@
                     <i class="material-symbols-outlined">people</i> People
                     <span class="org-tab-count" id="org-tab-count-people" hidden></span>
                 </button>
+                <button type="button" class="organize-tab{% if active_tab == 'media' %} active{% endif %}"
+                        role="tab" data-tab="media" aria-controls="panel-media" data-filter-ns="media">
+                    <i class="material-symbols-outlined">perm_media</i> Media
+                    <span class="org-tab-count" id="org-tab-count-media" hidden></span>
+                </button>
                 <button type="button" class="organize-tab{% if active_tab == 'priority' %} active{% endif %}"
                         role="tab" data-tab="priority" aria-controls="panel-priority">
                     <i class="material-symbols-outlined">low_priority</i> Display Order
@@ -146,6 +153,8 @@
             {% endif %}
 
             {% include 'dashboard/partials/labels/organize_label_panel.html' with tab='people' ns='people' form_id='new-people-form' filter_ns='people' label_url_kind='people' kind='people' singular_title='Label' plural_lower='labels' labels=user_labels parent_items=user_labels rows_id='people-label-rows' rows_target='#people-label-rows' select_class='people-sel-cb' select_data_name='people' edit_target='#people-label-edit-dialog-body' empty_icon='person' name_placeholder='e.g. Friend, Frequent Explorer' desc_placeholder='Who should this label apply to?' empty_message='No people labels yet. Create one to start organizing people.' selectable=True editable=True deletable=True %}
+
+            {% include 'dashboard/partials/labels/organize_label_panel.html' with tab='media' ns='media' form_id='new-media-form' filter_ns='media' label_url_kind='media' kind='media' singular_title='Media Label' plural_lower='labels' labels=media_labels parent_items=media_labels rows_id='media-label-rows' rows_target='#media-label-rows' select_class='media-sel-cb' select_data_name='media' edit_target='#media-label-edit-dialog-body' empty_icon='perm_media' name_placeholder='e.g. Interior, Drone Shot' desc_placeholder='What kind of media does this describe?' empty_message='No media labels yet. Create one to help you find your photos, videos, and documents in search.' selectable=True editable=True deletable=True %}
         </div>{# end .organize-labels-container-body #}
     </div>{# end .organize-labels-container #}
     </div>{# end #panel-labels #}
@@ -194,6 +203,7 @@
 {# -- Shared label edit dialog (tags, categories, statuses) ------------------ #}
 {% include 'dashboard/partials/labels/organize_label_edit_dialog.html' with dialog_id='label-edit-dialog' title='Edit' title_id='label-edit-dialog-title' body_id='label-edit-dialog-body' %}
 {% include 'dashboard/partials/labels/organize_label_edit_dialog.html' with dialog_id='people-label-edit-dialog' title='Edit Label' title_id='people-label-edit-dialog-title' body_id='people-label-edit-dialog-body' %}
+{% include 'dashboard/partials/labels/organize_label_edit_dialog.html' with dialog_id='media-label-edit-dialog' title='Edit Media Label' title_id='media-label-edit-dialog-title' body_id='media-label-edit-dialog-body' %}
 
 {# -- Label merge dialogs (shared template for tag/category/status) ------------ #}
 {% include 'dashboard/partials/labels/organize_label_merge_dialog.html' with ns='tag' title='Merge Tags' %}

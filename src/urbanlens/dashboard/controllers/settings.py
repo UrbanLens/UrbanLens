@@ -30,7 +30,7 @@ from urbanlens.dashboard.forms.settings_form import (
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.subscriptions.model import SiteFeature, user_has_feature
 from urbanlens.dashboard.services.apis.flickr.oauth import is_configured as flickr_is_configured
-from urbanlens.dashboard.services.storage import allowed_user_dimension_values, get_storage_settings_context
+from urbanlens.dashboard.services.storage import allowed_user_dimension_values, allowed_user_video_height_values, get_storage_settings_context
 from urbanlens.dashboard.services.webauthn import list_credentials
 
 if TYPE_CHECKING:
@@ -241,8 +241,24 @@ class SettingsView(LoginRequiredMixin, View):
                     messages.error(request, "That photo size is not available.")
                     return _settings_redirect("storage-settings-section")
                 profile.image_downscale_max_dimension = dimension
-            profile.save(update_fields=["image_downscale_max_dimension", "updated"])
-            messages.success(request, "Storage settings saved. The new photo size applies to future uploads.")
+
+            raw_video_height = (request.POST.get("video_downscale_max_height") or "").strip()
+            if raw_video_height == "":
+                profile.video_downscale_max_height = None
+            else:
+                try:
+                    video_height = int(raw_video_height)
+                except (ValueError, TypeError):
+                    video_height = None
+                if video_height is None or video_height not in allowed_user_video_height_values(profile):
+                    if is_xhr:
+                        return JsonResponse({"ok": False, "errors": {"video_downscale_max_height": ["That video quality is not available."]}})
+                    messages.error(request, "That video quality is not available.")
+                    return _settings_redirect("storage-settings-section")
+                profile.video_downscale_max_height = video_height
+
+            profile.save(update_fields=["image_downscale_max_dimension", "video_downscale_max_height", "updated"])
+            messages.success(request, "Storage settings saved. The new photo/video quality applies to future uploads.")
             return _settings_redirect("storage-settings-section")
 
         elif section == "map":

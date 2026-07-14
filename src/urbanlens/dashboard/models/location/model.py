@@ -399,9 +399,15 @@ class Location(abstract.PublicDashboardModel):
             )
 
     def save(self, *args, **kwargs) -> None:
-        """Sync the PostGIS point, then let PublicDashboardModel mint a routing slug."""
+        """Sanitize the official name, sync the PostGIS point, then let PublicDashboardModel mint a routing slug."""
+        from urbanlens.dashboard.services.locations.naming import sanitize_name
+
         if self.pk is not None:
             self._assert_identity_unchanged(kwargs.get("update_fields"))
+
+        update_fields = kwargs.get("update_fields")
+        if update_fields is None or "official_name" in update_fields:
+            self.official_name = sanitize_name(self.official_name)
 
         if self.latitude is not None and self.longitude is not None:
             lon = float(self.longitude)

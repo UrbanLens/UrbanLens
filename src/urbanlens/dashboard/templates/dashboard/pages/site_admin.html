@@ -287,6 +287,47 @@
                     <option value="0"{% if not settings.image_downscale_vip %} selected{% endif %}>No, subscribers keep originals</option>
                 </select>
             </div>
+            <div class="form-row">
+                <label for="max-upload-file-size-mb">Max upload file size (MB)</label>
+                <p class="form-help">
+                    Maximum size for a single photo, video, or document upload. Enforced on both the
+                    upload form and the server.
+                </p>
+                <input type="number" name="max_upload_file_size_mb" id="max-upload-file-size-mb"
+                       value="{{ settings.max_upload_file_size_mb }}" min="1" max="20000" step="1">
+            </div>
+            <div class="form-row">
+                <label for="video-downscale-enabled">Downscale uploaded videos</label>
+                <p class="form-help">
+                    Videos taller than the maximum height below are re-encoded on upload to save storage
+                    space.
+                </p>
+                <select name="video_downscale_enabled" id="video-downscale-enabled">
+                    <option value="1"{% if settings.video_downscale_enabled %} selected{% endif %}>Enabled</option>
+                    <option value="0"{% if not settings.video_downscale_enabled %} selected{% endif %}>Disabled</option>
+                </select>
+            </div>
+            <div class="form-row">
+                <label for="video-downscale-max-height">Max video height (px)</label>
+                <p class="form-help">
+                    Vertical resolution videos are downscaled to. 1080&nbsp;px (Full HD) keeps plenty of
+                    detail while meaningfully reducing storage for 4K phone footage.
+                </p>
+                <input type="number" name="video_downscale_max_height" id="video-downscale-max-height"
+                       value="{{ settings.video_downscale_max_height }}" min="240" max="8000" step="1">
+            </div>
+            <div class="form-row">
+                <label for="video-downscale-vip">Downscale subscriber videos</label>
+                <p class="form-help">
+                    Whether videos uploaded by users with an active subscription are also downscaled. When
+                    off, subscribers keep their original resolution (unless they opt into downscaling in
+                    their own settings).
+                </p>
+                <select name="video_downscale_vip" id="video-downscale-vip">
+                    <option value="1"{% if settings.video_downscale_vip %} selected{% endif %}>Yes, downscale subscribers too</option>
+                    <option value="0"{% if not settings.video_downscale_vip %} selected{% endif %}>No, subscribers keep originals</option>
+                </select>
+            </div>
             <div class="form-actions">
                 <button type="submit" class="btn btn--primary btn--lg btn--submit">Save Settings</button>
             </div>

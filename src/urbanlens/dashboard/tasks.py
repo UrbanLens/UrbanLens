@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+from dataclasses import dataclass
 import logging
 from typing import TYPE_CHECKING
 
@@ -54,12 +55,17 @@ def enrich_wiki_location(self, wiki_id: int) -> bool:
         logger.exception("enrich_wiki_location: Google place linking failed for location %s", location.pk)
 
     if not wiki.name or wiki.name == "Unnamed Location":
+        from urbanlens.dashboard.services.locations.naming import sanitize_name
+
         try:
             place_name = location.official_name or name_resolver.resolve(float(location.latitude), float(location.longitude))
         except Exception:
             logger.exception("enrich_wiki_location: name resolution failed for location %s", location.pk)
             place_name = None
-        if place_name:
+        # This bypasses Wiki.save() (a bulk .update()), so sanitize here too -
+        # location.official_name is already sanitized by Location.save(), but
+        # name_resolver.resolve() is a live external-source result that isn't.
+        if place_name := sanitize_name(place_name):
             Wiki.objects.filter(pk=wiki.pk, name__in=["", "Unnamed Location"]).update(name=place_name)
 
     update_task_progress(self, current=1, total=2, message="Generating boundaries...")
@@ -327,36 +333,21 @@ def prefetch_location_external_data(location_id: int, google_place_id: str | Non
         logger.exception("prefetch_location_external_data: name refresh failed for location %s", location_id)
 
 
-@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
-def process_image_upload(self, image_id: int) -> bool:
-    """Extract image metadata after upload and update the Image row.
+@dataclass
+class _UploadProcessResult:
+    """What each media-type-specific processing step produced."""
 
-    Besides EXIF GPS/capture time, this backfills two derived fields when
-    missing: the duplicate-detection ``checksum`` (rows predating that field)
-    and the shared ``location`` link - taken from the pin/wiki the photo is
-    attached to, or resolved from its GPS via ``get_nearby_or_create``.
+    update_fields: dict[str, object]
+    coords: tuple[float, float] | None = None
+    new_stored_size: int | None = None
 
-    It also snapshots the full EXIF metadata (before any re-encoding), applies
-    the storage downscale/WebP policy for the uploader, and records the stored
-    file size that counts against the uploader's storage quota.
 
-    Attribution fields (author/source_url/caption/copyright) are filled from
-    EXIF/PNG metadata when present and not already set. When none of those
-    four fields are present at all and the filename matches a common phone/
-    camera auto-naming convention (e.g. ``PXL_20260709_123456.jpg``), the
-    uploader is assumed to be the author; any other unattributed photo is
-    left blank rather than guessed at.
+def _process_photo_upload(image: Image, image_id: int, strip_location: bool) -> _UploadProcessResult | None:
+    """Photo-specific metadata extraction and downscaling.
 
-    When the uploader has turned off visit-history tracking (``track_pin_visits``),
-    GPS is treated as sensitive rather than useful: it's never read into
-    ``Image.latitude``/``longitude`` or the ``exif_data`` snapshot, the stored
-    file's own embedded GPS EXIF tag is stripped (forcing a re-save even when
-    no downscaling would otherwise happen), and no visit suggestion is raised
-    from the photo.
+    Returns None on unrecoverable read failure (the caller treats that as a
+    failed task run).
     """
-    from decimal import Decimal
-
-    from urbanlens.dashboard.models.images.model import Image
     from urbanlens.dashboard.services.images import (
         compute_checksum,
         downscale_stored_image,
@@ -369,19 +360,7 @@ def process_image_upload(self, image_id: int) -> bool:
         extract_taken_at,
         is_camera_generated_filename,
     )
-    from urbanlens.dashboard.services.memories.visits import maybe_suggest_photo_visit
     from urbanlens.dashboard.services.storage import get_downscale_policy
-    from urbanlens.dashboard.services.visits import visit_logging_allowed
-
-    update_task_progress(self, current=0, total=1, message="Processing image metadata...")
-    image = Image.objects.filter(pk=image_id).select_related("pin__location", "wiki__location", "profile").first()
-    if image is None or not image.image:
-        return False
-
-    # A profile with visit-history tracking off doesn't want its location
-    # trail reconstructible from photos either - GPS coordinates are neither
-    # extracted into the DB nor left embedded in the stored file below.
-    strip_location = image.profile is not None and not visit_logging_allowed(image.profile)
 
     try:
         with image.image.open("rb") as image_file:
@@ -395,18 +374,12 @@ def process_image_upload(self, image_id: int) -> bool:
             source_url = extract_source_url(image_file) if not image.source_url else None
     except (OSError, ValueError) as exc:
         logger.warning("Image metadata extraction failed for image %s: %s", image_id, exc, exc_info=True)
-        return False
+        return None
 
     if strip_location and exif_data:
         exif_data.pop("GPSInfo", None)
 
     update_fields: dict[str, object] = {}
-    if coords:
-        lat, lng = coords
-        image.latitude = Decimal(str(lat))
-        image.longitude = Decimal(str(lng))
-        update_fields["latitude"] = image.latitude
-        update_fields["longitude"] = image.longitude
     if taken_at:
         image.taken_at = taken_at
         update_fields["taken_at"] = taken_at
@@ -429,18 +402,13 @@ def process_image_upload(self, image_id: int) -> bool:
         image.source_url = source_url
         update_fields["source_url"] = source_url
 
-    if image.profile is not None and not (image.author or image.source_url or image.caption or image.copyright) and is_camera_generated_filename(image.image.name):
+    if image.profile is not None and not (image.author or image.source_url or image.caption or image.copyright) and is_camera_generated_filename(image.image.name or ""):
         uploader_name = image.profile.full_name or image.profile.username
         if uploader_name:
             image.author = uploader_name
             update_fields["author"] = uploader_name
 
-    # Downscale/convert per the uploader's storage policy, then record the
-    # stored size that counts against their quota. The EXIF snapshot above is
-    # taken from the original file, so nothing is lost in the re-encode.
-    stored_size: int | None = None
-    with contextlib.suppress(OSError):
-        stored_size = image.image.size
+    new_stored_size: int | None = None
     if image.profile is not None:
         max_dimension, convert_webp = get_downscale_policy(image.profile)
         if max_dimension is not None or convert_webp or strip_location:
@@ -450,8 +418,117 @@ def process_image_upload(self, image_id: int) -> bool:
                 logger.warning("Downscaling failed for image %s: %s", image_id, exc, exc_info=True)
             else:
                 if new_size is not None:
-                    stored_size = new_size
                     update_fields["image"] = image.image.name
+                    new_stored_size = new_size
+
+    return _UploadProcessResult(update_fields, coords, new_stored_size)
+
+
+def _process_video_upload(image: Image, strip_location: bool) -> _UploadProcessResult:
+    """Video-specific metadata extraction (via ffprobe) and downscaling (via ffmpeg)."""
+    from urbanlens.dashboard.services.storage import get_video_downscale_policy
+    from urbanlens.dashboard.services.videos import process_uploaded_video
+
+    max_height = get_video_downscale_policy(image.profile) if image.profile is not None else None
+    metadata, new_size = process_uploaded_video(image, None if strip_location else max_height)
+
+    update_fields: dict[str, object] = {}
+    coords: tuple[float, float] | None = None
+    if not strip_location:
+        if "taken_at" in metadata:
+            image.taken_at = metadata["taken_at"]
+            update_fields["taken_at"] = image.taken_at
+        if "latitude" in metadata and "longitude" in metadata:
+            coords = (metadata["latitude"], metadata["longitude"])
+    if new_size is not None:
+        update_fields["image"] = image.image.name
+    return _UploadProcessResult(update_fields, coords, new_size)
+
+
+def _process_document_upload(image: Image, image_id: int) -> _UploadProcessResult:
+    """Document-specific PDF conversion and OCR text extraction."""
+    from urbanlens.dashboard.services.documents import convert_to_pdf, extract_pdf_text
+
+    update_fields: dict[str, object] = {}
+    try:
+        new_size = convert_to_pdf(image)
+    except (OSError, ValueError) as exc:
+        logger.warning("Document conversion failed for image %s: %s", image_id, exc, exc_info=True)
+        new_size = None
+    if new_size is not None:
+        update_fields["image"] = image.image.name
+
+    ocr_text = extract_pdf_text(image)
+    if ocr_text:
+        image.ocr_text = ocr_text
+        update_fields["ocr_text"] = ocr_text
+    return _UploadProcessResult(update_fields, None, new_size)
+
+
+@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def process_image_upload(self, image_id: int) -> bool:
+    """Extract metadata after an upload and update the Image row.
+
+    Dispatches to media-type-specific extraction/downscaling (photo: EXIF +
+    Pillow; video: ffprobe/ffmpeg; document: LibreOffice-to-PDF + OCR), then
+    runs the shared tail identical for every type: resolving the photo's
+    ``location`` link (taken from the pin/wiki it's attached to, or resolved
+    from GPS via ``get_nearby_or_create``), raising a visit suggestion, and
+    queuing keyword generation. This is the single place PinSuggestion/
+    VisitSuggestion creation happens for any uploaded media - see
+    ``maybe_suggest_photo_visit``.
+
+    Attribution fields (author/source_url/caption/copyright), where
+    applicable, are filled from metadata when present and not already set.
+
+    When the uploader has turned off visit-history tracking (``track_pin_visits``),
+    GPS is treated as sensitive rather than useful: it's never read into
+    ``Image.latitude``/``longitude`` or the ``exif_data`` snapshot, the stored
+    file's own embedded GPS tag is stripped where supported, and no visit
+    suggestion is raised.
+    """
+    from decimal import Decimal
+
+    from urbanlens.dashboard.models.images.model import Image, MediaKind
+    from urbanlens.dashboard.services.memories.visits import maybe_suggest_photo_visit
+    from urbanlens.dashboard.services.visits import visit_logging_allowed
+
+    update_task_progress(self, current=0, total=1, message="Processing upload metadata...")
+    image = Image.objects.filter(pk=image_id).select_related("pin__location", "wiki__location", "profile").first()
+    if image is None or not image.image:
+        return False
+
+    # A profile with visit-history tracking off doesn't want its location
+    # trail reconstructible from any uploaded media either - GPS coordinates
+    # are neither extracted into the DB nor left embedded in the stored file
+    # below, and no visit suggestion is raised.
+    strip_location = image.profile is not None and not visit_logging_allowed(image.profile)
+
+    stored_size: int | None = None
+    with contextlib.suppress(OSError):
+        stored_size = image.image.size
+
+    if image.media_type == MediaKind.VIDEO:
+        result = _process_video_upload(image, strip_location)
+    elif image.media_type == MediaKind.DOCUMENT:
+        result = _process_document_upload(image, image_id)
+    else:
+        photo_result = _process_photo_upload(image, image_id, strip_location)
+        if photo_result is None:
+            return False
+        result = photo_result
+
+    update_fields, coords = result.update_fields, result.coords
+
+    if coords:
+        lat, lng = coords
+        image.latitude = Decimal(str(lat))
+        image.longitude = Decimal(str(lng))
+        update_fields["latitude"] = image.latitude
+        update_fields["longitude"] = image.longitude
+
+    if result.new_stored_size is not None:
+        stored_size = result.new_stored_size
     if stored_size is not None and stored_size != image.file_size:
         image.file_size = stored_size
         update_fields["file_size"] = stored_size
@@ -471,12 +548,16 @@ def process_image_upload(self, image_id: int) -> bool:
     # Keyword generation runs as its own task so a slow provider (AI vision,
     # classifiers) never delays the metadata/downscale pipeline above; it also
     # deliberately runs after the downscale so providers read the final file.
-    from urbanlens.dashboard.services.celery import safely_enqueue_task as _enqueue
+    # Photo-keyword plugins are built around analyzing a raster image, so this
+    # only applies to actual photos - videos/documents are made searchable via
+    # their own metadata/ocr_text instead.
+    if image.media_type == MediaKind.PHOTO:
+        from urbanlens.dashboard.services.celery import safely_enqueue_task as _enqueue
 
-    if image.profile is None or image.profile.generate_photo_keywords:
-        _enqueue(generate_image_keywords, image_id)
+        if image.profile is None or image.profile.generate_photo_keywords:
+            _enqueue(generate_image_keywords, image_id)
 
-    update_task_progress(self, current=1, total=1, message="Image metadata processed")
+    update_task_progress(self, current=1, total=1, message="Upload metadata processed")
     return True
 
 

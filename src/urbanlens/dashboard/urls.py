@@ -702,7 +702,7 @@ urlpatterns = [
     path("settings/google-calendar/disconnect/", calendar_sync.GoogleCalendarSettingsDisconnectView.as_view(), name="settings.google_calendar.disconnect"),
     path("undo/<uuid:undo_id>/restore/", undo.UndoRestoreView.as_view(), name="undo.restore"),
     re_path(
-        r"^(?P<label_kind>tags?|categor(y|ies)|status(es)?|people)/",
+        r"^(?P<label_kind>tags?|categor(y|ies)|status(es)?|people|media)/",
         include(
             [
                 path("", labels.LabelKindIndexView.as_view(), name="label.index"),
@@ -744,6 +744,11 @@ urlpatterns = [
                 ),
             ]
         ),
+    ),
+    path(
+        "labels/image/<uuid:image_uuid>/",
+        labels.LabelImageMembershipView.as_view(),
+        name="label.image",
     ),
     path(
         "friendship/",

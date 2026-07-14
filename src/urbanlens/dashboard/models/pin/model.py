@@ -26,7 +26,7 @@ from django.db.models.fields import BooleanField, CharField, DateField, DateTime
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.abstract.choices import TextChoices
 from urbanlens.dashboard.models.pin.queryset import PinManager
-from urbanlens.dashboard.services.locations.naming import is_meaningful_name
+from urbanlens.dashboard.services.locations.naming import is_meaningful_name, sanitize_name
 from urbanlens.dashboard.services.text_limits import MAX_PIN_DESCRIPTION_LENGTH
 
 if TYPE_CHECKING:
@@ -210,9 +210,13 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
         The alias list is the full set of names a pin has ever had, including
         the current one - so whenever a meaningful ``name`` is persisted, an
         alias row for it is ensured. This single enforcement point covers
-        every write path (HTMX controllers, REST serializer, Django admin).
+        every write path (HTMX controllers, REST serializer, Django admin),
+        and also sanitizes ``name`` to a strict character set before it's
+        persisted (see ``sanitize_name``).
         """
         update_fields = kwargs.get("update_fields")
+        if update_fields is None or "name" in update_fields:
+            self.name = sanitize_name(self.name)
         super().save(*args, **kwargs)
         if update_fields is not None and "name" not in update_fields:
             return

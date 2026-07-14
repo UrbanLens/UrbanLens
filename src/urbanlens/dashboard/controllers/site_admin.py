@@ -216,6 +216,16 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
             settings.image_convert_webp = request.POST.get("image_convert_webp") in {"1", "true", "on", "True"}
         if "image_downscale_vip" in request.POST:
             settings.image_downscale_vip = request.POST.get("image_downscale_vip") in {"1", "true", "on", "True"}
+        if "max_upload_file_size_mb" in request.POST:
+            with contextlib.suppress(ValueError, TypeError):
+                settings.max_upload_file_size_mb = max(1, int(request.POST.get("max_upload_file_size_mb", settings.max_upload_file_size_mb)))
+        if "video_downscale_enabled" in request.POST:
+            settings.video_downscale_enabled = request.POST.get("video_downscale_enabled") in {"1", "true", "on", "True"}
+        if "video_downscale_max_height" in request.POST:
+            with contextlib.suppress(ValueError, TypeError):
+                settings.video_downscale_max_height = min(max(240, int(request.POST.get("video_downscale_max_height", settings.video_downscale_max_height))), 8_000)
+        if "video_downscale_vip" in request.POST:
+            settings.video_downscale_vip = request.POST.get("video_downscale_vip") in {"1", "true", "on", "True"}
 
         settings.save()
 
@@ -238,6 +248,8 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
                 "email_limit_per_month",
                 "storage_quota_gb",
                 "image_downscale_max_dimension",
+                "max_upload_file_size_mb",
+                "video_downscale_max_height",
             )
             values = {field: getattr(settings, field) for field in clamped_fields if field in request.POST}
             return JsonResponse({"ok": True, "values": values})
