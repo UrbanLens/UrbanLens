@@ -12,16 +12,20 @@
 # out to `docker` / `docker compose` directly.
 #
 # Usage (from inside the staging checkout):
-#   ./clone_prod_to_staging.sh --prod-dir /path/to/prod-checkout [options]
+#   ./bin/clone_prod_to_staging.sh --prod-dir /path/to/prod-checkout [options]
+#   UL_PROD_DIR=/path/to/prod-checkout ./bin/clone_prod_to_staging.sh [options]
+#   # or set UL_PROD_DIR=/path/to/prod-checkout in the staging checkout's .env
 #
-#   --prod-dir DIR          Path to the production checkout (required)
+#   --prod-dir DIR          Path to the production checkout. Falls back to the
+#                           UL_PROD_DIR shell variable, then to UL_PROD_DIR in
+#                           the staging .env, in that order of precedence.
 #   --prod-env-file NAME    Env filename inside --prod-dir (default: .env)
 #   --staging-env-file NAME Env filename in the current directory (default: .env)
 #   -y, --yes               Skip the confirmation prompt
 #   --keep-dump             Don't delete the local dump file after restoring
 set -euo pipefail
 
-PROD_DIR=""
+PROD_DIR="${UL_PROD_DIR:-}"
 PROD_ENV_FILENAME=".env"
 STAGING_ENV_FILENAME=".env"
 ASSUME_YES=false
@@ -39,25 +43,17 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-if [[ -z "$PROD_DIR" ]]; then
-    echo "--prod-dir is required (path to the production checkout)." >&2
-    exit 1
-fi
-
 if [[ ! -f "./docker-compose.yml" ]]; then
     echo "No docker-compose.yml in the current directory - run this from inside the staging checkout." >&2
     exit 1
 fi
 
-PROD_ENV_FILE="${PROD_DIR%/}/$PROD_ENV_FILENAME"
 STAGING_ENV_FILE="./$STAGING_ENV_FILENAME"
 
-for f in "$PROD_ENV_FILE" "$STAGING_ENV_FILE"; do
-    if [[ ! -f "$f" ]]; then
-        echo "Env file not found: $f" >&2
-        exit 1
-    fi
-done
+if [[ ! -f "$STAGING_ENV_FILE" ]]; then
+    echo "Env file not found: $STAGING_ENV_FILE" >&2
+    exit 1
+fi
 
 # Read a KEY from an env file without polluting the current shell's environment
 # (the files carry API keys/secrets we have no reason to export here).
@@ -71,6 +67,24 @@ read_env_var() {
         echo "${line#*=}"
     fi
 }
+
+# Fall back to UL_PROD_DIR documented in the staging .env itself if neither
+# --prod-dir nor a shell-level UL_PROD_DIR were provided.
+if [[ -z "$PROD_DIR" ]]; then
+    PROD_DIR=$(read_env_var "$STAGING_ENV_FILE" UL_PROD_DIR "")
+fi
+
+if [[ -z "$PROD_DIR" ]]; then
+    echo "Path to the production checkout is required: pass --prod-dir, set the UL_PROD_DIR shell variable, or set UL_PROD_DIR in $STAGING_ENV_FILE." >&2
+    exit 1
+fi
+
+PROD_ENV_FILE="${PROD_DIR%/}/$PROD_ENV_FILENAME"
+
+if [[ ! -f "$PROD_ENV_FILE" ]]; then
+    echo "Env file not found: $PROD_ENV_FILE" >&2
+    exit 1
+fi
 
 PROD_ENVIRONMENT=$(read_env_var "$PROD_ENV_FILE" UL_ENVIRONMENT production)
 STAGING_ENVIRONMENT=$(read_env_var "$STAGING_ENV_FILE" UL_ENVIRONMENT staging)
