@@ -152,7 +152,7 @@
     margin-top: 0;
 }
 
-// A plain <nav> would otherwise pick up Materialize's global top-navbar
+// A plain <nav> would otherwise pick up _reset.scss's global top-navbar
 // styling (pink background, fixed 56px height/line-height) - that clips this
 // link list down to a single visible row. The class gives us enough
 // specificity to reset it without !important.

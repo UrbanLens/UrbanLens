@@ -502,7 +502,7 @@
 }
 
 .settings-select {
-    display: block !important; // override Materialize's select:not(.browser-default) { display:none }
+    display: block !important; // <select> defaults to inline-block; see _reset.scss
     width: 100%;
     max-width: 360px;
     padding: 8px 12px;
@@ -577,7 +577,7 @@
     gap: 0.75rem;
     cursor: pointer;
 
-    // Materialize hides native checkboxes globally; the sibling span carries the visual.
+    // _reset.scss hides native checkboxes globally; the sibling span carries the visual.
     .settings-checkbox-materialize {
         flex-shrink: 0;
         margin-top: 2px;

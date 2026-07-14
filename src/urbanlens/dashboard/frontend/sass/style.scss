@@ -8,7 +8,7 @@
 //   dark             →  CSS custom properties (must precede components)
 //   components       →  .ul-* design system classes
 
-@use 'third_party/_materialize';
+@use 'reset';
 @use 'variables';
 @use 'dark';
 @use 'base';

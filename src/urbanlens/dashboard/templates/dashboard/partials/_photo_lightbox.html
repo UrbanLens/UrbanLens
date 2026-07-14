@@ -13,12 +13,19 @@ Context:
                             (only meaningful when photos belong to a single
                             pin/location, e.g. pin detail or location wiki).
   cover_photo_url         - POST endpoint for "Set as cover photo"; blank hides it.
-  current_cover_image_id - the pin's current cover_photo id (if any), so the
-                            button can offer "Remove cover photo" instead of
-                            "Set as cover photo" for that image. Also drives a
-                            live update of the pin detail page's #pin-cover-hero
-                            banner (no reload) - only wired for that element,
-                            harmless no-op on pages without one (e.g. wiki).
+  current_cover_image_id - the pin/wiki's current cover_photo id (if any), so
+                            the button can offer "Remove cover photo" instead
+                            of "Set as cover photo" for that image.
+  cover_hero_key          - "pin" or "wiki": which on-page cover-hero banner
+                            (see partials/js/cover-hero.js) to live-update
+                            when the cover changes - drives the "#<key>-cover-
+                            hero" element id and the "<key>" passed to
+                            window._coverHeroNav. Blank when the page has no
+                            such banner (e.g. safety check-ins).
+  cover_hero_enabled      - whether the banner should actually be shown once
+                            a cover exists (the wiki hero also depends on the
+                            viewer's show_wiki_cover_photos preference, which
+                            a live update must keep respecting).
   pin_media_relevance_url - POST endpoint for the pin Media gallery's relevant/
                             not-relevant marking; blank when not applicable
                             (harmless even if set - only used for items with
@@ -81,6 +88,8 @@ Context:
   var CF_PHOTO_URL_TEMPLATE = '{% url "custom_fields.photo" 0 %}';
   // Mutated in place as the cover photo is changed live (see _setCoverPhoto).
   var CURRENT_COVER_ID = {{ current_cover_image_id|default:"null" }};
+  var COVER_HERO_KEY = '{{ cover_hero_key|default:"" }}';
+  var COVER_HERO_ENABLED = {% if cover_hero_enabled %}true{% else %}false{% endif %};
 
   // Ordered list of normalized items currently shown, plus the visible index.
   var _lightboxList = [];
@@ -221,28 +230,35 @@ Context:
     window._setCoverPhoto(isCover ? null : item.imageId);
   };
 
-  // Live-updates the pin detail page's cover-hero banner - creating it if this
-  // is the pin's first cover photo, updating its background if it already
-  // existed, or removing it entirely when the cover is cleared. A no-op on
-  // pages without a #pin-cover-hero (e.g. wiki, safety) or its insertion
-  // point (.pin-detail-grid).
+  // Anchor element each page's cover-hero banner is inserted directly before
+  // when created for the first time (mirrors the server-side markup's fixed
+  // position - see location/index.html and location/wiki.html).
+  var COVER_HERO_INSERT_BEFORE = { pin: '.pin-detail-grid', wiki: '.wiki-banner' };
+
+  // Live-updates the page's cover-hero banner - creating it if this is the
+  // first cover photo, updating its background if one already existed, or
+  // removing it entirely when the cover is cleared (or the viewer's display
+  // preference disallows it, for the wiki hero). A no-op on pages with no
+  // COVER_HERO_KEY (e.g. safety check-ins) or missing insertion anchor.
   function _applyCoverHeroUpdate(url) {
-    var hero = document.getElementById('pin-cover-hero');
-    if (url) {
+    if (!COVER_HERO_KEY) return;
+    var heroId = COVER_HERO_KEY + '-cover-hero';
+    var hero = document.getElementById(heroId);
+    if (url && COVER_HERO_ENABLED) {
       if (!hero) {
-        var grid = document.querySelector('.pin-detail-grid');
-        if (!grid || !grid.parentNode) return;
+        var anchor = document.querySelector(COVER_HERO_INSERT_BEFORE[COVER_HERO_KEY] || '');
+        if (!anchor || !anchor.parentNode) return;
         hero = document.createElement('div');
         hero.className = 'cover-hero';
-        hero.id = 'pin-cover-hero';
+        hero.id = heroId;
         hero.innerHTML =
-          '<button type="button" class="cover-hero-nav cover-hero-prev" onclick="window._coverHeroNav(\'pin\', -1)" title="Previous photo">' +
+          '<button type="button" class="cover-hero-nav cover-hero-prev" onclick="window._coverHeroNav(\'' + COVER_HERO_KEY + '\', -1)" title="Previous photo">' +
           '<i class="material-symbols-outlined">chevron_left</i></button>' +
-          '<button type="button" class="cover-hero-nav cover-hero-next" onclick="window._coverHeroNav(\'pin\', 1)" title="Next photo">' +
+          '<button type="button" class="cover-hero-nav cover-hero-next" onclick="window._coverHeroNav(\'' + COVER_HERO_KEY + '\', 1)" title="Next photo">' +
           '<i class="material-symbols-outlined">chevron_right</i></button>' +
-          '<button type="button" class="cover-hero-remove" onclick="window._setCoverPhoto(null)" title="Remove cover photo">' +
+          '<button type="button" class="cover-hero-remove" onclick="window._setCoverPhoto && window._setCoverPhoto(null)" title="Remove cover photo">' +
           '<i class="material-symbols-outlined">close</i></button>';
-        grid.parentNode.insertBefore(hero, grid);
+        anchor.parentNode.insertBefore(hero, anchor);
       }
       hero.style.backgroundImage = "url('" + url + "')";
     } else if (hero) {
@@ -250,7 +266,7 @@ Context:
     }
     // Cached hover-cycle state (see cover-hero.js) would otherwise keep
     // showing the pre-change cover as its "true" background to return to.
-    if (window._coverHeroInvalidate) window._coverHeroInvalidate('pin');
+    if (window._coverHeroInvalidate) window._coverHeroInvalidate(COVER_HERO_KEY);
   }
 
   // Called from the lightbox's Relevant/Not relevant buttons (only shown for

@@ -254,7 +254,9 @@ input[type=range] {
     }
 }
 
-// Override materializecss
+// <select> defaults to display:inline-block; the rest of the site's layout
+// assumes it lays out like a block-level form control (see _reset.scss for the
+// native select's background/border/height skin).
 select {
     display: block;
 }

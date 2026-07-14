@@ -582,7 +582,7 @@
 	}
 
 	&__input {
-		position: absolute !important;  // override materialize input[type=range]{position:relative}
+		position: absolute !important;  // pins the native input over the custom track/fill
 		width: 100%;
 		height: 100%;
 		top: 0;
@@ -592,7 +592,7 @@
 		appearance: none;
 		pointer-events: none;
 		outline: none;
-		margin: 0 !important;  // override materialize input[type=range]{margin:15px 0}
+		margin: 0 !important;  // override _reset.scss's input[type=range]{margin:15px 0}
 		border: none !important;
 
 		&:focus { outline: none; }

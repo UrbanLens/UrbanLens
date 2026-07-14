@@ -22,9 +22,16 @@
 	}
 
 	&:disabled {
-		background: var(--ul-grey-4);
+		// These exact colors (not the grey-* tokens) are what's actually been
+		// rendering here - Materialize's disabled-button rule used !important
+		// and always won, masking the token-based values above. Kept unchanged
+		// on purpose; revisit as a deliberate design decision, not in passing.
+		background-color: #DFDFDF;
 		border-color: var(--ul-grey-5b);
-		color: var(--ul-grey-9a);
+		color: #9F9F9F;
+		box-shadow: none;
+		cursor: default;
+		pointer-events: none;
 	}
 
 	.material-symbols-outlined,

@@ -4604,7 +4604,8 @@ body.page-location-details .pin-detail-grid {
     cursor: pointer;
 
     input[type="checkbox"] {
-        // Materialize hides bare checkboxes; opt this one back in.
+        // _reset.scss hides bare checkboxes (see [type="checkbox"]:not(:checked));
+        // opt this one back in to the native visible control.
         opacity: 1;
         position: static;
         pointer-events: auto;

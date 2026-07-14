@@ -362,7 +362,7 @@
     }
 }
 
-// Materialize's global `input[type=search]:not(.browser-default)` rule
+// _reset.scss's global `input[type=search]:not(.browser-default)` rule
 // outranks a lone `.dm-compose__input` class on specificity, so the ID is
 // needed here too to reliably win and keep the field inset from the sidebar
 // edge instead of visually touching it.
@@ -421,7 +421,7 @@
     }
 }
 
-// Materialize's global input styling needs the ID to reliably lose, same as
+// _reset.scss's global input styling needs the ID to reliably lose, same as
 // #dm-recipient-input above.
 #dm-messages-search-input.dm-messages-search__input {
     flex: 1;
@@ -723,7 +723,7 @@
     }
 }
 
-// Materialize's global input styling needs the ID to reliably lose, same as
+// _reset.scss's global input styling needs the ID to reliably lose, same as
 // #dm-recipient-input above.
 #dm-thread-search-input.dm-thread-search__input {
     flex: 1;

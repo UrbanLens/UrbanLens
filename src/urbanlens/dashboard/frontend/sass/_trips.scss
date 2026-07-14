@@ -2847,7 +2847,7 @@ a.trip-activity-name {
     font-weight: normal;
 
     input[type="checkbox"] {
-        // Undo Materialize's global checkbox reset (position:absolute;
+        // Undo _reset.scss's global checkbox reset (position:absolute;
         // opacity:0) so the box is actually visible.
         position: static;
         opacity: 1;
@@ -2963,13 +2963,13 @@ a.trip-activity-name {
         margin-top: .15rem;
         cursor: pointer;
         flex-shrink: 0;
-        // Undo Materialize's global checkbox reset inside the dialog.
+        // Undo _reset.scss's global checkbox reset inside the dialog.
         opacity: 1;
         position: static;
         pointer-events: auto;
     }
 
-    // Materialize also draws its own fake checkbox box on any span that
+    // _reset.scss also draws its own fake checkbox box on any span that
     // follows input[type=checkbox] and forces a fixed single-line height on
     // it - that doubles up with the native checkbox above and clips text
     // that wraps to a second line. Strip it since this dialog uses the

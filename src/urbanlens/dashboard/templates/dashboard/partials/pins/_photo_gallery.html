@@ -111,9 +111,15 @@ Context:
 {% endif %}
 
 {# -- Lightbox (shared component - same as Memories > Photos and the profile page) -- #}
-{% if context_type == "pin" %}{% url "pin.cover_photo" pin.slug as cover_photo_url %}{% url "pin.media.relevance" pin.slug as pin_media_relevance_url %}{% elif context_type == "wiki" %}{% url "location.wiki.cover_photo" location.slug as cover_photo_url %}{% endif %}
-{% if context_type == "pin" or context_type == "wiki" %}
-{% include "dashboard/partials/_photo_lightbox.html" with show_cover_action=True cover_photo_url=cover_photo_url pin_media_relevance_url=pin_media_relevance_url current_cover_image_id=pin.cover_photo_id %}
+{% if context_type == "pin" %}
+{% url "pin.cover_photo" pin.slug as cover_photo_url %}
+{% url "pin.media.relevance" pin.slug as pin_media_relevance_url %}
+{# The pin hero has no display preference gating it - it's always live-updatable. #}
+{% include "dashboard/partials/_photo_lightbox.html" with show_cover_action=True cover_photo_url=cover_photo_url pin_media_relevance_url=pin_media_relevance_url current_cover_image_id=pin.cover_photo_id cover_hero_key="pin" cover_hero_enabled=True %}
+{% elif context_type == "wiki" %}
+{% url "location.wiki.cover_photo" location.slug as cover_photo_url %}
+{# The wiki hero only ever renders when the viewer's show_wiki_cover_photos preference is on - respect that for the live-created version too. #}
+{% include "dashboard/partials/_photo_lightbox.html" with show_cover_action=True cover_photo_url=cover_photo_url current_cover_image_id=wiki.cover_photo_id cover_hero_key="wiki" cover_hero_enabled=profile.show_wiki_cover_photos %}
 {% else %}
 {% include "dashboard/partials/_photo_lightbox.html" with show_cover_action=False %}
 {% endif %}
