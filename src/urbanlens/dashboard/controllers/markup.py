@@ -409,7 +409,7 @@ class MarkupMapViewStateView(LoginRequiredMixin, View):
 
 
 class PinMarkupMapsView(LoginRequiredMixin, View):
-    """"Markup Maps" panel for the pin detail page (loaded via HTMX).
+    """ "Markup Maps" panel for the pin detail page (loaded via HTMX).
 
     Lists MarkupMaps directly associated with the pin (``MarkupMap.pin`` -
     e.g. created via the pin-share dialog's "New map" flow). Most pins have

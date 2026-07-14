@@ -221,11 +221,7 @@ class NominatimGateway(Gateway):
             # rather than trying to hotlink an unresolved image.
             image = f"https://commons.wikimedia.org/wiki/{image}"
 
-        extra_details = [
-            {"key": key, "label": label, "value": _humanize_osm_value(str(extra[key]))}
-            for key, label in _EXTRA_DETAIL_FIELDS
-            if extra.get(key)
-        ]
+        extra_details = [{"key": key, "label": label, "value": _humanize_osm_value(str(extra[key]))} for key, label in _EXTRA_DETAIL_FIELDS if extra.get(key)]
 
         return {
             "name": name,

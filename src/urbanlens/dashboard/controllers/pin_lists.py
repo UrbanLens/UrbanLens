@@ -64,9 +64,7 @@ def _list_items_with_labels(pin_list: PinList) -> list[PinListItem]:
     chip list resolve without N+1 queries.
     """
     return list(
-        pin_list.items.select_related("pin", "pin__location")
-        .prefetch_related(Prefetch("pin__labels", queryset=Label.objects.exclude(kind="user").order_by("-order", "name")))
-        .order_by("order"),
+        pin_list.items.select_related("pin", "pin__location").prefetch_related(Prefetch("pin__labels", queryset=Label.objects.exclude(kind="user").order_by("-order", "name"))).order_by("order"),
     )
 
 
