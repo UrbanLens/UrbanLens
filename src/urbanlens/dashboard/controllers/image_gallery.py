@@ -185,6 +185,23 @@ class PinCoverPhotoView(LoginRequiredMixin, View):
     """Set or clear a pin's hero-banner cover photo."""
 
     def post(self, request: HttpRequest, pin_slug: str) -> JsonResponse:
+        """Set (or, given a null ``image_id``, clear) the pin's cover photo.
+
+        Args:
+            request: Incoming HTTP request. Reads JSON body ``image_id`` -
+                an int to set the cover photo, or null/absent to clear it.
+            pin_slug: Slug of the pin to update; must belong to the requester.
+
+        Returns:
+            JSON ``{"cover_photo": null}`` when cleared, or
+            ``{"cover_photo": <url>}`` with the new cover's image URL (the
+            lightbox uses this to update the page live without a reload).
+
+        Raises:
+            Http404: The pin doesn't exist/belong to the requester, or the
+                given image isn't eligible (not tied to this pin or its
+                Location).
+        """
         pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         try:
             data = json.loads(request.body)

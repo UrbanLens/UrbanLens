@@ -621,8 +621,42 @@
   }
 }
 
-.cover-hero:hover .cover-hero-nav {
+.cover-hero-remove {
+  position: absolute;
+  top: .6rem;
+  right: .6rem;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgba(15, 23, 42, .45);
+  color: #fff;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity .15s ease, background .15s ease;
+
+  .material-symbols-outlined {
+    font-size: 1.15rem;
+  }
+
+  &:hover {
+    background: rgba($color-red-500, .85);
+  }
+}
+
+.cover-hero:hover .cover-hero-nav,
+.cover-hero:hover .cover-hero-remove {
   opacity: 1;
+}
+
+// Touch devices can't hover: keep the remove affordance reachable.
+@media (hover: none) {
+  .cover-hero-remove { opacity: .85; }
 }
 
 // Photo map marker

@@ -113,7 +113,7 @@ Context:
 {# -- Lightbox (shared component - same as Memories > Photos and the profile page) -- #}
 {% if context_type == "pin" %}{% url "pin.cover_photo" pin.slug as cover_photo_url %}{% url "pin.media.relevance" pin.slug as pin_media_relevance_url %}{% elif context_type == "wiki" %}{% url "location.wiki.cover_photo" location.slug as cover_photo_url %}{% endif %}
 {% if context_type == "pin" or context_type == "wiki" %}
-{% include "dashboard/partials/_photo_lightbox.html" with show_cover_action=True cover_photo_url=cover_photo_url pin_media_relevance_url=pin_media_relevance_url %}
+{% include "dashboard/partials/_photo_lightbox.html" with show_cover_action=True cover_photo_url=cover_photo_url pin_media_relevance_url=pin_media_relevance_url current_cover_image_id=pin.cover_photo_id %}
 {% else %}
 {% include "dashboard/partials/_photo_lightbox.html" with show_cover_action=False %}
 {% endif %}

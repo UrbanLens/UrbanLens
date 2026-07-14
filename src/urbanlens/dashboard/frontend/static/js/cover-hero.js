@@ -39,4 +39,13 @@
         entry.index = current - 1;
         entry.heroEl.style.backgroundImage = entry.index < 0 ? entry.originalBackground : "url('" + entry.candidates[entry.index].url + "')";
     };
+
+    // Drops the memoized entry for `key` so the next hover-cycle re-reads the
+    // hero element's current background as the "true" cover to return to.
+    // Called after the cover photo changes live (see _photo_lightbox.html's
+    // _applyCoverHeroUpdate) - the cached originalBackground/candidates would
+    // otherwise still reflect the pre-change cover photo.
+    window._coverHeroInvalidate = function (key) {
+        delete state[key];
+    };
 }());

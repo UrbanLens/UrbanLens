@@ -13,6 +13,12 @@ Context:
                             (only meaningful when photos belong to a single
                             pin/location, e.g. pin detail or location wiki).
   cover_photo_url         - POST endpoint for "Set as cover photo"; blank hides it.
+  current_cover_image_id - the pin's current cover_photo id (if any), so the
+                            button can offer "Remove cover photo" instead of
+                            "Set as cover photo" for that image. Also drives a
+                            live update of the pin detail page's #pin-cover-hero
+                            banner (no reload) - only wired for that element,
+                            harmless no-op on pages without one (e.g. wiki).
   pin_media_relevance_url - POST endpoint for the pin Media gallery's relevant/
                             not-relevant marking; blank when not applicable
                             (harmless even if set - only used for items with
@@ -26,11 +32,11 @@ Context:
       <i class="material-symbols-outlined">close</i>
     </button>
     <div class="lightbox-media-area">
-      <button type="button" class="lightbox-nav lightbox-prev" onclick="galleryLightboxNav(-1)">
+      <button type="button" id="lightbox-prev-btn" class="lightbox-nav lightbox-prev" onclick="galleryLightboxNav(-1)">
         <i class="material-symbols-outlined">chevron_left</i>
       </button>
       <img id="lightbox-img" src="" alt="" class="lightbox-img">
-      <button type="button" class="lightbox-nav lightbox-next" onclick="galleryLightboxNav(1)">
+      <button type="button" id="lightbox-next-btn" class="lightbox-nav lightbox-next" onclick="galleryLightboxNav(1)">
         <i class="material-symbols-outlined">chevron_right</i>
       </button>
     </div>
@@ -55,7 +61,7 @@ Context:
       </div>
       {% if show_cover_action %}
       <div id="lightbox-cover-actions" class="lightbox-relevance-actions" hidden>
-        <button type="button" class="btn btn--ghost btn--sm" onclick="window._lightboxSetCover()">
+        <button type="button" id="lightbox-cover-btn" class="btn btn--ghost btn--sm" onclick="window._lightboxSetCover()">
           <i class="material-symbols-outlined">wallpaper</i> Set as cover photo
         </button>
       </div>
@@ -73,6 +79,8 @@ Context:
   var PIN_MEDIA_RELEVANCE_URL = '{{ pin_media_relevance_url|default:"" }}';
   var COVER_PHOTO_URL = '{{ cover_photo_url|default:"" }}';
   var CF_PHOTO_URL_TEMPLATE = '{% url "custom_fields.photo" 0 %}';
+  // Mutated in place as the cover photo is changed live (see _setCoverPhoto).
+  var CURRENT_COVER_ID = {{ current_cover_image_id|default:"null" }};
 
   // Ordered list of normalized items currently shown, plus the visible index.
   var _lightboxList = [];
@@ -114,6 +122,14 @@ Context:
     document.getElementById('lightbox-caption').textContent = caption || '';
     _setLightboxMeta(item);
     _loadLightboxCustomFields(item.imageId);
+
+    // Nav arrows are pointless (and misleading - they'd just reopen the same
+    // photo) when there's nothing else to scroll to.
+    var multi = _lightboxList.length > 1;
+    var prevBtn = document.getElementById('lightbox-prev-btn');
+    var nextBtn = document.getElementById('lightbox-next-btn');
+    if (prevBtn) prevBtn.hidden = !multi;
+    if (nextBtn) nextBtn.hidden = !multi;
   }
 
   // Load the viewer's custom-field strip for the current photo. The endpoint
@@ -155,30 +171,87 @@ Context:
       if (downBtn) downBtn.classList.toggle('is-active', item.relevant === false);
     }
     var coverEl = document.getElementById('lightbox-cover-actions');
-    if (coverEl) coverEl.hidden = !(item.imageId && COVER_PHOTO_URL);
+    if (coverEl) {
+      coverEl.hidden = !(item.imageId && COVER_PHOTO_URL);
+      var coverBtn = document.getElementById('lightbox-cover-btn');
+      if (coverBtn) {
+        var isCover = !!(item.imageId && CURRENT_COVER_ID && item.imageId === CURRENT_COVER_ID);
+        coverBtn.innerHTML = isCover
+          ? '<i class="material-symbols-outlined">hide_image</i> Remove cover photo'
+          : '<i class="material-symbols-outlined">wallpaper</i> Set as cover photo';
+      }
+    }
   }
+
+  // Sets (imageId given) or clears (imageId null) the pin's cover photo, then
+  // live-updates everything that depends on it - no page reload needed.
+  // Exposed on window so the on-page hero banner's own remove-icon button
+  // (rendered outside this partial, see partials/pins/_photo_gallery.html's
+  // consumer templates) can call it directly without going through the
+  // lightbox.
+  window._setCoverPhoto = function (imageId) {
+    if (!COVER_PHOTO_URL) return;
+    fetch(COVER_PHOTO_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
+      body: JSON.stringify({ image_id: imageId || null }),
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (data) {
+        if (!r.ok) throw new Error(data.error || 'HTTP ' + r.status);
+        return data;
+      });
+    }).then(function (data) {
+      CURRENT_COVER_ID = imageId || null;
+      _applyCoverHeroUpdate(data.cover_photo || null);
+      var current = _lightboxList[_lightboxIdx];
+      if (current) _setLightboxMeta(current);
+      if (window.toastr) toastr.success(imageId ? 'Cover photo updated.' : 'Cover photo removed.');
+    }).catch(function (err) {
+      if (window.toastr) toastr.error(err.message || 'Failed to update cover photo.');
+    });
+  };
 
   // Only offered for real, persisted photos (personal uploads, or Media
   // gallery items already sent to the wiki) - a still-transient Media item
   // has no imageId to set as a cover.
   window._lightboxSetCover = function () {
     var item = _lightboxList[_lightboxIdx];
-    if (!item || !item.imageId || !COVER_PHOTO_URL) return;
-    fetch(COVER_PHOTO_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
-      body: JSON.stringify({ image_id: item.imageId }),
-    }).then(function (r) {
-      return r.json().catch(function () { return {}; }).then(function (data) {
-        if (!r.ok) throw new Error(data.error || 'HTTP ' + r.status);
-        return data;
-      });
-    }).then(function () {
-      if (window.toastr) toastr.success('Cover photo updated. Reload the page to see it.');
-    }).catch(function (err) {
-      if (window.toastr) toastr.error(err.message || 'Failed to set cover photo.');
-    });
+    if (!item || !item.imageId) return;
+    var isCover = !!(CURRENT_COVER_ID && item.imageId === CURRENT_COVER_ID);
+    window._setCoverPhoto(isCover ? null : item.imageId);
   };
+
+  // Live-updates the pin detail page's cover-hero banner - creating it if this
+  // is the pin's first cover photo, updating its background if it already
+  // existed, or removing it entirely when the cover is cleared. A no-op on
+  // pages without a #pin-cover-hero (e.g. wiki, safety) or its insertion
+  // point (.pin-detail-grid).
+  function _applyCoverHeroUpdate(url) {
+    var hero = document.getElementById('pin-cover-hero');
+    if (url) {
+      if (!hero) {
+        var grid = document.querySelector('.pin-detail-grid');
+        if (!grid || !grid.parentNode) return;
+        hero = document.createElement('div');
+        hero.className = 'cover-hero';
+        hero.id = 'pin-cover-hero';
+        hero.innerHTML =
+          '<button type="button" class="cover-hero-nav cover-hero-prev" onclick="window._coverHeroNav(\'pin\', -1)" title="Previous photo">' +
+          '<i class="material-symbols-outlined">chevron_left</i></button>' +
+          '<button type="button" class="cover-hero-nav cover-hero-next" onclick="window._coverHeroNav(\'pin\', 1)" title="Next photo">' +
+          '<i class="material-symbols-outlined">chevron_right</i></button>' +
+          '<button type="button" class="cover-hero-remove" onclick="window._setCoverPhoto(null)" title="Remove cover photo">' +
+          '<i class="material-symbols-outlined">close</i></button>';
+        grid.parentNode.insertBefore(hero, grid);
+      }
+      hero.style.backgroundImage = "url('" + url + "')";
+    } else if (hero) {
+      hero.remove();
+    }
+    // Cached hover-cycle state (see cover-hero.js) would otherwise keep
+    // showing the pre-change cover as its "true" background to return to.
+    if (window._coverHeroInvalidate) window._coverHeroInvalidate('pin');
+  }
 
   // Called from the lightbox's Relevant/Not relevant buttons (only shown for
   // Media-gallery items, see canRelevance). Persists the mark, updates the
