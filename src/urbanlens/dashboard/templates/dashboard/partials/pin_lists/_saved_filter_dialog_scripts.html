@@ -131,7 +131,52 @@ Context:
         const excludeInput = document.getElementById('saved-filter-exclude-regions');
         if (includeInput) includeInput.value = includeCoords.length ? JSON.stringify({ type: 'MultiPolygon', coordinates: includeCoords }) : '';
         if (excludeInput) excludeInput.value = excludeCoords.length ? JSON.stringify({ type: 'MultiPolygon', coordinates: excludeCoords }) : '';
+        _sfScheduleNameSuggestion();
     }
+
+    // -- Saved filter name auto-suggestion ------------------------------------
+    // Pre-fills "Filter name" with a summary of whatever criteria are currently
+    // set (e.g. "4★+ · 2 tags included"), unless the user has typed their own
+    // name - matches the same summary shown on the Filters tab's cards
+    // (dashboard_tags.filter_criteria_summary), computed server-side so the
+    // suggestion always matches what would actually be saved.
+    const SAVED_FILTER_SUGGEST_NAME_URL = "{% url 'saved_filters.suggest_name' %}";
+    let _sfNameManuallyEdited = false;
+    let _sfSuggestTimer = null;
+    let _sfSuggestToken = 0;
+
+    function _sfFetchSuggestedName() {
+        const form = document.getElementById('saved-filter-form');
+        const nameInput = document.getElementById('saved-filter-name');
+        if (!form || !nameInput || _sfNameManuallyEdited) return;
+        const token = ++_sfSuggestToken;
+        fetch(SAVED_FILTER_SUGGEST_NAME_URL, { method: 'POST', headers: { 'X-CSRFToken': CSRF }, body: new FormData(form) })
+            .then((r) => (r.ok ? r.json() : null))
+            .then((data) => {
+                if (!data || token !== _sfSuggestToken || _sfNameManuallyEdited) return;
+                if (data.name) nameInput.value = data.name;
+            })
+            .catch(() => { /* best-effort suggestion - leave the name field as-is on failure */ });
+    }
+
+    function _sfScheduleNameSuggestion() {
+        if (_sfNameManuallyEdited) return;
+        clearTimeout(_sfSuggestTimer);
+        _sfSuggestTimer = setTimeout(_sfFetchSuggestedName, 400);
+    }
+
+    document.body.addEventListener('input', (e) => {
+        if (!e.target.closest || !e.target.closest('#saved-filter-form')) return;
+        if (e.target.id === 'saved-filter-name') {
+            _sfNameManuallyEdited = e.target.value.trim().length > 0;
+            return;
+        }
+        _sfScheduleNameSuggestion();
+    });
+    document.body.addEventListener('change', (e) => {
+        if (!e.target.closest || !e.target.closest('#saved-filter-form') || e.target.id === 'saved-filter-name') return;
+        _sfScheduleNameSuggestion();
+    });
 
     function _sfAddRegionLayer(geojson, mode) {
         if (!_sfRegionLayers) return;
@@ -250,6 +295,10 @@ Context:
         document.getElementById('saved-filter-form-dialog').showModal();
         window.initSavedFilterRegionMap();
         _sfInitVisits();
+        // Editing an existing filter already has a real name - don't clobber it
+        // with a fresh suggestion; a blank "New Filter" dialog starts eligible.
+        const nameInput = document.getElementById('saved-filter-name');
+        _sfNameManuallyEdited = !!(nameInput && nameInput.value.trim());
     };
 </script>
 {% include "dashboard/partials/ui/_dual_range_slider_script.html" %}

@@ -11,6 +11,11 @@
 
 {% block page_title %}{{ pin_list.name }} - Lists - {{ site_title|default:"UrbanLens" }}{% endblock %}
 
+{% block hero %}
+{% url 'organize.index' as organize_url %}
+{% include "dashboard/partials/ui/_page_hero.html" with body_template="dashboard/partials/pin_lists/_detail_hero_body.html" back_url=organize_url|add:"?tab=lists" back_label="Lists" modifier="top" %}
+{% endblock %}
+
 {% block subnav %}
 <div class="ul-page-subnav">
     <div class="ul-page-subnav__inner">
@@ -33,14 +38,17 @@
 {% endblock %}
 
 {% block content %}
-{% url 'organize.index' as organize_url %}
-{% include "dashboard/partials/ui/_page_hero.html" with body_template="dashboard/partials/pin_lists/_detail_hero_body.html" back_url=organize_url|add:"?tab=lists" back_label="Lists" %}
 <div class="pin-lists-page page-content pin-list-detail-page">
 
     <div class="pin-list-detail-actions">
         <button type="button" class="btn btn--primary" onclick="document.getElementById('add-pins-dialog').showModal()">
             <i class="material-symbols-outlined">add_location_alt</i> Add Pins
         </button>
+        {% if not pin_list.is_smart and not pin_list.smart_filter and not pin_list.smart_boundary %}
+        <button type="button" class="btn btn--secondary" id="pin-list-add-smart-filter-btn" onclick="pinListShowSmartPanel()">
+            <i class="material-symbols-outlined">auto_awesome</i> Add Smart Filter
+        </button>
+        {% endif %}
         <div class="pin-list-more-menu">
             <button type="button" class="btn btn--icon pin-list-more-btn" id="pin-list-more-btn"
                     aria-haspopup="true" aria-expanded="false" aria-label="More list actions" title="More actions"
@@ -75,21 +83,21 @@
         {% map_layers_panel "street,terrain,satellite,borders" panel_id="pin-list-map-layers" %}
     </section>
 
-    {# -- Smart list configuration ------------------------------------------- #}
-    <section class="pin-list-smart-panel">
+    {# -- Smart list configuration - hidden entirely for a plain list until the #}
+    {# "Add Smart Filter" button (above) reveals it; starts collapsed even for  #}
+    {# an already-smart list, so it doesn't compete with the items below.      #}
+    <section class="pin-list-smart-panel" id="pin-list-smart-panel"
+              {% if not pin_list.is_smart and not pin_list.smart_filter and not pin_list.smart_boundary %}hidden{% endif %}>
         <div class="pin-list-smart-panel-header">
             <button type="button" class="pin-list-smart-panel-toggle" id="pin-list-smart-toggle-btn"
-                    aria-expanded="{% if pin_list.pin_count %}false{% else %}true{% endif %}"
-                    aria-controls="pin-list-smart-body" onclick="pinListToggleSmartPanel()">
-                <i class="material-symbols-outlined pin-list-smart-chevron" id="pin-list-smart-chevron">
-                    {% if pin_list.pin_count %}chevron_right{% else %}expand_more{% endif %}
-                </i>
+                    aria-expanded="false" aria-controls="pin-list-smart-body" onclick="pinListToggleSmartPanel()">
+                <i class="material-symbols-outlined pin-list-smart-chevron" id="pin-list-smart-chevron">chevron_right</i>
                 <span class="pin-list-smart-panel-title">Smart list</span>
                 {% if pin_list.is_smart %}<span class="pin-list-card-badge">Active</span>{% endif %}
             </button>
             {% include "dashboard/partials/ui/_tooltip_help.html" with text="Smart lists auto-include pins matching a saved filter and/or falling inside a boundary you draw. New/edited pins are added or removed automatically; pins you added manually always stay." %}
         </div>
-        <div class="pin-list-smart-panel-body" id="pin-list-smart-body" {% if pin_list.pin_count %}hidden{% endif %}>
+        <div class="pin-list-smart-panel-body" id="pin-list-smart-body" hidden>
             <div class="pin-list-smart-row">
                 <div class="pin-list-boundary-header">
                     <label for="pin-list-saved-filter-select">Match pins from a saved filter</label>
@@ -333,6 +341,10 @@
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape') window.pinListCloseMoreMenu(); });
 
     // -- Smart panel collapse ---------------------------------------------------
+    // The panel now always starts collapsed (even when a boundary map already
+    // exists), so the boundary mini-map can be constructed while its container
+    // is still hidden (0x0) - invalidateSize() once it's actually shown so
+    // Leaflet re-measures and renders its tiles correctly.
     window.pinListToggleSmartPanel = function () {
         const body = document.getElementById('pin-list-smart-body');
         const btn = document.getElementById('pin-list-smart-toggle-btn');
@@ -342,6 +354,25 @@
         body.hidden = !opening;
         btn?.setAttribute('aria-expanded', String(opening));
         if (chevron) chevron.textContent = opening ? 'expand_more' : 'chevron_right';
+        if (opening && _boundaryMap) requestAnimationFrame(() => _boundaryMap.invalidateSize());
+    };
+
+    // Reveals the smart-list panel for a plain list (hidden entirely until now)
+    // and expands it, so the "Add Smart Filter" button next to Add Pins has
+    // somewhere to land. The button itself is server-rendered only for plain
+    // lists, so hide it once its job is done - a full reload after a filter is
+    // actually picked will drop it from the DOM based on the list's new state.
+    window.pinListShowSmartPanel = function () {
+        const section = document.getElementById('pin-list-smart-panel');
+        if (section) section.hidden = false;
+        const body = document.getElementById('pin-list-smart-body');
+        if (body) body.hidden = false;
+        document.getElementById('pin-list-smart-toggle-btn')?.setAttribute('aria-expanded', 'true');
+        const chevron = document.getElementById('pin-list-smart-chevron');
+        if (chevron) chevron.textContent = 'expand_more';
+        document.getElementById('pin-list-add-smart-filter-btn')?.setAttribute('hidden', 'hidden');
+        if (_boundaryMap) requestAnimationFrame(() => _boundaryMap.invalidateSize());
+        section?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     };
 
     function _revealSmartEnableRow() {

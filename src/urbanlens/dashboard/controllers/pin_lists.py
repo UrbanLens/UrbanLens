@@ -227,6 +227,11 @@ class PinListEditView(LoginRequiredMixin, View):
     into ``smart_filter``; empty string clears it), and ``smart_boundary``
     (a GeoJSON Polygon/MultiPolygon geometry, or ``null`` to clear it - same
     payload shape as the pin/wiki boundary editor).
+
+    Changing ``saved_filter_uuid``/``smart_boundary`` always resyncs
+    membership immediately, so matching pins appear as soon as a rule is
+    picked - independent of ``is_smart``, which only controls whether *future*
+    pin/label edits keep re-triggering that sync.
     """
 
     def post(self, request: HttpRequest, list_uuid: str) -> HttpResponse:
@@ -245,10 +250,19 @@ class PinListEditView(LoginRequiredMixin, View):
                 return HttpResponse(length_error, status=400)
             pin_list.description = description
 
-        smart_config_changed = False
+        # Rule changes (which filter/boundary is active) always resync a fresh
+        # snapshot immediately, even before the list is marked "smart" - the
+        # user should see matching pins as soon as they pick a filter, not only
+        # after also flipping "keep this list in sync automatically". Turning
+        # is_smart on (without also changing the rules) likewise takes a fresh
+        # snapshot to catch up on anything that changed while it was off;
+        # turning it off alone leaves current membership untouched.
+        rules_changed = False
+        is_smart_turned_on = False
         if "is_smart" in body:
-            pin_list.is_smart = str(body.get("is_smart")).strip().lower() in {"true", "1", "yes", "on"}
-            smart_config_changed = True
+            new_is_smart = str(body.get("is_smart")).strip().lower() in {"true", "1", "yes", "on"}
+            is_smart_turned_on = new_is_smart and not pin_list.is_smart
+            pin_list.is_smart = new_is_smart
 
         if "saved_filter_uuid" in body:
             saved_filter_uuid = (body.get("saved_filter_uuid") or "").strip()
@@ -257,7 +271,7 @@ class PinListEditView(LoginRequiredMixin, View):
                 pin_list.smart_filter = saved_filter.criteria
             else:
                 pin_list.smart_filter = None
-            smart_config_changed = True
+            rules_changed = True
 
         if "smart_boundary" in body:
             from urbanlens.dashboard.services.geo import parse_multipolygon_geojson
@@ -270,11 +284,11 @@ class PinListEditView(LoginRequiredMixin, View):
                     return JsonResponse({"ok": False, "error": str(exc)}, status=400)
             else:
                 pin_list.smart_boundary = None
-            smart_config_changed = True
+            rules_changed = True
 
         pin_list.save()
 
-        if smart_config_changed and pin_list.is_smart:
+        if rules_changed or is_smart_turned_on:
             resync_smart_list(pin_list)
 
         return JsonResponse({"ok": True, "pin_count": pin_list.pin_count})

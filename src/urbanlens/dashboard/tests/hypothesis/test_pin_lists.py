@@ -7,6 +7,18 @@ Invariants verified:
   - PinListMarkupMapView's "no pins with coordinates" error is valid JSON (the
     client always calls response.json() on it), not a plain-text body that
     throws a SyntaxError in the browser.
+  - Picking a saved filter (or drawing a boundary) on the list-detail page
+    populates matching pins immediately, even before "keep this list in sync
+    automatically" (is_smart) is turned on - it used to silently do nothing
+    until that separate toggle was flipped, which read as "the smart filter
+    doesn't work".
+  - A smart list's membership re-syncs when a pin's labels change (add/remove/
+    clear), not just when the pin itself is saved - label add/remove is a
+    pure M2M operation that never calls Pin.save(), so this used to leave
+    smart lists stale after a badge was added to (or removed from) a pin.
+  - SavedFilterSuggestNameView returns a name summarizing the current form
+    criteria (for the create/edit dialog's auto-suggested "Filter name"), or
+    None when there's nothing active yet to summarize.
 """
 
 from __future__ import annotations
@@ -19,10 +31,27 @@ from hypothesis import HealthCheck, given, settings, strategies as st
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.models.pin_list.model import PinList
+from urbanlens.dashboard.models.labels.meta import KIND_TAG
+from urbanlens.dashboard.models.labels.model import Label
+from urbanlens.dashboard.models.location.model import Location
+from urbanlens.dashboard.models.pin.model import Pin
+from urbanlens.dashboard.models.pin_list.model import PinList, PinListItem
+from urbanlens.dashboard.models.saved_filter.model import SavedFilter
 from urbanlens.dashboard.services.filter_criteria import serialize_form_criteria
 
 _db_settings = settings(max_examples=20, deadline=None, suppress_health_check=[HealthCheck.too_slow, HealthCheck.filter_too_much])
+
+_coord_counter = 0
+
+
+def _make_pin(profile, **kwargs) -> Pin:
+    """Create a pin with a real coordinate-bearing Location (unique per call)."""
+    global _coord_counter
+    location = kwargs.pop("location", None)
+    if location is None:
+        _coord_counter += 1
+        location = baker.make(Location, latitude=40.0 + _coord_counter * 0.001, longitude=-74.0 - _coord_counter * 0.001)
+    return baker.make(Pin, profile=profile, location=location, **kwargs)
 
 
 class SerializeFormCriteriaNamePreservedTests(TestCase):
@@ -62,3 +91,130 @@ class PinListMarkupMapErrorIsJsonTests(TestCase):
         data = json.loads(response.content)
         self.assertFalse(data["ok"])
         self.assertIn("error", data)
+
+
+class SelectingSavedFilterImmediatelyPopulatesListTests(TestCase):
+    """Picking a saved filter must show matching pins right away, not only after also enabling "is_smart"."""
+
+    def setUp(self) -> None:
+        self.user = baker.make(User)
+        self.client.force_login(self.user)
+        self.profile = self.user.profile
+        self.matching_pin = _make_pin(self.profile, name="Rooftop Ruin", priority=5)
+        self.non_matching_pin = _make_pin(self.profile, name="Basement", priority=1)
+        self.saved_filter = SavedFilter.objects.create(
+            profile=self.profile,
+            name="High priority",
+            criteria={"min_priority": 5},
+        )
+        self.pin_list = baker.make(PinList, profile=self.profile, name="My List")
+
+    def test_selecting_filter_populates_matches_without_enabling_is_smart(self) -> None:
+        response = self.client.post(
+            reverse("lists.edit", kwargs={"list_uuid": self.pin_list.uuid}),
+            data=json.dumps({"saved_filter_uuid": str(self.saved_filter.uuid)}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.pin_list.refresh_from_db()
+        self.assertFalse(self.pin_list.is_smart)
+        member_pin_ids = set(self.pin_list.items.values_list("pin_id", flat=True))
+        self.assertIn(self.matching_pin.pk, member_pin_ids)
+        self.assertNotIn(self.non_matching_pin.pk, member_pin_ids)
+
+    def test_clearing_the_filter_removes_previously_matched_pins(self) -> None:
+        edit_url = reverse("lists.edit", kwargs={"list_uuid": self.pin_list.uuid})
+        self.client.post(edit_url, data=json.dumps({"saved_filter_uuid": str(self.saved_filter.uuid)}), content_type="application/json")
+        self.client.post(edit_url, data=json.dumps({"saved_filter_uuid": ""}), content_type="application/json")
+        self.pin_list.refresh_from_db()
+        self.assertEqual(self.pin_list.items.count(), 0)
+
+    def test_turning_is_smart_off_alone_does_not_touch_existing_membership(self) -> None:
+        edit_url = reverse("lists.edit", kwargs={"list_uuid": self.pin_list.uuid})
+        self.client.post(edit_url, data=json.dumps({"saved_filter_uuid": str(self.saved_filter.uuid)}), content_type="application/json")
+        self.client.post(edit_url, data=json.dumps({"is_smart": True}), content_type="application/json")
+        self.pin_list.refresh_from_db()
+        self.assertTrue(self.pin_list.items.filter(pin=self.matching_pin).exists())
+
+        self.client.post(edit_url, data=json.dumps({"is_smart": False}), content_type="application/json")
+        self.pin_list.refresh_from_db()
+        self.assertFalse(self.pin_list.is_smart)
+        # Membership is a frozen snapshot once sync is paused - still present.
+        self.assertTrue(self.pin_list.items.filter(pin=self.matching_pin).exists())
+
+
+class SmartListLabelChangeResyncTests(TestCase):
+    """A smart list must re-sync membership when a pin's labels change, not only when the pin itself is saved."""
+
+    def setUp(self) -> None:
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+        self.exclude_label = baker.make(Label, kind=KIND_TAG, profile=self.profile, name="Demolished")
+        self.pin_list = baker.make(
+            PinList,
+            profile=self.profile,
+            name="Smart Exclusions",
+            is_smart=True,
+            smart_filter={"exclude_tags": [self.exclude_label.pk]},
+        )
+
+    def test_pin_removed_from_list_once_it_gains_the_excluded_label(self) -> None:
+        with self.captureOnCommitCallbacks(execute=True):
+            pin = _make_pin(self.profile, name="Old Factory")
+        self.assertTrue(PinListItem.objects.filter(pin_list=self.pin_list, pin=pin).exists())
+
+        with self.captureOnCommitCallbacks(execute=True):
+            pin.labels.add(self.exclude_label)
+
+        self.assertFalse(PinListItem.objects.filter(pin_list=self.pin_list, pin=pin).exists())
+
+    def test_pin_readded_once_the_excluded_label_is_removed(self) -> None:
+        with self.captureOnCommitCallbacks(execute=True):
+            pin = _make_pin(self.profile, name="Old Factory")
+            pin.labels.add(self.exclude_label)
+        self.assertFalse(PinListItem.objects.filter(pin_list=self.pin_list, pin=pin).exists())
+
+        with self.captureOnCommitCallbacks(execute=True):
+            pin.labels.remove(self.exclude_label)
+
+        self.assertTrue(PinListItem.objects.filter(pin_list=self.pin_list, pin=pin).exists())
+
+    def test_manually_added_pin_is_not_removed_by_a_later_label_change(self) -> None:
+        with self.captureOnCommitCallbacks(execute=True):
+            pin = _make_pin(self.profile, name="Kept Manually")
+            pin.labels.add(self.exclude_label)
+        PinListItem.objects.filter(pin_list=self.pin_list, pin=pin).delete()
+        PinListItem.objects.create(pin_list=self.pin_list, pin=pin, added_via=PinListItem.ADDED_MANUAL)
+
+        with self.captureOnCommitCallbacks(execute=True):
+            pin.labels.remove(self.exclude_label)
+            pin.labels.add(self.exclude_label)
+
+        self.assertTrue(PinListItem.objects.filter(pin_list=self.pin_list, pin=pin).exists())
+
+
+class SavedFilterSuggestNameViewTests(TestCase):
+    """The create/edit dialog's name auto-suggestion endpoint."""
+
+    def setUp(self) -> None:
+        self.user = baker.make(User)
+        self.client.force_login(self.user)
+        self.suggest_url = reverse("saved_filters.suggest_name")
+
+    def test_suggests_a_name_from_active_criteria(self) -> None:
+        response = self.client.post(self.suggest_url, data={"min_rating": "4"})
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertEqual(data["name"], "4★+")
+
+    def test_returns_none_when_no_criteria_are_active(self) -> None:
+        response = self.client.post(self.suggest_url, data={})
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertIsNone(data["name"])
+
+    def test_returns_none_on_invalid_form_data(self) -> None:
+        response = self.client.post(self.suggest_url, data={"min_rating": "not-a-number"})
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        self.assertIsNone(data["name"])

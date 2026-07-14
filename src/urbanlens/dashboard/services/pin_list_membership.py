@@ -9,8 +9,8 @@ points keep membership current:
   (see ``dashboard.models.pin_list.signals``) to evaluate one pin against all
   of its owner's smart lists.
 - ``resync_smart_list`` - called synchronously from the list-edit view when a
-  list's ``smart_filter``/``smart_boundary``/``is_smart`` changes, to fully
-  recompute that one list's membership.
+  list's ``smart_filter``/``smart_boundary`` changes (or ``is_smart`` is
+  turned on), to fully recompute that one list's membership.
 
 ``PinListItem.added_via`` tracks provenance so manually-added pins are never
 auto-removed, even if they also happen to match (or stop matching) a smart
@@ -53,15 +53,19 @@ def sync_pin_against_smart_lists(pin: Pin) -> None:
 
 
 def resync_smart_list(pin_list: PinList) -> None:
-    """Fully recompute one list's smart membership against its current rules.
+    """Fully recompute one list's membership against its current smart_filter/smart_boundary rules.
+
+    Callable regardless of ``is_smart`` - picking a filter/boundary should show
+    a matching snapshot right away, even before the user opts into ongoing
+    auto-sync. ``is_smart`` only gates whether *future* pin edits keep
+    re-triggering this (see ``sync_pin_against_smart_lists``, wired to Pin's
+    post_save/labels-m2m signals).
 
     Args:
         pin_list: The list whose ``smart_filter``/``smart_boundary`` just changed.
     """
     from urbanlens.dashboard.models.pin_list.model import PinListItem
 
-    if not pin_list.is_smart:
-        return
     filter_ids = _filter_matching_ids(pin_list)
     boundary_ids = _boundary_matching_ids(pin_list)
     candidate_ids = filter_ids | boundary_ids

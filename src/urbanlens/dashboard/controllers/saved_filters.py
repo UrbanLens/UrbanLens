@@ -166,6 +166,41 @@ class SavedFilterEditView(LoginRequiredMixin, View):
         return JsonResponse({"ok": True, "uuid": str(saved_filter.uuid)})
 
 
+class SavedFilterSuggestNameView(LoginRequiredMixin, View):
+    """Suggest a filter name from whatever criteria the create/edit dialog currently holds.
+
+    POST /saved-filters/suggest-name/ → JSON ``{"name": str | None}``
+
+    Read-only preview, called from the dialog's JS as the user builds a
+    filter, so the "Filter name" field can pre-fill itself (e.g. "4★+ · 2 tags
+    included") unless the user has typed their own name. Reads the same
+    ``SearchForm``-shaped POST fields the create/edit endpoints read, so the
+    suggestion always matches what would actually be saved. Returns
+    ``{"name": None}`` on an invalid or still-empty form rather than an error,
+    so the caller can just leave the name field alone.
+    """
+
+    def post(self, request):
+        from urbanlens.dashboard.templatetags.dashboard_tags import filter_criteria_summary
+
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        search_form = SearchForm(request.POST, profile=profile)
+        if not search_form.is_valid():
+            return JsonResponse({"name": None})
+
+        cleaned = dict(search_form.cleaned_data)
+        label_groups = search_form.parse_label_groups()
+        custom_field_criteria = search_form.parse_custom_field_criteria()
+        regions = _dissolve_regions(search_form)
+        criteria = serialize_form_criteria(cleaned, label_groups, custom_field_criteria, regions)
+        if not criteria:
+            return JsonResponse({"name": None})
+
+        summary = filter_criteria_summary(criteria)
+        suggested = summary[:100] if summary and summary != "No conditions set" else None
+        return JsonResponse({"name": suggested})
+
+
 class SavedFilterDeleteView(LoginRequiredMixin, View):
     """Delete a saved filter.
 
