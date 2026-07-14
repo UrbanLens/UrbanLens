@@ -508,6 +508,8 @@ $z-nav: 1100;
     --primary-color: #{$primary-color};
     --secondary-color: #{$secondary-color};
     --nav-bg: #24324D;
+    --mix-color: #{$color-grey-0};
+    --mix-amount: 10%;
 }
 
 [data-theme="dark"] {
@@ -571,4 +573,5 @@ $z-nav: 1100;
     --ul-tooltip-border: rgba(140, 170, 255, 0.13);
     --ul-tooltip-shadow: 0 6px 24px rgba(0, 0, 0, 0.55), 0 2px 6px rgba(0, 0, 0, 0.28);
     --nav-bg: #{$color-blue-1700};
+    --mix-color: #{$color-grey-9};
 }
