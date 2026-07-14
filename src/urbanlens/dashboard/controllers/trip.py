@@ -53,7 +53,7 @@ TRIP_LIST_SORT_CHOICES = ("start_date", "updated")
 TRIP_LIST_DIRECTION_CHOICES = ("asc", "desc")
 
 
-def _trips_for_list(profile: Profile, sort: str = "updated", direction: str = "desc") -> QuerySet[Trip]:
+def _trips_for_list(profile: Profile, sort: str = "updated", direction: str = "desc") -> QuerySet[Trip] | list[Trip]:
     """Return annotated trips for the list page.
 
     Args:
@@ -62,7 +62,9 @@ def _trips_for_list(profile: Profile, sort: str = "updated", direction: str = "d
         direction: ``"asc"`` or ``"desc"``.
 
     Returns:
-        Queryset of trips the profile belongs to, with list stats prefetched.
+        Trips the profile belongs to, with list stats prefetched. Ordered per ``sort``/
+        ``direction`` - see :meth:`TripQuerySet.for_list_page` for the "soonest first"
+        grouping applied when ``sort="start_date"`` and ``direction="asc"``.
     """
     return Trip.objects.for_list_page(profile, sort=sort, direction=direction)
 
@@ -535,6 +537,7 @@ def _activities_panel_html(request: HttpRequest, trip: Trip, profile: Profile, *
             "user_vote": user_votes.get(act.id),
             "can_manage": viewer_has_joined and (act.added_by_id == profile.id or viewer_is_organizer),
             "effective_location_hidden": act.location_hidden or (act.id in viewer_hidden),
+            "pin_slug": act.pin.slug if (act.pin_id and act.pin.profile_id == profile.id) else None,
         }
         for act in activities
     ]
@@ -1030,6 +1033,11 @@ class TripActivityCompleteView(LoginRequiredMixin, View):
         )
         activity.status = TripActivity.STATUS_COMPLETED
         activity.save(update_fields=["status", "scheduled_at", "updated"])
+        # Completing an activity implies it was confirmed to have happened, so
+        # it should expand the trip's date range the same way confirming it
+        # would have (see TripActivityStatusView) - even if it was only ever
+        # "proposed" beforehand.
+        _expand_trip_dates(trip, completed_date)
         if not already_completed:
             _create_visit_entries_for_completed_activity(trip, activity, profile)
 

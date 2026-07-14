@@ -9,12 +9,6 @@
         <span>Activities</span>
         {% if activities_with_index %}<span class="badge">{{ activities_with_index|length }}</span>{% endif %}
         <div class="card-header-actions">
-            <button type="button" class="btn btn--secondary view-toggle-btn view-toggle-btn--icon" id="trip-show-completed-btn"
-                    data-view="completed"
-                    title="Show completed activities"
-                    onclick="window.tripToggleShowCompleted()">
-                <i class="material-symbols-outlined">check_circle</i>
-            </button>
             <div class="view-toggle-group" role="group" aria-label="Activities view">
                 <button type="button" class="btn btn--secondary view-toggle-btn view-toggle-btn--active view-toggle-btn--icon"
                         data-view="list" title="List view"
@@ -28,7 +22,7 @@
                 </button>
             </div>
             {% if viewer_has_joined %}
-            <button type="button" class="btn btn--sm btn--primary"
+            <button type="button" class="btn btn--icon-sm"
                     onclick="document.getElementById('add-activity-dialog').showModal()">
                 <i class="material-symbols-outlined">add</i>
             </button>
@@ -38,12 +32,14 @@
 
     {# -- Tabs ------------------------------------------------------------- #}
     <div class="activity-tabs">
-        <button type="button" class="activity-tab activity-tab--active" data-tab="all"
-                onclick="tripSetTab('all')">All</button>
+        <button type="button" class="activity-tab activity-tab--active" data-tab="upcoming"
+                onclick="tripSetTab('upcoming')">Upcoming</button>
         <button type="button" class="activity-tab" data-tab="proposed"
                 onclick="tripSetTab('proposed')">Proposed</button>
         <button type="button" class="activity-tab" data-tab="confirmed"
                 onclick="tripSetTab('confirmed')">Confirmed</button>
+        <button type="button" class="activity-tab" data-tab="completed"
+                onclick="tripSetTab('completed')">Completed</button>
     </div>
 
     {# -- List view -------------------------------------------------------- #}
@@ -94,6 +90,11 @@
 
                 <div class="trip-activity-body">
                     <div class="trip-activity-title-row">
+                        {% if item.pin_slug and not item.effective_location_hidden %}
+                        <a href="{% url 'pin.details' item.pin_slug %}" class="trip-activity-name">
+                            {{ act.effective_title }}
+                        </a>
+                        {% else %}
                         <span class="trip-activity-name{% if item.effective_location_hidden %} trip-activity-name--secret{% endif %}">
                             {% if item.effective_location_hidden %}
                                 Secret Location
@@ -101,6 +102,7 @@
                                 {{ act.effective_title }}
                             {% endif %}
                         </span>
+                        {% endif %}
                         <span class="trip-activity-status-chip trip-activity-status-chip--{{ act.status }}">
                             {% if act.status == 'proposed' %}Proposed
                             {% elif act.status == 'confirmed' %}Confirmed
@@ -184,7 +186,7 @@
                             hx-post="{% url 'trips.activity.status' trip.slug act.id %}"
                             hx-target="#trip-activities-panel"
                             hx-swap="outerHTML">
-                        <i class="material-icons">{% if act.status == 'confirmed' %}check_circle{% else %}radio_button_unchecked{% endif %}</i>
+                        <i class="material-icons">{% if act.status == 'confirmed' %}help{% else %}radio_button_unchecked{% endif %}</i>
                     </button>
                     {% endif %}
                     <button type="button" class="detail-pin-action-btn"

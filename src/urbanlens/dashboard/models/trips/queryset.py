@@ -5,6 +5,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from django.db.models import Count, F, Max, Prefetch, Q
+from django.utils import timezone
 
 # Django Imports
 # App Imports
@@ -12,6 +13,7 @@ from urbanlens.dashboard.models import abstract
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.models.trips.model import Trip
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +28,7 @@ TRIP_LIST_SORT_FIELDS: dict[str, str] = {
 class TripQuerySet(abstract.DashboardQuerySet):
     """Custom queryset for Trip models."""
 
-    def for_list_page(self, profile: Profile, sort: str = "updated", direction: str = "desc") -> TripQuerySet:
+    def for_list_page(self, profile: Profile, sort: str = "updated", direction: str = "desc") -> TripQuerySet | list[Trip]:
         """Return trips for the list page with counts and member prefetch.
 
         Args:
@@ -38,6 +40,9 @@ class TripQuerySet(abstract.DashboardQuerySet):
         Returns:
             Annotated queryset ordered per ``sort``/``direction``. Trips with no ``start_date``
             always sort to the end regardless of direction when sorting by ``start_date``.
+            For ``sort="start_date"``/``direction="asc"`` ("soonest first"), the result is a
+            plain list grouped as: upcoming/active trips soonest first, then undated
+            (planning) trips, then past trips most-recent first.
         """
         from urbanlens.dashboard.models.trips.model import TripMembership
 
@@ -48,7 +53,7 @@ class TripQuerySet(abstract.DashboardQuerySet):
         else:
             order = F(field).asc() if ascending else F(field).desc()
 
-        return (
+        qs = (
             self.filter(profiles=profile)
             .select_related("creator__user")
             .annotate(
@@ -67,6 +72,37 @@ class TripQuerySet(abstract.DashboardQuerySet):
             )
             .order_by(order)
         )
+
+        if field == "start_date" and ascending:
+            return self._soonest_first(qs)
+        return qs
+
+    @staticmethod
+    def _soonest_first(qs: TripQuerySet) -> list[Trip]:
+        """Reorder a ``start_date``-sorted queryset so past trips sink to the bottom.
+
+        Upcoming/active trips sort soonest first, undated (planning) trips sort next,
+        and past trips sort most-recent first - rather than the plain chronological
+        ordering (which would otherwise interleave "soonest" with the most stale past
+        trips as equally "soon" once their dates have passed).
+
+        Args:
+            qs: A queryset already ordered by ``start_date`` ascending (nulls last).
+
+        Returns:
+            A plain list of trips in the grouped order described above.
+        """
+        today = timezone.now().date()
+
+        def bucket_key(trip: Trip) -> tuple[int, int]:
+            start = trip.start_date
+            if start is None:
+                return (1, 0)
+            if start >= today:
+                return (0, start.toordinal())
+            return (2, -start.toordinal())
+
+        return sorted(qs, key=bucket_key)
 
     def recently_updated(self, profile: Profile, limit: int = 5) -> TripQuerySet:
         """Return the viewer's trips ordered by most recently updated, for the overview page.

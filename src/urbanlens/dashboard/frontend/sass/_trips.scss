@@ -126,14 +126,14 @@
 .trip-card {
     position: relative;
     border: 1px solid var(--ul-grey-1a);
-    background-color: var(--ul-grey-0);
+    background: var(--ul-grey-1b);
+    box-shadow: 3px 3px 10px rgba(0, 0, 0, .08);
     border-radius: 14px;
     overflow: hidden;
     transition: box-shadow .2s, border-color .2s, transform .2s;
 
     &:hover {
         box-shadow: 0 10px 28px rgba(0, 0, 0, .08);
-        background-color: var(--ul-grey-0a);
         transform: translateY(-2px);
 
         .trip-card-arrow {
@@ -659,7 +659,6 @@
     display: grid;
     gap: 1.5rem;
     grid-template-columns: 1fr;
-    align-items: start;
 
     @include up($breakpoint-md) {
         grid-template-columns: repeat(2, 1fr);
@@ -668,6 +667,23 @@
 
 .trip-section {
     position: relative;
+    // Stretch (the grid's default row alignment) only affects this wrapper -
+    // flex it down to the actual panel card so two sections sharing a row
+    // (e.g. Members + Comments) render as equal-height cards instead of the
+    // shorter one leaving blank space below a mismatched card boundary.
+    display: flex;
+    flex-direction: column;
+
+    &[hidden] {
+        display: none;
+    }
+
+    > .trip-detail-section,
+    > [id$="-panel"] {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+    }
 
     &:hover .trip-section-grip {
         opacity: 1;
@@ -684,6 +700,14 @@
             opacity: 1;
             color: var(--ul-grey-7);
         }
+    }
+}
+
+.trip-detail-section {
+    > [id$="-panel"] {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
     }
 }
 
@@ -733,6 +757,23 @@
             font-weight: 700;
             padding: 1px 7px;
         }
+    }
+}
+
+// The shared panel-header-grid mixin gives the title column all the leftover
+// flexible space, which pushes the count badge (grid-area: header-meta) all
+// the way over next to the action buttons instead of hugging the title next
+// to it. Scoped to the trip detail page rather than the shared mixin, since
+// other pages using the same card-header component haven't been audited.
+.trip-detail-page .card-header {
+    grid-template-columns: auto auto auto minmax(0, 1fr);
+
+    .card-header-actions {
+        justify-content: flex-end;
+    }
+
+    .badge {
+        justify-self: start;
     }
 }
 
@@ -1050,8 +1091,8 @@
     }
 
     &.trip-activity--highlighted {
-        background: var(--ul-grey-0a);
-        border-left: 3px solid $color-blue-500;
+        background: rgba($color-amber-500, .08);
+        border-left: 3px solid $color-amber-500;
         padding-left: calc(1rem - 3px);
     }
 
@@ -1115,6 +1156,15 @@
     font-weight: 600;
     font-size: .9rem;
     color: var(--ul-grey-8);
+}
+
+a.trip-activity-name {
+    text-decoration: none;
+
+    &:hover {
+        color: $color-blue-500;
+        text-decoration: underline;
+    }
 }
 
 .trip-activity-time {
@@ -1573,6 +1623,77 @@
     font-style: italic;
 }
 
+// -- Add-activity: location/trip picker chip (progressive disclosure) -----
+
+.activity-location-chip {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    padding: .5rem .7rem;
+    border: 1px solid var(--ul-grey-1a);
+    border-radius: 8px;
+    background: var(--ul-grey-1b);
+    font-size: .88rem;
+    color: var(--ul-grey-8);
+}
+
+.activity-location-chip-icon {
+    font-size: 1.15rem;
+    color: $color-blue-500;
+    flex-shrink: 0;
+}
+
+.activity-location-chip-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.activity-location-chip-clear {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    flex-shrink: 0;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--ul-grey-6);
+    cursor: pointer;
+
+    &:hover {
+        background: var(--ul-hover-bg);
+        color: var(--ul-grey-8);
+    }
+
+    .material-symbols-outlined {
+        font-size: 1rem;
+    }
+}
+
+#add-activity-more-fields {
+    animation: activity-fields-in .18s ease-out;
+}
+
+@keyframes activity-fields-in {
+    from {
+        opacity: 0;
+        transform: translateY(-4px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.addr-suggestion--trip .addr-suggestion-icon {
+    color: $color-blue-500;
+}
+
 // -- Trip activity map -----------------------------------------------------
 
 .trip-map-wrap {
@@ -1607,40 +1728,6 @@
         background: color-mix(in srgb, var(--ul-grey-0) 88%, transparent);
         border-radius: 8px;
         box-shadow: 0 1px 6px rgba(0, 0, 0, .12);
-    }
-}
-
-.trip-map-overlay {
-    position: absolute;
-    top: 0.5em;
-    right: 0.5em;
-    z-index: 1000;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    pointer-events: none;
-    justify-self: right;
-
-    >* {
-        pointer-events: auto;
-    }
-}
-
-.trip-map-past-btn {
-    opacity: 0.8;
-
-    &:hover {
-        opacity: 1;
-    }
-
-    &--active {
-        background: $color-blue-500;
-        border-color: $color-blue-600;
-        color: var(--ul-grey-5);
-
-        &:hover {
-            background: $color-blue-800;
-        }
     }
 }
 
@@ -2578,6 +2665,7 @@
     font-size: .84rem;
     color: var(--ul-grey-6);
     user-select: none;
+    transition: color .15s;
 
     input[type="checkbox"] {
         accent-color: var(--primary-color);
@@ -2591,6 +2679,19 @@
     .material-icons {
         font-size: 1rem;
         color: $text-muted;
+        transition: color .15s;
+    }
+
+    // Toggled on/off in JS as the checkbox changes, so clicking the toggle
+    // gives clear visual feedback beyond the easy-to-miss 15px checkbox itself.
+    &.is-active {
+        color: var(--ul-grey-8);
+        font-weight: 600;
+
+        .material-symbols-outlined,
+        .material-icons {
+            color: var(--primary-color);
+        }
     }
 }
 

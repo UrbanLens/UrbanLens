@@ -37,14 +37,6 @@
         {% map_toolbar "screenshot" panel_id="trip-map-buttons" screenshot_trip_name=trip.name %}
         {# Shared layers panel - same component and engine as the main map. #}
         {% map_layers_panel "street,terrain,satellite,borders" panel_id="trip-map-layers" %}
-        <div class="trip-map-overlay">
-            <button type="button" class="btn btn--icon btn--secondary trip-map-past-btn" id="trip-map-completed-toggle"
-                    onclick="window.tripToggleShowCompleted()"
-                    data-tooltip="Toggle past activities on the trip map."
-                    aria-label="Show completed activities">
-                <i class="material-symbols-outlined">history</i>
-            </button>
-        </div>
         <p class="trip-map-empty" id="trip-map-empty" hidden>No locations to display.</p>
     </div>
 
@@ -179,99 +171,99 @@
           hx-on::after-request="if(event.detail.successful)_onAddActivitySuccess()"
           class="trip-create-form">
         {% csrf_token %}
+        <input type="hidden" name="child_trip_uuid" id="activity-child-trip-uuid">
 
-        {# Name hidden by default - reveal with toggle #}
-        <div id="add-activity-name-wrap" hidden>
-            <div class="form-row">
-                <label for="activity-title">Custom Name <small>(optional)</small></label>
-                <input type="text" name="title" id="activity-title"
-                       placeholder="e.g. Rooftop access point" maxlength="255">
-            </div>
-        </div>
-        <div class="form-row" style="margin-bottom:.1rem">
-            <button type="button" class="btn btn--ghost" id="add-activity-name-toggle"
-                    style="font-size:.8rem;padding:.25rem .5rem"
-                    onclick="_toggleAddActivityName()">
-                <i class="material-icons" style="font-size:.95rem;vertical-align:middle">add</i> Add custom name
-            </button>
-        </div>
-
+        {# Step 1: only this is shown until a location or trip is picked #}
         <div class="form-row">
-            <label>Location <small>(optional - search your pins, or enter an address, coordinates, or Plus Code)</small></label>
-            <div class="activity-location-search-wrap">
-                {# Shared "jump to" search component - same suggestions engine as the main map. #}
-                {% map_search_bar "activity-loc" placeholder="Search pins, addresses, coordinates..." show_history=False extra_class="addr-search-bar--inline" %}
+            <label>Location <span class="required">*</span></label>
+            <div class="activity-location-search-wrap" id="add-activity-location-picker">
+                {# Shared "jump to" search component - same suggestions engine as the main map, extended below to also suggest your other trips. #}
+                {% map_search_bar "activity-loc" placeholder="Search pins, addresses, coordinates, or trips..." show_history=False extra_class="addr-search-bar--inline" %}
                 <input type="hidden" name="location_uuid" id="activity-location-uuid">
                 <input type="hidden" name="pin_uuid" id="activity-pin-uuid">
                 <input type="hidden" name="geocoded_lat" id="activity-geocoded-lat">
                 <input type="hidden" name="geocoded_lng" id="activity-geocoded-lng">
                 <input type="hidden" name="geocoded_name" id="activity-geocoded-name">
-                <span id="activity-location-display" class="activity-location-display"></span>
+                <span id="activity-location-display" class="activity-location-display" hidden></span>
             </div>
-        </div>
-
-        <div class="form-row">
-            <label>Start <small>(optional)</small></label>
-            <div class="activity-datetime-row">
-                <input type="date" name="scheduled_date" id="activity-date"
-                       value="{{ trip.start_date|date:'Y-m-d'|default:'' }}">
-                <input type="time" name="scheduled_time" id="activity-time">
-            </div>
-        </div>
-
-        <div class="form-row">
-            <label>End <small>(optional)</small></label>
-            <div class="activity-datetime-row">
-                <input type="date" name="scheduled_end_date" id="activity-end-date">
-                <input type="time" name="scheduled_end_time" id="activity-end-time">
-            </div>
-        </div>
-
-        <div class="form-row">
-            <label>Child Trip <small>(optional - link another trip as an activity)</small></label>
-            <div class="activity-child-trip-wrap">
-                <input type="text" id="activity-child-trip-search"
-                       placeholder="Search your trips..." autocomplete="off">
-                <input type="hidden" name="child_trip_uuid" id="activity-child-trip-uuid">
-                <div id="activity-child-trip-suggestions" class="location-suggestions" hidden></div>
-                <span id="activity-child-trip-display" class="activity-location-display"></span>
-                <button type="button" class="btn btn--ghost activity-child-trip-clear" id="activity-child-trip-clear"
-                        style="display:none;margin-top:.25rem;font-size:.8rem;padding:.2rem .5rem"
-                        onclick="_clearChildTrip('add')">
-                    <i class="material-icons" style="font-size:.9rem;vertical-align:middle">clear</i> Remove
+            <div class="activity-location-chip" id="activity-location-chip" hidden>
+                <i class="material-symbols-outlined activity-location-chip-icon" id="activity-location-chip-icon">place</i>
+                <span class="activity-location-chip-name" id="activity-location-chip-name"></span>
+                <button type="button" class="activity-location-chip-clear" id="activity-location-chip-clear"
+                        onclick="_clearAddActivityLocation()" aria-label="Change location">
+                    <i class="material-symbols-outlined">close</i>
                 </button>
             </div>
         </div>
 
-        <div class="form-row">
-            <label for="activity-notes">Notes</label>
-            <textarea name="notes" id="activity-notes" rows="3"
-                      placeholder="Any notes about this stop..."></textarea>
-        </div>
-        <div class="form-row">
-            <label>Status</label>
-            <input type="hidden" name="status" id="add-activity-status-input" value="proposed">
-            <div class="status-pill-toggle" role="group" aria-label="Activity status">
-                <button type="button" class="status-pill-btn is-active" data-value="proposed"
-                        onclick="_setStatusPill('add', 'proposed')">
-                    <i class="material-symbols-outlined">schedule</i> Proposed
-                </button>
-                <button type="button" class="status-pill-btn" data-value="confirmed"
-                        onclick="_setStatusPill('add', 'confirmed')">
-                    <i class="material-symbols-outlined">check_circle</i> Confirmed
+        {# Everything else stays hidden until step 1 is done #}
+        <div id="add-activity-more-fields" hidden>
+            <div class="form-row" style="margin-bottom:.1rem">
+                <button type="button" class="btn btn--ghost" id="add-activity-name-toggle"
+                        style="font-size:.8rem;padding:.25rem .5rem"
+                        onclick="_toggleAddActivityName()">
+                    <i class="material-icons" style="font-size:.95rem;vertical-align:middle">add</i> Add custom name
                 </button>
             </div>
+            <div id="add-activity-name-wrap" hidden>
+                <div class="form-row">
+                    <label for="activity-title">Custom Name</label>
+                    <input type="text" name="title" id="activity-title"
+                           placeholder="e.g. Rooftop access point" maxlength="255">
+                </div>
+            </div>
+
+            <div class="form-row">
+                <label>Start</label>
+                <div class="activity-datetime-row">
+                    <input type="date" name="scheduled_date" id="activity-date"
+                           value="{{ trip.start_date|date:'Y-m-d'|default:'' }}">
+                    <input type="time" name="scheduled_time" id="activity-time">
+                </div>
+            </div>
+
+            <div class="form-row" id="add-activity-end-date-wrap" hidden>
+                <label>End</label>
+                <div class="activity-datetime-row">
+                    <input type="date" name="scheduled_end_date" id="activity-end-date">
+                    <input type="time" name="scheduled_end_time" id="activity-end-time">
+                </div>
+            </div>
+            <div class="form-row" id="add-activity-end-date-toggle-row" style="margin-bottom:.1rem">
+                <button type="button" class="btn btn--ghost" id="add-activity-end-date-toggle"
+                        style="font-size:.8rem;padding:.25rem .5rem"
+                        onclick="_revealAddActivityEndDate()">
+                    <i class="material-icons" style="font-size:.95rem;vertical-align:middle">add</i> Add end date
+                </button>
+            </div>
+
+            <div class="form-row">
+                <label for="activity-notes">Notes</label>
+                <textarea name="notes" id="activity-notes" rows="3"
+                          placeholder="Any notes about this stop..."></textarea>
+            </div>
+            <div class="form-row form-row--toggle">
+                <input type="hidden" name="status" id="add-activity-status-input" value="confirmed">
+                <label class="activity-hide-label" id="add-activity-propose-label">
+                    <input type="checkbox" id="add-activity-propose-checkbox" onchange="_syncAddActivityStatus()">
+                    <i class="material-symbols-outlined">help</i>
+                    Propose for discussion
+                </label>
+                <p class="form-help">Left unchecked, the activity is added as confirmed. Checked, other members can vote on it first.</p>
+            </div>
+            <div class="form-row form-row--toggle">
+                <label class="activity-hide-label" id="add-activity-hide-label">
+                    <input type="checkbox" name="location_hidden" id="add-activity-location-hidden"
+                           value="true" onchange="_syncAddActivityHideLabel()">
+                    <i class="material-symbols-outlined" id="add-activity-hide-icon">visibility</i>
+                    Hide location
+                </label>
+                <p class="form-help">Location won't appear on the map. Shows as "Secret Location" in the list.</p>
+            </div>
         </div>
-        <div class="form-row form-row--toggle">
-            <label class="activity-hide-label">
-                <input type="checkbox" name="location_hidden" id="add-activity-location-hidden" value="true">
-                <i class="material-symbols-outlined">visibility_off</i>
-                Hide location
-            </label>
-            <p class="form-help">Location won't appear on the map. Shows as "Secret Location" in the list.</p>
-        </div>
+
         <div class="form-actions">
-            <button type="submit" class="btn btn--primary btn--lg btn--submit">Add Activity</button>
+            <button type="submit" class="btn btn--primary btn--lg btn--submit" id="add-activity-submit-btn" disabled>Add Activity</button>
             <button type="button" class="btn btn--ghost"
                     onclick="this.closest('dialog').close()">Cancel</button>
         </div>
@@ -383,9 +375,10 @@
             </div>
         </div>
         <div class="form-row form-row--toggle" id="edit-activity-hide-wrap" hidden>
-            <label class="activity-hide-label">
-                <input type="checkbox" name="location_hidden" id="edit-activity-location-hidden" value="true">
-                <i class="material-symbols-outlined">visibility_off</i>
+            <label class="activity-hide-label" id="edit-activity-hide-label">
+                <input type="checkbox" name="location_hidden" id="edit-activity-location-hidden"
+                       value="true" onchange="_syncHideLocationLabel('edit-activity-hide-label', 'edit-activity-hide-icon', this.checked)">
+                <i class="material-symbols-outlined" id="edit-activity-hide-icon">visibility_off</i>
                 Hide location
             </label>
             <p class="form-help">Location won't appear on the map. Shows as "Secret Location" in the list.</p>
@@ -683,7 +676,7 @@
 
     function _loadPoints() {
         var url = '{% url "trips.map_data" trip.slug %}';
-        if (window._tripShowCompleted) url += '?include_past=1';
+        if ((window._tripCurrentTab || 'upcoming') === 'completed') url += '?include_past=1';
         fetch(url, {
             headers: {'X-Requested-With': 'XMLHttpRequest'}
         })
@@ -730,6 +723,7 @@
 
                 if (pt.activity_id) {
                     var actId = pt.activity_id;
+                    marker._tripStatus = pt.status;
                     marker.on('mouseover', function () { window.tripHighlightActivity(actId, true); });
                     marker.on('mouseout',  function () { window.tripHighlightActivity(actId, false); });
                     _markers[actId] = marker;
@@ -787,11 +781,32 @@
             } else {
                 _map.fitBounds(bounds, {padding: [32, 32]});
             }
+            window.applyTripMapTabFilter();
         })
         .catch(function () {
             if (wrapEl) wrapEl.hidden = true;
         });
     }
+
+    // Shows/hides markers to match the active activities tab (Upcoming/
+    // Proposed/Confirmed/Completed) - the map always mirrors the visible list.
+    window.applyTripMapTabFilter = function () {
+        var tab = window._tripCurrentTab || 'upcoming';
+        Object.keys(_markers).forEach(function (id) {
+            var m = _markers[id];
+            var status = m._tripStatus;
+            var visible;
+            if (tab === 'completed') {
+                visible = status === 'completed';
+            } else if (status === 'completed') {
+                visible = false;
+            } else {
+                visible = (tab === 'upcoming') || (tab === status);
+            }
+            var el = m.getElement();
+            if (el) el.style.display = visible ? '' : 'none';
+        });
+    };
 
     _loadPoints();
     window.refreshTripMap = _loadPoints;
@@ -806,33 +821,26 @@ document.body.addEventListener('htmx:afterSettle', function () {
     }
 });
 
-// -- Show completed toggle (shared between map overlay and activities panel) -
-var _tripShowCompletedKey = 'trip-show-completed-{{ trip.uuid }}';
-var _tripAllCompletedCollapsedKey = 'trip-all-completed-collapsed-{{ trip.uuid }}';
-window._tripShowCompleted = false;
+// -- Activities tab preference (Upcoming/Proposed/Confirmed/Completed) -----
+// Replaces the old separate "show completed" toggles - the Completed tab now
+// covers that, and the map always mirrors whichever tab is active.
+var _tripActiveTabKey = 'trip-active-tab-{{ trip.uuid }}';
+var _TRIP_TABS = ['upcoming', 'proposed', 'confirmed', 'completed'];
 
 function _tripPanelAllCompleted() {
     var panel = document.getElementById('trip-activities-panel');
     return !!(panel && panel.dataset.allCompleted === 'true');
 }
 
-function _resolveShowCompletedPreference() {
+function _resolveActiveTabPreference() {
     try {
-        if (_tripPanelAllCompleted()) {
-            if (localStorage.getItem(_tripAllCompletedCollapsedKey) === 'true') {
-                return false;
-            }
-            return true;
-        }
-        var stored = localStorage.getItem(_tripShowCompletedKey);
-        if (stored !== null) {
-            return JSON.parse(stored);
-        }
+        var stored = localStorage.getItem(_tripActiveTabKey);
+        if (stored && _TRIP_TABS.indexOf(stored) !== -1) return stored;
     } catch (e) {}
-    return false;
+    return 'upcoming';
 }
 
-function _updateActivitiesEmptyState(panel, tab, showCompleted) {
+function _updateActivitiesEmptyState(panel, tab) {
     var list = panel.querySelector('.trip-activity-list');
     if (!list) return;
 
@@ -843,7 +851,7 @@ function _updateActivitiesEmptyState(panel, tab, showCompleted) {
     var allDoneVisible = false;
     if (emptyAllDone) {
         var allCompleted = panel.dataset.allCompleted === 'true';
-        allDoneVisible = !anyVisible && allCompleted && !showCompleted && tab === 'all';
+        allDoneVisible = !anyVisible && allCompleted && tab === 'upcoming';
         emptyAllDone.hidden = !allDoneVisible;
     }
     // Generic "nothing in this tab" message - covers e.g. the Confirmed tab
@@ -855,41 +863,9 @@ function _updateActivitiesEmptyState(panel, tab, showCompleted) {
     }
 }
 
-function _applyShowCompletedState() {
-    var on = window._tripShowCompleted;
-
-    var panelBtn = document.getElementById('trip-show-completed-btn');
-    if (panelBtn) panelBtn.classList.toggle('view-toggle-btn--active', on);
-
-    var mapBtn = document.getElementById('trip-map-completed-toggle');
-    if (mapBtn) mapBtn.classList.toggle('trip-map-past-btn--active', on);
-
-    tripSetTab(window._tripCurrentTab || 'all');
-
-    if (window.refreshTripMap) window.refreshTripMap();
+function _initActiveTabState() {
+    tripSetTab(_resolveActiveTabPreference());
 }
-
-function _initShowCompletedState() {
-    window._tripShowCompleted = _resolveShowCompletedPreference();
-    _applyShowCompletedState();
-}
-
-window.tripToggleShowCompleted = function () {
-    window._tripShowCompleted = !window._tripShowCompleted;
-    try {
-        localStorage.setItem(_tripShowCompletedKey, JSON.stringify(window._tripShowCompleted));
-        if (_tripPanelAllCompleted()) {
-            if (window._tripShowCompleted) {
-                localStorage.removeItem(_tripAllCompletedCollapsedKey);
-            } else {
-                localStorage.setItem(_tripAllCompletedCollapsedKey, 'true');
-            }
-        } else {
-            localStorage.removeItem(_tripAllCompletedCollapsedKey);
-        }
-    } catch (e) {}
-    _applyShowCompletedState();
-};
 
 // -- Sortable sections ----------------------------------------------------
 (function () {
@@ -943,6 +919,7 @@ window.tripToggleShowCompleted = function () {
             onSelect: function (result) {
                 _set(cfg.uuidId, '');
                 _set(cfg.pinId, '');
+                if (cfg.childTripId) _set(cfg.childTripId, '');
                 if (result.type === 'pin' && result.pinSlug) {
                     _set(cfg.pinId, result.pinSlug);
                     _set(cfg.latId, '');
@@ -955,8 +932,10 @@ window.tripToggleShowCompleted = function () {
                     _set(cfg.lngId, result.lng);
                     _set(cfg.nameId, result.title || '');
                 }
+                var title = result.title || (result.lat.toFixed(5) + ', ' + result.lng.toFixed(5));
                 var display = document.getElementById(cfg.displayId);
-                if (display) display.textContent = result.title || (result.lat.toFixed(5) + ', ' + result.lng.toFixed(5));
+                if (display) display.textContent = title;
+                if (cfg.onPicked) cfg.onPicked(title, 'place');
             },
         });
     }
@@ -968,6 +947,8 @@ window.tripToggleShowCompleted = function () {
         lngId:    'activity-geocoded-lng',
         nameId:   'activity-geocoded-name',
         pinId:    'activity-pin-uuid',
+        childTripId: 'activity-child-trip-uuid',
+        onPicked: _addActivityReveal,
     });
 
     _initLocationSearch('edit-activity-loc', {
@@ -980,6 +961,125 @@ window.tripToggleShowCompleted = function () {
     });
 }());
 
+// -- Add-activity progressive disclosure ----------------------------------
+// Only the location/trip picker shows at first; picking one reveals the rest
+// of the form and swaps the search bar for a chip naming what was chosen.
+function _addActivityReveal(title, kind) {
+    document.getElementById('add-activity-location-picker').hidden = true;
+    document.getElementById('activity-location-chip-icon').textContent = kind === 'trip' ? 'link' : 'place';
+    document.getElementById('activity-location-chip-name').textContent = title;
+    document.getElementById('activity-location-chip').hidden = false;
+    document.getElementById('add-activity-more-fields').hidden = false;
+    document.getElementById('add-activity-submit-btn').disabled = false;
+}
+
+function _clearAddActivityLocation() {
+    ['activity-location-uuid', 'activity-pin-uuid', 'activity-geocoded-lat', 'activity-geocoded-lng', 'activity-geocoded-name', 'activity-child-trip-uuid'].forEach(function (id) {
+        document.getElementById(id).value = '';
+    });
+    document.getElementById('activity-location-display').textContent = '';
+    document.getElementById('activity-location-chip').hidden = true;
+    document.getElementById('add-activity-location-picker').hidden = false;
+    document.getElementById('add-activity-submit-btn').disabled = true;
+    var input = document.getElementById('activity-loc-search-input');
+    if (input) { input.value = ''; input.focus(); }
+}
+
+// -- Add-activity: merge "your trips" suggestions into the same location bar,
+// so picking one links it as a child trip instead of a place. Kept as plain
+// fetch/DOM (rather than extending the compiled LocationSearchEngine) since
+// this box is rebuilt synchronously on every keystroke by that engine - this
+// listener is attached after it, so it always appends after that rebuild.
+(function () {
+    var input = document.getElementById('activity-loc-search-input');
+    var box = document.getElementById('activity-loc-search-suggestions');
+    if (!input || !box) return;
+
+    var seq = 0;
+    var debounceTimer;
+
+    function renderTripSlot(mySeq, trips) {
+        if (mySeq !== seq) return;
+        var existing = box.querySelector('.activity-trip-suggestion-slot');
+        if (existing) existing.remove();
+        if (!trips.length) return;
+
+        var slot = document.createElement('div');
+        slot.className = 'addr-source-slot activity-trip-suggestion-slot';
+        var hdr = document.createElement('div');
+        hdr.className = 'addr-suggestion-group-hdr';
+        hdr.textContent = 'Your Trips';
+        slot.appendChild(hdr);
+
+        trips.forEach(function (t) {
+            var safeName = String(t.name || 'Untitled trip').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            var dates = t.start_date ? ' (' + t.start_date + (t.end_date ? ' - ' + t.end_date : '') + ')' : '';
+            var btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'addr-suggestion addr-suggestion--trip';
+            btn.innerHTML = '<i class="material-icons addr-suggestion-icon">link</i>' +
+                '<span class="addr-suggestion-content">' +
+                '<span class="addr-suggestion-title">' + safeName + '</span>' +
+                '<span class="addr-suggestion-sub">Link as child trip' + dates + '</span>' +
+                '</span>';
+            btn.addEventListener('mousedown', function (e) {
+                e.preventDefault();
+                box.hidden = true;
+                ['activity-location-uuid', 'activity-pin-uuid', 'activity-geocoded-lat', 'activity-geocoded-lng', 'activity-geocoded-name'].forEach(function (id) {
+                    document.getElementById(id).value = '';
+                });
+                document.getElementById('activity-child-trip-uuid').value = t.uuid;
+                document.getElementById('activity-location-display').textContent = t.name;
+                input.value = t.name;
+                _addActivityReveal(t.name, 'trip');
+            });
+            slot.appendChild(btn);
+        });
+        box.appendChild(slot);
+        box.hidden = false;
+    }
+
+    input.addEventListener('input', function () {
+        var q = this.value.trim();
+        clearTimeout(debounceTimer);
+        var mySeq = ++seq;
+        if (q.length < 2) return;
+        debounceTimer = setTimeout(function () {
+            fetch('{% url "trips.child_trip_search" trip.slug %}?q=' + encodeURIComponent(q), {
+                headers: {'X-Requested-With': 'XMLHttpRequest'},
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (data) { renderTripSlot(mySeq, data.results || []); })
+            .catch(function () {});
+        }, 300);
+    });
+}());
+
+// -- Add-activity: end date stays hidden until requested -------------------
+function _revealAddActivityEndDate() {
+    document.getElementById('add-activity-end-date-wrap').hidden = false;
+    document.getElementById('add-activity-end-date-toggle-row').hidden = true;
+    document.getElementById('activity-end-date').focus();
+}
+
+// -- Add-activity: "Propose for discussion" checkbox drives the status field
+function _syncAddActivityStatus() {
+    var checked = document.getElementById('add-activity-propose-checkbox').checked;
+    document.getElementById('add-activity-status-input').value = checked ? 'proposed' : 'confirmed';
+}
+
+// -- Hide-location toggle: give the label/icon a visible on/off state, since
+// the 15px checkbox alone is easy to miss (shared by add + edit dialogs).
+function _syncHideLocationLabel(labelId, iconId, checked) {
+    var label = document.getElementById(labelId);
+    var icon = document.getElementById(iconId);
+    if (label) label.classList.toggle('is-active', checked);
+    if (icon) icon.textContent = checked ? 'visibility_off' : 'visibility';
+}
+function _syncAddActivityHideLabel() {
+    _syncHideLocationLabel('add-activity-hide-label', 'add-activity-hide-icon', document.getElementById('add-activity-location-hidden').checked);
+}
+
 // -- Add activity success callback ----------------------------------------
 function _resetAddActivityForm() {
     document.getElementById('add-activity-form').reset();
@@ -990,14 +1090,21 @@ function _resetAddActivityForm() {
     document.getElementById('activity-geocoded-lng').value  = '';
     document.getElementById('activity-geocoded-name').value = '';
     document.getElementById('activity-child-trip-uuid').value = '';
-    document.getElementById('activity-child-trip-display').textContent = '';
-    document.getElementById('activity-child-trip-clear').style.display = 'none';
     document.getElementById('activity-end-date').value = '';
     document.getElementById('activity-end-time').value = '';
-    // Reset status pill, hide toggle, and custom name field
-    _setStatusPill('add', 'proposed');
+    // Back to step 1: hide the chip + revealed fields, show the picker again
+    document.getElementById('activity-location-chip').hidden = true;
+    document.getElementById('add-activity-location-picker').hidden = false;
+    document.getElementById('add-activity-more-fields').hidden = true;
+    document.getElementById('add-activity-submit-btn').disabled = true;
+    document.getElementById('add-activity-end-date-wrap').hidden = true;
+    document.getElementById('add-activity-end-date-toggle-row').hidden = false;
+    // Reset status checkbox, hide toggle, and custom name field
+    document.getElementById('add-activity-propose-checkbox').checked = false;
+    document.getElementById('add-activity-status-input').value = 'confirmed';
     var hideCheck = document.getElementById('add-activity-location-hidden');
     if (hideCheck) hideCheck.checked = false;
+    _syncAddActivityHideLabel();
     var nameWrap = document.getElementById('add-activity-name-wrap');
     if (nameWrap) nameWrap.setAttribute('hidden', '');
     var nameToggle = document.getElementById('add-activity-name-toggle');
@@ -1021,8 +1128,8 @@ document.getElementById('add-activity-dialog').addEventListener('close', _resetA
         if (window._tripCurrentView && window._tripCurrentView !== 'list') {
             tripSetView(window._tripCurrentView);
         }
-        // Resolve show-completed default once the panel has loaded
-        _initShowCompletedState();
+        // Resolve the remembered active tab once the panel has loaded
+        _initActiveTabState();
     });
 }());
 
@@ -1123,10 +1230,12 @@ function _renderTripCalendar() {
     if (!calEl) return;
 
     var activities = _getActivityDataFromPanel();
-    // Apply tab filter
-    var activeTab = window._tripCurrentTab || 'all';
-    if (activeTab !== 'all') {
-        activities = activities.filter(function (a) { return a.status === activeTab; });
+    // Apply tab filter (mirrors tripSetTab's list-filtering logic)
+    var activeTab = window._tripCurrentTab || 'upcoming';
+    if (activeTab === 'completed') {
+        activities = activities.filter(function (a) { return a.status === 'completed'; });
+    } else {
+        activities = activities.filter(function (a) { return a.status !== 'completed' && (activeTab === 'upcoming' || a.status === activeTab); });
     }
     var byDate = {};
     activities.forEach(function (a) {
@@ -1368,6 +1477,7 @@ function tripOpenEditDialog(li) {
         if (canManage) {
             hideInput.checked = li.dataset.actLocationHidden === 'true';
         }
+        _syncHideLocationLabel('edit-activity-hide-label', 'edit-activity-hide-icon', hideInput.checked);
     }
 
     document.getElementById('edit-activity-dialog').showModal();
@@ -1447,7 +1557,6 @@ function _clearEditLocation() {
         });
     }
 
-    _initChildTripSearch('activity');
     _initChildTripSearch('edit-activity');
 }());
 
@@ -1471,36 +1580,48 @@ async function _deleteEditActivity() {
     });
 }
 
-// -- Activity tabs (All / Proposed / Confirmed) ---------------------------
-window._tripCurrentTab = 'all';
+// -- Activity tabs (Upcoming / Proposed / Confirmed / Completed) -----------
+window._tripCurrentTab = 'upcoming';
 
 window.tripSetTab = function (tab) {
+    var previousTab = window._tripCurrentTab;
     window._tripCurrentTab = tab;
+    try { localStorage.setItem(_tripActiveTabKey, tab); } catch (e) {}
+
     var panel = document.getElementById('trip-activities-panel');
-    if (!panel) return;
+    if (panel) {
+        panel.querySelectorAll('.activity-tab').forEach(function (btn) {
+            btn.classList.toggle('activity-tab--active', btn.dataset.tab === tab);
+        });
 
-    panel.querySelectorAll('.activity-tab').forEach(function (btn) {
-        btn.classList.toggle('activity-tab--active', btn.dataset.tab === tab);
-    });
+        panel.querySelectorAll('.trip-activity-item').forEach(function (li) {
+            var status = li.dataset.actStatus || 'proposed';
+            var isCompleted = status === 'completed';
+            var visible;
+            if (tab === 'completed') {
+                visible = isCompleted;
+            } else if (isCompleted) {
+                visible = false;
+            } else {
+                visible = (tab === 'upcoming') || (tab === status);
+            }
+            li.style.display = visible ? '' : 'none';
+        });
 
-    var showCompleted = !!window._tripShowCompleted;
-    panel.querySelectorAll('.trip-activity-item').forEach(function (li) {
-        var status = li.dataset.actStatus || 'proposed';
-        var isCompleted = status === 'completed';
-        var visible;
-        if (isCompleted) {
-            // Completed only appear when the show-completed toggle is on AND the tab is 'all'
-            visible = showCompleted && (tab === 'all');
-        } else {
-            visible = (tab === 'all') || (tab === status);
-        }
-        li.style.display = visible ? '' : 'none';
-    });
+        _updateActivitiesEmptyState(panel, tab);
 
-    _updateActivitiesEmptyState(panel, tab, showCompleted);
+        // Re-render calendar so the filtered set is reflected there too
+        if (window._tripCurrentView === 'calendar') _renderTripCalendar();
+    }
 
-    // Re-render calendar so the filtered set is reflected there too
-    if (window._tripCurrentView === 'calendar') _renderTripCalendar();
+    // The map only fetches completed activities while that tab is active, so
+    // switching to/from it needs a re-fetch; otherwise a cheap client-side
+    // marker filter keeps the map in sync with the visible list.
+    if ((tab === 'completed') !== (previousTab === 'completed') && window.refreshTripMap) {
+        window.refreshTripMap();
+    } else if (window.applyTripMapTabFilter) {
+        window.applyTripMapTabFilter();
+    }
 };
 
 // -- Mark-as-completed dialog ---------------------------------------------
@@ -1522,18 +1643,14 @@ window.tripOpenCompleteDialog = function (url, activityDate) {
     if (dlg) dlg.showModal();
 };
 
-// Restore tab + show-completed state after panel swap
+// Restore the active tab's filtering after any activities-panel swap
 (function () {
     var sec = document.querySelector('.trip-detail-activities');
     if (!sec) return;
     document.body.addEventListener('htmx:afterSettle', function (e) {
         if (e.target === document.getElementById('trip-activities-panel') ||
             sec.contains(e.target)) {
-            // Restore tab first (also filters by completed state)
-            tripSetTab(window._tripCurrentTab || 'all');
-            // Sync show-completed button active state in the freshly-rendered panel
-            var panelBtn = document.getElementById('trip-show-completed-btn');
-            if (panelBtn) panelBtn.classList.toggle('view-toggle-btn--active', !!window._tripShowCompleted);
+            tripSetTab(window._tripCurrentTab || 'upcoming');
         }
     });
 }());
