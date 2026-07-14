@@ -2379,33 +2379,33 @@ Sortable.mount(new AutoScrollPlugin);
 Sortable.mount(Remove, Revert);
 var sortable_esm_default = Sortable;
 
-// src/urbanlens/dashboard/frontend/ts/shared/badge-rel-picker.ts
-var BadgeRelPicker = {
+// src/urbanlens/dashboard/frontend/ts/shared/label-rel-picker.ts
+var LabelRelPicker = {
   toggle(instanceId, relType, _triggerBtn) {
     const popup = document.getElementById(`${instanceId}-popup-${relType}`);
     if (!popup)
       return;
     const wasHidden = popup.hidden;
-    document.querySelectorAll(".badge-rel-popup").forEach((p) => {
+    document.querySelectorAll(".label-rel-popup").forEach((p) => {
       p.hidden = true;
     });
     if (!wasHidden)
       return;
     popup.hidden = false;
-    const search = popup.querySelector(".badge-rel-search");
+    const search = popup.querySelector(".label-rel-search");
     if (search) {
       search.value = "";
       search.focus();
     }
   },
   select(instanceId, relType, btn) {
-    if (btn.classList.contains("badge-rel-suggestion--hidden"))
+    if (btn.classList.contains("label-rel-suggestion--hidden"))
       return;
     const group = document.getElementById(`${instanceId}-sel-${relType}`);
     if (!group)
       return;
     const id = btn.dataset.id;
-    if (!id || group.querySelector(`.badge-rel-chip[data-id="${id}"]`))
+    if (!id || group.querySelector(`.label-rel-chip[data-id="${id}"]`))
       return;
     const picker = document.querySelector(`[data-picker-id="${instanceId}"]`);
     const pill = document.createElement("span");
@@ -2414,7 +2414,7 @@ var BadgeRelPicker = {
     if (color)
       pill.style.setProperty("--tag-color", color);
     pill.innerHTML = btn.innerHTML;
-    pill.querySelector(".badge-kind-chip")?.remove();
+    pill.querySelector(".label-kind-chip")?.remove();
     if (picker?.dataset.mode === "replace") {
       const hidden = document.createElement("input");
       hidden.type = "hidden";
@@ -2423,7 +2423,7 @@ var BadgeRelPicker = {
       pill.appendChild(hidden);
     }
     const chip = document.createElement("span");
-    chip.className = "badge-rel-chip";
+    chip.className = "label-rel-chip";
     chip.dataset.id = id;
     chip.appendChild(pill);
     const removeBtn = document.createElement("button");
@@ -2431,11 +2431,11 @@ var BadgeRelPicker = {
     removeBtn.className = "tag-chip-remove";
     removeBtn.title = "Remove";
     removeBtn.innerHTML = "&times;";
-    removeBtn.onclick = () => BadgeRelPicker.remove(instanceId, chip);
+    removeBtn.onclick = () => LabelRelPicker.remove(instanceId, chip);
     chip.appendChild(removeBtn);
     group.appendChild(chip);
-    BadgeRelPicker._hideSuggestion(instanceId, id);
-    BadgeRelPicker._updateEmptyHints(instanceId);
+    LabelRelPicker._hideSuggestion(instanceId, id);
+    LabelRelPicker._updateEmptyHints(instanceId);
   },
   remove(instanceId, chipEl) {
     if (!chipEl)
@@ -2443,22 +2443,22 @@ var BadgeRelPicker = {
     const id = chipEl.dataset.id;
     chipEl.remove();
     if (id)
-      BadgeRelPicker._showSuggestion(instanceId, id);
-    BadgeRelPicker._updateEmptyHints(instanceId);
+      LabelRelPicker._showSuggestion(instanceId, id);
+    LabelRelPicker._updateEmptyHints(instanceId);
   },
   _hideSuggestion(instanceId, id) {
     ["parent", "child"].forEach((relType) => {
       const container = document.getElementById(`${instanceId}-suggestions-${relType}`);
-      container?.querySelector(`.badge-rel-suggestion[data-id="${id}"]`)?.classList.add("badge-rel-suggestion--hidden");
+      container?.querySelector(`.label-rel-suggestion[data-id="${id}"]`)?.classList.add("label-rel-suggestion--hidden");
     });
   },
   _showSuggestion(instanceId, id) {
     ["parent", "child"].forEach((relType) => {
       const container = document.getElementById(`${instanceId}-suggestions-${relType}`);
-      const btn = container?.querySelector(`.badge-rel-suggestion[data-id="${id}"]`);
+      const btn = container?.querySelector(`.label-rel-suggestion[data-id="${id}"]`);
       if (btn) {
-        btn.classList.remove("badge-rel-suggestion--hidden");
-        BadgeRelPicker._applyFilters(instanceId, relType);
+        btn.classList.remove("label-rel-suggestion--hidden");
+        LabelRelPicker._applyFilters(instanceId, relType);
       }
     });
   },
@@ -2466,18 +2466,18 @@ var BadgeRelPicker = {
     const popup = document.getElementById(`${instanceId}-popup-${relType}`);
     if (!popup)
       return;
-    popup.querySelectorAll(".badge-rel-tab").forEach((b) => b.classList.remove("active"));
+    popup.querySelectorAll(".label-rel-tab").forEach((b) => b.classList.remove("active"));
     btn.classList.add("active");
     const container = document.getElementById(`${instanceId}-suggestions-${relType}`);
     if (container)
       container.dataset.activeTab = kind;
-    BadgeRelPicker._applyFilters(instanceId, relType);
+    LabelRelPicker._applyFilters(instanceId, relType);
   },
   filter(instanceId, relType, query) {
     const popup = document.getElementById(`${instanceId}-popup-${relType}`);
     if (popup)
       popup.dataset.searchQuery = query.toLowerCase().trim();
-    BadgeRelPicker._applyFilters(instanceId, relType);
+    LabelRelPicker._applyFilters(instanceId, relType);
   },
   _applyFilters(instanceId, relType) {
     const popup = document.getElementById(`${instanceId}-popup-${relType}`);
@@ -2486,7 +2486,7 @@ var BadgeRelPicker = {
       return;
     const q = popup.dataset.searchQuery ?? "";
     const tab = container.dataset.activeTab ?? "";
-    container.querySelectorAll(".badge-rel-suggestion").forEach((btn) => {
+    container.querySelectorAll(".label-rel-suggestion").forEach((btn) => {
       const matchesTab = !tab || btn.dataset.kind === tab;
       const matchesSearch = !q || (btn.dataset.name ?? "").indexOf(q) !== -1;
       btn.style.display = matchesTab && matchesSearch ? "" : "none";
@@ -2495,7 +2495,7 @@ var BadgeRelPicker = {
   _updateEmptyHints(instanceId) {
     ["parent", "child"].forEach((relType) => {
       const group = document.getElementById(`${instanceId}-sel-${relType}`);
-      const hint = group?.parentElement?.querySelector(".badge-rel-empty-hint");
+      const hint = group?.parentElement?.querySelector(".label-rel-empty-hint");
       if (hint)
         hint.hidden = (group?.children.length ?? 0) > 0;
     });
@@ -2504,14 +2504,14 @@ var BadgeRelPicker = {
     const group = document.getElementById(`${instanceId}-sel-${relType}`);
     if (!group)
       return [];
-    return Array.from(group.querySelectorAll(".badge-rel-chip")).map((c) => Number.parseInt(c.dataset.id ?? "0", 10));
+    return Array.from(group.querySelectorAll(".label-rel-chip")).map((c) => Number.parseInt(c.dataset.id ?? "0", 10));
   },
   reset(instanceId) {
     ["parent", "child"].forEach((relType) => {
       const group = document.getElementById(`${instanceId}-sel-${relType}`);
       if (!group)
         return;
-      Array.from(group.querySelectorAll(".badge-rel-chip")).forEach((chip) => BadgeRelPicker.remove(instanceId, chip));
+      Array.from(group.querySelectorAll(".label-rel-chip")).forEach((chip) => LabelRelPicker.remove(instanceId, chip));
     });
   },
   _makeSortable(instanceId) {
@@ -2525,7 +2525,7 @@ var BadgeRelPicker = {
     const hideTrash = () => trash?.classList.remove("is-active");
     const onEnd = () => {
       hideTrash();
-      BadgeRelPicker._updateEmptyHints(instanceId);
+      LabelRelPicker._updateEmptyHints(instanceId);
     };
     const makeOnAdd = (relType) => (evt) => {
       const hidden = evt.item.querySelector('input[type="hidden"]');
@@ -2554,27 +2554,27 @@ var BadgeRelPicker = {
       new sortable_esm_default(trash, {
         group: { name: groupName, put: true, pull: false },
         animation: 150,
-        onAdd: (evt) => BadgeRelPicker.remove(instanceId, evt.item)
+        onAdd: (evt) => LabelRelPicker.remove(instanceId, evt.item)
       });
     }
   },
   _initAll(root) {
-    (root ?? document).querySelectorAll(".badge-rel-picker").forEach((picker) => {
+    (root ?? document).querySelectorAll(".label-rel-picker").forEach((picker) => {
       if (picker.dataset.relInit === "1")
         return;
       picker.dataset.relInit = "1";
       if (picker.dataset.pickerId)
-        BadgeRelPicker._makeSortable(picker.dataset.pickerId);
+        LabelRelPicker._makeSortable(picker.dataset.pickerId);
     });
   }
 };
-function installGlobalBadgeRelPicker() {
-  window.BadgeRelPicker = BadgeRelPicker;
-  BadgeRelPicker._initAll();
-  document.body.addEventListener("htmx:afterSettle", () => BadgeRelPicker._initAll());
+function installGlobalLabelRelPicker() {
+  window.LabelRelPicker = LabelRelPicker;
+  LabelRelPicker._initAll();
+  document.body.addEventListener("htmx:afterSettle", () => LabelRelPicker._initAll());
   document.addEventListener("click", (e) => {
-    if (!e.target.closest(".badge-rel-add-dropdown")) {
-      document.querySelectorAll(".badge-rel-popup").forEach((p) => {
+    if (!e.target.closest(".label-rel-add-dropdown")) {
+      document.querySelectorAll(".label-rel-popup").forEach((p) => {
         p.hidden = true;
       });
     }
@@ -2588,7 +2588,7 @@ var NS_CONFIG = {
   tag: { rowsId: "tag-rows", cardSel: ".tag-card[data-tag-id]", idKey: "tagId", nameKey: "tagName", iconKey: "tagIcon", customIconKey: "tagCustomIcon", colorKey: "tagColor", parentsKey: "tagParents" },
   cat: { rowsId: "category-rows", cardSel: ".tag-card[data-category-id]", idKey: "categoryId", nameKey: "categoryName", iconKey: "categoryIcon", customIconKey: "categoryCustomIcon", colorKey: "categoryColor", parentsKey: "categoryParents" },
   status: { rowsId: "status-rows", cardSel: ".tag-card[data-status-id]", idKey: "statusId", nameKey: "statusName", iconKey: "statusIcon", customIconKey: "statusCustomIcon", colorKey: "statusColor", parentsKey: "statusParents" },
-  people: { rowsId: "people-badge-rows", cardSel: ".tag-card[data-people-id]", idKey: "peopleId", nameKey: "peopleName", iconKey: "peopleIcon", colorKey: "peopleColor", parentsKey: "peopleParents" }
+  people: { rowsId: "people-label-rows", cardSel: ".tag-card[data-people-id]", idKey: "peopleId", nameKey: "peopleName", iconKey: "peopleIcon", colorKey: "peopleColor", parentsKey: "peopleParents" }
 };
 function loadSharedFilter() {
   const params = new URLSearchParams(window.location.search);
@@ -3137,7 +3137,7 @@ function installOrgSectionSwitching() {
         p.hidden = p.id !== `panel-${section}`;
       });
       const url = new URL(window.location.href);
-      const tabParam = section === "badges" ? localStorage.getItem("organize_tab") ?? "tags" : section;
+      const tabParam = section === "labels" ? localStorage.getItem("organize_tab") ?? "tags" : section;
       url.searchParams.set("tab", tabParam);
       window.history.replaceState({}, "", url.toString());
     });
@@ -3589,7 +3589,7 @@ ${this.cfg.deleteWarning}`;
         descValue.dataset.bulkOriginal = "";
       }
     }
-    BadgeRelPicker.reset(`${this.cfg.ns}-bulk`);
+    LabelRelPicker.reset(`${this.cfg.ns}-bulk`);
     this.convertTarget = null;
     document.querySelectorAll(`#${d.dialogId} .kind-toggle-option`).forEach((b) => b.classList.remove("is-active"));
     const titleEl = document.getElementById(d.titleId);
@@ -3663,8 +3663,8 @@ ${this.cfg.deleteWarning}`;
       if (!document.getElementById(d.colorNochangeId).checked) {
         body.color = document.getElementById(d.colorValueId)?.value ?? "";
       }
-      body.add_parent_ids = BadgeRelPicker.getSelectedIds(`${this.cfg.ns}-bulk`, "parent");
-      body.add_child_ids = BadgeRelPicker.getSelectedIds(`${this.cfg.ns}-bulk`, "child");
+      body.add_parent_ids = LabelRelPicker.getSelectedIds(`${this.cfg.ns}-bulk`, "parent");
+      body.add_child_ids = LabelRelPicker.getSelectedIds(`${this.cfg.ns}-bulk`, "child");
       try {
         const target = converting ? this.cfg.convertTargets.find((t) => t.kind === this.convertTarget) : undefined;
         const url = converting ? target.endpoint : this.cfg.endpoints.bulkEdit;
@@ -3878,7 +3878,7 @@ function initOrganizePriority() {
   let priorityOrderEditing = null;
   let lastClickedIdx = -1;
   function priorityOrderBadge(item) {
-    return item.querySelector(".priority-order-editor")?.querySelector(".priority-order-badge") ?? null;
+    return item.querySelector(".priority-order-editor")?.querySelector(".priority-order-chip") ?? null;
   }
   function flashPriorityOrderSaved(item) {
     item.classList.remove("priority-item--order-saved");
@@ -3886,9 +3886,9 @@ function initOrganizePriority() {
     item.classList.add("priority-item--order-saved");
     const badge = priorityOrderBadge(item);
     if (badge) {
-      badge.classList.remove("priority-order-badge--flash");
+      badge.classList.remove("priority-order-chip--flash");
       badge.offsetWidth;
-      badge.classList.add("priority-order-badge--flash");
+      badge.classList.add("priority-order-chip--flash");
     }
     window.setTimeout(() => item.classList.remove("priority-item--order-saved"), 650);
   }
@@ -4083,7 +4083,7 @@ function initOrganizePriority() {
   }
   document.getElementById("priority-list")?.addEventListener("click", (e) => {
     const target = e.target;
-    const badge = target.closest(".priority-order-badge");
+    const badge = target.closest(".priority-order-chip");
     if (badge) {
       e.preventDefault();
       beginPriorityOrderEdit(badge);
@@ -4222,8 +4222,8 @@ function initOnboardingTour(config) {
 // src/urbanlens/dashboard/frontend/ts/entries/organize.ts
 installGlobalOrganizeIconPicker();
 installGlobalColorPicker();
-installGlobalBadgeRelPicker();
-function showBadgeCustomPreview(input, previewId) {
+installGlobalLabelRelPicker();
+function showLabelCustomPreview(input, previewId) {
   const file = input.files?.[0];
   if (!file)
     return;
@@ -4238,9 +4238,9 @@ function showBadgeCustomPreview(input, previewId) {
   reader.readAsDataURL(file);
 }
 function showTagCustomPreview(input) {
-  showBadgeCustomPreview(input, "new-tag-custom-preview");
+  showLabelCustomPreview(input, "new-tag-custom-preview");
 }
-window.showBadgeCustomPreview = showBadgeCustomPreview;
+window.showLabelCustomPreview = showLabelCustomPreview;
 window.showTagCustomPreview = showTagCustomPreview;
 var KIND_ROWS_TARGET = { tag: "#tag-rows", category: "#category-rows", status: "#status-rows" };
 var KIND_TAB_KEY = { tag: "tags", category: "categories", status: "status" };
@@ -4359,7 +4359,7 @@ function initTabs() {
       newForm: { dialogId: "new-status-form", iconPickerId: "new-status", colorPickerId: "new-status-color-picker", colorValueId: "new-status-color-value", customPreviewId: "new-status-custom-preview" }
     })).init();
   }
-  const peopleRows = document.getElementById("people-badge-rows");
+  const peopleRows = document.getElementById("people-label-rows");
   if (peopleRows) {
     new OrgTabManager(buildTabConfig(peopleRows, {
       ns: "people",
@@ -4497,28 +4497,28 @@ function initConsolidatedDialogOpener() {
     const id = detail.target?.id;
     if (!id)
       return;
-    if (id === "badge-edit-dialog-body") {
+    if (id === "label-edit-dialog-body") {
       const body = detail.target;
-      const titleEl = document.getElementById("badge-edit-dialog-title");
+      const titleEl = document.getElementById("label-edit-dialog-title");
       if (titleEl) {
-        if (body.querySelector(".organize-badge-merge-form")) {
+        if (body.querySelector(".organize-label-merge-form")) {
           const mergeName = body.querySelector(".tag-merge-source-name");
           titleEl.textContent = mergeName ? `Merge ${mergeName.textContent?.trim()}` : "Merge";
-        } else if (body.querySelector(".organize-badge-customize-form")) {
+        } else if (body.querySelector(".organize-label-customize-form")) {
           titleEl.textContent = "Customize Display";
         } else if (body.querySelector(".tag-global-edit-form")) {
           titleEl.textContent = "Edit Global Tag";
         } else {
           const kindInput = body.querySelector('input[name="kind"]:checked');
           const titles = { tag: "Tag", category: "Category", status: "Status" };
-          titleEl.textContent = `Edit ${titles[kindInput?.value ?? ""] ?? "Badge"}`;
+          titleEl.textContent = `Edit ${titles[kindInput?.value ?? ""] ?? "Label"}`;
         }
       }
-      const dialog = document.getElementById("badge-edit-dialog");
+      const dialog = document.getElementById("label-edit-dialog");
       if (dialog && !dialog.open)
         dialog.showModal();
-    } else if (id === "people-badge-edit-dialog-body") {
-      const dialog = document.getElementById("people-badge-edit-dialog");
+    } else if (id === "people-label-edit-dialog-body") {
+      const dialog = document.getElementById("people-label-edit-dialog");
       if (dialog && !dialog.open)
         dialog.showModal();
     }

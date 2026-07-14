@@ -56,6 +56,14 @@ interface PhotoPanelItem {
     mine: boolean;
 }
 
+interface NearbyPinEntry {
+    name: string;
+    icon: string | null;
+    url: string;
+    latitude: number | null;
+    longitude: number | null;
+}
+
 function escHtml(s: string): string {
     return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 }
@@ -78,6 +86,7 @@ function readConfig(el: HTMLElement) {
         detailPinEditUrlTemplate: d.detailPinEditUrlTemplate || "",
         boundaryUrl: d.boundaryUrl || "",
         photoGalleryJsonUrl: d.photoGalleryJsonUrl || "",
+        nearbyPinsJsonUrl: d.nearbyPinsJsonUrl || "",
         markupFillOpacity: d.markupFillOpacity ? Number.parseInt(d.markupFillOpacity, 10) : 87,
         markupBorderOpacity: d.markupBorderOpacity ? Number.parseInt(d.markupBorderOpacity, 10) : 100,
         showOnboardingTips: d.showOnboardingTips === "1",
@@ -202,6 +211,58 @@ function init(): void {
 
     const photoLayer = L.layerGroup().addTo(map);
 
+    // -- Nearby pins layer -----------------------------------------------------
+    // This profile's other pins near the one being viewed. Off by default and
+    // fetched lazily the first time the layer is turned on (mirrors the main
+    // map's "Sub Pins" layer - see setChildPinsActive in pages/map/index.html).
+    const nearbyLayer = L.layerGroup();
+    let nearbyActive = false;
+    let nearbyFetchPromise: Promise<void> | null = null;
+
+    function buildNearbyMarker(pin: NearbyPinEntry): L.Marker | null {
+        if (pin.latitude == null || pin.longitude == null) return null;
+        const iconName = pin.icon || "place";
+        const inner = /^[a-z_]+$/.test(iconName) ? `<i class="material-icons nearby-pin-icon">${escHtml(iconName)}</i>` : `<span class="nearby-pin-emoji">${escHtml(iconName)}</span>`;
+        const marker = L.marker([pin.latitude, pin.longitude], {
+            icon: L.divIcon({ className: "nearby-pin-marker-wrap", html: `<span class="nearby-pin-marker">${inner}</span>`, iconSize: [26, 26], iconAnchor: [13, 13] }),
+        });
+        marker.bindPopup(`
+            <div class="pin-popup nearby-pin-popup">
+                <div class="popup-title">${escHtml(pin.name || "Pin")}</div>
+                <div class="popup-actions"><a href="${escHtml(pin.url || "#")}" class="view-full-pin">View Details</a></div>
+            </div>`);
+        return marker;
+    }
+
+    function loadNearbyPins(): Promise<void> {
+        if (!cfg.nearbyPinsJsonUrl) return Promise.resolve();
+        nearbyFetchPromise = fetch(cfg.nearbyPinsJsonUrl, { headers: { "X-Requested-With": "XMLHttpRequest" } })
+            .then((r) => (r.ok ? r.json() : { pins: [] }))
+            .then((data: { pins?: NearbyPinEntry[] }) => {
+                nearbyLayer.clearLayers();
+                (data.pins || []).forEach((pin) => {
+                    const m = buildNearbyMarker(pin);
+                    if (m) nearbyLayer.addLayer(m);
+                });
+            })
+            .catch(() => {
+                // Silently ignore - the layer just stays empty, matching the
+                // main map's "Sub Pins" layer failure behavior.
+            });
+        return nearbyFetchPromise;
+    }
+
+    function setNearbyActive(on: boolean): void {
+        if (on === nearbyActive) return;
+        nearbyActive = on;
+        if (on) {
+            nearbyLayer.addTo(map);
+            if (!nearbyFetchPromise) loadNearbyPins();
+        } else {
+            map.removeLayer(nearbyLayer);
+        }
+    }
+
     // Shared layers engine + panel - the exact same component as the main map
     // (see {% map_layers_panel %} in _map_annotations_panels.html). Details and
     // Photos are this page's own layer groups, registered as custom toggles.
@@ -221,6 +282,10 @@ function init(): void {
             photos: {
                 isActive: () => map.hasLayer(photoLayer),
                 toggle: () => (map.hasLayer(photoLayer) ? map.removeLayer(photoLayer) : photoLayer.addTo(map)),
+            },
+            nearby: {
+                isActive: () => nearbyActive,
+                toggle: () => setNearbyActive(!nearbyActive),
             },
         },
     });

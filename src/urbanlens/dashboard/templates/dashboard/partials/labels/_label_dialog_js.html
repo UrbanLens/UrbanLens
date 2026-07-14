@@ -57,6 +57,28 @@ if (!window._initLabelDialog) {
             search.addEventListener('input', applyFilter);
         }
         applyFilter();
+
+        // -- Top-level Labels/Lists tabs (pin context only) --------------------
+        dlg.querySelectorAll('.tad-top-tab').forEach(function (tab) {
+            var fresh = tab.cloneNode(true);
+            tab.parentNode.replaceChild(fresh, tab);
+            fresh.addEventListener('click', function () {
+                dlg.querySelectorAll('.tad-top-tab').forEach(function (t) { t.classList.remove('tad-top-tab--active'); });
+                this.classList.add('tad-top-tab--active');
+                var target = this.dataset.topTab;
+                dlg.querySelectorAll('.tad-top-panel').forEach(function (p) { p.hidden = p.dataset.topPanel !== target; });
+            });
+        });
+
+        // -- Reset the inline "create a new list" mini-form once the dialog closes --
+        dlg.addEventListener('close', function () {
+            var toggleRow = dlg.querySelector('#add-to-list-new-toggle-row');
+            var formRow = dlg.querySelector('#add-to-list-new-form-row');
+            var nameInput = dlg.querySelector('#add-to-list-new-name');
+            if (toggleRow) toggleRow.hidden = false;
+            if (formRow) formRow.hidden = true;
+            if (nameInput) nameInput.value = '';
+        });
     };
 }
 

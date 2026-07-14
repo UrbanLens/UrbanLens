@@ -7,7 +7,7 @@ import math
 from math import atan2, cos, radians, sin, sqrt
 from typing import TYPE_CHECKING, Self
 
-from django.contrib.gis.geos import Point
+from django.contrib.gis.db.models.functions import Distance
 from django.contrib.gis.measure import D
 from django.db.models import F, Q
 from django.utils import timezone
@@ -15,6 +15,9 @@ from django.utils import timezone
 # App Imports
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.services.redact import redact_coordinate
+
+if TYPE_CHECKING:
+    from django.contrib.gis.geos import Point
 
 logger = logging.getLogger(__name__)
 
@@ -104,6 +107,27 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
 
     def by_updated_year(self, year):
         return self.filter(updated__year=year)
+
+    def near_point(self, point: Point, radius_km: float) -> Self:
+        """Return root pins whose location falls within ``radius_km`` of ``point``, closest first.
+
+        Used by the pin detail page's "Nearby Pins" map layer to find a
+        profile's other pins around the one being viewed.
+
+        Args:
+            point: PostGIS point to measure distance from.
+            radius_km: Search radius in kilometers.
+
+        Returns:
+            Root pins ordered nearest-first, annotated with ``distance`` (a
+            ``django.contrib.gis.measure.Distance``).
+        """
+        return (
+            self.root_pins()
+            .filter(location__point__distance_lte=(point, D(km=radius_km)))
+            .annotate(distance=Distance("location__point", point))
+            .order_by("distance")
+        )
 
     def nearby_pins(self, latitude, longitude, radius):
 

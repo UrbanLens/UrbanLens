@@ -1248,7 +1248,13 @@
       }
     }
     function toggleCustom(key) {
-      custom[key]?.toggle();
+      const layer = custom[key];
+      if (!layer)
+        return;
+      const wasActive = layer.isActive();
+      layer.toggle();
+      if (key === "details" && wasActive)
+        setOverlay("borders", false);
       syncButtons();
     }
     function registerToggle(key, toggle) {

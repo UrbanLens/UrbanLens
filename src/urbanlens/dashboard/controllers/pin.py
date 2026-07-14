@@ -73,11 +73,15 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                     status=404,
                 )
 
-        # Backfill slug for legacy pins created before slug generation was automatic.
+        # Backfill slug for legacy pins/locations created before slug generation was automatic.
+        # A missing location slug otherwise hides the wiki create/view link entirely (see
+        # pin_overview_partial.html's `{% if pin.location and pin.location.slug %}` guard).
         if pin.wiki and not pin.wiki.slug:
             pin.wiki.ensure_slug()
         if not pin.slug:
             pin.slug = pin.ensure_slug()
+        if pin.location and not pin.location.slug:
+            pin.location.ensure_slug()
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
 
@@ -465,6 +469,23 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 logger.warning("media_send_to_wiki: malformed item entry: %r", entry)
 
         return JsonResponse({"created": created, "errors": errors})
+
+    @action(detail=True, methods=["get"])
+    def nearby_pins_json(self, request: Request, pin_slug: str):
+        """Return the profile's other pins near this one, for the "Nearby Pins" map layer.
+
+        Off by default on the pin detail page map - only fetched once the
+        user turns the layer on.
+        """
+        try:
+            pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)
+        except Pin.DoesNotExist:
+            return JsonResponse({"error": "Pin not found."}, status=404)
+        if not pin.location:
+            return JsonResponse({"pins": []})
+
+        nearby = Pin.objects.filter(profile=pin.profile).exclude(pk=pin.pk).near_point(pin.location.point, radius_km=5).select_related("location")[:200]
+        return JsonResponse({"pins": [p.to_detail_json() for p in nearby]})
 
     @action(detail=False, methods=["post"])
     def set_media_sort(self, request: Request):

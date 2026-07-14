@@ -143,7 +143,7 @@
         </div>
         <div class="map-wrapper">
 
-            {% include "dashboard/partials/layout/_map_annotations_panels.html" %}
+            {% include "dashboard/partials/layout/_map_annotations_panels.html" with layers="street,terrain,satellite,weather,borders,details,photos,nearby" %}
 
         </div>
     </div>{# end .location-map #}
@@ -217,21 +217,10 @@
                 <span class="badge" id="organization-count-badge" hidden></span>
                 <div class="card-header-actions organization-add-wrap" id="organization-add-wrap">
                     <button type="button" class="btn btn--icon-sm" id="organization-add-btn"
-                            aria-haspopup="true" aria-expanded="false" title="Add label or list">
+                            onclick="document.getElementById('category-add-dialog-{{ pin.slug }}').showModal();"
+                            title="Add a label or list">
                         <i class="material-symbols-outlined">add</i>
                     </button>
-                    <div class="pin-actions-menu organization-add-panel" id="organization-add-menu" hidden>
-                        <button type="button" class="pin-actions-item"
-                                onclick="document.getElementById('organization-add-menu').hidden = true; document.getElementById('category-add-dialog-{{ pin.slug }}').showModal();">
-                            <i class="material-symbols-outlined">label</i>
-                            <span>Add a label</span>
-                        </button>
-                        <button type="button" class="pin-actions-item"
-                                onclick="document.getElementById('organization-add-menu').hidden = true; document.getElementById('add-to-list-dialog').showModal();">
-                            <i class="material-symbols-outlined">playlist_add</i>
-                            <span>Add to a list</span>
-                        </button>
-                    </div>
                 </div>
             </div>
             <div hx-get="{% url 'label.pin' label_kind='category' pin_slug=pin.slug %}"
@@ -241,26 +230,6 @@
                 <div style="padding:1rem;color:#888;font-size:.85rem;">Loading...</div>
             </div>
         </div>
-        {% include "dashboard/partials/pin_lists/_add_to_list_dialog.html" %}
-        <script>
-        (function () {
-            var wrap = document.getElementById('organization-add-wrap');
-            var btn = document.getElementById('organization-add-btn');
-            var menu = document.getElementById('organization-add-menu');
-            if (!wrap || !btn || !menu) return;
-            btn.addEventListener('click', function () {
-                var open = menu.hidden;
-                menu.hidden = !open;
-                btn.setAttribute('aria-expanded', String(open));
-            });
-            document.addEventListener('click', function (e) {
-                if (!wrap.contains(e.target) && !menu.hidden) {
-                    menu.hidden = true;
-                    btn.setAttribute('aria-expanded', 'false');
-                }
-            });
-        }());
-        </script>
 
         <div hx-get="{% url 'pin.aliases' pin.slug %}"
             hx-trigger="load[!window.ulSectionCollapsed('pin','aliases')], ul:unhide"
@@ -670,6 +639,7 @@
 <script>
     // -- Add this pin to a list -------------------------------------------------
     const PIN_LIST_ADD_PIN_ID = "{{ pin.id }}";
+    const PIN_ORGANIZE_DIALOG_ID = "category-add-dialog-{{ pin.slug }}";
 
     function filterAddToListResults(query) {
         const q = (query || '').trim().toLowerCase();
@@ -691,7 +661,7 @@
                 if (typeof toastr !== 'undefined') toastr.error('Could not add pin to that list.');
                 return;
             }
-            document.getElementById('add-to-list-dialog')?.close();
+            document.getElementById(PIN_ORGANIZE_DIALOG_ID)?.close();
             if (typeof toastr !== 'undefined') toastr.success('Added to list.');
         });
     }
@@ -774,6 +744,7 @@
 {% url 'pin.detail_pin.edit' pin.slug '00000000-0000-0000-0000-000000000000' as detail_pin_edit_url_template %}
 {% url 'boundary.pin' pin.slug as boundary_url %}
 {% url 'pin.gallery.json' pin.slug as photo_gallery_json_url %}
+{% url 'pin.nearby_pins.json' pin.slug as nearby_pins_json_url %}
 <div id="map-annotations-config" hidden
      data-map-center-lat="{{ pin.effective_latitude|default:"42.6525" }}"
      data-map-center-lng="{{ pin.effective_longitude|default:"-73.7579" }}"
@@ -789,12 +760,31 @@
      data-detail-pin-edit-url-template="{{ detail_pin_edit_url_template }}"
      data-boundary-url="{{ boundary_url }}"
      data-photo-gallery-json-url="{{ photo_gallery_json_url }}{% if include_children %}?children=1{% endif %}"
+     data-nearby-pins-json-url="{{ nearby_pins_json_url }}"
      data-markup-fill-opacity="{{ markup_fill_opacity|default:87 }}"
      data-markup-border-opacity="{{ markup_border_opacity|default:100 }}"
      data-show-onboarding-tips="{{ request.user.profile.show_onboarding_tips|yesno:'1,' }}"></div>
 <script type="module" src="{% static 'dashboard/js/map-annotations.js' %}"></script>
 <script>
 
+
+    // -- Pin the "sub pin of" breadcrumb to the corner once it scrolls away --
+    (function initPinParentBreadcrumbScroll() {
+        const breadcrumb = document.querySelector('.pin-parent-breadcrumb');
+        const header = document.querySelector('.app-nav');
+        if (!breadcrumb || !header) return;
+        let ticking = false;
+        function update() {
+            ticking = false;
+            breadcrumb.classList.toggle('pin-parent-breadcrumb--pinned', header.getBoundingClientRect().bottom <= 0);
+        }
+        window.addEventListener('scroll', function () {
+            if (ticking) return;
+            ticking = true;
+            requestAnimationFrame(update);
+        }, { passive: true });
+        update();
+    }());
 
     // -- Pin detail onboarding ------------------------------------------------
     (function initPinDetailOnboarding() {
@@ -832,7 +822,7 @@
                     panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
                     panel.querySelector('input[type="text"], button')?.focus();
                 },
-                ready: function () { return !!document.getElementById('pin-aliases-panel'); },
+                ready: function () { return {{ pin.aliases.exists|yesno:'false,true' }} && !!document.getElementById('pin-aliases-panel'); },
             },
             {
                 id: 'community-wiki', icon: 'public', target: '.pin-location-name, .wiki-back-link',
@@ -1469,6 +1459,9 @@
             var wasNotRelevant = itemEl.dataset.mediaRelevant === 'false';
             var nextRelevant = isRelevant && wasRelevant ? null : (!isRelevant && wasNotRelevant ? null : isRelevant);
             applyRelevanceState(itemEl, nextRelevant);
+            rebuildMediaTabs();
+            applyMediaTabFilter(activeTab);
+            if (window.initAdaptivePagination) window.initAdaptivePagination(document, true);
             fetch('{% url "pin.media.relevance" pin.slug %}', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },

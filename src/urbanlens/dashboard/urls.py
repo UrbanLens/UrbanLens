@@ -255,6 +255,11 @@ urlpatterns = [
                                 pin.PinController.as_view({"post": "set_media_sort"}),
                                 name="pin.media.sort",
                             ),
+                            path(
+                                "<slug:pin_slug>/nearby-pins/json/",
+                                pin.PinController.as_view({"get": "nearby_pins_json"}),
+                                name="pin.nearby_pins.json",
+                            ),
                             # This catch-all must stay below the more specific media/ routes above -
                             # <str:source> would otherwise swallow "relevance"/"send-to-wiki" as a
                             # provider name and 405 on their POST-only methods.

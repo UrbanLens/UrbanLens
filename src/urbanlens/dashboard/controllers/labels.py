@@ -34,6 +34,7 @@ from urbanlens.dashboard.models.labels.model import (
 )
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
+from urbanlens.dashboard.models.pin_list.model import PinList
 from urbanlens.dashboard.models.subscriptions.model import SiteFeature, user_has_feature
 from urbanlens.dashboard.services.wiki_access import resolve_visible_wiki
 
@@ -1057,26 +1058,31 @@ def _membership_kind_blocked(kwargs: dict[str, Any]) -> bool:
 class LabelPinMembershipView(LoginRequiredMixin, View):
     """Add or remove any organize label on a pin (HTMX panel on pin detail)."""
 
+    @staticmethod
+    def _ctx(profile: Profile, pin: Pin, pin_slug: str) -> dict:
+        ctx = _membership_panel_ctx(
+            profile,
+            _pin_member_ids(pin),
+            panel_id="category-panel",
+            dialog_id_prefix="category-add-dialog-",
+            dialog_id_suffix=pin_slug,
+            membership_route="pin",
+            obj_uuid=pin_slug,
+            collapse_scope="pin",
+            embedded=True,
+        )
+        # The pin's Organize dialog combines label-picking with list-picking under
+        # tabs (see _label_dialog.html), so this panel also needs the profile's lists.
+        ctx["dialog_title"] = "Add to Pin"
+        ctx["pin_lists"] = list(PinList.objects.filter(profile=profile).order_by("name"))
+        return ctx
+
     def get(self, request: HttpRequest, pin_slug: str, *args, **kwargs) -> HttpResponse:
         if _membership_kind_blocked(kwargs):
             return HttpResponse(status=404)
         pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         profile = _request_profile(request)
-        return render(
-            request,
-            _MEMBERSHIP_PANEL,
-            _membership_panel_ctx(
-                profile,
-                _pin_member_ids(pin),
-                panel_id="category-panel",
-                dialog_id_prefix="category-add-dialog-",
-                dialog_id_suffix=pin_slug,
-                membership_route="pin",
-                obj_uuid=pin_slug,
-                collapse_scope="pin",
-                embedded=True,
-            ),
-        )
+        return render(request, _MEMBERSHIP_PANEL, self._ctx(profile, pin, pin_slug))
 
     def post(self, request: HttpRequest, pin_slug: str, *args, **kwargs) -> HttpResponse:
         if _membership_kind_blocked(kwargs):
@@ -1093,17 +1099,7 @@ class LabelPinMembershipView(LoginRequiredMixin, View):
         return render(
             request,
             _MEMBERSHIP_PANEL,
-            _membership_panel_ctx(
-                profile,
-                _pin_member_ids(pin),
-                panel_id="category-panel",
-                dialog_id_prefix="category-add-dialog-",
-                dialog_id_suffix=pin_slug,
-                membership_route="pin",
-                obj_uuid=pin_slug,
-                collapse_scope="pin",
-                embedded=True,
-            ),
+            self._ctx(profile, pin, pin_slug),
         )
 
 

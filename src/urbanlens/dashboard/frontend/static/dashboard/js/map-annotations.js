@@ -275,7 +275,13 @@ function createMapLayers(map, options = {}) {
     }
   }
   function toggleCustom(key) {
-    custom[key]?.toggle();
+    const layer = custom[key];
+    if (!layer)
+      return;
+    const wasActive = layer.isActive();
+    layer.toggle();
+    if (key === "details" && wasActive)
+      setOverlay("borders", false);
     syncButtons();
   }
   function registerToggle(key, toggle) {
@@ -451,6 +457,7 @@ function readConfig(el) {
     detailPinEditUrlTemplate: d.detailPinEditUrlTemplate || "",
     boundaryUrl: d.boundaryUrl || "",
     photoGalleryJsonUrl: d.photoGalleryJsonUrl || "",
+    nearbyPinsJsonUrl: d.nearbyPinsJsonUrl || "",
     markupFillOpacity: d.markupFillOpacity ? Number.parseInt(d.markupFillOpacity, 10) : 87,
     markupBorderOpacity: d.markupBorderOpacity ? Number.parseInt(d.markupBorderOpacity, 10) : 100,
     showOnboardingTips: d.showOnboardingTips === "1"
@@ -533,6 +540,49 @@ function init() {
   const markupLayer = L.layerGroup();
   const detailsLayer = L.layerGroup([detailPinLayer, markupLayer]).addTo(map);
   const photoLayer = L.layerGroup().addTo(map);
+  const nearbyLayer = L.layerGroup();
+  let nearbyActive = false;
+  let nearbyFetchPromise = null;
+  function buildNearbyMarker(pin) {
+    if (pin.latitude == null || pin.longitude == null)
+      return null;
+    const iconName = pin.icon || "place";
+    const inner = /^[a-z_]+$/.test(iconName) ? `<i class="material-icons nearby-pin-icon">${escHtml(iconName)}</i>` : `<span class="nearby-pin-emoji">${escHtml(iconName)}</span>`;
+    const marker = L.marker([pin.latitude, pin.longitude], {
+      icon: L.divIcon({ className: "nearby-pin-marker-wrap", html: `<span class="nearby-pin-marker">${inner}</span>`, iconSize: [26, 26], iconAnchor: [13, 13] })
+    });
+    marker.bindPopup(`
+            <div class="pin-popup nearby-pin-popup">
+                <div class="popup-title">${escHtml(pin.name || "Pin")}</div>
+                <div class="popup-actions"><a href="${escHtml(pin.url || "#")}" class="view-full-pin">View Details</a></div>
+            </div>`);
+    return marker;
+  }
+  function loadNearbyPins() {
+    if (!cfg.nearbyPinsJsonUrl)
+      return Promise.resolve();
+    nearbyFetchPromise = fetch(cfg.nearbyPinsJsonUrl, { headers: { "X-Requested-With": "XMLHttpRequest" } }).then((r) => r.ok ? r.json() : { pins: [] }).then((data) => {
+      nearbyLayer.clearLayers();
+      (data.pins || []).forEach((pin) => {
+        const m = buildNearbyMarker(pin);
+        if (m)
+          nearbyLayer.addLayer(m);
+      });
+    }).catch(() => {});
+    return nearbyFetchPromise;
+  }
+  function setNearbyActive(on) {
+    if (on === nearbyActive)
+      return;
+    nearbyActive = on;
+    if (on) {
+      nearbyLayer.addTo(map);
+      if (!nearbyFetchPromise)
+        loadNearbyPins();
+    } else {
+      map.removeLayer(nearbyLayer);
+    }
+  }
   createMapLayers(map, {
     root: document.getElementById("detail-map-layers"),
     apiKey: cfg.openweathermapApiKey || null,
@@ -550,6 +600,10 @@ function init() {
       photos: {
         isActive: () => map.hasLayer(photoLayer),
         toggle: () => map.hasLayer(photoLayer) ? map.removeLayer(photoLayer) : photoLayer.addTo(map)
+      },
+      nearby: {
+        isActive: () => nearbyActive,
+        toggle: () => setNearbyActive(!nearbyActive)
       }
     }
   });

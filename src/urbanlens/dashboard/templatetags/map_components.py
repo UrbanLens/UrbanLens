@@ -234,6 +234,17 @@ register_map_layer(
 )
 register_map_layer(
     MapLayerSpec(
+        key="nearby",
+        kind="custom",
+        label="Nearby Pins",
+        aria_label="Show or hide the user's other nearby pins",
+        tooltip="Show your other pins near this location",
+        icon="share_location",
+        button_id="nearby-pins-button",
+    )
+)
+register_map_layer(
+    MapLayerSpec(
         key="past_activities",
         kind="custom",
         label="Past Activities",

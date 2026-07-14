@@ -56,7 +56,7 @@ a sibling #map-annotations-config element, not from this partial).
     {# Shared layers panel - same component and engine as the main map. The  #}
     {# details/photos buttons are page-registered toggles (see the `custom`  #}
     {# option in ts/entries/map-annotations.ts).                             #}
-    {% map_layers_panel "street,terrain,satellite,weather,borders,details,photos" panel_id="detail-map-layers" extra_class="map-layers-panel--inline" %}
+    {% map_layers_panel layers|default:"street,terrain,satellite,weather,borders,details,photos" panel_id="detail-map-layers" extra_class="map-layers-panel--inline" %}
     <div id="boundary-save-controls" class="map-overlay-btn-group" style="display:none">
         <button class="btn btn--ghost map-overlay-btn map-overlay-btn--clear" onclick="clearBoundary()">
             <i class="material-symbols-outlined">delete_outline</i> Clear

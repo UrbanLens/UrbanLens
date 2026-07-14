@@ -31,7 +31,7 @@
     </p>
     {% endif %}
 
-    <form class="cf-add-form" {% if rows %}hidden{% endif %}
+    <form class="cf-add-form" hidden
           hx-post="{% url 'pin.custom_fields' pin.slug %}"
           hx-target="#pin-custom-fields-panel"
           hx-swap="outerHTML">

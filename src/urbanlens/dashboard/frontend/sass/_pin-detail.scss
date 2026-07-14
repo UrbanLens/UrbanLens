@@ -192,6 +192,57 @@
 .tag-add-dialog {
     width: min(460px, 95vw); // slightly wider to accommodate tabs
 
+    // -- Top-level Labels/Lists tab bar (pin context only) ---------------------
+    .tad-top-tabs {
+        display: flex;
+        gap: .4rem;
+        padding: .6rem .75rem 0;
+        flex-shrink: 0;
+    }
+
+    .tad-top-tab {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: .35rem;
+        flex: 1;
+        padding: .5rem .6rem;
+        border: 1px solid var(--ul-surface-raised-border);
+        border-radius: 8px 8px 0 0;
+        background: var(--ul-surface);
+        font-size: .85rem;
+        font-weight: 600;
+        color: var(--ul-grey-6);
+        cursor: pointer;
+        transition: color .12s, background .12s, border-color .12s;
+
+        .material-symbols-outlined {
+            font-size: 1.05rem;
+        }
+
+        &:hover {
+            color: $color-indigo-500;
+        }
+
+        &--active {
+            color: $color-indigo-500;
+            background: var(--ul-surface-raised);
+            border-color: var(--ul-surface-raised-border);
+            border-bottom-color: var(--ul-surface-raised);
+        }
+    }
+
+    .tad-top-panel {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        flex: 1;
+
+        &[hidden] {
+            display: none;
+        }
+    }
+
     // -- Tab bar --------------------------------------------------------------
     .tad-tabs {
         display: flex;
@@ -4414,7 +4465,7 @@ body.page-location-details .pin-detail-grid {
     color: var(--ul-grey-8);
     font-size: .85rem;
     text-decoration: none;
-    transition: border-color .12s, background .12s;
+    transition: border-color .12s, background .12s, top .3s ease, right .3s ease;
 
     i {
         font-size: 1.05rem;
@@ -4424,6 +4475,16 @@ body.page-location-details .pin-detail-grid {
     &:hover {
         border-color: var(--primary-color);
         background: var(--ul-color-accent-bg, rgba(30, 136, 229, .16));
+    }
+
+    // Once the header has scrolled out of view, tuck the breadcrumb into the
+    // top-right corner instead - mirrors the wiki page's `.wiki-notice--pinned`.
+    &.pin-parent-breadcrumb--pinned {
+        position: fixed;
+        top: 0.2rem;
+        right: 0.5rem;
+        z-index: 999;
+        box-shadow: 0px 5px 20px rgba(0, 0, 0, 0.35);
     }
 }
 

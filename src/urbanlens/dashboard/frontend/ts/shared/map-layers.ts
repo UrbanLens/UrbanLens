@@ -463,7 +463,14 @@ export function createMapLayers(map: L.Map, options: MapLayersOptions = {}): Map
     }
 
     function toggleCustom(key: string): void {
-        custom[key]?.toggle();
+        const layer = custom[key];
+        if (!layer) return;
+        const wasActive = layer.isActive();
+        layer.toggle();
+        // Turning markups off implies boundaries should go with it - they're
+        // drawn from the same annotation layer conceptually and left on
+        // otherwise clutters the map once markups are hidden.
+        if (key === "details" && wasActive) setOverlay("borders", false);
         syncButtons();
     }
 
