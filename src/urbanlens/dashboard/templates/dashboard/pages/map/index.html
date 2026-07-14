@@ -85,11 +85,11 @@
                     </div>
                     <div class="fp-score-group">
                         <div class="fp-score-label">Priority</div>
-                        {% include "dashboard/partials/ui/_dual_range_slider.html" with min=0 max=100 min_value=0 max_value=100 min_field="min_priority" max_field="max_priority" htmx_form="filter-form" accordion_id="fp-acc-scores" %}
+                        {% include "dashboard/partials/ui/_dual_range_slider.html" with min=0 max=5 min_value=0 max_value=5 min_field="min_priority" max_field="max_priority" format="stars" htmx_form="filter-form" accordion_id="fp-acc-scores" %}
                     </div>
                     <div class="fp-score-group">
                         <div class="fp-score-label">Vulnerability</div>
-                        {% include "dashboard/partials/ui/_dual_range_slider.html" with min=0 max=100 min_value=0 max_value=100 min_field="min_vulnerability" max_field="max_vulnerability" htmx_form="filter-form" accordion_id="fp-acc-scores" %}
+                        {% include "dashboard/partials/ui/_dual_range_slider.html" with min=0 max=5 min_value=0 max_value=5 min_field="min_vulnerability" max_field="max_vulnerability" format="stars" htmx_form="filter-form" accordion_id="fp-acc-scores" %}
                     </div>
                 </div>
             </details>

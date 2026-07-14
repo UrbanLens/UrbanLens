@@ -67,7 +67,7 @@
                 <input type="search" id="dm-messages-search-input" class="dm-messages-search__input"
                        placeholder="Search all conversations..." autocomplete="off"
                        hx-get="{% url 'messages.search' %}"
-                       hx-trigger="input changed delay:300ms[target.value.length >= 2 || target.value.length === 0], search"
+                       hx-trigger="input[target.value.length >= 2 || target.value.length === 0] changed delay:300ms, search"
                        hx-target="#dm-messages-search-results"
                        hx-swap="innerHTML">
                 <div id="dm-messages-search-results" class="dm-messages-search-results"></div>

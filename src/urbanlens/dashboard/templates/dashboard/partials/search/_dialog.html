@@ -8,7 +8,7 @@
                    placeholder="Search pins, photos, trips, messages..."
                    aria-label="Search"
                    hx-get="{% url 'search.panel' %}"
-                   hx-trigger="input changed delay:250ms[target.value.length >= 2 || target.value.length === 0]"
+                   hx-trigger="input[target.value.length >= 2 || target.value.length === 0] changed delay:250ms"
                    hx-target="#gs-panel"
                    hx-swap="innerHTML"
                    hx-indicator="#gs-spinner">

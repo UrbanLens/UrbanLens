@@ -31,11 +31,11 @@
             </div>
             <div class="fp-score-group">
                 <div class="fp-score-label">Priority</div>
-                {% include "dashboard/partials/ui/_dual_range_slider.html" with min=0 max=100 min_value=criteria.min_priority max_value=criteria.max_priority min_field="min_priority" max_field="max_priority" %}
+                {% include "dashboard/partials/ui/_dual_range_slider.html" with min=0 max=5 min_value=criteria.min_priority max_value=criteria.max_priority min_field="min_priority" max_field="max_priority" format="stars" %}
             </div>
             <div class="fp-score-group">
                 <div class="fp-score-label">Vulnerability</div>
-                {% include "dashboard/partials/ui/_dual_range_slider.html" with min=0 max=100 min_value=criteria.min_vulnerability max_value=criteria.max_vulnerability min_field="min_vulnerability" max_field="max_vulnerability" %}
+                {% include "dashboard/partials/ui/_dual_range_slider.html" with min=0 max=5 min_value=criteria.min_vulnerability max_value=criteria.max_vulnerability min_field="min_vulnerability" max_field="max_vulnerability" format="stars" %}
             </div>
         </div>
 

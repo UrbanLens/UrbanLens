@@ -144,9 +144,17 @@ Context:
         if (layers.length && _sfRegionMap) _sfRegionMap.fitBounds(_sfRegionLayers.getBounds());
     }
 
-    window.initSavedFilterRegionMap = function () {
+    window.initSavedFilterRegionMap = function (attempt) {
         const mapEl = document.getElementById('saved-filter-region-map');
-        if (!mapEl || typeof L === 'undefined') return;
+        if (!mapEl) return;
+        // Leaflet + Leaflet.draw load via <script src> tags injected into the DOM the
+        // first time the Filters tab is opened (see _organize_filters_panel.html); if
+        // "New Filter" is clicked before those finish downloading, L/L.Draw won't exist
+        // yet - retry briefly instead of silently leaving the map container empty.
+        if (typeof L === 'undefined' || typeof L.Draw === 'undefined') {
+            if ((attempt || 0) < 40) setTimeout(() => window.initSavedFilterRegionMap((attempt || 0) + 1), 100);
+            return;
+        }
 
         const centerLat = {{ map_center_lat|default:39.8283 }};
         const centerLng = {{ map_center_lng|default:-98.5795 }};
