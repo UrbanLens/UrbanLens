@@ -277,9 +277,9 @@ class Profile(abstract.PublicDashboardModel):
 
     # AI feature preferences (only relevant when the user has an AI subscription).
     ai_enabled = BooleanField(default=True, help_text="Allow AI features on your account.")
-    ai_label_tags = BooleanField(default=True, help_text="AI can automatically suggest and add tags when a pin is created.")
-    ai_label_categories = BooleanField(default=True, help_text="AI can automatically suggest and add categories when a pin is created.")
-    ai_label_statuses = BooleanField(default=True, help_text="AI can automatically suggest and add statuses when a pin is created.")
+    ai_label_tags = BooleanField(default=False, help_text="AI can automatically suggest and add tags when a pin is created.")
+    ai_label_categories = BooleanField(default=False, help_text="AI can automatically suggest and add categories when a pin is created.")
+    ai_label_statuses = BooleanField(default=False, help_text="AI can automatically suggest and add statuses when a pin is created.")
 
     # Whether photo-keyword plugins run on this user's uploads to make their
     # photos text-searchable. Applies to every enabled keywording strategy
