@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from itertools import chain
 import json
 import logging
@@ -132,9 +132,13 @@ class ViewProfileView(LoginRequiredMixin, View):
             "profile_recent_photos": Image.objects.uploaded_by(profile)[:8],
             "profile_recent_pins": Pin.objects.filter(profile=profile).select_related("location").order_by("-created")[:6],
             "profile_recent_markup_maps": MarkupMap.objects.for_profile(profile).prefetch_related("items").order_by("-created")[:6],
-            "profile_priority_unvisited_pins": (Pin.objects.filter(profile=profile, priority__gt=0, last_visited__isnull=True).select_related("location").order_by("-priority", "-updated")[:6]),
+            "profile_priority_unvisited_pins": (
+                Pin.objects.filter(profile=profile, priority__gt=0, last_visited__isnull=True, visit_history__isnull=True)
+                .select_related("location")
+                .order_by("-priority", "-updated")[:6]
+            ),
             "profile_recent_comments": recent_comments,
-            "profile_recent_trips": (Trip.objects.filter(profiles=profile).prefetch_related("memberships").order_by("-updated")[:6]),
+            "profile_recent_trips": Trip.objects.recently_active_past(profile, since=timezone.now() - timedelta(days=7)),
             "profile_upcoming_trips": (Trip.objects.filter(profiles=profile).filter(Q(start_date__gte=today) | Q(start_date__isnull=True, activities__scheduled_at__date__gte=today)).distinct().order_by("start_date", "name")[:6]),
             "profile_active_checkin": (SafetyCheckin.objects.filter(profile=profile, status__in=active_checkin_statuses).select_related("destination_location").order_by("checkin_by").first()),
         }

@@ -12,6 +12,8 @@ from django.utils import timezone
 from urbanlens.dashboard.models import abstract
 
 if TYPE_CHECKING:
+    import datetime
+
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.models.trips.model import Trip
 
@@ -115,6 +117,33 @@ class TripQuerySet(abstract.DashboardQuerySet):
             Trips ordered by `updated` descending, limited to `limit`.
         """
         return self.filter(profiles=profile).select_related("creator__user").order_by("-updated")[:limit]
+
+    def recently_active_past(self, profile: Profile, since: datetime.datetime, limit: int = 6) -> list[Trip]:
+        """Return the viewer's past trips that have had a comment posted since ``since``.
+
+        Args:
+            profile: The viewer's profile; only their trips are included.
+            since: Cutoff datetime - only trips with a comment created at or
+                after this time qualify.
+            limit: Maximum number of trips to return.
+
+        Returns:
+            Trips whose `Trip.timeline_status` is `"past"`, with at least one
+            comment posted since `since`, most recently commented first.
+            `timeline_status` depends on activity dates that aren't directly
+            queryable, so candidates are DB-filtered on comment recency first,
+            then narrowed to "past" in Python.
+        """
+        from urbanlens.dashboard.models.trips.model import TripComment
+
+        trip_ids = TripComment.objects.filter(trip__profiles=profile, created__gte=since).values_list("trip_id", flat=True).distinct()
+        last_comment_by_trip: dict[int, datetime.datetime] = dict(
+            TripComment.objects.filter(trip_id__in=trip_ids, created__gte=since).values("trip_id").annotate(last=Max("created")).values_list("trip_id", "last"),
+        )
+        candidates: TripQuerySet = self.filter(pk__in=trip_ids).select_related("creator__user").prefetch_related("memberships", "activities")
+        past = [trip for trip in candidates if trip.timeline_status == "past"]
+        past.sort(key=lambda trip: last_comment_by_trip[trip.pk], reverse=True)
+        return past[:limit]
 
     def recently_viewed(self, profile: Profile, limit: int = 5) -> TripQuerySet:
         """Return the viewer's trips ordered by when they personally last viewed each one.

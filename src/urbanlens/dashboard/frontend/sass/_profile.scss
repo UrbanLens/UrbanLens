@@ -2860,9 +2860,17 @@ a.profile-stat--link {
 }
 
 .profile-card-strip {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+    display: flex;
+    flex-wrap: nowrap;
     gap: .7rem;
+    overflow: hidden;
+    mask-image: linear-gradient(to right, #000 calc(100% - 2.5rem), transparent 100%);
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 2.5rem), transparent 100%);
+}
+
+.profile-card-strip > .profile-mini-card,
+.profile-card-strip > .profile-feature-card {
+    flex: 0 0 210px;
 }
 
 .profile-mini-card,
@@ -2922,8 +2930,16 @@ a.profile-stat--link {
 }
 
 .profile-photo-strip.photos-grid {
-    grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+    display: flex;
+    flex-wrap: nowrap;
+    overflow: hidden;
+    mask-image: linear-gradient(to right, #000 calc(100% - 2.5rem), transparent 100%);
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 2.5rem), transparent 100%);
     margin: 0;
+
+    > .photo-tile {
+        flex: 0 0 92px;
+    }
 }
 
 @media (min-width: 720px) {

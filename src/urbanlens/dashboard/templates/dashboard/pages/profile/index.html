@@ -180,6 +180,7 @@
 
     {% if profile.user == request.user %}
     <section class="profile-owner-activity-panel profile-private-zone" aria-label="Your recent UrbanLens activity - only visible to you">
+        <span class="profile-annotation-title">My Private Activity</span>
         <span class="profile-private-zone-cap profile-private-zone-cap--top" role="note"><i class="material-symbols-outlined" aria-hidden="true">lock</i> Only visible to you</span>
         <p class="profile-private-zone-note">Everything inside this frame is private - other explorers never see it.</p>
         <div class="profile-private-stats" aria-label="Private profile stats">
@@ -330,7 +331,7 @@
         <section class="profile-strip ul-section">
             <div class="profile-strip-heading">
                 <span class="profile-strip-icon"><i class="material-symbols-outlined">luggage</i></span>
-                <div><h3>Recent trips</h3><p>Plans with the latest activity.</p></div>
+                <div><h3>Recent trips</h3><p>Past trips with new comments in the last week.</p></div>
                 <a href="{% url 'trips.list' %}" class="profile-strip-link">All trips</a>
             </div>
             <div class="profile-card-strip">
