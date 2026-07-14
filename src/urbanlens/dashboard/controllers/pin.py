@@ -894,10 +894,12 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         document_warnings: list[str] = []
         for doc_name, doc_data in document_files:
             try:
-                doc_list = extract_pins_from_document(doc_name, doc_data, profile)
+                doc_list, doc_warning = extract_pins_from_document(doc_name, doc_data, profile)
             except DocumentTooLargeError:
                 document_warnings.append(f"Document too large: {doc_name}")
                 continue
+            if doc_warning:
+                document_warnings.append(doc_warning)
             if doc_list:
                 lists.append(doc_list)
 

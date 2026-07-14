@@ -395,11 +395,20 @@ img.leaflet-marker-icon.is-selected {
     }
 }
 
-// Shifts the bottom-left layers panel + boundary controls out of the way
-// while the sidebar is open, mirroring #map.pin-list-open on the main map.
-.map-wrapper:has(> .detail-pin-list-panel.open) .map-bottom-controls {
-    left: calc(300px + 20px);
-    transition: left 0.22s cubic-bezier(.4, 0, .2, 1);
+// Shifts the bottom-left layers panel + boundary controls, and the Leaflet
+// zoom control, out of the way while the sidebar is open - mirroring
+// #map.pin-list-open on the main map so the drawer never sits on top of them.
+.map-wrapper:has(> .detail-pin-list-panel.open) {
+    .map-bottom-controls {
+        left: calc(300px + 20px);
+        transition: left 0.22s cubic-bezier(.4, 0, .2, 1);
+    }
+
+    // Transition comes from the unconditional `#map .leaflet-top.leaflet-left`
+    // rule further down this file, which also matches this page's #map.
+    .leaflet-top.leaflet-left {
+        left: 300px;
+    }
 }
 
 .detail-pin-list-ul {

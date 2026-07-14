@@ -122,7 +122,7 @@ def extract_text(filename: str, data: bytes) -> str | None:
     return None
 
 
-def extract_pins_from_document(filename: str, data: bytes, profile: Profile) -> dict[str, Any] | None:
+def extract_pins_from_document(filename: str, data: bytes, profile: Profile) -> tuple[dict[str, Any] | None, str | None]:
     """Ask AI to extract pin candidates from an uploaded document.
 
     Only runs when AI is enabled for this profile/site/subscription; otherwise
@@ -136,9 +136,13 @@ def extract_pins_from_document(filename: str, data: bytes, profile: Profile) -> 
         profile: Profile the import is being run for.
 
     Returns:
-        A ``{"stem": ..., "pins": [...]}`` dict in the same shape as
-        ``GoogleMapsGateway.parse_for_preview`` list entries, or None when AI
-        extraction is unavailable or nothing usable was found.
+        A ``(list, warning)`` tuple. ``list`` is a ``{"stem": ..., "pins": [...]}``
+        dict in the same shape as ``GoogleMapsGateway.parse_for_preview`` list
+        entries, or None when AI extraction is unavailable, found no locations,
+        or none of the locations it found could be resolved to coordinates.
+        ``warning`` is a user-facing message when one or more extracted
+        locations could not be mapped to coordinates and were dropped (whether
+        or not any pins were still produced), or None otherwise.
 
     Raises:
         DocumentTooLargeError: The upload (or its extracted text) exceeds the
@@ -150,7 +154,7 @@ def extract_pins_from_document(filename: str, data: bytes, profile: Profile) -> 
     from urbanlens.dashboard.services.apis.locations.google.maps import _filename_stem
 
     if not user_has_feature(profile.user, SiteFeature.AI) or not profile.ai_enabled or not profile.external_apis_enabled:
-        return None
+        return None, None
 
     if len(data) > MAX_DOCUMENT_BYTES:
         raise DocumentTooLargeError(
@@ -159,7 +163,7 @@ def extract_pins_from_document(filename: str, data: bytes, profile: Profile) -> 
 
     text = extract_text(filename, data)
     if not text:
-        return None
+        return None, None
 
     max_chars = _get_max_document_chars()
     if len(text) > max_chars:
@@ -171,7 +175,7 @@ def extract_pins_from_document(filename: str, data: bytes, profile: Profile) -> 
 
     gateway = get_gateway("document_pin_import", profile=profile, instructions=_build_instructions())
     if not gateway:
-        return None
+        return None, None
 
     prompt = _build_prompt(text)
 
@@ -179,22 +183,31 @@ def extract_pins_from_document(filename: str, data: bytes, profile: Profile) -> 
         answer = gateway.send_prompt(prompt)
     except (RuntimeError, ValueError, OSError) as exc:
         logger.warning("AI document pin extraction failed for '%s': %s", filename, exc)
-        return None
+        return None, None
 
     logger.info("AI document import for '%s': ~%d tokens, est. cost $%s", filename, gateway.tokens, gateway.cost)
 
     if not answer:
-        return None
+        return None, None
 
     pins = _parse_ai_csv_response(answer)
     if not pins:
-        return None
+        return None, None
 
-    geocoded = _geocode_pins(pins)
+    geocoded, failed = _geocode_pins(pins)
+
+    warning: str | None = None
+    if failed:
+        plural = "s" if len(pins) != 1 else ""
+        if not geocoded:
+            warning = f"'{filename}': found {len(pins)} location{plural} but couldn't map any of them to coordinates. Try adding a more specific address or coordinates."
+        else:
+            warning = f"'{filename}': {failed} of {len(pins)} location{plural} couldn't be mapped to coordinates and were skipped."
+
     if not geocoded:
-        return None
+        return None, warning
 
-    return {"stem": _filename_stem(filename), "pins": geocoded}
+    return {"stem": _filename_stem(filename), "pins": geocoded}, warning
 
 
 def _build_instructions() -> str:
@@ -213,12 +226,18 @@ def _build_instructions() -> str:
         "- If the document describes no locations, return only the CSV header row.\n\n"
         "OUTPUT FORMAT:\n"
         "Return exactly one <ANSWER>...</ANSWER> tag containing CSV data with this exact header: "
-        "name,description,address\n"
+        "name,description,address,latitude,longitude\n"
         "- name: the location's name as written in the document, or a short factual label if it has "
         "no name.\n"
         "- description: notes or context about the location taken from the document.\n"
         "- address: a street address, place name, or region from the document that can be used to "
         "map this location. Leave blank if the document gives no locational detail for it.\n"
+        "- latitude, longitude: ONLY fill these in when the document itself states exact GPS "
+        'coordinates for this location (for example "40.7128, -74.0060", "40.7128N 74.0060W", or a '
+        "decimal-degree pair copied from a GPS device or map link). Convert to plain decimal degrees "
+        "(WGS-84). Never estimate, guess, or derive coordinates yourself from an address or place "
+        "name - leave both fields blank when the document does not give exact coordinates; the "
+        "address will be geocoded separately.\n"
         "Quote fields containing commas per standard CSV rules. Return nothing outside the single "
         "ANSWER tag."
     )
@@ -261,15 +280,25 @@ def _parse_csv_rows(answer: str) -> list[dict[str, str]]:
 
 
 def _rows_from_dicts(rows: Iterable[dict[str, str | None]]) -> list[dict[str, str]]:
-    """Filter and cap raw CSV row dicts down to usable ``{name, description, address}`` rows."""
+    """Filter and cap raw CSV row dicts down to usable ``{name, description, address, latitude, longitude}`` rows."""
     results: list[dict[str, str]] = []
     for row in rows:
         name = (row.get("name") or "").strip()
         description = (row.get("description") or "").strip()
         address = (row.get("address") or "").strip()
-        if not name and not address:
+        latitude = (row.get("latitude") or "").strip()
+        longitude = (row.get("longitude") or "").strip()
+        if not name and not address and not (latitude and longitude):
             continue
-        results.append({"name": name[:255], "description": description[:500], "address": address[:500]})
+        results.append(
+            {
+                "name": name[:255],
+                "description": description[:500],
+                "address": address[:500],
+                "latitude": latitude[:32],
+                "longitude": longitude[:32],
+            },
+        )
         if len(results) >= MAX_EXTRACTED_PINS:
             logger.info("AI document import: capping at %d extracted pins", MAX_EXTRACTED_PINS)
             break
@@ -319,14 +348,52 @@ def _parse_ai_csv_response(answer: str) -> list[dict[str, str]]:
             logger.warning("Could not remove temp AI import file %s", path, exc_info=True)
 
 
-def _geocode_pins(rows: list[dict[str, str]]) -> list[dict[str, Any]]:
-    """Resolve coordinates for each extracted row, dropping rows that fail to geocode.
+def _parse_explicit_coordinates(latitude: str, longitude: str) -> tuple[float, float] | None:
+    """Parse a lat/lng pair the AI copied directly from the document text.
+
+    Only returns a value when both fields are present and form a plausible WGS-84
+    coordinate. Anything else (blank, garbage, out-of-range) falls through to
+    address-based geocoding instead of failing the row outright - the AI is
+    instructed to leave these blank whenever it isn't looking at literal
+    coordinates, but its output is untrusted and shouldn't be trusted blindly.
 
     Args:
-        rows: Extracted ``{name, description, address}`` dicts.
+        latitude: Raw latitude string from the AI's CSV response.
+        longitude: Raw longitude string from the AI's CSV response.
 
     Returns:
-        Preview-shaped pin dicts (``name``, ``lat``, ``lng``, ``description``, ``cid``).
+        ``(lat, lng)`` floats, or None if no usable coordinate was given.
+    """
+    latitude = latitude.strip()
+    longitude = longitude.strip()
+    if not latitude or not longitude:
+        return None
+    try:
+        lat = float(latitude)
+        lng = float(longitude)
+    except ValueError:
+        return None
+    if not (-90.0 <= lat <= 90.0) or not (-180.0 <= lng <= 180.0):
+        return None
+    return lat, lng
+
+
+def _geocode_pins(rows: list[dict[str, str]]) -> tuple[list[dict[str, Any]], int]:
+    """Resolve coordinates for each extracted row.
+
+    Rows carrying an explicit ``latitude``/``longitude`` pair (copied straight from
+    the document by the AI, e.g. a GPS reading in trip notes) skip the geocoding
+    API entirely and use those coordinates directly - this is what lets a
+    document that already states coordinates import correctly even when the
+    surrounding text isn't a geocoder-friendly address. Every other row is
+    resolved via the Google Geocoding API as before.
+
+    Args:
+        rows: Extracted ``{name, description, address, latitude, longitude}`` dicts.
+
+    Returns:
+        Tuple of (preview-shaped pin dicts, count of rows that could not be
+        resolved to coordinates and were dropped).
     """
     import requests
 
@@ -334,24 +401,35 @@ def _geocode_pins(rows: list[dict[str, str]]) -> list[dict[str, Any]]:
 
     gateway = GoogleGeocodingGateway()
     pins: list[dict[str, Any]] = []
+    failed = 0
 
     for row in rows:
-        query = row["address"] or row["name"]
-        if not query:
-            continue
-        try:
-            lat, lng = gateway.get_coordinates(query)
-        except (ValueError, requests.RequestException):
-            logger.warning("Could not geocode extracted location %r", query, exc_info=True)
-            continue
+        explicit = _parse_explicit_coordinates(row.get("latitude", ""), row.get("longitude", ""))
+        coords: tuple[float, float] | None = explicit
+        if coords is None:
+            query = row["address"] or row["name"]
+            if not query:
+                failed += 1
+                continue
+            try:
+                geocoded_lat, geocoded_lng = gateway.get_coordinates(query)
+            except (ValueError, requests.RequestException):
+                logger.warning("Could not geocode extracted location %r", query, exc_info=True)
+                failed += 1
+                continue
 
-        if lat is None or lng is None:
-            logger.info("Skipping extracted location that could not be geocoded: %r", query)
-            continue
+            if geocoded_lat is None or geocoded_lng is None:
+                logger.info("Skipping extracted location that could not be geocoded: %r", query)
+                failed += 1
+                continue
 
+            coords = (geocoded_lat, geocoded_lng)
+
+        lat, lng = coords
+        fallback_name = (row["address"] or row["name"] or f"{lat}, {lng}")[:255]
         pins.append(
             {
-                "name": row["name"] or query[:255],
+                "name": row["name"] or fallback_name,
                 "lat": float(lat),
                 "lng": float(lng),
                 "description": row["description"],
@@ -359,4 +437,4 @@ def _geocode_pins(rows: list[dict[str, str]]) -> list[dict[str, Any]]:
             },
         )
 
-    return pins
+    return pins, failed

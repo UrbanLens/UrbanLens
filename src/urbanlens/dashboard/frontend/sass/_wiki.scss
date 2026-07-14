@@ -384,6 +384,9 @@
         // size for @include map-query-container to safely contain against
         // (`contain: size` collapses an "auto" height to 0 otherwise).
         height: clamp(320px, 52vw, 560px);
+        // Clips the off-canvas (translateX(-100%)) .detail-pin-list-panel so
+        // it doesn't bleed into the page to the left of the map card.
+        overflow: hidden;
         @include map-query-container;
     }
 

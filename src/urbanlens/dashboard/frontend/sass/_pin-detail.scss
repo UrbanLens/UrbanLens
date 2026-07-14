@@ -3515,6 +3515,10 @@ body.page-location-details .pin-detail-grid {
             // (`contain: size` collapses an "auto" height to 0 otherwise).
             height: min(52vh, 540px);
             min-height: 320px;
+            // Clips the off-canvas (translateX(-100%)) .detail-pin-list-panel so
+            // it doesn't bleed into the page to the left of the map card - without
+            // this the collapsed drawer is still painted, just outside the wrapper.
+            overflow: hidden;
             @include map-query-container;
         }
 

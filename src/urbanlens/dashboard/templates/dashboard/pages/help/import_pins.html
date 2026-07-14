@@ -193,11 +193,11 @@
                 <p>If you have trip notes, a forwarded list of locations, or a research writeup instead of a proper export file, upload it as a plain text (.txt) or Word (.docx) file and let AI pull the locations out for you.</p>
                 <ol>
                     <li>Upload your .txt or .docx file like any other import file.</li>
-                    <li>AI reads the document and extracts a CSV of locations it explicitly finds mentioned - name, notes, and address where available.</li>
-                    <li>Each extracted location is geocoded and shown in the same review step as every other import format, so you can deselect anything before it's saved.</li>
+                    <li>AI reads the document and extracts a list of locations it explicitly finds mentioned - name, notes, and address (or exact GPS coordinates, if your document states them) where available.</li>
+                    <li>Locations without exact coordinates are geocoded from their address; locations with coordinates already stated in the document skip that step and use them directly. Everything is shown in the same review step as every other import format, so you can deselect anything before it's saved.</li>
                 </ol>
                 <div class="help-import-callout"><strong>Tip:</strong> Only pins your document actually mentions are extracted. Nothing is invented, and text in the document cannot instruct the AI to add unrelated locations.</div>
-                <div class="help-import-callout help-import-callout--tech"><strong>Note:</strong> This option only appears when AI features are enabled for your account (see Settings) and only supports modern <code>.docx</code> Word files, not the legacy <code>.doc</code> format. Very long documents are rejected with a message rather than silently cut off - split the document into smaller files and re-upload if you hit this limit.</div>
+                <div class="help-import-callout help-import-callout--tech"><strong>Note:</strong> This option only appears when AI features are enabled for your account (see Settings) and only supports modern <code>.docx</code> Word files, not the legacy <code>.doc</code> format. Very long documents are rejected with a message rather than silently cut off - split the document into smaller files and re-upload if you hit this limit. If a location is mentioned but can't be mapped to coordinates (too vague, or an address our geocoder doesn't recognize), you'll get a warning naming it instead of it silently disappearing - try adding a more specific address or exact coordinates and re-upload.</div>
             </section>
             {% endif %}
 
