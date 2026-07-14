@@ -217,12 +217,17 @@
             </div>
             <ul class="profile-photo-strip photos-grid">
                 {% for img in profile_recent_photos %}
-                <li class="photo-tile" data-url="{{ img.image.url }}">
-                    <a class="photo-tile-btn" href="{{ img.image.url }}" target="_blank" rel="noopener">
+                <li class="photo-tile" data-id="{{ img.pk }}" data-url="{{ img.image.url }}"
+                    data-caption="{{ img.caption|default:'' }}"
+                    data-author="{{ img.author|default:'' }}"
+                    data-copyright="{{ img.copyright|default:'' }}"
+                    data-source-url="{{ img.source_url|default:'' }}"
+                    data-taken-at="{{ img.taken_at|date:'c'|default:'' }}">
+                    <button type="button" class="photo-tile-btn" onclick="profileOpenLightbox({{ img.pk }})">
                         <img src="{{ img.image.url }}" alt="{{ img.caption|default:'Photo' }}" loading="lazy"
                              onerror="urbanlensMediaThumbFallback(this, 'broken_image', 'photo-tile-fallback')">
                         {% if img.latitude and img.longitude %}<span class="photo-tile-badge" title="Has location"><i class="material-symbols-outlined">place</i></span>{% endif %}
-                    </a>
+                    </button>
                 </li>
                 {% endfor %}
             </ul>
@@ -399,6 +404,11 @@
         </div>
     </div>
 </div>
+
+{% if profile_recent_photos %}
+{# -- Lightbox (shared component - same as Memories > Photos and the pin detail gallery) -- #}
+{% include "dashboard/partials/_photo_lightbox.html" %}
+{% endif %}
 {% endblock %}
 
 {% block scripts %}
@@ -480,6 +490,21 @@
     renderRecentStrip('ul_recent_wikis_v1_' + recentHistoryProfileId, 'profile-recent-wikis-strip', '[data-recent-wikis]', 'menu_book', 'Recently viewed');
 
 }());
+
+// Opens the shared lightbox (dashboard/partials/_photo_lightbox.html,
+// included above) with the "Recent photos" strip's items.
+function profileOpenLightbox(id) {
+    var items = Array.prototype.map.call(document.querySelectorAll('.profile-photo-strip .photo-tile'), function (el) {
+        return {
+            url: el.dataset.url, caption: el.dataset.caption || '',
+            author: el.dataset.author || '', copyright: el.dataset.copyright || '',
+            sourceUrl: el.dataset.sourceUrl || '', sourceName: '', takenAt: el.dataset.takenAt || '',
+            imageId: parseInt(el.dataset.id, 10), canRelevance: false, relevant: null,
+        };
+    });
+    var idx = items.findIndex(function (i) { return i.imageId === id; });
+    window.galleryOpenLightboxItem(items, Math.max(idx, 0));
+}
 
 function panToggleEdit(noteId) {
     var body = document.getElementById('pan-note-body-' + noteId);

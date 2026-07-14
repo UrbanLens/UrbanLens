@@ -1,0 +1,205 @@
+{% comment %}
+Shared photo lightbox - single source of truth for every full-size photo
+viewer on the site (pin detail / location wiki / safety check-in galleries,
+Memories > Photos, the user profile page). Include once per page; open it via
+`window.galleryOpenLightboxItem(list, idx)`, where `list` is an array of
+normalized items:
+  {url, caption, author, copyright, sourceUrl, sourceName, takenAt, imageId,
+   canRelevance, relevant, mediaSource, mediaKey}
+
+Context:
+  lightbox_id            - DOM id for the <dialog> (default "gallery-lightbox").
+  show_cover_action      - whether to render the "Set as cover photo" button
+                            (only meaningful when photos belong to a single
+                            pin/location, e.g. pin detail or location wiki).
+  cover_photo_url         - POST endpoint for "Set as cover photo"; blank hides it.
+  pin_media_relevance_url - POST endpoint for the pin Media gallery's relevant/
+                            not-relevant marking; blank when not applicable
+                            (harmless even if set - only used for items with
+                            canRelevance true, which pages outside the pin
+                            Media gallery never set).
+{% endcomment %}
+{% with lightbox_id=lightbox_id|default:"gallery-lightbox" %}
+<dialog id="{{ lightbox_id }}" class="gallery-lightbox ul-dialog">
+  <div class="lightbox-inner">
+    <button type="button" class="lightbox-close" onclick="document.getElementById('{{ lightbox_id }}').close()">
+      <i class="material-symbols-outlined">close</i>
+    </button>
+    <div class="lightbox-media-area">
+      <button type="button" class="lightbox-nav lightbox-prev" onclick="galleryLightboxNav(-1)">
+        <i class="material-symbols-outlined">chevron_left</i>
+      </button>
+      <img id="lightbox-img" src="" alt="" class="lightbox-img">
+      <button type="button" class="lightbox-nav lightbox-next" onclick="galleryLightboxNav(1)">
+        <i class="material-symbols-outlined">chevron_right</i>
+      </button>
+    </div>
+    <div class="lightbox-side-panel">
+      <p id="lightbox-caption" class="lightbox-caption"></p>
+      <div id="lightbox-meta" class="lightbox-meta">
+        <p id="lightbox-source-name" class="lightbox-meta-line" hidden></p>
+        <p id="lightbox-author" class="lightbox-meta-line" hidden></p>
+        <p id="lightbox-taken-at" class="lightbox-meta-line" hidden></p>
+        <p id="lightbox-copyright" class="lightbox-meta-line" hidden></p>
+        <a id="lightbox-source-link" class="lightbox-meta-line lightbox-source-link" target="_blank" rel="noopener noreferrer" hidden>
+          <i class="material-symbols-outlined">open_in_new</i><span>View source</span>
+        </a>
+      </div>
+      <div id="lightbox-relevance-actions" class="lightbox-relevance-actions" hidden>
+        <button type="button" id="lightbox-relevant-btn" class="btn btn--ghost btn--sm" onclick="window._lightboxSetRelevance(true)">
+          <i class="material-symbols-outlined">thumb_up</i> Relevant
+        </button>
+        <button type="button" id="lightbox-not-relevant-btn" class="btn btn--ghost btn--sm" onclick="window._lightboxSetRelevance(false)">
+          <i class="material-symbols-outlined">thumb_down</i> Not relevant
+        </button>
+      </div>
+      {% if show_cover_action %}
+      <div id="lightbox-cover-actions" class="lightbox-relevance-actions" hidden>
+        <button type="button" class="btn btn--ghost btn--sm" onclick="window._lightboxSetCover()">
+          <i class="material-symbols-outlined">wallpaper</i> Set as cover photo
+        </button>
+      </div>
+      {% endif %}
+      {# Custom fields (viewer's own photo fields; loads empty for photos that aren't theirs) #}
+      <div id="lightbox-custom-fields" class="lightbox-custom-fields"></div>
+    </div>
+  </div>
+</dialog>
+
+<script>
+(function () {
+  var LIGHTBOX_ID = '{{ lightbox_id }}';
+  var CSRF_TOKEN = '{{ csrf_token }}';
+  var PIN_MEDIA_RELEVANCE_URL = '{{ pin_media_relevance_url|default:"" }}';
+  var COVER_PHOTO_URL = '{{ cover_photo_url|default:"" }}';
+  var CF_PHOTO_URL_TEMPLATE = '{% url "custom_fields.photo" 0 %}';
+
+  // Ordered list of normalized items currently shown, plus the visible index.
+  var _lightboxList = [];
+  var _lightboxIdx = 0;
+
+  // Generalized opener: `list` is an array of normalized items (see the file
+  // header), `idx` the one to show first. This is the single entry point
+  // every page's photo grid funnels through - each grid keeps its own
+  // DOM-resident item collection and just builds `list` before calling in.
+  window.galleryOpenLightboxItem = function (list, idx) {
+    _lightboxList = list || [];
+    _lightboxIdx = idx || 0;
+    _showLightbox();
+    document.getElementById(LIGHTBOX_ID).showModal();
+  };
+
+  window.galleryLightboxNav = function (dir) {
+    if (!_lightboxList.length) return;
+    _lightboxIdx = (_lightboxIdx + dir + _lightboxList.length) % _lightboxList.length;
+    _showLightbox();
+  };
+
+  document.addEventListener('keydown', function (e) {
+    var dlg = document.getElementById(LIGHTBOX_ID);
+    if (!dlg || !dlg.open) return;
+    if (e.key === 'ArrowLeft') galleryLightboxNav(-1);
+    else if (e.key === 'ArrowRight') galleryLightboxNav(1);
+  });
+
+  function _showLightbox() {
+    var item = _lightboxList[_lightboxIdx];
+    if (!item) return;
+    document.getElementById('lightbox-img').src = item.url;
+    var caption = item.caption;
+    if (!caption && item.imageId) {
+      var el = document.getElementById('gallery-item-' + item.imageId);
+      caption = el ? (el.querySelector('.gallery-caption') || {}).textContent || '' : '';
+    }
+    document.getElementById('lightbox-caption').textContent = caption || '';
+    _setLightboxMeta(item);
+    _loadLightboxCustomFields(item.imageId);
+  }
+
+  // Load the viewer's custom-field strip for the current photo. The endpoint
+  // returns 204 (leaving the strip empty) for photos the viewer doesn't own
+  // or when they have no photo fields defined.
+  function _loadLightboxCustomFields(imgId) {
+    var el = document.getElementById('lightbox-custom-fields');
+    if (!el) return;
+    el.innerHTML = '';
+    if (!imgId || !window.htmx) return;
+    htmx.ajax('GET', CF_PHOTO_URL_TEMPLATE.replace('/0/', '/' + imgId + '/'), { target: '#lightbox-custom-fields', swap: 'innerHTML' });
+  }
+
+  function _setLightboxMeta(item) {
+    var sourceNameEl = document.getElementById('lightbox-source-name');
+    var authorEl = document.getElementById('lightbox-author');
+    var takenEl = document.getElementById('lightbox-taken-at');
+    var copyrightEl = document.getElementById('lightbox-copyright');
+    var sourceEl = document.getElementById('lightbox-source-link');
+    var relevanceEl = document.getElementById('lightbox-relevance-actions');
+    if (sourceNameEl) { sourceNameEl.textContent = item.sourceName ? 'Source: ' + item.sourceName : ''; sourceNameEl.hidden = !item.sourceName; }
+    if (authorEl) { authorEl.textContent = item.author ? 'By ' + item.author : ''; authorEl.hidden = !item.author; }
+    if (takenEl) {
+      var takenText = '';
+      if (item.takenAt) { var d = new Date(item.takenAt); if (!isNaN(d)) takenText = d.toLocaleString(); }
+      takenEl.textContent = takenText;
+      takenEl.hidden = !takenText;
+    }
+    if (copyrightEl) { copyrightEl.textContent = item.copyright || ''; copyrightEl.hidden = !item.copyright; }
+    if (sourceEl) {
+      if (item.sourceUrl) { sourceEl.href = item.sourceUrl; sourceEl.hidden = false; }
+      else { sourceEl.removeAttribute('href'); sourceEl.hidden = true; }
+    }
+    if (relevanceEl) {
+      relevanceEl.hidden = !item.canRelevance;
+      var upBtn = document.getElementById('lightbox-relevant-btn');
+      var downBtn = document.getElementById('lightbox-not-relevant-btn');
+      if (upBtn) upBtn.classList.toggle('is-active', item.relevant === true);
+      if (downBtn) downBtn.classList.toggle('is-active', item.relevant === false);
+    }
+    var coverEl = document.getElementById('lightbox-cover-actions');
+    if (coverEl) coverEl.hidden = !(item.imageId && COVER_PHOTO_URL);
+  }
+
+  // Only offered for real, persisted photos (personal uploads, or Media
+  // gallery items already sent to the wiki) - a still-transient Media item
+  // has no imageId to set as a cover.
+  window._lightboxSetCover = function () {
+    var item = _lightboxList[_lightboxIdx];
+    if (!item || !item.imageId || !COVER_PHOTO_URL) return;
+    fetch(COVER_PHOTO_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
+      body: JSON.stringify({ image_id: item.imageId }),
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (data) {
+        if (!r.ok) throw new Error(data.error || 'HTTP ' + r.status);
+        return data;
+      });
+    }).then(function () {
+      if (window.toastr) toastr.success('Cover photo updated. Reload the page to see it.');
+    }).catch(function (err) {
+      if (window.toastr) toastr.error(err.message || 'Failed to set cover photo.');
+    });
+  };
+
+  // Called from the lightbox's Relevant/Not relevant buttons (only shown for
+  // Media-gallery items, see canRelevance). Persists the mark, updates the
+  // lightbox's own button state, and syncs the corresponding grid tile back
+  // on the pin detail page's Media section (if that tile is present).
+  window._lightboxSetRelevance = function (isRelevant) {
+    var item = _lightboxList[_lightboxIdx];
+    if (!item || !item.canRelevance || !PIN_MEDIA_RELEVANCE_URL) return;
+    var wasRelevant = item.relevant === true;
+    var wasNotRelevant = item.relevant === false;
+    var next = (isRelevant && wasRelevant) || (!isRelevant && wasNotRelevant) ? null : isRelevant;
+    item.relevant = next;
+    _setLightboxMeta(item);
+    var gridItem = document.querySelector('#media-gallery-grid .media-item[data-media-source="' + item.mediaSource + '"][data-media-key="' + item.mediaKey + '"]');
+    if (gridItem && window._mediaApplyRelevanceState) window._mediaApplyRelevanceState(gridItem, next);
+    fetch(PIN_MEDIA_RELEVANCE_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
+      body: JSON.stringify({ source: item.mediaSource, item_key: item.mediaKey, url: item.url, is_relevant: next }),
+    }).catch(function () { if (window.toastr) toastr.error('Failed to save.'); });
+  };
+})();
+</script>
+{% endwith %}

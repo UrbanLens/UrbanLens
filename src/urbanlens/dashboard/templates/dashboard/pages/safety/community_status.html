@@ -2,13 +2,15 @@
 {% load humanize %}
 
 {% comment %}
-Read-only community view of a safety check-in, linked from the comment posted to a
-destination's community wiki at escalation (services.safety.post_checkin_to_community_wiki).
+Read-only shared view of a safety check-in - reached either from a comment posted to a
+destination's community wiki at escalation (services.safety.post_checkin_to_community_wiki),
+or by a logged-in registered emergency contact from their safety overview page's
+"Shared with you" section (viewer_is_contact=True).
 
 Deliberately limited: status, owner, expected check-in time, and the destination map.
-The trip plan, contact message, emergency contacts, photos, and chat stay owner/contact
-only - opting into the wiki post shares that the owner is overdue and where, not the
-whole check-in.
+The trip plan, contact message, emergency contacts, photos, and chat stay owner-only -
+opting into the wiki post shares that the owner is overdue and where, not the whole
+check-in, and a contact gets the same limited view rather than the full owner page.
 {% endcomment %}
 
 {% block header %}
@@ -16,6 +18,16 @@ whole check-in.
     integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
     integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
+{% endblock %}
+
+{% block subnav %}
+{% if viewer_is_contact %}
+<div class="ul-page-subnav">
+    <div class="ul-page-subnav__inner">
+        {% include "dashboard/partials/safety/_safety_subnav.html" with active="overview" %}
+    </div>
+</div>
+{% endif %}
 {% endblock %}
 
 {% block content %}
@@ -27,12 +39,16 @@ whole check-in.
         {% if checkin.is_resolved %}
         <p><i class="material-symbols-outlined">check_circle</i>
             This check-in has been resolved - {{ checkin.profile.username }} is accounted for.</p>
-        {% else %}
+        {% elif checkin.escalated_at %}
         <p><i class="material-symbols-outlined">emergency</i>
             {{ checkin.profile.username }} hasn't checked in from a trip to this destination, and their
             emergency contacts have been notified. If you've seen them or know something that could help,
             leave a comment on the community wiki{% if wiki %} for <a href="{% url 'location.wiki' wiki.location.slug|default:wiki.location.uuid %}">{{ wiki.name }}</a>{% endif %}
             or reach out to them directly.</p>
+        {% else %}
+        <p><i class="material-symbols-outlined">schedule</i>
+            You're listed as an emergency contact for this upcoming trip. {{ checkin.profile.username }} is
+            expected to check in by {{ checkin.checkin_by|date:"N j, Y g:i A" }}.</p>
         {% endif %}
     </div>
 

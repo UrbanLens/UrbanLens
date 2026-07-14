@@ -11,6 +11,9 @@ from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract
 
+if TYPE_CHECKING:
+    from urbanlens.dashboard.models.profile.model import Profile
+
 
 class SafetyCheckinQuerySet(abstract.PublicDashboardQuerySet):
     """QuerySet for SafetyCheckin records."""
@@ -119,6 +122,23 @@ class SafetyCheckinQuerySet(abstract.PublicDashboardQuerySet):
         from urbanlens.dashboard.models.safety.model import SafetyCheckinStatus
 
         return self.exclude(status__in=SafetyCheckinStatus.resolved_statuses())
+
+    def shared_with(self, profile: Profile) -> Self:
+        """Return other profiles' check-ins where ``profile`` is a registered emergency contact.
+
+        Powers the safety overview's "Shared with you" section - a logged-in
+        emergency contact gets a read-only view of the check-in (see
+        ``SafetyCheckinDetailView._render_shared_view``) even before/without
+        the owner ever posting it to a community wiki.
+
+        Args:
+            profile: The viewing profile.
+
+        Returns:
+            Filtered queryset, most recent ``checkin_by`` first, excluding the
+            viewer's own check-ins.
+        """
+        return self.filter(contacts__contact_profile=profile).exclude(profile=profile).distinct()
 
 
 class SafetyCheckinManager(abstract.PublicDashboardManager.from_queryset(SafetyCheckinQuerySet)):

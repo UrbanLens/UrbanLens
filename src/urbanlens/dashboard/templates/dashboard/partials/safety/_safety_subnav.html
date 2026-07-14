@@ -1,0 +1,22 @@
+{% comment %}
+Overview | Settings tab strip for the safety check-in section.
+
+Context:
+  active - "overview" or "settings" (which tab is current); subpages that
+           aren't strictly one or the other (create/detail/community status)
+           pass "overview" so the nav still shows where they live.
+{% endcomment %}
+<nav class="ul-subnav-tabs" aria-label="Safety check-in views">
+    <a href="{% url 'safety.home' %}"
+       class="ul-subnav-tab {% if active == 'overview' %}is-active{% endif %}"
+       {% if active == 'overview' %}aria-current="page"{% endif %}>
+        <i class="material-symbols-outlined">dashboard</i>
+        <span>Overview</span>
+    </a>
+    <a href="{% url 'safety.settings' %}"
+       class="ul-subnav-tab {% if active == 'settings' %}is-active{% endif %}"
+       {% if active == 'settings' %}aria-current="page"{% endif %}>
+        <i class="material-symbols-outlined">settings</i>
+        <span>Settings</span>
+    </a>
+</nav>

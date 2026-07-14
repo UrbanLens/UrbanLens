@@ -232,6 +232,17 @@ register_map_layer(
         button_id="photos-button",
     )
 )
+register_map_layer(
+    MapLayerSpec(
+        key="past_activities",
+        kind="custom",
+        label="Past Activities",
+        aria_label="Show or hide past activities",
+        tooltip="Show completed/past activities on the map",
+        icon="history",
+        button_id="past-activities-button",
+    )
+)
 
 
 @register.inclusion_tag("dashboard/partials/map/_layers_panel.html")

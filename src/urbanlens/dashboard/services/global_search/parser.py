@@ -74,6 +74,16 @@ _STOPWORDS = {"my", "our", "from", "of", "the", "a", "an", "with", "about", "for
 _MONTH_PATTERN = "|".join(sorted(_MONTHS, key=len, reverse=True))
 _SEASON_PATTERN = "|".join(_SEASONS)
 
+#: A single calendar-date phrase, as used inside a "between X and Y" clause.
+_DATE_PHRASE = (
+    rf"(?:{_MONTH_PATTERN})\s+\d{{1,2}}(?:st|nd|rd|th)?,?\s*\d{{4}}"
+    rf"|(?:{_MONTH_PATTERN})\s+\d{{1,2}}(?:st|nd|rd|th)?"
+    rf"|(?:{_MONTH_PATTERN})\s+\d{{4}}"
+    rf"|\d{{4}}-\d{{1,2}}-\d{{1,2}}"
+    rf"|\d{{1,2}}/\d{{1,2}}/\d{{2,4}}"
+    rf"|20\d{{2}}"
+)
+
 
 @dataclass(slots=True)
 class ParsedQuery:
@@ -213,6 +223,88 @@ def _last_month_occurrence(month: int, today: date) -> tuple[date, date]:
     return _month_range(year, month)
 
 
+def _resolve_calendar_date(phrase: str, today: date, year_hint: int | None = None) -> date | None:
+    """Resolve a single date phrase (one side of a "between X and Y" clause) to a concrete date.
+
+    Args:
+        phrase: A lowercase date phrase, e.g. "march 5, 2024", "3/5/2024",
+            "2024-03-05", "march 2024", or "2024".
+        today: Anchor date used to infer a missing year for "month day" phrases.
+        year_hint: Year to use for a bare "month day" phrase instead of
+            guessing from ``today`` - set when the other side of a "between X
+            and Y" clause carried an explicit year that should apply to both.
+
+    Returns:
+        The resolved date, or None if the phrase isn't a recognized format.
+    """
+    phrase = phrase.strip(" ,.")
+    iso = re.match(r"^(\d{4})-(\d{1,2})-(\d{1,2})$", phrase)
+    if iso:
+        try:
+            return date(int(iso.group(1)), int(iso.group(2)), int(iso.group(3)))
+        except ValueError:
+            return None
+    slash = re.match(r"^(\d{1,2})/(\d{1,2})/(\d{2,4})$", phrase)
+    if slash:
+        month, day, year = int(slash.group(1)), int(slash.group(2)), int(slash.group(3))
+        year += 2000 if year < 100 else 0
+        try:
+            return date(year, month, day)
+        except ValueError:
+            return None
+    month_day_year = re.match(rf"^({_MONTH_PATTERN})\s+(\d{{1,2}})(?:st|nd|rd|th)?,?\s*(\d{{4}})$", phrase)
+    if month_day_year:
+        try:
+            return date(int(month_day_year.group(3)), _MONTHS[month_day_year.group(1)], int(month_day_year.group(2)))
+        except ValueError:
+            return None
+    month_day = re.match(rf"^({_MONTH_PATTERN})\s+(\d{{1,2}})(?:st|nd|rd|th)?$", phrase)
+    if month_day:
+        month = _MONTHS[month_day.group(1)]
+        year = year_hint if year_hint is not None else (today.year if month <= today.month else today.year - 1)
+        try:
+            return date(year, month, int(month_day.group(2)))
+        except ValueError:
+            return None
+    month_year = re.match(rf"^({_MONTH_PATTERN})\s+(\d{{4}})$", phrase)
+    if month_year:
+        return date(int(month_year.group(2)), _MONTHS[month_year.group(1)], 1)
+    year_only = re.match(r"^(20\d{2})$", phrase)
+    if year_only:
+        return date(int(year_only.group(1)), 1, 1)
+    return None
+
+
+def _between_range(first: str, second: str, today: date) -> tuple[date, date]:
+    """Resolve a "between X and Y" clause into an inclusive (start, end) range.
+
+    Args:
+        first: The date phrase before "and".
+        second: The date phrase after "and".
+        today: Anchor date passed through to single-date resolution.
+
+    Returns:
+        (start, end) with start <= end.
+
+    Raises:
+        ValueError: Either side isn't a recognized date phrase.
+    """
+    # If only one side spells out a year ("march 1 and march 15 2024"), apply
+    # it to the other side too instead of guessing a year from `today`.
+    first_year = re.search(r"\d{4}", first)
+    second_year = re.search(r"\d{4}", second)
+    year_hint = None
+    if first_year and not second_year:
+        year_hint = int(first_year.group(0))
+    elif second_year and not first_year:
+        year_hint = int(second_year.group(0))
+    start = _resolve_calendar_date(first, today, year_hint=year_hint)
+    end = _resolve_calendar_date(second, today, year_hint=year_hint)
+    if start is None or end is None:
+        raise ValueError(f"Unrecognized date phrase in 'between {first} and {second}'")
+    return (start, end) if start <= end else (end, start)
+
+
 def _extract_dates(text: str, today: date) -> tuple[str, date | None, date | None, str | None]:
     """Find and strip the first recognized date phrase from ``text``.
 
@@ -226,6 +318,7 @@ def _extract_dates(text: str, today: date) -> tuple[str, date | None, date | Non
     """
     # Ordered longest/most-specific first so e.g. "summer 2024" wins over "2024".
     patterns: list[tuple[re.Pattern[str], object]] = [
+        (re.compile(rf"\bbetween\s+({_DATE_PHRASE})\s+and\s+({_DATE_PHRASE})\b"), lambda m: _between_range(m.group(1), m.group(2), today)),
         (re.compile(rf"\b(?:from |during |in )?last ({_SEASON_PATTERN})\b"), lambda m: _last_season(m.group(1), today)),
         (re.compile(rf"\b(?:from |during |in )?this ({_SEASON_PATTERN})\b"), lambda m: _recent_season(m.group(1), today)),
         (re.compile(rf"\b(?:from |during |in )?({_SEASON_PATTERN}) (20\d{{2}})\b"), lambda m: _season_range(m.group(1), int(m.group(2)))),

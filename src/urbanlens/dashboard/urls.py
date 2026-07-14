@@ -1043,6 +1043,7 @@ urlpatterns = [
         include(
             [
                 path("", safety.SafetyHomeView.as_view(), name="safety.home"),
+                path("settings/", safety.SafetySettingsView.as_view(), name="safety.settings"),
                 path("new/", safety.SafetyCheckinCreateView.as_view(), name="safety.checkin.create"),
                 path("nav-banner/", safety.SafetyActiveCheckinBannerView.as_view(), name="safety.active_banner"),
                 path("wiki-option/", safety.SafetyCheckinWikiOptionView.as_view(), name="safety.checkin.wiki_option"),

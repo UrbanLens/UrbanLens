@@ -67,7 +67,7 @@
                 <input type="search" id="dm-messages-search-input" class="dm-messages-search__input"
                        placeholder="Search all conversations..." autocomplete="off"
                        hx-get="{% url 'messages.search' %}"
-                       hx-trigger="input changed delay:300ms, search"
+                       hx-trigger="input changed delay:300ms[target.value.length >= 2 || target.value.length === 0], search"
                        hx-target="#dm-messages-search-results"
                        hx-swap="innerHTML">
                 <div id="dm-messages-search-results" class="dm-messages-search-results"></div>
@@ -1454,14 +1454,33 @@
     // fresh page load (clicked a result for a different conversation), or a
     // same-page hash change (clicked a result while that conversation was
     // already open - the URL only gains a fragment, no navigation happens).
+    // Only the most recent page of history renders on load, so an older
+    // target message won't exist in the DOM yet - keep pulling older pages
+    // (the same "load earlier messages" sentinel infinite-scroll uses) until
+    // it appears or there's no more history to fetch.
+    function ensureMessageVisible(id, hopsLeft) {
+        if (hopsLeft === undefined) hopsLeft = 40;
+        var target = document.getElementById('dm-msg-' + id);
+        if (target) {
+            target.scrollIntoView({ block: 'center' });
+            target.classList.add('dm-bubble--highlight');
+            setTimeout(function () { target.classList.remove('dm-bubble--highlight'); }, 2000);
+            return;
+        }
+        if (hopsLeft <= 0) return;
+        var sentinel = document.getElementById('dm-load-older-sentinel');
+        if (!sentinel) return;
+        document.body.addEventListener('htmx:afterSwap', function onOlderSwap(evt) {
+            if (evt.detail.elt !== sentinel) return;
+            document.body.removeEventListener('htmx:afterSwap', onOlderSwap);
+            ensureMessageVisible(id, hopsLeft - 1);
+        });
+        htmx.trigger(sentinel, 'revealed');
+    }
     function highlightMessageFromHash() {
         var hash = window.location.hash;
         if (!hash || hash.indexOf('#dm-msg-') !== 0) return;
-        var target = document.getElementById(hash.slice(1));
-        if (!target) return;
-        target.scrollIntoView({ block: 'center' });
-        target.classList.add('dm-bubble--highlight');
-        setTimeout(function () { target.classList.remove('dm-bubble--highlight'); }, 2000);
+        ensureMessageVisible(hash.slice('#dm-msg-'.length));
     }
     window.addEventListener('hashchange', highlightMessageFromHash);
     highlightMessageFromHash();

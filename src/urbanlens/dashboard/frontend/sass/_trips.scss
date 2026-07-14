@@ -1538,10 +1538,11 @@ a.trip-activity-name {
         background: var(--ul-grey-0);
     }
 
+    // Selection toggles by clicking anywhere on the row (it's a <label>); the
+    // checkbox stays in the DOM for form submission but isn't shown - the
+    // background highlight below is the only selected-state indicator.
     .ul-checkbox-wrap {
-        width: auto;
-        height: auto;
-        flex-shrink: 0;
+        display: none;
     }
 
     &:has(input[type="checkbox"]:checked) {

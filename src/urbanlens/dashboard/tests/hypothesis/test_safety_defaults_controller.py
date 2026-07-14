@@ -1,7 +1,7 @@
 """Tests for the safety defaults form: chip-based contact parsing and autosave.
 
 - _contact_display_label: pure function, tested without DB.
-- SafetyHomeView.post: chip parsing (repeated contact_emails) and the XHR
+- SafetySettingsView.post: chip parsing (repeated contact_emails) and the XHR
   autosave JSON response, tested with RequestFactory + model_bakery.
 """
 
@@ -16,7 +16,7 @@ from hypothesis import given, settings, strategies as st
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.controllers.safety import SafetyHomeView, _contact_display_label
+from urbanlens.dashboard.controllers.safety import SafetySettingsView, _contact_display_label
 from urbanlens.dashboard.models.friendship import Friendship, FriendshipStatus
 from urbanlens.dashboard.models.safety.model import EmergencyContactDefault
 
@@ -50,7 +50,7 @@ def test_contact_display_label_prefers_label_over_email_without_profile(label: s
     assert result == expected  # nosec B101
 
 
-class SafetyHomeViewDefaultsPostTests(TestCase):
+class SafetySettingsViewDefaultsPostTests(TestCase):
     """Chip-based contact parsing and the defaults autosave response."""
 
     def setUp(self) -> None:
@@ -65,9 +65,9 @@ class SafetyHomeViewDefaultsPostTests(TestCase):
         )
 
     def _post(self, data: dict) -> object:
-        req = self.factory.post("/safety/", data=data)
+        req = self.factory.post("/safety/settings/", data=data)
         req.user = self.user
-        return SafetyHomeView.as_view()(req)
+        return SafetySettingsView.as_view()(req)
 
     def test_saves_a_friend_chip_and_multiple_email_chips(self) -> None:
         response = self._post(
@@ -101,7 +101,7 @@ class SafetyHomeViewDefaultsPostTests(TestCase):
 
     def test_xhr_request_returns_json_summary_instead_of_redirecting(self) -> None:
         req = self.factory.post(
-            "/safety/",
+            "/safety/settings/",
             data={
                 "default_message": "Ping me if I go quiet.",
                 "grace_period_hours": "1.5",
@@ -111,7 +111,7 @@ class SafetyHomeViewDefaultsPostTests(TestCase):
             HTTP_X_REQUESTED_WITH="XMLHttpRequest",
         )
         req.user = self.user
-        response = SafetyHomeView.as_view()(req)
+        response = SafetySettingsView.as_view()(req)
 
         self.assertEqual(response.status_code, 200)
         payload = json.loads(response.content)

@@ -293,6 +293,47 @@
     &--muted { background: var(--ul-grey-1a); color: var(--ul-grey-6); }
 }
 
+// -- Check-ins shared with you (registered emergency contact) ------------------
+
+.safety-shared-with-you {
+    margin-bottom: 2rem;
+}
+
+.safety-shared-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.safety-shared-item {
+    border-bottom: 1px solid var(--ul-grey-1a);
+
+    &:last-child { border-bottom: none; }
+}
+
+.safety-shared-link {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: .6rem;
+    padding: .85rem 1.25rem;
+    text-decoration: none;
+    color: inherit;
+
+    &:hover { background: var(--ul-grey-0); }
+}
+
+.safety-shared-title {
+    font-weight: 600;
+    color: var(--ul-grey-8);
+}
+
+.safety-shared-owner {
+    font-size: .85rem;
+    color: var(--ul-grey-6);
+    margin-left: auto;
+}
+
 // -- Defaults autosave ---------------------------------------------------------
 
 .safety-defaults-header-actions {

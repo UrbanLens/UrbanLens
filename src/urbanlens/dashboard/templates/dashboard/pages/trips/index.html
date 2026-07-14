@@ -156,6 +156,17 @@
             url.searchParams.set('dir', parts[1]);
             window.location.href = url.toString();
         };
+
+        // The trip overview page's "New Trip" button links here with ?new=1
+        // (this dialog only exists on the list page) so it can open the
+        // dialog directly instead of just landing on the list.
+        var params = new URLSearchParams(window.location.search);
+        if (params.has('new')) {
+            document.getElementById('create-trip-dialog').showModal();
+            params.delete('new');
+            var cleanUrl = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
+            window.history.replaceState(null, '', cleanUrl);
+        }
     })();
 </script>
 {% endblock %}

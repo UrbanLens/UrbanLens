@@ -16,20 +16,15 @@
 <div class="trips-overview-page page-content">
 
     <div class="trips-header-right trips-actions-row">
-        {% if calendar_account %}
-        <a href="{% url 'trips.list' %}" class="btn btn--secondary"
-           title="Import events from your Google Calendar as trips">
-            <i class="material-symbols-outlined">calendar_month</i>
-            Google Calendar
-        </a>
-        {% else %}
+        {% if not calendar_account %}
+        {# Connecting is still useful to surface here; the connected-state action (import) only lives on the trip list page. #}
         <a href="{% url 'trips.calendar.connect' %}" class="btn btn--secondary"
            title="Connect your own Google Calendar to import events as trips and export trips as events">
             <i class="material-symbols-outlined">calendar_month</i>
             Connect Google Calendar
         </a>
         {% endif %}
-        <a href="{% url 'trips.list' %}" class="btn btn--primary">
+        <a href="{% url 'trips.list' %}?new=1" class="btn btn--primary">
             <i class="material-symbols-outlined">add</i>
             New Trip
         </a>
@@ -119,7 +114,7 @@
         </div>
         <h2 class="trips-empty-title">No trips yet</h2>
         <p class="trips-empty-text">Create a trip to plan stops, invite friends, and track your route.</p>
-        <a href="{% url 'trips.list' %}" class="btn btn--primary">
+        <a href="{% url 'trips.list' %}?new=1" class="btn btn--primary">
             <i class="material-symbols-outlined">add</i>
             New Trip
         </a>

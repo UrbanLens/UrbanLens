@@ -155,7 +155,7 @@ class SiteSettings(abstract.FrontendDashboardModel):
     default_name_source_priority = CharField(
         max_length=500,
         blank=True,
-        default="google_places,wikipedia,nps",
+        default="nominatim,wikipedia,nps,google_places",
         help_text=("Comma-separated name-provider slugs, highest priority first, used to pick a location's official name from external candidates. Sources not listed rank last, in plugin order. Blank = plugin order only."),
         verbose_name="Name source priority",
     )

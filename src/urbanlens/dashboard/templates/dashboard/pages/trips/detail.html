@@ -36,7 +36,7 @@
         {# -- Map toolbar (tools only; shared component - same as the main map) -- #}
         {% map_toolbar "screenshot" panel_id="trip-map-buttons" screenshot_trip_name=trip.name %}
         {# Shared layers panel - same component and engine as the main map. #}
-        {% map_layers_panel "street,terrain,satellite,borders" panel_id="trip-map-layers" %}
+        {% map_layers_panel "street,terrain,satellite,borders,past_activities" panel_id="trip-map-layers" %}
         <p class="trip-map-empty" id="trip-map-empty" hidden>No locations to display.</p>
     </div>
 
@@ -547,6 +547,13 @@
     var _markersGroup = null;
     var _markers = {};   // activity_id → L.Marker
 
+    // "Past Activities" map layer - independent of the activities-list tab,
+    // so completed activities can be shown on the map without switching the
+    // whole activity list over to the Completed tab.
+    var _tripPastActivitiesKey = 'trip-show-past-activities-{{ trip.uuid }}';
+    try { window._tripShowPastActivities = localStorage.getItem(_tripPastActivitiesKey) === '1'; }
+    catch (e) { window._tripShowPastActivities = false; }
+
     // Context menu for right-click to add activity
     var _ctxMenu = null;
     function _removeCtxMenu() {
@@ -643,6 +650,16 @@
                 var el = document.getElementById('page-footer-attribution-text');
                 if (el) el.textContent = text;
             },
+            custom: {
+                past_activities: {
+                    isActive: function () { return !!window._tripShowPastActivities; },
+                    toggle: function () {
+                        window._tripShowPastActivities = !window._tripShowPastActivities;
+                        try { localStorage.setItem(_tripPastActivitiesKey, window._tripShowPastActivities ? '1' : '0'); } catch (e) {}
+                        if (window.refreshTripMap) window.refreshTripMap();
+                    },
+                },
+            },
         });
         _markersGroup = L.layerGroup().addTo(_map);
 
@@ -676,7 +693,7 @@
 
     function _loadPoints() {
         var url = '{% url "trips.map_data" trip.slug %}';
-        if ((window._tripCurrentTab || 'upcoming') === 'completed') url += '?include_past=1';
+        if (window._tripShowPastActivities) url += '?include_past=1';
         fetch(url, {
             headers: {'X-Requested-With': 'XMLHttpRequest'}
         })
@@ -789,17 +806,17 @@
     }
 
     // Shows/hides markers to match the active activities tab (Upcoming/
-    // Proposed/Confirmed/Completed) - the map always mirrors the visible list.
+    // Proposed/Confirmed) - the map mirrors the visible list for those.
+    // Completed/past activities are governed independently by the "Past
+    // Activities" map layer, not by which list tab is selected.
     window.applyTripMapTabFilter = function () {
         var tab = window._tripCurrentTab || 'upcoming';
         Object.keys(_markers).forEach(function (id) {
             var m = _markers[id];
             var status = m._tripStatus;
             var visible;
-            if (tab === 'completed') {
-                visible = status === 'completed';
-            } else if (status === 'completed') {
-                visible = false;
+            if (status === 'completed') {
+                visible = !!window._tripShowPastActivities;
             } else {
                 visible = (tab === 'upcoming') || (tab === status);
             }
@@ -822,8 +839,9 @@ document.body.addEventListener('htmx:afterSettle', function () {
 });
 
 // -- Activities tab preference (Upcoming/Proposed/Confirmed/Completed) -----
-// Replaces the old separate "show completed" toggles - the Completed tab now
-// covers that, and the map always mirrors whichever tab is active.
+// The map mirrors this tab for upcoming/proposed/confirmed activities; past
+// (completed) activities are shown independently via the "Past Activities"
+// map layer (see _tripPastActivitiesKey above).
 var _tripActiveTabKey = 'trip-active-tab-{{ trip.uuid }}';
 var _TRIP_TABS = ['upcoming', 'proposed', 'confirmed', 'completed'];
 
@@ -1584,7 +1602,6 @@ async function _deleteEditActivity() {
 window._tripCurrentTab = 'upcoming';
 
 window.tripSetTab = function (tab) {
-    var previousTab = window._tripCurrentTab;
     window._tripCurrentTab = tab;
     try { localStorage.setItem(_tripActiveTabKey, tab); } catch (e) {}
 
@@ -1614,14 +1631,10 @@ window.tripSetTab = function (tab) {
         if (window._tripCurrentView === 'calendar') _renderTripCalendar();
     }
 
-    // The map only fetches completed activities while that tab is active, so
-    // switching to/from it needs a re-fetch; otherwise a cheap client-side
-    // marker filter keeps the map in sync with the visible list.
-    if ((tab === 'completed') !== (previousTab === 'completed') && window.refreshTripMap) {
-        window.refreshTripMap();
-    } else if (window.applyTripMapTabFilter) {
-        window.applyTripMapTabFilter();
-    }
+    // The map's completed/past markers are governed by the independent "Past
+    // Activities" layer, not this tab - a cheap client-side marker filter is
+    // all that's needed to keep the map in sync with the visible list.
+    if (window.applyTripMapTabFilter) window.applyTripMapTabFilter();
 };
 
 // -- Mark-as-completed dialog ---------------------------------------------
