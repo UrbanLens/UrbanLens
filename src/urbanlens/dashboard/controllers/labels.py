@@ -17,6 +17,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User as AuthUser
 from django.http import HttpRequest, HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, render
+from django.utils import timezone
 from django.utils.html import escape
 from django.views import View
 
@@ -640,6 +641,13 @@ class LabelEditView(_LabelKindMixin, LoginRequiredMixin, View):
         kind_changed = _apply_kind_conversion(label, new_kind, profile)
         label.save()
 
+        # A label's icon/color/name feed into every pin's cached map marker
+        # (Pin.effective_icon, Pin.effective_color, the "statuses" list in
+        # to_detail_json()) without touching the Pin row itself, so the
+        # client's cache-freshness check (keyed to Max(Pin.updated)) would
+        # otherwise never notice this change and keep serving stale markers.
+        Pin.objects.filter(profile=profile, labels=label).update(updated=timezone.now())
+
         if kind_changed:
             label.parents.clear()
         else:
@@ -984,6 +992,11 @@ class LabelCustomizeView(_LabelKindMixin, LoginRequiredMixin, View):
                     label=label,
                     defaults={"name": name, "icon": icon, "color": color},
                 )
+
+        # See the matching comment in LabelEditView.post - a customization
+        # changes how this profile's pins render on the map without touching
+        # any Pin row, so the cache-freshness check needs a manual nudge.
+        Pin.objects.filter(profile=profile, labels=label).update(updated=timezone.now())
 
         return _render_rows(request, self.kind, profile)
 

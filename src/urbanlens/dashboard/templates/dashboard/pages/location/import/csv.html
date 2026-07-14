@@ -383,6 +383,17 @@
 /* Deselected row */
 .iw-pin-row.deselected .iw-pin-name { opacity: .4; text-decoration: line-through; }
 
+/* Pre-deselected because it matched a pin already on the user's map */
+.iw-pin-existing-badge {
+    font-size: .72rem;
+    color: var(--ul-grey-7);
+    background: var(--ul-grey-1);
+    border-radius: 999px;
+    padding: 2px 8px;
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
 /* Preview footer count */
 #iw-selected-count { font-size: .85rem; color: #5f6368; }
 
@@ -828,9 +839,9 @@ function renderPreview(data) {
     var lists = data.lists;
     var labels = data.labels || [];
     allSelected = true;
+    var alreadyOnMapCount = 0;
 
-    $('iw-preview-total-label').textContent =
-        data.total + ' pin' + (data.total !== 1 ? 's' : '') +
+    var totalLabel = data.total + ' pin' + (data.total !== 1 ? 's' : '') +
         ' across ' + lists.length + ' list' + (lists.length !== 1 ? 's' : '');
 
     var container = $('iw-lists-container');
@@ -910,16 +921,25 @@ function renderPreview(data) {
         pinList.className = 'iw-pin-list';
         pinList.id = 'iw-pins-' + listIdx;
         lst.pins.forEach(function (pin, pinIdx) {
-            pin._selected = true;
+            /* window.findLocalPinNear only exists on the main map page (it reads
+               that page's in-memory pin store) - pre-deselecting pins that are
+               already on the user's map there saves them from uploading pins
+               that would just come back as "existed" anyway. On pages without
+               it (e.g. Memories), every pin is selected by default as before. */
+            var localMatch = window.findLocalPinNear ? window.findLocalPinNear(pin.lat, pin.lng) : null;
+            pin._selected = !localMatch;
+            if (localMatch) alreadyOnMapCount++;
+
             var row = document.createElement('li');
-            row.className = 'iw-pin-row';
+            row.className = 'iw-pin-row' + (localMatch ? ' deselected' : '');
             row.dataset.listIdx = listIdx;
             row.dataset.pinIdx = pinIdx;
             var cbId = 'iw-pin-' + listIdx + '-' + pinIdx;
             row.innerHTML =
-                '<input type="checkbox" id="' + cbId + '" checked>' +
+                '<input type="checkbox" id="' + cbId + '"' + (localMatch ? '' : ' checked') + '>' +
                 '<label for="' + cbId + '" class="iw-pin-name" title="' + escHtml(pin.name || '(unnamed)') + '">' +
-                escHtml(pin.name || '(unnamed)') + '</label>';
+                escHtml(pin.name || '(unnamed)') + '</label>' +
+                (localMatch ? '<span class="iw-pin-existing-badge" title="A pin within 50m of these coordinates is already on your map">Already on your map</span>' : '');
             var cb = row.querySelector('input[type=checkbox]');
             cb.addEventListener('change', function () {
                 pin._selected = cb.checked;
@@ -930,6 +950,7 @@ function renderPreview(data) {
             pinList.appendChild(row);
         });
         group.appendChild(pinList);
+        updateListCount(listIdx);
 
         /* Collapse/expand */
         var toggleIcon = header.querySelector('.iw-list-toggle');
@@ -943,6 +964,9 @@ function renderPreview(data) {
         container.appendChild(group);
     });
 
+    $('iw-preview-total-label').textContent = alreadyOnMapCount > 0
+        ? totalLabel + ' · ' + alreadyOnMapCount + ' already on your map (deselected)'
+        : totalLabel;
     updateSelectedCount();
 }
 
@@ -1132,6 +1156,9 @@ $('iw-btn-confirm').addEventListener('click', async function () {
 /* -- Progress event handler -------------------------------------------- */
 var logRows = [];
 var MAX_LOG = 40;
+/* Cumulative created/exists totals as of the previously-finalised row, so
+   finaliseLogRow can diff each row's contribution correctly (see below). */
+var _importPrevTotals = { created: 0, exists: 0 };
 
 function handleProgressEvent(evt) {
     switch (evt.type) {
@@ -1202,28 +1229,27 @@ function addLogRow(name, iconClass, statusLabel) {
 }
 
 function finaliseLogRow(row, evt) {
-    /* The last progress event tells us the cumulative totals, but not which
-       outcome this specific pin had.  We infer: the running deltas reveal it. */
+    /* The event carries cumulative totals across the whole import, not which
+       outcome this specific pin had - diff against the totals as of the
+       previously-finalised row (_importPrevTotals), not the row's own
+       dataset (each row is finalised exactly once, so it never has a prior
+       value of its own to diff against). */
     var icon = row.querySelector('.iw-log-icon');
     var statusEl = row.querySelector('.iw-log-status');
-    /* We store the running totals on the row element for diff comparison */
-    var prevCreated = parseInt(row.dataset.created || 0);
-    var curCreated  = parseInt(evt.created || 0);
-    var prevExists  = parseInt(row.dataset.exists  || 0);
-    var curExists   = parseInt(evt.exists  || 0);
+    var curCreated = parseInt(evt.created || 0);
+    var curExists  = parseInt(evt.exists  || 0);
 
     var cls, mat, lbl;
-    if (curCreated > prevCreated) { cls = 'created'; mat = 'check_circle'; lbl = 'new'; }
-    else if (curExists > prevExists) { cls = 'existed'; mat = 'remove_circle_outline'; lbl = 'existed'; }
+    if (curCreated > _importPrevTotals.created) { cls = 'created'; mat = 'check_circle'; lbl = 'new'; }
+    else if (curExists > _importPrevTotals.exists) { cls = 'existed'; mat = 'remove_circle_outline'; lbl = 'existed'; }
     else { cls = 'skipped'; mat = 'cancel'; lbl = 'skipped'; }
 
     icon.className = 'material-icons iw-log-icon ' + cls;
     icon.textContent = mat;
     if (statusEl) statusEl.textContent = lbl;
 
-    /* Tag the row for the next diff */
-    row.dataset.created = evt.created;
-    row.dataset.exists  = evt.exists;
+    _importPrevTotals.created = curCreated;
+    _importPrevTotals.exists = curExists;
 }
 
 function iconForClass(cls) {

@@ -521,7 +521,10 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                                 # have returned a Location that still lacks one.  Set it
                                 # now so future imports resolve via CID instead of coords.
                                 if cid is not None and location is None and pin.location_id and not pin.location.cid:
-                                    GooglePlaceService().set_cid_for_entity(pin.location, cid)
+                                    # fetch_if_missing=False: never block the import loop
+                                    # on a live Places call per pin - the name resolves
+                                    # lazily the next time the location/pin is viewed.
+                                    GooglePlaceService().set_cid_for_entity(pin.location, cid, fetch_if_missing=False)
                             else:
                                 skipped_count += 1
                         except (DatabaseError, ValueError, OSError) as exc:
@@ -821,7 +824,9 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                                     pin.labels.add(*extra)
 
                             if cid and not location and pin.location_id and not pin.location.cid:
-                                GooglePlaceService().set_cid_for_entity(pin.location, cid)
+                                # fetch_if_missing=False: never block the import loop
+                                # on a live Places call per pin.
+                                GooglePlaceService().set_cid_for_entity(pin.location, cid, fetch_if_missing=False)
                         else:
                             skipped_count += 1
 
