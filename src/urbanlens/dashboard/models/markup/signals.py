@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from django.db import transaction
-from django.db.models.signals import post_delete, post_save
+from django.db.models.signals import post_delete, post_save, pre_delete
 from django.dispatch import receiver
 
 from urbanlens.dashboard.models.markup.model import MarkupMap, PinMarkup
@@ -51,3 +51,22 @@ def sync_pin_inferences_on_item_delete(sender: type[PinMarkup], instance: PinMar
     """Resync the parent map's detected pins whenever a map-scoped markup item is removed."""
     if instance.parent_map_id:
         _defer_sync(instance.parent_map_id)
+
+
+@receiver(pre_delete, sender=MarkupMap, dispatch_uid="markup_map_flag_map_removed_on_delete")
+def flag_map_removed_on_map_delete(sender: type[MarkupMap], instance: MarkupMap, **kwargs) -> None:
+    """Mark every comment/trip comment/DM that references this map as having had its map removed.
+
+    Runs pre-delete (rather than post-delete) so the affected rows are
+    flagged before Django's collector nulls out their ``markup_map`` FK via
+    ``on_delete=SET_NULL`` - by post-delete time there is no reliable way to
+    find them again. Uses bulk ``.update()`` rather than per-row ``.save()``
+    so this doesn't re-trigger any of those models' own signal handlers.
+    """
+    from urbanlens.dashboard.models.comments.model import Comment
+    from urbanlens.dashboard.models.direct_messages.model import DirectMessage
+    from urbanlens.dashboard.models.trips.model import TripComment
+
+    Comment.objects.filter(markup_map=instance).update(map_removed=True)
+    TripComment.objects.filter(markup_map=instance).update(map_removed=True)
+    DirectMessage.objects.filter(markup_map=instance).update(map_removed=True)

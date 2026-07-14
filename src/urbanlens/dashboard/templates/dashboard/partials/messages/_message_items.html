@@ -97,6 +97,10 @@ via infinite scroll) so the two render identically and never drift. Context:
   </div>
   {% include "dashboard/partials/map/_map_view_dialog.html" with map_id=map_id map_data=message.markup_map.to_snapshot title="Shared map" map_obj=message.markup_map %}
   {% endwith %}
+  {% elif message.map_removed %}
+  <div class="dm-map-removed-indicator">
+    <i class="material-symbols-outlined">map_off</i> The attached map was deleted
+  </div>
   {% endif %}
   {% if message.share %}
   {% include "dashboard/partials/messages/_message_share_card.html" with share=message.share viewer_id=viewer_id partner=partner %}

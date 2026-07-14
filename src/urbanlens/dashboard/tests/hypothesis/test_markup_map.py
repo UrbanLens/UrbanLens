@@ -510,3 +510,84 @@ class CheckinCreateLinksMapTests(TestCase):
     def test_garbage_uuid_is_ignored(self) -> None:
         checkin = self._create_checkin(markup_map="not-a-uuid")
         self.assertIsNone(checkin.markup_map_id)
+
+
+class DeleteFlagsAttachedContentTests(TestCase):
+    """Deleting a MarkupMap flags every Comment/TripComment/DirectMessage that referenced it.
+
+    ``on_delete=SET_NULL`` already detaches the map without touching the
+    host row's text, but without a separate flag there'd be no way to tell
+    "never had a map" from "had one that was deleted" once the FK is nulled.
+    """
+
+    def setUp(self) -> None:
+        self.user = baker.make("auth.User")
+        self.profile = self.user.profile
+
+    def test_comment_is_flagged_and_text_survives(self) -> None:
+        markup_map = MarkupMap.objects.create(profile=self.profile)
+        pin = baker.make("dashboard.Pin", profile=self.profile)
+        comment = baker.make("dashboard.Comment", pin=pin, profile=self.profile, markup_map=markup_map, text="Watch out here")
+        markup_map.delete()
+        comment.refresh_from_db()
+        self.assertIsNone(comment.markup_map_id)
+        self.assertTrue(comment.map_removed)
+        self.assertEqual(comment.text, "Watch out here")
+
+    def test_trip_comment_is_flagged(self) -> None:
+        markup_map = MarkupMap.objects.create(profile=self.profile)
+        trip = baker.make("dashboard.Trip", creator=self.profile)
+        trip_comment = baker.make("dashboard.TripComment", trip=trip, author=self.profile, markup_map=markup_map, text="Route looks good")
+        markup_map.delete()
+        trip_comment.refresh_from_db()
+        self.assertIsNone(trip_comment.markup_map_id)
+        self.assertTrue(trip_comment.map_removed)
+        self.assertEqual(trip_comment.text, "Route looks good")
+
+    def test_direct_message_is_flagged(self) -> None:
+        recipient_user = baker.make("auth.User")
+        markup_map = MarkupMap.objects.create(profile=self.profile)
+        message = baker.make(
+            "dashboard.DirectMessage",
+            sender=self.profile,
+            recipient=recipient_user.profile,
+            markup_map=markup_map,
+            body="Check out this spot",
+        )
+        markup_map.delete()
+        message.refresh_from_db()
+        self.assertIsNone(message.markup_map_id)
+        self.assertTrue(message.map_removed)
+        self.assertEqual(message.body, "Check out this spot")
+
+    def test_unrelated_comment_is_not_flagged(self) -> None:
+        markup_map = MarkupMap.objects.create(profile=self.profile)
+        pin = baker.make("dashboard.Pin", profile=self.profile)
+        untouched = baker.make("dashboard.Comment", pin=pin, profile=self.profile, markup_map=None, text="No map here")
+        markup_map.delete()
+        untouched.refresh_from_db()
+        self.assertFalse(untouched.map_removed)
+
+
+class AttachmentsPropertyTests(TestCase):
+    """MarkupMap.attachments enumerates every host referencing a map, including DMs."""
+
+    def setUp(self) -> None:
+        self.user = baker.make("auth.User")
+        self.profile = self.user.profile
+
+    def test_lists_every_attachment_kind_at_once(self) -> None:
+        markup_map = MarkupMap.objects.create(profile=self.profile)
+        pin = baker.make("dashboard.Pin", profile=self.profile)
+        recipient_user = baker.make("auth.User")
+        comment = baker.make("dashboard.Comment", pin=pin, profile=self.profile, markup_map=markup_map)
+        message = baker.make("dashboard.DirectMessage", sender=self.profile, recipient=recipient_user.profile, markup_map=markup_map)
+
+        kinds = {kind for kind, _host in markup_map.attachments}
+        self.assertEqual(kinds, {"comment", "direct_message"})
+        hosts = {host.pk for _kind, host in markup_map.attachments}
+        self.assertEqual(hosts, {comment.pk, message.pk})
+
+    def test_unattached_map_has_no_attachments(self) -> None:
+        markup_map = MarkupMap.objects.create(profile=self.profile)
+        self.assertEqual(markup_map.attachments, [])

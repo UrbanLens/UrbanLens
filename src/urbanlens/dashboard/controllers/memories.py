@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime
 import json
 import logging
-from typing import TYPE_CHECKING, TypedDict
+from typing import TYPE_CHECKING, Any, TypedDict
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import DateField, Min
@@ -87,8 +87,40 @@ class _IncomingMapShareGroup(TypedDict):
     shares: list[MarkupMapShare]
 
 
+def _attachment_label_url(kind: str, host: Any, *, markup_map: MarkupMap) -> tuple[str | None, str | None]:
+    """Resolve a human label and link for one (kind, host) attachment entry.
+
+    Args:
+        kind: One of ``safety_checkin`` / ``comment`` / ``trip_comment`` /
+            ``visit`` / ``direct_message``.
+        host: The attached instance matching *kind*.
+        markup_map: The map being described - only needed to tell which side
+            of a ``direct_message`` is "the other person" (this map's owner
+            sent it, so the label always names the recipient).
+
+    Returns:
+        Tuple of (label, url), or (None, None) when the host can't be
+        resolved to a link (e.g. a comment on a wiki with no location).
+    """
+    if kind == "safety_checkin":
+        return f"Safety check-in: {host.title}", reverse("safety.checkin.detail", args=[host.slug or host.uuid])
+    if kind == "comment" and host.pin_id:
+        return f"Comment on {host.pin.effective_name}", reverse("pin.details", args=[host.pin.slug])
+    if kind == "comment":
+        return f"Comment on {host.wiki.name}", reverse("location.wiki", args=[host.wiki.location.slug])
+    if kind == "trip_comment":
+        return f"Comment on trip: {host.trip.name}", reverse("trips.detail", args=[host.trip.slug])
+    if kind == "visit":
+        label = f"Visit to {host.pin.effective_name} on {host.visited_at:%b} {host.visited_at.day}, {host.visited_at.year}"
+        return label, reverse("pin.details", args=[host.pin.slug])
+    if kind == "direct_message":
+        recipient = host.recipient if host.sender_id == markup_map.profile_id else host.sender
+        return f"Direct message to {recipient.username}", reverse("messages.conversation", args=[recipient.slug])
+    return None, None
+
+
 def _map_attachment_info(markup_map: MarkupMap) -> tuple[str | None, str | None]:
-    """Resolve a human label and link for whatever a markup map is attached to.
+    """Resolve a human label and link for the map's single "primary" attachment.
 
     Args:
         markup_map: The map to inspect.
@@ -101,18 +133,29 @@ def _map_attachment_info(markup_map: MarkupMap) -> tuple[str | None, str | None]
     if attachment is None:
         return None, None
     kind, host = attachment
-    if kind == "safety_checkin":
-        return f"Safety check-in: {host.title}", reverse("safety.checkin.detail", args=[host.slug or host.uuid])
-    if kind == "comment" and host.pin_id:
-        return f"Comment on {host.pin.effective_name}", reverse("pin.details", args=[host.pin.slug])
-    if kind == "comment":
-        return f"Comment on {host.wiki.name}", reverse("location.wiki", args=[host.wiki.location.slug])
-    if kind == "trip_comment":
-        return f"Comment on trip: {host.trip.name}", reverse("trips.detail", args=[host.trip.slug])
-    if kind == "visit":
-        label = f"Visit to {host.pin.effective_name} on {host.visited_at:%b} {host.visited_at.day}, {host.visited_at.year}"
-        return label, reverse("pin.details", args=[host.pin.slug])
-    return None, None
+    return _attachment_label_url(kind, host, markup_map=markup_map)
+
+
+def _map_attachment_entries(markup_map: MarkupMap) -> list[dict[str, str]]:
+    """Resolve a label + link for every place a map is currently attached to.
+
+    Unlike :func:`_map_attachment_info` (the single "primary" link shown
+    under a map's title), this lists every comment, trip comment, safety
+    check-in, visit, and direct message referencing the map - so the owner
+    can see (and jump to) each one before deleting it.
+
+    Args:
+        markup_map: The map to inspect.
+
+    Returns:
+        List of ``{"label": ..., "url": ...}`` dicts, one per attachment.
+    """
+    entries: list[dict[str, str]] = []
+    for kind, host in markup_map.attachments:
+        label, url = _attachment_label_url(kind, host, markup_map=markup_map)
+        if label:
+            entries.append({"label": label, "url": url or ""})
+    return entries
 
 
 def _unlogged_band_context(profile: Profile) -> dict[str, object]:
@@ -733,15 +776,19 @@ class MemoriesMapsView(LoginRequiredMixin, View):
 
         Returns:
             Dict with the map, its snapshot (for the Leaflet thumbnail), item
-            count, and - when attached - a human label + link for the host.
+            count, the primary attachment's label + link, and the full list
+            of every place (comments, trip comments, check-ins, visits, DMs)
+            the map is currently attached to.
         """
         label, url = _map_attachment_info(markup_map)
+        attachments = _map_attachment_entries(markup_map)
         return {
             "map": markup_map,
             "snapshot": markup_map.to_snapshot(),
             "item_count": len(markup_map.items.all()),
             "attachment_label": label,
             "attachment_url": url,
+            "attachments": attachments,
         }
 
 

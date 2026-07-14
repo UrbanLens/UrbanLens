@@ -32,6 +32,10 @@
   {% if comment.map_data %}
   {% include "dashboard/partials/map/_map_view_preview.html" with map_id=comment.id %}
   {% include "dashboard/partials/map/_map_view_dialog.html" with map_id=comment.id map_data=comment.map_data %}
+  {% elif comment.map_removed %}
+  <p class="comment-map-removed-indicator">
+    <i class="material-symbols-outlined">map_off</i> The map attached to this comment was deleted
+  </p>
   {% endif %}
 
   {% if comment.image %}

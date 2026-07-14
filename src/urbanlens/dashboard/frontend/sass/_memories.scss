@@ -1134,6 +1134,15 @@ $memories-type-colors: (
     &:hover { text-decoration: underline; }
 }
 
+.memories-map-card-attachments {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: .2rem;
+}
+
 .memories-map-card-actions {
     margin-top: auto;
     padding-top: .5rem;

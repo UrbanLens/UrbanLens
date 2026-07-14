@@ -76,6 +76,8 @@ def message_preview(message: Any, viewer_id: int) -> str:
         return "📷 Photo"
     if message.markup_map_id:
         return "🗺️ Map"
+    if message.map_removed:
+        return "Map removed"
     return "Message"
 
 

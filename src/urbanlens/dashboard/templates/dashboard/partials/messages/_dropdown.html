@@ -30,7 +30,7 @@ the user has any DM history at all - selects the empty-state copy).
             <span class="msg-dropdown-item__time">{{ conv.last_message.created|human_timesince }}</span>
           </span>
           <span class="msg-dropdown-item__row">
-            <span class="msg-dropdown-item__preview">{% if conv.last_message.sender_id != conv.partner.pk %}You: {% endif %}{% if conv.last_message.is_encrypted %}🔒 Message{% elif conv.last_message.body %}{{ conv.last_message.body|truncatechars:60 }}{% elif conv.last_message.markup_map_id %}🗺️ Map{% elif conv.last_message.images.exists %}📷 Photo{% else %}Message{% endif %}</span>
+            <span class="msg-dropdown-item__preview">{% if conv.last_message.sender_id != conv.partner.pk %}You: {% endif %}{% if conv.last_message.is_encrypted %}🔒 Message{% elif conv.last_message.body %}{{ conv.last_message.body|truncatechars:60 }}{% elif conv.last_message.markup_map_id %}🗺️ Map{% elif conv.last_message.map_removed %}Map removed{% elif conv.last_message.images.exists %}📷 Photo{% else %}Message{% endif %}</span>
             <span class="msg-unread-pill">{{ conv.unread_count }}</span>
           </span>
         </span>

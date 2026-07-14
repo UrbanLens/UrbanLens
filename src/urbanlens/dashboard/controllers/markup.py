@@ -442,7 +442,12 @@ class MarkupMapDeleteView(LoginRequiredMixin, View):
     """Delete a standalone MarkupMap (and, via cascade, its items).
 
     Host models reference maps with ``on_delete=SET_NULL``, so deleting a map
-    that is still attached simply detaches it from its host.
+    that is still attached simply detaches it from its host - the host's own
+    text/content is untouched. A ``pre_delete`` signal on ``MarkupMap`` (see
+    ``models.markup.signals``) additionally flags every Comment/TripComment/
+    DirectMessage referencing this map (``map_removed``), so those hosts can
+    keep showing a "map removed" notice instead of silently losing all trace
+    that one was ever attached.
 
     POST/DELETE /markup-maps/<map_uuid>/delete/
     """

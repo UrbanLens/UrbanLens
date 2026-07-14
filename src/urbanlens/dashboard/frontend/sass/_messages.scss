@@ -1289,6 +1289,18 @@
     }
 }
 
+.dm-map-removed-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    margin: .2rem 0;
+    font-size: .8rem;
+    font-style: italic;
+    color: var(--ul-grey-6);
+
+    .material-symbols-outlined { font-size: 1rem; }
+}
+
 .dm-composer-attachments {
     display: flex;
     flex-wrap: wrap;

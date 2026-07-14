@@ -183,6 +183,18 @@
     margin-top: .35rem;
 }
 
+.comment-map-removed-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    margin: .35rem 0 0;
+    font-size: .8rem;
+    font-style: italic;
+    color: var(--ul-grey-6);
+
+    .material-symbols-outlined { font-size: 1rem; }
+}
+
 // -- Reply button --------------------------------------------------------------
 
 .comment-reply-btn {

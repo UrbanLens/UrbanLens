@@ -363,6 +363,10 @@ class TripComment(abstract.DashboardModel):
         null=True,
         blank=True,
     )
+    # Set by MarkupMap's pre_delete signal when the attached map above is
+    # deleted, so the comment can keep showing "map removed" instead of
+    # silently losing all trace that one was ever here.
+    map_removed = BooleanField(default=False)
 
     trip = ForeignKey(
         Trip,

@@ -41,11 +41,17 @@
                         {{ card.item_count }} annotation{{ card.item_count|pluralize }} ·
                         updated {{ card.map.updated|date:"M j, Y" }}
                     </p>
-                    {% if card.attachment_label %}
-                    <a class="memories-map-card-link" href="{{ card.attachment_url }}">
-                        <i class="material-symbols-outlined">link</i>
-                        {{ card.attachment_label }}
-                    </a>
+                    {% if card.attachments %}
+                    <ul class="memories-map-card-attachments">
+                        {% for entry in card.attachments %}
+                        <li>
+                            <a class="memories-map-card-link" href="{{ entry.url }}">
+                                <i class="material-symbols-outlined">link</i>
+                                {{ entry.label }}
+                            </a>
+                        </li>
+                        {% endfor %}
+                    </ul>
                     {% else %}
                     <p class="memories-map-card-meta memories-map-card-meta--draft">
                         <i class="material-symbols-outlined">draft</i>
@@ -62,7 +68,9 @@
                         <button type="button" class="btn btn--ghost btn--sm btn--danger-hover memories-map-delete-btn"
                                 data-delete-url="{% url 'markup_map.delete' card.map.uuid %}"
                                 data-card-id="memories-map-card-{{ card.map.uuid }}"
-                                {% if card.attachment_label %}data-attached="1"{% endif %}>
+                                {% if card.attachments %}
+                                data-attachment-labels="{% for entry in card.attachments %}{{ entry.label }}{% if not forloop.last %}||{% endif %}{% endfor %}"
+                                {% endif %}>
                             <i class="material-symbols-outlined">delete</i> Delete
                         </button>
                     </div>
@@ -102,12 +110,18 @@
 // something), then POST to the delete endpoint and drop the card.
 document.querySelectorAll('.memories-map-delete-btn').forEach(function (btn) {
     btn.addEventListener('click', async function () {
-        var attached = btn.dataset.attached === '1';
+        var labels = btn.dataset.attachmentLabels ? btn.dataset.attachmentLabels.split('||') : [];
+        var message;
+        if (!labels.length) {
+            message = 'Delete this map and all its annotations?';
+        } else {
+            message = 'Deleting this map will remove it from:\n\n'
+                + labels.map(function (label) { return '• ' + label; }).join('\n')
+                + '\n\nAny text there will stay, but a "map removed" notice will show in its place. Delete it?';
+        }
         var ok = await window.confirmDialog({
             title: 'Delete map',
-            message: attached
-                ? 'This map is attached to the item linked on its card - deleting it removes the map there too. Delete it?'
-                : 'Delete this map and all its annotations?',
+            message: message,
             confirmLabel: 'Delete',
         });
         if (!ok) return;

@@ -30,6 +30,7 @@ if TYPE_CHECKING:
     from django.db.models import QuerySet
 
     from urbanlens.dashboard.models.comments.model import Comment
+    from urbanlens.dashboard.models.direct_messages.model import DirectMessage
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.safety.model import SafetyCheckin
     from urbanlens.dashboard.models.trips.model import TripComment
@@ -163,6 +164,7 @@ class MarkupMap(abstract.FrontendDashboardModel):
         comments: QuerySet[Comment]
         trip_comments: QuerySet[TripComment]
         visits: QuerySet[PinVisit]
+        direct_messages: QuerySet[DirectMessage]
         clones: QuerySet[MarkupMap]
 
     @property
@@ -203,6 +205,30 @@ class MarkupMap(abstract.FrontendDashboardModel):
             references this map.
         """
         return self.attachment is not None
+
+    @property
+    def attachments(self) -> list[tuple[str, Any]]:
+        """Return every host object currently attached to this map.
+
+        Unlike :attr:`attachment` (which returns only the first match, for
+        the single "primary" link shown on a map's card), this enumerates
+        every safety check-in, comment, trip comment, visit, and direct
+        message that currently references this map - used to tell the owner
+        exactly where a delete will remove it from before they confirm.
+
+        Returns:
+            List of (kind, instance) tuples, kind one of ``safety_checkin``
+            / ``comment`` / ``trip_comment`` / ``visit`` / ``direct_message``.
+        """
+        results: list[tuple[str, Any]] = [
+            *(("safety_checkin", checkin) for checkin in self.safety_checkins.all()),
+            *(("safety_checkin", checkin) for checkin in self.attached_safety_checkins.all()),
+            *(("comment", comment) for comment in self.comments.select_related("pin", "wiki__location").all()),
+            *(("trip_comment", trip_comment) for trip_comment in self.trip_comments.select_related("trip").all()),
+            *(("visit", visit) for visit in self.visits.select_related("pin").all()),
+            *(("direct_message", message) for message in self.direct_messages.select_related("sender__user", "recipient__user").all()),
+        ]
+        return results
 
     def to_snapshot(self) -> dict:
         """Serialize this map (viewport + items) into the client snapshot format.
