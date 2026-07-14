@@ -7,12 +7,8 @@
     @include input-selectors { 
         color: var(--ul-grey-6); 
     }
-    @include input-selectors(":disabled", "[readonly=readonly]") { 
-        color: var(--ul-grey-5); 
-    }
-    
-    .page-content > .ul-section {
-        background-color: var(--ul-grey-0a);
+    @include input-selectors(":disabled", "[readonly=readonly]") {
+        color: var(--ul-grey-5);
     }
 
     .tag-stat {
@@ -50,7 +46,6 @@
 
     .ul-radio-button {
         border-color: var(--ul-grey-0b);
-        background: var(--ul-grey-0);
     }
 
     .settings-theme-option {
@@ -1164,14 +1159,11 @@
         }
     }
 
-    .ul-section,
-    .ul-card,
-    .ul-panel,
-    .ul-surface,
-    .dialog,
-    .ul-dialog,
-    .confirm-dialog {
-        background-color: var(--ul-grey-1b);
+    // .ul-card/.ul-panel/.ul-surface/.dialog/.ul-dialog/.confirm-dialog all
+    // resolve their background/border through the surface mixins now, which
+    // are already theme-adaptive - only .ul-section has no border in light
+    // mode, so this stays to add one for contrast against the dark page.
+    .ul-section {
         border-color: var(--ul-grey-1a);
     }
 

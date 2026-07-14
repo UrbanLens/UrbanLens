@@ -17,7 +17,7 @@ body.page-auth {
 }
 
 .auth-card {
-    background: var(--ul-grey-0);
+    background: var(--ul-surface-raised);
     border-radius: 20px;
     box-shadow: 0 24px 64px rgba(0, 0, 0, .35);
     width: 100%;
@@ -29,8 +29,8 @@ body.page-auth {
 .auth-card-header {
     text-align: center;
     padding: 2.25rem 2rem 1rem;
-    background: linear-gradient(160deg, $color-indigo-50 0%, var(--ul-grey-0), 100%);
-    border-bottom: 1px solid var(--ul-grey-1a);
+    background: linear-gradient(160deg, $color-indigo-50 0%, var(--ul-surface-raised), 100%);
+    border-bottom: 1px solid var(--ul-surface-raised-border);
 }
 
 .auth-logo {
@@ -100,11 +100,11 @@ body.page-auth {
     input[type="password"] {
         width: 100%;
         padding: .7rem .9rem;
-        border: 1.5px solid var(--ul-grey-1a);
+        border: 1.5px solid var(--ul-surface-raised-border);
         border-radius: 9px;
         font-size: .95rem;
         color: var(--ul-grey-8);
-        background: var(--ul-grey-0);
+        background: var(--ul-surface-raised);
         transition: border-color .15s, box-shadow .15s, background .15s;
         box-sizing: border-box;
         font-family: inherit;
@@ -112,7 +112,7 @@ body.page-auth {
         &:focus {
             outline: none;
             border-color: $color-indigo-500;
-            background: var(--ul-grey-0);
+            background: var(--ul-surface-raised);
             box-shadow: 0 0 0 3px rgba(99, 102, 241, .15);
         }
 
@@ -146,7 +146,7 @@ body.page-auth {
 
 // -- Non-field errors ------------------------------------------------------
 .auth-errors {
-    background: var(--ul-grey-0);
+    background: var(--ul-surface-raised);
     border: 1px solid $color-red-200;
     border-radius: 9px;
     padding: .75rem 1rem;
@@ -199,7 +199,7 @@ body.page-auth {
         content: '';
         flex: 1;
         height: 1px;
-        background: var(--ul-grey-0);
+        background: var(--ul-surface-raised-border);
     }
 
     span {
@@ -299,7 +299,7 @@ body.page-auth {
 
 // Debug-only verification link block
 .auth-debug-block {
-    background: var(--ul-grey-0);
+    background: var(--ul-surface-raised);
     border: 1px solid $color-green-200;
     border-radius: 9px;
     padding: .85rem 1rem;
@@ -334,7 +334,7 @@ body.page-auth {
 .auth-passphrase-btn {
     align-self: flex-start;
     background: transparent;
-    border: 1.5px solid var(--ul-grey-1a);
+    border: 1.5px solid var(--ul-surface-raised-border);
     color: $color-indigo-700;
     font-size: .8rem;
     font-weight: 600;
@@ -366,8 +366,8 @@ body.page-auth {
 .auth-passphrase-option {
     width: 100%;
     text-align: left;
-    background: var(--ul-grey-0);
-    border: 1px solid var(--ul-grey-1a);
+    background: var(--ul-surface-raised);
+    border: 1px solid var(--ul-surface-raised-border);
     border-radius: 8px;
     padding: .55rem .75rem;
     font-size: .85rem;

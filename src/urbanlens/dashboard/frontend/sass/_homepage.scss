@@ -121,10 +121,10 @@ body.page-index {
     }
 
     .home-feature-card {
-        background: var(--ul-grey-0b);
+        background: var(--ul-surface-raised);
         border-radius: 14px;
         padding: 1.75rem 1.5rem;
-        border: 1px solid var(--ul-grey-1a);
+        border: 1px solid var(--ul-surface-raised-border);
         text-align: center;
         transition: box-shadow .15s, transform .15s;
 
@@ -178,10 +178,10 @@ body.page-index {
     }
 
     .home-api-card {
-        background: var(--ul-grey-0);
+        background: var(--ul-surface-raised);
         border-radius: 14px;
         padding: 1.75rem 1.5rem;
-        border: 1px solid var(--ul-grey-1a);
+        border: 1px solid var(--ul-surface-raised-border);
         transition: box-shadow .15s, transform .15s;
 
         &:hover {

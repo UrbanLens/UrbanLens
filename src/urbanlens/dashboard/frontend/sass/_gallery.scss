@@ -2,12 +2,6 @@
 
 @use 'variables' as *;
 
-.photo-gallery {
-  .card-header {
-    border-bottom: 1px solid var(--ul-grey-1a);
-  }
-}
-
 // Compact upload button in the card header
 .gallery-upload-compact-btn {
   display: inline-flex;
@@ -77,7 +71,7 @@
   align-items: center;
   gap: .75rem;
   padding: 2.5rem 4rem;
-  background: var(--ul-grey-0);
+  background: var(--ul-surface-raised);
   border-radius: 16px;
   box-shadow: 0 8px 32px rgba(37, 99, 235, .18);
   pointer-events: none;
@@ -442,10 +436,10 @@
   align-items: center;
   gap: 6px;
   padding: 8px 10px 8px 12px;
-  background: color-mix(in srgb, var(--ul-grey-0) 92%, transparent);
+  background: color-mix(in srgb, var(--ul-surface-raised) 92%, transparent);
   backdrop-filter: blur(20px) saturate(1.15);
   -webkit-backdrop-filter: blur(20px) saturate(1.15);
-  border: 1px solid var(--ul-grey-1a);
+  border: 1px solid var(--ul-surface-raised-border);
   border-radius: 999px;
   box-shadow:
     0 10px 40px rgba(15, 23, 42, .14),
@@ -488,7 +482,7 @@
   width: 1px;
   height: 24px;
   align-self: center;
-  background: var(--ul-grey-1a);
+  background: var(--ul-surface-raised-border);
   margin: 0 2px;
   flex-shrink: 0;
 }
@@ -502,8 +496,8 @@
   border-radius: 999px;
   font-size: .82rem;
   font-weight: 600;
-  border: 1px solid var(--ul-grey-1a);
-  background: var(--ul-grey-0a, transparent);
+  border: 1px solid var(--ul-surface-raised-border);
+  background: var(--ul-surface-raised, transparent);
   color: inherit;
   cursor: pointer;
   transition: background .12s, color .12s, border-color .12s;
@@ -547,7 +541,7 @@
   border-color: color-mix(in srgb, $color-red-500 20%, transparent);
 
   &:hover {
-    background: color-mix(in srgb, $color-red-500 10%, var(--ul-grey-0a));
+    background: color-mix(in srgb, $color-red-500 10%, var(--ul-surface-raised));
     border-color: color-mix(in srgb, $color-red-500 35%, transparent);
     color: $color-red-600;
   }
@@ -556,7 +550,7 @@
 .ul-bulk-btn--wiki,
 .ul-bulk-btn--relevant {
   &:hover {
-    background: color-mix(in srgb, var(--color-accent, #2563eb) 10%, var(--ul-grey-0a));
+    background: color-mix(in srgb, var(--color-accent, #2563eb) 10%, var(--ul-surface-raised));
     border-color: color-mix(in srgb, var(--color-accent, #2563eb) 35%, transparent);
     color: var(--color-accent, #2563eb);
   }

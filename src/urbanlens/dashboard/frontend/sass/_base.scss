@@ -44,7 +44,7 @@ h1, h2, h3, h4, h5, h6 {
     margin: 0 auto;
     
     > .ul-section {
-        background-color: var(--ul-grey-0a);
+        background-color: var(--ul-surface-raised);
     }
 }
 
@@ -93,13 +93,13 @@ body div.container {
     @include input-selectors {
         padding: 0.5em;
         border-radius: $radius-sm;
-        border-color: var(--ul-grey-1);
-        background-color: var(--ul-grey-0);
+        border-color: var(--ul-surface-raised-border);
+        background-color: var(--ul-surface-raised);
         color: var(--ul-grey-7);
 
         &:active, &:hover, &:focus {
-            border-color: var(--ul-grey-2);
-            background-color: var(--ul-grey-0b);
+            border-color: var(--ul-surface-2-border);
+            background-color: var(--ul-surface-2);
             color: var(--ul-grey-8);
         }
     }
@@ -162,8 +162,8 @@ input[type=range] {
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    background: var(--ul-grey-1b);
-    border: 1px solid var(--ul-grey-1a);
+    background: var(--ul-surface-raised);
+    border: 1px solid var(--ul-surface-raised-border);
     border-radius: $radius-md;
     box-shadow: $shadow-dialog;
     width: calc(100% - 2rem);
@@ -198,9 +198,9 @@ input[type=range] {
             width: 100%;
             padding: 9px 12px;
             font-size: 0.9rem;
-            border: 1.5px solid var(--ul-grey-1a) !important;
+            border: 1.5px solid var(--ul-surface-border) !important;
             border-radius: $radius-sm !important;
-            background: var(--ul-grey-1);
+            background: var(--ul-surface);
             color: $text-primary;
             outline: none;
             transition: border-color 0.15s ease, box-shadow 0.15s ease;

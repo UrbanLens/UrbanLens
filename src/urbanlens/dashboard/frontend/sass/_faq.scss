@@ -78,8 +78,8 @@
 
     // -- Quick jump nav ----------------------------------------------------------
     .faq-jump {
-        background: var(--ul-grey-0);
-        border-bottom: 1px solid var(--ul-grey-1b);
+        background: var(--ul-surface-raised);
+        border-bottom: 1px solid var(--ul-surface-raised-border);
         position: sticky;
         top: 0;
         z-index: 5;
@@ -167,8 +167,8 @@
     }
 
     .faq-item {
-        background: var(--ul-grey-0);
-        border: 1px solid var(--ul-grey-1b);
+        background: var(--ul-surface-raised);
+        border: 1px solid var(--ul-surface-raised-border);
         border-left: 3px solid transparent;
         border-radius: 12px;
         padding: 0;

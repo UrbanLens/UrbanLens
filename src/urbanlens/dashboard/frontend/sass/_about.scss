@@ -160,8 +160,8 @@
     }
 
     .about-pillar {
-        background: var(--ul-grey-0a);
-        border: 1px solid var(--ul-grey-1b);
+        background: var(--ul-surface-raised);
+        border: 1px solid var(--ul-surface-raised-border);
         border-radius: 12px;
         padding: 1.5rem;
     }
@@ -207,8 +207,8 @@
 
     .about-value-card {
         padding: 1.75rem;
-        background: var(--ul-grey-0);
-        border: 1px solid var(--ul-grey-1b);
+        background: var(--ul-surface-raised);
+        border: 1px solid var(--ul-surface-raised-border);
         border-radius: 12px;
         position: relative;
     }
@@ -362,8 +362,8 @@
 
     .about-audience-card {
         padding: 1.5rem;
-        background: var(--ul-grey-0);
-        border: 1px solid var(--ul-grey-1b);
+        background: var(--ul-surface-raised);
+        border: 1px solid var(--ul-surface-raised-border);
         border-radius: 12px;
         text-align: center;
 
