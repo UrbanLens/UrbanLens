@@ -470,11 +470,6 @@
         color: var(--ul-grey-7);
     }
 
-    .notif-dropdown__header {
-        background: var(--ul-grey-0);
-        border-bottom-color: var(--ul-grey-2);
-    }
-
     .btn--danger {
         color: $color-red-300;
         background: rgba($dk-danger-text, .07);
@@ -523,21 +518,11 @@
     }
 
     .trip-card-member-avatar {
-        border-color: var(--ul-grey-0);
         background: $dk-navy;
     }
 
     .trip-card-role {
         color: $color-amber-300 !important;
-    }
-
-    .trip-panel .card-header {
-        border-bottom-color: var(--ul-grey-2);
-
-        .badge {
-            background: var(--ul-grey-4);
-            color: var(--ul-grey-7);
-        }
     }
 
     .view-toggle-btn {
@@ -571,8 +556,6 @@
     }
 
     .trip-activity-item {
-        border-bottom-color: var(--ul-grey-1a);
-
         &.trip-activity--highlighted {
             background: $dk-cal-event-bg;
         }
@@ -587,16 +570,8 @@
         }
     }
 
-    .trip-activity-num {
-        border-color: var(--ul-grey-1);
-    }
-
     .trip-attr-link:hover {
         color: $color-deep-purple-300;
-    }
-
-    .trip-member-item {
-        border-bottom-color: var(--ul-grey-1a);
     }
 
     .trip-member-avatar {
@@ -675,8 +650,6 @@
     }
 
     .trip-comment-item {
-        border-bottom-color: var(--ul-grey-1a);
-
         &:hover {
             background: rgba(255, 255, 255, .03);
         }
@@ -836,10 +809,6 @@
         }
     }
 
-    .comment-map-composer-controls {
-        border-color: var(--ul-grey-1a);
-    }
-
     .cmcc-label {
         color: var(--ul-grey-6);
     }
@@ -924,16 +893,6 @@
         }
     }
 
-    .ul-checkbox-wrap {
-        &:hover {
-            background: var(--ul-grey-1);
-        }
-
-        .ul-checkbox {
-            border-color: var(--ul-grey-3b);
-        }
-    }
-
     .tag-card--selected .tag-card-view {
         border-color: color.adjust($primary-color, $lightness: 10%) !important;
         background: rgba($color-blue-500, .1) !important;
@@ -951,8 +910,6 @@
     }
 
     .priority-item-icon {
-        background: var(--ul-grey-1);
-
         i {
             color: var(--ul-grey-7);
         }
@@ -962,23 +919,12 @@
         color: var(--ul-grey-8);
     }
 
-    .priority-order-chip {
-        background: var(--ul-grey-1);
-        color: var(--ul-grey-7);
-
-        &:hover {
-            background: var(--ul-grey-2);
-            color: var(--ul-color-accent);
-        }
-    }
-
     .priority-order-input {
         background: var(--ul-grey-0);
         color: var(--ul-grey-8);
     }
 
     .priority-order-save {
-        background: var(--ul-grey-1);
         color: var(--ul-color-accent);
     }
 

@@ -55,14 +55,14 @@ $onboarding-card-accents: (
     flex-direction: column;
     gap: 0.65rem;
     padding: 1.5rem;
-    border: 2px solid var(--ul-grey-1a);
+    border: 2px solid var(--ul-surface-border);
     border-radius: $radius-md;
-    background: var(--ul-grey-0);
+    background: var(--ul-surface);
     cursor: pointer;
     transition: border-color .15s, box-shadow .15s, transform .15s;
 
     &:hover {
-        border-color: var(--ul-grey-3a);
+        border-color: var(--ul-surface-2-border);
         box-shadow: 0 4px 16px rgba(0, 0, 0, .08);
         transform: translateY(-2px);
     }
@@ -84,8 +84,8 @@ $onboarding-card-accents: (
     // than a colored/glowing highlight, which would read as "active/selected") so
     // the off state reads as muted at a glance, backed up by the icon slash + ribbon.
     &:has(.onboarding-card-switch input:not(:checked)) {
-        background: var(--ul-grey-1);
-        border-color: var(--ul-grey-2a);
+        background: var(--ul-surface-raised);
+        border-color: var(--ul-surface-raised-border);
 
         .onboarding-card-title,
         .onboarding-card-desc {
@@ -148,7 +148,7 @@ $onboarding-card-accents: (
     justify-content: center;
     overflow: hidden;
     border-radius: $radius-sm;
-    background: var(--ul-grey-0);
+    background: var(--ul-surface-raised);
     transition: background .15s;
 
     .material-symbols-outlined {
@@ -174,7 +174,7 @@ $onboarding-card-accents: (
 }
 
 .onboarding-card:has(.onboarding-card-switch input:not(:checked)) .onboarding-card-icon {
-    background: var(--ul-grey-2a);
+    background: var(--ul-surface-2);
 
     .material-symbols-outlined {
         color: var(--ul-grey-6);

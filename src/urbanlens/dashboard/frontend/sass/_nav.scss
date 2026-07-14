@@ -543,7 +543,6 @@ nav {
     &__header {
         @include panel-header($spread: true);
         padding: .85rem 1rem .65rem;
-        border-bottom: 1px solid var(--ul-grey-1a);
         position: sticky;
         top: 0;
         z-index: 1;
@@ -797,7 +796,7 @@ $notif-prefs-cols: minmax(10rem, 1fr) repeat(5, 4.5rem);
 .notif-prefs {
     margin-top: 2rem;
     padding-top: 1.5rem;
-    border-top: 1px solid var(--ul-grey-1a);
+    border-top: 1px solid var(--ul-surface-border);
 
     &__saved {
         display: flex;
@@ -824,7 +823,7 @@ $notif-prefs-cols: minmax(10rem, 1fr) repeat(5, 4.5rem);
     }
 
     &__grid {
-        border: 1px solid var(--ul-grey-1a);
+        border: 1px solid var(--ul-surface-border);
         border-radius: $radius-md;
         overflow: hidden;
         font-size: .84rem;

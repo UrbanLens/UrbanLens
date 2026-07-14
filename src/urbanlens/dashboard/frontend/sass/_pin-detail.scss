@@ -196,7 +196,7 @@
     .tad-tabs {
         display: flex;
         gap: 0;
-        border-bottom: 2px solid var(--ul-grey-1a);
+        border-bottom: 2px solid var(--ul-surface-raised-border);
         padding: 0 .5rem;
         flex-shrink: 0;
         background: var(--ul-surface-raised);
@@ -373,7 +373,7 @@
         align-items: flex-start;
         gap: .65rem;
         padding: .7rem 1rem;
-        border-bottom: 1px solid var(--ul-grey-1a);
+        border-bottom: 1px solid var(--ul-surface-border);
         transition: background .12s;
 
         &:last-child {
@@ -439,7 +439,7 @@
         text-transform: uppercase;
         letter-spacing: .03em;
         color: var(--ul-grey-6);
-        background: var(--ul-grey-1a);
+        background: var(--ul-surface-raised);
         padding: .08rem .45rem;
         border-radius: 999px;
     }
@@ -484,7 +484,7 @@
         height: 22px;
         border-radius: 50%;
         overflow: hidden;
-        border: 2px solid var(--ul-grey-0);
+        border: 2px solid var(--ul-surface-raised);
         background: $color-light-blue-100;
         display: flex;
         align-items: center;
@@ -525,7 +525,7 @@
         height: 52px;
         border-radius: 8px;
         overflow: hidden;
-        border: 1px solid var(--ul-grey-1a);
+        border: 1px solid var(--ul-surface-raised-border);
         cursor: pointer;
         transition: transform .1s, box-shadow .1s;
 
@@ -716,7 +716,7 @@
         font-weight: 600;
         padding: .1rem .45rem;
         border-radius: 999px;
-        background: var(--ul-grey-1a);
+        background: var(--ul-surface-raised);
         color: var(--ul-grey-6);
     }
 
@@ -831,7 +831,7 @@
         gap: .35rem;
         margin-top: .5rem;
         padding: .35rem .6rem;
-        border: 1px dashed var(--ul-grey-3, #bbb);
+        border: 1px dashed var(--ul-surface-raised-border);
         border-radius: 6px;
         font-size: .82rem;
         color: var(--ul-grey-7);
@@ -885,7 +885,7 @@
 
     .sat-slides-wrapper {
         position: relative;
-        background: var(--ul-grey-0);
+        background: var(--ul-surface);
         overflow: hidden;
     }
 
@@ -1007,7 +1007,7 @@
 
     .sv-slides-wrapper {
         position: relative;
-        background: var(--ul-grey-0);
+        background: var(--ul-surface);
         overflow: hidden;
     }
 
@@ -1226,7 +1226,7 @@
         padding: .5rem .6rem;
         border: 1px solid var(--ul-border);
         border-radius: 6px;
-        background: var(--ul-grey-1);
+        background: var(--ul-surface-raised);
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
         gap: .3rem .75rem;
@@ -1269,7 +1269,7 @@
         font-size: .75rem;
         font-weight: 600;
         color: var(--ul-grey-6, #64748b);
-        background: var(--ul-grey-1, #f1f5f9);
+        background: var(--ul-surface-raised);
         border-radius: 999px;
         text-decoration: none;
 
@@ -1332,7 +1332,7 @@
         aspect-ratio: 1;
         object-fit: cover;
         display: block;
-        background: var(--ul-grey-1);
+        background: var(--ul-surface-raised);
     }
 
     .usgs-topo-thumb-empty {
@@ -1341,7 +1341,7 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        background: var(--ul-grey-1);
+        background: var(--ul-surface-raised);
         color: var(--ul-grey-4);
         .material-symbols-outlined,
         .material-icons { font-size: 2rem; }
@@ -1396,7 +1396,7 @@
         padding: .5rem .6rem;
         border: 1px solid var(--ul-border);
         border-radius: 6px;
-        background: var(--ul-grey-1);
+        background: var(--ul-surface-raised);
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
         gap: .3rem .75rem;
@@ -1451,7 +1451,7 @@
     align-items: center;
     gap: .65rem;
     padding: .65rem 1rem;
-    background: linear-gradient(90deg, var(--ul-grey-0) 0%, $color-light-blue-50 100%);
+    background: linear-gradient(90deg, var(--ul-surface) 0%, $color-light-blue-50 100%);
     border-bottom: 1px solid $color-light-blue-200;
     font-size: .83rem;
     color: $color-light-blue-700;
@@ -1557,7 +1557,7 @@
 
     // Footer stays pinned below the scrollable area.
     .pin-edit-form-actions {
-        border-top: 1px solid var(--ul-grey-1a);
+        border-top: 1px solid var(--ul-surface-border);
         padding: .75rem 1.25rem .75rem;
         display: flex;
         flex-wrap: wrap;
@@ -1582,10 +1582,7 @@
     margin: 2px 0 0;
     padding: .25rem 0;
     list-style: none;
-    background: var(--ul-grey-0);
-    border: 1px solid var(--ul-grey-3);
-    border-radius: $radius-md;
-    box-shadow: 0 4px 14px rgba(0, 0, 0, .16);
+    @include surface-elevated;
     max-height: 12rem;
     overflow-y: auto;
 
@@ -1614,7 +1611,7 @@
     text-transform: uppercase;
     letter-spacing: .04em;
     color: var(--ul-grey-5);
-    background: var(--ul-grey-1a);
+    background: var(--ul-surface-raised);
     padding: .1rem .4rem;
     border-radius: 999px;
     flex-shrink: 0;
@@ -1631,7 +1628,7 @@
 
 .security-indicators {
     padding: .5rem 1rem .75rem;
-    border-top: 1px solid var(--ul-grey-1);
+    border-top: 1px solid var(--ul-surface-border);
     display: flex;
     flex-direction: column;
     gap: .4rem;
@@ -1681,12 +1678,12 @@
 
 // Security field edit section
 .form-section-details {
-    border: 1px solid var(--ul-grey-1a);
+    border: 1px solid var(--ul-surface-raised-border);
     border-radius: 8px;
     padding: 0;
 
     &[open] .form-section-summary {
-        border-bottom: 1px solid var(--ul-grey-2);
+        border-bottom: 1px solid var(--ul-surface-raised-border);
         border-radius: 8px 8px 0 0;
     }
 
@@ -1696,13 +1693,13 @@
         font-size: .85rem;
         font-weight: 600;
         color: var(--ul-grey-6);
-        background: var(--ul-grey-0);
+        background: var(--ul-surface-raised);
         border-radius: 8px;
         cursor: pointer;
         user-select: none;
 
         &:hover {
-            background: var(--ul-grey-0);
+            background: var(--ul-hover-bg);
         }
 
         &::marker {
@@ -1732,10 +1729,9 @@
     select {
         font-size: .82rem;
         padding: .3rem .5rem;
-        border: 1px solid var(--ul-grey-1a);
-        ;
+        border: 1px solid var(--ul-surface-raised-border);
         border-radius: 6px;
-        background: var(--ul-grey-0);
+        background: var(--ul-surface-raised);
 
         &:focus {
             outline: none;
@@ -1926,7 +1922,7 @@ body.page-location-details {
         justify-content: space-around;
         gap: .5rem 1rem;
         padding: .6rem .9rem;
-        border-bottom: 1px solid var(--ul-grey-1a);
+        border-bottom: 1px solid var(--ul-surface-border);
     }
 
     .pin-stat-item {
@@ -1954,9 +1950,6 @@ body.page-location-details {
         }
     }
 
-    .security-indicators {
-        border-top-color: var(--ul-grey-1a);
-    }
 }
 
 // -- Community wiki CTA link (pin overview) --------------------------------
@@ -2143,14 +2136,14 @@ body.page-location-details {
         align-items: center;
         gap: .55rem;
         padding: .5rem .7rem;
-        border: 1px solid var(--ul-grey-1a);
+        border: 1px solid var(--ul-surface-raised-border);
         border-radius: $radius-md;
         cursor: pointer;
         transition: border-color .12s, background .12s;
 
         &:hover {
-            background: var(--ul-grey-1b);
-            border-color: var(--ul-grey-2b);
+            background: var(--ul-surface-2);
+            border-color: var(--ul-surface-2-border);
         }
     }
 
@@ -2164,11 +2157,11 @@ body.page-location-details {
 
 .wiki-seed-item--locked label {
     cursor: default;
-    background: var(--ul-grey-1a);
+    background: var(--ul-surface-raised);
 
     &:hover {
-        background: var(--ul-grey-1a);
-        border-color: var(--ul-grey-1a);
+        background: var(--ul-surface-raised);
+        border-color: var(--ul-surface-raised-border);
     }
 }
 
@@ -2315,7 +2308,7 @@ body.page-location-details {
     justify-content: center;
     width: 100%;
     height: 100%;
-    background: var(--ul-grey-1a);
+    background: var(--ul-surface-raised);
     color: var(--ul-grey-4);
 
     .material-icons { font-size: 1.4rem; }
@@ -2532,7 +2525,7 @@ body.page-location-details {
     justify-content: center;
     width: 100%;
     height: 100%;
-    background: var(--ul-grey-1a);
+    background: var(--ul-surface-raised);
     color: var(--ul-grey-4);
 
     .material-icons { font-size: 1.4rem; }
@@ -2601,8 +2594,8 @@ body.page-location-details {
     display: flex;
     align-items: center;
     gap: 4px;
-    background: var(--ul-grey-0);
-    border: 1px solid var(--ul-grey-3);
+    background: var(--ul-surface-raised);
+    border: 1px solid var(--ul-surface-raised-border);
     border-radius: 18px;
     padding: 0 4px 0 .8rem;
 
@@ -2659,7 +2652,7 @@ body.page-location-details {
 }
 
 .pin-share-map-tile {
-    border: 2px solid var(--ul-grey-1a);
+    border: 2px solid var(--ul-surface-raised-border);
     border-radius: $radius-md;
     overflow: hidden;
     transition: border-color .12s;
@@ -2743,8 +2736,8 @@ body.page-location-details {
     align-items: center;
     justify-content: center;
     gap: .2rem;
-    background: var(--ul-grey-1a);
-    border: 1px dashed var(--ul-grey-3);
+    background: var(--ul-surface-raised);
+    border: 1px dashed var(--ul-surface-raised-border);
     border-radius: $radius-md;
     cursor: pointer;
     color: var(--ul-grey-6);
@@ -2782,7 +2775,7 @@ body.page-location-details {
     font-style: italic;
     margin: 0 0 .8rem;
     padding: .5rem .7rem;
-    background: var(--ul-grey-1a);
+    background: var(--ul-surface-raised);
     border-radius: $radius-md;
 }
 
@@ -2907,7 +2900,7 @@ body.page-location-details {
     padding: .55rem .8rem;
     border-radius: $radius-md;
     font-size: .85rem;
-    background: var(--ul-grey-1a);
+    background: var(--ul-surface-raised);
     color: var(--ul-grey-6);
 
     .material-symbols-outlined {
@@ -2963,7 +2956,7 @@ body.page-location-details {
     gap: .4rem;
     flex-shrink: 0;
     padding-left: .5rem;
-    border-left: 1px solid var(--ul-grey-1a);
+    border-left: 1px solid var(--ul-surface-border);
 }
 
 .pin-loc-change-btn,
@@ -2987,7 +2980,7 @@ body.page-location-details {
     &:hover,
     &:focus {
         box-shadow: none;
-        background: var(--ul-grey-0a);
+        background: var(--ul-hover-bg);
         color: var(--ul-grey-8);
     }
 }
@@ -3011,10 +3004,7 @@ body.page-location-details {
     top: calc(100% + 8px);
     right: 0;
     width: min(360px, 90vw);
-    background: var(--ul-grey-1b);
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: $radius-md;
-    box-shadow: var(--ul-shadow-lg);
+    @include surface-elevated;
     z-index: 30;
     overflow: hidden;
 }
@@ -3054,7 +3044,7 @@ body.page-location-details {
     align-items: center;
     justify-content: space-between;
     padding: .45rem .85rem;
-    border-top: 1px solid var(--ul-grey-1);
+    border-top: 1px solid var(--ul-surface-border);
     gap: .5rem;
 
     &--current {
@@ -3140,7 +3130,7 @@ body.page-location-details {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    border: 1px solid var(--ul-grey-1a);
+    border: 1px solid var(--ul-surface-raised-border);
     border-radius: 8px;
     padding: .5rem .75rem;
     gap: .5rem;
@@ -3299,18 +3289,11 @@ body.page-location-details {
         }
     }
 
-    .pin-loc-picker {
-        background: var(--ul-grey-0);
-        border-color: var(--ul-grey-1a);
-    }
-
     .pin-loc-picker-header {
         color: var(--ul-grey-6);
     }
 
     .pin-loc-option {
-        border-color: var(--ul-grey-1a);
-
         &--current {
             background: rgba(59, 130, 246, .08);
         }
@@ -3325,8 +3308,6 @@ body.page-location-details {
     }
 
     .loc-conflict-option {
-        border-color: var(--ul-grey-1a);
-
         &--current {
             background: rgba(59, 130, 246, .08);
             border-color: $color-blue-500;
@@ -3351,7 +3332,6 @@ body.page-location-details {
     }
 
     .wiki-lcn-item {
-        background: var(--ul-grey-0);
         border-color: rgba(245, 158, 11, .3);
     }
 
@@ -3465,7 +3445,7 @@ body.page-location-details .pin-detail-grid {
                 gap: .15rem;
                 flex: 0 1 auto;
                 padding: .4rem .8rem;
-                border-left: 1px solid var(--ul-grey-1);
+                border-left: 1px solid var(--ul-surface-border);
 
                 &:first-child {
                     border-left: none;
@@ -3560,8 +3540,8 @@ body.page-location-details .pin-detail-grid {
             }
             text-decoration: none;
             color: inherit;
-            background: var(--ul-grey-0, #fff);
-            border: 1px solid var(--ul-grey-1a, #e2e8f0);
+            background: var(--ul-surface-raised);
+            border: 1px solid var(--ul-surface-raised-border);
             border-radius: 10px;
             overflow: hidden;
             box-shadow:
@@ -3606,7 +3586,7 @@ body.page-location-details .pin-detail-grid {
             aspect-ratio: 3 / 4;
             object-fit: cover;
             object-position: top center;
-            background: linear-gradient(145deg, var(--ul-grey-1, #f1f5f9) 0%, var(--ul-grey-0, #fff) 100%);
+            background: linear-gradient(145deg, var(--ul-surface-raised) 0%, var(--ul-surface-raised-border) 100%);
         }
 
         .media-item-thumb-fallback {
@@ -3633,8 +3613,7 @@ body.page-location-details .pin-detail-grid {
             line-height: 1.45;
             letter-spacing: .01em;
             color: var(--ul-grey-7, #475569);
-            background: var(--ul-grey-1, #f8fafc);
-            border-top: 1px solid var(--ul-grey-1a, #e2e8f0);
+            background: var(--ul-surface-raised-border);
         }
 
         // The whole tile used to be an <a>; the thumbnail is now a plain
@@ -3764,14 +3743,14 @@ body.page-location-details .pin-detail-grid {
             font-size: .78rem;
             font-weight: 600;
             color: var(--ul-grey-6, #64748b);
-            background: var(--ul-grey-1, #f1f5f9);
+            background: var(--ul-surface-raised);
             border: 1px solid transparent;
             border-radius: 999px;
             cursor: pointer;
             transition: background .12s ease, color .12s ease;
 
             &:hover {
-                background: var(--ul-grey-1a, #e2e8f0);
+                background: var(--ul-hover-bg);
             }
 
             &.active {
@@ -3812,7 +3791,7 @@ body.page-location-details .pin-detail-grid {
             }
 
             &:hover {
-                background: var(--ul-grey-1, #f1f5f9);
+                background: var(--ul-hover-bg);
                 color: var(--ul-grey-8, #1e293b);
             }
 
@@ -3828,8 +3807,8 @@ body.page-location-details .pin-detail-grid {
             z-index: 5;
             min-width: 15rem;
             padding: .6rem;
-            background: var(--ul-grey-0, #fff);
-            border: 1px solid var(--ul-grey-1a, #e2e8f0);
+            background: var(--ul-surface-raised);
+            border: 1px solid var(--ul-surface-raised-border);
             border-radius: 10px;
             box-shadow: 0 8px 24px rgba(15, 23, 42, .14);
 
@@ -3841,7 +3820,7 @@ body.page-location-details .pin-detail-grid {
             padding: .3rem 0;
 
             & + .media-settings-group {
-                border-top: 1px solid var(--ul-grey-1a, #e2e8f0);
+                border-top: 1px solid var(--ul-surface-raised-border);
             }
         }
         .media-settings-label {
@@ -3868,7 +3847,7 @@ body.page-location-details .pin-detail-grid {
             cursor: pointer;
 
             &:hover {
-                background: var(--ul-grey-1, #f1f5f9);
+                background: var(--ul-hover-bg);
             }
 
             &.active {
@@ -3959,16 +3938,16 @@ body.page-location-details .pin-detail-grid {
             font-size: .68rem;
             font-weight: 600;
             color: var(--ul-grey-6, #64748b);
-            background: var(--ul-grey-1, #f1f5f9);
+            background: var(--ul-surface-raised);
             border-radius: 999px;
         }
 
         .yelp-review {
             margin-top: .85rem;
             padding: .65rem .75rem;
-            background: var(--ul-grey-1, #f8fafc);
+            background: var(--ul-surface-raised);
             border-radius: 8px;
-            border: 1px solid var(--ul-grey-1a, #e2e8f0);
+            border: 1px solid var(--ul-surface-raised-border);
         }
 
         .yelp-review-header {
@@ -4020,7 +3999,7 @@ body.page-location-details .pin-detail-grid {
 
         .search-result {
             padding: .75rem 1rem;
-            border-bottom: 1px solid var(--ul-grey-1a);
+            border-bottom: 1px solid var(--ul-surface-border);
             transition: background .12s;
 
             &:last-child {
@@ -4028,7 +4007,7 @@ body.page-location-details .pin-detail-grid {
             }
 
             &:hover {
-                background: var(--ul-grey-1, #f8fafc);
+                background: var(--ul-hover-bg);
             }
         }
 
@@ -4051,7 +4030,7 @@ body.page-location-details .pin-detail-grid {
             height: 100%;
             object-fit: cover;
             display: block;
-            border: 1px solid var(--ul-grey-1a);
+            border: 1px solid var(--ul-surface-raised-border);
         }
 
         .search-result-thumb-fallback {
@@ -4285,8 +4264,8 @@ body.page-location-details .pin-detail-grid {
     display: flex;
     flex-direction: column;
     border-radius: 10px;
-    border: 1px solid var(--ul-grey-1a);
-    background: var(--ul-grey-0);
+    border: 1px solid var(--ul-surface-raised-border);
+    background: var(--ul-surface-raised);
     box-shadow: var(--ul-shadow-lg);
     font-family: 'Roboto Mono', 'Consolas', monospace;
     font-size: 0.75rem;
@@ -4303,7 +4282,7 @@ body.page-location-details .pin-detail-grid {
     align-items: center;
     gap: 0.5rem;
     padding: 0.5rem 0.75rem;
-    border-bottom: 1px solid var(--ul-grey-1a);
+    border-bottom: 1px solid var(--ul-surface-raised-border);
     font-family: var(--ul-font-family, sans-serif);
     font-weight: 600;
 
@@ -4330,7 +4309,7 @@ body.page-location-details .pin-detail-grid {
 
 .pin-debug-overlay__meta {
     padding: 0.375rem 0.75rem;
-    border-bottom: 1px solid var(--ul-grey-1a);
+    border-bottom: 1px solid var(--ul-surface-raised-border);
     opacity: 0.85;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -4350,7 +4329,7 @@ body.page-location-details .pin-detail-grid {
     padding: 0.25rem 0.75rem;
 
     &:hover {
-        background: var(--ul-grey-1a);
+        background: var(--ul-hover-bg);
     }
 }
 
@@ -4414,7 +4393,7 @@ body.page-location-details .pin-detail-grid {
     padding: .35rem .8rem .35rem .6rem;
     border-radius: 999px;
     background: var(--ul-color-accent-bg, rgba(30, 136, 229, .1));
-    border: 1px solid var(--ul-grey-1a);
+    border: 1px solid var(--ul-surface-border);
     color: var(--ul-grey-8);
     font-size: .85rem;
     text-decoration: none;
@@ -4485,8 +4464,8 @@ body.page-location-details .pin-detail-grid {
     display: flex;
     flex-direction: column;
     min-width: 230px;
-    background: var(--ul-grey-0, #fff);
-    border: 1px solid var(--ul-grey-1a);
+    background: var(--ul-surface-raised);
+    border: 1px solid var(--ul-surface-raised-border);
     border-radius: 12px;
     box-shadow: 0 10px 34px rgba(0, 0, 0, .3);
     overflow: hidden;
@@ -4503,7 +4482,7 @@ body.page-location-details .pin-detail-grid {
     padding: .65rem .9rem;
     background: none;
     border: none;
-    border-bottom: 1px solid var(--ul-grey-1a);
+    border-bottom: 1px solid var(--ul-surface-raised-border);
     color: var(--ul-grey-9);
     font-size: .87rem;
     text-align: left;
@@ -4577,7 +4556,7 @@ body.page-location-details .pin-detail-grid {
     padding: .1rem .5rem;
     border-radius: 999px;
     background: var(--ul-color-accent-bg, rgba(30, 136, 229, .1));
-    border: 1px solid var(--ul-grey-1a);
+    border: 1px solid var(--ul-surface-border);
     font-size: .72rem;
     font-weight: 600;
     color: var(--ul-grey-8);
@@ -4648,7 +4627,7 @@ body.page-location-details .pin-detail-grid {
     display: flex;
     gap: .25rem;
     padding: 0 1.25rem;
-    border-bottom: 1px solid var(--ul-grey-1a);
+    border-bottom: 1px solid var(--ul-surface-raised-border);
 }
 
 .import-photos-tab {
@@ -4685,7 +4664,7 @@ body.page-location-details .pin-detail-grid {
     padding: 2px;
     margin-bottom: .9rem;
     border-radius: 8px;
-    background: var(--ul-grey-1, #f1f1f3);
+    background: var(--ul-surface-raised-border);
 }
 
 .photo-import-mode-btn {
@@ -4721,7 +4700,7 @@ body.page-location-details .pin-detail-grid {
     select {
         padding: .3rem .5rem;
         border-radius: 6px;
-        border: 1px solid var(--ul-grey-2);
+        border: 1px solid var(--ul-surface-border);
         background: var(--ul-surface, #fff);
     }
 }
@@ -4808,7 +4787,7 @@ body.page-location-details .pin-detail-grid {
     width: 100%;
     height: 6px;
     border-radius: 3px;
-    background: var(--ul-grey-1a);
+    background: var(--ul-surface-raised-border);
     overflow: hidden;
 }
 

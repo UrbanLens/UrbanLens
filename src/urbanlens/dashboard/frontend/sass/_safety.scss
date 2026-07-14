@@ -133,8 +133,8 @@
         height: 72px;
         margin: 0 auto 1.25rem;
         border-radius: 50%;
-        background: linear-gradient(135deg, var(--ul-grey-0a));
-        border: 1px solid var(--ul-grey-1a);
+        background: var(--ul-surface-raised);
+        border: 1px solid var(--ul-surface-raised-border);
         display: flex;
         align-items: center;
         justify-content: center;
@@ -270,14 +270,14 @@
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: .03em;
-    background: var(--ul-grey-1a);
+    background: var(--ul-surface-raised);
     color: var(--ul-grey-7);
 
     &--awaiting_checkin,
     &--overdue { background: rgba($color-yellow-500, .18); color: $color-yellow-700; }
     &--found_safe,
     &--checked_in { background: rgba($color-green-500, .18); color: $color-green-700; }
-    &--cancelled { background: var(--ul-grey-1a); color: var(--ul-grey-6); }
+    &--cancelled { background: var(--ul-surface-raised); color: var(--ul-grey-6); }
 }
 
 .safety-badge {
@@ -285,12 +285,12 @@
     padding: .1rem .5rem;
     border-radius: 999px;
     font-size: .75rem;
-    background: var(--ul-grey-1a);
+    background: var(--ul-surface-raised);
     color: var(--ul-grey-7);
 
     &--success { background: rgba($color-green-500, .18); color: $color-green-700; }
     &--warning { background: rgba($color-yellow-500, .18); color: $color-yellow-700; }
-    &--muted { background: var(--ul-grey-1a); color: var(--ul-grey-6); }
+    &--muted { background: var(--ul-surface-raised); color: var(--ul-grey-6); }
 }
 
 // -- Check-ins shared with you (registered emergency contact) ------------------
@@ -613,7 +613,7 @@
     height: 96px;
     object-fit: cover;
     border-radius: 8px;
-    border: 1px solid var(--ul-grey-1a);
+    border: 1px solid var(--ul-surface-raised-border);
 }
 
 .safety-contact-status-list {
@@ -630,7 +630,7 @@
         justify-content: space-between;
         gap: .5rem;
         padding-bottom: .6rem;
-        border-bottom: 1px solid var(--ul-grey-0b);
+        border-bottom: 1px solid var(--ul-surface-border);
 
         &:last-child {
             padding-bottom: 0;
@@ -658,7 +658,7 @@
         justify-content: space-between;
         gap: 1rem;
         padding-bottom: 1rem;
-        border-bottom: 1px solid var(--ul-grey-0b);
+        border-bottom: 1px solid var(--ul-surface-border);
 
         strong { color: var(--ul-grey-8); }
 

@@ -490,7 +490,7 @@
 
 .comment-map-preview {
     margin: .5rem 0;
-    border: 1px solid var(--ul-grey-1a);
+    border: 1px solid var(--ul-surface-raised-border);
     border-radius: 10px;
     overflow: hidden;
     position: relative;
@@ -600,7 +600,7 @@
 
 .comment-map-composer-controls {
     padding: .5rem 1rem;
-    border-bottom: 1px solid var(--ul-grey-1);
+    border-bottom: 1px solid var(--ul-surface-border);
     display: flex;
     align-items: center;
     gap: .75rem;
@@ -738,7 +738,7 @@
     input[type="color"] {
         width: 28px;
         height: 22px;
-        border: 1px solid var(--ul-grey-1a);
+        border: 1px solid var(--ul-surface-border);
         border-radius: 4px;
         padding: 1px;
         cursor: pointer;

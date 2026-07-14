@@ -115,8 +115,8 @@ $memories-type-colors: (
     display: inline-flex;
     align-items: center;
     gap: .3rem;
-    background: var(--ul-grey-0);
-    border: 1px solid var(--ul-grey-1a);
+    background: var(--ul-surface-raised);
+    border: 1px solid var(--ul-surface-raised-border);
     border-radius: 999px;
     padding: .3rem .7rem;
     font-size: .8rem;
@@ -203,7 +203,7 @@ $memories-type-colors: (
     width: 100%;
     border-radius: .75rem;
     overflow: hidden;
-    border: 1px solid var(--ul-grey-1a);
+    border: 1px solid var(--ul-surface-border);
 }
 
 .memories-marker-icon {
@@ -394,7 +394,7 @@ $memories-type-colors: (
     text-align: center;
     padding: 1.5rem 1rem;
     margin-bottom: 1.5rem;
-    border: 2px dashed var(--ul-grey-2);
+    border: 2px dashed var(--ul-surface-raised-border);
     border-radius: .9rem;
     background: var(--ul-surface-1);
     color: var(--ul-grey-7);
@@ -416,7 +416,7 @@ $memories-type-colors: (
     max-width: 320px;
     height: 5px;
     margin-top: .6rem;
-    background: var(--ul-grey-1a);
+    background: var(--ul-surface-raised-border);
     border-radius: 3px;
     overflow: hidden;
 }
@@ -668,7 +668,7 @@ $memories-type-colors: (
     aspect-ratio: 1 / 1;
     border-radius: .5rem;
     overflow: hidden;
-    background: var(--ul-grey-1a);
+    background: var(--ul-surface-raised);
 
     &:hover .photo-tile-del { opacity: 1; }
 }
@@ -737,7 +737,7 @@ $memories-type-colors: (
     text-align: center;
     padding: 2.5rem 1rem;
     color: var(--ul-grey-6);
-    border: 1px dashed var(--ul-grey-2);
+    border: 1px dashed var(--ul-surface-raised-border);
     border-radius: .9rem;
     background: var(--ul-surface-1);
 

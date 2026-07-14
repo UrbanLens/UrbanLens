@@ -17,7 +17,7 @@
 #pin-suggestions-map {
     height: 320px;
     width: 100%;
-    background: var(--ul-grey-1);
+    background: var(--ul-surface);
 
     @include up($breakpoint-sm) {
         height: 420px;
@@ -206,7 +206,7 @@
     align-items: center;
     gap: $space-xs;
     padding: $space-sm;
-    border: 1px dashed var(--ul-grey-2);
+    border: 1px dashed var(--ul-surface-raised-border);
     border-radius: $radius-sm;
     color: var(--ul-grey-5);
     font-size: .78rem;
@@ -223,7 +223,7 @@
     border-radius: $radius-sm;
     overflow: hidden;
     cursor: pointer;
-    border: 2px solid var(--ul-grey-2);
+    border: 2px solid var(--ul-surface-raised-border);
     flex-shrink: 0;
 
     img {

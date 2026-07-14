@@ -58,7 +58,7 @@
     font-size: .85rem;
     cursor: pointer;
 
-    &:hover { border-color: var(--ul-grey-2); }
+    &:hover { border-color: var(--ul-surface-2-border); }
     &:focus-visible { outline: 2px solid $color-blue-500; outline-offset: 1px; }
 }
 
@@ -74,8 +74,8 @@
         height: 72px;
         margin: 0 auto 1.25rem;
         border-radius: 50%;
-        background: linear-gradient(135deg, var(--ul-grey-0a));
-        border: 1px solid var(--ul-grey-1a);
+        background: var(--ul-surface-raised);
+        border: 1px solid var(--ul-surface-raised-border);
         display: flex;
         align-items: center;
         justify-content: center;
@@ -313,7 +313,7 @@
     gap: .75rem;
     margin-top: auto;
     padding-top: .55rem;
-    border-top: 1px solid var(--ul-grey-4);
+    border-top: 1px solid var(--ul-surface-border);
 }
 
 .trip-card-members {
@@ -327,7 +327,7 @@
     height: 28px;
     border-radius: 50%;
     overflow: hidden;
-    border: 2px solid var(--ul-grey-0);
+    border: 2px solid var(--ul-surface-raised);
     background: $color-light-blue-100;
     display: flex;
     align-items: center;
@@ -458,7 +458,7 @@
 }
 
 .trip-mini-row {
-    border-bottom: 1px solid var(--ul-grey-4);
+    border-bottom: 1px solid var(--ul-surface-border);
 
     &:last-child {
         border-bottom: none;
@@ -603,7 +603,7 @@
     gap: .5rem;
     flex-shrink: 0;
     padding-bottom: 1.5rem;
-    border-bottom: 1px solid var(--ul-grey-1a);
+    border-bottom: 1px solid var(--ul-surface-border);
     margin-bottom: 1.5rem;
     opacity: 0.75;
 
@@ -740,7 +740,7 @@
 
     .card-header {
         padding: .75rem 1rem;
-        border-bottom: 1px solid var(--ul-grey-4);
+        border-bottom: 1px solid var(--ul-surface-border);
         font-weight: 600;
         font-size: .9rem;
 
@@ -914,7 +914,7 @@
         border-color: var(--ul-surface-raised-border);
 
         &:hover {
-            border-color: var(--ul-grey-3);
+            border-color: var(--ul-surface-2-border);
             box-shadow: 0 2px 8px rgba(0, 0, 0, .07);
         }
     }
@@ -1073,7 +1073,7 @@
     align-items: flex-start;
     gap: .75rem;
     padding: .85rem 1rem;
-    border-bottom: 1px solid var(--ul-grey-4);
+    border-bottom: 1px solid var(--ul-surface-border);
     transition: opacity .2s, background .15s;
 
     &:last-child {
@@ -1126,7 +1126,7 @@
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    border: 2px solid var(--ul-grey-1a);
+    border: 2px solid var(--ul-surface-raised);
     box-shadow: 0 1px 4px rgba($color-blue-500, .4);
 }
 
@@ -1208,7 +1208,7 @@ a.trip-activity-name {
     align-items: center;
     gap: .65rem;
     padding: .6rem 1rem;
-    border-bottom: 1px solid var(--ul-grey-4);
+    border-bottom: 1px solid var(--ul-surface-border);
     transition: opacity .2s;
 
     &:last-child {
@@ -1321,7 +1321,7 @@ a.trip-activity-name {
     align-items: flex-start;
     gap: .75rem;
     padding: .875rem 1rem;
-    border-bottom: 1px solid var(--ul-grey-4);
+    border-bottom: 1px solid var(--ul-surface-border);
     transition: opacity .2s, background .15s;
 
     &:last-child {
@@ -1717,7 +1717,7 @@ a.trip-activity-name {
         font-size: .88rem;
         margin: 0;
         pointer-events: none;
-        background: color-mix(in srgb, var(--ul-grey-0) 88%, transparent);
+        background: color-mix(in srgb, var(--ul-surface) 88%, transparent);
         border-radius: 8px;
         box-shadow: 0 1px 6px rgba(0, 0, 0, .12);
     }
@@ -1830,7 +1830,7 @@ a.trip-activity-name {
 
 .activity-tabs {
     display: flex;
-    border-bottom: 1px solid var(--ul-grey-1a);
+    border-bottom: 1px solid var(--ul-surface-border);
     padding: 0 .5rem;
     gap: .15rem;
 }
@@ -1894,7 +1894,7 @@ a.trip-activity-name {
     }
 
     &--no {
-        background: var(--ul-grey-0a);
+        background: $color-red-100;
         color: $color-red-600;
         border: 1px solid $color-red-200;
     }
@@ -1909,7 +1909,6 @@ a.trip-activity-name {
         background: var(--ul-grey-4);
         color: var(--ul-grey-6);
         border: 1px solid var(--ul-grey-1a);
-        ;
     }
 
     &--invited {
@@ -1991,7 +1990,7 @@ a.trip-activity-name {
         color: $color-red-600;
 
         &:hover {
-            background: var(--ul-grey-0a);
+            background: $color-red-100;
         }
     }
 
@@ -2045,7 +2044,7 @@ a.trip-activity-name {
 
     &:hover {
         color: $color-red-600;
-        background: var(--ul-grey-0a);
+        background: $color-red-100;
     }
 }
 
@@ -2084,7 +2083,7 @@ a.trip-activity-name {
 
     &:hover {
         color: var(--ul-grey-7);
-        background: var(--ul-grey-4);
+        background: var(--ul-hover-bg);
     }
 
     &.is-active[data-value="proposed"] {
@@ -2154,7 +2153,6 @@ a.trip-activity-name {
     letter-spacing: .06em;
     color: var(--ul-grey-6);
     background: var(--ul-surface-border);
-    border-bottom: 1px solid var(--ul-grey-4);
     cursor: default;
 }
 
@@ -2197,7 +2195,7 @@ a.trip-activity-name {
     transition: background .12s, border-color .12s, color .12s;
 
     &:hover {
-        border-color: var(--ul-grey-6);
+        border-color: var(--ul-surface-2-border);
         background: var(--ul-surface-raised);
     }
 
@@ -2282,12 +2280,12 @@ a.trip-activity-name {
     }
 
     &:hover:not(.trip-setting-pill--disabled):not(.trip-setting-pill--active) {
-        background: var(--ul-grey-4);
+        background: var(--ul-hover-bg);
         border-color: var(--ul-surface-raised-border);
     }
 
     &--active {
-        background: var(--ul-grey-0a);
+        background: rgba($color-blue-500, .12);
         border-color: $color-blue-500;
         color: $color-blue-700;
     }
@@ -2347,7 +2345,7 @@ a.trip-activity-name {
 }
 
 .trip-weather-day {
-    border: 1px solid var(--ul-grey-4);
+    border: 1px solid var(--ul-surface-raised-border);
     border-radius: $radius-sm;
     overflow: hidden;
 }
@@ -2357,8 +2355,8 @@ a.trip-activity-name {
     align-items: baseline;
     gap: .5rem;
     padding: .5rem .75rem .45rem;
-    background: var(--ul-grey-1);
-    border-bottom: 1px solid var(--ul-grey-4);
+    background: var(--ul-surface-raised);
+    border-bottom: 1px solid var(--ul-surface-raised-border);
 
     .trip-weather-day-dow {
         font-weight: 600;
@@ -2386,7 +2384,7 @@ a.trip-activity-name {
     padding: .65rem .75rem;
 
     &+& {
-        border-top: 1px solid var(--ul-grey-1a);
+        border-top: 1px solid var(--ul-surface-border);
     }
 
     .trip-weather-activity-info {
@@ -2614,7 +2612,7 @@ a.trip-activity-name {
         }
 
         &.activity-vote-btn--down {
-            background: var(--ul-grey-0a);
+            background: $color-red-100;
             color: $color-red-600;
         }
     }
@@ -2795,12 +2793,12 @@ a.trip-activity-name {
     padding: 0;
     max-height: 20rem;
     overflow-y: auto;
-    border: 1px solid var(--ul-grey-1a);
+    border: 1px solid var(--ul-surface-raised-border);
     border-radius: 8px;
 }
 
 .calendar-import-item {
-    border-bottom: 1px solid var(--ul-grey-1a);
+    border-bottom: 1px solid var(--ul-surface-border);
 
     &:last-child {
         border-bottom: none;
@@ -2862,7 +2860,7 @@ a.trip-activity-name {
 .calendar-import-footer {
     margin-top: 1rem;
     padding-top: .75rem;
-    border-top: 1px solid var(--ul-grey-1a);
+    border-top: 1px solid var(--ul-surface-border);
     display: flex;
     justify-content: flex-end;
 }
@@ -2881,7 +2879,7 @@ a.trip-activity-name {
 }
 
 .calendar-import-preview {
-    border: 1px solid var(--ul-grey-1a);
+    border: 1px solid var(--ul-surface-raised-border);
     border-radius: $radius-md;
     padding: .6rem .75rem;
 
@@ -2963,7 +2961,7 @@ a.trip-activity-name {
 .calendar-import-preview-participants {
     margin-top: .6rem;
     padding-top: .5rem;
-    border-top: 1px dashed var(--ul-grey-1a);
+    border-top: 1px dashed var(--ul-surface-raised-border);
 }
 
 .calendar-import-preview-subhead {

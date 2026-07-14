@@ -32,7 +32,7 @@
     position: fixed;
     left: 22px;
     bottom: 22px;
-    z-index: 1400;
+    z-index: 9999;
 
     &[hidden] { display: none; }
 }

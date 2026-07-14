@@ -174,7 +174,7 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
         color: var(--ul-grey-6);
         font-size: .9rem;
         background: var(--ul-surface-raised);
-        border: 1px dashed var(--ul-grey-1a);
+        border: 1px dashed var(--ul-surface-raised-border);
         border-radius: 10px;
 
         .material-symbols-outlined,
@@ -322,7 +322,7 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
         align-items: center;
         gap: .3rem;
         padding: .3rem .65rem;
-        border: 1.5px solid var(--ul-grey-1a);
+        border: 1.5px solid var(--ul-surface-border);
         border-radius: 8px;
         font-size: .8rem;
         font-weight: 600;
@@ -336,7 +336,7 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
         }
 
         &:hover {
-            background: var(--ul-grey-0a);
+            background: var(--ul-hover-bg);
             color: var(--ul-grey-8);
         }
 
@@ -351,7 +351,7 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     }
 
     &[open] &__toggle {
-        background: var(--ul-grey-0a);
+        background: var(--ul-hover-bg);
         border-color: $color-blue-300;
     }
 }
@@ -651,8 +651,7 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     input[type="number"] {
         width: 120px;
         padding: .5rem .75rem;
-        border: 1.5px solid var(--ul-grey-1a);
-        ;
+        border: 1.5px solid var(--ul-surface-raised-border);
         border-radius: 8px;
         font-size: .9rem;
         color: var(--ul-grey-8);
@@ -882,7 +881,7 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     td {
         padding: .55rem .9rem;
         text-align: left;
-        border-bottom: 1px solid var(--ul-grey-1a);
+        border-bottom: 1px solid var(--ul-surface-border);
     }
 
     th {
@@ -1457,7 +1456,7 @@ $users-list-cols: minmax(180px, 1.3fr) minmax(170px, 1.15fr) minmax(110px, .75fr
         color: var(--ul-grey-6);
         font-size: .9rem;
         background: var(--ul-surface-raised);
-        border: 1px dashed var(--ul-grey-1a);
+        border: 1px dashed var(--ul-surface-raised-border);
         border-radius: 10px;
 
         .material-symbols-outlined,
@@ -1559,10 +1558,6 @@ $users-list-cols: minmax(180px, 1.3fr) minmax(170px, 1.15fr) minmax(110px, .75fr
     .subscription-admin-page .role-pill {
         background: linear-gradient(135deg, rgba($color-indigo-600, .25), rgba($color-blue-500, .2));
         color: var(--ul-grey-8);
-
-        &--default {
-            background: var(--ul-grey-3);
-        }
     }
 
     .feature-toggle {
@@ -1624,7 +1619,4 @@ $users-list-cols: minmax(180px, 1.3fr) minmax(170px, 1.15fr) minmax(110px, .75fr
         }
     }
 
-    .stats-skeleton {
-        background: var(--ul-grey-2);
-    }
 }

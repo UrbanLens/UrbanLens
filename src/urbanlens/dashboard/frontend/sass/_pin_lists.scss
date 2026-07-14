@@ -634,7 +634,7 @@
 .saved-filter-label-list {
     max-height: 160px;
     overflow-y: auto;
-    border: 1px solid var(--ul-grey-1a);
+    border: 1px solid var(--ul-surface-raised-border);
     border-radius: 8px;
     padding: .5rem .6rem;
     font-size: .82rem;
@@ -658,7 +658,7 @@
 
 // -- Region field (include/exclude polygon drawing) --------------------------
 .saved-filter-region-field {
-    border-top: 1px solid var(--ul-grey-1a);
+    border-top: 1px solid var(--ul-surface-border);
     padding-top: 1rem;
 }
 
@@ -744,5 +744,5 @@
     height: 280px;
     border-radius: 10px;
     overflow: hidden;
-    border: 1px solid var(--ul-grey-1a);
+    border: 1px solid var(--ul-surface-raised-border);
 }

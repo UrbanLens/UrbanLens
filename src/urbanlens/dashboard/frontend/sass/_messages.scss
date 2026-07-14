@@ -281,9 +281,9 @@
     width: 1.9rem;
     height: 1.9rem;
     flex-shrink: 0;
-    border: 1px solid var(--ul-grey-1a);
+    border: 1px solid var(--ul-surface-border);
     border-radius: 50%;
-    background: var(--ul-grey-1);
+    background: var(--ul-surface-raised);
     color: var(--ul-grey-7);
     cursor: pointer;
     padding: 0;
@@ -293,7 +293,7 @@
     }
 
     &:hover {
-        background: var(--ul-grey-1a);
+        background: var(--ul-hover-bg);
     }
 }
 
@@ -661,9 +661,9 @@
     height: 1.9rem;
     margin-left: auto;
     flex-shrink: 0;
-    border: 1px solid var(--ul-grey-1a);
+    border: 1px solid var(--ul-surface-border);
     border-radius: 50%;
-    background: var(--ul-grey-1);
+    background: var(--ul-surface-raised);
     color: var(--ul-grey-7);
     cursor: pointer;
     padding: 0;
@@ -891,7 +891,7 @@
     span {
         padding: .15rem .6rem;
         border-radius: $radius-full;
-        background: var(--ul-grey-1a);
+        background: var(--ul-surface-raised);
     }
 }
 
@@ -903,7 +903,7 @@
     margin: .3rem 0;
     padding: .3rem .75rem;
     border-radius: $radius-full;
-    background: var(--ul-grey-1a);
+    background: var(--ul-surface-raised);
     color: var(--ul-grey-6);
     font-size: .72rem;
     font-weight: 600;
@@ -972,9 +972,9 @@
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        border: 1px solid var(--ul-grey-1a);
+        border: 1px solid var(--ul-surface-border);
         border-radius: 50%;
-        background: var(--ul-grey-1);
+        background: var(--ul-surface-raised);
         color: var(--ul-grey-7);
         cursor: pointer;
         padding: 0;
@@ -1056,7 +1056,7 @@
 
     &--them {
         align-self: flex-start;
-        background: var(--ul-grey-1a);
+        background: var(--ul-surface-raised);
         color: var(--ul-grey-8);
         border-bottom-left-radius: 5px;
 
@@ -1317,7 +1317,7 @@
     gap: .3rem;
     padding: .2rem .5rem;
     border-radius: $radius-full;
-    background: var(--ul-grey-1a);
+    background: var(--ul-surface-raised);
     font-size: .78rem;
 
     // A plain-class `display` rule otherwise beats the browser's default
@@ -1342,7 +1342,7 @@
         border-radius: 6px;
         overflow: hidden;
         pointer-events: none; // preview only, matches .comment-map-thumb
-        background: var(--ul-grey-1);
+        background: var(--ul-surface-raised);
     }
 
     button {
@@ -1379,8 +1379,8 @@
     gap: .2rem;
     padding: .1rem .4rem;
     border-radius: $radius-full;
-    border: 1px solid var(--ul-grey-1a);
-    background: var(--ul-grey-0a);
+    border: 1px solid var(--ul-surface-raised-border);
+    background: var(--ul-surface-raised);
     font-size: .78rem;
     cursor: pointer;
     color: inherit;
@@ -1426,9 +1426,9 @@
     justify-content: center;
     width: 1.5rem;
     height: 1.5rem;
-    border: 1px solid var(--ul-grey-1a);
+    border: 1px solid var(--ul-surface-border);
     border-radius: 50%;
-    background: var(--ul-grey-1);
+    background: var(--ul-surface-raised);
     cursor: pointer;
     padding: 0;
     color: var(--ul-grey-7);
@@ -1436,7 +1436,7 @@
     transition: background .12s ease;
 
     &:hover {
-        background: var(--ul-grey-1a);
+        background: var(--ul-hover-bg);
     }
 
     i {
@@ -1460,8 +1460,8 @@
     gap: .2rem;
     padding: .4rem;
     border-radius: 10px;
-    border: 1px solid var(--ul-grey-2);
-    background: var(--ul-grey-1);
+    border: 1px solid var(--ul-surface-raised-border);
+    background: var(--ul-surface-raised);
     box-shadow: 0 4px 16px rgba(0, 0, 0, .15);
     width: max-content;
     max-width: 220px;
@@ -1475,7 +1475,7 @@
         border-radius: 6px;
 
         &:hover {
-            background: var(--ul-grey-1a);
+            background: var(--ul-hover-bg);
         }
     }
 
@@ -1790,7 +1790,7 @@
     flex-direction: column;
     gap: .35rem;
     padding: .6rem 1rem .7rem;
-    border-top: 1px solid var(--ul-grey-1a);
+    border-top: 1px solid var(--ul-surface-border);
     flex-shrink: 0;
 
     &__input-row {
@@ -1861,7 +1861,7 @@
     gap: .4rem;
     margin: 0;
     padding: .85rem 1rem;
-    border-top: 1px solid var(--ul-grey-1a);
+    border-top: 1px solid var(--ul-surface-border);
     font-size: .84rem;
     color: var(--ul-grey-6);
 
