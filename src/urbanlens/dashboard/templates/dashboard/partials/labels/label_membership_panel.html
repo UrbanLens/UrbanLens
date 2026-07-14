@@ -5,6 +5,11 @@
 {# universal look site-wide, so that context doesn't repeat a title for them - #}
 {# it's added/collapsed from the Organization card's own header instead. See #}
 {# location/index.html and _membership_panel_ctx(). #}
+{% if embedded %}
+{# Organization's card-header lives on the pin detail page itself (see location/index.html) - #}
+{# push this panel's member count out to that header's badge via an OOB swap. #}
+<span class="badge" id="organization-count-badge" hx-swap-oob="true"{% if not member_ids %} hidden{% endif %}>{{ member_ids|length }}</span>
+{% endif %}
 <div class="tag-panel{% if not embedded %} card{% endif %}{% if embedded %} tag-panel--embedded{% endif %}" id="{{ panel_id }}"
      {% if not embedded %}data-collapse-scope="{{ collapse_scope }}" data-collapse-section="categories"{% endif %}>
     {% if not embedded %}

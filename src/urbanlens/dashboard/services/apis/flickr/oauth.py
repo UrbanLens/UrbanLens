@@ -51,6 +51,15 @@ def _consumer_credentials() -> tuple[str, str]:
     return api_key, api_secret
 
 
+def is_configured() -> bool:
+    """Return whether the site has a Flickr API key and secret configured.
+
+    Returns:
+        True when both ``UL_FLICKR_API_KEY`` and ``UL_FLICKR_API_SECRET`` are set.
+    """
+    return bool(settings.flickr_api_key and settings.flickr_api_secret)
+
+
 @dataclass(frozen=True, slots=True)
 class PendingFlickrAuthorization:
     """Temporary request-token state to stash between step 1 and step 3."""

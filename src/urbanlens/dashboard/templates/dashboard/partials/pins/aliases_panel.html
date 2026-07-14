@@ -3,8 +3,9 @@
      data-collapse-scope="{{ collapse_scope }}" data-collapse-section="aliases">
     <div class="card-header">
         <i class="material-symbols-outlined">label_important</i>
-        <span>Aliases</span>
         {% include "dashboard/partials/ui/_page_explainer_anchor.html" with explainer_id=explainer_id %}
+        <span>Aliases</span>
+        {% if aliases %}<span class="badge">{{ aliases|length }}</span>{% endif %}
         {% if show_header_add_button %}
         <button type="button" class="btn btn--icon-sm" title="Add alias"
                 onclick="var p=this.closest('.aliases-panel'); p.classList.add('is-adding'); p.querySelector('.alias-add-input').focus();">

@@ -278,6 +278,22 @@
     .ul-page-explainer {
         margin: .5rem 1rem 0;
     }
+
+    // .card-header is a named-area CSS grid (see panel-header-grid) that places
+    // items by grid-area, not DOM order - an element with no explicit grid-area
+    // (like .ul-explainer-anchor) falls back to auto-placement in whatever cell
+    // is first free, which lands it *after* the title here. This panel wants the
+    // explainer to the left of "Aliases" instead, so it gets its own column
+    // between the icon and the title rather than relying on source order.
+    .card-header {
+        grid-template-columns: auto auto minmax(0, 1fr) auto auto;
+        grid-template-areas: 'header-icon header-explainer header-title header-meta header-actions';
+
+        .ul-explainer-anchor {
+            grid-area: header-explainer;
+            margin-left: 0;
+        }
+    }
 }
 
 .alias-chips-row {

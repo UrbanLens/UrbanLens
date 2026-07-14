@@ -212,6 +212,7 @@
             <div class="card-header">
                 <i class="material-symbols-outlined">folder</i>
                 <span>Organization</span>
+                <span class="badge" id="organization-count-badge" hidden></span>
                 <div class="card-header-actions organization-add-wrap" id="organization-add-wrap">
                     <button type="button" class="btn btn--icon-sm" id="organization-add-btn"
                             aria-haspopup="true" aria-expanded="false" title="Add label or list">
@@ -683,7 +684,11 @@
             method: 'POST',
             headers: { 'X-CSRFToken': "{{ csrf_token }}" },
             body: params,
-        }).then(() => {
+        }).then((response) => {
+            if (!response.ok) {
+                if (typeof toastr !== 'undefined') toastr.error('Could not add pin to that list.');
+                return;
+            }
             document.getElementById('add-to-list-dialog')?.close();
             if (typeof toastr !== 'undefined') toastr.success('Added to list.');
         });
@@ -698,7 +703,12 @@
             headers: { 'X-CSRFToken': "{{ csrf_token }}", 'Content-Type': 'application/json', 'Accept': 'application/json' },
             body: JSON.stringify({ name }),
         }).then((r) => r.json()).then((data) => {
-            if (data.ok) { nameInput.value = ''; addPinsToList(data.uuid); }
+            if (data.ok) {
+                nameInput.value = '';
+                addPinsToList(data.uuid);
+            } else if (typeof toastr !== 'undefined') {
+                toastr.error('Could not create that list.');
+            }
         });
     }
 
@@ -1262,18 +1272,20 @@
             var tabsEl = document.getElementById('media-tabs');
             if (!g || !tabsEl) return;
             var counts = {};
+            var notRelevantCount = 0;
             g.querySelectorAll('.media-item').forEach(function (item) {
                 var src = item.dataset.mediaSource;
-                if (!src) return;
-                counts[src] = (counts[src] || 0) + 1;
+                if (src) counts[src] = (counts[src] || 0) + 1;
+                if (item.classList.contains('media-item--not-relevant')) notRelevantCount += 1;
             });
             var sources = Object.keys(counts);
-            if (sources.length < 2) {
+            if (sources.length < 2 && !notRelevantCount) {
                 tabsEl.hidden = true;
                 tabsEl.innerHTML = '';
                 return;
             }
-            if (!sources.includes(activeTab)) activeTab = 'all';
+            if (activeTab !== 'not_relevant' && !sources.includes(activeTab)) activeTab = 'all';
+            if (activeTab === 'not_relevant' && !notRelevantCount) activeTab = 'all';
             var total = sources.reduce(function (sum, s) { return sum + counts[s]; }, 0);
             var html = '<button type="button" class="media-tab' + (activeTab === 'all' ? ' active' : '') +
                 '" data-tab="all">All<span class="media-tab-count">' + total + '</span></button>';
@@ -1282,6 +1294,10 @@
                 html += '<button type="button" class="media-tab' + (activeTab === src ? ' active' : '') +
                     '" data-tab="' + src + '">' + label + '<span class="media-tab-count">' + counts[src] + '</span></button>';
             });
+            if (notRelevantCount) {
+                html += '<button type="button" class="media-tab' + (activeTab === 'not_relevant' ? ' active' : '') +
+                    '" data-tab="not_relevant">Not Relevant<span class="media-tab-count">' + notRelevantCount + '</span></button>';
+            }
             tabsEl.innerHTML = html;
             tabsEl.hidden = false;
             tabsEl.querySelectorAll('.media-tab').forEach(function (btn) {
@@ -1289,16 +1305,34 @@
             });
         }
 
-        window.mediaSetTab = function (tab) {
-            activeTab = tab;
+        // Reapplies the active tab's exclusion classes to whatever items exist
+        // right now, without touching the current pagination page - used both
+        // by an explicit tab click (see mediaSetTab) and by refreshMediaGallery,
+        // which must re-filter newly-arrived items from later providers without
+        // yanking the user back to page 1 of the tab they're already browsing.
+        function applyMediaTabFilter(tab) {
             var g = grid();
             if (!g) return;
+            var galleryEl = g.closest('.media-gallery');
+            if (galleryEl) galleryEl.classList.toggle('media-gallery--tab-not-relevant', tab === 'not_relevant');
             g.querySelectorAll('.media-item').forEach(function (item) {
-                item.classList.toggle('media-tab-excluded', tab !== 'all' && item.dataset.mediaSource !== tab);
+                var isNotRelevant = item.classList.contains('media-item--not-relevant');
+                var excluded;
+                if (tab === 'all') excluded = false;
+                else if (tab === 'not_relevant') excluded = !isNotRelevant;
+                else excluded = isNotRelevant || item.dataset.mediaSource !== tab;
+                item.classList.toggle('media-tab-excluded', excluded);
             });
             document.querySelectorAll('#media-tabs .media-tab').forEach(function (btn) {
                 btn.classList.toggle('active', btn.dataset.tab === tab);
             });
+        }
+
+        window.mediaSetTab = function (tab) {
+            activeTab = tab;
+            applyMediaTabFilter(tab);
+            var g = grid();
+            if (!g) return;
             var card = g.closest('.card');
             if (card) card.dataset.adaptivePaginationCurrentPage = '1';
             if (window.initAdaptivePagination) window.initAdaptivePagination(document, true);
@@ -1318,7 +1352,7 @@
                 item.setAttribute('data-adaptive-pagination-item', '');
             });
             rebuildMediaTabs();
-            if (activeTab !== 'all') window.mediaSetTab(activeTab);
+            if (activeTab !== 'all') applyMediaTabFilter(activeTab);
             if (window.initAdaptivePagination) window.initAdaptivePagination(document, true);
         }
 

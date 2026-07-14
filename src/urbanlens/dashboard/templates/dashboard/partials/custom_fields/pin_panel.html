@@ -4,6 +4,7 @@
     <div class="card-header">
         <i class="material-symbols-outlined">tune</i>
         <span>Custom Fields</span>
+        {% if rows %}<span class="badge">{{ rows|length }}</span>{% endif %}
         <button type="button" class="btn btn--icon-sm" title="Add a custom field"
                 onclick="var f = this.closest('.custom-fields-panel').querySelector('.cf-add-form'); f.hidden = !f.hidden; if (!f.hidden) f.querySelector('input[name=name]').focus();">
             <i class="material-symbols-outlined">add</i>

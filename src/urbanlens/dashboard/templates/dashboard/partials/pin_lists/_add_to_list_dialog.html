@@ -7,7 +7,13 @@ and (with `?pin_uuid=`) the pin detail page's Labels section. Context: pin_lists
     <div class="ul-dialog-body">
         <input type="search" id="add-to-list-search" class="pin-list-add-results-search" placeholder="Search your lists..." oninput="filterAddToListResults(this.value)" autocomplete="off">
         <ul class="pin-list-add-results" id="add-to-list-results">
-            <li data-search="create a new list">
+            <li data-search="create a new list" id="add-to-list-new-toggle-row">
+                <button type="button" class="pin-list-add-results-item pin-list-add-results-item--new"
+                        onclick="document.getElementById('add-to-list-new-form-row').hidden = false; document.getElementById('add-to-list-new-toggle-row').hidden = true; document.getElementById('add-to-list-new-name').focus();">
+                    <i class="material-symbols-outlined">add</i> Create a new list
+                </button>
+            </li>
+            <li data-search="create a new list" id="add-to-list-new-form-row" hidden>
                 <div class="pin-list-add-results-item pin-list-add-results-item--new">
                     <i class="material-symbols-outlined">add</i>
                     <input type="text" id="add-to-list-new-name" placeholder="New list name..." maxlength="100" autocomplete="off">
@@ -36,3 +42,18 @@ and (with `?pin_uuid=`) the pin detail page's Labels section. Context: pin_lists
         </div>
     </div>
 </dialog>
+
+<script>
+(function () {
+    var dlg = document.getElementById('add-to-list-dialog');
+    if (!dlg) return;
+    dlg.addEventListener('close', function () {
+        var toggleRow = document.getElementById('add-to-list-new-toggle-row');
+        var formRow = document.getElementById('add-to-list-new-form-row');
+        var nameInput = document.getElementById('add-to-list-new-name');
+        if (toggleRow) toggleRow.hidden = false;
+        if (formRow) formRow.hidden = true;
+        if (nameInput) nameInput.value = '';
+    });
+}());
+</script>

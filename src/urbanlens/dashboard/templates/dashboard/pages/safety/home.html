@@ -1,5 +1,9 @@
 {% extends 'dashboard/themes/base.html' %}
 
+{% block hero %}
+{% include "dashboard/partials/ui/_page_hero.html" with icon="emergency" title="Safety" title_suffix_template="dashboard/partials/ui/_page_explainer_anchor.html" explainer_id="safety-explainer" subtitle="Let people know when to expect you back, and who to alert if you don't check in." modifier="top" %}
+{% endblock %}
+
 {% block subnav %}
 <div class="ul-page-subnav">
     <div class="ul-page-subnav__inner">
@@ -9,7 +13,6 @@
 {% endblock %}
 
 {% block content %}
-{% include "dashboard/partials/ui/_page_hero.html" with icon="emergency" title="Safety" title_suffix_template="dashboard/partials/ui/_page_explainer_anchor.html" explainer_id="safety-explainer" subtitle="Let people know when to expect you back, and who to alert if you don't check in." %}
 <div class="safety-page page-content">
     {# Standalone CSRF token for the check-in delete button's fetch() below - no form on this page needs one otherwise. #}
     {% csrf_token %}

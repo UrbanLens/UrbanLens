@@ -20,6 +20,10 @@ check-in, and a contact gets the same limited view rather than the full owner pa
     integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
 {% endblock %}
 
+{% block hero %}
+{% include "dashboard/partials/ui/_page_hero.html" with body_template="dashboard/partials/safety/_community_status_hero_body.html" modifier="top" %}
+{% endblock %}
+
 {% block subnav %}
 {% if viewer_is_contact %}
 <div class="ul-page-subnav">
@@ -31,7 +35,6 @@ check-in, and a contact gets the same limited view rather than the full owner pa
 {% endblock %}
 
 {% block content %}
-{% include "dashboard/partials/ui/_page_hero.html" with body_template="dashboard/partials/safety/_community_status_hero_body.html" %}
 <div class="safety-page page-content">
 
 

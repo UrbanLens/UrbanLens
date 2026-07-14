@@ -322,6 +322,7 @@
         </div>
 
         {# -- Flickr (subsection) ------------------------------------------------- #}
+        {% if flickr_configured %}
         <div class="settings-subsection" id="flickr-settings-section">
             <h3 class="settings-subsection-title">
                 <i class="material-symbols-outlined">photo_camera</i>
@@ -332,6 +333,7 @@
                 <p class="loading-text">Loading...</p>
             </div>
         </div>
+        {% endif %}
 
         {# -- Google Photos (subsection) ------------------------------------------ #}
         <div class="settings-subsection" id="google-photos-settings-section">

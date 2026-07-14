@@ -29,6 +29,7 @@ from urbanlens.dashboard.forms.settings_form import (
 )
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.subscriptions.model import SiteFeature, user_has_feature
+from urbanlens.dashboard.services.apis.flickr.oauth import is_configured as flickr_is_configured
 from urbanlens.dashboard.services.storage import allowed_user_dimension_values, get_storage_settings_context
 from urbanlens.dashboard.services.webauthn import list_credentials
 
@@ -131,6 +132,7 @@ class SettingsView(LoginRequiredMixin, View):
             return redirect("login")
         profile, _ = Profile.objects.get_or_create(user=request.user)
         context = {
+            "flickr_configured": flickr_is_configured(),
             "privacy_form": PrivacySettingsForm(instance=profile),
             "contact_form": ContactSettingsForm(initial={"email": request.user.email}, exclude_user_id=request.user.pk),
             "style_form": StyleSettingsForm(instance=profile),
@@ -281,6 +283,7 @@ class SettingsView(LoginRequiredMixin, View):
                 return _settings_redirect("direct-message-settings-section")
 
         context = {
+            "flickr_configured": flickr_is_configured(),
             "privacy_form": privacy_form,
             "contact_form": contact_form,
             "style_form": style_form,

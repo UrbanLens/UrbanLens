@@ -3643,6 +3643,20 @@ body.page-location-details .pin-detail-grid {
         .media-gallery--only-relevant .media-item:not(.media-item--relevant) {
             display: none;
         }
+        // The "Not Relevant" source tab shows items the Visibility setting
+        // above would otherwise hide - kept as its own class so the two
+        // independent filters (tabs vs. the Visibility submenu) don't fight.
+        .media-gallery--tab-not-relevant .media-item--not-relevant {
+            display: flex;
+            opacity: .55;
+        }
+        // Items excluded by the active source tab must actually disappear;
+        // !important wins over both the Visibility rules above and the tab
+        // override so pagination (which already skips excluded items) and
+        // what's on screen never disagree.
+        .media-item.media-tab-excluded {
+            display: none !important;
+        }
 
         // -- Per-tile hover actions (open source / relevant / not relevant) --
         .media-item-actions {
@@ -3739,23 +3753,26 @@ body.page-location-details .pin-detail-grid {
             display: inline-flex;
             align-items: center;
             gap: .35rem;
-            padding: .3rem .7rem;
+            padding: .35rem .75rem;
             font-size: .78rem;
             font-weight: 600;
             color: var(--ul-grey-6, #64748b);
             background: var(--ul-surface-raised);
-            border: 1px solid transparent;
+            border: 1px solid var(--ul-surface-raised-border);
             border-radius: 999px;
             cursor: pointer;
-            transition: background .12s ease, color .12s ease;
+            transition: background .12s ease, color .12s ease, border-color .12s ease, box-shadow .12s ease;
 
             &:hover {
                 background: var(--ul-hover-bg);
+                border-color: var(--ul-grey-4, #94a3b8);
             }
 
             &.active {
                 color: #fff;
                 background: var(--ul-primary, #2563eb);
+                border-color: var(--ul-primary, #2563eb);
+                box-shadow: 0 1px 3px rgba(37, 99, 235, .35);
             }
         }
         .media-tab-count {

@@ -1,5 +1,9 @@
 {% extends 'dashboard/themes/base.html' %}
 
+{% block hero %}
+{% include "dashboard/partials/ui/_page_hero.html" with icon="emergency" title="Safety Settings" subtitle="Defaults applied to every new check-in you create." modifier="top" %}
+{% endblock %}
+
 {% block subnav %}
 <div class="ul-page-subnav">
     <div class="ul-page-subnav__inner">
@@ -9,7 +13,6 @@
 {% endblock %}
 
 {% block content %}
-{% include "dashboard/partials/ui/_page_hero.html" with icon="emergency" title="Safety Settings" subtitle="Defaults applied to every new check-in you create." %}
 <div class="safety-page page-content">
 
     {# -- Defaults ------------------------------------------------------------ #}

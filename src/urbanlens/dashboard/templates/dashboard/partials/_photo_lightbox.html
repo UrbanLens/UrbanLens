@@ -35,10 +35,10 @@ Context:
 {% with lightbox_id=lightbox_id|default:"gallery-lightbox" %}
 <dialog id="{{ lightbox_id }}" class="gallery-lightbox ul-dialog">
   <div class="lightbox-inner">
-    <button type="button" class="lightbox-close" onclick="document.getElementById('{{ lightbox_id }}').close()">
-      <i class="material-symbols-outlined">close</i>
-    </button>
     <div class="lightbox-media-area">
+      <button type="button" class="lightbox-close" onclick="document.getElementById('{{ lightbox_id }}').close()">
+        <i class="material-symbols-outlined">close</i>
+      </button>
       <button type="button" id="lightbox-prev-btn" class="lightbox-nav lightbox-prev" onclick="galleryLightboxNav(-1)">
         <i class="material-symbols-outlined">chevron_left</i>
       </button>
