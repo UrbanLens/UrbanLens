@@ -29,7 +29,7 @@ from urbanlens.dashboard.models.markup.model import MarkupMap, PinMarkup
 from urbanlens.dashboard.models.markup.share import MarkupMapShare
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_share import PinShare, PinShareOrigin, PinShareStatus
-from urbanlens.dashboard.services.map_pin_share_detection import detect_shared_pins
+from urbanlens.dashboard.services.map_pin_share_detection import detect_shared_pins, sync_pin_inferences
 from urbanlens.dashboard.services.map_sharing import clone_markup_map, share_markup_map_with_profile
 
 # Fixed test coordinates - Manhattan-ish, nowhere near a pole/antimeridian.
@@ -131,6 +131,49 @@ class DetectSharedPinsTests(_MapShareTestCase):
         self.assertEqual(detect_shared_pins(markup_map, self.profiles["a"]), [])
 
 
+# -- sync_pin_inferences / MarkupMap.inferred_pins ------------------------------------
+
+@override_settings(UL_MAP_SHARE_ZOOM_THRESHOLD=14)
+class SyncPinInferencesTests(_MapShareTestCase):
+    def test_persists_detected_matches(self) -> None:
+        markup_map = self._map(zoom=16)
+        pins = sync_pin_inferences(markup_map)
+        self.assertEqual(pins, [self.pin])
+        self.assertEqual(list(markup_map.inferred_pins.all()), [self.pin])
+        self.assertIn(markup_map, self.pin.inferred_maps.all())
+
+    def test_resync_drops_matches_that_no_longer_hold(self) -> None:
+        markup_map = self._map(zoom=16)
+        sync_pin_inferences(markup_map)
+        self.assertEqual(list(markup_map.inferred_pins.all()), [self.pin])
+
+        # Pan away from the pin, then resync - the stale match should be removed.
+        markup_map.center_latitude, markup_map.center_longitude = 10.0, 10.0
+        markup_map.save(update_fields=["center_latitude", "center_longitude"])
+        sync_pin_inferences(markup_map)
+        self.assertEqual(list(markup_map.inferred_pins.all()), [])
+
+    def test_independent_of_explicit_pin_link(self) -> None:
+        """Clearing MarkupMap.pin must never touch inferred_pins, and vice versa."""
+        markup_map = self._map(zoom=16)
+        markup_map.pin = self.pin
+        markup_map.save(update_fields=["pin"])
+        sync_pin_inferences(markup_map)
+        self.assertEqual(list(markup_map.inferred_pins.all()), [self.pin])
+
+        markup_map.pin = None
+        markup_map.save(update_fields=["pin"])
+        markup_map.refresh_from_db()
+        self.assertIsNone(markup_map.pin_id)
+        self.assertEqual(list(markup_map.inferred_pins.all()), [self.pin])
+
+    def test_saving_map_or_item_auto_syncs_via_signal(self) -> None:
+        markup_map = self._map(zoom=4)
+        with self.captureOnCommitCallbacks(execute=True):
+            self._markup_item(markup_map, MarkupType.PIN, {"type": "Point", "coordinates": [_LNG, _LAT]})
+        self.assertEqual(list(markup_map.inferred_pins.all()), [self.pin])
+
+
 # -- share_markup_map_with_profile / dedup / chaining --------------------------------
 
 @override_settings(UL_MAP_SHARE_ZOOM_THRESHOLD=14)
@@ -144,6 +187,7 @@ class ShareMarkupMapWithProfileTests(_MapShareTestCase):
         self.assertEqual(share.status, PinShareStatus.DETECTED)
         self.assertEqual(share.detected_via_map_id, markup_map.pk)
         self.assertFalse(share.is_actionable)
+        self.assertEqual(list(markup_map.inferred_pins.all()), [self.pin])
 
     def test_resending_same_map_does_not_duplicate(self) -> None:
         markup_map = self._map(zoom=16)

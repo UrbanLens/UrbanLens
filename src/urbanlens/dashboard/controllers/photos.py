@@ -331,7 +331,7 @@ class PhotoActionView(LoginRequiredMixin, View):
     def dismiss(self, request: HttpRequest, image: Image, profile: Profile) -> HttpResponse:
         """Clear a photo out of the organize queue without deleting it."""
         Image.objects.filter(pk=image.pk).update(organize_dismissed=True)
-        return _toast("Photo cleared from your to-do list.", "info", refresh_queue=True)
+        return _toast("Photo dismissed.", "info", refresh_queue=True)
 
     def delete_photo(self, request: HttpRequest, image: Image, profile: Profile) -> HttpResponse:
         """Delete the photo entirely."""

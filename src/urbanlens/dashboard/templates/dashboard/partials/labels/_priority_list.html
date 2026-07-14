@@ -3,10 +3,10 @@
 Organize > Display Order tab's priority list.
 
 Context:
-  priority_items - Badge queryset (tags/categories/statuses), in display order
+  priority_items - Label queryset (tags/categories/statuses), in display order
 
 Rendered both on the initial Organize page load and by OrganizePriorityListView
-(refetched via the `refreshPriority` event, fired after any badge create/edit/
+(refetched via the `refreshPriority` event, fired after any label create/edit/
 delete/merge/bulk-edit/convert elsewhere on the page - this list was previously
 only ever built once at page load and never caught up with those changes).
 {% endcomment %}
@@ -32,9 +32,9 @@ only ever built once at page load and never caught up with those changes).
         </div>
         <div class="priority-item-info">
             <span class="priority-item-name">{{ item.name }}</span>
-            <div class="priority-item-badges">
-                <span class="priority-kind-badge priority-kind-badge--{{ item.kind }}">{{ item.kind }}</span>
-                {% if not item.profile %}<span class="tag-global-badge">global</span>{% endif %}
+            <div class="priority-item-chips">
+                <span class="priority-kind-chip priority-kind-chip--{{ item.kind }}">{{ item.kind }}</span>
+                {% if not item.profile %}<span class="tag-global-label">global</span>{% endif %}
             </div>
         </div>
         <div class="priority-jump-actions">
@@ -43,13 +43,13 @@ only ever built once at page load and never caught up with those changes).
         </div>
         {% if item.kind == 'tag' or item.kind == 'category' or item.kind == 'status' and item.profile %}
         <button type="button" class="priority-edit-btn" title="Edit {{ item.kind }}"
-                hx-get="{% url 'badge.edit' badge_kind=item.kind badge_id=item.id %}"
-                hx-target="#badge-edit-dialog-body" hx-swap="innerHTML">
+                hx-get="{% url 'label.edit' label_kind=item.kind label_id=item.id %}"
+                hx-target="#label-edit-dialog-body" hx-swap="innerHTML">
             <i class="material-symbols-outlined">edit</i>
         </button>
         {% endif %}
         <div class="priority-order-editor">
-            <button type="button" class="priority-order-badge" title="Change position">{{ forloop.counter }}</button>
+            <button type="button" class="priority-order-chip" title="Change position">{{ forloop.counter }}</button>
             <input type="number" class="priority-order-input" aria-hidden="true" tabindex="-1"
                    aria-label="Position in list" inputmode="numeric">
             <button type="button" class="priority-order-save" aria-hidden="true" tabindex="-1"

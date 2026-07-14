@@ -31,17 +31,17 @@ class SerializeFormCriteriaNamePreservedTests(TestCase):
     @_db_settings
     @given(name=st.text(min_size=1, max_size=100).filter(lambda s: s.strip()))
     def test_name_round_trips(self, name: str) -> None:
-        criteria = serialize_form_criteria({"name": name}, badge_groups=None, custom_field_criteria=None)
+        criteria = serialize_form_criteria({"name": name}, label_groups=None, custom_field_criteria=None)
         self.assertEqual(criteria.get("name"), name.strip())
 
     def test_blank_name_is_not_stored(self) -> None:
-        criteria = serialize_form_criteria({"name": "   "}, badge_groups=None, custom_field_criteria=None)
+        criteria = serialize_form_criteria({"name": "   "}, label_groups=None, custom_field_criteria=None)
         self.assertNotIn("name", criteria)
 
     def test_name_alone_is_not_an_empty_criteria_dict(self) -> None:
         # A saved filter made of just a name search must be considered "active"
         # criteria by SavedFilterCreateView, which rejects an empty dict.
-        criteria = serialize_form_criteria({"name": "rooftop"}, badge_groups=None, custom_field_criteria=None)
+        criteria = serialize_form_criteria({"name": "rooftop"}, label_groups=None, custom_field_criteria=None)
         self.assertTrue(criteria)
 
 

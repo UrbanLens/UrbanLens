@@ -1,6 +1,6 @@
 import { installGlobalOrganizeIconPicker } from "../shared/organize-icon-picker";
 import { installGlobalColorPicker } from "../shared/color-picker";
-import { installGlobalBadgeRelPicker } from "../shared/badge-rel-picker";
+import { installGlobalLabelRelPicker } from "../shared/label-rel-picker";
 import { installOrgFilterEngine } from "../shared/organize-filter-engine";
 import { installOrgBulkToolbar, installOrgTabSwitching, installOrgSectionSwitching, createOrganizeHeader, orgHeader } from "../shared/organize-header";
 import { OrgTabManager, type OrgTabManagerConfig } from "../shared/organize-tab-manager";
@@ -9,10 +9,10 @@ import { initOnboardingTour } from "../shared/onboarding-tour";
 
 installGlobalOrganizeIconPicker();
 installGlobalColorPicker();
-installGlobalBadgeRelPicker();
+installGlobalLabelRelPicker();
 
 /** Live preview for the "upload custom icon" file inputs on organize's create dialogs. */
-function showBadgeCustomPreview(input: HTMLInputElement, previewId: string): void {
+function showLabelCustomPreview(input: HTMLInputElement, previewId: string): void {
     const file = input.files?.[0];
     if (!file) return;
     const preview = document.getElementById(previewId) as HTMLImageElement | null;
@@ -25,18 +25,18 @@ function showBadgeCustomPreview(input: HTMLInputElement, previewId: string): voi
     reader.readAsDataURL(file);
 }
 function showTagCustomPreview(input: HTMLInputElement): void {
-    showBadgeCustomPreview(input, "new-tag-custom-preview");
+    showLabelCustomPreview(input, "new-tag-custom-preview");
 }
-window.showBadgeCustomPreview = showBadgeCustomPreview;
+window.showLabelCustomPreview = showLabelCustomPreview;
 window.showTagCustomPreview = showTagCustomPreview;
 declare global {
     interface Window {
-        showBadgeCustomPreview: typeof showBadgeCustomPreview;
+        showLabelCustomPreview: typeof showLabelCustomPreview;
         showTagCustomPreview: typeof showTagCustomPreview;
     }
 }
 
-/** Destination-tab metadata for badge-kind conversion, shared by the single-item
+/** Destination-tab metadata for label-kind conversion, shared by the single-item
  *  kindChanged handler and the bulk-convert path below. */
 const KIND_ROWS_TARGET: Record<string, string> = { tag: "#tag-rows", category: "#category-rows", status: "#status-rows" };
 const KIND_TAB_KEY: Record<string, string> = { tag: "tags", category: "categories", status: "status" };
@@ -164,7 +164,7 @@ function initTabs(): void {
         ).init();
     }
 
-    const peopleRows = document.getElementById("people-badge-rows");
+    const peopleRows = document.getElementById("people-label-rows");
     if (peopleRows) {
         new OrgTabManager(
             buildTabConfig(peopleRows, {
@@ -284,7 +284,7 @@ function initKindChangedListener(): void {
 }
 
 /**
- * Badge edits (icon, color, name, kind, merges, bulk actions) change how pins
+ * Label edits (icon, color, name, kind, merges, bulk actions) change how pins
  * render on the map without touching any Pin row, so the map's own staleness
  * check (Max(Pin.updated)) can never detect them on its own. Flag the shared
  * cross-page `ul_pins_dirty` marker so the map forces a refresh on its next
@@ -314,27 +314,27 @@ function initConsolidatedDialogOpener(): void {
         const id = detail.target?.id;
         if (!id) return;
 
-        if (id === "badge-edit-dialog-body") {
+        if (id === "label-edit-dialog-body") {
             const body = detail.target!;
-            const titleEl = document.getElementById("badge-edit-dialog-title");
+            const titleEl = document.getElementById("label-edit-dialog-title");
             if (titleEl) {
-                if (body.querySelector(".organize-badge-merge-form")) {
+                if (body.querySelector(".organize-label-merge-form")) {
                     const mergeName = body.querySelector(".tag-merge-source-name");
                     titleEl.textContent = mergeName ? `Merge ${mergeName.textContent?.trim()}` : "Merge";
-                } else if (body.querySelector(".organize-badge-customize-form")) {
+                } else if (body.querySelector(".organize-label-customize-form")) {
                     titleEl.textContent = "Customize Display";
                 } else if (body.querySelector(".tag-global-edit-form")) {
                     titleEl.textContent = "Edit Global Tag";
                 } else {
                     const kindInput = body.querySelector<HTMLInputElement>('input[name="kind"]:checked');
                     const titles: Record<string, string> = { tag: "Tag", category: "Category", status: "Status" };
-                    titleEl.textContent = `Edit ${titles[kindInput?.value ?? ""] ?? "Badge"}`;
+                    titleEl.textContent = `Edit ${titles[kindInput?.value ?? ""] ?? "Label"}`;
                 }
             }
-            const dialog = document.getElementById("badge-edit-dialog") as HTMLDialogElement | null;
+            const dialog = document.getElementById("label-edit-dialog") as HTMLDialogElement | null;
             if (dialog && !dialog.open) dialog.showModal();
-        } else if (id === "people-badge-edit-dialog-body") {
-            const dialog = document.getElementById("people-badge-edit-dialog") as HTMLDialogElement | null;
+        } else if (id === "people-label-edit-dialog-body") {
+            const dialog = document.getElementById("people-label-edit-dialog") as HTMLDialogElement | null;
             if (dialog && !dialog.open) dialog.showModal();
         }
     });

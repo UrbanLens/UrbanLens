@@ -12,7 +12,7 @@ from django.shortcuts import get_object_or_404, render
 from django.views import View
 
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
-from urbanlens.dashboard.models.badges.model import Badge
+from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.model import Pin, PinType
 from urbanlens.dashboard.models.pin.note import PinNote
 from urbanlens.dashboard.models.reviews.model import Review
@@ -83,7 +83,7 @@ def _stat_item_context(pin: Pin, field: str) -> dict:
 
 
 def _overview_context(pin: Pin) -> dict:
-    from urbanlens.dashboard.models.badges.model import COLOR_CHOICES
+    from urbanlens.dashboard.models.labels.model import COLOR_CHOICES
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import PinType
 
@@ -111,7 +111,7 @@ def _overview_context(pin: Pin) -> dict:
         "pin": pin,
         "client_version": _pin_version(pin),
         "pin_type_choices": PinType.choices,
-        "all_categories": Badge.objects.categories().ordered(),
+        "all_categories": Label.objects.categories().ordered(),
         "detail_pin_icon_choices": detail_pin_icon_choices,
         "color_choices": COLOR_CHOICES,
         "security_level_choices": SecurityLevel.choices,
@@ -373,23 +373,23 @@ class PinEditView(LoginRequiredMixin, View):
             category_raw = (body.get("categories") or "").strip()
             names = [n.strip().lower() for n in category_raw.split(",") if n.strip()]
             seen_names: set[str] = set()
-            pin.badges.remove(*pin.badges.filter(kind="category"))
+            pin.labels.remove(*pin.labels.filter(kind="category"))
             for name in names:
                 if name in seen_names:
                     continue
                 seen_names.add(name)
-                cat = Badge.objects.filter(name__iexact=name, kind="category", profile=pin.profile).first()
+                cat = Label.objects.filter(name__iexact=name, kind="category", profile=pin.profile).first()
                 if cat is None:
-                    cat, _ = Badge.objects.get_or_create(
+                    cat, _ = Label.objects.get_or_create(
                         name=name,
                         kind="category",
                         profile=pin.profile,
                     )
-                pin.badges.add(cat)
+                pin.labels.add(cat)
 
         # Reload from DB so all properties reflect saved state
         pin.refresh_from_db()
-        pin.badges.filter(kind="category")  # prime M2M cache
+        pin.labels.filter(kind="category")  # prime M2M cache
 
         # Quick-edit widgets (star ratings) submit exactly one field at a time. When the
         # client's last-known version still matches what was in the DB before this save,

@@ -1,7 +1,7 @@
 """Additional Pin model tests covering methods not in test_pin_properties.py.
 
 An LLM Believes this file covers the following (this assessment may be correct, or incorrect):
-- effective_color  (mock-based, badges M2M filtered by kind=tag)
+- effective_color  (mock-based, labels M2M filtered by kind=tag)
 - rating  (DB, requires Review)
 - add_category / change_category  (DB)
 - to_json / to_detail_json  (DB)
@@ -19,7 +19,7 @@ from urbanlens.dashboard.models.pin.model import Pin
 
 
 class PinEffectiveColorTests(TestCase):
-    """effective_color returns map icon circle color from pin override or icon badge only."""
+    """effective_color returns map icon circle color from pin override or icon label only."""
 
     def _make_pin(self) -> Pin:
         pin = Pin()
@@ -29,51 +29,51 @@ class PinEffectiveColorTests(TestCase):
         pin.color = None
         return pin
 
-    def _mock_badges(self, mock_badges: MagicMock, badges: list[MagicMock]) -> None:
-        mock_badges.exclude.return_value.order_by.return_value = iter(badges)
+    def _mock_labels(self, mock_labels: MagicMock, labels: list[MagicMock]) -> None:
+        mock_labels.exclude.return_value.order_by.return_value = iter(labels)
 
-    @patch.object(Pin, "badges")
-    def test_returns_none_when_no_tags(self, mock_badges: MagicMock) -> None:
-        self._mock_badges(mock_badges, [])
+    @patch.object(Pin, "labels")
+    def test_returns_none_when_no_tags(self, mock_labels: MagicMock) -> None:
+        self._mock_labels(mock_labels, [])
         self.assertIsNone(self._make_pin().effective_color)
 
-    @patch.object(Pin, "badges")
-    def test_returns_none_when_icon_badge_has_no_color(self, mock_badges: MagicMock) -> None:
+    @patch.object(Pin, "labels")
+    def test_returns_none_when_icon_label_has_no_color(self, mock_labels: MagicMock) -> None:
         tag = MagicMock()
         tag.effective_color = None
         tag.effective_icon = "star"
         tag.custom_icon = None
         tag.icon_is_overridden = False
-        self._mock_badges(mock_badges, [tag])
+        self._mock_labels(mock_labels, [tag])
         self.assertIsNone(self._make_pin().effective_color)
 
-    @patch.object(Pin, "badges")
-    def test_returns_icon_badge_color(self, mock_badges: MagicMock) -> None:
+    @patch.object(Pin, "labels")
+    def test_returns_icon_label_color(self, mock_labels: MagicMock) -> None:
         tag = MagicMock()
         tag.effective_color = "#ff0000"
         tag.effective_icon = "star"
         tag.custom_icon = None
         tag.icon_is_overridden = False
-        self._mock_badges(mock_badges, [tag])
+        self._mock_labels(mock_labels, [tag])
         self.assertEqual(self._make_pin().effective_color, "#ff0000")
 
-    @patch.object(Pin, "badges")
-    def test_does_not_use_color_from_non_icon_badge(self, mock_badges: MagicMock) -> None:
-        icon_badge = MagicMock()
-        icon_badge.effective_color = None
-        icon_badge.effective_icon = "star"
-        icon_badge.custom_icon = None
-        icon_badge.icon_is_overridden = False
-        other_badge = MagicMock()
-        other_badge.effective_color = "#FFEB3B"
-        other_badge.effective_icon = None
-        other_badge.custom_icon = None
-        other_badge.icon_is_overridden = False
-        self._mock_badges(mock_badges, [icon_badge, other_badge])
+    @patch.object(Pin, "labels")
+    def test_does_not_use_color_from_non_icon_label(self, mock_labels: MagicMock) -> None:
+        icon_label = MagicMock()
+        icon_label.effective_color = None
+        icon_label.effective_icon = "star"
+        icon_label.custom_icon = None
+        icon_label.icon_is_overridden = False
+        other_label = MagicMock()
+        other_label.effective_color = "#FFEB3B"
+        other_label.effective_icon = None
+        other_label.custom_icon = None
+        other_label.icon_is_overridden = False
+        self._mock_labels(mock_labels, [icon_label, other_label])
         self.assertIsNone(self._make_pin().effective_color)
 
-    @patch.object(Pin, "badges")
-    def test_icon_badge_color_wins_over_later_badges(self, mock_badges: MagicMock) -> None:
+    @patch.object(Pin, "labels")
+    def test_icon_label_color_wins_over_later_labels(self, mock_labels: MagicMock) -> None:
         tag1 = MagicMock()
         tag1.effective_color = "#0000ff"
         tag1.effective_icon = "star"
@@ -84,22 +84,22 @@ class PinEffectiveColorTests(TestCase):
         tag2.effective_icon = None
         tag2.custom_icon = None
         tag2.icon_is_overridden = False
-        self._mock_badges(mock_badges, [tag1, tag2])
+        self._mock_labels(mock_labels, [tag1, tag2])
         self.assertEqual(self._make_pin().effective_color, "#0000ff")
 
-    def test_pin_color_override_wins_without_badges(self) -> None:
+    def test_pin_color_override_wins_without_labels(self) -> None:
         pin = self._make_pin()
         pin.color = "#123456"
         self.assertEqual(pin.effective_color, "#123456")
 
-    @patch.object(Pin, "badges")
-    def test_explicit_pin_icon_ignores_badge_colors(self, mock_badges: MagicMock) -> None:
+    @patch.object(Pin, "labels")
+    def test_explicit_pin_icon_ignores_label_colors(self, mock_labels: MagicMock) -> None:
         tag = MagicMock()
         tag.effective_color = "#4CAF50"
         tag.effective_icon = "star"
         tag.custom_icon = None
         tag.icon_is_overridden = False
-        self._mock_badges(mock_badges, [tag])
+        self._mock_labels(mock_labels, [tag])
         pin = self._make_pin()
         pin.icon = "star"
         self.assertIsNone(pin.effective_color)
@@ -178,26 +178,26 @@ class PinRatingTests(TestCase):
 # -- add_category / change_category --------------------------------------------
 
 class PinAddCategoryTests(TestCase):
-    """add_category creates the Badge if needed and links it to the pin."""
+    """add_category creates the Label if needed and links it to the pin."""
 
     def setUp(self):
         self.user = baker.make("auth.User")
         self.location = baker.make("dashboard.Location", latitude="41.0", longitude="-73.0")
         self.pin = baker.make(Pin, profile=self.user.profile, location=self.location)
 
-    def test_add_category_returns_a_badge(self) -> None:
+    def test_add_category_returns_a_label(self) -> None:
         result = self.pin.add_category("factory")
         self.assertIsNotNone(result)
 
-    def test_add_category_creates_badge_with_category_kind(self) -> None:
-        from urbanlens.dashboard.models.badges.model import Badge
+    def test_add_category_creates_label_with_category_kind(self) -> None:
+        from urbanlens.dashboard.models.labels.model import Label
         self.pin.add_category("hospital")
-        self.assertTrue(Badge.objects.filter(name="hospital", kind="category").exists())
+        self.assertTrue(Label.objects.filter(name="hospital", kind="category").exists())
 
-    def test_add_category_links_badge_to_pin(self) -> None:
+    def test_add_category_links_label_to_pin(self) -> None:
         self.pin.add_category("school")
         self.pin.refresh_from_db()
-        names = list(self.pin.badges.filter(kind="category").values_list("name", flat=True))
+        names = list(self.pin.labels.filter(kind="category").values_list("name", flat=True))
         self.assertIn("school", names)
 
     def test_add_category_normalises_to_lowercase(self) -> None:
@@ -213,19 +213,19 @@ class PinChangeCategoryTests(TestCase):
         self.user = baker.make("auth.User")
         self.location = baker.make("dashboard.Location", latitude="42.0", longitude="-72.0")
         self.pin = baker.make(Pin, profile=self.user.profile, location=self.location)
-        self.old_cat = baker.make("dashboard.Badge", name="old", kind="category", profile=None)
-        self.new_cat = baker.make("dashboard.Badge", name="new_cat", kind="category", profile=None)
-        self.pin.badges.add(self.old_cat)
+        self.old_cat = baker.make("dashboard.Label", name="old", kind="category", profile=None)
+        self.new_cat = baker.make("dashboard.Label", name="new_cat", kind="category", profile=None)
+        self.pin.labels.add(self.old_cat)
 
     def test_change_category_sets_new_category(self) -> None:
         self.pin.change_category(self.new_cat.id)
         self.pin.refresh_from_db()
-        self.assertIn(self.new_cat, self.pin.badges.filter(kind="category"))
+        self.assertIn(self.new_cat, self.pin.labels.filter(kind="category"))
 
     def test_change_category_removes_old_category(self) -> None:
         self.pin.change_category(self.new_cat.id)
         self.pin.refresh_from_db()
-        self.assertNotIn(self.old_cat, self.pin.badges.filter(kind="category"))
+        self.assertNotIn(self.old_cat, self.pin.labels.filter(kind="category"))
 
 
 # -- to_json / to_detail_json --------------------------------------------------

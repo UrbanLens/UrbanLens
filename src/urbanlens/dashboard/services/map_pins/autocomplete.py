@@ -52,7 +52,7 @@ def search_local(query: str, profile) -> list[AutocompleteResult]:
     - Pin name (effective name)
     - Pin aliases (PinAlias)
     - Pin personal notes / description
-    - Badge / tag names assigned to the pin
+    - Label / tag names assigned to the pin
     - Location canonical name
     - Wiki aliases (WikiAlias / community wiki aliases)
     - Location description
@@ -85,12 +85,12 @@ def search_local(query: str, profile) -> list[AutocompleteResult]:
     pin_qs = (
         Pin.objects.filter(profile=profile)
         .select_related("location__wiki", "parent_pin", "parent_pin__location")
-        .prefetch_related("badges", "aliases", "location__wiki__aliases")
+        .prefetch_related("labels", "aliases", "location__wiki__aliases")
         .filter(
             Q(name__icontains=q)
             | Q(aliases__name__icontains=q)
             | Q(description__icontains=q)
-            | Q(badges__name__icontains=q)
+            | Q(labels__name__icontains=q)
             | Q(location__official_name__icontains=q)
             | Q(location__wiki__name__icontains=q)
             | Q(location__wiki__aliases__name__icontains=q)
@@ -187,10 +187,10 @@ def _pin_match_subtitle(pin, q_lower: str) -> str:
             snippet += "..."
         return snippet
 
-    # Badge / tag match
-    for badge in pin.badges.all():
-        if q_lower in badge.name.lower():
-            return f"Tagged: {badge.name}"
+    # Label / tag match
+    for label in pin.labels.all():
+        if q_lower in label.name.lower():
+            return f"Tagged: {label.name}"
 
     # Wiki/display name match
     if q_lower in loc_name:

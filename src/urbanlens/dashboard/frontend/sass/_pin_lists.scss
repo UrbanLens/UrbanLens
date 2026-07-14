@@ -629,7 +629,7 @@
 
 .saved-filter-score-grid,
 .saved-filter-date-grid,
-.saved-filter-badge-grid {
+.saved-filter-label-grid {
     display: grid;
     grid-template-columns: 1fr;
     gap: .9rem;
@@ -639,7 +639,7 @@
     }
 }
 
-.saved-filter-badge-list {
+.saved-filter-label-list {
     max-height: 160px;
     overflow-y: auto;
     border: 1px solid var(--ul-grey-1a);

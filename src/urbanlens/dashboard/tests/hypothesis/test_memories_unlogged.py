@@ -18,7 +18,7 @@ from django.utils import timezone
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.models.badges.model import Badge
+from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
 from urbanlens.dashboard.services.memories.unlogged import unlogged_visited_pins
@@ -62,10 +62,10 @@ class VisitedWithoutRecordQuerySetTests(TestCase):
         pin = _make_pin(self.profile, last_visited=None)
         self.assertNotIn(pin, self._unlogged())
 
-    def test_pin_with_visited_badge_but_no_record_is_included(self) -> None:
+    def test_pin_with_visited_label_but_no_record_is_included(self) -> None:
         pin = _make_pin(self.profile, last_visited=None)
-        badge = baker.make("dashboard.Badge", profile=self.profile, kind="status", name="Visited")
-        pin.badges.add(badge)
+        label = baker.make("dashboard.Label", profile=self.profile, kind="status", name="Visited")
+        pin.labels.add(label)
         self.assertIn(pin, self._unlogged())
 
     def test_detail_pin_is_excluded(self) -> None:
@@ -219,16 +219,16 @@ class MemoriesUnloggedActionViewTests(TestCase):
         self.assertIsNone(self.pin.last_visited)
         self.assertNotIn(self.pin, unlogged_visited_pins(self.profile))
 
-    def test_unmark_removes_visited_badge(self) -> None:
-        # Every profile gets exactly one "Visited" status badge auto-created on
-        # signup (see badges.signals.create_default_tags) - fetch that one rather
-        # than baking a duplicate, so removal targets the badge actually attached.
-        badge = Badge.objects.get(profile=self.profile, kind="status", name="Visited")
-        self.pin.badges.add(badge)
+    def test_unmark_removes_visited_label(self) -> None:
+        # Every profile gets exactly one "Visited" status label auto-created on
+        # signup (see labels.signals.create_default_tags) - fetch that one rather
+        # than baking a duplicate, so removal targets the label actually attached.
+        label = Label.objects.get(profile=self.profile, kind="status", name="Visited")
+        self.pin.labels.add(label)
 
         self.client.post(reverse("memories.unlogged.action", args=[self.pin.slug, "unmark"]))
 
-        self.assertNotIn(badge, self.pin.badges.all())
+        self.assertNotIn(label, self.pin.labels.all())
 
     def test_unknown_action_is_404(self) -> None:
         response = self.client.post(reverse("memories.unlogged.action", args=[self.pin.slug, "bogus"]))

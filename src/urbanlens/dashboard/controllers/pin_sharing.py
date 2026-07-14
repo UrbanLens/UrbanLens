@@ -44,7 +44,7 @@ def _create_pin_from_share(share: PinShare, parent_pin: Pin | None = None) -> Pi
 
     Returns:
         The newly created Pin, carrying over every user-visible property
-        (name, icon, badges, notes, scores, security indicators, photos).
+        (name, icon, labels, notes, scores, security indicators, photos).
     """
     source = share.pin
     new_pin = Pin.objects.create(
@@ -76,7 +76,7 @@ def _create_pin_from_share(share: PinShare, parent_pin: Pin | None = None) -> Pi
         plywood=source.plywood,
         locked=source.locked,
     )
-    new_pin.badges.set(source.badges.all())
+    new_pin.labels.set(source.labels.all())
     for image in share.images.all():
         Image.objects.create(
             image=image.image.name,
@@ -348,11 +348,11 @@ class PinShareRespondView(LoginRequiredMixin, View):
         elif action == "reject":
             messages.info(request, status_message)
         if request.headers.get("HX-Request"):
-            from urbanlens.dashboard.controllers.notifications import _trigger_badge_refresh
+            from urbanlens.dashboard.controllers.notifications import _trigger_label_refresh
 
             notifications = NotificationLog.objects.for_profile(request.user.profile).select_related("source_profile").order_by("-created")[:20]
             response = render(request, "dashboard/partials/notifications/notification_dropdown.html", {"notifications": notifications, "unread_count": NotificationLog.objects.for_profile(request.user.profile).unread().count()})
-            return _trigger_badge_refresh(response)
+            return _trigger_label_refresh(response)
         if action == "accept" and target_pin is not None:
             return redirect("pin.details", pin_slug=target_pin.slug)
         return redirect("pin.share.detail", share_id=share.id)

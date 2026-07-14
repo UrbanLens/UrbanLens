@@ -1,4 +1,4 @@
-"""Signals for Badge - creates default user-specific badges when a Profile is created."""
+"""Signals for Label - creates default user-specific labels when a Profile is created."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
 
 # Default category definitions mirror the keys in services/ai/keywords.py so that
-# auto-categorisation can match against badges the user actually owns.
+# auto-categorisation can match against labels the user actually owns.
 # Each entry carries an icon (emoji), a hex color, and an optional display order.
 DEFAULT_CATEGORIES: list[dict] = [
     {"name": "Amusement Park", "icon": "🎢", "color": "#FF9800"},
@@ -51,7 +51,7 @@ DEFAULT_TAGS: list[dict] = [
 
 # Parent → child relationships established after all categories are created.
 # Children are a specialisation or sub-type of the parent, which lets users
-# filter a parent badge and surface pins tagged with any of its descendants.
+# filter a parent label and surface pins tagged with any of its descendants.
 CATEGORY_HIERARCHY: list[tuple[str, str]] = [
     # Healthcare
     ("Hospital", "Asylum"),  # psychiatric hospitals were often called asylums
@@ -67,25 +67,25 @@ CATEGORY_HIERARCHY: list[tuple[str, str]] = [
 
 
 def create_default_tags(sender: type[Profile], instance: Profile, created: bool, **kwargs) -> None:
-    """Create default personal status and category badges for every new profile.
+    """Create default personal status and category labels for every new profile.
 
-    Status badges:
+    Status labels:
         "Visited" is protected - it cannot be deleted or renamed.
         "Active", "Abandoned", and "Demolished" are also protected.
 
-    Category badges:
-        One badge per entry in DEFAULT_CATEGORIES, pre-populated with an icon,
+    Category labels:
+        One label per entry in DEFAULT_CATEGORIES, pre-populated with an icon,
         colour, and display order. Parent-child relationships from CATEGORY_HIERARCHY
-        are wired up via the ``parents`` M2M after all badges exist. Users may delete
-        or rename any category badge after creation.
+        are wired up via the ``parents`` M2M after all labels exist. Users may delete
+        or rename any category label after creation.
 
-    Tag badges:
-        A small starter set of ordinary, user-owned tag badges. Users may edit or
+    Tag labels:
+        A small starter set of ordinary, user-owned tag labels. Users may edit or
         delete these exactly like tags they create themselves.
     """
     if not created:
         return
-    from urbanlens.dashboard.models.badges.model import KIND_CATEGORY, KIND_STATUS, KIND_TAG, KIND_USER, Badge
+    from urbanlens.dashboard.models.labels.model import KIND_CATEGORY, KIND_STATUS, KIND_TAG, KIND_USER, Label
 
     status_defaults = [
         {"name": "Visited", "icon": "✅", "color": "#4CAF50", "order": 100, "is_protected": True},
@@ -95,7 +95,7 @@ def create_default_tags(sender: type[Profile], instance: Profile, created: bool,
         {"name": "Demolished", "icon": "💀", "color": "#795548", "order": 60, "is_protected": True},
     ]
     for d in status_defaults:
-        Badge.objects.get_or_create(
+        Label.objects.get_or_create(
             profile=instance,
             name=d["name"],
             kind=KIND_STATUS,
@@ -104,7 +104,7 @@ def create_default_tags(sender: type[Profile], instance: Profile, created: bool,
 
     total = len(DEFAULT_CATEGORIES)
     for i, cat in enumerate(DEFAULT_CATEGORIES):
-        Badge.objects.get_or_create(
+        Label.objects.get_or_create(
             profile=instance,
             name=cat["name"],
             kind=KIND_CATEGORY,
@@ -115,25 +115,25 @@ def create_default_tags(sender: type[Profile], instance: Profile, created: bool,
             },
         )
 
-    # Wire up parent → child badge relationships so that hierarchy-aware
-    # filtering (get_badge_and_descendants) works for new profiles.
+    # Wire up parent → child label relationships so that hierarchy-aware
+    # filtering (get_label_and_descendants) works for new profiles.
     hierarchy_names = {name for pair in CATEGORY_HIERARCHY for name in pair}
-    badge_by_name: dict[str, Badge] = {
+    label_by_name: dict[str, Label] = {
         b.name: b
-        for b in Badge.objects.filter(
+        for b in Label.objects.filter(
             profile=instance,
             kind=KIND_CATEGORY,
             name__in=hierarchy_names,
         )
     }
     for parent_name, child_name in CATEGORY_HIERARCHY:
-        parent = badge_by_name.get(parent_name)
-        child = badge_by_name.get(child_name)
+        parent = label_by_name.get(parent_name)
+        child = label_by_name.get(child_name)
         if parent and child:
             child.parents.add(parent)
 
     for d in DEFAULT_TAGS:
-        Badge.objects.get_or_create(
+        Label.objects.get_or_create(
             profile=instance,
             name=d["name"],
             kind=KIND_TAG,
@@ -147,7 +147,7 @@ def create_default_tags(sender: type[Profile], instance: Profile, created: bool,
         {"name": "Influencer", "icon": "📣", "color": "#9C27B0", "order": 10},
     ]
     for d in people_defaults:
-        Badge.objects.get_or_create(
+        Label.objects.get_or_create(
             profile=instance,
             name=d["name"],
             kind=KIND_USER,

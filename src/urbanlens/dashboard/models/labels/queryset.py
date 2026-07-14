@@ -1,4 +1,4 @@
-"""QuerySet and Manager for Badge."""
+"""QuerySet and Manager for Label."""
 
 from __future__ import annotations
 
@@ -13,27 +13,27 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
 
 
-class BadgeQuerySet(abstract.FrontendDashboardQuerySet):
-    """QuerySet for Badge with visibility and ordering helpers."""
+class LabelQuerySet(abstract.FrontendDashboardQuerySet):
+    """QuerySet for Label with visibility and ordering helpers."""
 
     def visible_to(self, profile: Profile | int) -> Self:
-        """Return global badges (profile=None) plus badges owned by this profile."""
+        """Return global labels (profile=None) plus labels owned by this profile."""
         if isinstance(profile, int):
             return self.filter(Q(profile__isnull=True) | Q(profile_id=profile))
         return self.filter(Q(profile__isnull=True) | Q(profile=profile))
 
     def global_only(self) -> Self:
-        """Return only global badges (profile=None)."""
+        """Return only global labels (profile=None)."""
         return self.filter(profile__isnull=True)
 
     def for_profile(self, profile: Profile | int) -> Self:
-        """Return badges owned by a specific profile (not global)."""
+        """Return labels owned by a specific profile (not global)."""
         if isinstance(profile, int):
             return self.filter(profile_id=profile)
         return self.filter(profile=profile)
 
     def with_icon(self) -> Self:
-        """Badges that have at least one icon set (standard or custom)."""
+        """Labels that have at least one icon set (standard or custom)."""
         return self.filter(Q(custom_icon__gt="") | Q(icon__gt=""))
 
     def tags(self) -> Self:
@@ -51,25 +51,25 @@ class BadgeQuerySet(abstract.FrontendDashboardQuerySet):
         # Don't hardcode strings
         return self.filter(kind="status")
 
-    def user_badges(self) -> Self:
+    def user_labels(self) -> Self:
         """Return only items with kind='user' (for annotating profiles privately)."""
         # TODO: Don't hardcode 'user' string
         return self.filter(kind="user")
 
-    def location_badges(self) -> Self:
+    def location_labels(self) -> Self:
         """Return only items without kind='user'."""
         # TODO: Don't hardcode 'user' string
         return self.exclude(kind="user")
 
     def with_customizations_for(self, profile: Profile | int) -> Self:
-        """Prefetch this user's BadgeCustomizations into _user_customizations attr."""
-        from urbanlens.dashboard.models.badges.customization import BadgeCustomization
+        """Prefetch this user's LabelCustomizations into _user_customizations attr."""
+        from urbanlens.dashboard.models.labels.customization import LabelCustomization
 
         profile_id = profile if isinstance(profile, int) else profile.pk
         return self.prefetch_related(
             Prefetch(
                 "customizations",
-                queryset=BadgeCustomization.objects.filter(profile_id=profile_id),
+                queryset=LabelCustomization.objects.filter(profile_id=profile_id),
                 to_attr="_user_customizations",
             ),
         )
@@ -79,13 +79,13 @@ class BadgeQuerySet(abstract.FrontendDashboardQuerySet):
 
         Each count is a correlated subquery rather than a sibling `Count()` on the
         same queryset - annotating `pins` and `wikis` together would join both M2M
-        tables in before grouping, producing a row per (pin, wiki) pair per badge
+        tables in before grouping, producing a row per (pin, wiki) pair per label
         (a cartesian fan-out) that `distinct=True` only fixes after the fact.
         """
-        from urbanlens.dashboard.models.badges.model import Badge
+        from urbanlens.dashboard.models.labels.model import Label
 
-        pin_counts = Badge.objects.filter(pk=OuterRef("pk")).order_by().values("pk").annotate(c=Count("pins")).values("c")
-        wiki_counts = Badge.objects.filter(pk=OuterRef("pk")).order_by().values("pk").annotate(c=Count("wikis")).values("c")
+        pin_counts = Label.objects.filter(pk=OuterRef("pk")).order_by().values("pk").annotate(c=Count("pins")).values("c")
+        wiki_counts = Label.objects.filter(pk=OuterRef("pk")).order_by().values("pk").annotate(c=Count("wikis")).values("c")
 
         return self.annotate(
             pin_count=Coalesce(Subquery(pin_counts, output_field=IntegerField()), 0),
@@ -93,14 +93,14 @@ class BadgeQuerySet(abstract.FrontendDashboardQuerySet):
         ).prefetch_related(
             Prefetch(
                 "children",
-                queryset=Badge.objects.annotate(pin_count=Count("pins", distinct=True)),
+                queryset=Label.objects.annotate(pin_count=Count("pins", distinct=True)),
             ),
-            Prefetch("parents", queryset=Badge.objects.only("id", "name", "kind")),
+            Prefetch("parents", queryset=Label.objects.only("id", "name", "kind")),
         )
 
     def ordered(self) -> Self:
         return self.order_by("-order", "name")
 
 
-class BadgeManager(abstract.FrontendDashboardManager.from_queryset(BadgeQuerySet)):
+class LabelManager(abstract.FrontendDashboardManager.from_queryset(LabelQuerySet)):
     pass

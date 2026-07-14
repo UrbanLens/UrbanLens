@@ -19,12 +19,12 @@ from rest_framework.viewsets import GenericViewSet
 
 from urbanlens.dashboard.forms.advanced_search import AdvancedSearchForm
 from urbanlens.dashboard.forms.search import SearchForm
-from urbanlens.dashboard.models.badges.model import (
+from urbanlens.dashboard.models.images.model import Image
+from urbanlens.dashboard.models.labels.model import (
     COLOR_CHOICES,
     ICON_CATEGORIES,
-    Badge,
+    Label,
 )
-from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin import Pin, PinQuerySet
 from urbanlens.dashboard.models.profile.model import Profile
@@ -128,15 +128,15 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         )
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        from urbanlens.dashboard.models.badges.model import KIND_USER
+        from urbanlens.dashboard.models.labels.model import KIND_USER
 
-        tags = Badge.objects.tags().visible_to(profile).ordered()
-        categories = Badge.objects.categories().ordered()
-        filter_badges = Badge.objects.exclude(kind=KIND_USER).visible_to(profile).ordered()
+        tags = Label.objects.tags().visible_to(profile).ordered()
+        categories = Label.objects.categories().ordered()
+        filter_labels = Label.objects.exclude(kind=KIND_USER).visible_to(profile).ordered()
         pin_count = Pin.objects.filter(profile=profile).root_pins().count()
 
-        filter_badges_list = list(filter_badges)
-        filter_badges_json = safe_json_for_script([{"id": b.id, "name": b.name, "kind": b.kind, "color": b.color or "", "icon": b.icon or ""} for b in filter_badges_list])
+        filter_labels_list = list(filter_labels)
+        filter_labels_json = safe_json_for_script([{"id": b.id, "name": b.name, "kind": b.kind, "color": b.color or "", "icon": b.icon or ""} for b in filter_labels_list])
 
         from urbanlens.dashboard.models.custom_fields.model import CustomField, CustomFieldEntity
 
@@ -158,8 +158,8 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 "openweathermap_api_key": settings.openweathermap_api_key,
                 "tags": tags,
                 "categories": categories,
-                "filter_badges": filter_badges_list,
-                "filter_badges_json": filter_badges_json,
+                "filter_labels": filter_labels_list,
+                "filter_labels_json": filter_labels_json,
                 "custom_filter_fields": custom_filter_fields,
                 "saved_filters": saved_filters,
                 "pin_lists": pin_lists,
@@ -193,7 +193,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             icon = request.POST.get("icon") or None
             color = request.POST.get("color") or None
             custom_icon = request.FILES.get("custom_icon") or None
-            badge_ids = request.POST.getlist("badge_ids")
+            label_ids = request.POST.getlist("label_ids")
             tag_ids = request.POST.getlist("tag_ids")
             category_ids = request.POST.getlist("category_ids")
             google_place_id = request.POST.get("google_place_id") or None
@@ -235,15 +235,15 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 profile=request.user.profile,
             )
 
-            if badge_ids:
-                pin.badges.set(Badge.objects.location_badges().filter(id__in=badge_ids))
+            if label_ids:
+                pin.labels.set(Label.objects.location_labels().filter(id__in=label_ids))
             else:
                 if tag_ids:
-                    pin.badges.remove(*pin.badges.filter(kind="tag"))
-                    pin.badges.add(*Badge.objects.tags().filter(id__in=tag_ids))
+                    pin.labels.remove(*pin.labels.filter(kind="tag"))
+                    pin.labels.add(*Label.objects.tags().filter(id__in=tag_ids))
                 if category_ids:
-                    pin.badges.remove(*pin.badges.filter(kind="category"))
-                    pin.badges.add(*Badge.objects.categories().filter(id__in=category_ids))
+                    pin.labels.remove(*pin.labels.filter(kind="category"))
+                    pin.labels.add(*Label.objects.categories().filter(id__in=category_ids))
 
             # Generate slug immediately so the "View Details" URL resolves without a
             # separate lookup - Pin.slug is nullable and is not auto-populated by create().
@@ -323,7 +323,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             return HttpResponse("Error: failed to create pin.", status=400)
 
     def autocomplete_local(self, request, *args, **kwargs):
-        """Fast autocomplete from local DB: pins, locations, aliases, badges, wiki.
+        """Fast autocomplete from local DB: pins, locations, aliases, labels, wiki.
 
         Returns JSON with pin/location suggestions ranked by relevance.  This is
         always the first source shown to the user because it requires no external
@@ -442,10 +442,10 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         search_form = SearchForm(request.POST, profile=profile)
         if search_form.is_valid():
             criteria = dict(search_form.cleaned_data)
-            # Prefer structured badge_groups (from formula bar) over legacy tag lists
-            parsed_groups = search_form.parse_badge_groups()
+            # Prefer structured label_groups (from formula bar) over legacy tag lists
+            parsed_groups = search_form.parse_label_groups()
             if parsed_groups is not None:
-                criteria["badge_groups"] = parsed_groups
+                criteria["label_groups"] = parsed_groups
             if (custom_field_criteria := search_form.parse_custom_field_criteria()) is not None:
                 criteria["custom_fields"] = custom_field_criteria
             criteria["include_regions"] = search_form.parse_region_geojson("include_regions")
@@ -476,14 +476,14 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             for the requested page, plus the total match count.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        query = Pin.objects.filter(profile=profile).root_pins().select_related("location").prefetch_related(Prefetch("badges", queryset=Badge.objects.exclude(kind="user").order_by("-order", "name")))
+        query = Pin.objects.filter(profile=profile).root_pins().select_related("location").prefetch_related(Prefetch("labels", queryset=Label.objects.exclude(kind="user").order_by("-order", "name")))
 
         search_form = SearchForm(request.GET, profile=profile)
         if search_form.is_valid():
             criteria = dict(search_form.cleaned_data)
-            parsed_groups = search_form.parse_badge_groups()
+            parsed_groups = search_form.parse_label_groups()
             if parsed_groups is not None:
-                criteria["badge_groups"] = parsed_groups
+                criteria["label_groups"] = parsed_groups
             if (custom_field_criteria := search_form.parse_custom_field_criteria()) is not None:
                 criteria["custom_fields"] = custom_field_criteria
             criteria["include_regions"] = search_form.parse_region_geojson("include_regions")
@@ -535,7 +535,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         return HttpResponse(status=200)
 
     def change_category(self, request, pin_slug, *args, **kwargs):
-        # TODO: Assess codebase, but this is probably deprecated since the addition of Badges more generically.
+        # TODO: Assess codebase, but this is probably deprecated since the addition of Labels more generically.
 
         category_id = request.POST.get("category")
         pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
@@ -613,14 +613,14 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             parent_name, parent_url}, ...]}``
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        query = Pin.objects.filter(profile=profile).detail_pins().select_related("location", "parent_pin", "parent_pin__location").prefetch_related(Prefetch("badges", queryset=Badge.objects.exclude(kind="user").order_by("-order", "name")))
+        query = Pin.objects.filter(profile=profile).detail_pins().select_related("location", "parent_pin", "parent_pin__location").prefetch_related(Prefetch("labels", queryset=Label.objects.exclude(kind="user").order_by("-order", "name")))
 
         search_form = SearchForm(request.GET, profile=profile)
         if search_form.is_valid():
             criteria = dict(search_form.cleaned_data)
-            parsed_groups = search_form.parse_badge_groups()
+            parsed_groups = search_form.parse_label_groups()
             if parsed_groups is not None:
-                criteria["badge_groups"] = parsed_groups
+                criteria["label_groups"] = parsed_groups
             if (custom_field_criteria := search_form.parse_custom_field_criteria()) is not None:
                 criteria["custom_fields"] = custom_field_criteria
             criteria["include_regions"] = search_form.parse_region_geojson("include_regions")
@@ -692,8 +692,8 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         """Quick-edit a pin from the map popup dialog.
 
         Accepts the same FormData fields as ``post_add_pin`` and applies them to
-        an existing pin looked up by slug or UUID.  Badges are replaced (not merged)
-        when ``badge_ids`` is provided.
+        an existing pin looked up by slug or UUID.  Labels are replaced (not merged)
+        when ``label_ids`` is provided.
 
         Args:
             pin_slug: Slug or UUID string of the pin to update.
@@ -715,7 +715,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         icon = request.POST.get("icon")
         color = request.POST.get("color")
         custom_icon = request.FILES.get("custom_icon") or None
-        badge_ids = [bid for bid in request.POST.getlist("badge_ids") if bid]
+        label_ids = [bid for bid in request.POST.getlist("label_ids") if bid]
 
         import contextlib
 
@@ -737,12 +737,12 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             pin.custom_icon = None
         pin.save()
 
-        if badge_ids:
-            from urbanlens.dashboard.models.badges.model import KIND_USER as _KIND_USER
+        if label_ids:
+            from urbanlens.dashboard.models.labels.model import KIND_USER as _KIND_USER
 
-            pin.badges.set(Badge.objects.exclude(kind=_KIND_USER).filter(id__in=badge_ids))
-        elif "badge_ids" in request.POST:
-            pin.badges.clear()
+            pin.labels.set(Label.objects.exclude(kind=_KIND_USER).filter(id__in=label_ids))
+        elif "label_ids" in request.POST:
+            pin.labels.clear()
 
         return JsonResponse({"ok": True, "pin_slug": pin.slug or str(pin.uuid)})
 

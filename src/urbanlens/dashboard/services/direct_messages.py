@@ -233,7 +233,7 @@ def _broadcast_direct_message(message: DirectMessage) -> None:
 
     Best-effort, mirroring ``services.safety._broadcast_chat_message``: the row
     is already durably saved, so a channel-layer failure is logged, not raised -
-    the recipient still sees the message on their next page load or badge poll.
+    the recipient still sees the message on their next page load or label poll.
 
     Args:
         message: The freshly created message.

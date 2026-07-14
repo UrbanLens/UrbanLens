@@ -905,10 +905,10 @@ def _broadcast_chat_message(checkin: SafetyCheckin, message: SafetyCheckinMessag
 def _broadcast_status_update(checkin: SafetyCheckin) -> None:
     """Push a check-in status change to any live-connected chat clients for this check-in.
 
-    The status badge, the "I'm safe"/"I found them" action buttons, and the leave-page
+    The status label, the "I'm safe"/"I found them" action buttons, and the leave-page
     warning all depend on ``checkin.status``/``is_resolved`` - without this, anyone with
     the detail page or contact portal already open only saw the change via the system
-    chat message, not in the badge/button state, until they reloaded.
+    chat message, not in the label/button state, until they reloaded.
 
     Best-effort, same as ``_broadcast_chat_message`` - the status is already durably
     saved regardless of whether anyone is connected right now.

@@ -40,8 +40,8 @@ def _get_or_create_prefs(profile: Profile) -> NotificationPreference:
     return prefs
 
 
-def _trigger_badge_refresh(response: HttpResponse) -> HttpResponse:
-    """Attach an HTMX trigger so the nav bell badge refreshes."""
+def _trigger_label_refresh(response: HttpResponse) -> HttpResponse:
+    """Attach an HTMX trigger so the nav bell label refreshes."""
     response["HX-Trigger"] = json.dumps({"notifCountRefresh": {"target": "body"}})
     return response
 
@@ -73,7 +73,7 @@ class NotificationDropdownView(LoginRequiredMixin, View):
                 "unread_count": unread_count,
             },
         )
-        return _trigger_badge_refresh(response) if unread_ids else response
+        return _trigger_label_refresh(response) if unread_ids else response
 
 
 class NotificationMarkReadView(LoginRequiredMixin, View):
@@ -94,7 +94,7 @@ class NotificationMarkReadView(LoginRequiredMixin, View):
             "dashboard/partials/notifications/notification_item.html",
             {"n": notification},
         )
-        return _trigger_badge_refresh(response)
+        return _trigger_label_refresh(response)
 
 
 class NotificationMarkAllReadView(LoginRequiredMixin, View):
@@ -111,7 +111,7 @@ class NotificationMarkAllReadView(LoginRequiredMixin, View):
                 "unread_count": 0,
             },
         )
-        return _trigger_badge_refresh(response)
+        return _trigger_label_refresh(response)
 
 
 class NotificationPreferencesView(LoginRequiredMixin, View):
@@ -155,9 +155,9 @@ class NotificationPreferencesView(LoginRequiredMixin, View):
 
 
 class NotificationUnreadCountView(LoginRequiredMixin, View):
-    """GET /notifications/unread-count/ - returns the unread count badge partial."""
+    """GET /notifications/unread-count/ - returns the unread count label partial."""
 
     def get(self, request):
         profile = request.user.profile
         count = NotificationLog.objects.for_profile(profile).unread().count()
-        return render(request, "dashboard/partials/notifications/notification_badge.html", {"unread_count": count})
+        return render(request, "dashboard/partials/notifications/notification_label.html", {"unread_count": count})

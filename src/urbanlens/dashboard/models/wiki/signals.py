@@ -11,7 +11,7 @@ def suggest_and_add_categories(sender: type[Wiki], instance: Wiki, created: bool
 
     Auto-tagging is deferred to Wiki creation (rather than Location creation) so
     it only runs for places that actually have a community page, keeping the
-    badge suggestion work bounded.
+    label suggestion work bounded.
 
     Args:
         sender: The model class.

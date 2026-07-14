@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 
     from django.utils.safestring import SafeString
 
-    from urbanlens.dashboard.models.badges.model import Badge
+    from urbanlens.dashboard.models.labels.model import Label
     from urbanlens.dashboard.models.profile.model import Profile
 
 register = template.Library()
@@ -120,10 +120,10 @@ def first_pin_directions_url(map_data: Any) -> str | None:
 
 
 @register.filter
-def tag_total_pins(tag: Badge) -> int:
+def tag_total_pins(tag: Label) -> int:
     """Return direct pin count plus all direct children's pin counts.
 
-    Uses annotated pin_count when available (set by BadgeQuerySet.with_pin_counts()).
+    Uses annotated pin_count when available (set by LabelQuerySet.with_pin_counts()).
     Falls back to DB queries only when annotations are absent.
     """
     total = getattr(tag, "pin_count", None)
@@ -175,7 +175,7 @@ def filter_criteria_summary(criteria: dict[str, Any] | None) -> str:
     Walks the well-known criteria keys (the same ones SearchForm/filter_criteria
     produce) and joins whichever are present into a compact "·"-separated
     string for a Filters-tab card, e.g. "name contains 'diner' · 4★+ · 2 tags".
-    Region keys are summarized separately by the card (see the region badge),
+    Region keys are summarized separately by the card (see the region label),
     not included here.
     """
     if not criteria:
@@ -187,8 +187,8 @@ def filter_criteria_summary(criteria: dict[str, Any] | None) -> str:
         parts.append(f"{min_rating}★+")
     if max_rating := criteria.get("max_rating"):
         parts.append(f"{max_rating}★ or less")
-    if criteria.get("badge_groups"):
-        parts.append(f"{len(criteria['badge_groups'])} badge rule(s)")
+    if criteria.get("label_groups"):
+        parts.append(f"{len(criteria['label_groups'])} label rule(s)")
     else:
         if tags := criteria.get("tags"):
             parts.append(f"{len(tags)} tag(s) included")
@@ -299,7 +299,7 @@ def icon_keywords(value: str | None) -> str:
 
     Usage: data-keywords="{{ tag.icon|icon_keywords }}"
     """
-    from urbanlens.dashboard.models.badges.meta import ICON_KEYWORDS
+    from urbanlens.dashboard.models.labels.meta import ICON_KEYWORDS
 
     return ICON_KEYWORDS.get(str(value), "")
 

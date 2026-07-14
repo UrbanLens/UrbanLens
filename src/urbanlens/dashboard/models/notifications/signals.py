@@ -2,7 +2,7 @@
 
 When a ``NotificationLog`` row is inserted, every browser session the recipient
 has open (subscribed via ``UserNotificationConsumer`` at ``ws/notifications/``)
-receives the notification over the channel layer immediately, so the bell badge
+receives the notification over the channel layer immediately, so the bell label
 and a toast appear without a page refresh.
 """
 

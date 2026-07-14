@@ -186,7 +186,7 @@ export function installOrgBulkToolbar(): void {
         if (deleteBtn) deleteBtn.hidden = !opts.hasDel;
     };
 
-    // When exactly one badge is selected, "Edit" should open that badge's own
+    // When exactly one label is selected, "Edit" should open that label's own
     // single-edit dialog rather than the bulk-edit dialog.
     window._orgOpenSingleEdit = (dataAttr, id) => {
         const card = document.querySelector(`[${dataAttr}="${id}"]`);
@@ -239,7 +239,7 @@ export function installOrgTabSwitching(): void {
     });
 }
 
-// ── Section switching (Badges | Lists | Filters) --------------------------
+// ── Section switching (Labels | Lists | Filters) --------------------------
 // A second, independent tab tier above `.organize-tab`/`.organize-panel`:
 // switches between the three top-level sections of the Organize page. Lists
 // and Filters lazy-load their content via HTMX the first time they're shown
@@ -259,10 +259,10 @@ export function installOrgSectionSwitching(): void {
                 p.hidden = p.id !== `panel-${section}`;
             });
             const url = new URL(window.location.href);
-            // "badges" isn't a real ?tab= value server-side - it's implied by
-            // whichever badge sub-tab (tags/categories/...) was last active,
+            // "labels" isn't a real ?tab= value server-side - it's implied by
+            // whichever label sub-tab (tags/categories/...) was last active,
             // which installOrgTabSwitching persists to localStorage.
-            const tabParam = section === "badges" ? (localStorage.getItem("organize_tab") ?? "tags") : section;
+            const tabParam = section === "labels" ? (localStorage.getItem("organize_tab") ?? "tags") : section;
             url.searchParams.set("tab", tabParam);
             window.history.replaceState({}, "", url.toString());
         });

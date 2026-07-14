@@ -35,12 +35,12 @@ _SCALAR_KEYS = (
     "overlapping_pins",
 )
 _DATE_KEYS = ("visited_after", "visited_before", "created_after", "created_before")
-_BADGE_LIST_KEYS = ("tags", "exclude_tags")
+_LABEL_LIST_KEYS = ("tags", "exclude_tags")
 
 
 def serialize_form_criteria(
     cleaned_data: dict[str, Any],
-    badge_groups: list[dict] | None,
+    label_groups: list[dict] | None,
     custom_field_criteria: list[dict] | None,
     regions: dict[str, MultiPolygon | None] | None = None,
 ) -> dict[str, Any]:
@@ -48,7 +48,7 @@ def serialize_form_criteria(
 
     Args:
         cleaned_data: A ``SearchForm.cleaned_data``-shaped dict.
-        badge_groups: Output of ``SearchForm.parse_badge_groups()``, if any.
+        label_groups: Output of ``SearchForm.parse_label_groups()``, if any.
         custom_field_criteria: Output of ``SearchForm.parse_custom_field_criteria()``, if any.
         regions: Mapping of ``"include_regions"``/``"exclude_regions"`` to a
             parsed MultiPolygon (e.g. from ``SearchForm.parse_region_geojson()``),
@@ -74,17 +74,17 @@ def serialize_form_criteria(
         value = cleaned_data.get(key)
         if value is not None:
             out[key] = value.isoformat()
-    if badge_groups:
-        out["badge_groups"] = badge_groups
+    if label_groups:
+        out["label_groups"] = label_groups
     else:
-        # Flat tags/exclude_tags only matter as a fallback when badge_groups
+        # Flat tags/exclude_tags only matter as a fallback when label_groups
         # (the map formula bar's richer AND/OR/NOT logic) isn't set - storing
         # both would be dead weight since filter_by_criteria always prefers
-        # badge_groups when present.
-        for key in _BADGE_LIST_KEYS:
+        # label_groups when present.
+        for key in _LABEL_LIST_KEYS:
             value = cleaned_data.get(key)
             if value:
-                out[key] = [badge.pk for badge in value]
+                out[key] = [label.pk for label in value]
     if custom_field_criteria:
         out["custom_fields"] = [_serialize_custom_field_criterion(c) for c in custom_field_criteria]
     for key in _GEOM_KEYS:
@@ -125,17 +125,17 @@ def deserialize_criteria(stored: dict[str, Any], profile: Profile) -> dict[str, 
         Custom-field entries whose field was deleted since the filter was
         saved are silently dropped.
     """
-    from urbanlens.dashboard.models.badges.model import Badge
     from urbanlens.dashboard.models.custom_fields.model import CustomField
+    from urbanlens.dashboard.models.labels.model import Label
     from urbanlens.dashboard.services.geo import parse_multipolygon_geojson
 
     criteria: dict[str, Any] = dict(stored)
     for key in _DATE_KEYS:
         if criteria.get(key):
             criteria[key] = date.fromisoformat(criteria[key])
-    for key in _BADGE_LIST_KEYS:
-        if badge_ids := criteria.get(key):
-            criteria[key] = list(Badge.objects.filter(pk__in=badge_ids))
+    for key in _LABEL_LIST_KEYS:
+        if label_ids := criteria.get(key):
+            criteria[key] = list(Label.objects.filter(pk__in=label_ids))
     for key in _GEOM_KEYS:
         if raw_geom := criteria.get(key):
             try:

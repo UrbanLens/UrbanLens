@@ -27,20 +27,20 @@ def ensure_site_admin_group_permissions(group: Group) -> None:
     from django.contrib.auth.models import Permission
     from django.contrib.contenttypes.models import ContentType
 
-    badge_ct = ContentType.objects.get(app_label="dashboard", model="badge")
+    label_ct = ContentType.objects.get(app_label="dashboard", model="label")
     sitesettings_ct = ContentType.objects.get(app_label="dashboard", model="sitesettings")
 
-    edit_global_badge, _ = Permission.objects.get_or_create(
-        codename="edit_global_badge",
-        content_type=badge_ct,
-        defaults={"name": "Can edit global badges"},
+    edit_global_label, _ = Permission.objects.get_or_create(
+        codename="edit_global_label",
+        content_type=label_ct,
+        defaults={"name": "Can edit global labels"},
     )
     view_site_admin, _ = Permission.objects.get_or_create(
         codename="view_site_admin",
         content_type=sitesettings_ct,
         defaults={"name": "Can access site admin panel"},
     )
-    group.permissions.add(edit_global_badge, view_site_admin)
+    group.permissions.add(edit_global_label, view_site_admin)
 
 
 def add_user_to_site_admin_group(user: User) -> None:

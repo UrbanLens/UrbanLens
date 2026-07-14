@@ -75,7 +75,7 @@ class DirectMessageQuerySet(abstract.DashboardQuerySet):
     def unread_conversation_count(self, profile: Profile) -> int:
         """Count distinct conversations with at least one unread message.
 
-        The navbar badge shows this (one badge per conversation needing
+        The navbar label shows this (one label per conversation needing
         attention), while each dropdown row still shows its own per-conversation
         unread message count.
 

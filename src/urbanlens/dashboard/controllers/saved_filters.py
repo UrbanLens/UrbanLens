@@ -78,10 +78,10 @@ class SavedFilterCreateView(LoginRequiredMixin, View):
             return HttpResponse("Invalid filter criteria.", status=400)
 
         cleaned = dict(search_form.cleaned_data)
-        badge_groups = search_form.parse_badge_groups()
+        label_groups = search_form.parse_label_groups()
         custom_field_criteria = search_form.parse_custom_field_criteria()
         regions = _dissolve_regions(search_form)
-        criteria = serialize_form_criteria(cleaned, badge_groups, custom_field_criteria, regions)
+        criteria = serialize_form_criteria(cleaned, label_groups, custom_field_criteria, regions)
         if not criteria:
             return HttpResponse("No active filters to save.", status=400)
 
@@ -118,8 +118,8 @@ class SavedFilterEditView(LoginRequiredMixin, View):
             saved_filter = get_object_or_404(SavedFilter, uuid=filter_uuid, profile=profile)
             criteria = deserialize_criteria(saved_filter.criteria, profile)
             initial = {
-                "tags": [badge.pk for badge in criteria.get("tags", [])],
-                "exclude_tags": [badge.pk for badge in criteria.get("exclude_tags", [])],
+                "tags": [label.pk for label in criteria.get("tags", [])],
+                "exclude_tags": [label.pk for label in criteria.get("exclude_tags", [])],
                 "has_visits": criteria.get("has_visits", ""),
             }
         search_form = SearchForm(profile=profile, initial=initial)
@@ -132,7 +132,7 @@ class SavedFilterEditView(LoginRequiredMixin, View):
                 "criteria": criteria,
                 "form": search_form,
                 "custom_field_values": custom_field_values,
-                "has_badge_groups": bool(saved_filter.criteria.get("badge_groups")) if saved_filter else False,
+                "has_label_groups": bool(saved_filter.criteria.get("label_groups")) if saved_filter else False,
             },
         )
 
@@ -151,10 +151,10 @@ class SavedFilterEditView(LoginRequiredMixin, View):
             return JsonResponse({"ok": False, "error": "Invalid filter criteria."}, status=400)
 
         cleaned = dict(search_form.cleaned_data)
-        badge_groups = search_form.parse_badge_groups()
+        label_groups = search_form.parse_label_groups()
         custom_field_criteria = search_form.parse_custom_field_criteria()
         regions = _dissolve_regions(search_form)
-        criteria = serialize_form_criteria(cleaned, badge_groups, custom_field_criteria, regions)
+        criteria = serialize_form_criteria(cleaned, label_groups, custom_field_criteria, regions)
         if not criteria:
             return JsonResponse({"ok": False, "error": "No active filters to save."}, status=400)
 

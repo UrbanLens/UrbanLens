@@ -1,11 +1,11 @@
-"""Auto-tagging service: keyword and AI-based badge suggestion for pins and wikis.
+"""Auto-tagging service: keyword and AI-based label suggestion for pins and wikis.
 
-Pipeline per badge kind:
-  1. Keyword match - badge name patterns (CATEGORY_PATTERNS) + badge.keywords field.
-  2. AI match     - remaining eligible badges sent to LLM as a constrained list.
+Pipeline per label kind:
+  1. Keyword match - label name patterns (CATEGORY_PATTERNS) + label.keywords field.
+  2. AI match     - remaining eligible labels sent to LLM as a constrained list.
 
 Callers use AutoTagService.suggest_for_pin / suggest_for_wiki; both return
-the matched Badge instances and optionally apply them immediately.
+the matched Label instances and optionally apply them immediately.
 """
 
 from __future__ import annotations
@@ -16,21 +16,21 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from django.db.models import QuerySet
 
-    from urbanlens.dashboard.models.badges.model import Badge
+    from urbanlens.dashboard.models.labels.model import Label
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.models.wiki.model import Wiki
 
 logger = logging.getLogger(__name__)
 
-# Maps badge kind → Profile field that enables auto-tagging for that kind.
+# Maps label kind → Profile field that enables auto-tagging for that kind.
 _KIND_PREF: dict[str, str] = {
-    "category": "ai_badge_categories",
-    "tag": "ai_badge_tags",
-    "status": "ai_badge_statuses",
+    "category": "ai_label_categories",
+    "tag": "ai_label_tags",
+    "status": "ai_label_statuses",
 }
 
-# Fallback category list shown to AI when no global badges exist yet.
+# Fallback category list shown to AI when no global labels exist yet.
 _FALLBACK_EXAMPLES = (
     "Airport, Amusement Park, Asylum, Bank, Bridge, Bunker, Cars, Castle, Church, Factory, "
     "Firehouse, Fire Tower, Funeral Home, Graveyard, Hospital, Hotel, House, Laboratory, "
@@ -40,18 +40,18 @@ _FALLBACK_EXAMPLES = (
 
 
 class AutoTagService:
-    """Suggests and optionally applies badges to a Pin or Location.
+    """Suggests and optionally applies labels to a Pin or Location.
 
     Uses a two-stage pipeline:
 
     1. **Keyword matching** - checks CATEGORY_PATTERNS (built-in regex patterns keyed
-       by badge name) and each badge's custom ``keywords`` field.  No API call.
-    2. **AI matching** - sends a constrained list of remaining eligible badge names to
+       by label name) and each label's custom ``keywords`` field.  No API call.
+    2. **AI matching** - sends a constrained list of remaining eligible label names to
        the configured LLM gateway and validates the returned names against the list.
 
     Args:
-        kinds: Badge kinds to process.  Defaults to ``["category"]``.
-        max_badges: Maximum suggestions returned *per kind*.  ``None`` means no
+        kinds: Label kinds to process.  Defaults to ``["category"]``.
+        max_labels: Maximum suggestions returned *per kind*.  ``None`` means no
             limit (accept all keyword hits + everything the AI proposes).
             Defaults to ``None`` (multiple).
     """
@@ -61,58 +61,58 @@ class AutoTagService:
     def __init__(
         self,
         kinds: list[str] | tuple[str, ...] | None = None,
-        max_badges: int | None = None,
+        max_labels: int | None = None,
     ) -> None:
         self.kinds = list(kinds) if kinds is not None else list(self._DEFAULT_KINDS)
-        self.max_badges = max_badges
+        self.max_labels = max_labels
 
     # -- public entry points --------------------------------------------------
 
-    def suggest_for_pin(self, pin: Pin, *, apply: bool = False) -> list[Badge]:
-        """Suggest (and optionally apply) badges for a Pin.
+    def suggest_for_pin(self, pin: Pin, *, apply: bool = False) -> list[Label]:
+        """Suggest (and optionally apply) labels for a Pin.
 
-        Respects the pin owner's per-kind AI preference flags.  Only badges
+        Respects the pin owner's per-kind AI preference flags.  Only labels
         visible to that user (global + user-owned) are considered.
 
         Args:
             pin: Target Pin instance.
-            apply: When True, attach all matched badges before returning.
+            apply: When True, attach all matched labels before returning.
 
         Returns:
-            Matched Badge instances across all configured kinds.
+            Matched Label instances across all configured kinds.
         """
         profile = getattr(pin, "profile", None)
-        results: list[Badge] = []
+        results: list[Label] = []
         for kind in self.kinds:
             if profile is not None and not self._kind_enabled_for_profile(kind, profile):
                 logger.debug("Auto-tagging kind '%s' disabled for profile %s", kind, profile.pk)
                 continue
-            eligible = self._eligible_badges(kind, profile=profile)
+            eligible = self._eligible_labels(kind, profile=profile)
             matched = self._match(pin, eligible, kind)
             if apply and matched:
-                pin.badges.add(*matched)
+                pin.labels.add(*matched)
             results.extend(matched)
         return results
 
-    def suggest_for_wiki(self, wiki: Wiki, *, apply: bool = False) -> list[Badge]:
-        """Suggest (and optionally apply) badges for a community Wiki.
+    def suggest_for_wiki(self, wiki: Wiki, *, apply: bool = False) -> list[Label]:
+        """Suggest (and optionally apply) labels for a community Wiki.
 
-        A Wiki is shared/global, so only global badges (``profile=None``) are
+        A Wiki is shared/global, so only global labels (``profile=None``) are
         considered and no user preference check is performed.
 
         Args:
             wiki: Target Wiki instance.
-            apply: When True, attach all matched badges before returning.
+            apply: When True, attach all matched labels before returning.
 
         Returns:
-            Matched Badge instances across all configured kinds.
+            Matched Label instances across all configured kinds.
         """
-        results: list[Badge] = []
+        results: list[Label] = []
         for kind in self.kinds:
-            eligible = self._eligible_badges(kind, profile=None)
+            eligible = self._eligible_labels(kind, profile=None)
             matched = self._match(wiki, eligible, kind)
             if apply and matched:
-                wiki.badges.add(*matched)
+                wiki.labels.add(*matched)
             results.extend(matched)
         return results
 
@@ -120,10 +120,10 @@ class AutoTagService:
 
     @staticmethod
     def _kind_enabled_for_profile(kind: str, profile: Profile) -> bool:
-        """Return False when the user has disabled auto-tagging for this badge kind.
+        """Return False when the user has disabled auto-tagging for this label kind.
 
         Args:
-            kind: Badge kind string (e.g. ``"category"``).
+            kind: Label kind string (e.g. ``"category"``).
             profile: Owner profile to check.
 
         Returns:
@@ -135,25 +135,25 @@ class AutoTagService:
         return bool(getattr(profile, pref_field, True)) if pref_field else True
 
     @staticmethod
-    def _eligible_badges(kind: str, *, profile: Profile | None) -> list[Badge]:
-        """Return badges eligible for auto-tagging.
+    def _eligible_labels(kind: str, *, profile: Profile | None) -> list[Label]:
+        """Return labels eligible for auto-tagging.
 
-        Excludes protected badges and those with ``allow_auto_tag=False``.
-        For Pin targets (profile given) both global and user-owned badges are
-        included; for Location targets only global badges.
+        Excludes protected labels and those with ``allow_auto_tag=False``.
+        For Pin targets (profile given) both global and user-owned labels are
+        included; for Location targets only global labels.
 
         Args:
-            kind: Badge kind to filter by.
+            kind: Label kind to filter by.
             profile: Owning profile for Pin targets; ``None`` for Location targets.
 
         Returns:
-            Ordered list of eligible Badge instances.
+            Ordered list of eligible Label instances.
         """
         from django.db.models import Q
 
-        from urbanlens.dashboard.models.badges.model import Badge
+        from urbanlens.dashboard.models.labels.model import Label
 
-        qs = Badge.objects.filter(kind=kind, allow_auto_tag=True).exclude(is_protected=True)
+        qs = Label.objects.filter(kind=kind, allow_auto_tag=True).exclude(is_protected=True)
         if profile is not None:
             qs = qs.filter(Q(profile__isnull=True) | Q(profile=profile))
         else:
@@ -165,18 +165,18 @@ class AutoTagService:
     def _match(
         self,
         target: Pin | Wiki,
-        eligible: list[Badge],
+        eligible: list[Label],
         kind: str,
-    ) -> list[Badge]:
-        """Run the full keyword → AI pipeline and return up to max_badges results.
+    ) -> list[Label]:
+        """Run the full keyword → AI pipeline and return up to max_labels results.
 
         Args:
             target: Pin or Location being tagged.
-            eligible: Pre-filtered list of candidate badges.
-            kind: Badge kind (used for AI instructions).
+            eligible: Pre-filtered list of candidate labels.
+            kind: Label kind (used for AI instructions).
 
         Returns:
-            Matched Badge instances.
+            Matched Label instances.
         """
         if not eligible:
             return []
@@ -185,7 +185,7 @@ class AutoTagService:
         matched = self._keyword_match(eligible, text)
         remaining = [b for b in eligible if b not in matched]
 
-        need_more = self.max_badges is None or len(matched) < self.max_badges
+        need_more = self.max_labels is None or len(matched) < self.max_labels
         if need_more and remaining:
             ai_results = self._ai_match(target, remaining, kind)
             # Avoid duplicates (keyword match already got some).
@@ -195,8 +195,8 @@ class AutoTagService:
                     matched.append(b)
                     seen.add(b.pk)
 
-        if self.max_badges is not None:
-            matched = matched[: self.max_badges]
+        if self.max_labels is not None:
+            matched = matched[: self.max_labels]
         return matched
 
     # -- keyword matching ------------------------------------------------------
@@ -234,19 +234,19 @@ class AutoTagService:
         return " ".join(parts)
 
     @staticmethod
-    def _badge_matches_text(
-        badge: Badge,
+    def _label_matches_text(
+        label: Label,
         text: str,
         compiled_patterns: dict,
     ) -> bool:
-        """Return True if this badge's name patterns or custom keywords match text.
+        """Return True if this label's name patterns or custom keywords match text.
 
         Matching order:
-        1. Built-in CATEGORY_PATTERNS keyed by badge name (case-insensitive).
-        2. User-defined ``badge.keywords`` (comma-separated phrase list).
+        1. Built-in CATEGORY_PATTERNS keyed by label name (case-insensitive).
+        2. User-defined ``label.keywords`` (comma-separated phrase list).
 
         Args:
-            badge: Badge to test.
+            label: Label to test.
             text: Text to search in.
             compiled_patterns: Pre-compiled pattern dict from
                 ``keywords._get_compiled()``.
@@ -255,32 +255,32 @@ class AutoTagService:
             True on first match found.
         """
         # 1. Built-in regex patterns.
-        badge_name_lower = badge.name.lower()
+        label_name_lower = label.name.lower()
         for cat_key, patterns in compiled_patterns.items():
-            if cat_key.lower() == badge_name_lower:
+            if cat_key.lower() == label_name_lower:
                 for pat in patterns:
                     if pat.search(text):
                         return True
 
         # 2. User-defined keywords (case-insensitive substring search).
-        if badge.keywords:
+        if label.keywords:
             lower_text = text.lower()
-            for raw_kw in badge.keywords.split(","):
+            for raw_kw in label.keywords.split(","):
                 needle = raw_kw.strip().lower()
                 if needle and needle in lower_text:
                     return True
 
         return False
 
-    def _keyword_match(self, eligible: list[Badge], text: str) -> list[Badge]:
-        """Return all eligible badges that match the text via keywords.
+    def _keyword_match(self, eligible: list[Label], text: str) -> list[Label]:
+        """Return all eligible labels that match the text via keywords.
 
         Args:
-            eligible: Candidate badges.
+            eligible: Candidate labels.
             text: Text to match against (from ``_build_keyword_text``).
 
         Returns:
-            Matched badges in eligibility order.
+            Matched labels in eligibility order.
         """
         if not text:
             return []
@@ -288,11 +288,11 @@ class AutoTagService:
         from urbanlens.dashboard.services.ai.keywords import _get_compiled
 
         compiled = _get_compiled()
-        matched: list[Badge] = []
-        for badge in eligible:
-            if self._badge_matches_text(badge, text, compiled):
-                matched.append(badge)
-                if self.max_badges and len(matched) >= self.max_badges:
+        matched: list[Label] = []
+        for label in eligible:
+            if self._label_matches_text(label, text, compiled):
+                matched.append(label)
+                if self.max_labels and len(matched) >= self.max_labels:
                     break
         return matched
 
@@ -301,18 +301,18 @@ class AutoTagService:
     def _ai_match(
         self,
         target: Pin | Wiki,
-        eligible: list[Badge],
+        eligible: list[Label],
         kind: str,
-    ) -> list[Badge]:
-        """Use the LLM gateway to select badges from the eligible list.
+    ) -> list[Label]:
+        """Use the LLM gateway to select labels from the eligible list.
 
         Args:
             target: Pin or Location being tagged.
-            eligible: Badges not yet matched by keywords.
-            kind: Badge kind (used for instructions wording).
+            eligible: Labels not yet matched by keywords.
+            kind: Label kind (used for instructions wording).
 
         Returns:
-            Matched Badge instances validated against the eligible list.
+            Matched Label instances validated against the eligible list.
         """
         from urbanlens.dashboard.services.ai.factory import get_gateway
 
@@ -325,24 +325,24 @@ class AutoTagService:
         if not gateway:
             return []
 
-        names = gateway.send_prompt_list(prompt, max_results=self.max_badges)
-        name_to_badge = {b.name.lower(): b for b in eligible}
-        results: list[Badge] = []
+        names = gateway.send_prompt_list(prompt, max_results=self.max_labels)
+        name_to_label = {b.name.lower(): b for b in eligible}
+        results: list[Label] = []
         for raw_name in names:
-            badge = name_to_badge.get(raw_name.lower())
-            if badge:
-                results.append(badge)
+            label = name_to_label.get(raw_name.lower())
+            if label:
+                results.append(label)
             else:
                 logger.debug("AI returned '%s' not in eligible list; discarding", raw_name)
         return results
 
     @staticmethod
-    def _build_instructions(eligible: list[Badge], kind: str) -> str:
-        """Build the AI system instructions with the constrained badge list.
+    def _build_instructions(eligible: list[Label], kind: str) -> str:
+        """Build the AI system instructions with the constrained label list.
 
         Args:
-            eligible: Badges the AI may choose from.
-            kind: Badge kind name used in the instruction text.
+            eligible: Labels the AI may choose from.
+            kind: Label kind name used in the instruction text.
 
         Returns:
             Instruction string to pass to the gateway.

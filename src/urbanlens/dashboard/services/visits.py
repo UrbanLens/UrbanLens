@@ -485,34 +485,34 @@ def reject_visit_suggestion(suggestion: VisitSuggestion) -> None:
 
 
 def add_visited_status(pin: Pin) -> None:
-    """Add the profile's "Visited" status badge to the pin if not already present.
+    """Add the profile's "Visited" status label to the pin if not already present.
 
     Args:
         pin: Pin instance whose statuses should be updated.
     """
-    from urbanlens.dashboard.models.badges.model import Badge
+    from urbanlens.dashboard.models.labels.model import Label
 
-    visited_badge = Badge.objects.filter(profile=pin.profile, kind="status", name="Visited").first()
-    if visited_badge and not pin.badges.filter(pk=visited_badge.pk).exists():
-        pin.badges.add(visited_badge)
+    visited_label = Label.objects.filter(profile=pin.profile, kind="status", name="Visited").first()
+    if visited_label and not pin.labels.filter(pk=visited_label.pk).exists():
+        pin.labels.add(visited_label)
         pin.save(update_fields=["updated"])
 
 
 def remove_visited_status(pin: Pin) -> None:
-    """Clear a pin's "Visited" marking - the profile's status badge and last_visited.
+    """Clear a pin's "Visited" marking - the profile's status label and last_visited.
 
-    Used when a pin was marked visited by mistake (e.g. a stray status badge or
+    Used when a pin was marked visited by mistake (e.g. a stray status label or
     an import glitch) and the user doesn't want to log a dated visit for it, so
     it should stop being surfaced in the Memories "log your visits" queue.
 
     Args:
         pin: Pin instance to update in-place.
     """
-    from urbanlens.dashboard.models.badges.model import Badge
+    from urbanlens.dashboard.models.labels.model import Label
 
-    visited_badge = Badge.objects.filter(profile=pin.profile, kind="status", name="Visited").first()
-    if visited_badge:
-        pin.badges.remove(visited_badge)
+    visited_label = Label.objects.filter(profile=pin.profile, kind="status", name="Visited").first()
+    if visited_label:
+        pin.labels.remove(visited_label)
     pin.last_visited = None
     pin.save(update_fields=["last_visited", "updated"])
 

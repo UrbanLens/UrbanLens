@@ -1,4 +1,4 @@
-"""Per-user badge display overrides."""
+"""Per-user label display overrides."""
 
-from urbanlens.dashboard.models.badges.customization.model import BadgeCustomization
-from urbanlens.dashboard.models.badges.customization.queryset import BadgeCustomizationManager, BadgeCustomizationQuerySet
+from urbanlens.dashboard.models.labels.customization.model import LabelCustomization
+from urbanlens.dashboard.models.labels.customization.queryset import LabelCustomizationManager, LabelCustomizationQuerySet

@@ -16,7 +16,6 @@ Two ways to opt in:
     {% if app_version %}
     <span class="page-footer__version" aria-label="Application version">UrbanLens v{{ app_version }}</span>
     {% endif %}
-    {% if map_attribution or show_map_footer %}
     <div class="page-footer__meta">
         <p class="page-footer__github">
             <i class="material-icons" aria-hidden="true">code</i>
@@ -27,5 +26,4 @@ Two ways to opt in:
             <a href="{% url 'thanks' %}" class="page-footer__attribution-more">More info</a>
         </p>
     </div>
-    {% endif %}
 </footer>

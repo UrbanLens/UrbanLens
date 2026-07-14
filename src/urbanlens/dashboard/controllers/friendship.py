@@ -11,7 +11,7 @@ from django.template.loader import render_to_string
 from django.urls import reverse
 from rest_framework.viewsets import GenericViewSet
 
-from urbanlens.dashboard.controllers.notifications import _trigger_badge_refresh
+from urbanlens.dashboard.controllers.notifications import _trigger_label_refresh
 from urbanlens.dashboard.models.friendship import Friendship, FriendshipStatus
 from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, Importance, NotificationType, Status
 from urbanlens.dashboard.models.notifications.model import NotificationLog
@@ -161,7 +161,7 @@ def _mark_friend_request_notifications_read(viewer_profile: Profile, source_prof
 
     Accepting/declining/ignoring a request on the profile page (rather than via the
     notification dropdown's own accept/decline buttons) previously left the originating
-    notification unread indefinitely, inflating the bell badge count forever.
+    notification unread indefinitely, inflating the bell label count forever.
 
     Args:
         viewer_profile: Profile who just acted on the request.
@@ -179,7 +179,7 @@ def _mark_incoming_request_notifications_read(viewer_profile: Profile, incoming_
 
     UL-240: previously only accepting/declining/ignoring a request marked its notification
     read - simply seeing the pending request listed on your own profile page left the
-    notification (and bell badge count) unread indefinitely.
+    notification (and bell label count) unread indefinitely.
 
     Args:
         viewer_profile: Profile who is viewing their own pending requests.
@@ -210,7 +210,7 @@ def _own_friend_widget_response(request: HttpRequest) -> HttpResponse:
         response = render(request, "dashboard/partials/profile/friends_page_content.html", ctx)
     else:
         response = render(request, "dashboard/partials/profile/friend_list_partial.html", ctx)
-    return _trigger_badge_refresh(response)
+    return _trigger_label_refresh(response)
 
 
 def _redirect_to_profile(profile_id: int, fallback_view_name: str = "profile.view") -> HttpResponse:
@@ -388,7 +388,7 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
         response = render(request, "dashboard/partials/profile/friend_list_partial.html", ctx)
         if viewer and viewer.pk == profile.pk and ctx["incoming_requests"]:
             _mark_incoming_request_notifications_read(viewer, ctx["incoming_requests"])
-            response = _trigger_badge_refresh(response)
+            response = _trigger_label_refresh(response)
         return response
 
     def friends_page(self, request: HttpRequest, profile_id: int):
@@ -474,7 +474,7 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
                 "unread_count": unread_count,
             },
         )
-        return _trigger_badge_refresh(response)
+        return _trigger_label_refresh(response)
 
     def invite_by_email(self, request: HttpRequest):
         """Invite a friend by email address.

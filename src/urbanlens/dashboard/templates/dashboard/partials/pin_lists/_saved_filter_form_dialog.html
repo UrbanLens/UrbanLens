@@ -1,10 +1,10 @@
 {% load dashboard_tags %}
 {% include "dashboard/partials/ui/_dialog_header.html" with title=saved_filter|yesno:"Edit Filter,New Filter" %}
 <div class="ul-dialog-body saved-filter-form-body">
-    {% if has_badge_groups %}
+    {% if has_label_groups %}
     <div class="saved-filter-form-warning">
         <i class="material-symbols-outlined">warning</i>
-        This filter uses advanced badge rules created from the map's filter panel. Saving here will replace them with the simple include/exclude badges below.
+        This filter uses advanced label rules created from the map's filter panel. Saving here will replace them with the simple include/exclude labels below.
     </div>
     {% endif %}
     <form id="saved-filter-form" onsubmit="return savedFilterFormSubmit(event)"
@@ -75,14 +75,14 @@
             </div>
         </div>
 
-        <div class="saved-filter-badge-grid">
+        <div class="saved-filter-label-grid">
             <div class="form-row">
-                <label>Include badges</label>
-                <div class="saved-filter-badge-list">{{ form.tags }}</div>
+                <label>Include labels</label>
+                <div class="saved-filter-label-list">{{ form.tags }}</div>
             </div>
             <div class="form-row">
-                <label>Exclude badges</label>
-                <div class="saved-filter-badge-list">{{ form.exclude_tags }}</div>
+                <label>Exclude labels</label>
+                <div class="saved-filter-label-list">{{ form.exclude_tags }}</div>
             </div>
         </div>
 

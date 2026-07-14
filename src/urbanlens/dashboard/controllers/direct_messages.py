@@ -90,8 +90,8 @@ def _get_partner(profile: Profile, profile_slug: str) -> Profile:
     return partner
 
 
-def _trigger_msg_badge_refresh(response: HttpResponse) -> HttpResponse:
-    """Attach HTMX triggers so the navbar messages badge and sidebar conversation list refresh.
+def _trigger_msg_label_refresh(response: HttpResponse) -> HttpResponse:
+    """Attach HTMX triggers so the navbar messages label and sidebar conversation list refresh.
 
     Used both when opening a thread (marks it read - the sidebar's unread pill and
     last-message preview need to catch up) and on the plain-POST send fallback
@@ -246,7 +246,7 @@ class ConversationView(LoginRequiredMixin, View):
             profile_slug: Slug of the conversation partner.
 
         Returns:
-            Thread partial or full page, with a badge-refresh trigger since
+            Thread partial or full page, with a label-refresh trigger since
             opening a thread marks it read.
 
         Raises:
@@ -262,7 +262,7 @@ class ConversationView(LoginRequiredMixin, View):
 
         if request.headers.get("HX-Request"):
             response = render(request, "dashboard/partials/messages/_thread.html", _thread_context(profile, partner))
-            return _trigger_msg_badge_refresh(response)
+            return _trigger_msg_label_refresh(response)
 
         context = {
             **_thread_context(profile, partner),
@@ -313,7 +313,7 @@ class ConversationSendView(LoginRequiredMixin, View):
         except PermissionError as exc:
             return HttpResponseForbidden(str(exc))
         response = render(request, "dashboard/partials/messages/_thread.html", _thread_context(profile, partner))
-        return _trigger_msg_badge_refresh(response)
+        return _trigger_msg_label_refresh(response)
 
 
 class ConversationOlderMessagesView(LoginRequiredMixin, View):
@@ -518,7 +518,7 @@ class MessageDeleteView(LoginRequiredMixin, View):
             return HttpResponseForbidden(str(exc))
 
         response = render(request, "dashboard/partials/messages/_thread.html", _thread_context(profile, partner))
-        return _trigger_msg_badge_refresh(response)
+        return _trigger_msg_label_refresh(response)
 
 
 class MessageImagePermissionView(LoginRequiredMixin, View):
@@ -560,14 +560,14 @@ class MessageImagePermissionView(LoginRequiredMixin, View):
             return HttpResponseBadRequest("Unknown decision.")
 
         response = render(request, "dashboard/partials/messages/_thread.html", _thread_context(profile, partner))
-        return _trigger_msg_badge_refresh(response)
+        return _trigger_msg_label_refresh(response)
 
 
 class ConversationReadView(LoginRequiredMixin, View):
     """POST /messages/<profile_slug>/read/ - mark the partner's messages as read.
 
     Called by the messages page when a live message arrives on the thread the
-    user is already looking at, so the unread badge doesn't claim a message
+    user is already looking at, so the unread label doesn't claim a message
     the user has plainly seen.
     """
 
@@ -579,7 +579,7 @@ class ConversationReadView(LoginRequiredMixin, View):
             profile_slug: Slug of the conversation partner.
 
         Returns:
-            An empty 204 with a badge-refresh trigger.
+            An empty 204 with a label-refresh trigger.
         """
         from django.http import HttpResponse as DjangoHttpResponse
 
@@ -587,7 +587,7 @@ class ConversationReadView(LoginRequiredMixin, View):
         partner = _get_partner(profile, profile_slug)
         DirectMessage.objects.between(profile, partner).filter(recipient=profile).mark_read()
         clear_email_debounce(partner.pk, profile.pk)
-        return _trigger_msg_badge_refresh(DjangoHttpResponse(status=204))
+        return _trigger_msg_label_refresh(DjangoHttpResponse(status=204))
 
 
 class ConversationSearchView(LoginRequiredMixin, View):
@@ -703,22 +703,22 @@ class MessagesDropdownView(LoginRequiredMixin, View):
 
 
 class MessagesUnreadCountView(LoginRequiredMixin, View):
-    """GET /messages/unread-count/ - returns the navbar unread badge partial."""
+    """GET /messages/unread-count/ - returns the navbar unread label partial."""
 
     def get(self, request: HttpRequest) -> HttpResponse:
-        """Render the unread badge.
+        """Render the unread label.
 
         Args:
             request: The incoming request.
 
         Returns:
-            The badge partial with the count of conversations that have at
+            The label partial with the count of conversations that have at
             least one unread message (not the total unread message count -
-            one badge per conversation needing attention).
+            one label per conversation needing attention).
         """
         profile = _get_profile(request)
         count = DirectMessage.objects.unread_conversation_count(profile)
-        return render(request, "dashboard/partials/messages/_badge.html", {"unread_count": count})
+        return render(request, "dashboard/partials/messages/_label.html", {"unread_count": count})
 
 
 class RecipientSearchView(LoginRequiredMixin, View):

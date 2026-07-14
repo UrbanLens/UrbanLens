@@ -129,7 +129,7 @@ class LocationWikiView(LoginRequiredMixin, View):
         else:
             other_locations = Location.objects.none()
 
-        from urbanlens.dashboard.models.badges.model import COLOR_CHOICES
+        from urbanlens.dashboard.models.labels.model import COLOR_CHOICES
         from urbanlens.dashboard.models.pin.model import PinType
 
         detail_pin_icon_choices = [

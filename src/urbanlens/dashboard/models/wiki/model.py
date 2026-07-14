@@ -1,7 +1,7 @@
 """Wiki model - the community-editable page for a shared place.
 
 The Wiki holds everything a community collectively knows and edits about a
-place: its canonical name, description, security indicators, dates, badges,
+place: its canonical name, description, security indicators, dates, labels,
 aliases, comments, photos, child wikis (community detail markers, via the
 self-referential ``parent_wiki``) and edit history.  It links to a
 :class:`~urbanlens.dashboard.models.location.model.Location` for its current
@@ -34,7 +34,7 @@ if TYPE_CHECKING:
 
     from django.db.models import Manager as DjangoManager
 
-    from urbanlens.dashboard.models.badges.model import Badge
+    from urbanlens.dashboard.models.labels.model import Label
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.markup.model import PinMarkup
     from urbanlens.dashboard.models.profile.model import Profile
@@ -85,8 +85,8 @@ class Wiki(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addre
     detail_border_opacity = IntegerField(default=100)
 
     # Shared taxonomy - the real-world place's type, visible to all users.
-    badges = ManyToManyField(
-        "dashboard.Badge",
+    labels = ManyToManyField(
+        "dashboard.Label",
         blank=True,
         related_name="wikis",
     )
@@ -249,33 +249,33 @@ class Wiki(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addre
         return self.created_by_id is not None and self.created_by_id == profile.id and not self.viewed_by_other
 
     # ------------------------------------------------------------------
-    # Badge helpers
+    # Label helpers
     # ------------------------------------------------------------------
 
     @property
     def categories(self):
-        """Badges of kind "category" attached to this wiki."""
-        return self.badges.all().categories()
+        """Labels of kind "category" attached to this wiki."""
+        return self.labels.all().categories()
 
     @property
     def tags(self):
-        """Badges of kind "tag" attached to this wiki."""
-        return self.badges.all().tags()
+        """Labels of kind "tag" attached to this wiki."""
+        return self.labels.all().tags()
 
     @property
     def statuses(self):
-        """Badges of kind "status" attached to this wiki."""
-        return self.badges.all().statuses()
+        """Labels of kind "status" attached to this wiki."""
+        return self.labels.all().statuses()
 
-    def add_category(self, category_name: str, save: bool = True) -> Badge | None:
-        """Attach a category badge to this wiki by name, creating it if needed."""
-        from urbanlens.dashboard.models.badges.model import Badge
+    def add_category(self, category_name: str, save: bool = True) -> Label | None:
+        """Attach a category label to this wiki by name, creating it if needed."""
+        from urbanlens.dashboard.models.labels.model import Label
 
         category_name = category_name.lower()
         try:
-            category, _created = Badge.objects.get_or_create(name=category_name, kind="category", defaults={"profile": None})
+            category, _created = Label.objects.get_or_create(name=category_name, kind="category", defaults={"profile": None})
             if category:
-                self.badges.add(category)
+                self.labels.add(category)
                 if save:
                     self.save()
                 return category

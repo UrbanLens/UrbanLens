@@ -115,7 +115,7 @@ function escHtml(s: string): string {
 const MATERIAL_ICON_NAME = /^[a-z_]+$/;
 
 /**
- * Generic bulk-select + bulk-edit + merge + delete manager for a badge-like
+ * Generic bulk-select + bulk-edit + merge + delete manager for a label-like
  * entity list (categories, tags, and - via organize.ts - organize's
  * tag/category/status/people tabs). Consolidates what used to be four
  * separately-copy-pasted implementations differing only in id/dataset

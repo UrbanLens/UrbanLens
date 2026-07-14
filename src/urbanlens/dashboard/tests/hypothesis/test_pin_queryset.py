@@ -153,25 +153,25 @@ class PinQuerySetRatingTests(TestCase):
 # -- by_tag --------------------------------------------------------------------
 
 class PinQuerySetByTagTests(TestCase):
-    """by_tag() traverses the Badge parents M2M to include descendant tags."""
+    """by_tag() traverses the Label parents M2M to include descendant tags."""
 
     def setUp(self):
         self.profile = baker.make("auth.User").profile
-        self.parent_tag = baker.make("dashboard.Badge", kind="tag", profile=None)
-        self.child_tag = baker.make("dashboard.Badge", kind="tag", profile=None)
+        self.parent_tag = baker.make("dashboard.Label", kind="tag", profile=None)
+        self.child_tag = baker.make("dashboard.Label", kind="tag", profile=None)
         self.child_tag.parents.add(self.parent_tag)
-        self.other_tag = baker.make("dashboard.Badge", kind="tag", profile=None)
+        self.other_tag = baker.make("dashboard.Label", kind="tag", profile=None)
 
         # A profile may hold only one root pin per Location, so each pin here
         # gets its own.
         self.pin_parent = baker.make(Pin, profile=self.profile)
-        self.pin_parent.badges.add(self.parent_tag)
+        self.pin_parent.labels.add(self.parent_tag)
 
         self.pin_child = baker.make(Pin, profile=self.profile)
-        self.pin_child.badges.add(self.child_tag)
+        self.pin_child.labels.add(self.child_tag)
 
         self.pin_other = baker.make(Pin, profile=self.profile)
-        self.pin_other.badges.add(self.other_tag)
+        self.pin_other.labels.add(self.other_tag)
 
         self.pin_none = baker.make(Pin, profile=self.profile)
 

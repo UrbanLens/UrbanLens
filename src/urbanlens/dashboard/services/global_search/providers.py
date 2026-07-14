@@ -279,7 +279,7 @@ class SearchProvider(ABC):
 
 
 class PinSearchProvider(SearchProvider):
-    """The user's own pins: names, aliases, notes, badges, and place names."""
+    """The user's own pins: names, aliases, notes, labels, and place names."""
 
     slug = "pins"
     fuzzy_field = "name"
@@ -307,7 +307,7 @@ class PinSearchProvider(SearchProvider):
                 "name",
                 "description",
                 "aliases__name",
-                "badges__name",
+                "labels__name",
                 "notes__text",
                 "location__official_name",
                 "location__wiki__name",

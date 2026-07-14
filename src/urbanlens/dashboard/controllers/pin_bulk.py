@@ -13,8 +13,8 @@ from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.views import View
 
-from urbanlens.dashboard.models.badges.meta import KIND_CATEGORY, KIND_STATUS, KIND_TAG
-from urbanlens.dashboard.models.badges.model import Badge
+from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_STATUS, KIND_TAG
+from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.undo import UndoAction
 from urbanlens.dashboard.services.text_limits import MAX_PIN_DESCRIPTION_LENGTH, text_length_error
@@ -149,7 +149,7 @@ class PinBulkMergeView(LoginRequiredMixin, View):
 
 
 class PinBulkEditView(LoginRequiredMixin, View):
-    """Bulk-edit description and badges across selected root pins (JSON POST)."""
+    """Bulk-edit description and labels across selected root pins (JSON POST)."""
 
     def post(self, request: HttpRequest, *args, **kwargs) -> HttpResponse:
         try:
@@ -175,36 +175,36 @@ class PinBulkEditView(LoginRequiredMixin, View):
                 pin.description = description
                 pin.save(update_fields=["description"])
 
-        if add_ids := [int(x) for x in data.get("add_badge_ids", [])]:
-            valid = list(Badge.objects.visible_to(profile).filter(id__in=add_ids, kind__in=_ORGANIZE_KINDS))
+        if add_ids := [int(x) for x in data.get("add_label_ids", [])]:
+            valid = list(Label.objects.visible_to(profile).filter(id__in=add_ids, kind__in=_ORGANIZE_KINDS))
             for pin in pins:
-                pin.badges.add(*valid)
+                pin.labels.add(*valid)
 
-        if remove_ids := [int(x) for x in data.get("remove_badge_ids", [])]:
-            # Never trust the client's option list - only remove badges that are
+        if remove_ids := [int(x) for x in data.get("remove_label_ids", [])]:
+            # Never trust the client's option list - only remove labels that are
             # actually present on at least one of the selected pins.
             removable = list(
-                Badge.objects.filter(id__in=remove_ids, kind__in=_ORGANIZE_KINDS, pins__in=pins).distinct(),
+                Label.objects.filter(id__in=remove_ids, kind__in=_ORGANIZE_KINDS, pins__in=pins).distinct(),
             )
             for pin in pins:
-                pin.badges.remove(*removable)
+                pin.labels.remove(*removable)
 
         return JsonResponse({"ok": True, "count": len(pins)})
 
 
-class PinBulkEditBadgeOptionsView(LoginRequiredMixin, View):
-    """Return the union of organize badges present on at least one of the given pins."""
+class PinBulkEditLabelOptionsView(LoginRequiredMixin, View):
+    """Return the union of organize labels present on at least one of the given pins."""
 
     def get(self, request: HttpRequest, *args, **kwargs) -> HttpResponse:
         uuids = request.GET.getlist("uuids")
         if not uuids:
-            return JsonResponse({"badges": []})
+            return JsonResponse({"labels": []})
 
         profile = _request_profile(request)
         pins = _owned_root_pins(profile, uuids)
-        badges = Badge.objects.filter(kind__in=_ORGANIZE_KINDS, pins__in=pins).distinct().order_by("name")
+        labels = Label.objects.filter(kind__in=_ORGANIZE_KINDS, pins__in=pins).distinct().order_by("name")
         return JsonResponse(
             {
-                "badges": [{"id": b.id, "name": b.name, "icon": b.effective_icon, "color": b.effective_color, "kind": b.kind} for b in badges],
+                "labels": [{"id": b.id, "name": b.name, "icon": b.effective_icon, "color": b.effective_color, "kind": b.kind} for b in labels],
             },
         )

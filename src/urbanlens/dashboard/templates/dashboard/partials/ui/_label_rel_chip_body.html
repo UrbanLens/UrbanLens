@@ -1,12 +1,12 @@
 {% load dashboard_tags %}
-{% if badge.custom_icon %}
-<span class="tag-chip-icon"><img src="{{ badge.custom_icon.url }}" alt="" class="tag-chip-icon-img"></span>
-{% elif badge.icon %}
+{% if label.custom_icon %}
+<span class="tag-chip-icon"><img src="{{ label.custom_icon.url }}" alt="" class="tag-chip-icon-img"></span>
+{% elif label.icon %}
 <span class="tag-chip-icon">
-    {% if badge.icon|is_material_icon %}
-    <i class="material-icons" style="font-size:13px{% if badge.color %};color:{{ badge.color }}{% endif %}">{{ badge.icon }}</i>
-    {% else %}{{ badge.icon }}{% endif %}
+    {% if label.icon|is_material_icon %}
+    <i class="material-icons" style="font-size:13px{% if label.color %};color:{{ label.color }}{% endif %}">{{ label.icon }}</i>
+    {% else %}{{ label.icon }}{% endif %}
 </span>
 {% endif %}
-<span class="tag-chip-name">{{ badge.name }}</span>
-{% if show_kind %}<span class="badge-kind-chip badge-kind-chip--{{ badge.kind }}">{{ badge.kind }}</span>{% endif %}
+<span class="tag-chip-name">{{ label.name }}</span>
+{% if show_kind %}<span class="label-kind-chip label-kind-chip--{{ label.kind }}">{{ label.kind }}</span>{% endif %}

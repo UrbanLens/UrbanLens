@@ -1,7 +1,7 @@
 {% load dashboard_tags %}
 <dialog id="{{ ns }}-bulk-edit-dialog" class="tag-edit-dialog ul-dialog">
     {% include "dashboard/partials/ui/_dialog_header.html" with title=title title_id=ns|add:"-bulk-edit-title" %}
-    <div class="tag-edit-dialog-body organize-badge-edit-form">
+    <div class="tag-edit-dialog-body organize-label-edit-form">
         {% if ns != 'people' %}
         <div class="form-field">
             <label class="form-label">Type</label>
@@ -43,8 +43,8 @@
                     <label class="form-label">Color</label>
                     <div class="color-picker" id="{{ ns }}-bulk-color-picker">
                         <input type="hidden" id="{{ ns }}-bulk-color-value">
-                        {% for hex, label in color_choices %}
-                        <button type="button" class="color-swatch" data-color="{{ hex }}" title="{{ label }}" style="background:{{ hex }};" onclick="pickColor('{{ ns }}-bulk-color-picker','{{ ns }}-bulk-color-value','{{ hex }}',this); document.getElementById('{{ ns }}-bulk-color-nochange').checked=false; {% if ns == 'tag' %}_updateTagBulkState(){% elif ns == 'cat' %}_updateCatBulkState(){% elif ns == 'status' %}_updateStatusBulkState(){% elif ns == 'people' %}_updatePeopleBulkState(){% endif %};"></button>
+                        {% for hex, color_name in color_choices %}
+                        <button type="button" class="color-swatch" data-color="{{ hex }}" title="{{ color_name }}" style="background:{{ hex }};" onclick="pickColor('{{ ns }}-bulk-color-picker','{{ ns }}-bulk-color-value','{{ hex }}',this); document.getElementById('{{ ns }}-bulk-color-nochange').checked=false; {% if ns == 'tag' %}_updateTagBulkState(){% elif ns == 'cat' %}_updateCatBulkState(){% elif ns == 'status' %}_updateStatusBulkState(){% elif ns == 'people' %}_updatePeopleBulkState(){% endif %};"></button>
                         {% endfor %}
                         <button type="button" class="color-swatch color-clear" title="No color" onclick="pickColor('{{ ns }}-bulk-color-picker','{{ ns }}-bulk-color-value','',this); document.getElementById('{{ ns }}-bulk-color-nochange').checked=false; {% if ns == 'tag' %}_updateTagBulkState(){% elif ns == 'cat' %}_updateCatBulkState(){% elif ns == 'status' %}_updateStatusBulkState(){% elif ns == 'people' %}_updatePeopleBulkState(){% endif %};"><i class="material-icons" style="font-size:1rem;">block</i></button>
                     </div>
@@ -52,7 +52,7 @@
                 </div>
             </div>
             <div class="form-field">
-                {% include 'dashboard/partials/ui/_badge_relationship_picker.html' with instance_id=ns|add:'-bulk' mode='additive' ns=ns candidates=parent_items|default:priority_items %}
+                {% include 'dashboard/partials/ui/_label_relationship_picker.html' with instance_id=ns|add:'-bulk' mode='additive' ns=ns candidates=parent_items|default:priority_items %}
             </div>
         </div>
         <div class="tag-form-actions">

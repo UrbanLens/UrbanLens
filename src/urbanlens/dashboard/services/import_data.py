@@ -177,7 +177,7 @@ def run_import(user_id: int, zip_path: str, job_id: str) -> bool:
 
         # Cache of UUID→PK mappings built as we go, needed for cross-references.
         pin_uuid_map: dict[str, int] = {}
-        badge_uuid_map: dict[str, int] = {}
+        label_uuid_map: dict[str, int] = {}
 
         for i, key in enumerate(steps):
             step_start = 10 + int((i / total) * 80)
@@ -188,7 +188,7 @@ def run_import(user_id: int, zip_path: str, job_id: str) -> bool:
             if importer is None:
                 continue
             report_progress = _make_step_progress_reporter(job_status, key, step_start, step_end)
-            importer(profile, data_dir, result, pin_uuid_map=pin_uuid_map, badge_uuid_map=badge_uuid_map, report_progress=report_progress)
+            importer(profile, data_dir, result, pin_uuid_map=pin_uuid_map, label_uuid_map=label_uuid_map, report_progress=report_progress)
 
         job_status.write("done", 100, "Import complete!", result=result.to_dict())
         return True
@@ -274,21 +274,23 @@ def _read_json(data_dir: str, filename: str) -> Any:
 # -- Individual importers -------------------------------------------------------
 
 
-def _import_badges(
+def _import_labels(
     profile: Any,
     data_dir: str,
     result: ImportResult,
     *,
     pin_uuid_map: dict[str, int],
-    badge_uuid_map: dict[str, int],
+    label_uuid_map: dict[str, int],
     report_progress: ProgressReporter | None = None,
 ) -> None:
-    """Import user-owned badge definitions. Global badges are matched by name."""
+    """Import user-owned label definitions. Global labels are matched by name."""
     from uuid import UUID, uuid4
 
-    from urbanlens.dashboard.models.badges.model import Badge
+    from urbanlens.dashboard.models.labels.model import Label
 
-    rows = _read_json(data_dir, "badges.json")
+    # Fall back to the pre-rename filename so backup archives exported before the
+    # Badge -> Label rename still import cleanly.
+    rows = _read_json(data_dir, "labels.json") or _read_json(data_dir, "badges.json")
     if not rows:
         return
     total_rows = len(rows)
@@ -299,29 +301,29 @@ def _import_badges(
         uuid_str = row.get("uuid", "")
         name = row.get("name", "").strip()
         if not name:
-            result.inc_skipped("badges")
+            result.inc_skipped("labels")
             continue
 
         kind = row.get("kind", "tag")
-        is_user_badge = row.get("is_user_badge", True)
+        is_user_label = row.get("is_user_label", True)
 
         try:
-            badge_uuid = UUID(uuid_str)
+            label_uuid = UUID(uuid_str)
         except (ValueError, AttributeError, TypeError):
-            badge_uuid = uuid4()
+            label_uuid = uuid4()
 
-        if is_user_badge:
+        if is_user_label:
             # Match by UUID first (re-importing the same export), then by name+kind
             # (the import may be re-run against data that was already imported, or
             # the export UUID may not round-trip - either way, don't duplicate).
-            existing = Badge.objects.filter(uuid=badge_uuid, profile=profile).first() or Badge.objects.filter(profile=profile, name=name, kind=kind).first()
+            existing = Label.objects.filter(uuid=label_uuid, profile=profile).first() or Label.objects.filter(profile=profile, name=name, kind=kind).first()
             if existing:
-                badge_uuid_map[uuid_str] = existing.pk
-                result.inc_skipped("badges")
+                label_uuid_map[uuid_str] = existing.pk
+                result.inc_skipped("labels")
                 continue
 
-            badge = Badge.objects.create(
-                uuid=badge_uuid,
+            label = Label.objects.create(
+                uuid=label_uuid,
                 profile=profile,
                 name=name,
                 description=row.get("description") or "",
@@ -330,24 +332,24 @@ def _import_badges(
                 kind=kind,
                 order=row.get("order", 0),
             )
-            badge_uuid_map[uuid_str] = badge.pk
-            result.inc_created("badges")
+            label_uuid_map[uuid_str] = label.pk
+            result.inc_created("labels")
         else:
-            # Global badge: match by name+kind first, then fall back to a user-owned
-            # badge with the same name+kind, then create as user-owned if neither exists.
-            existing = Badge.objects.filter(profile__isnull=True, name=name, kind=kind).first()
+            # Global label: match by name+kind first, then fall back to a user-owned
+            # label with the same name+kind, then create as user-owned if neither exists.
+            existing = Label.objects.filter(profile__isnull=True, name=name, kind=kind).first()
             if existing:
-                badge_uuid_map[uuid_str] = existing.pk
-                result.inc_skipped("badges")
+                label_uuid_map[uuid_str] = existing.pk
+                result.inc_skipped("labels")
             else:
-                # Re-create as a user-owned badge (global doesn't exist on this instance).
-                user_existing = Badge.objects.filter(profile=profile, name=name, kind=kind).first()
+                # Re-create as a user-owned label (global doesn't exist on this instance).
+                user_existing = Label.objects.filter(profile=profile, name=name, kind=kind).first()
                 if user_existing:
-                    badge_uuid_map[uuid_str] = user_existing.pk
-                    result.inc_skipped("badges")
+                    label_uuid_map[uuid_str] = user_existing.pk
+                    result.inc_skipped("labels")
                 else:
-                    badge = Badge.objects.create(
-                        uuid=badge_uuid,
+                    label = Label.objects.create(
+                        uuid=label_uuid,
                         profile=profile,
                         name=name,
                         description=row.get("description") or "",
@@ -356,24 +358,24 @@ def _import_badges(
                         kind=kind,
                         order=row.get("order", 0),
                     )
-                    badge_uuid_map[uuid_str] = badge.pk
-                    result.inc_created("badges")
+                    label_uuid_map[uuid_str] = label.pk
+                    result.inc_created("labels")
 
-    # Second pass: wire up parent relationships now that all badges exist.
+    # Second pass: wire up parent relationships now that all labels exist.
     for row in rows:
         uuid_str = row.get("uuid", "")
-        if uuid_str not in badge_uuid_map:
+        if uuid_str not in label_uuid_map:
             continue
         parent_uuids = row.get("parent_uuids", [])
         if not parent_uuids:
             continue
         try:
-            badge = Badge.objects.get(pk=badge_uuid_map[uuid_str])
-        except Badge.DoesNotExist:
+            label = Label.objects.get(pk=label_uuid_map[uuid_str])
+        except Label.DoesNotExist:
             continue
-        parent_pks = [badge_uuid_map[u] for u in parent_uuids if u in badge_uuid_map]
+        parent_pks = [label_uuid_map[u] for u in parent_uuids if u in label_uuid_map]
         if parent_pks:
-            badge.parents.add(*parent_pks)
+            label.parents.add(*parent_pks)
 
 
 def _import_pins(
@@ -382,7 +384,7 @@ def _import_pins(
     result: ImportResult,
     *,
     pin_uuid_map: dict[str, int],
-    badge_uuid_map: dict[str, int],
+    label_uuid_map: dict[str, int],
     report_progress: ProgressReporter | None = None,
 ) -> None:
     """Import user pins.
@@ -465,10 +467,10 @@ def _import_pins(
 
         result.inc_created("pins")
 
-        # Assign badges.
-        for badge_uuid in row.get("badge_uuids", []):
-            if badge_uuid in badge_uuid_map:
-                pin.badges.add(badge_uuid_map[badge_uuid])
+        # Assign labels. "badge_uuids" is the pre-rename key, kept for old backup archives.
+        for label_uuid in row.get("label_uuids") or row.get("badge_uuids", []):
+            if label_uuid in label_uuid_map:
+                pin.labels.add(label_uuid_map[label_uuid])
 
 
 def _import_visit_history(
@@ -477,7 +479,7 @@ def _import_visit_history(
     result: ImportResult,
     *,
     pin_uuid_map: dict[str, int],
-    badge_uuid_map: dict[str, int],
+    label_uuid_map: dict[str, int],
     report_progress: ProgressReporter | None = None,
 ) -> None:
     """Import visit history records, skipping duplicates by (pin, visited_at)."""
@@ -537,7 +539,7 @@ def _import_connections(
     result: ImportResult,
     *,
     pin_uuid_map: dict[str, int],
-    badge_uuid_map: dict[str, int],
+    label_uuid_map: dict[str, int],
     report_progress: ProgressReporter | None = None,
 ) -> None:
     """Import friendship connections. Skips connections to users not on this instance."""
@@ -590,7 +592,7 @@ def _import_settings(
     result: ImportResult,
     *,
     pin_uuid_map: dict[str, int],
-    badge_uuid_map: dict[str, int],
+    label_uuid_map: dict[str, int],
     report_progress: ProgressReporter | None = None,
 ) -> None:
     """Import user settings, overwriting the current profile settings."""
@@ -669,7 +671,7 @@ def _import_pin_lists(
     result: ImportResult,
     *,
     pin_uuid_map: dict[str, int],
-    badge_uuid_map: dict[str, int],
+    label_uuid_map: dict[str, int],
     report_progress: ProgressReporter | None = None,
 ) -> None:
     """Import pin lists (idempotent by UUID) and their pin membership rows.
@@ -742,10 +744,10 @@ def _import_pin_lists(
 
 # -- Dispatch table -------------------------------------------------------------
 
-_IMPORT_ORDER = ["badges", "pins", "pin_lists", "visit_history", "connections", "settings"]
+_IMPORT_ORDER = ["labels", "pins", "pin_lists", "visit_history", "connections", "settings"]
 
 _IMPORTERS: dict[str, Any] = {
-    "badges": _import_badges,
+    "labels": _import_labels,
     "pins": _import_pins,
     "pin_lists": _import_pin_lists,
     "visit_history": _import_visit_history,
@@ -754,7 +756,7 @@ _IMPORTERS: dict[str, Any] = {
 }
 
 _STEP_MESSAGES = {
-    "badges": "Importing badges...",
+    "labels": "Importing labels...",
     "pins": "Importing pins and locations...",
     "pin_lists": "Importing lists...",
     "visit_history": "Importing visit history...",

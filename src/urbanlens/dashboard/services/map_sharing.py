@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING
 
 from urbanlens.dashboard.models.markup.model import MarkupMap
 from urbanlens.dashboard.models.pin_share import PinShare, PinShareOrigin, PinShareStatus
-from urbanlens.dashboard.services.map_pin_share_detection import detect_shared_pins
+from urbanlens.dashboard.services.map_pin_share_detection import sync_pin_inferences
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
@@ -92,7 +92,7 @@ def share_markup_map_with_profile(sender: Profile, recipient: Profile, markup_ma
         everything was already recorded from a prior send of this or another
         map covering the same pins).
     """
-    pins = detect_shared_pins(markup_map, sender)
+    pins = sync_pin_inferences(markup_map)
     shares = []
     for pin in pins:
         share = _record_detected_share(sender, recipient, pin, markup_map)

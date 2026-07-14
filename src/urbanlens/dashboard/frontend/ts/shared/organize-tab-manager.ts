@@ -3,7 +3,7 @@ import { getCsrfToken } from "./csrf";
 import { renderIconGlyphHtml, resetIconPicker } from "./icon-picker";
 import { resetColorPicker } from "./color-picker";
 import { renderTreeView } from "./tree-view";
-import { BadgeRelPicker } from "./badge-rel-picker";
+import { LabelRelPicker } from "./label-rel-picker";
 import { registerBulkStateUpdater } from "./organize-icon-picker";
 import { applyOrgFilter, getOrgVisibleCards, type OrgNamespace } from "./organize-filter-engine";
 import { orgHeader } from "./organize-header";
@@ -93,7 +93,7 @@ interface CardData {
  * tabs. Consolidates what used to be four separately copy-pasted ~350-450
  * line IIFEs differing mainly in id/dataset naming plus a handful of real
  * capability differences (kind-conversion, merge-time rename/re-icon/re-color,
- * a "protected" badge that can't be a merge source, custom-icon upload).
+ * a "protected" label that can't be a merge source, custom-icon upload).
  *
  * Selection/toolbar model differs from categories.ts/tags.ts's
  * BulkEntityManager: organize selects by clicking anywhere on a card (not a
@@ -289,7 +289,7 @@ export class OrgTabManager {
         });
     }
 
-    // When multiple badges are selected, a row's own "Edit" pencil should
+    // When multiple labels are selected, a row's own "Edit" pencil should
     // still open the bulk-edit dialog for the whole selection rather than
     // the single-item form - otherwise it silently edits just that one row
     // while the rest of the selection looks like it's being included. Runs
@@ -421,7 +421,7 @@ export class OrgTabManager {
         const sharedIcon = iconSet.size === 1 ? Array.from(iconSet)[0]! : null;
         const sharedColor = colorSet.size === 1 ? Array.from(colorSet)[0]! : null;
         // A shared *custom uploaded* icon has no representation in the symbol/emoji
-        // picker below - without this check, every selected badge sharing one was
+        // picker below - without this check, every selected label sharing one was
         // computed as sharedIcon="" (empty symbol field), which unchecked "no
         // change" and would submit icon="" on save, silently wiping the custom
         // icon from all of them even for a bulk edit that only touched color/order.
@@ -480,7 +480,7 @@ export class OrgTabManager {
             }
         }
 
-        BadgeRelPicker.reset(`${this.cfg.ns}-bulk`);
+        LabelRelPicker.reset(`${this.cfg.ns}-bulk`);
         this.convertTarget = null;
         document.querySelectorAll(`#${d.dialogId} .kind-toggle-option`).forEach((b) => b.classList.remove("is-active"));
 
@@ -555,8 +555,8 @@ export class OrgTabManager {
             if (!(document.getElementById(d.colorNochangeId) as HTMLInputElement).checked) {
                 body.color = (document.getElementById(d.colorValueId) as HTMLInputElement | null)?.value ?? "";
             }
-            body.add_parent_ids = BadgeRelPicker.getSelectedIds(`${this.cfg.ns}-bulk`, "parent");
-            body.add_child_ids = BadgeRelPicker.getSelectedIds(`${this.cfg.ns}-bulk`, "child");
+            body.add_parent_ids = LabelRelPicker.getSelectedIds(`${this.cfg.ns}-bulk`, "parent");
+            body.add_child_ids = LabelRelPicker.getSelectedIds(`${this.cfg.ns}-bulk`, "child");
 
             try {
                 const target = converting ? this.cfg.convertTargets.find((t) => t.kind === this.convertTarget) : undefined;

@@ -13,7 +13,6 @@ from rest_framework import routers
 from urbanlens.dashboard.controllers import (
     account_deletion,
     aliases,
-    badges,
     boundary,
     calendar_sync,
     comments,
@@ -27,6 +26,7 @@ from urbanlens.dashboard.controllers import (
     google_photos,
     image_gallery,
     immich,
+    labels,
     location_wiki,
     map_sharing,
     maps,
@@ -62,7 +62,7 @@ from urbanlens.dashboard.controllers import (
     wiki_create,
 )
 from urbanlens.dashboard.controllers.index import IndexController
-from urbanlens.dashboard.models.badges.meta import KIND_CATEGORY, KIND_STATUS, KIND_TAG, KIND_USER
+from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_STATUS, KIND_TAG, KIND_USER
 from urbanlens.dashboard.models.pin import PinViewSet
 from urbanlens.dashboard.models.reviews import ReviewViewSet
 
@@ -144,9 +144,9 @@ urlpatterns = [
                 path("pins/bulk-merge/", pin_bulk.PinBulkMergeView.as_view(), name="pin.bulk_merge"),
                 path("pins/bulk-edit/", pin_bulk.PinBulkEditView.as_view(), name="pin.bulk_edit"),
                 path(
-                    "pins/bulk-edit/badge-options/",
-                    pin_bulk.PinBulkEditBadgeOptionsView.as_view(),
-                    name="pin.bulk_edit.badge_options",
+                    "pins/bulk-edit/label-options/",
+                    pin_bulk.PinBulkEditLabelOptionsView.as_view(),
+                    name="pin.bulk_edit.label_options",
                 ),
                 path("pins/<slug:pin_slug>/", maps.MapController.as_view({"get": "map_pin_json"}), name="map.pin.json"),
                 path(
@@ -214,7 +214,7 @@ urlpatterns = [
                     maps.MapController.as_view({"post": "upload_image"}),
                     name="pin.upload_image",
                 ),
-                # TODO: Assess codebase, but this is probably deprecated since the addition of Badges more generically.
+                # TODO: Assess codebase, but this is probably deprecated since the addition of Labels more generically.
                 path(
                     "change_category/<slug:pin_slug>/",
                     maps.MapController.as_view({"post": "change_category"}),
@@ -641,9 +641,9 @@ urlpatterns = [
                     name="profile.note.edit",
                 ),
                 path(
-                    "<slug:profile_slug>/badge/<int:badge_id>/",
-                    userprofile.ProfileBadgeToggleView.as_view(),
-                    name="profile.badge_toggle",
+                    "<slug:profile_slug>/label/<int:label_id>/",
+                    userprofile.ProfileLabelToggleView.as_view(),
+                    name="profile.label_toggle",
                 ),
                 path(
                     "<slug:profile_slug>/trust/",
@@ -702,45 +702,45 @@ urlpatterns = [
     path("settings/google-calendar/disconnect/", calendar_sync.GoogleCalendarSettingsDisconnectView.as_view(), name="settings.google_calendar.disconnect"),
     path("undo/<uuid:undo_id>/restore/", undo.UndoRestoreView.as_view(), name="undo.restore"),
     re_path(
-        r"^(?P<badge_kind>tags?|categor(y|ies)|status(es)?|people)/",
+        r"^(?P<label_kind>tags?|categor(y|ies)|status(es)?|people)/",
         include(
             [
-                path("", badges.BadgeKindIndexView.as_view(), name="badge.index"),
-                path("create/", badges.BadgeCreateView.as_view(), name="badge.create"),
-                path("rows/", badges.BadgeRowsView.as_view(), name="badge.rows"),
-                path("<int:badge_id>/edit/", badges.BadgeEditView.as_view(), name="badge.edit"),
-                path("<int:badge_id>/delete/", badges.BadgeDeleteView.as_view(), name="badge.delete"),
-                path("<int:badge_id>/merge/", badges.BadgeMergeView.as_view(), name="badge.merge"),
-                path("<int:badge_id>/customize/", badges.BadgeCustomizeView.as_view(), name="badge.customize"),
-                path("reorder/", badges.BadgeReorderView.as_view(), name="badge.reorder"),
-                path("bulk-delete/", badges.BadgeBulkDeleteView.as_view(), name="badge.bulk_delete"),
-                path("bulk-edit/", badges.BadgeBulkEditView.as_view(), name="badge.bulk_edit"),
+                path("", labels.LabelKindIndexView.as_view(), name="label.index"),
+                path("create/", labels.LabelCreateView.as_view(), name="label.create"),
+                path("rows/", labels.LabelRowsView.as_view(), name="label.rows"),
+                path("<int:label_id>/edit/", labels.LabelEditView.as_view(), name="label.edit"),
+                path("<int:label_id>/delete/", labels.LabelDeleteView.as_view(), name="label.delete"),
+                path("<int:label_id>/merge/", labels.LabelMergeView.as_view(), name="label.merge"),
+                path("<int:label_id>/customize/", labels.LabelCustomizeView.as_view(), name="label.customize"),
+                path("reorder/", labels.LabelReorderView.as_view(), name="label.reorder"),
+                path("bulk-delete/", labels.LabelBulkDeleteView.as_view(), name="label.bulk_delete"),
+                path("bulk-edit/", labels.LabelBulkEditView.as_view(), name="label.bulk_edit"),
                 path(
                     "bulk-convert/",
-                    badges.BadgeBulkConvertView.as_view(),
-                    name="badge.bulk_convert",
+                    labels.LabelBulkConvertView.as_view(),
+                    name="label.bulk_convert",
                 ),
                 path(
                     "bulk-convert-status/",
-                    badges.BadgeBulkConvertView.as_view(target_kind=KIND_STATUS),
-                    name="badge.bulk_convert_status",
+                    labels.LabelBulkConvertView.as_view(target_kind=KIND_STATUS),
+                    name="label.bulk_convert_status",
                 ),
                 path(
                     "bulk-convert-tag/",
-                    badges.BadgeBulkConvertView.as_view(target_kind=KIND_TAG),
-                    name="badge.bulk_convert_tag",
+                    labels.LabelBulkConvertView.as_view(target_kind=KIND_TAG),
+                    name="label.bulk_convert_tag",
                 ),
                 path(
                     "bulk-convert-category/",
-                    badges.BadgeBulkConvertView.as_view(target_kind=KIND_CATEGORY),
-                    name="badge.bulk_convert_category",
+                    labels.LabelBulkConvertView.as_view(target_kind=KIND_CATEGORY),
+                    name="label.bulk_convert_category",
                 ),
-                path("multi-merge/", badges.BadgeMultiMergeView.as_view(), name="badge.multi_merge"),
-                path("pin/<slug:pin_slug>/", badges.BadgePinMembershipView.as_view(), name="badge.pin"),
+                path("multi-merge/", labels.LabelMultiMergeView.as_view(), name="label.multi_merge"),
+                path("pin/<slug:pin_slug>/", labels.LabelPinMembershipView.as_view(), name="label.pin"),
                 path(
                     "location/<slug:location_slug>/",
-                    badges.BadgeLocationMembershipView.as_view(),
-                    name="badge.location",
+                    labels.LabelLocationMembershipView.as_view(),
+                    name="label.location",
                 ),
             ]
         ),

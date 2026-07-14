@@ -24,8 +24,8 @@ from urbanlens.dashboard.forms.profile_form import (
     validate_birth_date,
     validate_started_exploring,
 )
-from urbanlens.dashboard.models.badges.meta import KIND_STATUS
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
+from urbanlens.dashboard.models.labels.meta import KIND_STATUS
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
@@ -182,9 +182,9 @@ class ViewProfileView(LoginRequiredMixin, View):
         )
         common_ids = their_loc_ids & my_loc_ids
 
-        # Visited by both - has the protected "Visited" status badge, or has a last_visited date
+        # Visited by both - has the protected "Visited" status label, or has a last_visited date
         # TODO: Whatever is happening here is probably wrong.
-        visited_filter = Q(badges__name="Visited", badges__kind=KIND_STATUS) | Q(last_visited__isnull=False)
+        visited_filter = Q(labels__name="Visited", labels__kind=KIND_STATUS) | Q(last_visited__isnull=False)
         their_visited_ids = set(
             Pin.objects.filter(profile=profile, location__isnull=False).filter(visited_filter).values_list("location_id", flat=True),
         )
@@ -221,9 +221,9 @@ class ViewProfileView(LoginRequiredMixin, View):
 
             context["trips_in_common"] = Trip.objects.none()
 
-        # Private annotations (notes, user badges, trust rating, nickname) - only when viewing someone else
-        from urbanlens.dashboard.models.badges.model import Badge
-        from urbanlens.dashboard.models.badges.profile_assignment import ProfileBadgeAssignment
+        # Private annotations (notes, user labels, trust rating, nickname) - only when viewing someone else
+        from urbanlens.dashboard.models.labels.model import Label
+        from urbanlens.dashboard.models.labels.profile_assignment import ProfileLabelAssignment
         from urbanlens.dashboard.models.profile.nickname import ProfileNickname
         from urbanlens.dashboard.models.profile.note import ProfileNote
         from urbanlens.dashboard.models.profile.trust import ProfileTrust
@@ -231,16 +231,16 @@ class ViewProfileView(LoginRequiredMixin, View):
         context["viewer_notes"] = ProfileNote.objects.filter(author=my_profile, subject=profile)
         nickname = ProfileNickname.objects.filter(author=my_profile, subject=profile).first()
         context["nickname"] = nickname.nickname if nickname else ""
-        user_badges = Badge.objects.user_badges().visible_to(my_profile).ordered()
-        assigned_badge_ids = set(
-            ProfileBadgeAssignment.objects.filter(author=my_profile, subject=profile).values_list(
-                "badge_id",
+        user_labels = Label.objects.user_labels().visible_to(my_profile).ordered()
+        assigned_label_ids = set(
+            ProfileLabelAssignment.objects.filter(author=my_profile, subject=profile).values_list(
+                "label_id",
                 flat=True,
             ),
         )
-        context["user_badges"] = user_badges
-        context["assigned_badge_ids"] = assigned_badge_ids
-        context["unassigned_badges"] = [badge for badge in user_badges if badge.id not in assigned_badge_ids]
+        context["user_labels"] = user_labels
+        context["assigned_label_ids"] = assigned_label_ids
+        context["unassigned_labels"] = [label for label in user_labels if label.id not in assigned_label_ids]
         trust = ProfileTrust.objects.filter(author=my_profile, subject=profile).first()
         context["trust_rating"] = trust.rating if trust else 0
 
@@ -912,12 +912,12 @@ class ProfileNoteEditView(LoginRequiredMixin, View):
         return _render_profile_annotation_partial(request, author, subject)
 
 
-class ProfileBadgeToggleView(LoginRequiredMixin, View):
-    """Toggle a user-type badge on another profile (HTMX - re-renders the badge chips)."""
+class ProfileLabelToggleView(LoginRequiredMixin, View):
+    """Toggle a user-type label on another profile (HTMX - re-renders the label chips)."""
 
-    def post(self, request: HttpRequest, profile_slug: UUID, badge_id: int) -> HttpResponse:
-        from urbanlens.dashboard.models.badges.model import KIND_USER, Badge
-        from urbanlens.dashboard.models.badges.profile_assignment import ProfileBadgeAssignment
+    def post(self, request: HttpRequest, profile_slug: UUID, label_id: int) -> HttpResponse:
+        from urbanlens.dashboard.models.labels.model import KIND_USER, Label
+        from urbanlens.dashboard.models.labels.profile_assignment import ProfileLabelAssignment
 
         subject = get_object_or_404(Profile, slug=profile_slug)
         author = _authenticated_profile(request)
@@ -925,13 +925,13 @@ class ProfileBadgeToggleView(LoginRequiredMixin, View):
             return HttpResponse("Cannot annotate your own profile.", status=400)
 
         # visible_to keeps forged ids from attaching (and thereby exposing)
-        # another user's private people badges.
-        badge = get_object_or_404(Badge.objects.visible_to(author), pk=badge_id, kind=KIND_USER)
+        # another user's private people labels.
+        label = get_object_or_404(Label.objects.visible_to(author), pk=label_id, kind=KIND_USER)
 
-        assignment, created = ProfileBadgeAssignment.objects.get_or_create(
+        assignment, created = ProfileLabelAssignment.objects.get_or_create(
             author=author,
             subject=subject,
-            badge=badge,
+            label=label,
         )
         if not created:
             assignment.delete()
@@ -1016,17 +1016,17 @@ def _render_profile_annotation_partial(
         Rendered HTML partial.
     """
     from urbanlens.dashboard.controllers.custom_fields import rows_for_target
-    from urbanlens.dashboard.models.badges.model import KIND_USER, Badge
-    from urbanlens.dashboard.models.badges.profile_assignment import ProfileBadgeAssignment
     from urbanlens.dashboard.models.custom_fields.model import CustomFieldEntity
+    from urbanlens.dashboard.models.labels.model import KIND_USER, Label
+    from urbanlens.dashboard.models.labels.profile_assignment import ProfileLabelAssignment
     from urbanlens.dashboard.models.profile.nickname import ProfileNickname
     from urbanlens.dashboard.models.profile.note import ProfileNote
     from urbanlens.dashboard.models.profile.trust import ProfileTrust
 
     viewer_notes = ProfileNote.objects.filter(author=author, subject=subject)
-    user_badges = Badge.objects.user_badges().visible_to(author).ordered()
+    user_labels = Label.objects.user_labels().visible_to(author).ordered()
     assigned_ids = set(
-        ProfileBadgeAssignment.objects.filter(author=author, subject=subject).values_list("badge_id", flat=True),
+        ProfileLabelAssignment.objects.filter(author=author, subject=subject).values_list("label_id", flat=True),
     )
     trust = ProfileTrust.objects.filter(author=author, subject=subject).first()
     nickname = ProfileNickname.objects.filter(author=author, subject=subject).first()
@@ -1037,9 +1037,9 @@ def _render_profile_annotation_partial(
         {
             "subject": subject,
             "viewer_notes": viewer_notes,
-            "user_badges": user_badges,
-            "assigned_badge_ids": assigned_ids,
-            "unassigned_badges": [badge for badge in user_badges if badge.id not in assigned_ids],
+            "user_labels": user_labels,
+            "assigned_label_ids": assigned_ids,
+            "unassigned_labels": [label for label in user_labels if label.id not in assigned_ids],
             "trust_rating": trust.rating if trust else 0,
             "nickname": nickname.nickname if nickname else "",
             "custom_field_rows": rows_for_target(author, CustomFieldEntity.PROFILE, subject),

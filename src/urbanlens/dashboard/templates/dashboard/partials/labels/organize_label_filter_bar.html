@@ -8,7 +8,7 @@
         <button type="button" class="org-filter-chip" data-filter="has-parents"><i class="material-symbols-outlined">call_merge</i> Has parents</button>
         <div class="org-filter-color-row">
             <button type="button" class="org-filter-chip org-filter-color-side-btn" data-filter="has-color" data-mutex="no-color" title="Show only items with a color"><i class="material-symbols-outlined">palette</i></button>
-            {% for hex, label in color_choices %}<button type="button" class="org-filter-color-dot" data-filter="color:{{ hex }}" title="{{ label }}" style="background:{{ hex }};"></button>{% endfor %}
+            {% for hex, color_name in color_choices %}<button type="button" class="org-filter-color-dot" data-filter="color:{{ hex }}" title="{{ color_name }}" style="background:{{ hex }};"></button>{% endfor %}
             <button type="button" class="org-filter-chip org-filter-color-side-btn" data-filter="no-color" data-mutex="has-color" title="Show only items without a color"><i class="material-symbols-outlined">block</i></button>
         </div>
         <button type="button" class="org-filter-clear">✕ Clear</button>

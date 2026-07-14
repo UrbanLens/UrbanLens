@@ -13,8 +13,8 @@ from model_bakery import baker
 import pytest
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.models.badges.meta import KIND_TAG
-from urbanlens.dashboard.models.badges.model import Badge
+from urbanlens.dashboard.models.labels.meta import KIND_TAG
+from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinContact
 from urbanlens.dashboard.models.trips.model import Trip, TripMembership
@@ -116,22 +116,22 @@ class UndoServiceTests(TestCase):
 
 @override_settings(CACHES=_LOCMEM_CACHES)
 class PinUndoHandlerTests(TestCase):
-    """Pin's own fields, badges, and personal detail-pin subtree round-trip."""
+    """Pin's own fields, labels, and personal detail-pin subtree round-trip."""
 
     def setUp(self) -> None:
         self.user = baker.make(User)
         self.profile = self.user.profile
 
-    def test_restores_badges(self) -> None:
+    def test_restores_labels(self) -> None:
         pin = baker.make(Pin, profile=self.profile, name="Tagged")
-        badge = baker.make(Badge, kind=KIND_TAG, profile=self.profile)
-        pin.badges.add(badge)
+        label = baker.make(Label, kind=KIND_TAG, profile=self.profile)
+        pin.labels.add(label)
 
         undo_action = stash_for_undo("pin", [pin], self.profile)
         pin.delete()
         restored = restore_undo_action(undo_action)[0]
 
-        self.assertIn(badge, restored.badges.all())
+        self.assertIn(label, restored.labels.all())
 
     def test_restores_detail_pin_subtree_hierarchy(self) -> None:
         parent = baker.make(Pin, profile=self.profile, name="Parent")
@@ -151,16 +151,16 @@ class PinUndoHandlerTests(TestCase):
 
 @override_settings(CACHES=_LOCMEM_CACHES)
 class WikiUndoHandlerTests(TestCase):
-    """Wiki's own fields, badges, and child-wiki subtree round-trip."""
+    """Wiki's own fields, labels, and child-wiki subtree round-trip."""
 
     def setUp(self) -> None:
         self.user = baker.make(User)
         self.profile = self.user.profile
 
-    def test_restores_fields_and_badges(self) -> None:
+    def test_restores_fields_and_labels(self) -> None:
         wiki = _make_wiki(name="Old Factory", description="Rusty.")
-        badge = baker.make(Badge, kind=KIND_TAG, profile=self.profile)
-        wiki.badges.add(badge)
+        label = baker.make(Label, kind=KIND_TAG, profile=self.profile)
+        wiki.labels.add(label)
 
         undo_action = stash_for_undo("wiki", [wiki], self.profile)
         wiki.delete()
@@ -168,7 +168,7 @@ class WikiUndoHandlerTests(TestCase):
 
         self.assertEqual(restored.name, "Old Factory")
         self.assertEqual(restored.description, "Rusty.")
-        self.assertIn(badge, restored.badges.all())
+        self.assertIn(label, restored.labels.all())
 
     def test_restores_child_wiki_hierarchy(self) -> None:
         parent = _make_wiki(name="Parent Site")

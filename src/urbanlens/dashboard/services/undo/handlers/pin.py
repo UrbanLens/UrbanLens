@@ -42,7 +42,7 @@ _RESTORABLE_FIELDS = (
 
 @register
 class PinUndoHandler(UndoHandler):
-    """Restores a pin's own fields, hierarchy position, and badges - not its cascade children.
+    """Restores a pin's own fields, hierarchy position, and labels - not its cascade children.
 
     Reviews, visit history, notes, markup annotations, aliases, and comments
     are gone the instant the pin is deleted and are not restored.
@@ -65,7 +65,7 @@ class PinUndoHandler(UndoHandler):
             "profile_id": pin.profile_id,
             "wiki_id": pin.wiki_id,
             "parent_pin_old_pk": pin.parent_pin_id,
-            "badge_ids": list(pin.badges.values_list("id", flat=True)),
+            "label_ids": list(pin.labels.values_list("id", flat=True)),
         }
 
     @classmethod
@@ -76,7 +76,7 @@ class PinUndoHandler(UndoHandler):
 
     @classmethod
     def restore(cls, payload: list[dict[str, Any]]) -> list[Pin]:
-        """Recreate pins with fresh pks/uuids/slugs, relinking hierarchy and badges.
+        """Recreate pins with fresh pks/uuids/slugs, relinking hierarchy and labels.
 
         Parent/child relationships within the restored batch are relinked in
         a second pass once every pin has a new pk to relink against.
@@ -106,7 +106,7 @@ class PinUndoHandler(UndoHandler):
                     if surviving_parent is not None:
                         pin.parent_pin = surviving_parent
                         pin.save(update_fields=["parent_pin"])
-            if entry["badge_ids"]:
-                pin.badges.set(entry["badge_ids"])
+            if entry["label_ids"]:
+                pin.labels.set(entry["label_ids"])
 
         return restored

@@ -2,23 +2,23 @@ import Sortable from "sortablejs";
 
 /**
  * Parent/child relationship chip picker used by organize's create/edit/bulk-edit
- * dialogs (dashboard/partials/badges/*). Templates call this via inline
+ * dialogs (dashboard/partials/labels/*). Templates call this via inline
  * onclick attributes, so it stays a window global - see icon-picker.ts for
  * the same rationale.
  */
 type RelType = "parent" | "child";
 
-export const BadgeRelPicker = {
+export const LabelRelPicker = {
     toggle(instanceId: string, relType: RelType, _triggerBtn: HTMLElement): void {
         const popup = document.getElementById(`${instanceId}-popup-${relType}`);
         if (!popup) return;
         const wasHidden = (popup as HTMLElement).hidden;
-        document.querySelectorAll<HTMLElement>(".badge-rel-popup").forEach((p) => {
+        document.querySelectorAll<HTMLElement>(".label-rel-popup").forEach((p) => {
             p.hidden = true;
         });
         if (!wasHidden) return;
         (popup as HTMLElement).hidden = false;
-        const search = popup.querySelector<HTMLInputElement>(".badge-rel-search");
+        const search = popup.querySelector<HTMLInputElement>(".label-rel-search");
         if (search) {
             search.value = "";
             search.focus();
@@ -26,11 +26,11 @@ export const BadgeRelPicker = {
     },
 
     select(instanceId: string, relType: RelType, btn: HTMLElement): void {
-        if (btn.classList.contains("badge-rel-suggestion--hidden")) return;
+        if (btn.classList.contains("label-rel-suggestion--hidden")) return;
         const group = document.getElementById(`${instanceId}-sel-${relType}`);
         if (!group) return;
         const id = btn.dataset.id;
-        if (!id || group.querySelector(`.badge-rel-chip[data-id="${id}"]`)) return;
+        if (!id || group.querySelector(`.label-rel-chip[data-id="${id}"]`)) return;
 
         const picker = document.querySelector<HTMLElement>(`[data-picker-id="${instanceId}"]`);
         const pill = document.createElement("span");
@@ -38,7 +38,7 @@ export const BadgeRelPicker = {
         const color = btn.style.getPropertyValue("--tag-color");
         if (color) pill.style.setProperty("--tag-color", color);
         pill.innerHTML = btn.innerHTML;
-        pill.querySelector(".badge-kind-chip")?.remove();
+        pill.querySelector(".label-kind-chip")?.remove();
         if (picker?.dataset.mode === "replace") {
             const hidden = document.createElement("input");
             hidden.type = "hidden";
@@ -48,7 +48,7 @@ export const BadgeRelPicker = {
         }
 
         const chip = document.createElement("span");
-        chip.className = "badge-rel-chip";
+        chip.className = "label-rel-chip";
         chip.dataset.id = id;
         chip.appendChild(pill);
 
@@ -57,36 +57,36 @@ export const BadgeRelPicker = {
         removeBtn.className = "tag-chip-remove";
         removeBtn.title = "Remove";
         removeBtn.innerHTML = "&times;";
-        removeBtn.onclick = () => BadgeRelPicker.remove(instanceId, chip);
+        removeBtn.onclick = () => LabelRelPicker.remove(instanceId, chip);
         chip.appendChild(removeBtn);
 
         group.appendChild(chip);
-        BadgeRelPicker._hideSuggestion(instanceId, id);
-        BadgeRelPicker._updateEmptyHints(instanceId);
+        LabelRelPicker._hideSuggestion(instanceId, id);
+        LabelRelPicker._updateEmptyHints(instanceId);
     },
 
     remove(instanceId: string, chipEl: HTMLElement | null): void {
         if (!chipEl) return;
         const id = chipEl.dataset.id;
         chipEl.remove();
-        if (id) BadgeRelPicker._showSuggestion(instanceId, id);
-        BadgeRelPicker._updateEmptyHints(instanceId);
+        if (id) LabelRelPicker._showSuggestion(instanceId, id);
+        LabelRelPicker._updateEmptyHints(instanceId);
     },
 
     _hideSuggestion(instanceId: string, id: string): void {
         (["parent", "child"] as RelType[]).forEach((relType) => {
             const container = document.getElementById(`${instanceId}-suggestions-${relType}`);
-            container?.querySelector(`.badge-rel-suggestion[data-id="${id}"]`)?.classList.add("badge-rel-suggestion--hidden");
+            container?.querySelector(`.label-rel-suggestion[data-id="${id}"]`)?.classList.add("label-rel-suggestion--hidden");
         });
     },
 
     _showSuggestion(instanceId: string, id: string): void {
         (["parent", "child"] as RelType[]).forEach((relType) => {
             const container = document.getElementById(`${instanceId}-suggestions-${relType}`);
-            const btn = container?.querySelector(`.badge-rel-suggestion[data-id="${id}"]`);
+            const btn = container?.querySelector(`.label-rel-suggestion[data-id="${id}"]`);
             if (btn) {
-                btn.classList.remove("badge-rel-suggestion--hidden");
-                BadgeRelPicker._applyFilters(instanceId, relType);
+                btn.classList.remove("label-rel-suggestion--hidden");
+                LabelRelPicker._applyFilters(instanceId, relType);
             }
         });
     },
@@ -94,17 +94,17 @@ export const BadgeRelPicker = {
     setTab(instanceId: string, relType: RelType, kind: string, btn: HTMLElement): void {
         const popup = document.getElementById(`${instanceId}-popup-${relType}`);
         if (!popup) return;
-        popup.querySelectorAll(".badge-rel-tab").forEach((b) => b.classList.remove("active"));
+        popup.querySelectorAll(".label-rel-tab").forEach((b) => b.classList.remove("active"));
         btn.classList.add("active");
         const container = document.getElementById(`${instanceId}-suggestions-${relType}`);
         if (container) container.dataset.activeTab = kind;
-        BadgeRelPicker._applyFilters(instanceId, relType);
+        LabelRelPicker._applyFilters(instanceId, relType);
     },
 
     filter(instanceId: string, relType: RelType, query: string): void {
         const popup = document.getElementById(`${instanceId}-popup-${relType}`);
         if (popup) popup.dataset.searchQuery = query.toLowerCase().trim();
-        BadgeRelPicker._applyFilters(instanceId, relType);
+        LabelRelPicker._applyFilters(instanceId, relType);
     },
 
     _applyFilters(instanceId: string, relType: RelType): void {
@@ -113,7 +113,7 @@ export const BadgeRelPicker = {
         if (!popup || !container) return;
         const q = popup.dataset.searchQuery ?? "";
         const tab = container.dataset.activeTab ?? "";
-        container.querySelectorAll<HTMLElement>(".badge-rel-suggestion").forEach((btn) => {
+        container.querySelectorAll<HTMLElement>(".label-rel-suggestion").forEach((btn) => {
             const matchesTab = !tab || btn.dataset.kind === tab;
             const matchesSearch = !q || (btn.dataset.name ?? "").indexOf(q) !== -1;
             btn.style.display = matchesTab && matchesSearch ? "" : "none";
@@ -123,7 +123,7 @@ export const BadgeRelPicker = {
     _updateEmptyHints(instanceId: string): void {
         (["parent", "child"] as RelType[]).forEach((relType) => {
             const group = document.getElementById(`${instanceId}-sel-${relType}`);
-            const hint = group?.parentElement?.querySelector<HTMLElement>(".badge-rel-empty-hint");
+            const hint = group?.parentElement?.querySelector<HTMLElement>(".label-rel-empty-hint");
             if (hint) hint.hidden = (group?.children.length ?? 0) > 0;
         });
     },
@@ -131,14 +131,14 @@ export const BadgeRelPicker = {
     getSelectedIds(instanceId: string, relType: RelType): number[] {
         const group = document.getElementById(`${instanceId}-sel-${relType}`);
         if (!group) return [];
-        return Array.from(group.querySelectorAll<HTMLElement>(".badge-rel-chip")).map((c) => Number.parseInt(c.dataset.id ?? "0", 10));
+        return Array.from(group.querySelectorAll<HTMLElement>(".label-rel-chip")).map((c) => Number.parseInt(c.dataset.id ?? "0", 10));
     },
 
     reset(instanceId: string): void {
         (["parent", "child"] as RelType[]).forEach((relType) => {
             const group = document.getElementById(`${instanceId}-sel-${relType}`);
             if (!group) return;
-            Array.from(group.querySelectorAll<HTMLElement>(".badge-rel-chip")).forEach((chip) => BadgeRelPicker.remove(instanceId, chip));
+            Array.from(group.querySelectorAll<HTMLElement>(".label-rel-chip")).forEach((chip) => LabelRelPicker.remove(instanceId, chip));
         });
     },
 
@@ -153,7 +153,7 @@ export const BadgeRelPicker = {
         const hideTrash = () => trash?.classList.remove("is-active");
         const onEnd = () => {
             hideTrash();
-            BadgeRelPicker._updateEmptyHints(instanceId);
+            LabelRelPicker._updateEmptyHints(instanceId);
         };
         const makeOnAdd = (relType: RelType) => (evt: { item: HTMLElement }) => {
             const hidden = evt.item.querySelector<HTMLInputElement>('input[type="hidden"]');
@@ -182,27 +182,27 @@ export const BadgeRelPicker = {
             new Sortable(trash, {
                 group: { name: groupName, put: true, pull: false },
                 animation: 150,
-                onAdd: (evt: { item: HTMLElement }) => BadgeRelPicker.remove(instanceId, evt.item),
+                onAdd: (evt: { item: HTMLElement }) => LabelRelPicker.remove(instanceId, evt.item),
             });
         }
     },
 
     _initAll(root?: ParentNode): void {
-        (root ?? document).querySelectorAll<HTMLElement>(".badge-rel-picker").forEach((picker) => {
+        (root ?? document).querySelectorAll<HTMLElement>(".label-rel-picker").forEach((picker) => {
             if (picker.dataset.relInit === "1") return;
             picker.dataset.relInit = "1";
-            if (picker.dataset.pickerId) BadgeRelPicker._makeSortable(picker.dataset.pickerId);
+            if (picker.dataset.pickerId) LabelRelPicker._makeSortable(picker.dataset.pickerId);
         });
     },
 };
 
-export function installGlobalBadgeRelPicker(): void {
-    window.BadgeRelPicker = BadgeRelPicker;
-    BadgeRelPicker._initAll();
-    document.body.addEventListener("htmx:afterSettle", () => BadgeRelPicker._initAll());
+export function installGlobalLabelRelPicker(): void {
+    window.LabelRelPicker = LabelRelPicker;
+    LabelRelPicker._initAll();
+    document.body.addEventListener("htmx:afterSettle", () => LabelRelPicker._initAll());
     document.addEventListener("click", (e) => {
-        if (!(e.target as Element).closest(".badge-rel-add-dropdown")) {
-            document.querySelectorAll<HTMLElement>(".badge-rel-popup").forEach((p) => {
+        if (!(e.target as Element).closest(".label-rel-add-dropdown")) {
+            document.querySelectorAll<HTMLElement>(".label-rel-popup").forEach((p) => {
                 p.hidden = true;
             });
         }
@@ -211,6 +211,6 @@ export function installGlobalBadgeRelPicker(): void {
 
 declare global {
     interface Window {
-        BadgeRelPicker: typeof BadgeRelPicker;
+        LabelRelPicker: typeof LabelRelPicker;
     }
 }

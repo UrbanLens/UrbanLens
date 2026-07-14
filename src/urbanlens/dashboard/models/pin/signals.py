@@ -72,18 +72,18 @@ def delete_map_pin_cache(sender: type[Pin], instance: Pin, **kwargs) -> None:
         _delete_cached_pin(instance.pk, instance.profile_id)
 
 
-@receiver(m2m_changed, sender=Pin.badges.through, dispatch_uid="pin_badges_refresh_map_pin_cache")
-def refresh_map_pin_cache_for_badges(sender, instance: Pin, action: str, **kwargs) -> None:
+@receiver(m2m_changed, sender=Pin.labels.through, dispatch_uid="pin_labels_refresh_map_pin_cache")
+def refresh_map_pin_cache_for_labels(sender, instance: Pin, action: str, **kwargs) -> None:
     if action in {"post_add", "post_remove", "post_clear"} and instance.profile_id:
         _refresh_cached_pin(instance.pk, instance.profile_id)
 
 
-@receiver(m2m_changed, sender=Pin.badges.through, dispatch_uid="pin_badges_propagate_visited")
-def propagate_visited_badge_to_ancestors(sender, instance: Pin, action: str, pk_set=None, reverse: bool = False, **kwargs) -> None:
-    """Mark a child pin's ancestors Visited when the child gains the Visited badge.
+@receiver(m2m_changed, sender=Pin.labels.through, dispatch_uid="pin_labels_propagate_visited")
+def propagate_visited_label_to_ancestors(sender, instance: Pin, action: str, pk_set=None, reverse: bool = False, **kwargs) -> None:
+    """Mark a child pin's ancestors Visited when the child gains the Visited label.
 
     Visiting a sub pin (an entrance, a building on a campus) means the parent
-    place was visited too, so the profile's "Visited" status badge cascades up
+    place was visited too, so the profile's "Visited" status label cascades up
     the ``parent_pin`` chain. The whole chain is stamped in one pass with a
     cycle-safe walk (see ``Pin.ancestor_chain``); the m2m adds this performs
     re-fire this handler for each ancestor, but their ``pk_set`` only contains
@@ -91,13 +91,13 @@ def propagate_visited_badge_to_ancestors(sender, instance: Pin, action: str, pk_
     """
     if action != "post_add" or reverse or not pk_set or instance.parent_pin_id is None:
         return
-    from urbanlens.dashboard.models.badges.model import Badge
+    from urbanlens.dashboard.models.labels.model import Label
 
-    visited_badge = Badge.objects.filter(pk__in=pk_set, kind="status", name="Visited").first()
-    if visited_badge is None:
+    visited_label = Label.objects.filter(pk__in=pk_set, kind="status", name="Visited").first()
+    if visited_label is None:
         return
     for ancestor in instance.ancestor_chain():
-        ancestor.badges.add(visited_badge)
+        ancestor.labels.add(visited_label)
 
 
 @receiver(post_save, sender=Review, dispatch_uid="review_refresh_map_pin_cache")

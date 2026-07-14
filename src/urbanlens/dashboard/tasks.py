@@ -209,7 +209,7 @@ def rebuild_map_pin_cache(self, profile_id: int) -> int:
 
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def suggest_wiki_category(self, wiki_id: int) -> list[str]:
-    """Suggest and attach badges for a community Wiki outside model signals."""
+    """Suggest and attach labels for a community Wiki outside model signals."""
     from urbanlens.dashboard.models.wiki import Wiki
     from urbanlens.dashboard.services.auto_tag import AutoTagService
 
@@ -218,14 +218,14 @@ def suggest_wiki_category(self, wiki_id: int) -> list[str]:
     if wiki is None:
         logger.info("Wiki %s no longer exists; skipping auto-tagging", wiki_id)
         return []
-    badges = AutoTagService().suggest_for_wiki(wiki, apply=True)
+    labels = AutoTagService().suggest_for_wiki(wiki, apply=True)
     update_task_progress(self, current=1, total=1, message="Wiki auto-tagging complete")
-    return [b.name for b in badges]
+    return [b.name for b in labels]
 
 
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def suggest_pin_category(self, pin_id: int) -> list[str]:
-    """Suggest and attach badges for a Pin outside request/import loops."""
+    """Suggest and attach labels for a Pin outside request/import loops."""
     from urbanlens.dashboard.models.pin import Pin
     from urbanlens.dashboard.services.auto_tag import AutoTagService
 
@@ -234,9 +234,9 @@ def suggest_pin_category(self, pin_id: int) -> list[str]:
     if pin is None:
         logger.info("Pin %s no longer exists; skipping auto-tagging", pin_id)
         return []
-    badges = AutoTagService().suggest_for_pin(pin, apply=True)
+    labels = AutoTagService().suggest_for_pin(pin, apply=True)
     update_task_progress(self, current=1, total=1, message="Pin auto-tagging complete")
-    return [b.name for b in badges]
+    return [b.name for b in labels]
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})

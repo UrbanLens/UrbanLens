@@ -315,7 +315,7 @@ class MapToolSpec:
         hx_get_name: URL name to reverse for an ``hx-get`` button, or ``""``.
         hx_target: ``hx-target`` selector, paired with ``hx_get_name``.
         hx_swap: ``hx-swap`` value, paired with ``hx_get_name``.
-        extra_html: Extra raw HTML rendered inside the button (e.g. a badge).
+        extra_html: Extra raw HTML rendered inside the button (e.g. a label).
     """
 
     key: str
@@ -383,11 +383,11 @@ register_map_tool(
         key="search",
         icon="search",
         aria_label="Filter and search pins",
-        tooltip="Filter pins by name, rating, visits, badges, and more (F)",
+        tooltip="Filter pins by name, rating, visits, labels, and more (F)",
         tooltip_pos="below",
         button_id="search-pins-button",
         onclick="toggleFilterPanel()",
-        extra_html='<span class="fp-active-badge" id="fp-active-badge" aria-hidden="true" hidden></span>',
+        extra_html='<span class="fp-active-label" id="fp-active-label" aria-hidden="true" hidden></span>',
     )
 )
 register_map_tool(

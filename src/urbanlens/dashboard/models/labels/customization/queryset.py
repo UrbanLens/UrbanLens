@@ -1,13 +1,13 @@
-"""BadgeCustomization queryset and manager."""
+"""LabelCustomization queryset and manager."""
 
 from __future__ import annotations
 
 from urbanlens.dashboard.models import abstract
 
 
-class BadgeCustomizationQuerySet(abstract.DashboardQuerySet):
-    """QuerySet for per-user badge display overrides."""
+class LabelCustomizationQuerySet(abstract.DashboardQuerySet):
+    """QuerySet for per-user label display overrides."""
 
 
-class BadgeCustomizationManager(abstract.DashboardManager.from_queryset(BadgeCustomizationQuerySet)):
-    """Manager for BadgeCustomization records."""
+class LabelCustomizationManager(abstract.DashboardManager.from_queryset(LabelCustomizationQuerySet)):
+    """Manager for LabelCustomization records."""

@@ -15,7 +15,7 @@ from django.urls import reverse
 from django.views import View
 
 from urbanlens.dashboard.forms.search import SearchForm
-from urbanlens.dashboard.models.badges.model import Badge
+from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_list.model import PinList, PinListItem
 from urbanlens.dashboard.models.profile.model import Profile
@@ -56,8 +56,8 @@ def _default_trip_name_for_list(pin_list: PinList) -> str:
     return f'Trip from the "{pin_list.name}" list'
 
 
-def _list_items_with_badges(pin_list: PinList) -> list[PinListItem]:
-    """Ordered list items with their pin's badges prefetched (icon/color/tag chips need these).
+def _list_items_with_labels(pin_list: PinList) -> list[PinListItem]:
+    """Ordered list items with their pin's labels prefetched (icon/color/tag chips need these).
 
     Matches the same prefetch shape the main map's bulk pin endpoints use
     (see maps.py) so ``Pin.effective_icon``/``effective_color`` and the tag
@@ -65,22 +65,22 @@ def _list_items_with_badges(pin_list: PinList) -> list[PinListItem]:
     """
     return list(
         pin_list.items.select_related("pin", "pin__location")
-        .prefetch_related(Prefetch("pin__badges", queryset=Badge.objects.exclude(kind="user").order_by("-order", "name")))
+        .prefetch_related(Prefetch("pin__labels", queryset=Label.objects.exclude(kind="user").order_by("-order", "name")))
         .order_by("order"),
     )
 
 
 def _pin_map_marker_data(pin: Pin) -> dict[str, Any]:
-    """Serialize a pin for the list-detail overview map's badge-icon markers/popups.
+    """Serialize a pin for the list-detail overview map's label-icon markers/popups.
 
     Mirrors the field shapes the main map's markers already expect (icon,
     tags_data, rating, last_visited as "Never" or "YYYY-MM-DD", etc. - see
     maps.py's post-processing of ``Pin.to_json()``) so the same marker/popup
-    look carries over here. Reads ``pin.badges.all()`` (not ``.filter()``) so
-    the ``pin__badges`` prefetch in ``_list_items_with_badges`` is reused
+    look carries over here. Reads ``pin.labels.all()`` (not ``.filter()``) so
+    the ``pin__labels`` prefetch in ``_list_items_with_labels`` is reused
     instead of triggering a query per pin.
     """
-    tags = [{"id": b.id, "name": b.name, "color": b.effective_color, "icon": b.effective_icon} for b in pin.badges.all() if b.kind == "tag"]
+    tags = [{"id": b.id, "name": b.name, "color": b.effective_color, "icon": b.effective_icon} for b in pin.labels.all() if b.kind == "tag"]
     return {
         "uuid": str(pin.uuid),
         "name": pin.effective_name,
@@ -102,7 +102,7 @@ def _items_map_data(items: list[PinListItem]) -> list[dict[str, Any]]:
 
 
 def _render_items_panel(request: HttpRequest, pin_list: PinList) -> HttpResponse:
-    items = _list_items_with_badges(pin_list)
+    items = _list_items_with_labels(pin_list)
     return render(request, _ITEMS_PANEL_TEMPLATE, {"pin_list": pin_list, "items": items, "items_map_data": _items_map_data(items)})
 
 
@@ -196,7 +196,7 @@ class PinListDetailView(LoginRequiredMixin, View):
     def get(self, request: HttpRequest, list_uuid: str) -> HttpResponse:
         profile, _ = Profile.objects.get_or_create(user=request.user)
         pin_list = get_object_or_404(PinList, uuid=list_uuid, profile=profile)
-        items = _list_items_with_badges(pin_list)
+        items = _list_items_with_labels(pin_list)
         saved_filters = list(profile.saved_filters.all())
         trips = list(Trip.objects.filter(profiles=profile).order_by("name"))
         return render(
@@ -347,9 +347,9 @@ class PinListAddPinsView(LoginRequiredMixin, View):
             if not search_form.is_valid():
                 return HttpResponse("Invalid filter criteria.", status=400)
             criteria = dict(search_form.cleaned_data)
-            parsed_groups = search_form.parse_badge_groups()
+            parsed_groups = search_form.parse_label_groups()
             if parsed_groups is not None:
-                criteria["badge_groups"] = parsed_groups
+                criteria["label_groups"] = parsed_groups
             if (custom_field_criteria := search_form.parse_custom_field_criteria()) is not None:
                 criteria["custom_fields"] = custom_field_criteria
             criteria["include_regions"] = search_form.parse_region_geojson("include_regions")

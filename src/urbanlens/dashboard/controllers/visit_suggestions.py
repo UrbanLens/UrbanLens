@@ -36,7 +36,7 @@ class VisitSuggestionRespondView(LoginRequiredMixin, View):
             suggestion_id: Primary key of the VisitSuggestion being responded to.
 
         Returns:
-            Rendered notification dropdown partial, with the badge-refresh trigger set.
+            Rendered notification dropdown partial, with the label-refresh trigger set.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
         suggestion = get_object_or_404(VisitSuggestion, pk=suggestion_id, suggested_to=profile)
@@ -58,7 +58,7 @@ class VisitSuggestionRespondView(LoginRequiredMixin, View):
         if suggestion.notification_id:
             NotificationLog.objects.filter(pk=suggestion.notification_id).update(status=Status.READ)
 
-        from urbanlens.dashboard.controllers.notifications import _trigger_badge_refresh
+        from urbanlens.dashboard.controllers.notifications import _trigger_label_refresh
 
         if request.POST.get("context") == "pin" and request.POST.get("pin_slug"):
             from urbanlens.dashboard.controllers.visits import _render_visit_history
@@ -66,7 +66,7 @@ class VisitSuggestionRespondView(LoginRequiredMixin, View):
 
             pin = get_object_or_404(Pin, slug=request.POST["pin_slug"], profile__user=request.user)
             response = _render_visit_history(request, pin)
-            return _trigger_badge_refresh(response)
+            return _trigger_label_refresh(response)
 
         notifications = NotificationLog.objects.for_profile(profile).select_related("source_profile").order_by("-created")[:20]
         response = render(
@@ -74,7 +74,7 @@ class VisitSuggestionRespondView(LoginRequiredMixin, View):
             "dashboard/partials/notifications/notification_dropdown.html",
             {"notifications": notifications, "unread_count": NotificationLog.objects.for_profile(profile).unread().count()},
         )
-        response = _trigger_badge_refresh(response)
+        response = _trigger_label_refresh(response)
         if blocked:
             response["HX-Trigger"] = json.dumps(
                 {

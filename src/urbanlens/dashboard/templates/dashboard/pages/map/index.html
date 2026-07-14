@@ -153,16 +153,16 @@
                 </div>
             </details>
 
-            {% if filter_badges %}
-            {# Combined badges -- collapsible -- #}
-            <details class="fp-accordion-item" id="fp-acc-badges" data-importance="medium">
+            {% if filter_labels %}
+            {# Combined labels -- collapsible -- #}
+            <details class="fp-accordion-item" id="fp-acc-labels" data-importance="medium">
                 <summary class="fp-accordion-summary">
-                    <span class="fp-accordion-label">Badges</span>
+                    <span class="fp-accordion-label">Labels</span>
                     <i class="material-icons fp-acc-arrow">expand_more</i>
                 </summary>
                 <div class="fp-accordion-body">
-                    {# Badge query submitted as structured JSON; falls back to tags/exclude_tags for compat #}
-                    <input type="hidden" name="badge_groups" id="fp-badge-groups">
+                    {# Label query submitted as structured JSON; falls back to tags/exclude_tags for compat #}
+                    <input type="hidden" name="label_groups" id="fp-label-groups">
                     {# Geographic include/exclude regions carried through from an applied saved filter
                        (Organize's Filters tab - _organize_filters_panel.html - is the only place these
                        are authored - there's no drawing UI here, this is just a pass-through so results
@@ -170,39 +170,39 @@
                     <input type="hidden" name="include_regions" id="fp-include-regions">
                     <input type="hidden" name="exclude_regions" id="fp-exclude-regions">
 
-                    {# Selected badges area - two columns, shown only when something selected #}
-                    <div class="fp-badge-selected" id="fp-badge-selected" style="display:none">
-                        <div class="fp-badge-col fp-badge-col--incl" id="fp-badge-col-incl"
+                    {# Selected labels area - two columns, shown only when something selected #}
+                    <div class="fp-label-selected" id="fp-label-selected" style="display:none">
+                        <div class="fp-label-col fp-label-col--incl" id="fp-label-col-incl"
                              ondragover="event.preventDefault(); event.currentTarget.classList.add('fp-drag-over')"
                              ondragleave="event.currentTarget.classList.remove('fp-drag-over')"
-                             ondrop="_onBadgeColDrop(event, 'incl')">
-                            <div class="fp-badge-col-label">
+                             ondrop="_onLabelColDrop(event, 'incl')">
+                            <div class="fp-label-col-title">
                                 <i class="material-symbols-outlined">check_circle</i> Include
-                                <button type="button" class="fp-badge-mode-btn" id="fp-incl-mode-btn"
+                                <button type="button" class="fp-label-mode-btn" id="fp-incl-mode-btn"
                                         onclick="_toggleInclMode()" title="Switch include matching: AND requires all, OR requires any">AND</button>
                             </div>
-                            <div class="fp-badge-chips" id="fp-badge-incl-chips"></div>
+                            <div class="fp-label-chips" id="fp-label-incl-chips"></div>
                         </div>
-                        <div class="fp-badge-col fp-badge-col--excl" id="fp-badge-col-excl"
+                        <div class="fp-label-col fp-label-col--excl" id="fp-label-col-excl"
                              ondragover="event.preventDefault(); event.currentTarget.classList.add('fp-drag-over')"
                              ondragleave="event.currentTarget.classList.remove('fp-drag-over')"
-                             ondrop="_onBadgeColDrop(event, 'excl')">
-                            <div class="fp-badge-col-label"><i class="material-symbols-outlined">cancel</i> Exclude</div>
-                            <div class="fp-badge-chips" id="fp-badge-excl-chips"></div>
+                             ondrop="_onLabelColDrop(event, 'excl')">
+                            <div class="fp-label-col-title"><i class="material-symbols-outlined">cancel</i> Exclude</div>
+                            <div class="fp-label-chips" id="fp-label-excl-chips"></div>
                         </div>
                     </div>
 
                     {# Complex formula display - shown instead of 2-column chips for mixed AND/OR expressions #}
                     <div class="fp-formula-display" id="fp-formula-display" style="display:none">
                         <span class="fp-formula-display-text" id="fp-formula-display-text"></span>
-                        <button type="button" class="fp-formula-display-clear" onclick="_clearAllBadgeSelections()" title="Clear filter">
+                        <button type="button" class="fp-formula-display-clear" onclick="_clearAllLabelSelections()" title="Clear filter">
                             <i class="material-symbols-outlined">close</i>
                         </button>
                     </div>
 
                     {# Formula bar - replaces old search input. Supports plain search + formula operators. #}
                     <div class="fp-formula-wrap" id="fp-formula-wrap">
-                        <input type="text" class="fp-formula-bar" id="fp-badge-formula"
+                        <input type="text" class="fp-formula-bar" id="fp-label-formula"
                                placeholder="(Visited / Want To Go) - Demolished"
                                autocomplete="off" autocorrect="off" autocapitalize="off"
                                spellcheck="false">
@@ -210,25 +210,25 @@
                         <div class="fp-formula-errors" id="fp-formula-errors" hidden></div>
                     </div>
 
-                    {# Available badge list - still clickable as before #}
-                    <div class="fp-tag-list" id="fp-badge-list">
-                        {% for badge in filter_badges %}
+                    {# Available label list - still clickable as before #}
+                    <div class="fp-tag-list" id="fp-label-list">
+                        {% for label in filter_labels %}
                         <button type="button"
-                                class="fp-chip fp-badge-avail"
+                                class="fp-chip fp-label-avail"
                                 draggable="true"
-                                data-badge-id="{{ badge.id }}"
-                                data-badge-name="{{ badge.name|lower }}"
-                                data-badge-label="{{ badge.name|escapejs }}"
-                                data-badge-color="{{ badge.color|default:'' }}"
-                                data-badge-icon="{{ badge.icon|default:'' }}"
-                                {% if badge.color %}style="border-color:{{ badge.color }}55;background:{{ badge.color }}18;color:{{ badge.color }}cc"{% endif %}
-                                onclick="_onBadgeAvailClick(this)">
-                            {% if badge.icon %}<span style="font-size:.9em">{{ badge.icon }}</span>{% endif %}
-                            {{ badge.name }}
+                                data-label-id="{{ label.id }}"
+                                data-label-name="{{ label.name|lower }}"
+                                data-label-text="{{ label.name|escapejs }}"
+                                data-label-color="{{ label.color|default:'' }}"
+                                data-label-icon="{{ label.icon|default:'' }}"
+                                {% if label.color %}style="border-color:{{ label.color }}55;background:{{ label.color }}18;color:{{ label.color }}cc"{% endif %}
+                                onclick="_onLabelAvailClick(this)">
+                            {% if label.icon %}<span style="font-size:.9em">{{ label.icon }}</span>{% endif %}
+                            {{ label.name }}
                         </button>
                         {% endfor %}
                     </div>
-                    <div class="fp-badge-list-hint">Click to include &nbsp;·&nbsp; Right-click to exclude</div>
+                    <div class="fp-label-list-hint">Click to include &nbsp;·&nbsp; Right-click to exclude</div>
                 </div>
             </details>
             {% endif %}
@@ -388,20 +388,20 @@
             <input type="hidden" id="apdlg-lng">
         </div>
 
-        {# Badges - unified search across tags, categories, and statuses #}
-        {% if filter_badges %}
+        {# Labels - unified search across tags, categories, and statuses #}
+        {% if filter_labels %}
         <div class="form-field">
-            <label class="form-label">Badges</label>
-            <div class="apdlg-badge-field" id="apdlg-badge-field">
-                <div class="apdlg-badge-chips" id="apdlg-badge-chips"></div>
-                <div class="apdlg-badge-input-wrap form-input-wrap">
-                    <input type="text" id="apdlg-badge-search" class="form-input apdlg-badge-input"
-                           placeholder="Search or add badges..." autocomplete="off" autocorrect="off">
-                    <div id="apdlg-badge-suggestions" class="apdlg-badge-suggestions" hidden></div>
+            <label class="form-label">Labels</label>
+            <div class="apdlg-label-field" id="apdlg-label-field">
+                <div class="apdlg-label-chips" id="apdlg-label-chips"></div>
+                <div class="apdlg-label-input-wrap form-input-wrap">
+                    <input type="text" id="apdlg-label-search" class="form-input apdlg-label-input"
+                           placeholder="Search or add labels..." autocomplete="off" autocorrect="off">
+                    <div id="apdlg-label-suggestions" class="apdlg-label-suggestions" hidden></div>
                 </div>
             </div>
         </div>
-        <script id="apdlg-badge-data" type="application/json">{{ filter_badges_json|safe }}</script>
+        <script id="apdlg-label-data" type="application/json">{{ filter_labels_json|safe }}</script>
         {% endif %}
 
         {# Icon & color - optional per-pin override, collapsed by default #}
@@ -413,7 +413,7 @@
             </summary>
             <div class="apdlg-customize-body">
                 <p class="apdlg-customize-hint">
-                    Override what your badges would show for this pin with a custom icon or color.
+                    Override what your labels would show for this pin with a custom icon or color.
                 </p>
                 <div class="form-field">
                     <label class="form-label">Icon</label>
@@ -426,8 +426,8 @@
                     <label class="form-label">Color</label>
                     <div class="color-picker" id="apdlg-color-picker">
                         <input type="hidden" id="apdlg-color-value">
-                        {% for hex, label in color_choices %}
-                        <button type="button" class="color-swatch" data-color="{{ hex }}" title="{{ label }}"
+                        {% for hex, color_name in color_choices %}
+                        <button type="button" class="color-swatch" data-color="{{ hex }}" title="{{ color_name }}"
                                 style="background:{{ hex }};"
                                 onclick="pickColor('apdlg-color-picker','apdlg-color-value','{{ hex }}',this)"></button>
                         {% endfor %}
@@ -458,13 +458,13 @@
     </div>
 </dialog>
 
-{# Mini dialog: "Create a badge" from the add-pin badge selector #}
-<dialog id="apdlg-create-badge-dialog" class="ul-dialog tag-create-card">
-    {% include "dashboard/partials/ui/_dialog_header.html" with title="Create a badge" %}
+{# Mini dialog: "Create a label" from the add-pin label selector #}
+<dialog id="apdlg-create-label-dialog" class="ul-dialog tag-create-card">
+    {% include "dashboard/partials/ui/_dialog_header.html" with title="Create a label" %}
     <div class="ul-dialog-body">
         <div class="form-field">
             <label class="form-label" for="apdlg-cbname">Name</label>
-            <input type="text" id="apdlg-cbname" class="form-input" placeholder="Badge name" required>
+            <input type="text" id="apdlg-cbname" class="form-input" placeholder="Label name" required>
         </div>
         <div class="form-field">
             <label class="form-label">Type</label>
@@ -1424,7 +1424,7 @@
             id: 'search-filters',
             icon: 'search',
             eyebrow: 'Find things faster',
-            title: 'Filter by rating, visits, badges, and more',
+            title: 'Filter by rating, visits, labels, and more',
             body: 'Search & Filter keeps your map tidy as your collection grows.',
             button: 'Open filters',
             target: 'search-pins-button',
@@ -2866,8 +2866,8 @@
         .catch(function () { toastr.error('Merge failed.'); btn.disabled = false; btn.innerHTML = saved; });
     });
 
-    // -- Bulk edit: description replace + badge add/remove --------------------
-    function _makeBadgeChipPicker(chipsElId, searchElId, suggElId) {
+    // -- Bulk edit: description replace + label add/remove --------------------
+    function _makeLabelChipPicker(chipsElId, searchElId, suggElId) {
         const chipsEl = document.getElementById(chipsElId);
         const searchEl = document.getElementById(searchElId);
         const suggEl = document.getElementById(suggElId);
@@ -2878,7 +2878,7 @@
             chipsEl.innerHTML = '';
             selected.forEach(function (b) {
                 const chip = document.createElement('span');
-                chip.className = 'apdlg-badge-chip-item';
+                chip.className = 'apdlg-label-chip-item';
                 chip.dataset.id = b.id;
                 const iconHtml = b.icon ? `<span class="apdlg-chip-icon">${_escHtml(b.icon)}</span>` : '';
                 chip.innerHTML = `${iconHtml}<span class="apdlg-chip-name">${_escHtml(b.name)}</span><button class="apdlg-chip-remove" type="button" aria-label="Remove">x</button>`;
@@ -2901,7 +2901,7 @@
             matches.forEach(function (b) {
                 const item = document.createElement('button');
                 item.type = 'button';
-                item.className = 'apdlg-badge-sugg-item';
+                item.className = 'apdlg-label-sugg-item';
                 const iconHtml = b.icon ? `<span class="apdlg-sugg-icon">${_escHtml(b.icon)}</span>` : '';
                 item.innerHTML = `${iconHtml}<span class="apdlg-sugg-name">${_escHtml(b.name)}</span>`;
                 item.addEventListener('click', function () {
@@ -2927,8 +2927,8 @@
         };
     }
 
-    const _bulkEditAddPicker = _makeBadgeChipPicker('bulk-edit-add-badge-chips', 'bulk-edit-add-badge-search', 'bulk-edit-add-badge-suggestions');
-    const _bulkEditRemovePicker = _makeBadgeChipPicker('bulk-edit-remove-badge-chips', 'bulk-edit-remove-badge-search', 'bulk-edit-remove-badge-suggestions');
+    const _bulkEditAddPicker = _makeLabelChipPicker('bulk-edit-add-label-chips', 'bulk-edit-add-label-search', 'bulk-edit-add-label-suggestions');
+    const _bulkEditRemovePicker = _makeLabelChipPicker('bulk-edit-remove-label-chips', 'bulk-edit-remove-label-search', 'bulk-edit-remove-label-suggestions');
 
     function openBulkEditDialog() {
         const uuids = Array.from(_selectedPinUuids);
@@ -2937,18 +2937,18 @@
         document.getElementById('bulk-edit-description-value').value = '';
         document.getElementById('bulk-edit-description-nochange').checked = true;
         _bulkEditAddPicker.reset();
-        _bulkEditAddPicker.setCandidates(_apdlgAllBadges);
+        _bulkEditAddPicker.setCandidates(_apdlgAllLabels);
         _bulkEditRemovePicker.reset();
         _bulkEditRemovePicker.setCandidates([]);
-        const removeHint = document.getElementById('bulk-edit-remove-badge-hint');
+        const removeHint = document.getElementById('bulk-edit-remove-label-hint');
         removeHint.textContent = 'Loading...';
-        fetch('{% url "pin.bulk_edit.badge_options" %}?' + uuids.map(function (u) { return 'uuids=' + encodeURIComponent(u); }).join('&'))
-            .then(function (r) { return r.ok ? r.json() : { badges: [] }; })
+        fetch('{% url "pin.bulk_edit.label_options" %}?' + uuids.map(function (u) { return 'uuids=' + encodeURIComponent(u); }).join('&'))
+            .then(function (r) { return r.ok ? r.json() : { labels: [] }; })
             .then(function (data) {
-                _bulkEditRemovePicker.setCandidates(data.badges || []);
-                removeHint.textContent = 'Only badges present on at least one selected pin are offered here.';
+                _bulkEditRemovePicker.setCandidates(data.labels || []);
+                removeHint.textContent = 'Only labels present on at least one selected pin are offered here.';
             })
-            .catch(function () { removeHint.textContent = 'Only badges present on at least one selected pin are offered here.'; });
+            .catch(function () { removeHint.textContent = 'Only labels present on at least one selected pin are offered here.'; });
         document.getElementById('bulk-edit-dialog').showModal();
     }
 
@@ -2963,8 +2963,8 @@
         if (!document.getElementById('bulk-edit-description-nochange').checked) {
             payload.description = document.getElementById('bulk-edit-description-value').value;
         }
-        payload.add_badge_ids = _bulkEditAddPicker.getSelectedIds();
-        payload.remove_badge_ids = _bulkEditRemovePicker.getSelectedIds();
+        payload.add_label_ids = _bulkEditAddPicker.getSelectedIds();
+        payload.remove_label_ids = _bulkEditRemovePicker.getSelectedIds();
         fetch('{% url "pin.bulk_edit" %}', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
@@ -3214,15 +3214,15 @@
         // Reset date reset buttons
         if (typeof _syncVisitDateReset === 'function') _syncVisitDateReset();
         if (typeof _syncCreatedDateReset === 'function') _syncCreatedDateReset();
-        // Reset badge selected area
-        if (typeof _clearAllBadgeSelections === 'function') _clearAllBadgeSelections();
+        // Reset label selected area
+        if (typeof _clearAllLabelSelections === 'function') _clearAllLabelSelections();
         // Reset a saved filter's regions, if one had been applied
         const includeRegions = document.getElementById('fp-include-regions');
         const excludeRegions = document.getElementById('fp-exclude-regions');
         if (includeRegions) includeRegions.value = '';
         if (excludeRegions) excludeRegions.value = '';
         _exitFilterMode();
-        _updateFilterBadge();
+        _updateFilterLabel();
     }
 
     function _countActiveFilters() {
@@ -3247,9 +3247,9 @@
         // Visit radio selection stored in the separate hidden input
         const visitsHidden = form.querySelector('input[name=has_visits]');
         if ((visitsHidden?.value || '').trim()) n++;
-        // Badge groups
-        const badgeGroups = form.querySelector('input[name=badge_groups]');
-        if ((badgeGroups?.value || '').trim()) n++;
+        // Label groups
+        const labelGroups = form.querySelector('input[name=label_groups]');
+        if ((labelGroups?.value || '').trim()) n++;
         // Geographic regions, carried through from an applied saved filter
         for (const key of ['include_regions', 'exclude_regions']) {
             const el = form.querySelector(`input[name=${key}]`);
@@ -3260,16 +3260,16 @@
 
     function _hasActiveFilters() { return _countActiveFilters() > 0; }
 
-    function _updateFilterBadge() {
+    function _updateFilterLabel() {
         const count = _countActiveFilters();
-        const badge = document.getElementById('fp-active-badge');
+        const label = document.getElementById('fp-active-label');
         const btn = document.getElementById('search-pins-button');
-        if (badge) {
+        if (label) {
             if (count > 0) {
-                badge.textContent = String(count);
-                badge.hidden = false;
+                label.textContent = String(count);
+                label.hidden = false;
             } else {
-                badge.hidden = true;
+                label.hidden = true;
             }
         }
         btn?.classList.toggle('has-filters', count > 0);
@@ -3277,15 +3277,15 @@
         if (saveBtn) saveBtn.style.display = count > 0 ? '' : 'none';
     }
 
-    // Show the active-filter count badge whenever any filter changes
-    document.getElementById('filter-form').addEventListener('change', _updateFilterBadge);
-    document.getElementById('filter-form').addEventListener('input', _updateFilterBadge);
+    // Show the active-filter count label whenever any filter changes
+    document.getElementById('filter-form').addEventListener('change', _updateFilterLabel);
+    document.getElementById('filter-form').addEventListener('input', _updateFilterLabel);
 
     // -- Apply a saved filter, merged additively with whatever is already active --
     // Conflict rule: for a given scalar/range field, an already-active sidebar
     // value always wins - the saved filter only fills in fields currently at
-    // their default. Badges are always UNIONED into the current included set
-    // (never touching excludes), regardless of whether other badges are active.
+    // their default. Labels are always UNIONED into the current included set
+    // (never touching excludes), regardless of whether other labels are active.
     function applySavedFilter(chipEl) {
         let criteria;
         try {
@@ -3332,19 +3332,19 @@
         if (typeof _syncVisitDateReset === 'function') _syncVisitDateReset();
         if (typeof _syncCreatedDateReset === 'function') _syncCreatedDateReset();
 
-        // Badges: union saved include-ids into the current included set; never
+        // Labels: union saved include-ids into the current included set; never
         // touch excludes, and never auto-add a saved filter's exclusions.
-        if (Array.isArray(criteria.badge_groups)) {
-            for (const group of criteria.badge_groups) {
+        if (Array.isArray(criteria.label_groups)) {
+            for (const group of criteria.label_groups) {
                 if (group.op === 'not') continue;
                 for (const id of (group.ids || [])) {
                     const key = String(id);
-                    if (_badgeState.get(key) !== 'excl') _badgeState.set(key, 'incl');
+                    if (_labelState.get(key) !== 'excl') _labelState.set(key, 'incl');
                 }
             }
             _formulaGroups = null; // merged state may mix groups; fall back to simple chip mode
-            _serializeBadgeGroups();
-            _rebuildBadgeSelected();
+            _serializeLabelGroups();
+            _rebuildLabelSelected();
         }
 
         // Custom fields: same "current wins if empty" rule, keyed by cf_<field_id>*.
@@ -3375,7 +3375,7 @@
         // Trigger the sidebar's normal submission path.
         htmx.trigger(form, 'change');
         _refreshPinList();
-        _updateFilterBadge();
+        _updateFilterLabel();
     }
 
     // Restore filter state from URL params (supports Back button + page refresh)
@@ -3400,7 +3400,7 @@
             }
         }
         if (anySet) {
-            _updateFilterBadge();
+            _updateFilterLabel();
             // Open filter panel so user can see restored filters
             const mapEl = document.getElementById('map');
             if (mapEl && !mapEl.classList.contains('filter-open')) toggleFilterPanel();
@@ -3446,7 +3446,7 @@
         if (!_hasActiveFilters()) {
             e.preventDefault();
             _exitFilterMode();
-            _updateFilterBadge();
+            _updateFilterLabel();
             return;
         }
         _showFilterFetchIndicator();
@@ -3713,83 +3713,83 @@
         } catch (_) {}
     }, 0);
 
-    // -- Combined badge filter section -----------------------------------------
-    // _badgeState: Map of badgeId(string) → 'incl' | 'excl'
-    // _inclMode:   'and' | 'or'  - how included badges are combined
-    const _badgeState = new Map();
+    // -- Combined label filter section -----------------------------------------
+    // _labelState: Map of labelId(string) → 'incl' | 'excl'
+    // _inclMode:   'and' | 'or'  - how included labels are combined
+    const _labelState = new Map();
     let _inclMode = 'and';
-    let _badgeDragId = null;
-    let _badgeDropHandled = false;  // set by drop handlers so dragend knows not to auto-remove
-    let _badgeChipJustDragged = false;  // suppresses the click that browsers fire after dragend
-    let _badgeAvailJustDragged = false; // same, for badges dragged straight from the suggestion list
+    let _labelDragId = null;
+    let _labelDropHandled = false;  // set by drop handlers so dragend knows not to auto-remove
+    let _labelChipJustDragged = false;  // suppresses the click that browsers fire after dragend
+    let _labelAvailJustDragged = false; // same, for labels dragged straight from the suggestion list
     let _formulaGroups = null;      // non-null in formula mode: parsed groups are the canonical state
 
     // -- Helpers -------------------------------------------------------------
-    function _badgeLabelForId(id) {
-        return document.querySelector(`#fp-badge-list [data-badge-id="${id}"]`)?.dataset.badgeLabel || String(id);
+    function _labelTextForId(id) {
+        return document.querySelector(`#fp-label-list [data-label-id="${id}"]`)?.dataset.labelText || String(id);
     }
 
-    function _quoteBadgeName(label) {
+    function _quoteLabelName(label) {
         return /[\s\/\-\+\(\)]/.test(label) ? `"${label}"` : label;
     }
 
-    // Build name→{id,label,color,icon} lookup from the badge list DOM
-    function _badgeByNameMap() {
+    // Build name→{id,label,color,icon} lookup from the label list DOM
+    function _labelByNameMap() {
         const m = new Map();
-        document.querySelectorAll('#fp-badge-list .fp-badge-avail').forEach(btn => {
-            m.set((btn.dataset.badgeLabel || '').toLowerCase(), {
-                id: btn.dataset.badgeId,
-                label: btn.dataset.badgeLabel || '',
-                color: btn.dataset.badgeColor || '',
-                icon: btn.dataset.badgeIcon  || '',
+        document.querySelectorAll('#fp-label-list .fp-label-avail').forEach(btn => {
+            m.set((btn.dataset.labelText || '').toLowerCase(), {
+                id: btn.dataset.labelId,
+                label: btn.dataset.labelText || '',
+                color: btn.dataset.labelColor || '',
+                icon: btn.dataset.labelIcon  || '',
             });
         });
         return m;
     }
 
     // -- Chip HTML ------------------------------------------------------------
-    function _badgeChipHtml(id, label, color, icon, mode) {
+    function _labelChipHtml(id, label, color, icon, mode) {
         const bg     = color ? (color + '33') : (mode === 'incl' ? 'rgba(34,197,94,.18)' : 'rgba(239,68,68,.18)');
         const border = color ? (color + '66') : (mode === 'incl' ? 'rgba(34,197,94,.4)' : 'rgba(239,68,68,.4)');
         const txtCol = mode === 'incl' ? '#86efac' : '#fca5a5';
         const iconHtml = icon ? `<span style="font-size:.85em">${icon}</span>` : '';
-        return `<span class="fp-badge-chip fp-badge-chip--${mode}" data-id="${id}" draggable="true"
+        return `<span class="fp-label-chip fp-label-chip--${mode}" data-id="${id}" draggable="true"
                       title="Click to remove · Right-click to ${mode === 'incl' ? 'exclude' : 'include'} · Drag to move or drop outside to remove"
                       style="background:${bg};border-color:${border};color:${txtCol}">
-                    ${iconHtml}<span class="fp-badge-chip-label">${label}</span>
+                    ${iconHtml}<span class="fp-label-chip-text">${label}</span>
                 </span>`;
     }
 
-    // -- Serialise state → badge_groups JSON ----------------------------------
+    // -- Serialise state → label_groups JSON ----------------------------------
     // When _formulaGroups is set (formula mode), use it directly so group structure
-    // (mixed AND/OR) is preserved. Otherwise derive from _badgeState + _inclMode.
-    function _serializeBadgeGroups() {
+    // (mixed AND/OR) is preserved. Otherwise derive from _labelState + _inclMode.
+    function _serializeLabelGroups() {
         let groups;
         if (_formulaGroups !== null) {
             groups = _formulaGroups;
         } else {
-            const inclIds = [..._badgeState.entries()].filter(([,m]) => m === 'incl').map(([id]) => Number(id));
-            const exclIds = [..._badgeState.entries()].filter(([,m]) => m === 'excl').map(([id]) => Number(id));
+            const inclIds = [..._labelState.entries()].filter(([,m]) => m === 'incl').map(([id]) => Number(id));
+            const exclIds = [..._labelState.entries()].filter(([,m]) => m === 'excl').map(([id]) => Number(id));
             groups = [];
             if (inclIds.length > 0) groups.push({op: _inclMode, ids: inclIds});
             if (exclIds.length > 0) groups.push({op: 'not', ids: exclIds});
         }
-        const el = document.getElementById('fp-badge-groups');
+        const el = document.getElementById('fp-label-groups');
         if (el) el.value = groups.length ? JSON.stringify(groups) : '';
     }
 
     function _updateFormulaFromState() {
-        const bar = document.getElementById('fp-badge-formula');
+        const bar = document.getElementById('fp-label-formula');
         if (!bar || document.activeElement === bar) return;
         if (_formulaGroups !== null) {
             // Reconstruct formula text from stored groups, preserving parentheses for OR groups
-            const byName = _badgeByNameMap();
+            const byName = _labelByNameMap();
             const byId = new Map([...byName.values()].map(v => [v.id, v]));
             const parts = [];
             for (const g of _formulaGroups) {
                 const names = g.ids.map(id => {
                     const entry = byId.get(String(id));
-                    return entry ? _quoteBadgeName(entry.label) : String(id);
+                    return entry ? _quoteLabelName(entry.label) : String(id);
                 });
                 if (g.op === 'not') {
                     names.forEach(n => parts.push(`-${n}`));
@@ -3801,14 +3801,14 @@
             }
             bar.value = parts.join(' ');
         } else {
-            const inclIds = [..._badgeState.entries()].filter(([,m]) => m === 'incl').map(([id]) => id);
-            const exclIds = [..._badgeState.entries()].filter(([,m]) => m === 'excl').map(([id]) => id);
+            const inclIds = [..._labelState.entries()].filter(([,m]) => m === 'incl').map(([id]) => id);
+            const exclIds = [..._labelState.entries()].filter(([,m]) => m === 'excl').map(([id]) => id);
             const parts = [];
             if (inclIds.length > 0) {
-                const names = inclIds.map(id => _quoteBadgeName(_badgeLabelForId(id)));
+                const names = inclIds.map(id => _quoteLabelName(_labelTextForId(id)));
                 parts.push(_inclMode === 'or' && names.length > 1 ? `(${names.join(' / ')})` : names.join(' '));
             }
-            exclIds.forEach(id => parts.push(`-${_quoteBadgeName(_badgeLabelForId(id))}`));
+            exclIds.forEach(id => parts.push(`-${_quoteLabelName(_labelTextForId(id))}`));
             bar.value = parts.join(' ');
         }
     }
@@ -3827,16 +3827,16 @@
     }
 
     // -- Rebuild selected chips UI --------------------------------------------
-    function _rebuildBadgeSelected() {
-        const inclEl         = document.getElementById('fp-badge-incl-chips');
-        const exclEl         = document.getElementById('fp-badge-excl-chips');
-        const colIncl        = document.getElementById('fp-badge-col-incl');
-        const colExcl        = document.getElementById('fp-badge-col-excl');
-        const selectedEl     = document.getElementById('fp-badge-selected');
+    function _rebuildLabelSelected() {
+        const inclEl         = document.getElementById('fp-label-incl-chips');
+        const exclEl         = document.getElementById('fp-label-excl-chips');
+        const colIncl        = document.getElementById('fp-label-col-incl');
+        const colExcl        = document.getElementById('fp-label-col-excl');
+        const selectedEl     = document.getElementById('fp-label-selected');
         const formulaDisplay = document.getElementById('fp-formula-display');
         const formulaText    = document.getElementById('fp-formula-display-text');
         const modeBtn        = document.getElementById('fp-incl-mode-btn');
-        const det            = document.getElementById('fp-acc-badges');
+        const det            = document.getElementById('fp-acc-labels');
 
         // Detect whether the active formula is too complex for the 2-column UI
         const isComplex = _formulaGroups !== null && !_isSimpleGroups(_formulaGroups);
@@ -3847,13 +3847,13 @@
             if (formulaDisplay) formulaDisplay.style.display = '';
             if (formulaText) {
                 // Reconstruct formula text from _formulaGroups
-                const byName = _badgeByNameMap();
+                const byName = _labelByNameMap();
                 const byId   = new Map([...byName.values()].map(v => [v.id, v]));
                 const parts  = [];
                 for (const g of _formulaGroups) {
                     const names = g.ids.map(id => {
                         const entry = byId.get(String(id));
-                        return entry ? _quoteBadgeName(entry.label) : String(id);
+                        return entry ? _quoteLabelName(entry.label) : String(id);
                     });
                     if (g.op === 'not') {
                         names.forEach(n => parts.push(`-${n}`));
@@ -3866,7 +3866,7 @@
                 formulaText.textContent = parts.join(' + ');
             }
             if (det) det.classList.add('fp-acc-active');
-            _serializeBadgeGroups();
+            _serializeLabelGroups();
             _updateFormulaFromState();
             return;
         }
@@ -3879,55 +3879,55 @@
 
         let hasIncl = false, hasExcl = false;
         let inclCount = 0;
-        _badgeState.forEach((mode, id) => {
-            const avail = document.querySelector(`#fp-badge-list [data-badge-id="${id}"]`);
-            const label = avail?.dataset.badgeLabel || id;
-            const color = avail?.dataset.badgeColor || '';
-            const icon  = avail?.dataset.badgeIcon  || '';
+        _labelState.forEach((mode, id) => {
+            const avail = document.querySelector(`#fp-label-list [data-label-id="${id}"]`);
+            const label = avail?.dataset.labelText || id;
+            const color = avail?.dataset.labelColor || '';
+            const icon  = avail?.dataset.labelIcon  || '';
             if (mode === 'incl') {
                 hasIncl = true;
                 inclCount++;
-                inclEl.insertAdjacentHTML('beforeend', _badgeChipHtml(id, label, color, icon, 'incl'));
+                inclEl.insertAdjacentHTML('beforeend', _labelChipHtml(id, label, color, icon, 'incl'));
             } else {
                 hasExcl = true;
-                exclEl.insertAdjacentHTML('beforeend', _badgeChipHtml(id, label, color, icon, 'excl'));
+                exclEl.insertAdjacentHTML('beforeend', _labelChipHtml(id, label, color, icon, 'excl'));
             }
         });
 
         // Attach chip events
         [inclEl, exclEl].forEach(container => {
-            container.querySelectorAll('.fp-badge-chip').forEach(chip => {
+            container.querySelectorAll('.fp-label-chip').forEach(chip => {
                 const id = chip.dataset.id;
-                chip.addEventListener('click', () => { if (!_badgeChipJustDragged) _removeBadge(id); });
-                chip.addEventListener('contextmenu', (e) => { e.preventDefault(); _toggleBadgeMode(id); });
+                chip.addEventListener('click', () => { if (!_labelChipJustDragged) _removeLabel(id); });
+                chip.addEventListener('contextmenu', (e) => { e.preventDefault(); _toggleLabelMode(id); });
                 chip.addEventListener('dragstart', (e) => {
-                    _badgeDragId = id;
-                    _badgeDropHandled = false;
-                    _badgeChipJustDragged = true;
+                    _labelDragId = id;
+                    _labelDropHandled = false;
+                    _labelChipJustDragged = true;
                     e.dataTransfer.effectAllowed = 'move';
                     chip.classList.add('fp-drag-active');
                     // Ensure both columns are visible so the user can drag between them
-                    document.getElementById('fp-badge-col-incl')?.style.removeProperty('display');
-                    document.getElementById('fp-badge-col-excl')?.style.removeProperty('display');
+                    document.getElementById('fp-label-col-incl')?.style.removeProperty('display');
+                    document.getElementById('fp-label-col-excl')?.style.removeProperty('display');
                 });
                 chip.addEventListener('dragend', () => {
-                    const draggedId = _badgeDragId;
-                    _badgeDragId = null;
+                    const draggedId = _labelDragId;
+                    _labelDragId = null;
                     chip.classList.remove('fp-drag-active');
                     document.querySelectorAll('.fp-drag-over').forEach(el => el.classList.remove('fp-drag-over'));
                     // If no drop handler claimed this drag, the chip was dropped outside → remove
-                    if (draggedId && !_badgeDropHandled) _removeBadge(draggedId);
-                    _badgeDropHandled = false;
+                    if (draggedId && !_labelDropHandled) _removeLabel(draggedId);
+                    _labelDropHandled = false;
                     // Clear the drag flag after the click event that browsers fire post-drag has fired
-                    setTimeout(() => { _badgeChipJustDragged = false; }, 0);
+                    setTimeout(() => { _labelChipJustDragged = false; }, 0);
                 });
             });
         });
 
-        // AND/OR mode toggle: only meaningful (and visible) when 2+ badges included
+        // AND/OR mode toggle: only meaningful (and visible) when 2+ labels included
         if (modeBtn) {
             modeBtn.textContent = _inclMode === 'or' ? 'OR' : 'AND';
-            modeBtn.classList.toggle('fp-badge-mode-btn--or', _inclMode === 'or');
+            modeBtn.classList.toggle('fp-label-mode-btn--or', _inclMode === 'or');
             modeBtn.style.display = inclCount > 1 ? '' : 'none';
         }
 
@@ -3937,126 +3937,126 @@
         colExcl.style.display = hasExcl ? '' : 'none';
         if (det) det.classList.toggle('fp-acc-active', anySelected);
 
-        _serializeBadgeGroups();
+        _serializeLabelGroups();
         _updateFormulaFromState();
     }
 
-    // -- Badge state mutations ------------------------------------------------
-    function _onBadgeAvailClick(btn) {
+    // -- Label state mutations ------------------------------------------------
+    function _onLabelAvailClick(btn) {
         // Suppress the click some browsers fire on the source element right after a drag-drop
-        if (_badgeAvailJustDragged) return;
-        _addBadge(btn, 'incl');
+        if (_labelAvailJustDragged) return;
+        _addLabel(btn, 'incl');
     }
 
-    function _addBadge(btn, mode) {
+    function _addLabel(btn, mode) {
         _formulaGroups = null;  // chip interactions exit formula mode
-        const id = btn.dataset.badgeId;
-        if (_badgeState.has(id)) {
-            if (_badgeState.get(id) !== mode) _toggleBadgeMode(id);
+        const id = btn.dataset.labelId;
+        if (_labelState.has(id)) {
+            if (_labelState.get(id) !== mode) _toggleLabelMode(id);
             return;
         }
-        _badgeState.set(id, mode);
+        _labelState.set(id, mode);
         btn.style.display = 'none';
-        _rebuildBadgeSelected();
+        _rebuildLabelSelected();
         htmx.trigger(document.getElementById('filter-form'), 'change');
     }
 
-    function _toggleBadgeMode(id) {
+    function _toggleLabelMode(id) {
         _formulaGroups = null;
-        if (!_badgeState.has(id)) return;
-        _badgeState.set(id, _badgeState.get(id) === 'incl' ? 'excl' : 'incl');
-        _rebuildBadgeSelected();
+        if (!_labelState.has(id)) return;
+        _labelState.set(id, _labelState.get(id) === 'incl' ? 'excl' : 'incl');
+        _rebuildLabelSelected();
         htmx.trigger(document.getElementById('filter-form'), 'change');
     }
 
-    function _removeBadge(id) {
+    function _removeLabel(id) {
         _formulaGroups = null;
-        _badgeState.delete(id);
-        const btn = document.querySelector(`#fp-badge-list [data-badge-id="${id}"]`);
+        _labelState.delete(id);
+        const btn = document.querySelector(`#fp-label-list [data-label-id="${id}"]`);
         if (btn) btn.style.display = '';
-        _rebuildBadgeSelected();
+        _rebuildLabelSelected();
         htmx.trigger(document.getElementById('filter-form'), 'change');
     }
 
-    function _clearAllBadgeSelections() {
-        _badgeState.clear();
+    function _clearAllLabelSelections() {
+        _labelState.clear();
         _formulaGroups = null;
-        document.querySelectorAll('#fp-badge-list .fp-badge-avail').forEach(btn => { btn.style.display = ''; });
+        document.querySelectorAll('#fp-label-list .fp-label-avail').forEach(btn => { btn.style.display = ''; });
         _inclMode = 'and';
-        _rebuildBadgeSelected();
+        _rebuildLabelSelected();
         htmx.trigger(document.getElementById('filter-form'), 'change');
     }
 
     function _toggleInclMode() {
         _formulaGroups = null;
         _inclMode = _inclMode === 'and' ? 'or' : 'and';
-        _rebuildBadgeSelected();
+        _rebuildLabelSelected();
         htmx.trigger(document.getElementById('filter-form'), 'change');
     }
 
     // -- Column drop handlers (switch mode / add from list) ------------------
-    function _onBadgeColDrop(e, targetMode) {
+    function _onLabelColDrop(e, targetMode) {
         e.currentTarget.classList.remove('fp-drag-over');
-        if (!_badgeDragId) return;
-        _badgeDropHandled = true;
-        if (_badgeState.has(_badgeDragId)) {
-            if (_badgeState.get(_badgeDragId) !== targetMode) _toggleBadgeMode(_badgeDragId);
+        if (!_labelDragId) return;
+        _labelDropHandled = true;
+        if (_labelState.has(_labelDragId)) {
+            if (_labelState.get(_labelDragId) !== targetMode) _toggleLabelMode(_labelDragId);
         } else {
-            const btn = document.querySelector(`#fp-badge-list [data-badge-id="${_badgeDragId}"]`);
-            if (btn) _addBadge(btn, targetMode);
+            const btn = document.querySelector(`#fp-label-list [data-label-id="${_labelDragId}"]`);
+            if (btn) _addLabel(btn, targetMode);
         }
     }
 
-    // Right-click on list badge → add as exclude
-    document.getElementById('fp-badge-list')?.addEventListener('contextmenu', function (e) {
-        const btn = e.target.closest('.fp-badge-avail');
+    // Right-click on list label → add as exclude
+    document.getElementById('fp-label-list')?.addEventListener('contextmenu', function (e) {
+        const btn = e.target.closest('.fp-label-avail');
         if (!btn) return;
         e.preventDefault();
-        _addBadge(btn, 'excl');
+        _addLabel(btn, 'excl');
     });
 
-    // Drag a not-yet-selected badge straight from the suggestion list into Include/Exclude
-    document.getElementById('fp-badge-list')?.addEventListener('dragstart', function (e) {
-        const btn = e.target.closest('.fp-badge-avail');
+    // Drag a not-yet-selected label straight from the suggestion list into Include/Exclude
+    document.getElementById('fp-label-list')?.addEventListener('dragstart', function (e) {
+        const btn = e.target.closest('.fp-label-avail');
         if (!btn) return;
-        _badgeDragId = btn.dataset.badgeId;
-        _badgeDropHandled = false;
-        _badgeAvailJustDragged = true;
+        _labelDragId = btn.dataset.labelId;
+        _labelDropHandled = false;
+        _labelAvailJustDragged = true;
         e.dataTransfer.effectAllowed = 'move';
         btn.classList.add('fp-drag-active');
         // Reveal both columns as drop targets even though nothing is selected yet
-        const selectedEl = document.getElementById('fp-badge-selected');
+        const selectedEl = document.getElementById('fp-label-selected');
         if (selectedEl) selectedEl.style.display = '';
-        document.getElementById('fp-badge-col-incl')?.style.removeProperty('display');
-        document.getElementById('fp-badge-col-excl')?.style.removeProperty('display');
+        document.getElementById('fp-label-col-incl')?.style.removeProperty('display');
+        document.getElementById('fp-label-col-excl')?.style.removeProperty('display');
     });
-    document.getElementById('fp-badge-list')?.addEventListener('dragend', function (e) {
-        const btn = e.target.closest('.fp-badge-avail');
+    document.getElementById('fp-label-list')?.addEventListener('dragend', function (e) {
+        const btn = e.target.closest('.fp-label-avail');
         if (!btn) return;
-        _badgeDragId = null;
+        _labelDragId = null;
         btn.classList.remove('fp-drag-active');
         document.querySelectorAll('.fp-drag-over').forEach(el => el.classList.remove('fp-drag-over'));
-        // If the badge wasn't dropped into a column, restore the selected area's visibility
-        if (!_badgeDropHandled) _rebuildBadgeSelected();
-        _badgeDropHandled = false;
+        // If the label wasn't dropped into a column, restore the selected area's visibility
+        if (!_labelDropHandled) _rebuildLabelSelected();
+        _labelDropHandled = false;
         // Clear the drag flag after the click event that browsers fire post-drag has fired
-        setTimeout(() => { _badgeAvailJustDragged = false; }, 0);
+        setTimeout(() => { _labelAvailJustDragged = false; }, 0);
     });
 
-    // -- Badge formula bar ----------------------------------------------------
-    (function _initBadgeFormulaBar() {
-        const bar  = document.getElementById('fp-badge-formula');
+    // -- Label formula bar ----------------------------------------------------
+    (function _initLabelFormulaBar() {
+        const bar  = document.getElementById('fp-label-formula');
         const sugg = document.getElementById('fp-formula-suggestions');
         const errs = document.getElementById('fp-formula-errors');
         if (!bar) return;
 
         let _activeSuggIdx = -1;
 
-        // Returns true if no badge name starts with `partial` - typing more cannot fix it
+        // Returns true if no label name starts with `partial` - typing more cannot fix it
         function _isDeadEnd(partial) {
             if (!partial) return false;
             const lo = partial.toLowerCase();
-            const byName = _badgeByNameMap();
+            const byName = _labelByNameMap();
             for (const name of byName.keys()) {
                 if (name.startsWith(lo)) return false;
             }
@@ -4064,9 +4064,9 @@
         }
 
         // Tokenize formula → [{type, text, id?, start, end}]
-        // Types: BADGE, NOT, OR, LPAREN, RPAREN, UNKNOWN
+        // Types: LABEL, NOT, OR, LPAREN, RPAREN, UNKNOWN
         function _tokenize(text) {
-            const byName = _badgeByNameMap();
+            const byName = _labelByNameMap();
             const sorted = [...byName.keys()].sort((a, b) => b.length - a.length);
             const tokens = [];
             let i = 0;
@@ -4082,7 +4082,7 @@
                     const raw = text.slice(i + 1, j);
                     const match = byName.get(raw.toLowerCase());
                     tokens.push(match
-                        ? {type:'BADGE', text:raw, id:match.id, start:i, end:j+1}
+                        ? {type:'LABEL', text:raw, id:match.id, start:i, end:j+1}
                         : {type:'UNKNOWN', text:raw, start:i, end:j+1});
                     i = j + 1;
                     continue;
@@ -4094,7 +4094,7 @@
                         const next = text[end];
                         if (!next || ' /+-()"'.includes(next)) {
                             const entry = byName.get(name);
-                            tokens.push({type:'BADGE', text:text.slice(i, end), id:entry.id, start:i, end});
+                            tokens.push({type:'LABEL', text:text.slice(i, end), id:entry.id, start:i, end});
                             i = end;
                             matched = true;
                             break;
@@ -4131,7 +4131,7 @@
                     const orIds = [];
                     i++;
                     while (i < tokens.length && tokens[i].type !== 'RPAREN') {
-                        if (tokens[i].type === 'BADGE') orIds.push(tokens[i].id);
+                        if (tokens[i].type === 'LABEL') orIds.push(tokens[i].id);
                         else if (tokens[i].type === 'UNKNOWN') errors.push(tokens[i].text);
                         i++;
                     }
@@ -4140,20 +4140,20 @@
                     negate = false;
                     continue;
                 }
-                if (tok.type === 'BADGE') {
+                if (tok.type === 'LABEL') {
                     if (negate) {
-                        // NOT applies to the single badge only, no lookahead for OR
+                        // NOT applies to the single label only, no lookahead for OR
                         groups.push({op: 'not', ids: [Number(tok.id)]});
                         negate = false;
                         i++;
                         continue;
                     }
-                    // Collect consecutive OR-connected badges at top level: A / B / C → OR group
+                    // Collect consecutive OR-connected labels at top level: A / B / C → OR group
                     const orIds = [tok.id];
                     let j = i + 1;
                     while (j < tokens.length && tokens[j].type === 'OR') {
                         j++; // skip OR token
-                        if (j < tokens.length && tokens[j].type === 'BADGE') {
+                        if (j < tokens.length && tokens[j].type === 'LABEL') {
                             orIds.push(tokens[j].id);
                             j++;
                         }
@@ -4178,25 +4178,25 @@
             return {groups, errors};
         }
 
-        // Apply parsed groups: update _badgeState for chip display.
+        // Apply parsed groups: update _labelState for chip display.
         // Caller must set _formulaGroups before calling so serialization is correct.
         function _applyGroups(groups) {
-            document.querySelectorAll('#fp-badge-list .fp-badge-avail').forEach(b => { b.style.display = ''; });
-            _badgeState.clear();
+            document.querySelectorAll('#fp-label-list .fp-label-avail').forEach(b => { b.style.display = ''; });
+            _labelState.clear();
             _inclMode = 'and';
             groups.forEach(g => {
                 if (g.op === 'not') {
-                    g.ids.forEach(id => { _badgeState.set(String(id), 'excl'); });
+                    g.ids.forEach(id => { _labelState.set(String(id), 'excl'); });
                 } else {
-                    g.ids.forEach(id => { _badgeState.set(String(id), 'incl'); });
+                    g.ids.forEach(id => { _labelState.set(String(id), 'incl'); });
                     if (g.op === 'or') _inclMode = 'or';
                 }
             });
-            _badgeState.forEach((mode, id) => {
-                const btn = document.querySelector(`#fp-badge-list [data-badge-id="${id}"]`);
+            _labelState.forEach((mode, id) => {
+                const btn = document.querySelector(`#fp-label-list [data-label-id="${id}"]`);
                 if (btn) btn.style.display = 'none';
             });
-            _rebuildBadgeSelected();
+            _rebuildLabelSelected();
             htmx.trigger(document.getElementById('filter-form'), 'change');
         }
 
@@ -4211,13 +4211,13 @@
             q = q.toLowerCase().trim();
             _activeSuggIdx = -1;
             if (!q) { sugg.hidden = true; return; }
-            const all = [...document.querySelectorAll('#fp-badge-list .fp-badge-avail')];
-            const matches = all.filter(btn => (btn.dataset.badgeName || '').includes(q));
+            const all = [...document.querySelectorAll('#fp-label-list .fp-label-avail')];
+            const matches = all.filter(btn => (btn.dataset.labelName || '').includes(q));
             if (!matches.length) { sugg.hidden = true; return; }
             sugg.innerHTML = matches.slice(0, 6).map((btn, i) =>
-                `<div class="fp-formula-sugg" data-idx="${i}" data-id="${btn.dataset.badgeId}" data-label="${btn.dataset.badgeLabel}">
-                    ${btn.dataset.badgeIcon ? `<span>${btn.dataset.badgeIcon}</span>` : ''}
-                    ${btn.dataset.badgeLabel}
+                `<div class="fp-formula-sugg" data-idx="${i}" data-id="${btn.dataset.labelId}" data-label="${btn.dataset.labelText}">
+                    ${btn.dataset.labelIcon ? `<span>${btn.dataset.labelIcon}</span>` : ''}
+                    ${btn.dataset.labelText}
                 </div>`
             ).join('');
             sugg.hidden = false;
@@ -4241,7 +4241,7 @@
         function _insertSuggestion(label) {
             const cursor = bar.selectionStart;
             const tok = _currentToken(bar.value, cursor);
-            const quoted = _quoteBadgeName(label);
+            const quoted = _quoteLabelName(label);
             bar.value = bar.value.slice(0, tok.start) + quoted + bar.value.slice(tok.end);
             const newPos = tok.start + quoted.length;
             bar.setSelectionRange(newPos, newPos);
@@ -4250,15 +4250,15 @@
             _onFormulaChange();
         }
 
-        // On each keystroke: update suggestions, filter badge list, show dead-end errors only.
+        // On each keystroke: update suggestions, filter label list, show dead-end errors only.
         // Groups are NOT applied until Enter - prevents premature chip updates mid-formula.
         function _onFormulaChange() {
             const text = bar.value;
             // If the user clears the box entirely (backspace/select-all-delete) while a
-            // formula or badge filter is still applied, drop it and refresh the map
+            // formula or label filter is still applied, drop it and refresh the map
             // instead of leaving the stale filter active until some other trigger.
-            if (!text.trim() && (_formulaGroups !== null || _badgeState.size > 0)) {
-                _clearAllBadgeSelections();
+            if (!text.trim() && (_formulaGroups !== null || _labelState.size > 0)) {
+                _clearAllLabelSelections();
                 sugg.hidden = true;
                 if (errs) errs.hidden = true;
                 return;
@@ -4266,14 +4266,14 @@
             const cursor = bar.selectionStart ?? text.length;
             const tok = _currentToken(text, cursor);
             _showSuggestions(tok.text);
-            document.querySelectorAll('#fp-badge-list .fp-badge-avail').forEach(btn => {
+            document.querySelectorAll('#fp-label-list .fp-label-avail').forEach(btn => {
                 const q = tok.text.toLowerCase();
-                btn.style.display = (!q || (btn.dataset.badgeName || '').includes(q)) ? '' : 'none';
+                btn.style.display = (!q || (btn.dataset.labelName || '').includes(q)) ? '' : 'none';
             });
             // Only show an error when the current cursor token is a provable dead end
             if (errs) {
                 if (tok.text && _isDeadEnd(tok.text)) {
-                    errs.textContent = `No badge matches "${tok.text}"`;
+                    errs.textContent = `No label matches "${tok.text}"`;
                     errs.hidden = false;
                 } else {
                     errs.hidden = true;
@@ -4295,8 +4295,8 @@
                     const cursor = bar.selectionStart;
                     const tok = _currentToken(bar.value, cursor);
                     if (tok.text) {
-                        const match = document.querySelector(`#fp-badge-list .fp-badge-avail:not([style*="display: none"])`);
-                        if (match) { e.preventDefault(); _insertSuggestion(match.dataset.badgeLabel); }
+                        const match = document.querySelector(`#fp-label-list .fp-label-avail:not([style*="display: none"])`);
+                        if (match) { e.preventDefault(); _insertSuggestion(match.dataset.labelText); }
                     }
                 }
             } else if (e.key === 'ArrowUp') {
@@ -4311,8 +4311,8 @@
                 const text = bar.value.trim();
                 if (!text) {
                     // Empty box + Enter should clear any active filter, not add a
-                    // random badge (previously fell through to "simple mode" below).
-                    if (_formulaGroups !== null || _badgeState.size > 0) _clearAllBadgeSelections();
+                    // random label (previously fell through to "simple mode" below).
+                    if (_formulaGroups !== null || _labelState.size > 0) _clearAllLabelSelections();
                     sugg.hidden = true;
                     if (errs) errs.hidden = true;
                     return;
@@ -4335,17 +4335,17 @@
                         _applyGroups(groups);
                         bar.value = '';
                         sugg.hidden = true;
-                        document.querySelectorAll('#fp-badge-list .fp-badge-avail').forEach(b => { b.style.display = ''; });
+                        document.querySelectorAll('#fp-label-list .fp-label-avail').forEach(b => { b.style.display = ''; });
                         if (errs && !errors.length) errs.hidden = true;
                     }
                 } else {
-                    // Simple mode: add first visible badge as include (plain search + Enter)
-                    const firstVisible = document.querySelector('#fp-badge-list .fp-badge-avail:not([style*="display: none"])');
+                    // Simple mode: add first visible label as include (plain search + Enter)
+                    const firstVisible = document.querySelector('#fp-label-list .fp-label-avail:not([style*="display: none"])');
                     if (firstVisible) {
-                        _addBadge(firstVisible, 'incl');
+                        _addLabel(firstVisible, 'incl');
                         bar.value = '';
                         sugg.hidden = true;
-                        document.querySelectorAll('#fp-badge-list .fp-badge-avail').forEach(b => { b.style.display = ''; });
+                        document.querySelectorAll('#fp-label-list .fp-label-avail').forEach(b => { b.style.display = ''; });
                         if (errs) errs.hidden = true;
                     }
                 }
@@ -4441,7 +4441,7 @@
                     var uploadInput = document.getElementById('icon-upload-input-' + id);
                     if (uploadInput) uploadInput.value = '';
                     if (id === 'add-pin') { window._addPinCustomIconFile = null; }
-                    // Badge edit context: mark existing custom icon for clearing
+                    // Label edit context: mark existing custom icon for clearing
                     var clearFlag = document.getElementById('edit-clear-custom-' + id);
                     if (clearFlag) clearFlag.value = '1';
                 }
@@ -4464,7 +4464,7 @@
                 // Clear any text icon value
                 var textInput = document.getElementById('icon-value-' + id);
                 if (textInput) textInput.value = '';
-                // Badge edit context: clear the "delete" flag (we're replacing, not removing)
+                // Label edit context: clear the "delete" flag (we're replacing, not removing)
                 var clearFlag = document.getElementById('edit-clear-custom-' + id);
                 if (clearFlag) clearFlag.value = '';
                 // Deselect any grid icon
@@ -4526,13 +4526,13 @@
         const colorVal = document.getElementById('apdlg-color-value');
         if (colorVal) colorVal.value = '';
 
-        // Reset badge selector
-        _apdlgSelectedBadges = [];
+        // Reset label selector
+        _apdlgSelectedLabels = [];
         _apdlgRenderSelectedChips();
-        const badgeSearch = document.getElementById('apdlg-badge-search');
-        if (badgeSearch) badgeSearch.value = '';
-        const badgeSugg = document.getElementById('apdlg-badge-suggestions');
-        if (badgeSugg) badgeSugg.hidden = true;
+        const labelSearch = document.getElementById('apdlg-label-search');
+        if (labelSearch) labelSearch.value = '';
+        const labelSugg = document.getElementById('apdlg-label-suggestions');
+        if (labelSugg) labelSugg.hidden = true;
 
         const customize = document.getElementById('apdlg-customize');
         if (customize) customize.open = false;
@@ -4549,7 +4549,7 @@
     }
 
     // Clears both the icon (standard or custom-uploaded) and color overrides
-    // for the pin currently open in the dialog, leaving badges untouched.
+    // for the pin currently open in the dialog, leaving labels untouched.
     function _apdlgClearCustomizations() {
         IconPicker.pick('add-pin', '', null);
         const clearSwatch = document.querySelector('#apdlg-color-picker .color-swatch.color-clear');
@@ -4637,8 +4637,8 @@
         }
 
         // Pre-fill icon/color from the pin's OWN overrides only - never from
-        // pin.icon/pin.color, which are the *effective* (possibly badge-inherited)
-        // display values. Pre-filling from those would silently bake a badge's
+        // pin.icon/pin.color, which are the *effective* (possibly label-inherited)
+        // display values. Pre-filling from those would silently bake a label's
         // icon/color onto the pin the next time this form is saved, even if the
         // user never opened the Customize section.
         if (pin.own_custom_icon_url) {
@@ -4663,17 +4663,17 @@
             pickColor('apdlg-color-picker', 'apdlg-color-value', pin.own_color, swatch);
         }
 
-        // Pre-fill badges from cached tags_data. Match by id (the reliable key -
-        // badge names aren't guaranteed unique across kinds/owners) and fall back
+        // Pre-fill labels from cached tags_data. Match by id (the reliable key -
+        // label names aren't guaranteed unique across kinds/owners) and fall back
         // to a name match only for stale cache entries from before ids were cached.
-        // If a badge can't be found in _apdlgAllBadges at all (e.g. it's no longer
+        // If a label can't be found in _apdlgAllLabels at all (e.g. it's no longer
         // visible to this profile), keep it selected anyway using the cached data
         // so saving the form doesn't silently drop it from the pin.
         const tagsData = pin.tags_data || [];
-        _apdlgSelectedBadges = tagsData.map(tag => {
+        _apdlgSelectedLabels = tagsData.map(tag => {
             const found = (tag.id != null)
-                ? _apdlgAllBadges.find(b => b.id === tag.id)
-                : _apdlgAllBadges.find(b => b.name.toLowerCase() === tag.name.toLowerCase());
+                ? _apdlgAllLabels.find(b => b.id === tag.id)
+                : _apdlgAllLabels.find(b => b.name.toLowerCase() === tag.name.toLowerCase());
             if (found) return found;
             if (tag.id == null) return null;
             return { id: tag.id, name: tag.name, icon: tag.icon || '', color: tag.color || '', kind: tag.kind || '' };
@@ -4836,28 +4836,28 @@
         setTimeout(() => { document.getElementById('apdlg-addr-suggestions').hidden = true; }, 150);
     });
 
-    // -- Badge selector ----------------------------------------------------
-    let _apdlgSelectedBadges = [];
-    let _apdlgAllBadges = [];
+    // -- Label selector ----------------------------------------------------
+    let _apdlgSelectedLabels = [];
+    let _apdlgAllLabels = [];
     (function() {
-        const dataEl = document.getElementById('apdlg-badge-data');
+        const dataEl = document.getElementById('apdlg-label-data');
         if (dataEl) {
-            try { _apdlgAllBadges = JSON.parse(dataEl.textContent); } catch(e) {}
+            try { _apdlgAllLabels = JSON.parse(dataEl.textContent); } catch(e) {}
         }
     })();
 
     function _apdlgRenderSelectedChips() {
-        const chips = document.getElementById('apdlg-badge-chips');
+        const chips = document.getElementById('apdlg-label-chips');
         if (!chips) return;
         chips.innerHTML = '';
-        _apdlgSelectedBadges.forEach(b => {
+        _apdlgSelectedLabels.forEach(b => {
             const chip = document.createElement('span');
-            chip.className = 'apdlg-badge-chip-item';
+            chip.className = 'apdlg-label-chip-item';
             chip.dataset.id = b.id;
             const iconHtml = b.icon ? `<span class="apdlg-chip-icon">${b.icon}</span>` : '';
             chip.innerHTML = `${iconHtml}<span class="apdlg-chip-name">${_escHtml(b.name)}</span><button class="apdlg-chip-remove" type="button" aria-label="Remove">x</button>`;
             chip.querySelector('.apdlg-chip-remove').addEventListener('click', () => {
-                _apdlgSelectedBadges = _apdlgSelectedBadges.filter(x => x.id !== b.id);
+                _apdlgSelectedLabels = _apdlgSelectedLabels.filter(x => x.id !== b.id);
                 _apdlgRenderSelectedChips();
             });
             chips.appendChild(chip);
@@ -4865,149 +4865,149 @@
     }
 
     function _apdlgShowSuggestions(query) {
-        const box = document.getElementById('apdlg-badge-suggestions');
+        const box = document.getElementById('apdlg-label-suggestions');
         if (!box) return;
         const q = query.toLowerCase().trim();
-        const selectedIds = new Set(_apdlgSelectedBadges.map(b => b.id));
-        let matches = _apdlgAllBadges.filter(b => !selectedIds.has(b.id) && (!q || b.name.toLowerCase().includes(q)));
+        const selectedIds = new Set(_apdlgSelectedLabels.map(b => b.id));
+        let matches = _apdlgAllLabels.filter(b => !selectedIds.has(b.id) && (!q || b.name.toLowerCase().includes(q)));
         matches = matches.slice(0, 12);
         box.innerHTML = '';
         matches.forEach(b => {
             const item = document.createElement('button');
             item.type = 'button';
-            item.className = 'apdlg-badge-sugg-item';
+            item.className = 'apdlg-label-sugg-item';
             const iconHtml = b.icon ? `<span class="apdlg-sugg-icon">${b.icon}</span>` : '';
-            const kindBadge = `<span class="apdlg-sugg-kind apdlg-sugg-kind--${b.kind}">${b.kind}</span>`;
-            item.innerHTML = `${iconHtml}<span class="apdlg-sugg-name">${_escHtml(b.name)}</span>${kindBadge}`;
-            item.addEventListener('mousedown', e => { e.preventDefault(); _apdlgSelectBadge(b); });
+            const kindLabel = `<span class="apdlg-sugg-kind apdlg-sugg-kind--${b.kind}">${b.kind}</span>`;
+            item.innerHTML = `${iconHtml}<span class="apdlg-sugg-name">${_escHtml(b.name)}</span>${kindLabel}`;
+            item.addEventListener('mousedown', e => { e.preventDefault(); _apdlgSelectLabel(b); });
             box.appendChild(item);
         });
-        // "Create a badge" option at bottom
+        // "Create a label" option at bottom
         const createBtn = document.createElement('button');
         createBtn.type = 'button';
-        createBtn.className = 'apdlg-badge-sugg-item apdlg-badge-sugg-create';
-        createBtn.innerHTML = '<i class="material-symbols-outlined">add_circle_outline</i><span>Create a badge' + (q ? ` "${_escHtml(query.trim())}"` : '') + '</span>';
-        createBtn.addEventListener('mousedown', e => { e.preventDefault(); _apdlgPromptCreateBadge(query.trim()); });
+        createBtn.className = 'apdlg-label-sugg-item apdlg-label-sugg-create';
+        createBtn.innerHTML = '<i class="material-symbols-outlined">add_circle_outline</i><span>Create a label' + (q ? ` "${_escHtml(query.trim())}"` : '') + '</span>';
+        createBtn.addEventListener('mousedown', e => { e.preventDefault(); _apdlgPromptCreateLabel(query.trim()); });
         box.appendChild(createBtn);
         box.hidden = false;
     }
 
-    function _apdlgSelectBadge(badge) {
-        if (_apdlgSelectedBadges.find(b => b.id === badge.id)) return;
-        _apdlgSelectedBadges.push(badge);
+    function _apdlgSelectLabel(label) {
+        if (_apdlgSelectedLabels.find(b => b.id === label.id)) return;
+        _apdlgSelectedLabels.push(label);
         _apdlgRenderSelectedChips();
-        const input = document.getElementById('apdlg-badge-search');
+        const input = document.getElementById('apdlg-label-search');
         if (input) { input.value = ''; input.focus(); }
-        document.getElementById('apdlg-badge-suggestions').hidden = true;
+        document.getElementById('apdlg-label-suggestions').hidden = true;
     }
 
-    function _apdlgPromptCreateBadge(prefilledName) {
-        document.getElementById('apdlg-badge-suggestions').hidden = true;
+    function _apdlgPromptCreateLabel(prefilledName) {
+        document.getElementById('apdlg-label-suggestions').hidden = true;
         // Show kind-picker mini dialog
-        const kindDlg = document.getElementById('apdlg-create-badge-dialog');
+        const kindDlg = document.getElementById('apdlg-create-label-dialog');
         if (!kindDlg) return;
         const nameEl = document.getElementById('apdlg-cbname');
         if (nameEl) nameEl.value = prefilledName;
         kindDlg.showModal();
     }
 
-    const badgeInput = document.getElementById('apdlg-badge-search');
-    if (badgeInput) {
-        badgeInput.addEventListener('input', function() {
+    const labelInput = document.getElementById('apdlg-label-search');
+    if (labelInput) {
+        labelInput.addEventListener('input', function() {
             _apdlgShowSuggestions(this.value);
         });
-        badgeInput.addEventListener('focus', function() {
+        labelInput.addEventListener('focus', function() {
             _apdlgShowSuggestions(this.value);
         });
-        badgeInput.addEventListener('blur', function() {
+        labelInput.addEventListener('blur', function() {
             setTimeout(() => {
-                const box = document.getElementById('apdlg-badge-suggestions');
+                const box = document.getElementById('apdlg-label-suggestions');
                 if (box) box.hidden = true;
             }, 150);
         });
-        badgeInput.addEventListener('keydown', function(e) {
-            const box = document.getElementById('apdlg-badge-suggestions');
+        labelInput.addEventListener('keydown', function(e) {
+            const box = document.getElementById('apdlg-label-suggestions');
             if (!box || box.hidden) return;
-            const items = [...box.querySelectorAll('.apdlg-badge-sugg-item:not(.apdlg-badge-sugg-create)')];
+            const items = [...box.querySelectorAll('.apdlg-label-sugg-item:not(.apdlg-label-sugg-create)')];
             // Tab: select top real suggestion
             if (e.key === 'Tab' && items.length) {
                 e.preventDefault();
                 const q = this.value.trim();
-                const topMatch = _apdlgAllBadges.find(b =>
-                    !_apdlgSelectedBadges.find(s => s.id === b.id) && b.name.toLowerCase().includes(q.toLowerCase())
+                const topMatch = _apdlgAllLabels.find(b =>
+                    !_apdlgSelectedLabels.find(s => s.id === b.id) && b.name.toLowerCase().includes(q.toLowerCase())
                 );
-                if (topMatch) _apdlgSelectBadge(topMatch);
+                if (topMatch) _apdlgSelectLabel(topMatch);
                 return;
             }
             // Comma or space: select top suggestion only if it's an exact/prefix match dead-end
             if ((e.key === ',' || e.key === ' ') && items.length) {
                 const q = this.value.trim().toLowerCase();
-                // Find if continuing to type would still match: any badge that starts with q but isn't q
-                const wouldContinue = _apdlgAllBadges.some(b =>
-                    !_apdlgSelectedBadges.find(s => s.id === b.id) &&
+                // Find if continuing to type would still match: any label that starts with q but isn't q
+                const wouldContinue = _apdlgAllLabels.some(b =>
+                    !_apdlgSelectedLabels.find(s => s.id === b.id) &&
                     b.name.toLowerCase().startsWith(q) &&
                     b.name.toLowerCase() !== q
                 );
                 if (!wouldContinue && items.length === 1) {
                     e.preventDefault();
-                    const topMatch = _apdlgAllBadges.find(b =>
-                        !_apdlgSelectedBadges.find(s => s.id === b.id) && b.name.toLowerCase().includes(q)
+                    const topMatch = _apdlgAllLabels.find(b =>
+                        !_apdlgSelectedLabels.find(s => s.id === b.id) && b.name.toLowerCase().includes(q)
                     );
-                    if (topMatch) { _apdlgSelectBadge(topMatch); return; }
+                    if (topMatch) { _apdlgSelectLabel(topMatch); return; }
                 }
             }
             // Arrow key navigation
             if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
                 e.preventDefault();
-                const allItems = [...box.querySelectorAll('.apdlg-badge-sugg-item')];
-                const focused = box.querySelector('.apdlg-badge-sugg-item:focus');
+                const allItems = [...box.querySelectorAll('.apdlg-label-sugg-item')];
+                const focused = box.querySelector('.apdlg-label-sugg-item:focus');
                 let idx = focused ? allItems.indexOf(focused) : -1;
                 idx = e.key === 'ArrowDown' ? Math.min(idx + 1, allItems.length - 1) : Math.max(idx - 1, 0);
                 allItems[idx] && allItems[idx].focus();
             }
             if (e.key === 'Escape') { box.hidden = true; }
             if (e.key === 'Enter') {
-                const focused = box.querySelector('.apdlg-badge-sugg-item:focus');
+                const focused = box.querySelector('.apdlg-label-sugg-item:focus');
                 if (focused) { e.preventDefault(); focused.dispatchEvent(new MouseEvent('mousedown')); return; }
                 // No item focused: mirror Tab and select the top real suggestion.
                 if (items.length) {
                     e.preventDefault();
                     const q = this.value.trim();
-                    const topMatch = _apdlgAllBadges.find(b =>
-                        !_apdlgSelectedBadges.find(s => s.id === b.id) && b.name.toLowerCase().includes(q.toLowerCase())
+                    const topMatch = _apdlgAllLabels.find(b =>
+                        !_apdlgSelectedLabels.find(s => s.id === b.id) && b.name.toLowerCase().includes(q.toLowerCase())
                     );
-                    if (topMatch) _apdlgSelectBadge(topMatch);
+                    if (topMatch) _apdlgSelectLabel(topMatch);
                 }
             }
         });
     }
 
-    // A badge created inline from the Add/Edit Pin dialog is immediately usable
-    // there, but the Filter panel's badge list is only rendered once at page
+    // A label created inline from the Add/Edit Pin dialog is immediately usable
+    // there, but the Filter panel's label list is only rendered once at page
     // load - append a matching chip so it's filterable/draggable without a reload.
-    function _appendFilterPanelBadgeChip(badge) {
-        const list = document.getElementById('fp-badge-list');
-        if (!list || list.querySelector(`[data-badge-id="${badge.id}"]`)) return;
+    function _appendFilterPanelLabelChip(label) {
+        const list = document.getElementById('fp-label-list');
+        if (!list || list.querySelector(`[data-label-id="${label.id}"]`)) return;
         const btn = document.createElement('button');
         btn.type = 'button';
-        btn.className = 'fp-chip fp-badge-avail';
+        btn.className = 'fp-chip fp-label-avail';
         btn.draggable = true;
-        btn.dataset.badgeId = badge.id;
-        btn.dataset.badgeName = (badge.name || '').toLowerCase();
-        btn.dataset.badgeLabel = badge.name || '';
-        btn.dataset.badgeColor = badge.color || '';
-        btn.dataset.badgeIcon = badge.icon || '';
-        if (badge.color) {
-            btn.style.borderColor = badge.color + '55';
-            btn.style.background = badge.color + '18';
-            btn.style.color = badge.color + 'cc';
+        btn.dataset.labelId = label.id;
+        btn.dataset.labelName = (label.name || '').toLowerCase();
+        btn.dataset.labelText = label.name || '';
+        btn.dataset.labelColor = label.color || '';
+        btn.dataset.labelIcon = label.icon || '';
+        if (label.color) {
+            btn.style.borderColor = label.color + '55';
+            btn.style.background = label.color + '18';
+            btn.style.color = label.color + 'cc';
         }
-        btn.innerHTML = (badge.icon ? `<span style="font-size:.9em">${_escHtml(badge.icon)}</span>` : '') + _escHtml(badge.name || '');
-        btn.addEventListener('click', () => _onBadgeAvailClick(btn));
+        btn.innerHTML = (label.icon ? `<span style="font-size:.9em">${_escHtml(label.icon)}</span>` : '') + _escHtml(label.name || '');
+        btn.addEventListener('click', () => _onLabelAvailClick(btn));
         list.appendChild(btn);
     }
 
-    // Create-a-badge submit (from the mini dialog)
+    // Create-a-label submit (from the mini dialog)
     (function () {
         const submitBtn = document.getElementById('apdlg-cb-submit');
         if (!submitBtn) return;
@@ -5018,13 +5018,13 @@
             submitBtn.disabled = true;
             const fd = new FormData();
             fd.append('name', name);
-            const badgeCreateUrls = {
-                tag: "{% url 'badge.create' badge_kind='tag' %}",
-                category: "{% url 'badge.create' badge_kind='category' %}",
-                status: "{% url 'badge.create' badge_kind='status' %}",
+            const labelCreateUrls = {
+                tag: "{% url 'label.create' label_kind='tag' %}",
+                category: "{% url 'label.create' label_kind='category' %}",
+                status: "{% url 'label.create' label_kind='status' %}",
             };
-            const createUrl = badgeCreateUrls[kind.value];
-            if (!createUrl) { toastr.warning('Unknown badge type.'); submitBtn.disabled = false; return; }
+            const createUrl = labelCreateUrls[kind.value];
+            if (!createUrl) { toastr.warning('Unknown label type.'); submitBtn.disabled = false; return; }
             fetch(createUrl, {
                 method: 'POST',
                 body: fd,
@@ -5032,14 +5032,14 @@
             })
             .then(r => r.ok ? r.json() : r.text().then(t => Promise.reject(t)))
             .then(data => {
-                const newBadge = { id: data.id, name: data.name, kind: data.kind, icon: data.icon || '', color: data.color || '' };
-                _apdlgAllBadges.push(newBadge);
-                _apdlgSelectBadge(newBadge);
-                _appendFilterPanelBadgeChip(newBadge);
-                document.getElementById('apdlg-create-badge-dialog').close();
-                toastr.success(`Badge "${data.name}" created.`);
+                const newLabel = { id: data.id, name: data.name, kind: data.kind, icon: data.icon || '', color: data.color || '' };
+                _apdlgAllLabels.push(newLabel);
+                _apdlgSelectLabel(newLabel);
+                _appendFilterPanelLabelChip(newLabel);
+                document.getElementById('apdlg-create-label-dialog').close();
+                toastr.success(`Label "${data.name}" created.`);
             })
-            .catch(err => { toastr.error('Failed to create badge: ' + err); })
+            .catch(err => { toastr.error('Failed to create label: ' + err); })
             .finally(() => { submitBtn.disabled = false; });
         });
     })();
@@ -5078,9 +5078,9 @@
             }
             const colorVal = document.getElementById('apdlg-color-value');
             formData.append('color', (colorVal && colorVal.value) ? colorVal.value : '');
-            _apdlgSelectedBadges.forEach(b => formData.append('badge_ids', b.id));
-            // Send badge_ids key even when empty so the server knows to clear badges
-            if (!_apdlgSelectedBadges.length) formData.append('badge_ids', '');
+            _apdlgSelectedLabels.forEach(b => formData.append('label_ids', b.id));
+            // Send label_ids key even when empty so the server knows to clear labels
+            if (!_apdlgSelectedLabels.length) formData.append('label_ids', '');
 
             const uuid = _editPinUuid;
             this.disabled = true;
@@ -5124,8 +5124,8 @@
             const colorVal = document.getElementById('apdlg-color-value');
             if (colorVal && colorVal.value) formData.append('color', colorVal.value);
 
-            // Badges (unified tags/categories/statuses)
-            _apdlgSelectedBadges.forEach(b => formData.append('badge_ids', b.id));
+            // Labels (unified tags/categories/statuses)
+            _apdlgSelectedLabels.forEach(b => formData.append('label_ids', b.id));
 
             // Pass Google Place ID and canonical name when adding from a Places marker.
             // The canonical name lets the server skip a geocoding API call.

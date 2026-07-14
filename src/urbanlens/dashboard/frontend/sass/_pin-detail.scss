@@ -290,7 +290,7 @@
         flex: 1;
     }
 
-    // -- Kind pill (shown in "All" tab next to badge name) --------------------
+    // -- Kind pill (shown in "All" tab next to label name) --------------------
     .tad-kind-pill {
         display: inline-flex;
         align-items: center;
@@ -1515,9 +1515,9 @@
     }
 }
 
-// -- Combined "Organization" card: Badges + "Add to a list" ----------------
-// One header covers both - badges already have a universal look site-wide, so
-// no separate sub-header is needed to identify them. Adding either a badge or
+// -- Combined "Organization" card: Labels + "Add to a list" ----------------
+// One header covers both - labels already have a universal look site-wide, so
+// no separate sub-header is needed to identify them. Adding either a label or
 // a list membership happens from the single "+" menu in the card header (see
 // .organization-add-wrap below); the header's own collapse chevron (injected
 // by the collapsible-sections script) covers the whole card.
@@ -4227,7 +4227,7 @@ body.page-location-details .pin-detail-grid {
     }
 }
 
-// Satellite Imagery / Street View / Photos, and Visit History / Badges /
+// Satellite Imagery / Street View / Photos, and Visit History / Labels /
 // Aliases: each row starts every card at an equal share of the row and lets
 // `auto-fit` redivide that space among whichever cards are actually visible.
 // Collapsing a card (`.is-collapsed`, see _collapsible.scss) removes it from

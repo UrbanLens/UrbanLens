@@ -50,7 +50,7 @@ was itself a bug found and fixed on 2026-07-11 (see below).
 
 This was audited and fixed across the codebase on 2026-07-11 after a review surfaced that nearly
 every wiki-scoped view (`location_wiki.py`, `aliases.py`, `image_gallery.py`, `boundary.py`,
-`detail_pins.py`, `badges.py`, `markup.py`) only checked `LoginRequiredMixin` — any authenticated
+`detail_pins.py`, `labels.py`, `markup.py`) only checked `LoginRequiredMixin` — any authenticated
 user could view, and in several cases *edit*, any wiki on the site by slug, regardless of whether
 they had ever pinned that location. `comments.py` was the sole exception that already gated on pin
 ownership, but it returned a distinguishable 403 (rather than 404), which was itself a smaller
@@ -64,18 +64,19 @@ Two deliberate exceptions worth knowing about, both because a hard 404 doesn't f
   instead of a separate location check, because only a profile with a pin at that location could
   ever have uploaded the image in the first place (upload itself is gated).
 
-## Badges are one model wearing four hats
+## Labels are one model wearing four hats
 
-`Badge` (`dashboard/models/badges/model.py`) is the single backing model for **tags**,
-**categories**, **statuses**, and **person labels** — distinguished only by a `kind` field
-(see `KIND_*` constants in `badges/meta.py`). `models/categories/` and the old `tags`/`statuses`
-modules are now thin aliases re-exporting `Badge`/`Category` for backward compatibility, not
-separate tables. The standalone `categories`/`tags`/`statuses` controllers and viewsets were
-recently deleted in favor of the unified badge controller/viewset with a `kind` parameter — if you
-find references to the old separate modules elsewhere, they're stale.
+`Label` (`dashboard/models/labels/model.py`, renamed from `Badge` in migration 0034) is the single
+backing model for **tags**, **categories**, **statuses**, and **person labels** — distinguished
+only by a `kind` field (see `KIND_*` constants in `labels/meta.py`). `models/categories/` is a thin
+module re-exporting `Label` as `Category` (real, distinct `CategorySerializer`/`CategoryViewSet`/
+`CategoryFilter` classes, not separate tables) for backward compatibility; the old `models/tags/`
+alias shim was unused and has been deleted outright. The standalone `categories`/`tags`/`statuses`
+controllers and viewsets were deleted in favor of the unified label controller/viewset with a
+`kind` parameter — if you find references to the old separate modules elsewhere, they're stale.
 
-Per-user visual overrides (color/icon) on a shared global badge live in a separate
-`BadgeCustomization` model — editing "your" badge color never mutates the badge other users see.
+Per-user visual overrides (color/icon) on a shared global label live in a separate
+`LabelCustomization` model — editing "your" label color never mutates the label other users see.
 
 ## Pin slugs are scoped per-profile, not global
 

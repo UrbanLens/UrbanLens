@@ -264,15 +264,15 @@
 .iw-meta-row label:before,
 .iw-meta-row label:after { display: none !important; }
 
-/* Badge picker */
-.iw-badge-row {
+/* Label picker */
+.iw-label-row {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
     gap: 6px;
 }
-.iw-badge-row-label { font-size: .78rem; color: #9aa0a6; white-space: nowrap; }
-.iw-badge-pill {
+.iw-label-row-text { font-size: .78rem; color: #9aa0a6; white-space: nowrap; }
+.iw-label-pill {
     display: inline-flex;
     align-items: center;
     gap: 4px;
@@ -286,23 +286,23 @@
     color: #333;
     user-select: none;
 }
-.iw-badge-pill[hidden] {
+.iw-label-pill[hidden] {
     display: none;
 }
-.iw-badge-pill.selected {
+.iw-label-pill.selected {
     border-color: currentColor;
     box-shadow: 0 0 0 2px rgba(33,150,243,.15);
 }
-.iw-badge-pill i { font-size: .85rem; }
-.iw-badge-pill-new {
+.iw-label-pill i { font-size: .85rem; }
+.iw-label-pill-new {
     background: none;
     border-style: dashed;
     border-color: #c8d0d8;
     color: #5f6368;
     cursor: default;
 }
-.iw-badge-pill-new i { color: #4caf50; font-size: 1rem; }
-.iw-badge-add {
+.iw-label-pill-new i { color: #4caf50; font-size: 1rem; }
+.iw-label-add {
     display: inline-flex;
     align-items: center;
     gap: 4px;
@@ -314,10 +314,10 @@
     color: #5f6368;
     cursor: pointer;
 }
-.iw-badge-add:hover { border-color: #2196F3; color: #2196F3; }
+.iw-label-add:hover { border-color: #2196F3; color: #2196F3; }
 
-/* Badge dropdown */
-.iw-badge-dropdown {
+/* Label dropdown */
+.iw-label-dropdown {
     position: absolute;
     z-index: 9999;
     background: var(--ul-grey-1, #fff);
@@ -329,7 +329,7 @@
     max-height: 240px;
     overflow-y: auto;
 }
-.iw-badge-dropdown-item {
+.iw-label-dropdown-item {
     display: flex;
     align-items: center;
     gap: 8px;
@@ -339,10 +339,10 @@
     font-size: .83rem;
     color: var(--ul-grey-9);
 }
-.iw-badge-dropdown-item:hover { background: var(--ul-grey-1); }
-.iw-badge-dropdown-item.checked { background: var(--ul-grey-1); }
-.iw-badge-dropdown-item i { font-size: 1rem; }
-.iw-badge-dropdown-check { margin-left: auto; color: var(--ul-primary-color); font-size: .9rem; }
+.iw-label-dropdown-item:hover { background: var(--ul-grey-1); }
+.iw-label-dropdown-item.checked { background: var(--ul-grey-1); }
+.iw-label-dropdown-item i { font-size: 1rem; }
+.iw-label-dropdown-check { margin-left: auto; color: var(--ul-primary-color); font-size: .9rem; }
 
 /* Pin list */
 .iw-pin-list {
@@ -583,7 +583,7 @@
 'use strict';
 
 /* -- State ------------------------------------------------------------- */
-var parsedData = null;   // {lists, total, badges} from server
+var parsedData = null;   // {lists, total, labels} from server
 var selectedFiles = [];  // FileList-like array
 var abortCtrl = null;
 var importing = false;
@@ -826,7 +826,7 @@ $('iw-btn-upload').addEventListener('click', async function () {
 /* -- Step 2: Render preview -------------------------------------------- */
 function renderPreview(data) {
     var lists = data.lists;
-    var badges = data.badges || [];
+    var labels = data.labels || [];
     allSelected = true;
 
     $('iw-preview-total-label').textContent =
@@ -866,42 +866,42 @@ function renderPreview(data) {
         meta.appendChild(catRow);
         var catCheckbox = catRow.querySelector('input[type=checkbox]');
 
-        /* Badge picker row (always present so the new-category preview chip has somewhere to live) */
-        var badgeRow = document.createElement('div');
-        badgeRow.className = 'iw-meta-row';
-        var badgeInner = document.createElement('div');
-        badgeInner.className = 'iw-badge-row';
-        badgeInner.id = 'iw-badges-' + listIdx;
-        badgeInner.innerHTML = '<span class="iw-badge-row-label">Badges:</span>';
+        /* Label picker row (always present so the new-category preview chip has somewhere to live) */
+        var labelRow = document.createElement('div');
+        labelRow.className = 'iw-meta-row';
+        var labelInner = document.createElement('div');
+        labelInner.className = 'iw-label-row';
+        labelInner.id = 'iw-labels-' + listIdx;
+        labelInner.innerHTML = '<span class="iw-label-row-text">Labels:</span>';
 
-        /* Sample chip previewing the category badge that will be created on import */
+        /* Sample chip previewing the category label that will be created on import */
         var catPreview = document.createElement('span');
-        catPreview.className = 'iw-badge-pill iw-badge-pill-new';
+        catPreview.className = 'iw-label-pill iw-label-pill-new';
         catPreview.title = 'This category will be created when you import';
         catPreview.innerHTML = '<i class="material-icons">fiber_new</i><span>' + escHtml(lst.stem) + '</span>';
         catPreview.hidden = !catCheckbox.checked;
-        badgeInner.appendChild(catPreview);
+        labelInner.appendChild(catPreview);
         catCheckbox.addEventListener('change', function () {
             catPreview.hidden = !catCheckbox.checked;
         });
 
-        if (badges.length > 0) {
+        if (labels.length > 0) {
             var addBtn = document.createElement('button');
-            addBtn.className = 'iw-badge-add';
+            addBtn.className = 'iw-label-add';
             addBtn.type = 'button';
             addBtn.dataset.listIdx = listIdx;
-            addBtn.innerHTML = '<i class="material-icons" style="font-size:.9rem">add</i> Add badge';
-            badgeInner.appendChild(addBtn);
+            addBtn.innerHTML = '<i class="material-icons" style="font-size:.9rem">add</i> Add label';
+            labelInner.appendChild(addBtn);
 
             addBtn.addEventListener('click', function (e) {
                 e.stopPropagation();
-                openBadgeDropdown(listIdx, badges, addBtn);
+                openLabelDropdown(listIdx, labels, addBtn);
             });
         }
 
-        badgeRow.appendChild(badgeInner);
-        meta.appendChild(badgeRow);
-        lst._selectedBadgeIds = [];
+        labelRow.appendChild(labelInner);
+        meta.appendChild(labelRow);
+        lst._selectedLabelIds = [];
 
         group.appendChild(meta);
 
@@ -934,7 +934,7 @@ function renderPreview(data) {
         /* Collapse/expand */
         var toggleIcon = header.querySelector('.iw-list-toggle');
         header.addEventListener('click', function (e) {
-            if (e.target.closest('.iw-badge-add')) return;
+            if (e.target.closest('.iw-label-add')) return;
             var collapsed = pinList.hidden;
             pinList.hidden = !collapsed;
             toggleIcon.classList.toggle('collapsed', !collapsed);
@@ -946,28 +946,28 @@ function renderPreview(data) {
     updateSelectedCount();
 }
 
-/* Badge dropdown */
+/* Label dropdown */
 var openDropdown = null;
-function openBadgeDropdown(listIdx, badges, anchor) {
+function openLabelDropdown(listIdx, labels, anchor) {
     closeOpenDropdown();
 
     var lst = parsedData.lists[listIdx];
     var dropdown = document.createElement('div');
-    dropdown.className = 'iw-badge-dropdown';
+    dropdown.className = 'iw-label-dropdown';
     dropdown.id = 'iw-bdrop-' + listIdx;
 
-    badges.forEach(function (b) {
+    labels.forEach(function (b) {
         var item = document.createElement('div');
-        item.className = 'iw-badge-dropdown-item' + (lst._selectedBadgeIds.indexOf(b.id) >= 0 ? ' checked' : '');
+        item.className = 'iw-label-dropdown-item' + (lst._selectedLabelIds.indexOf(b.id) >= 0 ? ' checked' : '');
         var iconHtml = b.icon
             ? '<i class="material-icons" style="font-size:1rem' + (b.color ? ';color:' + b.color : '') + '">' + escHtml(b.icon) + '</i>'
             : '<i class="material-icons" style="font-size:1rem;opacity:.3">label</i>';
         item.innerHTML = iconHtml + '<span>' + escHtml(b.name) + '</span>';
-        if (lst._selectedBadgeIds.indexOf(b.id) >= 0) {
-            item.innerHTML += '<i class="material-icons iw-badge-dropdown-check">check</i>';
+        if (lst._selectedLabelIds.indexOf(b.id) >= 0) {
+            item.innerHTML += '<i class="material-icons iw-label-dropdown-check">check</i>';
         }
         item.addEventListener('click', function () {
-            toggleBadgeOnList(listIdx, b);
+            toggleLabelOnList(listIdx, b);
             dropdown.remove();
             openDropdown = null;
         });
@@ -990,29 +990,29 @@ function closeOpenDropdown() {
     if (openDropdown) { openDropdown.remove(); openDropdown = null; }
 }
 
-function toggleBadgeOnList(listIdx, badge) {
+function toggleLabelOnList(listIdx, label) {
     var lst = parsedData.lists[listIdx];
-    var ids = lst._selectedBadgeIds;
-    var badgeRow = $('iw-badges-' + listIdx);
-    var existIdx = ids.indexOf(badge.id);
+    var ids = lst._selectedLabelIds;
+    var labelRow = $('iw-labels-' + listIdx);
+    var existIdx = ids.indexOf(label.id);
     if (existIdx >= 0) {
         ids.splice(existIdx, 1);
-        var pill = badgeRow.querySelector('[data-badge-id="' + badge.id + '"]');
+        var pill = labelRow.querySelector('[data-label-id="' + label.id + '"]');
         if (pill) pill.remove();
     } else {
-        ids.push(badge.id);
+        ids.push(label.id);
         var pill = document.createElement('span');
-        pill.className = 'iw-badge-pill selected';
-        pill.dataset.badgeId = badge.id;
+        pill.className = 'iw-label-pill selected';
+        pill.dataset.labelId = label.id;
         pill.title = 'Click to remove';
-        if (badge.color) pill.style.setProperty('color', badge.color);
-        if (badge.icon) {
-            pill.innerHTML = '<i class="material-icons" style="font-size:.85rem">' + escHtml(badge.icon) + '</i>';
+        if (label.color) pill.style.setProperty('color', label.color);
+        if (label.icon) {
+            pill.innerHTML = '<i class="material-icons" style="font-size:.85rem">' + escHtml(label.icon) + '</i>';
         }
-        pill.innerHTML += '<span>' + escHtml(badge.name) + '</span>';
-        pill.addEventListener('click', function () { toggleBadgeOnList(listIdx, badge); });
-        var addBtn = badgeRow.querySelector('.iw-badge-add');
-        badgeRow.insertBefore(pill, addBtn);
+        pill.innerHTML += '<span>' + escHtml(label.name) + '</span>';
+        pill.addEventListener('click', function () { toggleLabelOnList(listIdx, label); });
+        var addBtn = labelRow.querySelector('.iw-label-add');
+        labelRow.insertBefore(pill, addBtn);
     }
 }
 
@@ -1068,7 +1068,7 @@ $('iw-btn-confirm').addEventListener('click', async function () {
             return {
                 stem: lst.stem,
                 create_category: catEl ? catEl.checked : false,
-                badge_ids: lst._selectedBadgeIds || [],
+                label_ids: lst._selectedLabelIds || [],
                 pins: lst.pins
                     .filter(function (p) { return p._selected; })
                     .map(function (p) {
@@ -1078,7 +1078,7 @@ $('iw-btn-confirm').addEventListener('click', async function () {
                             lng: p.lng,
                             description: p.description,
                             cid: p.cid,
-                            badge_ids: [],
+                            label_ids: [],
                         };
                     }),
             };

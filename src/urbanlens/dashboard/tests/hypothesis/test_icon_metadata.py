@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from unittest import TestCase
 
-from urbanlens.dashboard.models.badges.meta import ICON_CATEGORIES, ICON_KEYWORDS
+from urbanlens.dashboard.models.labels.meta import ICON_CATEGORIES, ICON_KEYWORDS
 from urbanlens.dashboard.templatetags.dashboard_tags import icon_keywords
 
 

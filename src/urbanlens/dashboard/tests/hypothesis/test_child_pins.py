@@ -1,7 +1,7 @@
 """Tests for child (sub) pin functionality: merge property retention, the main
 map's Sub Pins layer, jump-to-pin search coverage, detaching a child pin, the
 pin page's "show sub pin details" toggle endpoints, share bundles, and the
-Visited-badge propagation to ancestors."""
+Visited-label propagation to ancestors."""
 
 from __future__ import annotations
 
@@ -12,8 +12,8 @@ from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.models.badges.meta import KIND_STATUS, KIND_TAG
-from urbanlens.dashboard.models.badges.model import Badge
+from urbanlens.dashboard.models.labels.meta import KIND_STATUS, KIND_TAG
+from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
@@ -47,7 +47,7 @@ class MergeRetainsPropertiesTests(TestCase):
         self.profile = self.user.profile
         self.client.force_login(self.user)
         self.target = _make_pin(self.profile, name="Target")
-        self.badge = baker.make(Badge, kind=KIND_TAG, profile=self.profile, name="rooftop")
+        self.label = baker.make(Label, kind=KIND_TAG, profile=self.profile, name="rooftop")
         self.source = _make_pin(
             self.profile,
             name="Old Mill",
@@ -57,9 +57,9 @@ class MergeRetainsPropertiesTests(TestCase):
             priority=4,
             danger=3,
         )
-        self.source.badges.add(self.badge)
+        self.source.labels.add(self.label)
 
-    def test_merged_pin_keeps_name_icon_badges_and_notes(self) -> None:
+    def test_merged_pin_keeps_name_icon_labels_and_notes(self) -> None:
         response = self.client.post(
             reverse("pin.bulk_merge"),
             data=json.dumps({"target_uuid": str(self.target.uuid), "source_uuids": [str(self.source.uuid)]}),
@@ -74,7 +74,7 @@ class MergeRetainsPropertiesTests(TestCase):
         self.assertEqual(self.source.description, "my private notes")
         self.assertEqual(self.source.priority, 4)
         self.assertEqual(self.source.danger, 3)
-        self.assertIn(self.badge, self.source.badges.all())
+        self.assertIn(self.label, self.source.labels.all())
 
 
 class MapChildPinsJsonTests(TestCase):
@@ -378,27 +378,27 @@ class PinShareBundleTests(TestCase):
         self.assertFalse(Pin.objects.filter(profile=self.recipient).exists())
 
 
-class VisitedBadgePropagationTests(TestCase):
-    """Adding the Visited status badge to a child pin stamps all its ancestors."""
+class VisitedLabelPropagationTests(TestCase):
+    """Adding the Visited status label to a child pin stamps all its ancestors."""
 
     def setUp(self) -> None:
         self.user = baker.make(User)
         self.profile = self.user.profile
-        self.visited = baker.make(Badge, kind=KIND_STATUS, name="Visited", profile=self.profile)
+        self.visited = baker.make(Label, kind=KIND_STATUS, name="Visited", profile=self.profile)
         self.root = _make_pin(self.profile)
         self.child = _make_pin(self.profile, parent_pin=self.root)
         self.grandchild = _make_pin(self.profile, parent_pin=self.child)
 
-    def test_badge_cascades_to_all_ancestors(self) -> None:
-        self.grandchild.badges.add(self.visited)
-        self.assertIn(self.visited, self.child.badges.all())
-        self.assertIn(self.visited, self.root.badges.all())
+    def test_label_cascades_to_all_ancestors(self) -> None:
+        self.grandchild.labels.add(self.visited)
+        self.assertIn(self.visited, self.child.labels.all())
+        self.assertIn(self.visited, self.root.labels.all())
 
-    def test_root_pin_badge_does_not_cascade_down(self) -> None:
-        self.root.badges.add(self.visited)
-        self.assertNotIn(self.visited, self.child.badges.all())
+    def test_root_pin_label_does_not_cascade_down(self) -> None:
+        self.root.labels.add(self.visited)
+        self.assertNotIn(self.visited, self.child.labels.all())
 
-    def test_other_status_badges_do_not_cascade(self) -> None:
-        other = baker.make(Badge, kind=KIND_STATUS, name="Demolished", profile=self.profile)
-        self.grandchild.badges.add(other)
-        self.assertNotIn(other, self.root.badges.all())
+    def test_other_status_labels_do_not_cascade(self) -> None:
+        other = baker.make(Label, kind=KIND_STATUS, name="Demolished", profile=self.profile)
+        self.grandchild.labels.add(other)
+        self.assertNotIn(other, self.root.labels.all())

@@ -1,4 +1,4 @@
-"""Badge model - a named label applied to pins, with optional user ownership and hierarchy."""
+"""Label model - a named label applied to pins, with optional user ownership and hierarchy."""
 
 from __future__ import annotations
 
@@ -20,27 +20,27 @@ from django.db.models import (
 )
 
 from urbanlens.dashboard.models import abstract
-from urbanlens.dashboard.models.badges.meta import COLOR_CHOICES, ICON_CATEGORIES, ICON_CHOICES, KIND_CATEGORY, KIND_CHOICES, KIND_STATUS, KIND_TAG, KIND_USER
-from urbanlens.dashboard.models.badges.queryset import BadgeManager
+from urbanlens.dashboard.models.labels.meta import COLOR_CHOICES, ICON_CATEGORIES, ICON_CHOICES, KIND_CATEGORY, KIND_CHOICES, KIND_STATUS, KIND_TAG, KIND_USER
+from urbanlens.dashboard.models.labels.queryset import LabelManager
 
 if TYPE_CHECKING:
-    from urbanlens.dashboard.models.badges.customization import BadgeCustomization
+    from urbanlens.dashboard.models.labels.customization import LabelCustomization
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.models.wiki.model import Wiki
 
 
-class Badge(abstract.FrontendDashboardModel):
+class Label(abstract.FrontendDashboardModel):
     """A named label that can be applied to pins.
 
-    Badges are either global (profile=None, visible to all users) or user-specific
-    (profile set, only visible to that user and alongside global badges).
+    Labels are either global (profile=None, visible to all users) or user-specific
+    (profile set, only visible to that user and alongside global labels).
 
-    Badges form an arbitrary-depth hierarchy via the parents M2M. Filtering by a badge
-    also matches any descendant badges (use get_badge_and_descendants for the full set).
+    Labels form an arbitrary-depth hierarchy via the parents M2M. Filtering by a label
+    also matches any descendant labels (use get_label_and_descendants for the full set).
 
-    The `kind` field distinguishes between tag-type badges (personal labels) and
-    category-type badges (global shared classification). Badges absorb the functionality
+    The `kind` field distinguishes between tag-type labels (personal labels) and
+    category-type labels (global shared classification). Labels absorb the functionality
     of the former PinList model: they carry an icon, custom icon, color, description,
     and ordering weight that feeds into Pin.effective_icon's priority chain.
     """
@@ -50,16 +50,16 @@ class Badge(abstract.FrontendDashboardModel):
     # Hex color string chosen from COLOR_CHOICES (e.g. "#2196F3").
     color = CharField(max_length=50, null=True, blank=True, choices=COLOR_CHOICES)
     icon = CharField(max_length=50, null=True, blank=True)  # emoji char or Material Icons name
-    custom_icon = ImageField(upload_to="tag_icons/", null=True, blank=True)
+    custom_icon = ImageField(upload_to="label_icons/", null=True, blank=True)
     # Discriminates tags from categories (and any future kinds).
     kind = CharField(max_length=20, choices=KIND_CHOICES, default=KIND_TAG, db_index=True)
     # Higher order = checked first in the icon priority chain.
     order = IntegerField(default=0)
-    # Protected badges (e.g. the built-in "Visited" status) cannot be deleted or renamed.
+    # Protected labels (e.g. the built-in "Visited" status) cannot be deleted or renamed.
     is_protected = BooleanField(default=False)
-    # When False, auto-tagging (keyword or AI) will never attach this badge to a pin.
+    # When False, auto-tagging (keyword or AI) will never attach this label to a pin.
     allow_auto_tag = BooleanField(default=True)
-    # Comma-separated keywords/phrases used by the keyword auto-tagger in addition to the badge name.
+    # Comma-separated keywords/phrases used by the keyword auto-tagger in addition to the label name.
     keywords = TextField(null=True, blank=True)
 
     # NULL = global tag visible to all users; non-null = owned by one user.
@@ -68,11 +68,11 @@ class Badge(abstract.FrontendDashboardModel):
         on_delete=CASCADE,
         null=True,
         blank=True,
-        related_name="custom_tags",
+        related_name="custom_labels",
     )
 
     # Hierarchical parents - symmetrical=False so parent→child is one direction.
-    parents: ManyToManyField[Badge, Badge] = ManyToManyField(
+    parents: ManyToManyField[Label, Label] = ManyToManyField(
         "self",
         symmetrical=False,
         blank=True,
@@ -84,11 +84,11 @@ class Badge(abstract.FrontendDashboardModel):
         pins: ManyToManyField[Pin, Pin]
         wikis: ManyToManyField[Wiki, Wiki]
 
-    objects = BadgeManager()
+    objects = LabelManager()
 
-    def _get_customization(self) -> BadgeCustomization | None:
+    def _get_customization(self) -> LabelCustomization | None:
         """Return this user's customization, if the queryset was prefetched."""
-        cached: list[BadgeCustomization] = getattr(self, "_user_customizations", [])
+        cached: list[LabelCustomization] = getattr(self, "_user_customizations", [])
         return cached[0] if cached else None
 
     @property
@@ -131,17 +131,17 @@ class Badge(abstract.FrontendDashboardModel):
         profile: Profile,
         parent_ids: list[str] | list[int],
     ) -> int | None:
-        """Return ``order`` for a new badge placed just above its highest-priority parent.
+        """Return ``order`` for a new label placed just above its highest-priority parent.
 
-        When parents are chosen at creation time, the new badge is placed immediately
+        When parents are chosen at creation time, the new label is placed immediately
         above the highest-priority parent among them. When multiple parents are
         selected, the parent with the smallest ``order`` value is used (e.g.
-        Hospital at order 20 rather than Pennsylvania at order 35). The new badge
+        Hospital at order 20 rather than Pennsylvania at order 35). The new label
         receives that parent's ``order`` minus one (20 → 19).
 
         Args:
-            profile: Owner profile used to resolve visible parent badges.
-            parent_ids: Primary keys of selected parent badges.
+            profile: Owner profile used to resolve visible parent labels.
+            parent_ids: Primary keys of selected parent labels.
 
         Returns:
             Computed order, or ``None`` when ``parent_ids`` is empty or no valid
@@ -156,14 +156,14 @@ class Badge(abstract.FrontendDashboardModel):
         return reference_order - 1
 
     @classmethod
-    def get_badge_and_descendants(cls, badge_id: int) -> set[int]:
-        """Return badge_id plus all descendant badge IDs (BFS, cycle-safe).
+    def get_label_and_descendants(cls, label_id: int) -> set[int]:
+        """Return label_id plus all descendant label IDs (BFS, cycle-safe).
 
-        Used so that filtering pins by a parent badge also surfaces pins carrying
-        any of its descendant badges.
+        Used so that filtering pins by a parent label also surfaces pins carrying
+        any of its descendant labels.
         """
         visited: set[int] = set()
-        queue: list[int] = [badge_id]
+        queue: list[int] = [label_id]
         while queue:
             current = queue.pop(0)
             if current in visited:
@@ -179,12 +179,12 @@ class Badge(abstract.FrontendDashboardModel):
         return f"{self.name} [global]"
 
     class Meta(abstract.DashboardModel.Meta):
-        db_table = "dashboard_tags"
+        db_table = "dashboard_labels"
         ordering = ["-order", "name"]
         get_latest_by = "updated"
-        permissions = [("edit_global_badge", "Can edit global badges")]
+        permissions = [("edit_global_label", "Can edit global labels")]
         indexes = [
-            Index(fields=["uuid"], name="idxdb_badge_uuid"),
-            Index(fields=["profile"], name="idxdb_badge_profile"),
-            Index(fields=["profile", "order"], name="idxdb_badge_pfile_ord"),
+            Index(fields=["uuid"], name="idxdb_label_uuid"),
+            Index(fields=["profile"], name="idxdb_label_profile"),
+            Index(fields=["profile", "order"], name="idxdb_label_pfile_ord"),
         ]

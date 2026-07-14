@@ -17,6 +17,7 @@ from django.db.models import (
     Index,
     IntegerField,
     JSONField,
+    ManyToManyField,
     TextField,
 )
 
@@ -29,6 +30,7 @@ if TYPE_CHECKING:
     from django.db.models import QuerySet
 
     from urbanlens.dashboard.models.comments.model import Comment
+    from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.safety.model import SafetyCheckin
     from urbanlens.dashboard.models.trips.model import TripComment
     from urbanlens.dashboard.models.visits.model import PinVisit
@@ -82,6 +84,9 @@ class MarkupMap(abstract.FrontendDashboardModel):
         zoom: Saved viewport zoom level.
         layer_mode: Base tile layer (street / satellite / topographic / dark).
         show_borders: Whether the geopolitical-borders overlay is enabled.
+        pin: Explicit, user-set link to the pin this map was created for, if any.
+        inferred_pins: Pins this map's geometry is detected to reveal (may be
+            several, or none, regardless of ``pin``).
     """
 
     title = CharField(max_length=200, blank=True, default="")
@@ -97,7 +102,7 @@ class MarkupMap(abstract.FrontendDashboardModel):
         related_name="markup_maps",
     )
     # The map this one was cloned from via "Add to my maps", if any. SET_NULL
-    # so a clone's provenance badge can fall back to `shared_by` even after
+    # so a clone's provenance label can fall back to `shared_by` even after
     # the original map is deleted.
     cloned_from = ForeignKey(
         "self",
@@ -109,7 +114,7 @@ class MarkupMap(abstract.FrontendDashboardModel):
     # The profile who most recently sent this map to its current owner (via a
     # DM attachment, a standalone map share, or a pin-share attachment) at the
     # time it was cloned. Denormalized from the share event rather than
-    # derived from `cloned_from.profile` so the "From X" badge survives even
+    # derived from `cloned_from.profile` so the "From X" label survives even
     # if the source map is later deleted, and so a forwarded chain always
     # shows the immediate sender rather than the original creator.
     shared_by = ForeignKey(
@@ -130,6 +135,19 @@ class MarkupMap(abstract.FrontendDashboardModel):
         null=True,
         blank=True,
         related_name="associated_maps",
+    )
+    # Pins this map's geometry (saved viewport + markup) is detected to reveal,
+    # per services.map_pin_share_detection.detect_shared_pins - kept in sync by
+    # models.markup.signals any time the viewport or items change, independent
+    # of whether the map is ever actually shared. Deliberately separate from
+    # `pin` (a single explicit, user-set link): a map can geometrically point
+    # at several pins at once, and this set is a passive detection record
+    # consumed by search and pin-share tracking, never edited directly by a
+    # user, so it is unaffected by `pin` being cleared from the pin detail page.
+    inferred_pins: ManyToManyField[Pin, Pin] = ManyToManyField(
+        "dashboard.Pin",
+        blank=True,
+        related_name="inferred_maps",
     )
 
     objects = MarkupMapManager()

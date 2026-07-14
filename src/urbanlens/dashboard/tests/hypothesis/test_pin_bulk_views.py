@@ -10,8 +10,8 @@ from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.models.badges.meta import KIND_CATEGORY, KIND_TAG
-from urbanlens.dashboard.models.badges.model import Badge
+from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_TAG
+from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.trips.model import TripActivity
@@ -87,8 +87,8 @@ class PinBulkUndoViewTests(TestCase):
         self.client.force_login(self.user)
         self.parent = baker.make(Pin, profile=self.profile, name="Parent")
         self.child = baker.make(Pin, profile=self.profile, parent_pin=self.parent, name="Child")
-        self.badge = baker.make(Badge, kind=KIND_TAG, profile=self.profile)
-        self.parent.badges.add(self.badge)
+        self.label = baker.make(Label, kind=KIND_TAG, profile=self.profile)
+        self.parent.labels.add(self.label)
 
     def _delete_and_get_token(self) -> str:
         response = self.client.post(
@@ -120,11 +120,11 @@ class PinBulkUndoViewTests(TestCase):
         restored_child = Pin.objects.get(profile=self.profile, name="Child")
         self.assertEqual(restored_child.parent_pin_id, restored_parent.pk)
 
-    def test_restores_badges(self) -> None:
+    def test_restores_labels(self) -> None:
         token = self._delete_and_get_token()
         self._undo(token)
         restored_parent = Pin.objects.get(profile=self.profile, name="Parent")
-        self.assertIn(self.badge, restored_parent.badges.all())
+        self.assertIn(self.label, restored_parent.labels.all())
 
     def test_expired_or_unknown_token_returns_410(self) -> None:
         response = self._undo("not-a-real-token")
@@ -192,7 +192,7 @@ class PinBulkMergeViewTests(TestCase):
 
 
 class PinBulkEditViewTests(TestCase):
-    """POST /map/pins/bulk-edit/ replaces description and adds/removes badges in bulk."""
+    """POST /map/pins/bulk-edit/ replaces description and adds/removes labels in bulk."""
 
     def setUp(self) -> None:
         self.user = baker.make(User)
@@ -200,9 +200,9 @@ class PinBulkEditViewTests(TestCase):
         self.client.force_login(self.user)
         self.pin_a = baker.make(Pin, profile=self.profile, description="old a")
         self.pin_b = baker.make(Pin, profile=self.profile, description="old b")
-        self.tag_present = baker.make(Badge, kind=KIND_TAG, profile=self.profile, name="present")
-        self.tag_absent = baker.make(Badge, kind=KIND_TAG, profile=self.profile, name="absent")
-        self.pin_a.badges.add(self.tag_present)
+        self.tag_present = baker.make(Label, kind=KIND_TAG, profile=self.profile, name="present")
+        self.tag_absent = baker.make(Label, kind=KIND_TAG, profile=self.profile, name="absent")
+        self.pin_a.labels.add(self.tag_present)
 
     def _edit(self, payload: dict):
         return self.client.post(
@@ -223,28 +223,28 @@ class PinBulkEditViewTests(TestCase):
         self.pin_a.refresh_from_db()
         self.assertEqual(self.pin_a.description, "old a")
 
-    def test_adds_badge_to_all_selected_pins(self) -> None:
-        new_badge = baker.make(Badge, kind=KIND_CATEGORY, profile=self.profile)
-        self._edit({"uuids": [str(self.pin_a.uuid), str(self.pin_b.uuid)], "add_badge_ids": [new_badge.id]})
-        self.assertIn(new_badge, self.pin_a.badges.all())
-        self.assertIn(new_badge, self.pin_b.badges.all())
+    def test_adds_label_to_all_selected_pins(self) -> None:
+        new_label = baker.make(Label, kind=KIND_CATEGORY, profile=self.profile)
+        self._edit({"uuids": [str(self.pin_a.uuid), str(self.pin_b.uuid)], "add_label_ids": [new_label.id]})
+        self.assertIn(new_label, self.pin_a.labels.all())
+        self.assertIn(new_label, self.pin_b.labels.all())
 
-    def test_remove_ignores_badge_not_present_on_any_selected_pin(self) -> None:
-        """The server must re-validate remove_badge_ids, not trust the client's list."""
+    def test_remove_ignores_label_not_present_on_any_selected_pin(self) -> None:
+        """The server must re-validate remove_label_ids, not trust the client's list."""
         self._edit({
             "uuids": [str(self.pin_a.uuid), str(self.pin_b.uuid)],
-            "remove_badge_ids": [self.tag_absent.id],
+            "remove_label_ids": [self.tag_absent.id],
         })
         # tag_absent was never on either pin - nothing should change, and no error either.
-        self.assertNotIn(self.tag_absent, self.pin_a.badges.all())
+        self.assertNotIn(self.tag_absent, self.pin_a.labels.all())
 
-    def test_remove_badge_present_on_selection_is_removed(self) -> None:
-        self._edit({"uuids": [str(self.pin_a.uuid)], "remove_badge_ids": [self.tag_present.id]})
-        self.assertNotIn(self.tag_present, self.pin_a.badges.all())
+    def test_remove_label_present_on_selection_is_removed(self) -> None:
+        self._edit({"uuids": [str(self.pin_a.uuid)], "remove_label_ids": [self.tag_present.id]})
+        self.assertNotIn(self.tag_present, self.pin_a.labels.all())
 
 
-class PinBulkEditBadgeOptionsViewTests(TestCase):
-    """GET /map/pins/bulk-edit/badge-options/ only offers badges present on the selection."""
+class PinBulkEditLabelOptionsViewTests(TestCase):
+    """GET /map/pins/bulk-edit/label-options/ only offers labels present on the selection."""
 
     def setUp(self) -> None:
         self.user = baker.make(User)
@@ -252,15 +252,15 @@ class PinBulkEditBadgeOptionsViewTests(TestCase):
         self.client.force_login(self.user)
         self.pin_a = baker.make(Pin, profile=self.profile)
         self.pin_b = baker.make(Pin, profile=self.profile)
-        self.tag_on_a = baker.make(Badge, kind=KIND_TAG, profile=self.profile, name="on-a")
-        self.tag_unused = baker.make(Badge, kind=KIND_TAG, profile=self.profile, name="unused")
-        self.pin_a.badges.add(self.tag_on_a)
+        self.tag_on_a = baker.make(Label, kind=KIND_TAG, profile=self.profile, name="on-a")
+        self.tag_unused = baker.make(Label, kind=KIND_TAG, profile=self.profile, name="unused")
+        self.pin_a.labels.add(self.tag_on_a)
 
-    def test_only_includes_badges_present_on_the_selection(self) -> None:
+    def test_only_includes_labels_present_on_the_selection(self) -> None:
         response = self.client.get(
-            reverse("pin.bulk_edit.badge_options"),
+            reverse("pin.bulk_edit.label_options"),
             {"uuids": [str(self.pin_a.uuid), str(self.pin_b.uuid)]},
         )
-        ids = {b["id"] for b in response.json()["badges"]}
+        ids = {b["id"] for b in response.json()["labels"]}
         self.assertIn(self.tag_on_a.id, ids)
         self.assertNotIn(self.tag_unused.id, ids)

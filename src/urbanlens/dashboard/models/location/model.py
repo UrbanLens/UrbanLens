@@ -36,7 +36,7 @@ class Location(abstract.PublicDashboardModel):
       coordinates. Treated as immutable: when a pin's or wiki's coordinates
       change we find-or-create a *different* Location instead of mutating it.
     - Wiki      - one community page per Location (1:1); everything users edit
-      collectively (name, description, security, badges, aliases, ...).
+      collectively (name, description, security, labels, aliases, ...).
     - Pin       - one row per (user, place) pair; a user's personal record.
 
     A Location stores only what is derived from the address itself: coordinates,
@@ -46,7 +46,7 @@ class Location(abstract.PublicDashboardModel):
 
     What does NOT belong here (all on Wiki now):
     - Community name / description -> Wiki.name / Wiki.description
-    - Security indicators, badges, dates -> Wiki
+    - Security indicators, labels, dates -> Wiki
     - Aliases, comments, edit history, photos -> Wiki
     A user's personal label/notes/visit history belong on Pin.
 

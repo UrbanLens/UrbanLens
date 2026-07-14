@@ -382,7 +382,7 @@ class DirectMessageEndpointTests(TestCase):
         response = self.client.get(reverse("messages.conversation", kwargs={"profile_slug": self.me.slug}))
         self.assertEqual(response.status_code, 404)
 
-    def test_unread_count_badge(self) -> None:
+    def test_unread_count_label(self) -> None:
         DirectMessage.objects.create(sender=self.partner, recipient=self.me, body="hi")
         response = self.client.get(reverse("messages.unread_count"))
         self.assertEqual(response.status_code, 200)

@@ -10,7 +10,7 @@ from django.http import HttpResponseBadRequest, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, render
 from django.views import View
 
-from urbanlens.dashboard.controllers.direct_messages import _get_partner, _get_profile, _thread_context, _trigger_msg_badge_refresh
+from urbanlens.dashboard.controllers.direct_messages import _get_partner, _get_profile, _thread_context, _trigger_msg_label_refresh
 from urbanlens.dashboard.models.direct_messages.model import DirectMessage
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_share.meta import PinShareStatus
@@ -65,7 +65,7 @@ class MessageSharePinView(LoginRequiredMixin, View):
             return HttpResponseBadRequest(str(exc))
 
         response = render(request, "dashboard/partials/messages/_thread.html", _thread_context(profile, partner))
-        return _trigger_msg_badge_refresh(response)
+        return _trigger_msg_label_refresh(response)
 
 
 def _get_share_message(profile: Profile, partner: Profile, message_id: int) -> DirectMessage:
@@ -231,7 +231,7 @@ class MessageShareTripView(LoginRequiredMixin, View):
             return HttpResponseBadRequest(str(exc))
 
         response = render(request, "dashboard/partials/messages/_thread.html", _thread_context(profile, partner))
-        return _trigger_msg_badge_refresh(response)
+        return _trigger_msg_label_refresh(response)
 
 
 class MessageShareFriendView(LoginRequiredMixin, View):
@@ -275,4 +275,4 @@ class MessageShareFriendView(LoginRequiredMixin, View):
             return HttpResponseBadRequest(str(exc))
 
         response = render(request, "dashboard/partials/messages/_thread.html", _thread_context(profile, partner))
-        return _trigger_msg_badge_refresh(response)
+        return _trigger_msg_label_refresh(response)

@@ -1,15 +1,15 @@
-"""CategoryFilter - backed by Badge with kind='category'."""
+"""CategoryFilter - backed by Label with kind='category'."""
 
 from __future__ import annotations
 
 import django_filters
 
-from urbanlens.dashboard.models.badges.model import Badge
+from urbanlens.dashboard.models.labels.model import Label
 
 
 class CategoryFilter(django_filters.FilterSet):
-    """FilterSet for Badge rows that represent categories."""
+    """FilterSet for Label rows that represent categories."""
 
     class Meta:
-        model = Badge
+        model = Label
         fields = ["name"]

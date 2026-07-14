@@ -5,8 +5,8 @@ from urbanlens.dashboard.models.account import AccountKdf, EmailVerification
 from urbanlens.dashboard.models.aliases import PinAlias, WikiAlias
 from urbanlens.dashboard.models.api_call_log import ApiCallLog
 from urbanlens.dashboard.models.api_rate_limit import ApiRateLimit
-from urbanlens.dashboard.models.badges import COLOR_CHOICES, ICON_CHOICES, Badge, BadgeCustomization, BadgeSerializer
-from urbanlens.dashboard.models.badges.profile_assignment import ProfileBadgeAssignment
+from urbanlens.dashboard.models.labels import COLOR_CHOICES, ICON_CHOICES, Label, LabelCustomization, LabelSerializer
+from urbanlens.dashboard.models.labels.profile_assignment import ProfileLabelAssignment
 from urbanlens.dashboard.models.boundary import Boundary, BoundaryType
 from urbanlens.dashboard.models.cache import GeocodedLocation
 from urbanlens.dashboard.models.calendar_sync import CalendarSyncDirection, GoogleCalendarAccount, TripCalendarLink

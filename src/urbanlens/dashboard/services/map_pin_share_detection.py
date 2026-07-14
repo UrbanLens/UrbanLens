@@ -314,3 +314,27 @@ def detect_shared_pins(markup_map: MarkupMap, sender: Profile) -> list[Pin]:
         if any(_item_matches_pin(item, boundary) for item in items):
             matches.append(pin)
     return matches
+
+
+def sync_pin_inferences(markup_map: MarkupMap) -> list[Pin]:
+    """Recompute ``markup_map.inferred_pins`` from its current geometry.
+
+    Runs :func:`detect_shared_pins` against the map's own owner and persists
+    the result via a plain M2M ``.set()`` (which diffs and commits the add/
+    remove itself), so ``MarkupMap.inferred_pins`` / ``Pin.inferred_maps``
+    stay a durable record of geometric detection for search and pin-share
+    tracking - independent of whether the map is ever actually shared, and of
+    the separate, user-editable ``MarkupMap.pin`` link. See
+    ``models.markup.signals`` for the save/delete hooks that call this.
+
+    Args:
+        markup_map: The map to (re)sync.
+
+    Returns:
+        The freshly-detected list of pins (so callers like
+        :func:`~urbanlens.dashboard.services.map_sharing.share_markup_map_with_profile`
+        that need the current set don't have to run detection twice).
+    """
+    pins = detect_shared_pins(markup_map, markup_map.profile)
+    markup_map.inferred_pins.set(pins)
+    return pins

@@ -23,7 +23,7 @@ VALID_EXPORT_TYPES = frozenset(
     {
         "profile",
         "pins",
-        "badges",
+        "labels",
         "connections",
         "visit_history",
         "comments",
@@ -43,7 +43,7 @@ _ORDERED_TYPES = [
     "custom_fields",
     "pins",
     "google_takeout",
-    "badges",
+    "labels",
     "connections",
     "visit_history",
     "comments",
@@ -151,7 +151,7 @@ def run_export(user_id: int, export_types: list[str], export_dir_path: str, base
         "custom_fields": (_export_custom_fields, "Exporting custom fields..."),
         "pins": (_export_pins, "Exporting pins..."),
         "google_takeout": (_export_pins_google_takeout, "Exporting Google Takeout format..."),
-        "badges": (_export_badges, "Exporting badges..."),
+        "labels": (_export_labels, "Exporting labels..."),
         "connections": (_export_connections, "Exporting connections..."),
         "visit_history": (_export_visit_history, "Exporting visit history..."),
         "comments": (_export_comments, "Exporting comments..."),
@@ -370,7 +370,7 @@ def _export_pins(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
     """
     from urbanlens.dashboard.models.pin.model import Pin
 
-    pins = Pin.objects.filter(profile=profile).select_related("location").prefetch_related("badges").order_by("created")
+    pins = Pin.objects.filter(profile=profile).select_related("location").prefetch_related("labels").order_by("created")
 
     rows = []
     for pin in pins:
@@ -394,7 +394,7 @@ def _export_pins(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
                 "detail_border_opacity": pin.detail_border_opacity,
                 "created": str(pin.created),
                 "updated": str(pin.updated),
-                "badge_uuids": [str(b.uuid) for b in pin.badges.all()],
+                "label_uuids": [str(b.uuid) for b in pin.labels.all()],
             },
         )
 
@@ -406,7 +406,7 @@ def _export_pins_google_takeout(profile: Any, temp_dir: str, *, base_url: str = 
     """Export pins as a Google Takeout-compatible CSV file."""
     from urbanlens.dashboard.models.pin.model import Pin
 
-    pins = Pin.objects.filter(profile=profile).select_related("location").prefetch_related("badges").order_by("created")
+    pins = Pin.objects.filter(profile=profile).select_related("location").prefetch_related("labels").order_by("created")
 
     buf = io.StringIO()
     writer = csv.writer(buf)
@@ -416,7 +416,7 @@ def _export_pins_google_takeout(profile: Any, temp_dir: str, *, base_url: str = 
         name = pin.effective_name
         note = pin.description or ""
         url = f"{base_url.rstrip('/')}/dashboard/map/pin/{pin.slug}/" if pin.slug else ""
-        tags = ", ".join(b.name for b in pin.badges.all() if hasattr(b, "name"))
+        tags = ", ".join(b.name for b in pin.labels.all() if hasattr(b, "name"))
         writer.writerow([name, note, url, tags, ""])
 
     gt_dir = os.path.join(temp_dir, "google_takeout")
@@ -424,39 +424,39 @@ def _export_pins_google_takeout(profile: Any, temp_dir: str, *, base_url: str = 
     pathlib.Path(os.path.join(gt_dir, "pins.csv")).write_text(buf.getvalue(), encoding="utf-8", newline="")
 
 
-def _export_badges(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
-    """Export all badges visible to the user, with pin assignments."""
-    from urbanlens.dashboard.models.badges.model import Badge
+def _export_labels(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
+    """Export all labels visible to the user, with pin assignments."""
+    from urbanlens.dashboard.models.labels.model import Label
 
-    # Export user-owned badges plus global badges that are assigned to the user's pins.
-    user_badges = Badge.objects.filter(profile=profile).prefetch_related("parents", "pins")
-    global_assigned = Badge.objects.filter(profile__isnull=True, pins__profile=profile).distinct().prefetch_related("parents", "pins")
+    # Export user-owned labels plus global labels that are assigned to the user's pins.
+    user_labels = Label.objects.filter(profile=profile).prefetch_related("parents", "pins")
+    global_assigned = Label.objects.filter(profile__isnull=True, pins__profile=profile).distinct().prefetch_related("parents", "pins")
 
     seen: set[int] = set()
     rows = []
 
-    for badge in list(user_badges) + list(global_assigned):
-        if badge.pk in seen:
+    for label in list(user_labels) + list(global_assigned):
+        if label.pk in seen:
             continue
-        seen.add(badge.pk)
+        seen.add(label.pk)
 
         rows.append(
             {
-                "uuid": str(badge.uuid),
-                "name": badge.name,
-                "description": badge.description or "",
-                "color": badge.color or "",
-                "icon": badge.icon or "",
-                "kind": badge.kind,
-                "order": badge.order,
-                "is_user_badge": badge.profile_id is not None,
-                "is_protected": badge.is_protected,
-                "parent_uuids": [str(p.uuid) for p in badge.parents.all()],
-                "pin_uuids": [str(p.uuid) for p in badge.pins.filter(profile=profile)],
+                "uuid": str(label.uuid),
+                "name": label.name,
+                "description": label.description or "",
+                "color": label.color or "",
+                "icon": label.icon or "",
+                "kind": label.kind,
+                "order": label.order,
+                "is_user_label": label.profile_id is not None,
+                "is_protected": label.is_protected,
+                "parent_uuids": [str(p.uuid) for p in label.parents.all()],
+                "pin_uuids": [str(p.uuid) for p in label.pins.filter(profile=profile)],
             },
         )
 
-    with open(os.path.join(temp_dir, "badges.json"), "w", encoding="utf-8") as fh:
+    with open(os.path.join(temp_dir, "labels.json"), "w", encoding="utf-8") as fh:
         json.dump(rows, fh, indent=2, ensure_ascii=False)
 
 

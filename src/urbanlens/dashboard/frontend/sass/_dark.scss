@@ -43,7 +43,7 @@
         border-left-color: var(--ul-grey-7b);
     }
 
-    .badge-title {
+    .label-title {
         color: var(--ul-grey-1);
     }
 
@@ -81,7 +81,7 @@
         }
     }
 
-    .tag-global-badge {
+    .tag-global-label {
         background: var(--ul-grey-8a);
         color: var(--ul-grey-3b);
     }
@@ -91,7 +91,7 @@
         border-color: var(--ul-grey-7b);
     }
 
-    .badge-rel-tab {
+    .label-rel-tab {
         color: var(--ul-grey-5a);
 
         &:hover {
@@ -99,17 +99,17 @@
         }
     }
 
-    .badge-rel-popup {
+    .label-rel-popup {
         background: var(--ul-grey-0);
         border-color: var(--ul-grey-7b);
     }
 
-    .badge-rel-add-btn {
+    .label-rel-add-btn {
         background: var(--ul-grey-0);
         border-color: var(--ul-grey-7b);
     }
 
-    .badge-rel-trash.is-active {
+    .label-rel-trash.is-active {
         border-color: var(--ul-grey-6b);
         background: var(--ul-grey-0);
     }
@@ -128,7 +128,7 @@
         border-color: var(--primary-color);
     }
 
-    .tag-order-badge {
+    .tag-order-label {
         color: var(--ul-grey-3b);
     }
 
@@ -1053,7 +1053,7 @@
         color: var(--ul-grey-8);
     }
 
-    .priority-order-badge {
+    .priority-order-chip {
         background: var(--ul-grey-1);
         color: var(--ul-grey-7);
 
@@ -1078,7 +1078,7 @@
         box-shadow: 0 2px 12px rgba(0, 0, 0, .35);
     }
 
-    .priority-kind-badge {
+    .priority-kind-chip {
         color: var(--ul-grey-9);
 
         &--tag {
@@ -1250,7 +1250,7 @@
         }
     }
 
-    .organize-badge-rows.tag-view--gallery .ul-checkbox-wrap {
+    .organize-label-rows.tag-view--gallery .ul-checkbox-wrap {
         background: color-mix(in srgb, var(--ul-grey-2) 92%, transparent);
     }
 

@@ -228,9 +228,9 @@ class PinEffectiveIconTests(TestCase):
 
     def test_none_icon_returns_none_when_no_tags(self) -> None:
         pin = self._make_pin_with_icon(icon=None, custom_icon=None)
-        mock_badges = MagicMock()
-        mock_badges.exclude.return_value.order_by.return_value = []
-        with patch.object(type(pin), "badges", new_callable=PropertyMock, return_value=mock_badges):
+        mock_labels = MagicMock()
+        mock_labels.exclude.return_value.order_by.return_value = []
+        with patch.object(type(pin), "labels", new_callable=PropertyMock, return_value=mock_labels):
             self.assertIsNone(pin.effective_icon)
 
     @given(st.text(min_size=1, max_size=50, alphabet=st.characters(min_codepoint=ord("a"), max_codepoint=ord("z"))))

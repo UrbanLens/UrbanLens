@@ -1051,9 +1051,9 @@ img.leaflet-marker-icon.is-selected {
     }
 }
 
-// -- Unified badge selector --------------------------------------------------
+// -- Unified label selector --------------------------------------------------
 
-.apdlg-badge-field {
+.apdlg-label-field {
     display: flex;
     flex-direction: column;
     gap: .4rem;
@@ -1076,7 +1076,7 @@ img.leaflet-marker-icon.is-selected {
     }
 }
 
-.apdlg-badge-chips {
+.apdlg-label-chips {
     display: flex;
     flex-wrap: wrap;
     gap: .3rem;
@@ -1086,7 +1086,7 @@ img.leaflet-marker-icon.is-selected {
     }
 }
 
-.apdlg-badge-chip-item {
+.apdlg-label-chip-item {
     display: inline-flex;
     align-items: center;
     gap: .25rem;
@@ -1117,11 +1117,11 @@ img.leaflet-marker-icon.is-selected {
     }
 }
 
-.apdlg-badge-input-wrap {
+.apdlg-label-input-wrap {
     position: relative;
 }
 
-.apdlg-badge-input {
+.apdlg-label-input {
     border: none !important;
     padding: 0 !important;
     font-size: .88rem;
@@ -1131,7 +1131,7 @@ img.leaflet-marker-icon.is-selected {
     &:focus { outline: none; }
 }
 
-.apdlg-badge-suggestions {
+.apdlg-label-suggestions {
     position: absolute;
     top: calc(100% + 4px);
     left: -0.65rem;
@@ -1152,7 +1152,7 @@ img.leaflet-marker-icon.is-selected {
     }
 }
 
-.apdlg-badge-sugg-item {
+.apdlg-label-sugg-item {
     display: flex;
     align-items: center;
     gap: .5rem;
@@ -1197,7 +1197,7 @@ img.leaflet-marker-icon.is-selected {
         &--status   { background: color-mix(in srgb, $color-amber-500 12%, white); color: $color-amber-700; }
     }
 
-    &.apdlg-badge-sugg-create {
+    &.apdlg-label-sugg-create {
         border-top: 1px solid var(--ul-grey-1a);
         color: var(--ul-grey-6);
         font-style: italic;
@@ -1872,7 +1872,7 @@ img.leaflet-marker-icon.is-selected {
     color: $ui-fp-chip-txt;
 }
 
-.fp-badge-avail {
+.fp-label-avail {
     cursor: grab;
 
     &.fp-drag-active {
@@ -4088,16 +4088,16 @@ div.container .addr-search-bar {
 
 .map-layer-btn.active .map-layer-thumb img { opacity: 1; }
 
-// -- Combined badge filter section ---------------------------------------------
+// -- Combined label filter section ---------------------------------------------
 
-.fp-badge-selected {
+.fp-label-selected {
     display: flex;
     gap: 6px;
     margin-bottom: 8px;
     flex-wrap: wrap;
 }
 
-.fp-badge-col {
+.fp-label-col {
     flex: 1;
     min-width: 0;
     border-radius: 8px;
@@ -4113,7 +4113,7 @@ div.container .addr-search-bar {
     }
 }
 
-.fp-badge-col-label {
+.fp-label-col-title {
     display: flex;
     align-items: center;
     gap: 4px;
@@ -4126,8 +4126,8 @@ div.container .addr-search-bar {
     .material-symbols-outlined,
     .material-icons { font-size: .85rem; }
 
-    .fp-badge-col--incl & { color: rgba(134, 239, 172, .85); }
-    .fp-badge-col--excl & { color: rgba(252, 165, 165, .85); }
+    .fp-label-col--incl & { color: rgba(134, 239, 172, .85); }
+    .fp-label-col--excl & { color: rgba(252, 165, 165, .85); }
 }
 
 // -- Complex formula display (replaces 2-column when mixed AND/OR active) ------
@@ -4179,13 +4179,13 @@ div.container .addr-search-bar {
     }
 }
 
-.fp-badge-chips {
+.fp-label-chips {
     display: flex;
     flex-wrap: wrap;
     gap: 4px;
 }
 
-.fp-badge-drop-remove {
+.fp-label-drop-remove {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -4209,12 +4209,12 @@ div.container .addr-search-bar {
     }
 }
 
-.fp-badge-col.fp-drag-over {
+.fp-label-col.fp-drag-over {
     outline: 2px dashed rgba(100, 180, 255, .6);
     outline-offset: 2px;
 }
 
-.fp-badge-chip {
+.fp-label-chip {
     display: inline-flex;
     align-items: center;
     gap: 3px;
@@ -4238,14 +4238,14 @@ div.container .addr-search-bar {
     }
 }
 
-.fp-badge-chip-label {
+.fp-label-chip-text {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     max-width: 80px;
 }
 
-.fp-badge-list-hint {
+.fp-label-list-hint {
     font-size: .62rem;
     color: rgba(255, 255, 255, .22);
     text-align: center;
@@ -4255,7 +4255,7 @@ div.container .addr-search-bar {
 
 // -- AND/OR mode toggle (inside column header) ---------------------------------
 
-.fp-badge-mode-btn {
+.fp-label-mode-btn {
     margin-left: auto;
     padding: 1px 6px;
     font-size: .6rem;
@@ -4525,4 +4525,4 @@ div.container .addr-search-bar {
             border-color: transparent;
         }
     }
-}
+}

@@ -36,8 +36,6 @@ from urbanlens.dashboard.models.visits.model import VisitSource
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models import (
-        Badge,
-        BadgeCustomization,
         Boundary,
         Comment,
         EmailVerification,
@@ -45,6 +43,8 @@ if TYPE_CHECKING:
         GeocodedLocation,
         GooglePlace,
         Image,
+        Label,
+        LabelCustomization,
         Location,
         NotificationLog,
         NotificationPreference,
@@ -115,17 +115,17 @@ child_wiki: Recipe[Wiki] = Recipe(
     parent_wiki=foreign_key("dashboard.wiki"),
 )
 
-# -- Badges --------------------------------------------------------------------
+# -- Labels --------------------------------------------------------------------
 
-badge: Recipe[Badge] = Recipe("dashboard.Badge", name=seq("Badge "), kind="tag")
-tag_badge: Recipe[Badge] = Recipe("dashboard.Badge", name=seq("Tag "), kind="tag")
-category_badge: Recipe[Badge] = Recipe("dashboard.Badge", name=seq("Category "), kind="category")
-status_badge: Recipe[Badge] = Recipe("dashboard.Badge", name=seq("Status "), kind="status")
+label: Recipe[Label] = Recipe("dashboard.Label", name=seq("Label "), kind="tag")
+tag_label: Recipe[Label] = Recipe("dashboard.Label", name=seq("Tag "), kind="tag")
+category_label: Recipe[Label] = Recipe("dashboard.Label", name=seq("Category "), kind="category")
+status_label: Recipe[Label] = Recipe("dashboard.Label", name=seq("Status "), kind="status")
 
-badge_customization: Recipe[BadgeCustomization] = Recipe(
-    "dashboard.BadgeCustomization",
+label_customization: Recipe[LabelCustomization] = Recipe(
+    "dashboard.LabelCustomization",
     profile=_make_profile,
-    badge=foreign_key("dashboard.badge"),
+    label=foreign_key("dashboard.label"),
 )
 
 # -- Boundary --------------------------------------------------------------------

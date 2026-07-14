@@ -1,19 +1,19 @@
 {% load dashboard_tags %}
 <div class="tag-chips-row card__body">
-    {% for badge in all_badges %}
-    {% if badge.id in member_ids %}
-    <span class="tag-chip tag-chip--{{ badge.kind }}" {% if badge.color %}style="--tag-color:{{ badge.color }}"{% endif %}>
-        {% if badge.icon %}
+    {% for label in all_labels %}
+    {% if label.id in member_ids %}
+    <span class="tag-chip tag-chip--{{ label.kind }}" {% if label.color %}style="--tag-color:{{ label.color }}"{% endif %}>
+        {% if label.icon %}
         <span class="tag-chip-icon">
-            {% if badge.icon|is_material_icon %}
-            <i class="material-icons" style="font-size:13px{% if badge.color %};color:{{ badge.color }}{% endif %}">{{ badge.icon }}</i>
-            {% else %}{{ badge.icon }}{% endif %}
+            {% if label.icon|is_material_icon %}
+            <i class="material-icons" style="font-size:13px{% if label.color %};color:{{ label.color }}{% endif %}">{{ label.icon }}</i>
+            {% else %}{{ label.icon }}{% endif %}
         </span>
         {% endif %}
-        <span class="tag-chip-name">{{ badge.name }}</span>
-        <form hx-post="{% if membership_route == 'location' %}{% url 'badge.location' badge_kind=badge_url_kind location_slug=obj_uuid %}{% else %}{% url 'badge.pin' badge_kind=badge_url_kind pin_slug=obj_uuid %}{% endif %}" hx-target="#{{ panel_id }}" hx-swap="outerHTML" style="display:inline">
+        <span class="tag-chip-name">{{ label.name }}</span>
+        <form hx-post="{% if membership_route == 'location' %}{% url 'label.location' label_kind=label_url_kind location_slug=obj_uuid %}{% else %}{% url 'label.pin' label_kind=label_url_kind pin_slug=obj_uuid %}{% endif %}" hx-target="#{{ panel_id }}" hx-swap="outerHTML" style="display:inline">
             {% csrf_token %}
-            <input type="hidden" name="badge_id" value="{{ badge.id }}">
+            <input type="hidden" name="label_id" value="{{ label.id }}">
             <input type="hidden" name="action" value="remove">
             <button type="submit" class="tag-chip-remove" title="Remove">x</button>
         </form>

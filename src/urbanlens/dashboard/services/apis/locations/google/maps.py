@@ -22,20 +22,20 @@ from shapely.errors import ShapelyError
 from shapely.geometry import shape as shapely_shape
 
 from urbanlens.core.cache_keys import make_cache_key
-from urbanlens.dashboard.models.badges.meta import KIND_TAG
-from urbanlens.dashboard.models.badges.model import Badge
+from urbanlens.dashboard.models.labels.meta import KIND_TAG
+from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.location import Location
 from urbanlens.dashboard.models.pin import Pin
 from urbanlens.dashboard.services.apis.locations.base import SatelliteSlide, SatelliteViewProvider, StreetViewProvider, StreetViewSlide
 from urbanlens.dashboard.services.apis.locations.google.geocoding import GoogleGeocodingGateway
 from urbanlens.dashboard.services.apis.locations.google.place_info import GooglePlaceService
-from urbanlens.dashboard.services.badges.style_suggestions import suggest_badge_style
 from urbanlens.dashboard.services.import_formats.heuristics import (
     DEFAULT_LATITUDE_KEYS,
     DEFAULT_LONGITUDE_KEYS,
     pick_latlon,
     pick_name_and_description,
 )
+from urbanlens.dashboard.services.labels.style_suggestions import suggest_label_style
 from urbanlens.dashboard.services.redact import redact_coordinate, redact_text
 from urbanlens.UrbanLens.settings.app import settings
 
@@ -513,7 +513,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                                 else:
                                     exists_count += 1
                                 if tags:
-                                    pin.badges.add(*tags)
+                                    pin.labels.add(*tags)
                                 if file_pins is not None:
                                     file_pins.append(pin)
                                 # Backfill: if the import carried a CID but no existing
@@ -545,17 +545,17 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                 # Apply a per-file tag to every pin produced from this file.
                 if file_pins:
                     try:
-                        from urbanlens.dashboard.models.badges.model import Badge
+                        from urbanlens.dashboard.models.labels.model import Label
 
                         tag_name = _filename_stem(filename)
-                        file_tag = Badge.objects.filter(
+                        file_tag = Label.objects.filter(
                             profile=user_profile,
                             name__iexact=tag_name,
                             kind=KIND_TAG,
                         ).first()
                         if file_tag is None:
-                            style = suggest_badge_style(tag_name, user_profile)
-                            file_tag = Badge.objects.create(
+                            style = suggest_label_style(tag_name, user_profile)
+                            file_tag = Label.objects.create(
                                 profile=user_profile,
                                 kind=KIND_TAG,
                                 name=tag_name,
@@ -563,10 +563,10 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                                 color=style.color,
                             )
                         for pin in file_pins:
-                            pin.badges.add(file_tag)
+                            pin.labels.add(file_tag)
                     except Exception as exc:
                         # TODO: Catch specific exception
-                        logger.exception("Unable to add badge to pins: %s", exc)
+                        logger.exception("Unable to add label to pins: %s", exc)
         except (DatabaseError, OSError, ValueError, RuntimeError) as exc:
             logger.exception("Unexpected error during streaming import: %s", exc)
             yield sse({"type": "error", "message": "Import failed unexpectedly."})
@@ -720,10 +720,10 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
 
         Each ``confirmed_lists`` entry must have:
             - ``stem`` (str): list name used for category creation.
-            - ``create_category`` (bool): create a ``kind="category"`` badge from *stem*.
-            - ``badge_ids`` (list[int]): badge IDs to apply to every pin in the list.
+            - ``create_category`` (bool): create a ``kind="category"`` label from *stem*.
+            - ``label_ids`` (list[int]): label IDs to apply to every pin in the list.
             - ``pins`` (list[dict]): dicts with ``name``, ``lat``, ``lng``,
-              ``description``, ``cid``, and ``badge_ids`` (list[int]) fields.
+              ``description``, ``cid``, and ``label_ids`` (list[int]) fields.
               Imports never create community wiki entries or hit external APIs;
               wikis are created explicitly by the user from the pin detail page.
 
@@ -753,14 +753,14 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         try:
             for lst in confirmed_lists:
                 stem = lst.get("stem", "")
-                list_badge_ids = lst.get("badge_ids") or []
+                list_label_ids = lst.get("label_ids") or []
                 create_category = bool(lst.get("create_category", False))
 
-                list_badges = list(Badge.objects.filter(id__in=list_badge_ids)) if list_badge_ids else []
+                list_labels = list(Label.objects.filter(id__in=list_label_ids)) if list_label_ids else []
 
-                category_badge = None
+                category_label = None
                 if create_category and stem:
-                    category_badge, _ = Badge.objects.get_or_create(
+                    category_label, _ = Label.objects.get_or_create(
                         profile=user_profile,
                         name__iexact=stem,
                         defaults={"name": stem, "kind": "category"},
@@ -773,7 +773,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                     lng = pin_dict.get("lng")
                     description = pin_dict.get("description") or ""
                     cid = pin_dict.get("cid")
-                    pin_badge_ids = pin_dict.get("badge_ids") or []
+                    pin_label_ids = pin_dict.get("label_ids") or []
 
                     try:
                         location = Location.objects.by_cid(cid).first() if cid else None
@@ -811,14 +811,14 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                             else:
                                 exists_count += 1
 
-                            if list_badges:
-                                pin.badges.add(*list_badges)
-                            if category_badge:
-                                pin.badges.add(category_badge)
-                            if pin_badge_ids:
-                                extra = list(Badge.objects.filter(id__in=pin_badge_ids))
+                            if list_labels:
+                                pin.labels.add(*list_labels)
+                            if category_label:
+                                pin.labels.add(category_label)
+                            if pin_label_ids:
+                                extra = list(Label.objects.filter(id__in=pin_label_ids))
                                 if extra:
-                                    pin.badges.add(*extra)
+                                    pin.labels.add(*extra)
 
                             if cid and not location and pin.location_id and not pin.location.cid:
                                 GooglePlaceService().set_cid_for_entity(pin.location, cid)

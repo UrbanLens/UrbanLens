@@ -1,30 +1,30 @@
 {% load dashboard_tags %}
-{# Single-item merge form loaded into #badge-edit-dialog-body #}
-<form hx-post="{% url 'badge.merge' badge_kind=badge_url_kind badge_id=badge.id %}"
+{# Single-item merge form loaded into #label-edit-dialog-body #}
+<form hx-post="{% url 'label.merge' label_kind=label_url_kind label_id=label.id %}"
       hx-target="{{ rows_target }}"
       hx-swap="innerHTML"
-      class="organize-badge-merge-form tag-merge-form"
-      hx-on::after-request="if(event.detail.successful){ document.getElementById('badge-edit-dialog').close(); toastr.success('{{ singular_title }} merged.'); }">
+      class="organize-label-merge-form tag-merge-form"
+      hx-on::after-request="if(event.detail.successful){ document.getElementById('label-edit-dialog').close(); toastr.success('{{ singular_title }} merged.'); }">
     {% csrf_token %}
 
     <div class="tag-merge-source">
-        <div class="tag-card-icon" {% if badge.color %}style="background:{{ badge.color }}22; border-color:{{ badge.color }}44;"{% endif %}>
-            {% if badge.custom_icon and not badge.icon_is_overridden %}
-            <img src="{{ badge.custom_icon.url }}" alt="" class="tag-icon-img">
-            {% elif badge.icon %}
-                {% if badge.icon|is_material_icon %}
-                <i class="material-icons tag-icon-std" {% if badge.color %}style="color:{{ badge.color }}"{% endif %}>{{ badge.icon }}</i>
+        <div class="tag-card-icon" {% if label.color %}style="background:{{ label.color }}22; border-color:{{ label.color }}44;"{% endif %}>
+            {% if label.custom_icon and not label.icon_is_overridden %}
+            <img src="{{ label.custom_icon.url }}" alt="" class="tag-icon-img">
+            {% elif label.icon %}
+                {% if label.icon|is_material_icon %}
+                <i class="material-icons tag-icon-std" {% if label.color %}style="color:{{ label.color }}"{% endif %}>{{ label.icon }}</i>
                 {% else %}
-                <span class="tag-icon-emoji">{{ badge.icon }}</span>
+                <span class="tag-icon-emoji">{{ label.icon }}</span>
                 {% endif %}
             {% else %}
             <i class="material-icons tag-icon-std tag-icon-empty">{{ empty_icon }}</i>
             {% endif %}
         </div>
         <div>
-            <div class="tag-merge-source-name">{{ badge.name }}</div>
+            <div class="tag-merge-source-name">{{ label.name }}</div>
             <div class="tag-merge-source-meta">
-                {{ badge.pin_count }} pin{{ badge.pin_count|pluralize }}{% if show_location_count %}, {{ badge.location_count }} location{{ badge.location_count|pluralize }}{% endif %}
+                {{ label.pin_count }} pin{{ label.pin_count|pluralize }}{% if show_location_count %}, {{ label.location_count }} location{{ label.location_count|pluralize }}{% endif %}
             </div>
         </div>
     </div>
@@ -36,7 +36,7 @@
 
     <div class="form-field">
         <label class="form-label" for="merge-target-select">Target {{ singular_title|lower }}</label>
-        <select name="target_badge_id" id="merge-target-select" class="form-input" required>
+        <select name="target_label_id" id="merge-target-select" class="form-input" required>
             <option value="">- Select a {{ singular_title|lower }} -</option>
             {% for candidate in candidates %}
             <option value="{{ candidate.id }}">
@@ -46,16 +46,16 @@
         </select>
         <p class="tag-merge-warning">
             {% if show_location_count %}
-            All pins and locations in <strong>{{ badge.name }}</strong> will be moved to the selected {{ singular_title|lower }}, then
+            All pins and locations in <strong>{{ label.name }}</strong> will be moved to the selected {{ singular_title|lower }}, then
             {% else %}
-            All pins on <strong>{{ badge.name }}</strong> will be moved to the selected {{ singular_title|lower }}, then
+            All pins on <strong>{{ label.name }}</strong> will be moved to the selected {{ singular_title|lower }}, then
             {% endif %}
-            <strong>{{ badge.name }}</strong> will be permanently deleted.
+            <strong>{{ label.name }}</strong> will be permanently deleted.
         </p>
     </div>
 
     <div class="tag-form-actions">
-        <button type="button" class="btn btn--primary" data-merge-name="{{ badge.name|escapejs }}"
+        <button type="button" class="btn btn--primary" data-merge-name="{{ label.name|escapejs }}"
                 onclick="(async function(btn){ if(await confirmDialog({title:'Merge {{ singular_title }}',message:'Merge &quot;'+btn.dataset.mergeName+'&quot; into the selected {{ singular_title|lower }}?\n\nThis cannot be undone.',confirmLabel:'Merge'})) btn.closest('form').requestSubmit(); })(this)">
             <i class="material-icons" style="font-size:1rem;vertical-align:middle;">merge</i>
             Merge

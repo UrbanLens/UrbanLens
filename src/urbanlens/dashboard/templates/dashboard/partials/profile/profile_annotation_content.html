@@ -53,49 +53,49 @@
         </div>
     </div>
 
-    {# -- People badges -------------------------------------------------------- #}
-    <div class="profile-annotation-badges">
+    {# -- People labels -------------------------------------------------------- #}
+    <div class="profile-annotation-labels">
         <p class="profile-annotation-label">Labels</p>
         <div class="profile-annotation-chips" id="pab-chips">
-            {% for badge in user_badges %}
-            {% if badge.id in assigned_badge_ids %}
+            {% for label in user_labels %}
+            {% if label.id in assigned_label_ids %}
             <button type="button"
-                    class="profile-badge-chip profile-badge-chip--on"
-                    style="--badge-color: {{ badge.color|default:'#6b7280' }}"
-                    hx-post="{% url 'profile.badge_toggle' subject.slug badge.id %}"
+                    class="profile-label-chip profile-label-chip--on"
+                    style="--label-color: {{ label.color|default:'#6b7280' }}"
+                    hx-post="{% url 'profile.label_toggle' subject.slug label.id %}"
                     hx-target="#profile-annotation-inner"
                     hx-swap="outerHTML"
-                    title="Remove {{ badge.name }}">
-                {% if badge.icon %}<span class="profile-badge-chip-icon">{{ badge.icon }}</span>{% endif %}
-                {{ badge.name }}
-                <i class="material-icons profile-badge-chip-remove">close</i>
+                    title="Remove {{ label.name }}">
+                {% if label.icon %}<span class="profile-label-chip-icon">{{ label.icon }}</span>{% endif %}
+                {{ label.name }}
+                <i class="material-icons profile-label-chip-remove">close</i>
             </button>
             {% endif %}
             {% endfor %}
 
-            {% if unassigned_badges %}
+            {% if unassigned_labels %}
             <details class="pab-add-picker">
                 <summary class="pab-add-btn" title="Add a label">
                     <i class="material-symbols-outlined">add</i> Add label
                 </summary>
                 <div class="pab-add-list">
-                    {% for badge in unassigned_badges %}
+                    {% for label in unassigned_labels %}
                     <button type="button"
-                            class="profile-badge-chip"
-                            style="--badge-color: {{ badge.color|default:'#6b7280' }}"
-                            hx-post="{% url 'profile.badge_toggle' subject.slug badge.id %}"
+                            class="profile-label-chip"
+                            style="--label-color: {{ label.color|default:'#6b7280' }}"
+                            hx-post="{% url 'profile.label_toggle' subject.slug label.id %}"
                             hx-target="#profile-annotation-inner"
                             hx-swap="outerHTML"
-                            title="Add {{ badge.name }}">
-                        {% if badge.icon %}<span class="profile-badge-chip-icon">{{ badge.icon }}</span>{% endif %}
-                        {{ badge.name }}
+                            title="Add {{ label.name }}">
+                        {% if label.icon %}<span class="profile-label-chip-icon">{{ label.icon }}</span>{% endif %}
+                        {{ label.name }}
                     </button>
                     {% endfor %}
                 </div>
             </details>
             {% endif %}
 
-            {% if not user_badges %}
+            {% if not user_labels %}
             <span class="profile-annotation-empty">No labels yet - create some in Organize → People</span>
             {% endif %}
         </div>
@@ -182,7 +182,7 @@
 <script>
 (function () {
     // Fallback for browsers without CSS field-sizing support (see .pan-note-textarea
-    // in _profile.scss). This whole panel is swapped via htmx on every note/trust/badge
+    // in _profile.scss). This whole panel is swapped via htmx on every note/trust/label
     // action, so the listener is attached fresh each time rather than once on page load.
     document.querySelectorAll('#profile-annotation-inner .pan-note-textarea').forEach(function (el) {
         var resize = function () {

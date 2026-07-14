@@ -35,7 +35,7 @@ export function initOrganizePriority(): void {
     let lastClickedIdx = -1;
 
     function priorityOrderBadge(item: HTMLElement): HTMLElement | null {
-        return item.querySelector(".priority-order-editor")?.querySelector(".priority-order-badge") ?? null;
+        return item.querySelector(".priority-order-editor")?.querySelector(".priority-order-chip") ?? null;
     }
 
     function flashPriorityOrderSaved(item: HTMLElement): void {
@@ -44,9 +44,9 @@ export function initOrganizePriority(): void {
         item.classList.add("priority-item--order-saved");
         const badge = priorityOrderBadge(item);
         if (badge) {
-            badge.classList.remove("priority-order-badge--flash");
+            badge.classList.remove("priority-order-chip--flash");
             void badge.offsetWidth;
-            badge.classList.add("priority-order-badge--flash");
+            badge.classList.add("priority-order-chip--flash");
         }
         window.setTimeout(() => item.classList.remove("priority-item--order-saved"), 650);
     }
@@ -243,7 +243,7 @@ export function initOrganizePriority(): void {
 
     document.getElementById("priority-list")?.addEventListener("click", (e) => {
         const target = e.target as HTMLElement;
-        const badge = target.closest<HTMLElement>(".priority-order-badge");
+        const badge = target.closest<HTMLElement>(".priority-order-chip");
         if (badge) {
             e.preventDefault();
             beginPriorityOrderEdit(badge);
@@ -286,7 +286,7 @@ export function initOrganizePriority(): void {
     window._initPrioritySortable = initPrioritySortable;
 
     // The list re-fetches its own contents (see _priority_list.html's
-    // hx-trigger="refreshPriority from:body") after a badge mutation elsewhere
+    // hx-trigger="refreshPriority from:body") after a label mutation elsewhere
     // on the page. That's an innerHTML swap - #priority-list itself survives,
     // but its children (and Sortable's references to them) don't, so it needs
     // rebinding same as the tab-switch case in organize-header.ts.

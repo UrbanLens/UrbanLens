@@ -147,7 +147,7 @@
 // -- Tags (replaces pin lists) -------------------------------------------------
 
 
-.badge-header {
+.label-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -155,7 +155,7 @@
     gap: 1rem;
     margin-bottom: 1.75rem;
 
-    .badge-title {
+    .label-title {
         font-size: 1.6rem;
         font-weight: 700;
         color: var(--ul-grey-9);
@@ -178,7 +178,7 @@
     margin-bottom: 1.5rem;
 }
 
-// Create-badge modals on the organize page (native <dialog>)
+// Create-label modals on the organize page (native <dialog>)
 dialog.tag-create-card.ul-dialog {
 
     .tag-form {
@@ -347,8 +347,8 @@ dialog.tag-create-card.ul-dialog {
     color: $text-muted;
 }
 
-// Global and readonly badges
-.tag-global-badge {
+// Global and readonly labels
+.tag-global-label {
     font-size: 0.7rem;
     font-weight: 500;
     color: $text-muted;
@@ -375,7 +375,7 @@ dialog.tag-create-card.ul-dialog {
     }
 }
 
-.tag-customized-badge {
+.tag-customized-label {
     font-size: 0.7rem;
     font-weight: 500;
     color: var(--ul-grey-5);
@@ -384,7 +384,7 @@ dialog.tag-create-card.ul-dialog {
     padding: 1px 5px;
 }
 
-.tag-readonly-badge {
+.tag-readonly-label {
     display: flex;
     align-items: center;
     padding: 0 4px;
@@ -414,7 +414,7 @@ dialog.tag-create-card.ul-dialog {
     }
 }
 
-.tag-order-badge {
+.tag-order-label {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -513,12 +513,12 @@ dialog.tag-create-card.ul-dialog {
     }
 }
 
-// Parent / child relationship picker (reusable across create/edit/bulk-edit badge dialogs)
-.badge-rel-picker {
+// Parent / child relationship picker (reusable across create/edit/bulk-edit label dialogs)
+.label-rel-picker {
     margin-top: .4rem;
 }
 
-.badge-rel-top-row {
+.label-rel-top-row {
     display: flex;
     align-items: center;
     margin-bottom: .3rem;
@@ -528,19 +528,19 @@ dialog.tag-create-card.ul-dialog {
     }
 }
 
-.badge-rel-selected-section {
+.label-rel-selected-section {
     display: flex;
     flex-wrap: wrap;
     gap: 1rem;
     margin-bottom: .6rem;
 }
 
-.badge-rel-selected-group {
+.label-rel-selected-group {
     flex: 1 1 220px;
     min-width: 220px;
 }
 
-.badge-rel-selected-header {
+.label-rel-selected-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -548,7 +548,7 @@ dialog.tag-create-card.ul-dialog {
     margin-bottom: .35rem;
 }
 
-.badge-rel-selected-label {
+.label-rel-selected-label {
     display: flex;
     align-items: center;
     gap: .3rem;
@@ -564,12 +564,12 @@ dialog.tag-create-card.ul-dialog {
     }
 }
 
-.badge-rel-add-dropdown {
+.label-rel-add-dropdown {
     position: relative;
     display: inline-block;
 }
 
-.badge-rel-add-btn {
+.label-rel-add-btn {
     display: inline-flex;
     align-items: center;
     gap: 1px;
@@ -593,7 +593,7 @@ dialog.tag-create-card.ul-dialog {
     }
 }
 
-.badge-rel-popup {
+.label-rel-popup {
     position: absolute;
     top: calc(100% + 4px);
     right: 0;
@@ -611,7 +611,7 @@ dialog.tag-create-card.ul-dialog {
     }
 }
 
-.badge-rel-selected-chips {
+.label-rel-selected-chips {
     display: flex;
     flex-wrap: wrap;
     gap: .4rem;
@@ -620,7 +620,7 @@ dialog.tag-create-card.ul-dialog {
 
 // Outer draggable wrapper: an inner `.tag-chip` pill (consistent everywhere it's used)
 // plus a remove button that sits outside the pill rather than styled as part of it.
-.badge-rel-chip {
+.label-rel-chip {
     display: inline-flex;
     align-items: center;
     gap: 3px;
@@ -635,14 +635,14 @@ dialog.tag-create-card.ul-dialog {
     }
 }
 
-.badge-rel-empty-hint {
+.label-rel-empty-hint {
     margin: 0;
     font-size: .8rem;
     color: var(--ul-grey-6);
     font-style: italic;
 }
 
-.badge-rel-trash {
+.label-rel-trash {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -676,8 +676,8 @@ dialog.tag-create-card.ul-dialog {
     }
 }
 
-// Tabs inside the add-badges popup - underline style, not pill buttons.
-.badge-rel-tabs {
+// Tabs inside the add-labels popup - underline style, not pill buttons.
+.label-rel-tabs {
     display: flex;
     border-bottom: 1px solid var(--ul-grey-1a);
     overflow-x: auto;
@@ -689,7 +689,7 @@ dialog.tag-create-card.ul-dialog {
     }
 }
 
-.badge-rel-tab {
+.label-rel-tab {
     flex-shrink: 0;
     padding: 5px 10px;
     font-size: .78rem;
@@ -713,7 +713,7 @@ dialog.tag-create-card.ul-dialog {
     }
 }
 
-.badge-rel-search {
+.label-rel-search {
     width: 100%;
     box-sizing: border-box;
     margin-bottom: .4rem;
@@ -740,7 +740,7 @@ dialog.tag-create-card.ul-dialog {
 }
 
 // Suggestion chips reuse `.tag-chip` styling but are clickable buttons, not removable pills.
-.tag-chip.badge-rel-suggestion {
+.tag-chip.label-rel-suggestion {
     border: none;
     cursor: pointer;
     transition: transform .1s, box-shadow .12s;
@@ -752,19 +752,19 @@ dialog.tag-create-card.ul-dialog {
     // Already selected as a parent/child elsewhere in the picker - permanently excluded
     // from the suggestion pool (as opposed to the transient tab/search filtering below,
     // which toggles inline `display` and must not be able to override this).
-    &.badge-rel-suggestion--hidden {
+    &.label-rel-suggestion--hidden {
         display: none;
     }
 }
 
-// Only the "All" tab shows each suggestion's badge-kind chip; narrowing to a specific
+// Only the "All" tab shows each suggestion's label-kind chip; narrowing to a specific
 // kind tab makes it redundant, so hide it there.
-.badge-rel-suggestions[data-active-tab]:not([data-active-tab=""]) .badge-kind-chip {
+.label-rel-suggestions[data-active-tab]:not([data-active-tab=""]) .label-kind-chip {
     display: none;
 }
 
-// -- Badge kind chip (shown on the "All" tab to distinguish tag / category / status) --
-.badge-kind-chip {
+// -- Label kind chip (shown on the "All" tab to distinguish tag / category / status) --
+.label-kind-chip {
     display: inline-block;
     margin-left: auto;
     padding: 1px 6px;
@@ -872,7 +872,7 @@ dialog.tag-create-card.ul-dialog {
 
 // Nested inside the pin detail page's combined "Organization" card (see
 // .organization-card) instead of standing alone - drop the card-in-a-card
-// chrome entirely and render just the badge chips, no header of its own.
+// chrome entirely and render just the label chips, no header of its own.
 .tag-panel--embedded {
     background: none;
     border: none;
@@ -1105,7 +1105,7 @@ dialog.tag-create-card.ul-dialog {
 }
 
 // -- Gallery view --------------------------------------------------------------
-.organize-badge-rows.tag-view--gallery {
+.organize-label-rows.tag-view--gallery {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
     gap: .75rem;
@@ -1155,7 +1155,7 @@ dialog.tag-create-card.ul-dialog {
     }
 
     .tag-drag-handle,
-    .tag-order-badge {
+    .tag-order-label {
         display: none;
     }
 }
@@ -1187,7 +1187,7 @@ dialog.tag-create-card.ul-dialog {
     }
 }
 
-.organize-badge-rows.tag-view--tree {
+.organize-label-rows.tag-view--tree {
 
     // Source cards stay in the DOM for HTMX swaps; tree view uses clones inside .tag-tree-root.
     >.tag-card {
@@ -1195,7 +1195,7 @@ dialog.tag-create-card.ul-dialog {
     }
 
     .tag-drag-handle,
-    .tag-order-badge {
+    .tag-order-label {
         display: none;
     }
 }
@@ -1260,7 +1260,7 @@ dialog.tag-create-card.ul-dialog {
     }
 }
 
-// Organize badge cards are selected by clicking the row itself; the checkbox
+// Organize label cards are selected by clicking the row itself; the checkbox
 // stays in the DOM (for select-all bookkeeping) but is never shown to the user.
 .organize-page .tag-card .ul-checkbox-wrap {
     display: none;
@@ -1638,8 +1638,8 @@ dialog.tag-create-card.ul-dialog {
     pointer-events: none;
 }
 
-// -- Badge rows: gallery checkbox positioning + Materialize checkbox suppression -
-.organize-badge-rows {
+// -- Label rows: gallery checkbox positioning + Materialize checkbox suppression -
+.organize-label-rows {
     &.tag-view--gallery {
         .ul-checkbox-wrap {
             top: .4rem;
@@ -1721,14 +1721,14 @@ dialog.tag-create-card.ul-dialog {
     margin: 0 0 1.25rem;
 }
 
-// -- Badges container (Organize > Badges tab) --------------------------------
+// -- Labels container (Organize > Labels tab) --------------------------------
 // A visually distinct "island" for the Tags/Categories/Statuses/People/Display
 // Order sub-tabs - deliberately different from the flat underline
-// `.ul-subnav-tabs` used by the page's own Badges|Lists|Filters subnav above
+// `.ul-subnav-tabs` used by the page's own Labels|Lists|Filters subnav above
 // it (see _page_hero.scss). Two identical-looking tab rows stacked would read
 // as duplicated navigation, so this is a raised, rounded card with a
 // gradient-pill segmented control instead - reads as "a tool", not "another menu".
-.organize-badges-container {
+.organize-labels-container {
     background: linear-gradient(160deg, var(--ul-grey-0a) 0%, var(--ul-grey-0) 55%);
     border: 1px solid var(--ul-grey-1a);
     border-radius: $radius-md;
@@ -1736,7 +1736,7 @@ dialog.tag-create-card.ul-dialog {
     padding: 1.1rem 1.25rem 1.5rem;
 }
 
-.organize-badges-container-header {
+.organize-labels-container-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -1984,14 +1984,14 @@ dialog.tag-create-card.ul-dialog {
     @include truncate;
 }
 
-.priority-item-badges {
+.priority-item-labels {
     display: flex;
     align-items: center;
     gap: .4rem;
     flex-shrink: 0;
 }
 
-.priority-kind-badge {
+.priority-kind-chip {
     font-size: .7rem;
     font-weight: 600;
     text-transform: uppercase;
@@ -2031,7 +2031,7 @@ dialog.tag-create-card.ul-dialog {
     }
 }
 
-.priority-order-badge {
+.priority-order-chip {
     font-size: .78rem;
     font-weight: 600;
     font-family: inherit;
@@ -2069,8 +2069,8 @@ dialog.tag-create-card.ul-dialog {
         visibility: hidden;
     }
 
-    &.priority-order-badge--flash {
-        animation: priority-order-badge-flash .55s ease-out;
+    &.priority-order-chip--flash {
+        animation: priority-order-chip-flash .55s ease-out;
     }
 }
 
@@ -2217,7 +2217,7 @@ dialog.tag-create-card.ul-dialog {
     }
 }
 
-@keyframes priority-order-badge-flash {
+@keyframes priority-order-chip-flash {
     0% {
         transform: scale(1);
         box-shadow: 0 0 0 0 var(--ul-color-accent-ring);
@@ -2985,4 +2985,4 @@ dialog.tag-create-card.ul-dialog {
     .tag-card-view {
         background: var(--ul-grey-1b);
     }
-}
+}

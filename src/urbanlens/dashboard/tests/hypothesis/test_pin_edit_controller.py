@@ -11,7 +11,7 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.controllers.pin_edit import PinEditView
-from urbanlens.dashboard.models.badges.model import Badge
+from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.model import Pin
 
 
@@ -24,9 +24,9 @@ class PinEditCategoryUpdateTests(TestCase):
         self.user = self.profile.user
         self.pin = baker.make(Pin, profile=self.profile)
         self.existing_cat = baker.make(
-            Badge, name="existing", kind="category", profile=self.profile,
+            Label, name="existing", kind="category", profile=self.profile,
         )
-        self.pin.badges.add(self.existing_cat)
+        self.pin.labels.add(self.existing_cat)
 
     def _post(self, body: dict) -> object:
         req = self.factory.post(
@@ -45,7 +45,7 @@ class PinEditCategoryUpdateTests(TestCase):
             return PinEditView.as_view()(req, pin_slug=self.pin.slug)
 
     def _categories(self):
-        return self.pin.badges.filter(kind="category")
+        return self.pin.labels.filter(kind="category")
 
     def test_partial_priority_update_preserves_existing_categories(self) -> None:
         """Submitting only priority must not clear the pin's categories."""
@@ -79,7 +79,7 @@ class PinEditCategoryUpdateTests(TestCase):
         self.assertEqual(self._categories().count(), 0)
 
     def test_duplicate_category_names_are_deduplicated(self) -> None:
-        """Comma-separated list with duplicates should not create two badges."""
+        """Comma-separated list with duplicates should not create two labels."""
         response = self._post({"categories": "nature,nature,Nature"})
         self.assertEqual(response.status_code, 200)
         self.pin.refresh_from_db()

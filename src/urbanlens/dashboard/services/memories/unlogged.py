@@ -1,7 +1,7 @@
 """Surface pins the user marked visited but never logged a dated PinVisit for.
 
 The Memories page uses this to prompt the user to turn a vague "I've been here"
-flag (``Pin.last_visited`` or a "Visited" status badge) into a concrete,
+flag (``Pin.last_visited`` or a "Visited" status label) into a concrete,
 dated ``PinVisit`` record they can then enrich with photos, a map, and notes.
 """
 

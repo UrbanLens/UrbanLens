@@ -18,7 +18,7 @@ class UndoHandler(abc.ABC):
     etc.) are gone the instant the parent is deleted - before ``serialize``
     gets a chance to capture them - so ``restore`` only brings back each
     instance's own core fields plus whichever relations are cheap and safe
-    to relink (self-referential hierarchy, badges, membership rosters).
+    to relink (self-referential hierarchy, labels, membership rosters).
     Callers must surface this scope limit to the user before they confirm
     the delete.
     """

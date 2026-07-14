@@ -33,7 +33,7 @@ from urbanlens.dashboard.services.text_limits import MAX_PROFILE_BIO_LENGTH
 if TYPE_CHECKING:
     from django.db.models import Manager as DjangoManager
 
-    from urbanlens.dashboard.models.badges.queryset import BadgeManager
+    from urbanlens.dashboard.models.labels.queryset import LabelManager
     from urbanlens.dashboard.models.markup.model import PinMarkup
     from urbanlens.dashboard.models.notifications.model import NotificationLog
     from urbanlens.dashboard.models.trips import Trip, TripActivity, TripMembership
@@ -277,9 +277,9 @@ class Profile(abstract.PublicDashboardModel):
 
     # AI feature preferences (only relevant when the user has an AI subscription).
     ai_enabled = BooleanField(default=True, help_text="Allow AI features on your account.")
-    ai_badge_tags = BooleanField(default=True, help_text="AI can automatically suggest and add tags when a pin is created.")
-    ai_badge_categories = BooleanField(default=True, help_text="AI can automatically suggest and add categories when a pin is created.")
-    ai_badge_statuses = BooleanField(default=True, help_text="AI can automatically suggest and add statuses when a pin is created.")
+    ai_label_tags = BooleanField(default=True, help_text="AI can automatically suggest and add tags when a pin is created.")
+    ai_label_categories = BooleanField(default=True, help_text="AI can automatically suggest and add categories when a pin is created.")
+    ai_label_statuses = BooleanField(default=True, help_text="AI can automatically suggest and add statuses when a pin is created.")
 
     # Whether photo-keyword plugins run on this user's uploads to make their
     # photos text-searchable. Applies to every enabled keywording strategy
@@ -345,7 +345,7 @@ class Profile(abstract.PublicDashboardModel):
         trip_activities_added: DjangoManager[TripActivity]
         created_trips: DjangoManager[Trip]
         trips: DjangoManager[Trip]
-        custom_tags: BadgeManager
+        custom_labels: LabelManager
         trip_memberships: DjangoManager[TripMembership]
         notifications: DjangoManager[NotificationLog]
         triggered_notifications: DjangoManager[NotificationLog]

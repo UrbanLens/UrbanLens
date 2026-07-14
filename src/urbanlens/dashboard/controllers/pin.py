@@ -56,7 +56,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         from django.db.models import Case, When
 
         from urbanlens.dashboard.models.aliases.model import AliasType
-        from urbanlens.dashboard.models.badges.model import COLOR_CHOICES, Badge
+        from urbanlens.dashboard.models.labels.model import COLOR_CHOICES, Label
         from urbanlens.dashboard.models.location.model import Location
         from urbanlens.dashboard.models.wiki.model import Wiki
 
@@ -133,7 +133,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 "pin_alias_suggestions": pin.aliases.order_by(Case(When(kind=AliasType.OFFICIAL, then=0), default=1), "name"),
                 "detail_pin_icon_choices": detail_pin_icon_choices,
                 "color_choices": COLOR_CHOICES,
-                "all_categories": Badge.objects.categories().ordered(),
+                "all_categories": Label.objects.categories().ordered(),
                 "default_map_view": profile.default_map_view,
                 "markup_fill_color": profile.markup_fill_color,
                 "markup_fill_opacity": profile.markup_fill_opacity,
@@ -736,10 +736,10 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         Returns:
             The rendered import wizard dialog template.
         """
-        from urbanlens.dashboard.models.badges.model import Badge
+        from urbanlens.dashboard.models.labels.model import Label
 
         profile = Profile.objects.get(user=request.user)
-        tags = Badge.objects.visible_to(profile).ordered()
+        tags = Label.objects.visible_to(profile).ordered()
         variant = "memories" if request.GET.get("variant") == "memories" else "pins"
         import_title = "Import Routes & History" if variant == "memories" else "Import Pins"
         return render(
@@ -810,10 +810,10 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
 
-        from urbanlens.dashboard.models.badges.model import Badge
+        from urbanlens.dashboard.models.labels.model import Label
 
         tag_ids = request.POST.getlist("tag_ids")
-        import_tags = list(Badge.objects.visible_to(profile).filter(id__in=tag_ids)) if tag_ids else []
+        import_tags = list(Label.objects.visible_to(profile).filter(id__in=tag_ids)) if tag_ids else []
         tag_by_filename = request.POST.get("tag_by_filename") == "1"
 
         google_maps_gateway = GoogleMapsGateway()
@@ -836,7 +836,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         """Parse uploaded files and return pin preview data as JSON without importing."""
         import json as _json
 
-        from urbanlens.dashboard.models.badges.model import Badge
+        from urbanlens.dashboard.models.labels.model import Label
         from urbanlens.dashboard.services.archive_extractor import extract_archive, is_archive
 
         if not isinstance(request.user, User):
@@ -907,13 +907,13 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 status=400,
             )
 
-        badges = Badge.objects.visible_to(profile).ordered()
+        labels = Label.objects.visible_to(profile).ordered()
 
         return JsonResponse(
             {
                 "lists": lists,
                 "total": sum(len(lst["pins"]) for lst in lists),
-                "badges": [
+                "labels": [
                     {
                         "id": b.id,
                         "name": b.name,
@@ -921,7 +921,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                         "icon": b.icon or "",
                         "kind": b.kind,
                     }
-                    for b in badges
+                    for b in labels
                 ],
                 "warnings": document_warnings,
             },

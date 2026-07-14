@@ -42,12 +42,12 @@ resend the filter-form fields on every page click, so filters stay applied.
                     <span class="pin-list-meta"
                         >{% if pin.effective_city %}{{ pin.effective_city }}{% endif %}{% if pin.effective_city and pin.effective_state %}, {% endif %}{% if pin.effective_state %}{{ pin.effective_state }}{% endif %}{% if pin.effective_country %} · {{ pin.effective_country }}{% endif %}</span>
                     {% endif %}
-                    {% if pin.badges.all %}
-                    <span class="pin-list-badges">
-                        {% for badge in pin.badges.all %}
-                        <span class="popup-tag-chip pin-list-badge"
-                              {% if badge.color %}style="border-color:{{ badge.color }}55;background:{{ badge.color }}18;color:{{ badge.color }}cc"{% endif %}
-                              >{{ badge.name }}</span>
+                    {% if pin.labels.all %}
+                    <span class="pin-list-labels">
+                        {% for label in pin.labels.all %}
+                        <span class="popup-tag-chip pin-list-label"
+                              {% if label.color %}style="border-color:{{ label.color }}55;background:{{ label.color }}18;color:{{ label.color }}cc"{% endif %}
+                              >{{ label.name }}</span>
                         {% endfor %}
                     </span>
                     {% endif %}

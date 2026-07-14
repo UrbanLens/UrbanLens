@@ -29,7 +29,7 @@ class AvatarService:
     """
 
     ANIMAL_EMOJIS: dict[str, str] = {
-        "badger": "🦡",
+        "labelr": "🦡",
         "bear": "🐻",
         "beetle": "🪲",
         "bison": "🦬",

@@ -95,7 +95,7 @@ src/urbanlens/
 │   │   ├-- images/              # Image attachments
 │   │   ├-- categories/          # Pin categories
 │   │   ├-- location/            # Location data
-│   │   ├-- badges/              # Badges (tags, categories, ...)
+│   │   ├-- labels/              # Labels (tags, categories, statuses, people labels)
 │   │   ├-- trips/               # Trip planning
 │   │   └-- cache/               # Geocoding cache
 │   ├-- services/                # Business logic (AI, search, weather, geocoding, APIs)

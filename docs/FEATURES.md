@@ -7,7 +7,7 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
 ## Mapping & Pins
 
 - Interactive Leaflet map with satellite, street, and topographic layers, HTMX-driven panels,
-  and a filter sidebar (badges, rating, visited status, etc.)
+  and a filter sidebar (labels, rating, visited status, etc.)
 - **Pin** — a user's personal record for a place (custom name, private notes, icon, priority,
   status, last-visited date, marker coordinates), separate from the shared **Location** record
   it points to (canonical name, address, coordinates, Google CID). See `docs/NOTES.md` for why
@@ -110,9 +110,9 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
 - Multiple verified email addresses per account, for easier friend discovery
 - Social/community links on profile (site, Discord/Signal/etc.)
 
-## Badges (Tags, Categories, Statuses, People)
+## Labels (Tags, Categories, Statuses, People)
 
-A single unified `Badge` model (with a `kind`) backs four distinct UI concepts:
+A single unified `Label` model (with a `kind`) backs four distinct UI concepts:
 
 - **Tags** — freeform labels on pins/wikis
 - **Categories** — hierarchical classification of pins/wikis
@@ -121,7 +121,7 @@ A single unified `Badge` model (with a `kind`) backs four distinct UI concepts:
 
 Shared features across all four: create/edit/delete, merge, hierarchical parent/child
 relationships, bulk edit and bulk convert between kinds, per-user color/icon customization
-(`BadgeCustomization`) on top of shared global badges, drag-to-reorder priority, and a unified
+(`LabelCustomization`) on top of shared global labels, drag-to-reorder priority, and a unified
 "Organize" management page.
 
 ## Notifications
@@ -159,7 +159,7 @@ relationships, bulk edit and bulk convert between kinds, per-user color/icon cus
 
 - Pluggable AI provider gateway (OpenAI, Cloudflare, Hugging Face)
 - AI-assisted import: extract pins from freeform documents/notes
-- AI-assisted badge styling: suggest colors/icons for auto-created badges
+- AI-assisted label styling: suggest colors/icons for auto-created labels
 - Keyword-based and AI-assisted auto-tagging of pins/wikis
 
 ## REST API

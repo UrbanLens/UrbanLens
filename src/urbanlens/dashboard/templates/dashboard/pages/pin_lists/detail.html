@@ -17,7 +17,7 @@
         <nav class="ul-subnav-tabs" aria-label="Organize sections">
             <a href="{% url 'organize.index' %}?tab=tags" class="ul-subnav-tab">
                 <i class="material-symbols-outlined">sell</i>
-                <span>Badges</span>
+                <span>Labels</span>
             </a>
             <a href="{% url 'organize.index' %}?tab=lists" class="ul-subnav-tab is-active" aria-current="page">
                 <i class="material-symbols-outlined">bookmarks</i>
@@ -504,7 +504,7 @@
 
     // -- Overview map of every pin currently on this list --------------------
     // Marker icons and popups mirror the main map's own _buildMarker/popup
-    // construction (badge icon, tag chips, rating, address, last visited) so
+    // construction (label icon, tag chips, rating, address, last visited) so
     // this map looks and behaves the same - just read-only (no drag/edit/
     // delete, which don't apply on a list summary map). Reads the JSON blob
     // #pin-list-items-map-data embeds (see pin_lists.py's _pin_map_marker_data)

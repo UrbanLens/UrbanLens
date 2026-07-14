@@ -12,17 +12,17 @@ from django.http import HttpRequest, JsonResponse
 from django.shortcuts import render
 from django.views import View
 
-from urbanlens.dashboard.models.badges.model import COLOR_CHOICES, ICON_CATEGORIES, ICON_CHOICES, KIND_USER, Badge
+from urbanlens.dashboard.models.labels.model import COLOR_CHOICES, ICON_CATEGORIES, ICON_CHOICES, KIND_USER, Label
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
 
 logger = logging.getLogger(__name__)
 
-_PERM = "dashboard.edit_global_badge"
-_BADGE_TABS = frozenset({"tags", "categories", "status", "people", "priority"})
+_PERM = "dashboard.edit_global_label"
+_LABEL_TABS = frozenset({"tags", "categories", "status", "people", "priority"})
 _SECTION_TABS = frozenset({"lists", "filters"})
-_VALID_ORGANIZE_TABS = _BADGE_TABS | _SECTION_TABS
+_VALID_ORGANIZE_TABS = _LABEL_TABS | _SECTION_TABS
 
 _BASE_CTX = {
     "icon_choices": ICON_CHOICES,
@@ -36,35 +36,35 @@ def build_organize_page_context(request: HttpRequest, active_tab: str = "tags") 
 
     Args:
         request: The HTTP request (used for profile and permissions).
-        active_tab: Tab to show as active - one of the badge tabs (tags, categories,
+        active_tab: Tab to show as active - one of the label tabs (tags, categories,
             status, people, priority) or one of the top-level sections (lists, filters).
 
     Returns:
         Context dict for dashboard/pages/organize/index.html. Includes both
-        ``active_section`` (badges/lists/filters - which top-level subnav tab is
-        current) and ``active_tab`` (which badge sub-tab is current, only
-        meaningful while ``active_section == "badges"``).
+        ``active_section`` (labels/lists/filters - which top-level subnav tab is
+        current) and ``active_tab`` (which label sub-tab is current, only
+        meaningful while ``active_section == "labels"``).
     """
     if not isinstance(request.user, AuthUser):
         raise TypeError("Expected an authenticated user")
     profile: Profile = request.user.profile
-    tags = Badge.objects.tags().visible_to(profile).ordered().with_customizations_for(profile).with_pin_counts()
-    categories = Badge.objects.categories().for_profile(profile).ordered().with_customizations_for(profile).with_pin_counts()
-    statuses = Badge.objects.statuses().for_profile(profile).ordered().with_customizations_for(profile).with_pin_counts()
-    user_badges = Badge.objects.user_badges().visible_to(profile).ordered().with_customizations_for(profile)
-    priority_items = Badge.objects.visible_to(profile).exclude(kind=KIND_USER).ordered().with_pin_counts()
+    tags = Label.objects.tags().visible_to(profile).ordered().with_customizations_for(profile).with_pin_counts()
+    categories = Label.objects.categories().for_profile(profile).ordered().with_customizations_for(profile).with_pin_counts()
+    statuses = Label.objects.statuses().for_profile(profile).ordered().with_customizations_for(profile).with_pin_counts()
+    user_labels = Label.objects.user_labels().visible_to(profile).ordered().with_customizations_for(profile)
+    priority_items = Label.objects.visible_to(profile).exclude(kind=KIND_USER).ordered().with_pin_counts()
 
-    active_section = active_tab if active_tab in _SECTION_TABS else "badges"
-    badge_tab = active_tab if active_tab in _BADGE_TABS else "tags"
+    active_section = active_tab if active_tab in _SECTION_TABS else "labels"
+    label_tab = active_tab if active_tab in _LABEL_TABS else "tags"
 
     return {
         **_BASE_CTX,
         "tags": tags,
         "categories": categories,
         "statuses": statuses,
-        "user_badges": user_badges,
+        "user_labels": user_labels,
         "priority_items": priority_items,
-        "active_tab": badge_tab,
+        "active_tab": label_tab,
         "active_section": active_section,
         "can_edit_global": request.user.has_perm(_PERM),
         "standalone_mode": False,
@@ -72,7 +72,7 @@ def build_organize_page_context(request: HttpRequest, active_tab: str = "tags") 
 
 
 class OrganizeIndexView(LoginRequiredMixin, View):
-    """Unified Organize page with Badges (Tags/Categories/Statuses/People/Priority), Lists, and Filters tabs."""
+    """Unified Organize page with Labels (Tags/Categories/Statuses/People/Priority), Lists, and Filters tabs."""
 
     def get(self, request, *args, **kwargs):
         """Render the organize page.
@@ -94,10 +94,10 @@ class OrganizePriorityListView(LoginRequiredMixin, View):
 
     GET /organize/priority/list/
 
-    The initial page load renders this list once; any badge create/edit/delete/
+    The initial page load renders this list once; any label create/edit/delete/
     merge/bulk-edit/convert elsewhere on the Organize page fires a `refreshPriority`
     client-side event (see organize.ts) that re-fetches it here, so a renamed,
-    re-icon'd, deleted, or newly-created badge shows up without a full reload.
+    re-icon'd, deleted, or newly-created label shows up without a full reload.
     """
 
     def get(self, request, *args, **kwargs):
@@ -112,8 +112,8 @@ class OrganizePriorityListView(LoginRequiredMixin, View):
         if not isinstance(request.user, AuthUser):
             raise TypeError("Expected an authenticated user")
         profile: Profile = request.user.profile
-        priority_items = Badge.objects.visible_to(profile).exclude(kind=KIND_USER).ordered().with_pin_counts()
-        return render(request, "dashboard/partials/badges/_priority_list.html", {"priority_items": priority_items})
+        priority_items = Label.objects.visible_to(profile).exclude(kind=KIND_USER).ordered().with_pin_counts()
+        return render(request, "dashboard/partials/labels/_priority_list.html", {"priority_items": priority_items})
 
 
 class OrganizePrioritySaveView(LoginRequiredMixin, View):
@@ -142,12 +142,12 @@ class OrganizePrioritySaveView(LoginRequiredMixin, View):
 
         profile = request.user.profile
         visible_ids = set(
-            Badge.objects.visible_to(profile).filter(id__in=item_ids).values_list("id", flat=True),
+            Label.objects.visible_to(profile).filter(id__in=item_ids).values_list("id", flat=True),
         )
         total = len(item_ids)
         for i, item_id in enumerate(item_ids):
             if item_id not in visible_ids:
                 continue
-            Badge.objects.filter(id=item_id).update(order=total - i)
+            Label.objects.filter(id=item_id).update(order=total - i)
 
         return JsonResponse({"ok": True})

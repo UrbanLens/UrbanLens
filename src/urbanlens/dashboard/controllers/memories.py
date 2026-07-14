@@ -139,7 +139,7 @@ def _toast(message: str, level: str = "success", *, unlogged_count: int | None =
         level: toastr level (``success``/``info``/``warning``/``error``).
         unlogged_count: When given, also tells the shared _photos_tabs.html nav
             (outside this card's own swap target) to update or remove its
-            "Visits" tab badge instead of leaving it stale.
+            "Visits" tab label instead of leaving it stale.
 
     Returns:
         An empty-body response carrying an ``HX-Trigger`` header; swapping it with
@@ -555,7 +555,7 @@ class MemoriesVisitView(LoginRequiredMixin, View):
             {
                 "showToast": {"message": "Visit logged." if created else "Details saved.", "level": "success"},
                 "memoriesFeedRefresh": True,
-                # The "Visits" tab badge lives outside #memories-unlogged-band, in
+                # The "Visits" tab label lives outside #memories-unlogged-band, in
                 # the shared _photos_tabs.html nav - tell it to catch up.
                 "unloggedVisitsCountChanged": {"count": len(unlogged_visited_pins(profile))},
             },
@@ -785,7 +785,7 @@ class MemoriesUnloggedActionView(LoginRequiredMixin, View):
     POST /memories/unlogged/<pin_slug>/<action>/
     where action is "dismiss" (hide the suggestion without changing the pin's
     visited status) or "unmark" (clear the pin's visited status entirely, e.g.
-    a stray "Visited" badge or import glitch the user never actually visited).
+    a stray "Visited" label or import glitch the user never actually visited).
     """
 
     def _get_pin(self, request: HttpRequest, pin_slug: str) -> Pin:
@@ -798,7 +798,7 @@ class MemoriesUnloggedActionView(LoginRequiredMixin, View):
         return _toast("Removed from your list.", "info", unlogged_count=len(unlogged_visited_pins(pin.profile)))
 
     def unmark(self, request: HttpRequest, pin: Pin) -> HttpResponse:
-        """Clear the pin's "Visited" status/badge so it drops out of the queue entirely."""
+        """Clear the pin's "Visited" status/label so it drops out of the queue entirely."""
         remove_visited_status(pin)
         return _toast('"Visited" status removed.', "info", unlogged_count=len(unlogged_visited_pins(pin.profile)))
 

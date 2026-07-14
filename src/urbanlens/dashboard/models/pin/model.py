@@ -32,7 +32,7 @@ from urbanlens.dashboard.services.text_limits import MAX_PIN_DESCRIPTION_LENGTH
 if TYPE_CHECKING:
     from django.db.models import Manager as DjangoManager
 
-    from urbanlens.dashboard.models.badges.model import Badge
+    from urbanlens.dashboard.models.labels.model import Label
     from urbanlens.dashboard.models.markup.model import PinMarkup
     from urbanlens.dashboard.models.pin.note import PinNote
     from urbanlens.dashboard.models.reviews import Manager as ReviewManager
@@ -118,8 +118,8 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
         blank=True,
         related_name="pins",
     )
-    badges = ManyToManyField(
-        "dashboard.Badge",
+    labels = ManyToManyField(
+        "dashboard.Label",
         blank=True,
         related_name="pins",
     )
@@ -236,7 +236,7 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
         A ``visited`` guard bounds the walk to the number of distinct pins actually
         in the chain, so the check still terminates promptly even against data that
         is already corrupted with a pre-existing cycle (mirrors the cycle-safe walk
-        in ``Badge.get_badge_and_descendants``).
+        in ``Label.get_label_and_descendants``).
 
         Args:
             new_parent: The pin that would be assigned to ``self.parent_pin``, or
@@ -293,15 +293,15 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
     # Effective values
     # ------------------------------------------------------------------
 
-    def display_badge(self) -> Badge | None:
-        """Badge supplying the map icon, when the icon is inherited from a badge."""
+    def icon_source_label(self) -> Label | None:
+        """Label supplying the map icon, when the icon is inherited from a label."""
         if self.custom_icon or self.icon:
             return None
-        for badge in self.badges.exclude(kind="user").order_by("-order"):
-            if badge.custom_icon and not badge.icon_is_overridden:
-                return badge
-            if badge.effective_icon:
-                return badge
+        for label in self.labels.exclude(kind="user").order_by("-order"):
+            if label.custom_icon and not label.icon_is_overridden:
+                return label
+            if label.effective_icon:
+                return label
         return None
 
     @property
@@ -405,27 +405,27 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
             return self.custom_icon.url
         if self.icon:
             return self.icon
-        if badge := self.display_badge():
-            if badge.custom_icon and not badge.icon_is_overridden:
-                return badge.custom_icon.url
-            return badge.effective_icon
+        if label := self.icon_source_label():
+            if label.custom_icon and not label.icon_is_overridden:
+                return label.custom_icon.url
+            return label.effective_icon
         return None
 
     @property
     def effective_color(self) -> str | None:
         """Color hex for the map icon circle, when one applies.
 
-        Only an explicit ``pin.color`` or the badge that supplies the displayed icon
-        may contribute. Other badges on the pin (e.g. a yellow tag when a green
+        Only an explicit ``pin.color`` or the label that supplies the displayed icon
+        may contribute. Other labels on the pin (e.g. a yellow tag when a green
         icon tag has no color) must not produce a circle.
 
-        Prefetch badges (with customizations) when calling in bulk (e.g. get_map_data).
+        Prefetch labels (with customizations) when calling in bulk (e.g. get_map_data).
         """
         if self.color:
             return self.color
         if self.custom_icon or self.icon:
             return None
-        winning = self.display_badge()
+        winning = self.icon_source_label()
         if winning:
             return winning.effective_color
         return None
@@ -475,18 +475,18 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
 
     @property
     def categories(self):
-        """Badges of kind "category" attached to this pin."""
-        return self.badges.all().categories()
+        """Labels of kind "category" attached to this pin."""
+        return self.labels.all().categories()
 
     @property
     def tags(self):
-        """Badges of kind "tag" attached to this pin."""
-        return self.badges.all().tags()
+        """Labels of kind "tag" attached to this pin."""
+        return self.labels.all().tags()
 
     @property
     def statuses(self):
-        """Badges of kind "status" attached to this pin."""
-        return self.badges.all().statuses()
+        """Labels of kind "status" attached to this pin."""
+        return self.labels.all().statuses()
 
     @property
     def rating(self) -> int:
@@ -503,23 +503,23 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
     # ------------------------------------------------------------------
 
     def change_category(self, category_id: int) -> None:
-        # TODO: Assess codebase, but this is probably deprecated since the addition of Badges more generically.
+        # TODO: Assess codebase, but this is probably deprecated since the addition of Labels more generically.
 
-        from urbanlens.dashboard.models.badges.model import Badge
+        from urbanlens.dashboard.models.labels.model import Label
 
-        category = Badge.objects.get(id=category_id, kind="category")
-        self.badges.remove(*self.badges.filter(kind="category"))
-        self.badges.add(category)
+        category = Label.objects.get(id=category_id, kind="category")
+        self.labels.remove(*self.labels.filter(kind="category"))
+        self.labels.add(category)
         self.save()
 
-    def add_category(self, category_name: str, save: bool = True) -> Badge | None:
-        from urbanlens.dashboard.models.badges.model import Badge
+    def add_category(self, category_name: str, save: bool = True) -> Label | None:
+        from urbanlens.dashboard.models.labels.model import Label
 
         category_name = category_name.lower()
         try:
-            category, _ = Badge.objects.get_or_create(name=category_name, kind="category", defaults={"profile": None})
+            category, _ = Label.objects.get_or_create(name=category_name, kind="category", defaults={"profile": None})
             if category:
-                self.badges.add(category)
+                self.labels.add(category)
                 if save:
                     self.save()
                 return category
@@ -532,7 +532,7 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
     # ------------------------------------------------------------------
 
     def __str__(self) -> str:
-        status_labels = ", ".join(s.name for s in self.badges.filter(kind="status")) if self.pk else "None"
+        status_labels = ", ".join(s.name for s in self.labels.filter(kind="status")) if self.pk else "None"
 
         return f"Name: {self.effective_name}\nDescription: {self.description or ''}\nPriority: {self.priority}\nLast Visited: {self.last_visited}\nStatus: {status_labels}"
 
@@ -555,12 +555,12 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
             "last_visited": self.last_visited.isoformat() if self.last_visited else "never",
             "latitude": self.effective_latitude,
             "longitude": self.effective_longitude,
-            "statuses": [{"id": s.id, "name": s.name, "color": s.color, "icon": s.icon} for s in self.badges.filter(kind="status")],
+            "statuses": [{"id": s.id, "name": s.name, "color": s.color, "icon": s.icon} for s in self.labels.filter(kind="status")],
             "profile": self.profile.id,
             "name_is_user_provided": self.name_is_user_provided,
             "rating": self.rating,
             "color": self.effective_color,
-            "tags": [{"id": t.id, "name": t.name, "color": t.effective_color, "icon": t.effective_icon} for t in self.badges.filter(kind="tag")],
+            "tags": [{"id": t.id, "name": t.name, "color": t.effective_color, "icon": t.effective_icon} for t in self.labels.filter(kind="tag")],
         }
 
     def to_detail_json(self) -> dict:

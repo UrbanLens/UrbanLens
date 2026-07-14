@@ -5,8 +5,8 @@ from typing import TYPE_CHECKING
 
 from django import forms
 
-from urbanlens.dashboard.models.badges.model import Badge
 from urbanlens.dashboard.models.custom_fields.model import CustomField, CustomFieldEntity, CustomFieldType
+from urbanlens.dashboard.models.labels.model import Label
 
 if TYPE_CHECKING:
     from django.contrib.gis.geos import MultiPolygon
@@ -19,15 +19,15 @@ class SearchForm(forms.Form):
 
     Fields are all optional; omitting a field means "no filter on that dimension."
 
-    Badge filtering accepts either the legacy ``tags``/``exclude_tags`` fields OR the
-    richer ``badge_groups`` JSON field (produced by the formula bar).  ``badge_groups``
+    Label filtering accepts either the legacy ``tags``/``exclude_tags`` fields OR the
+    richer ``label_groups`` JSON field (produced by the formula bar).  ``label_groups``
     takes precedence when present.  Its schema is a JSON array of group objects::
 
-        [{"op": "and"|"or"|"not", "ids": [<badge_id>, ...]}, ...]
+        [{"op": "and"|"or"|"not", "ids": [<label_id>, ...]}, ...]
 
-    ``and``  - pin must have ALL badges in the group.
-    ``or``   - pin must have AT LEAST ONE badge in the group.
-    ``not``  - pin must have NONE of the badges in the group.
+    ``and``  - pin must have ALL labels in the group.
+    ``or``   - pin must have AT LEAST ONE label in the group.
+    ``not``  - pin must have NONE of the labels in the group.
 
     When constructed with a ``profile``, one form field per custom pin field is
     added dynamically (named ``cf_<id>`` for text, ``cf_<id>_min``/``_max`` for
@@ -39,17 +39,17 @@ class SearchForm(forms.Form):
     min_rating = forms.IntegerField(required=False, min_value=0, max_value=5)
     max_rating = forms.IntegerField(required=False, min_value=0, max_value=5)
     tags: forms.ModelMultipleChoiceField = forms.ModelMultipleChoiceField(
-        queryset=Badge.objects.all(),
+        queryset=Label.objects.all(),
         widget=forms.CheckboxSelectMultiple,
         required=False,
     )
     exclude_tags: forms.ModelMultipleChoiceField = forms.ModelMultipleChoiceField(
-        queryset=Badge.objects.all(),
+        queryset=Label.objects.all(),
         widget=forms.CheckboxSelectMultiple,
         required=False,
     )
-    # Structured badge query from the formula bar - supersedes tags/exclude_tags when set.
-    badge_groups = forms.CharField(required=False)
+    # Structured label query from the formula bar - supersedes tags/exclude_tags when set.
+    label_groups = forms.CharField(required=False)
     has_visits = forms.ChoiceField(
         choices=[("", ""), ("yes", "yes"), ("no", "no")],
         required=False,
@@ -82,13 +82,13 @@ class SearchForm(forms.Form):
         """
         super().__init__(*args, **kwargs)
         self.custom_fields: list[CustomField] = []
-        visible_badges = Badge.objects.visible_to(profile).ordered() if profile else Badge.objects.global_only().ordered()
+        visible_labels = Label.objects.visible_to(profile).ordered() if profile else Label.objects.global_only().ordered()
         tags_field = self.fields["tags"]
         exclude_tags_field = self.fields["exclude_tags"]
         if isinstance(tags_field, forms.ModelMultipleChoiceField):
-            tags_field.queryset = visible_badges
+            tags_field.queryset = visible_labels
         if isinstance(exclude_tags_field, forms.ModelMultipleChoiceField):
-            exclude_tags_field.queryset = visible_badges
+            exclude_tags_field.queryset = visible_labels
         if profile is None:
             return
         self.custom_fields = list(CustomField.objects.for_entity(profile, CustomFieldEntity.PIN))
@@ -156,14 +156,14 @@ class SearchForm(forms.Form):
         except (ValueError, TypeError):
             return None
 
-    def parse_badge_groups(self) -> list[dict] | None:
-        """Parse the ``badge_groups`` JSON field into a list of group dicts.
+    def parse_label_groups(self) -> list[dict] | None:
+        """Parse the ``label_groups`` JSON field into a list of group dicts.
 
         Returns:
             List of ``{"op": str, "ids": list[int]}`` dicts, or ``None`` when the
             field is absent or malformed.
         """
-        raw = (self.cleaned_data.get("badge_groups") or "").strip()
+        raw = (self.cleaned_data.get("label_groups") or "").strip()
         if not raw:
             return None
         try:

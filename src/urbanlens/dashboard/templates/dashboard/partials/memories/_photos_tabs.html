@@ -64,7 +64,7 @@ Context:
 </nav>
 <script>
     // Confirming a photo-origin visit, creating a pin from a suggestion, or logging/clearing
-    // a "Visited" status here can create or re-badge a Pin, but this isn't the map page and
+    // a "Visited" status here can create or re-label a Pin, but this isn't the map page and
     // can't reach into its in-memory pin store/localStorage cache directly. Flag it dirty
     // instead, same as the bulk importer does - the map page checks this flag on load and on
     // every background poll tick, so the change shows up there without a manual reload.

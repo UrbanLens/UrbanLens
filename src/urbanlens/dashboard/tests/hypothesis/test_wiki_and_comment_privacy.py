@@ -2,7 +2,7 @@
 
 Covers two regressions:
 
-- Wiki-scoped views (page, gallery, boundary, aliases, badge membership,
+- Wiki-scoped views (page, gallery, boundary, aliases, label membership,
   markup, detail pins, comments) resolved the Location/Wiki from the URL
   slug alone, so any logged-in user could view or edit the wiki for a place
   they had never pinned. Every one of them must instead resolve through
@@ -19,8 +19,8 @@ from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.models.badges.meta import KIND_TAG
-from urbanlens.dashboard.models.badges.model import Badge
+from urbanlens.dashboard.models.labels.meta import KIND_TAG
+from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.comments.model import Comment
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import VisibilityChoice
@@ -71,12 +71,12 @@ class WikiVisibilityTests(TestCase):
         response = self.client.get(reverse("location.wiki.aliases", args=[self.own_wiki.location.slug]))
         self.assertEqual(response.status_code, 200)
 
-    def test_wiki_badge_membership_unpinned_404s(self) -> None:
-        response = self.client.get(reverse("badge.location", kwargs={"badge_kind": "tag", "location_slug": self.wiki.location.slug}))
+    def test_wiki_label_membership_unpinned_404s(self) -> None:
+        response = self.client.get(reverse("label.location", kwargs={"label_kind": "tag", "location_slug": self.wiki.location.slug}))
         self.assertEqual(response.status_code, 404)
 
-    def test_wiki_badge_membership_pinned_succeeds(self) -> None:
-        response = self.client.get(reverse("badge.location", kwargs={"badge_kind": "tag", "location_slug": self.own_wiki.location.slug}))
+    def test_wiki_label_membership_pinned_succeeds(self) -> None:
+        response = self.client.get(reverse("label.location", kwargs={"label_kind": "tag", "location_slug": self.own_wiki.location.slug}))
         self.assertEqual(response.status_code, 200)
 
     def test_wiki_markup_json_unpinned_404s(self) -> None:

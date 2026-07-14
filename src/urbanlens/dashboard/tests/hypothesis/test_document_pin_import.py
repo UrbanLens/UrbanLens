@@ -3,7 +3,7 @@
 Covers the deterministic pieces (extension detection, text extraction, CSV-answer
 parsing) with hypothesis, and the AI-gating/prompt-injection-guard behavior of
 ``extract_pins_from_document`` with mocks, following the pattern established in
-``test_badge_style_suggestions.py``.
+``test_label_style_suggestions.py``.
 """
 
 from __future__ import annotations

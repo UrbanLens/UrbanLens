@@ -2,7 +2,7 @@ import logging
 
 from rest_framework import serializers
 
-from urbanlens.dashboard.models.badges.serializer import BadgeSerializer
+from urbanlens.dashboard.models.labels.serializer import LabelSerializer
 from urbanlens.dashboard.models.pin.model import Pin
 
 logger = logging.getLogger(__name__)
@@ -20,8 +20,8 @@ class PinSerializer(serializers.ModelSerializer):
     Address and place name are not included here; nest a LocationSerializer or add
     read-only ``source="location.*"`` fields if API consumers need place-level data.
 
-    categories/tags are read-only views of the pin's badges, filtered by kind.
-    Badge assignment is handled by the dedicated badges controller/endpoints,
+    categories/tags are read-only views of the pin's labels, filtered by kind.
+    Label assignment is handled by the dedicated labels controller/endpoints,
     not through this serializer.
     """
 
@@ -46,9 +46,9 @@ class PinSerializer(serializers.ModelSerializer):
     # accepted from the client, or a PATCH could reassign a pin to an
     # arbitrary profile id.
     profile = serializers.PrimaryKeyRelatedField(read_only=True)
-    categories = BadgeSerializer(many=True, read_only=True)
-    tags = BadgeSerializer(many=True, read_only=True)
-    statuses = BadgeSerializer(many=True, read_only=True)
+    categories = LabelSerializer(many=True, read_only=True)
+    tags = LabelSerializer(many=True, read_only=True)
+    statuses = LabelSerializer(many=True, read_only=True)
 
     class Meta:
         model = Pin

@@ -57,7 +57,7 @@ def with_wiki_descendants(wikis: list[Wiki]) -> list[Wiki]:
 
 @register
 class WikiUndoHandler(UndoHandler):
-    """Restores a wiki's own fields, hierarchy position, and badges - not its cascade children.
+    """Restores a wiki's own fields, hierarchy position, and labels - not its cascade children.
 
     Comments, aliases, edit history, and photos are gone the instant the
     wiki is deleted and are not restored.
@@ -78,7 +78,7 @@ class WikiUndoHandler(UndoHandler):
             "location_id": wiki.location_id,
             "created_by_id": wiki.created_by_id,
             "parent_wiki_old_pk": wiki.parent_wiki_id,
-            "badge_ids": list(wiki.badges.values_list("id", flat=True)),
+            "label_ids": list(wiki.labels.values_list("id", flat=True)),
         }
 
     @classmethod
@@ -89,7 +89,7 @@ class WikiUndoHandler(UndoHandler):
 
     @classmethod
     def restore(cls, payload: list[dict[str, Any]]) -> list[Wiki]:
-        """Recreate wikis with fresh pks/uuids/slugs, relinking hierarchy and badges."""
+        """Recreate wikis with fresh pks/uuids/slugs, relinking hierarchy and labels."""
         old_to_new: dict[int, Wiki] = {}
         restored: list[Wiki] = []
         for entry in payload:
@@ -108,7 +108,7 @@ class WikiUndoHandler(UndoHandler):
                 if parent is not None:
                     wiki.parent_wiki = parent
                     wiki.save(update_fields=["parent_wiki"])
-            if entry["badge_ids"]:
-                wiki.badges.set(entry["badge_ids"])
+            if entry["label_ids"]:
+                wiki.labels.set(entry["label_ids"])
 
         return restored

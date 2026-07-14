@@ -1,28 +1,28 @@
 {% load dashboard_tags %}
-{# Add-badges popup for one relationship direction (rel_type: 'parent' or 'child'). Nested inside _badge_relationship_picker.html. #}
-<div class="badge-rel-popup" id="{{ instance_id }}-popup-{{ rel_type }}" hidden>
+{# Add-labels popup for one relationship direction (rel_type: 'parent' or 'child'). Nested inside _label_relationship_picker.html. #}
+<div class="label-rel-popup" id="{{ instance_id }}-popup-{{ rel_type }}" hidden>
     {% if ns != 'people' %}
-    <div class="badge-rel-tabs" role="tablist">
-        <button type="button" class="badge-rel-tab" data-kind="tag" onclick="BadgeRelPicker.setTab('{{ instance_id }}','{{ rel_type }}','tag',this)">Tags</button>
-        <button type="button" class="badge-rel-tab" data-kind="category" onclick="BadgeRelPicker.setTab('{{ instance_id }}','{{ rel_type }}','category',this)">Categories</button>
-        <button type="button" class="badge-rel-tab" data-kind="status" onclick="BadgeRelPicker.setTab('{{ instance_id }}','{{ rel_type }}','status',this)">Statuses</button>
-        <button type="button" class="badge-rel-tab active" data-kind="" onclick="BadgeRelPicker.setTab('{{ instance_id }}','{{ rel_type }}','',this)">All</button>
+    <div class="label-rel-tabs" role="tablist">
+        <button type="button" class="label-rel-tab" data-kind="tag" onclick="LabelRelPicker.setTab('{{ instance_id }}','{{ rel_type }}','tag',this)">Tags</button>
+        <button type="button" class="label-rel-tab" data-kind="category" onclick="LabelRelPicker.setTab('{{ instance_id }}','{{ rel_type }}','category',this)">Categories</button>
+        <button type="button" class="label-rel-tab" data-kind="status" onclick="LabelRelPicker.setTab('{{ instance_id }}','{{ rel_type }}','status',this)">Statuses</button>
+        <button type="button" class="label-rel-tab active" data-kind="" onclick="LabelRelPicker.setTab('{{ instance_id }}','{{ rel_type }}','',this)">All</button>
     </div>
     {% endif %}
 
-    <input type="text" class="form-input badge-rel-search" placeholder="Search badges..."
-           oninput="BadgeRelPicker.filter('{{ instance_id }}', '{{ rel_type }}', this.value)" autocomplete="off">
+    <input type="text" class="form-input label-rel-search" placeholder="Search labels..."
+           oninput="LabelRelPicker.filter('{{ instance_id }}', '{{ rel_type }}', this.value)" autocomplete="off">
 
-    <div class="tag-parent-select badge-rel-suggestions" id="{{ instance_id }}-suggestions-{{ rel_type }}" data-active-tab="">
+    <div class="tag-parent-select label-rel-suggestions" id="{{ instance_id }}-suggestions-{{ rel_type }}" data-active-tab="">
         {% for b in candidates %}
-        <button type="button" class="tag-chip badge-rel-suggestion{% if selected_ids and b.id in selected_ids %} badge-rel-suggestion--hidden{% endif %}"
+        <button type="button" class="tag-chip label-rel-suggestion{% if selected_ids and b.id in selected_ids %} label-rel-suggestion--hidden{% endif %}"
                 data-id="{{ b.id }}" data-kind="{{ b.kind }}" data-name="{{ b.name|lower }}"
                 {% if b.color %}style="--tag-color:{{ b.color }}"{% endif %}
-                onclick="BadgeRelPicker.select('{{ instance_id }}', '{{ rel_type }}', this)">
+                onclick="LabelRelPicker.select('{{ instance_id }}', '{{ rel_type }}', this)">
             {% if ns != 'people' %}
-            {% include 'dashboard/partials/ui/_badge_rel_chip_body.html' with badge=b show_kind=True %}
+            {% include 'dashboard/partials/ui/_label_rel_chip_body.html' with label=b show_kind=True %}
             {% else %}
-            {% include 'dashboard/partials/ui/_badge_rel_chip_body.html' with badge=b show_kind=False %}
+            {% include 'dashboard/partials/ui/_label_rel_chip_body.html' with label=b show_kind=False %}
             {% endif %}
         </button>
         {% endfor %}

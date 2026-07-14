@@ -187,7 +187,7 @@ def _contact_display_label(contact_profile: Profile | None, email: str | None, l
 
 
 def _contact_status_map(checkin: SafetyCheckin, contacts: Iterable[SafetyCheckinContact]) -> dict[int | str, dict[str, str]]:
-    """Build a {contact identity -> {"label", "class"}} map for the contact-picker's status badges.
+    """Build a {contact identity -> {"label", "class"}} map for the contact-picker's status labels.
 
     Args:
         checkin: The check-in these contacts belong to (used to resolve opt-out scopes).
@@ -200,11 +200,11 @@ def _contact_status_map(checkin: SafetyCheckin, contacts: Iterable[SafetyCheckin
     status_map: dict[int | str, dict[str, str]] = {}
     for contact in contacts:
         if contact.found_safe_at:
-            label, css_class = "Found you", "safety-badge--success"
+            label, css_class = "Found you", "safety-label--success"
         elif is_contact_opted_out(contact.contact_profile, contact.email, owner=checkin.profile, checkin=checkin):
-            label, css_class = "Opted out", "safety-badge--muted"
+            label, css_class = "Opted out", "safety-label--muted"
         elif contact.notified_at:
-            label, css_class = "Notified", "safety-badge--warning"
+            label, css_class = "Notified", "safety-label--warning"
         else:
             label, css_class = "Not yet notified", ""
         key = contact.contact_profile_id or contact.email

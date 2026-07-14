@@ -17,7 +17,7 @@ class SavedFilter(abstract.FrontendDashboardModel):
     """A profile's saved main-map filter combination.
 
     ``criteria`` stores a JSON-safe, normalized form of the fields
-    ``SearchForm.cleaned_data`` (plus parsed ``badge_groups``/custom-field
+    ``SearchForm.cleaned_data`` (plus parsed ``label_groups``/custom-field
     criteria) would produce - see ``dashboard.services.filter_criteria`` for
     the (de)serialization helpers that build and replay this shape against
     ``Pin.objects.filter_by_criteria()``.

@@ -1,13 +1,13 @@
-"""ProfileBadgeAssignment queryset and manager."""
+"""ProfileLabelAssignment queryset and manager."""
 
 from __future__ import annotations
 
 from urbanlens.dashboard.models import abstract
 
 
-class ProfileBadgeAssignmentQuerySet(abstract.DashboardQuerySet):
-    """QuerySet for private user-badge assignments on profiles."""
+class ProfileLabelAssignmentQuerySet(abstract.DashboardQuerySet):
+    """QuerySet for private user-label assignments on profiles."""
 
 
-class ProfileBadgeAssignmentManager(abstract.DashboardManager.from_queryset(ProfileBadgeAssignmentQuerySet)):
-    """Manager for ProfileBadgeAssignment records."""
+class ProfileLabelAssignmentManager(abstract.DashboardManager.from_queryset(ProfileLabelAssignmentQuerySet)):
+    """Manager for ProfileLabelAssignment records."""

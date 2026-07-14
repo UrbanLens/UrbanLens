@@ -22,7 +22,7 @@ from hypothesis import HealthCheck, given, settings, strategies as st
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.models.badges.model import KIND_TAG, Badge
+from urbanlens.dashboard.models.labels.model import KIND_TAG, Label
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.reviews.model import Review
@@ -301,16 +301,16 @@ class FilterByCriteriaMonotonicityTests(TestCase):
 
 
 class FilterByCriteriaTagTests(TestCase):
-    """Tag criterion filters via Badge.get_badge_and_descendants."""
+    """Tag criterion filters via Label.get_label_and_descendants."""
 
     profile: Profile
 
     def setUp(self) -> None:
         super().setUp()
         self.profile = baker.make(User).profile
-        self.tag = baker.make(Badge, kind=KIND_TAG, profile=None, name="urban-exploration")
+        self.tag = baker.make(Label, kind=KIND_TAG, profile=None, name="urban-exploration")
         self.tagged_pin = baker.make(Pin, profile=self.profile)
-        self.tagged_pin.badges.add(self.tag)
+        self.tagged_pin.labels.add(self.tag)
         self.untagged_pin = baker.make(Pin, profile=self.profile)
 
     def _base_qs(self):
@@ -328,10 +328,10 @@ class FilterByCriteriaTagTests(TestCase):
 
     def test_tag_filter_includes_child_tag_pins(self) -> None:
         """Pins with a child tag of the filter tag must also appear."""
-        child_tag = baker.make(Badge, kind=KIND_TAG, profile=None, name="abandoned-urbex")
+        child_tag = baker.make(Label, kind=KIND_TAG, profile=None, name="abandoned-urbex")
         child_tag.parents.add(self.tag)
         child_pin = baker.make(Pin, profile=self.profile)
-        child_pin.badges.add(child_tag)
+        child_pin.labels.add(child_tag)
         qs = self._base_qs().filter_by_criteria({"tags": [self.tag]})
         result_ids = set(qs.values_list("pk", flat=True))
         self.assertIn(child_pin.pk, result_ids)
