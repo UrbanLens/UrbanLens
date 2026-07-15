@@ -420,7 +420,7 @@ div.section {
 
     .card-header {
         @include panel-header-grid;
-        background: color-mix(in srgb, var(--ul-surface), #000 20%);
+        background: color-mix(in srgb, var(--ul-surface), #fff 20%);
         border-radius: $radius-sm $radius-sm 0 0;
 
         > span:not(.badge):not(.visit-count):not(.ul-explainer-anchor) {
@@ -527,6 +527,14 @@ div.section {
         .map-btn-icon {
             width: 2.75rem;
             height: 2.75rem;
+        }
+    }
+}
+
+[data-theme="dark"] {
+    .card {
+        .card-header {
+            background: color-mix(in srgb, var(--ul-surface), #000 20%);
         }
     }
 }

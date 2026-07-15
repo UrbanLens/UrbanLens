@@ -1,5 +1,6 @@
 # Server state - Could contain sensitive details
 *.log
+.deploy.lock
 
 # Compiled code
 __pycache__/

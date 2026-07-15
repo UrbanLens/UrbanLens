@@ -1,0 +1,27 @@
+[Unit]
+Description=UrbanLens deploy webhook listener
+After=network.target docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+# Edit these two paths for the checkout this unit belongs to (they differ
+# between the staging and dev/production hosts - copy this file per host and
+# adjust, or install to e.g. urbanlens-deploy-webhook@staging.service and swap
+# in %i if you'd rather template it).
+WorkingDirectory=/opt/urbanlens
+EnvironmentFile=/opt/urbanlens/.env
+ExecStart=/usr/bin/python3 /opt/urbanlens/bin/deploy_webhook.py
+Restart=on-failure
+RestartSec=5
+
+# Run as the same user that owns the checkout and can run `docker compose`
+# without sudo (i.e. a member of the `docker` group) - NOT root.
+User=deploy
+Group=deploy
+
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
