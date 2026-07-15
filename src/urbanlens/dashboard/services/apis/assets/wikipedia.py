@@ -313,14 +313,21 @@ class WikipediaGateway(Gateway):
     @staticmethod
     def _address_matches(summary: dict, components: dict[str, str], name: str = "") -> bool:
         """
-        Returns True if the candidate's title matches ``name``, or at least one
-        address component appears in the article text.
+        Returns True only when there's a genuine positive signal that the
+        candidate is specifically about the queried place - a title match on
+        the place's own name, or an address component (locality/route/street
+        number) mentioned in the article text.
 
         A title match on the place's own name is checked first since it is the
         strongest signal available - stronger than any address mention, which
         can also be true of unrelated articles about nearby places. We check
         the extract (first few paragraphs) for the city/locality as a fallback
         signal.  A street address match is stronger but optional.
+
+        Geosearch alone only proves the candidate is *nearby* - it says
+        nothing about whether the article is actually about this specific
+        place, so a candidate with no matching signal at all (no title match,
+        no extract, no address mention) is rejected rather than guessed at.
         """
         title = (summary.get("title") or "").strip().lower()
         name = name.strip().lower()
@@ -329,7 +336,7 @@ class WikipediaGateway(Gateway):
 
         text = (summary.get("extract") or "").lower()
         if not text:
-            return True  # no extract - accept the article, let the user judge
+            return False
 
         locality = (components.get("locality") or "").lower()
         route = (components.get("route") or "").lower()
@@ -339,12 +346,7 @@ class WikipediaGateway(Gateway):
             return True
         if route and route in text:
             return True
-        if street_number and street_number in text:
-            return True
-
-        # Fallback: accept articles with very short extracts (stub articles
-        # often lack address mentions but are still correct).
-        return len(text) < 200
+        return bool(street_number and street_number in text)
 
     @staticmethod
     def _normalise(summary: dict) -> dict[str, Any]:
