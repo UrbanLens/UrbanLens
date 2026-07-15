@@ -1049,6 +1049,11 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
         background: rgba($color-amber-500, .12);
         color: $color-amber-600;
     }
+
+    &--pending {
+        background: var(--ul-grey-2);
+        color: var(--ul-grey-6);
+    }
 }
 
 .admin-home-meta-pill {

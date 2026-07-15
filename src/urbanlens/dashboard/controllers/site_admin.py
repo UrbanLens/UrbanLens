@@ -1043,13 +1043,11 @@ class SiteAdminHomeView(LoginRequiredMixin, PermissionRequiredMixin, View):
         return super().handle_no_permission()
 
     def get(self, request: HttpRequest):
-        from django.conf import settings as django_settings
         from django.contrib.auth.models import User
 
         from urbanlens.dashboard.models.images.model import Image
         from urbanlens.dashboard.models.location.model import Location
         from urbanlens.dashboard.models.pin.model import Pin
-        from urbanlens.dashboard.services.infrastructure_stats import collect_infrastructure_service_stats
 
         now = timezone.now()
         thirty_days_ago = now - timedelta(days=30)
@@ -1067,20 +1065,14 @@ class SiteAdminHomeView(LoginRequiredMixin, PermissionRequiredMixin, View):
 
             total_subscriptions = UserSubscription.objects.filter(revoked_at__isnull=True).count()
 
-        infra_services = collect_infrastructure_service_stats()
-        unhealthy_count = sum(1 for s in infra_services if s.status == "unhealthy")
-
         site_settings = SiteSettings.get_current()
 
-        from urbanlens.core.version import (
-            format_short_commit,
-            get_current_git_branch,
-            get_git_commit_at_start,
-            get_git_update_status,
-        )
-
-        git_update = get_git_update_status(get_git_commit_at_start())
-
+        # Service health (Postgres/Valkey/Celery/nginx pings) and the git
+        # update check (a `git fetch` against the remote, only cached for the
+        # life of this worker process) are both real I/O, not DB lookups -
+        # fetched by SiteAdminHomeStatusPartialView below instead of blocking
+        # this page's initial render, same as the /site-admin/stats/ page
+        # already lazy-loads its own system panel.
         return render(
             request,
             "dashboard/pages/site_admin_home.html",
@@ -1094,11 +1086,6 @@ class SiteAdminHomeView(LoginRequiredMixin, PermissionRequiredMixin, View):
                 "total_pins": total_pins,
                 "total_photos": total_photos,
                 "total_subscriptions": total_subscriptions,
-                "unhealthy_services": unhealthy_count,
-                "total_services": len(infra_services),
-                "git_has_newer_commits": git_update.has_newer_commits,
-                "git_available": git_update.git_available,
-                "git_branch": get_current_git_branch(),
                 "app_version": app_settings.app_version,
                 "show_dev_toolbar": site_settings.show_dev_admin_features(request.user),
             },
@@ -1125,6 +1112,38 @@ class _AdminPermissionMixin(LoginRequiredMixin, PermissionRequiredMixin):
                 redirect_field_name=self.get_redirect_field_name(),
             )
         return super().handle_no_permission()
+
+
+class SiteAdminHomeStatusPartialView(_AdminPermissionMixin, View):
+    """HTMX partial: infrastructure health + git update badges for the admin home page.
+
+    GET /site-admin/status/
+
+    Split out of ``SiteAdminHomeView`` because ``collect_infrastructure_service_stats``
+    pings Postgres/Valkey/Celery/nginx and ``get_git_update_status`` runs a
+    ``git fetch`` - real I/O that shouldn't block the page's initial render.
+    """
+
+    def get(self, request: HttpRequest):
+        from urbanlens.core.version import get_current_git_branch, get_git_commit_at_start, get_git_update_status
+        from urbanlens.dashboard.services.infrastructure_stats import collect_infrastructure_service_stats
+
+        infra_services = collect_infrastructure_service_stats()
+        unhealthy_count = sum(1 for s in infra_services if s.status == "unhealthy")
+
+        git_update = get_git_update_status(get_git_commit_at_start())
+
+        return render(
+            request,
+            "dashboard/partials/admin/admin_home_status.html",
+            {
+                "unhealthy_services": unhealthy_count,
+                "total_services": len(infra_services),
+                "git_has_newer_commits": git_update.has_newer_commits,
+                "git_available": git_update.git_available,
+                "git_branch": get_current_git_branch(),
+            },
+        )
 
 
 class SiteAdminStatsKpiPartialView(_AdminPermissionMixin, View):

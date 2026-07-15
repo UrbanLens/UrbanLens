@@ -17,33 +17,21 @@
 
     {# -- Status & meta row -------------------------------------------------------- #}
     <div class="admin-home-status-row">
-        {% if unhealthy_services %}
-        <span class="admin-home-status admin-home-status--warn">
-            <i class="material-symbols-outlined">warning</i>
-            {{ unhealthy_services }} service{{ unhealthy_services|pluralize }} unhealthy
+        {# Service health + git update badges are real I/O (service pings, a git
+           fetch) - lazy-loaded so they never block this page's initial render. #}
+        <span id="admin-home-health-status"
+              hx-get="{% url 'site_admin_home_status' %}"
+              hx-trigger="load"
+              hx-swap="innerHTML">
+            <span class="admin-home-status admin-home-status--pending">
+                <i class="material-symbols-outlined">more_horiz</i>
+                Checking services…
+            </span>
         </span>
-        {% elif total_services %}
-        <span class="admin-home-status admin-home-status--ok">
-            <i class="material-symbols-outlined">check_circle</i>
-            All services healthy
-        </span>
-        {% endif %}
-        {% if git_has_newer_commits %}
-        <span class="admin-home-status admin-home-status--warn">
-            <i class="material-symbols-outlined">new_releases</i>
-            Update available
-        </span>
-        {% endif %}
         <span class="admin-home-meta-pill">
             <i class="material-symbols-outlined">sell</i>
             v{{ app_version }}
         </span>
-        {% if git_branch %}
-        <span class="admin-home-meta-pill">
-            <i class="material-symbols-outlined">call_split</i>
-            {{ git_branch }}
-        </span>
-        {% endif %}
         <span class="admin-home-meta-pill">
             <i class="material-symbols-outlined">schedule</i>
             {{ server_time|date:"N j, Y" }}

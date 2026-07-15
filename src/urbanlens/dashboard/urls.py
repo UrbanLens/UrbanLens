@@ -1291,6 +1291,7 @@ urlpatterns = [
     path("welcome/", onboarding.WelcomeOnboardingView.as_view(), name="onboarding.welcome"),
     path("tasks/<str:task_id>/status/", site_admin.CeleryTaskStatusView.as_view(), name="celery_task_status"),
     path("site-admin/", site_admin.SiteAdminHomeView.as_view(), name="site_admin_home"),
+    path("site-admin/status/", site_admin.SiteAdminHomeStatusPartialView.as_view(), name="site_admin_home_status"),
     path("site-admin/users/", site_admin.SiteAdminUsersView.as_view(), name="site_admin_users"),
     path("site-admin/settings/", site_admin.SiteAdminView.as_view(), name="site_admin"),
     path("site-admin/stats/", site_admin.SiteAdminStatsView.as_view(), name="site_admin_stats"),
