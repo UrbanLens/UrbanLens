@@ -149,6 +149,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     usgs_username: str | None = Field(default=None, description="The USGS EarthExplorer username (required alongside usgs_api_key for M2M auth)")
     mapbox_api_key: str | None = Field(default=None, description="The Mapbox public access token (pk.* token)")
     bing_maps_api_key: str | None = Field(default=None, description="The Bing Maps API key (from Azure portal)")
+    azure_maps_subscription_key: str | None = Field(default=None, description="The Azure Maps subscription key (Azure Portal -> Azure Maps account -> Authentication)")
     mapillary_access_token: str | None = Field(default=None, description="The Mapillary client access token")
     brave_search_api_key: str | None = Field(default=None, description="The Brave Search API key")
     smithsonian_api_key: str | None = Field(default=None, description="The smithsonian key")

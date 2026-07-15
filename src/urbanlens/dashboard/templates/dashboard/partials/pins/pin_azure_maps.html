@@ -1,0 +1,74 @@
+{% load dashboard_tags %}
+<div id="azure-maps-section" class="azure-maps-info card"
+     data-collapse-scope="pin" data-collapse-section="azure_maps">
+    {% if debug %}
+    <span class="debug-marker" hidden
+          data-debug-source="{{ debug.source }}"
+          data-debug-query="{{ debug.query }}"
+          data-debug-cache="{{ debug.from_cache|yesno:'hit,miss' }}"
+          data-debug-count="{{ debug.count }}"></span>
+    {% endif %}
+    <div class="card-header">
+        <i class="material-symbols-outlined">travel_explore</i>
+        <h3>Azure Maps</h3>
+    </div>
+
+    <div class="card__body azure-maps-body">
+        <div class="azure-maps-heading">
+            {% if place.poi.name %}
+            <p class="azure-maps-place-name">{{ place.poi.name }}</p>
+            {% elif place.formatted_address %}
+            <p class="azure-maps-place-name">{{ place.formatted_address }}</p>
+            {% endif %}
+            {% if place.poi.categories %}
+            {% for category in place.poi.categories %}
+            <span class="azure-maps-kind-chip">{{ category }}</span>
+            {% endfor %}
+            {% endif %}
+        </div>
+
+        {% if place.poi.website or place.poi.phone or place.poi.distance_meters %}
+        <div class="azure-maps-quick-facts">
+            {% if place.poi.website %}
+            <a class="azure-maps-fact" href="{{ place.poi.website }}" target="_blank" rel="noopener noreferrer">
+                <i class="material-symbols-outlined">language</i>
+                <span>{{ place.poi.website|truncatechars:40 }}</span>
+            </a>
+            {% endif %}
+            {% if place.poi.phone %}
+            <a class="azure-maps-fact" href="tel:{{ place.poi.phone }}">
+                <i class="material-symbols-outlined">call</i>
+                <span>{{ place.poi.phone }}</span>
+            </a>
+            {% endif %}
+            {% if place.poi.distance_meters %}
+            <span class="azure-maps-fact">
+                <i class="material-symbols-outlined">social_distance</i>
+                <span>{{ place.poi.distance_meters|floatformat:0 }}m away</span>
+            </span>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        {% if place.formatted_address %}
+        <dl class="azure-maps-meta">
+            <div class="azure-maps-meta-item">
+                <dt>Address</dt>
+                <dd>{{ place.formatted_address }}</dd>
+            </div>
+            {% if place.admin_district %}
+            <div class="azure-maps-meta-item">
+                <dt>Region</dt>
+                <dd>{{ place.admin_district }}</dd>
+            </div>
+            {% endif %}
+            {% if place.country %}
+            <div class="azure-maps-meta-item">
+                <dt>Country</dt>
+                <dd>{{ place.country }}</dd>
+            </div>
+            {% endif %}
+        </dl>
+        {% endif %}
+    </div>
+</div>

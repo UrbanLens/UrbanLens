@@ -73,15 +73,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                     status=404,
                 )
 
-        # Backfill slug for legacy pins/locations created before slug generation was automatic.
-        # A missing location slug otherwise hides the wiki create/view link entirely (see
-        # pin_overview_partial.html's `{% if pin.location and pin.location.slug %}` guard).
-        if pin.wiki and not pin.wiki.slug:
-            pin.wiki.ensure_slug()
-        if not pin.slug:
-            pin.slug = pin.ensure_slug()
-        if pin.location and not pin.location.slug:
-            pin.location.ensure_slug()
+        pin.backfill_wiki_link_slugs()
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
 
@@ -1159,6 +1151,47 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         context = {"place": data, "debug": self._debug_entry(request, "nominatim", cached.query_key, from_cache=True, count=1)}
         return render(request, "dashboard/partials/pins/pin_nominatim.html", context)
+
+    def azure_maps_info(self, request: HttpRequest, pin_slug: str):
+        """
+        HTMX partial: Azure Maps reverse-geocoded address and nearest-POI details for the pin's location.
+
+        Only renders when the payload carries a formatted address or a nearby POI - a
+        coordinate-only result (nothing geocoded, nothing nearby) returns 204.
+        """
+        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+
+        if not settings.azure_maps_subscription_key:
+            logger.debug("azure_maps_info: Azure Maps subscription key not configured, skipping pin %s", pin_slug)
+            return HttpResponse(status=204)
+
+        try:
+            pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)
+        except Pin.DoesNotExist:
+            return HttpResponse(status=404)
+
+        location = pin.location
+        if not location:
+            logger.debug("azure_maps_info: pin %s has no location, skipping", pin_slug)
+            return HttpResponse(status=204)
+
+        lat = pin.effective_latitude
+        lng = pin.effective_longitude
+        if not lat or not lng:
+            logger.debug("azure_maps_info: pin %s has no coordinates, skipping", pin_slug)
+            return HttpResponse(status=204)
+
+        cached = LocationCache.get_fresh(location, "azure_maps")
+        if cached is None:
+            return self._pending_panel(request, pin, "azure_maps")
+        data = cached.data or None
+
+        if not data or not (data.get("formatted_address") or data.get("poi")):
+            logger.debug("azure_maps_info: no enrichment data for pin %s at (%s, %s)", pin_slug, redact_coordinate(lat), redact_coordinate(lng))
+            return HttpResponse(status=204)
+
+        context = {"place": data, "debug": self._debug_entry(request, "azure_maps", cached.query_key, from_cache=True, count=1)}
+        return render(request, "dashboard/partials/pins/pin_azure_maps.html", context)
 
     def usgs_topo_info(self, request: HttpRequest, pin_slug: str):
         """HTMX partial: USGS Historical Topographic Map Collection maps near the pin.

@@ -406,6 +406,19 @@
             <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
         </div>
 
+        <div id="azure-maps-section" class="card card--secondary"
+            hx-get="{% url 'pin.azure_maps' pin.slug %}"
+            hx-trigger="load[!window.ulSectionCollapsed('pin','azure_maps')], ul:unhide"
+            hx-swap="outerHTML"
+            hx-timeout="25000"
+            data-collapse-scope="pin" data-collapse-section="azure_maps">
+            <div class="card-header">
+                <i class="material-symbols-outlined">travel_explore</i>
+                <h3>Azure Maps</h3>
+            </div>
+            <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
+        </div>
+
         <div id="yelp-section" class="card card--secondary"
             hx-get="{% url 'pin.yelp' pin.slug %}"
             hx-trigger="load[!window.ulSectionCollapsed('pin','yelp')], ul:unhide"

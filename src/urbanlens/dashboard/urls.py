@@ -476,6 +476,11 @@ urlpatterns = [
                                 name="pin.nominatim",
                             ),
                             path(
+                                "<slug:pin_slug>/azure-maps/",
+                                pin.PinController.as_view({"get": "azure_maps_info"}),
+                                name="pin.azure_maps",
+                            ),
+                            path(
                                 "<slug:pin_slug>/usgs-topo/",
                                 pin.PinController.as_view({"get": "usgs_topo_info"}),
                                 name="pin.usgs_topo",

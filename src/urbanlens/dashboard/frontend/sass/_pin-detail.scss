@@ -1354,6 +1354,102 @@
     }
 }
 
+// -- Azure Maps address/POI panel ----------------------------------------------
+.azure-maps-info {
+    .azure-maps-heading {
+        display: flex;
+        align-items: baseline;
+        flex-wrap: wrap;
+        gap: .1rem .6rem;
+    }
+
+    .azure-maps-place-name {
+        margin: 0;
+        font-size: 1.05rem;
+        font-weight: 600;
+        color: var(--ul-grey-9);
+    }
+
+    .azure-maps-kind-chip {
+        padding: .1rem .55rem;
+        font-size: .68rem;
+        font-weight: 600;
+        letter-spacing: .02em;
+        text-transform: uppercase;
+        color: var(--ul-primary, #2563eb);
+        background: var(--ul-primary-light, rgba(37, 99, 235, .12));
+        border-radius: 999px;
+        white-space: nowrap;
+    }
+
+    .azure-maps-quick-facts {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .4rem .9rem;
+        margin-top: .6rem;
+    }
+
+    .azure-maps-fact {
+        display: inline-flex;
+        align-items: center;
+        gap: .3rem;
+        font-size: .82rem;
+        color: var(--ul-grey-7, #475569);
+        text-decoration: none;
+        min-width: 0;
+
+        span {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .material-symbols-outlined {
+            font-size: .95rem;
+            opacity: .75;
+            flex-shrink: 0;
+        }
+
+        &:is(a):hover {
+            color: var(--ul-primary, #2563eb);
+            text-decoration: underline;
+        }
+    }
+
+    .azure-maps-meta {
+        margin: .75rem 0 0;
+        padding: .5rem .6rem;
+        border: 1px solid var(--ul-border);
+        border-radius: 6px;
+        background: var(--ul-surface-raised);
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+        gap: .3rem .75rem;
+    }
+
+    .azure-maps-meta-item {
+        display: flex;
+        flex-direction: column;
+        gap: .05rem;
+        min-width: 0;
+
+        dt {
+            font-size: .68rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: .02em;
+            color: var(--ul-grey-5);
+        }
+
+        dd {
+            margin: 0;
+            font-size: .8rem;
+            color: var(--ul-grey-8);
+            overflow-wrap: break-word;
+        }
+    }
+}
+
 // -- USGS Historical Topographic Maps panel ------------------------------------
 .usgs-topo {
     .usgs-topo-grid {

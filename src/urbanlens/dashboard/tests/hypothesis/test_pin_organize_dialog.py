@@ -99,3 +99,23 @@ class PinWikiLinkVisibilityTests(TestCase):
         # "Create Community Wiki" button instead of rendering nothing.
         overview = self.client.get(reverse("pin.overview", args=[pin.slug]))
         self.assertContains(overview, "Create Community Wiki")
+
+    def test_overview_fragment_backfills_the_slug_even_without_a_prior_page_load(self) -> None:
+        """PinOverviewView must not depend on PinController.view having run first.
+
+        The backfill used to live only in PinController.view - a direct hit to
+        the HTMX overview endpoint (e.g. a bookmarked fragment URL, or any
+        future caller that skips the full page load) would render with the
+        wiki link permanently hidden even though nothing else was wrong with
+        the pin.
+        """
+        location = baker.make("dashboard.Location", latitude="43.000000", longitude="-77.000000", route="Main St")
+        pin = baker.make("dashboard.Pin", profile=self.profile, location=location, name="Legacy Pin 2")
+        type(location).objects.filter(pk=location.pk).update(slug=None)
+        location.refresh_from_db()
+        self.assertIsNone(location.slug)
+
+        overview = self.client.get(reverse("pin.overview", args=[pin.slug]))
+        self.assertContains(overview, "Create Community Wiki")
+        location.refresh_from_db()
+        self.assertIsNotNone(location.slug)

@@ -321,6 +321,23 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
             promoted += 1
         return promoted
 
+    def backfill_wiki_link_slugs(self) -> None:
+        """Ensure this pin, its location, and its wiki (if any) all have slugs.
+
+        Legacy rows created before slug generation was automatic can have a
+        blank ``Location.slug``, which silently hides the wiki create/view
+        link on the pin overview partial (see its
+        ``{% if pin.location and pin.location.slug %}`` guard) since the url
+        can't be reversed without one. Safe to call on every request - each
+        check is a no-op once the slug exists.
+        """
+        if self.wiki and not self.wiki.slug:
+            self.wiki.ensure_slug()
+        if not self.slug:
+            self.slug = self.ensure_slug()
+        if self.location and not self.location.slug:
+            self.location.ensure_slug()
+
     # ------------------------------------------------------------------
     # Effective values
     # ------------------------------------------------------------------
