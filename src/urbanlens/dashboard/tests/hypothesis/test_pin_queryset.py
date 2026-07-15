@@ -264,3 +264,32 @@ class PinManagerGetNearbyOrCreateProximityTests(TestCase):
         pin, created = Pin.objects.get_nearby_or_create(40.0, -74.0, other_profile)
         self.assertTrue(created)
         self.assertNotEqual(pin.pk, self.existing.pk)
+
+
+class PinManagerGetNearbyOrCreateChildPinTests(TestCase):
+    """get_nearby_or_create() must also dedupe against an existing *child* pin.
+
+    Import previously only looked for a root pin (parent_pin__isnull=True) at the
+    Location, so importing a placemark that matched an existing child/sub pin's
+    coordinates silently created a brand-new, disconnected root pin instead of
+    merging into it.
+    """
+
+    def setUp(self):
+        self.profile = baker.make("auth.User").profile
+        self.loc = baker.make("dashboard.Location", latitude="40.0", longitude="-74.0")
+
+    def test_finds_existing_child_pin_when_no_root_pin_exists(self) -> None:
+        parent = baker.make(Pin, profile=self.profile)
+        child = baker.make(Pin, profile=self.profile, location=self.loc, parent_pin=parent)
+        pin, created = Pin.objects.get_nearby_or_create(40.0, -74.0, self.profile, threshold_meters=100)
+        self.assertFalse(created)
+        self.assertEqual(pin.pk, child.pk)
+
+    def test_prefers_root_pin_over_child_pin_when_both_exist_at_same_location(self) -> None:
+        root = baker.make(Pin, profile=self.profile, location=self.loc)
+        other_parent = baker.make(Pin, profile=self.profile)
+        baker.make(Pin, profile=self.profile, location=self.loc, parent_pin=other_parent)
+        pin, created = Pin.objects.get_nearby_or_create(40.0, -74.0, self.profile, threshold_meters=100)
+        self.assertFalse(created)
+        self.assertEqual(pin.pk, root.pk)

@@ -22,6 +22,7 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
+from urbanlens.dashboard.services.text_limits import MAX_PIN_DESCRIPTION_LENGTH
 
 
 def _events(sse_lines: list[str]) -> list[dict]:
@@ -77,3 +78,14 @@ class ImportPinsStreamingCreatesPinsTests(TestCase):
         pin = Pin.objects.get(profile=self.profile, name="Old Mill")
         self.assertEqual(pin.latitude, 40.0)
         self.assertEqual(pin.longitude, -74.0)
+
+    def test_oversized_description_is_clamped_not_left_unbounded(self) -> None:
+        """Pin.save() never calls full_clean(), so this direct-create path must
+        clamp itself - nothing else enforces the model's own MaxLengthValidator."""
+        huge_description = "x" * (MAX_PIN_DESCRIPTION_LENGTH + 1000)
+        csv_bytes = f"name,latitude,longitude,description\nOld Mill,40.0,-74.0,{huge_description}\n".encode()
+
+        list(self.gateway.import_pins_streaming([("pins.csv", csv_bytes)], self.profile))
+
+        pin = Pin.objects.get(profile=self.profile, name="Old Mill")
+        self.assertEqual(len(pin.description), MAX_PIN_DESCRIPTION_LENGTH)

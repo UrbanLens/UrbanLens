@@ -37,6 +37,7 @@ from urbanlens.dashboard.services.import_formats.heuristics import (
 )
 from urbanlens.dashboard.services.labels.style_suggestions import suggest_label_style
 from urbanlens.dashboard.services.redact import redact_coordinate, redact_text
+from urbanlens.dashboard.services.text_limits import MAX_PIN_DESCRIPTION_LENGTH
 from urbanlens.UrbanLens.settings.app import settings
 
 _CID_RE = re.compile(r"!1s0x[0-9a-fA-F]+:0x([0-9a-fA-F]+)")
@@ -496,6 +497,11 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                             pin_data["location"] = location
                             pin_data.setdefault("latitude", location.latitude)
                             pin_data.setdefault("longitude", location.longitude)
+                        if pin_data.get("description"):
+                            # Pin.save() never calls full_clean(), so nothing else
+                            # enforces the model's own MaxLengthValidator on this
+                            # direct create path - clamp defensively.
+                            pin_data["description"] = pin_data["description"][:MAX_PIN_DESCRIPTION_LENGTH]
 
                         pin_name = pin_data.get("name") or (location.display_name if location else "")
                         lookup_lat = pin_data.get("latitude") or (location.latitude if location else None)
@@ -707,7 +713,12 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                     "name": (p.get("name") or "")[:255],
                     "lat": float(lat),
                     "lng": float(lng),
-                    "description": (p.get("description") or "")[:500],
+                    # The preview UI never displays this - it's only carried through
+                    # so the confirm step (which re-uses this exact dict, not a fresh
+                    # parse of the file) has the real description to save. A tight
+                    # display-oriented cutoff here used to silently truncate every
+                    # saved pin's description to 500 characters.
+                    "description": (p.get("description") or "")[:MAX_PIN_DESCRIPTION_LENGTH],
                     "cid": p.get("cid"),
                 },
             )

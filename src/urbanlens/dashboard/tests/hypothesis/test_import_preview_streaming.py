@@ -8,7 +8,9 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.labels.model import Label
+from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
+from urbanlens.dashboard.services.text_limits import MAX_PIN_DESCRIPTION_LENGTH
 
 
 class ImportPreviewStreamingLabelAssignmentTests(TestCase):
@@ -75,3 +77,47 @@ class ImportPreviewStreamingLabelAssignmentTests(TestCase):
         self.assertIsNotNone(pin)
         self.assertIn(existing_label, pin.labels.all())
         self.assertIn(category_label, pin.labels.all())
+
+
+class ImportPreviewDescriptionLengthTests(TestCase):
+    """_preview_pins() must not silently truncate descriptions that later get saved verbatim.
+
+    The confirm/save step (import_preview_streaming) re-uses the exact dict
+    _preview_pins() built for the client-facing preview - it never re-parses the
+    original file. A tight, display-oriented cutoff there used to permanently
+    truncate every imported pin's description to 500 characters, even though the
+    preview UI never actually displays the description at all.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.profile = baker.make("auth.User").profile
+        self.gateway = GoogleMapsGateway(api_key="test-key")
+
+    def test_preview_pins_keeps_a_long_description_intact(self) -> None:
+        long_description = "x" * 2000
+        raw_pins = [{"latitude": 40.0, "longitude": -74.0, "name": "Old Mill", "description": long_description}]
+        preview = GoogleMapsGateway._preview_pins(raw_pins)
+        self.assertEqual(preview[0]["description"], long_description)
+
+    def test_preview_pins_clamps_at_the_real_max_length_not_500(self) -> None:
+        huge_description = "x" * (MAX_PIN_DESCRIPTION_LENGTH + 1000)
+        raw_pins = [{"latitude": 40.0, "longitude": -74.0, "name": "Old Mill", "description": huge_description}]
+        preview = GoogleMapsGateway._preview_pins(raw_pins)
+        self.assertEqual(len(preview[0]["description"]), MAX_PIN_DESCRIPTION_LENGTH)
+
+    def test_a_long_description_survives_the_full_preview_then_confirm_flow(self) -> None:
+        long_description = "A" * 2000 + " full KMZ description text that must not be cut off."
+        raw_pins = [{"latitude": 40.0, "longitude": -74.0, "name": "Old Mill", "description": long_description}]
+        preview = GoogleMapsGateway._preview_pins(raw_pins)
+
+        list(
+            self.gateway.import_preview_streaming(
+                [{"stem": "", "create_category": False, "label_ids": [], "pins": preview}],
+                self.profile,
+                auto_tag=False,
+            ),
+        )
+
+        pin = Pin.objects.get(profile=self.profile, name="Old Mill")
+        self.assertEqual(pin.description, long_description)

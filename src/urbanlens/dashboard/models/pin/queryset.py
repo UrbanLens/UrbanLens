@@ -425,11 +425,12 @@ class PinManager(abstract.PublicDashboardManager.from_queryset(PinQuerySet)):
 
             location, _ = Location.objects.get_nearby_or_create(latitude, longitude, threshold_meters=threshold_meters)
 
-        existing_pin = self.filter(
-            location=location,
-            profile=profile,
-            parent_pin__isnull=True,
-        ).first()
+        # Not scoped to root pins: the profile may already have a child (sub) pin
+        # at this exact Location (e.g. one merged under another pin earlier), and
+        # that must dedupe too, not just root pins. Root pins sort first when both
+        # exist, since that's the more useful merge target and matches prior
+        # behavior for the common case.
+        existing_pin = self.filter(location=location, profile=profile).order_by(F("parent_pin_id").asc(nulls_first=True)).first()
         if existing_pin is not None:
             return existing_pin, False
 
