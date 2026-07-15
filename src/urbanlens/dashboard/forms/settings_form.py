@@ -478,6 +478,43 @@ class AISettingsForm(forms.ModelForm):
         fields = ["ai_enabled", "ai_label_categories", "ai_label_tags", "ai_label_statuses"]
 
 
+class KeywordTaggingSettingsForm(forms.ModelForm):
+    """Keyword-based auto-tagging preferences - independent of the AI settings above.
+
+    Keyword matching is local pattern/substring matching with no external API
+    call, so it's available to every user regardless of AI subscription.
+    """
+
+    keyword_tagging_enabled = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
+        label="Enable Keyword Tagging",
+        help_text="Turn all keyword-based auto-tagging on or off.",
+    )
+    keyword_label_categories = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
+        label="Auto-categorize pins",
+        help_text="Matching keywords automatically add a category label when you create a pin.",
+    )
+    keyword_label_tags = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
+        label="Auto-tag pins",
+        help_text="Matching keywords automatically add tags when you create a pin.",
+    )
+    keyword_label_statuses = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
+        label="Auto-status pins",
+        help_text="Matching keywords automatically add a status label when you create a pin.",
+    )
+
+    class Meta:
+        model = Profile
+        fields = ["keyword_tagging_enabled", "keyword_label_categories", "keyword_label_tags", "keyword_label_statuses"]
+
+
 class HistorySettingsForm(forms.ModelForm):
     """Which visit/location-history categories get saved. Independently adjustable at any time."""
 

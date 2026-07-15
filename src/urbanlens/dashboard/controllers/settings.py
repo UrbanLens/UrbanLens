@@ -20,6 +20,7 @@ from urbanlens.dashboard.forms.settings_form import (
     DirectMessageSettingsForm,
     ExternalApiSettingsForm,
     HistorySettingsForm,
+    KeywordTaggingSettingsForm,
     MapCenterForm,
     MapDisplayForm,
     MarkupDefaultsForm,
@@ -158,6 +159,7 @@ class SettingsView(LoginRequiredMixin, View):
             "places_layer_form": PlacesLayerForm(instance=profile),
             "markup_defaults_form": MarkupDefaultsForm(instance=profile),
             "ai_form": AISettingsForm(instance=profile),
+            "keyword_tagging_form": KeywordTaggingSettingsForm(instance=profile),
             "history_form": HistorySettingsForm(instance=profile),
             "community_form": CommunitySettingsForm(instance=profile),
             "external_api_form": ExternalApiSettingsForm(instance=profile),
@@ -194,6 +196,7 @@ class SettingsView(LoginRequiredMixin, View):
         places_layer_form = PlacesLayerForm(instance=profile)
         markup_defaults_form = MarkupDefaultsForm(instance=profile)
         ai_form = AISettingsForm(instance=profile)
+        keyword_tagging_form = KeywordTaggingSettingsForm(instance=profile)
         history_form = HistorySettingsForm(instance=profile)
         community_form = CommunitySettingsForm(instance=profile)
         external_api_form = ExternalApiSettingsForm(instance=profile)
@@ -214,6 +217,13 @@ class SettingsView(LoginRequiredMixin, View):
                     ai_form.save()
                     messages.success(request, "AI settings saved.")
                     return _settings_redirect("ai-settings-section")
+
+        elif section == "keyword_tagging":
+            keyword_tagging_form = KeywordTaggingSettingsForm(request.POST, instance=profile)
+            if keyword_tagging_form.is_valid():
+                keyword_tagging_form.save()
+                messages.success(request, "Keyword tagging settings saved.")
+                return _settings_redirect("keyword-tagging-settings-section")
 
         elif section == "markup_defaults":
             markup_defaults_form = MarkupDefaultsForm(request.POST, instance=profile)
@@ -326,6 +336,7 @@ class SettingsView(LoginRequiredMixin, View):
             "places_layer_form": places_layer_form,
             "markup_defaults_form": markup_defaults_form,
             "ai_form": ai_form,
+            "keyword_tagging_form": keyword_tagging_form,
             "history_form": history_form,
             "community_form": community_form,
             "external_api_form": external_api_form,
@@ -349,6 +360,7 @@ class SettingsView(LoginRequiredMixin, View):
                 places_layer_form,
                 markup_defaults_form,
                 ai_form,
+                keyword_tagging_form,
                 history_form,
                 community_form,
                 external_api_form,

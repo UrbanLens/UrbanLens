@@ -281,6 +281,16 @@ class Profile(abstract.PublicDashboardModel):
     ai_label_categories = BooleanField(default=False, help_text="AI can automatically suggest and add categories when a pin is created.")
     ai_label_statuses = BooleanField(default=False, help_text="AI can automatically suggest and add statuses when a pin is created.")
 
+    # Keyword-based auto-tagging preferences. Unlike the AI settings above, this
+    # matching is local pattern/substring matching (built-in CATEGORY_PATTERNS plus
+    # each Label's own `keywords` field) - no external API call and no subscription
+    # required - so it defaults to on. Independent of the ai_* toggles: a user can
+    # keep free keyword tagging while leaving paid AI tagging off, or vice versa.
+    keyword_tagging_enabled = BooleanField(default=True, help_text="Allow keyword-based auto-tagging on your account.")
+    keyword_label_tags = BooleanField(default=True, help_text="Keyword matches can automatically add tags when a pin is created.")
+    keyword_label_categories = BooleanField(default=True, help_text="Keyword matches can automatically add categories when a pin is created.")
+    keyword_label_statuses = BooleanField(default=True, help_text="Keyword matches can automatically add a status when a pin is created.")
+
     # Whether photo-keyword plugins run on this user's uploads to make their
     # photos text-searchable. Applies to every enabled keywording strategy
     # (embedded metadata tags, AI vision, classifiers); the AI-based providers

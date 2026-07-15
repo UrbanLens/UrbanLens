@@ -23,11 +23,18 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Maps label kind → Profile field that enables auto-tagging for that kind.
-_KIND_PREF: dict[str, str] = {
+# Maps label kind → Profile field that enables AI-based auto-tagging for that kind.
+_AI_KIND_PREF: dict[str, str] = {
     "category": "ai_label_categories",
     "tag": "ai_label_tags",
     "status": "ai_label_statuses",
+}
+
+# Maps label kind → Profile field that enables keyword-based auto-tagging for that kind.
+_KEYWORD_KIND_PREF: dict[str, str] = {
+    "category": "keyword_label_categories",
+    "tag": "keyword_label_tags",
+    "status": "keyword_label_statuses",
 }
 
 # Fallback category list shown to AI when no global labels exist yet.
@@ -84,11 +91,16 @@ class AutoTagService:
         profile = getattr(pin, "profile", None)
         results: list[Label] = []
         for kind in self.kinds:
-            if profile is not None and not self._kind_enabled_for_profile(kind, profile):
-                logger.debug("Auto-tagging kind '%s' disabled for profile %s", kind, profile.pk)
-                continue
+            if profile is not None:
+                do_keyword = self._keyword_kind_enabled_for_profile(kind, profile)
+                do_ai = self._ai_kind_enabled_for_profile(kind, profile)
+                if not do_keyword and not do_ai:
+                    logger.debug("Auto-tagging kind '%s' disabled for profile %s", kind, profile.pk)
+                    continue
+            else:
+                do_keyword = do_ai = True
             eligible = self._eligible_labels(kind, profile=profile)
-            matched = self._match(pin, eligible, kind)
+            matched = self._match(pin, eligible, kind, do_keyword=do_keyword, do_ai=do_ai)
             if apply and matched:
                 pin.labels.add(*matched)
             results.extend(matched)
@@ -119,19 +131,38 @@ class AutoTagService:
     # -- eligibility ----------------------------------------------------------
 
     @staticmethod
-    def _kind_enabled_for_profile(kind: str, profile: Profile) -> bool:
-        """Return False when the user has disabled auto-tagging for this label kind.
+    def _ai_kind_enabled_for_profile(kind: str, profile: Profile) -> bool:
+        """Return False when the user has disabled AI-based auto-tagging for this label kind.
 
         Args:
             kind: Label kind string (e.g. ``"category"``).
             profile: Owner profile to check.
 
         Returns:
-            True if auto-tagging is permitted for this kind and profile.
+            True if AI-based auto-tagging is permitted for this kind and profile.
         """
         if not getattr(profile, "ai_enabled", True) or not getattr(profile, "external_apis_enabled", True):
             return False
-        pref_field = _KIND_PREF.get(kind)
+        pref_field = _AI_KIND_PREF.get(kind)
+        return bool(getattr(profile, pref_field, True)) if pref_field else True
+
+    @staticmethod
+    def _keyword_kind_enabled_for_profile(kind: str, profile: Profile) -> bool:
+        """Return False when the user has disabled keyword-based auto-tagging for this label kind.
+
+        Keyword matching makes no external API call, so it isn't gated on
+        ``external_apis_enabled`` - only the user's own keyword-tagging toggles.
+
+        Args:
+            kind: Label kind string (e.g. ``"category"``).
+            profile: Owner profile to check.
+
+        Returns:
+            True if keyword-based auto-tagging is permitted for this kind and profile.
+        """
+        if not getattr(profile, "keyword_tagging_enabled", True):
+            return False
+        pref_field = _KEYWORD_KIND_PREF.get(kind)
         return bool(getattr(profile, pref_field, True)) if pref_field else True
 
     @staticmethod
@@ -167,13 +198,18 @@ class AutoTagService:
         target: Pin | Wiki,
         eligible: list[Label],
         kind: str,
+        *,
+        do_keyword: bool = True,
+        do_ai: bool = True,
     ) -> list[Label]:
-        """Run the full keyword → AI pipeline and return up to max_labels results.
+        """Run the keyword and/or AI matching stages and return up to max_labels results.
 
         Args:
             target: Pin or Location being tagged.
             eligible: Pre-filtered list of candidate labels.
             kind: Label kind (used for AI instructions).
+            do_keyword: Whether to run the keyword-matching stage.
+            do_ai: Whether to run the AI-matching stage on labels keyword matching didn't catch.
 
         Returns:
             Matched Label instances.
@@ -181,12 +217,15 @@ class AutoTagService:
         if not eligible:
             return []
 
-        text = self._build_keyword_text(target)
-        matched = self._keyword_match(eligible, text)
-        remaining = [b for b in eligible if b not in matched]
+        matched: list[Label] = []
+        remaining = eligible
+        if do_keyword:
+            text = self._build_keyword_text(target)
+            matched = self._keyword_match(eligible, text)
+            remaining = [b for b in eligible if b not in matched]
 
         need_more = self.max_labels is None or len(matched) < self.max_labels
-        if need_more and remaining:
+        if do_ai and need_more and remaining:
             ai_results = self._ai_match(target, remaining, kind)
             # Avoid duplicates (keyword match already got some).
             seen = {b.pk for b in matched}

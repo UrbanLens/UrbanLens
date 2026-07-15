@@ -439,6 +439,73 @@
         </form>
     </section>
     {% endif %}
+
+    {# -- Keyword Tagging --------------------------------------------------------- #}
+    <section class="settings-section ul-section" id="keyword-tagging-settings-section">
+        <div class="settings-section-header">
+            <i class="material-symbols-outlined">sell</i>
+            <div>
+                <h2 class="settings-section-title">Keyword Tagging</h2>
+                <p class="settings-section-desc">Free, local keyword matching that can auto-tag pins - no AI subscription needed.</p>
+            </div>
+        </div>
+
+        <form method="post" class="settings-form" id="keyword-tagging-form">
+            {% csrf_token %}
+            <input type="hidden" name="section" value="keyword_tagging">
+
+            <div class="settings-field">
+                <label class="settings-toggle-row">
+                    {{ keyword_tagging_form.keyword_tagging_enabled }}
+                    <span class="settings-toggle-label">
+                        <strong>{{ keyword_tagging_form.keyword_tagging_enabled.label }}</strong>
+                        <span class="settings-help">{{ keyword_tagging_form.keyword_tagging_enabled.help_text }}</span>
+                    </span>
+                </label>
+                {% if keyword_tagging_form.keyword_tagging_enabled.errors %}
+                <p class="settings-error">{{ keyword_tagging_form.keyword_tagging_enabled.errors|join:", " }}</p>
+                {% endif %}
+            </div>
+
+            <div class="settings-ai-sub-options" id="keyword-tagging-sub-options">
+                <p class="settings-help" style="margin-bottom:0.75rem;">When a pin is created, matching keywords can automatically add these label types:</p>
+
+                <div class="settings-field">
+                    <label class="settings-toggle-row">
+                        {{ keyword_tagging_form.keyword_label_categories }}
+                        <span class="settings-toggle-label">
+                            <strong>{{ keyword_tagging_form.keyword_label_categories.label }}</strong>
+                            <span class="settings-help">{{ keyword_tagging_form.keyword_label_categories.help_text }}</span>
+                        </span>
+                    </label>
+                </div>
+
+                <div class="settings-field">
+                    <label class="settings-toggle-row">
+                        {{ keyword_tagging_form.keyword_label_tags }}
+                        <span class="settings-toggle-label">
+                            <strong>{{ keyword_tagging_form.keyword_label_tags.label }}</strong>
+                            <span class="settings-help">{{ keyword_tagging_form.keyword_label_tags.help_text }}</span>
+                        </span>
+                    </label>
+                </div>
+
+                <div class="settings-field">
+                    <label class="settings-toggle-row">
+                        {{ keyword_tagging_form.keyword_label_statuses }}
+                        <span class="settings-toggle-label">
+                            <strong>{{ keyword_tagging_form.keyword_label_statuses.label }}</strong>
+                            <span class="settings-help">{{ keyword_tagging_form.keyword_label_statuses.help_text }}</span>
+                        </span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="settings-actions">
+                <button type="submit" class="settings-save-btn">Save</button>
+            </div>
+        </form>
+    </section>
     </div> {# /tab-panel-connections #}
 
     {# ======================================================================= #}
@@ -1867,6 +1934,23 @@ window.updateClusterRadius = function (value) {
 (function () {
     var masterToggle = document.getElementById('{{ ai_form.ai_enabled.id_for_label }}');
     var subOptions   = document.getElementById('ai-sub-options');
+    if (!masterToggle || !subOptions) return;
+
+    function syncSubOptions() {
+        subOptions.style.opacity = masterToggle.checked ? '' : '0.4';
+        subOptions.querySelectorAll('input').forEach(function (inp) {
+            inp.disabled = !masterToggle.checked;
+        });
+    }
+
+    masterToggle.addEventListener('change', syncSubOptions);
+    syncSubOptions();
+}());
+
+// -- Keyword tagging: toggle sub-options when master switch is flipped ---------
+(function () {
+    var masterToggle = document.getElementById('{{ keyword_tagging_form.keyword_tagging_enabled.id_for_label }}');
+    var subOptions   = document.getElementById('keyword-tagging-sub-options');
     if (!masterToggle || !subOptions) return;
 
     function syncSubOptions() {

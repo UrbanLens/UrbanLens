@@ -588,6 +588,12 @@ class LabelEditView(_LabelKindMixin, LoginRequiredMixin, View):
         }.get(label.kind, False)
         can_use_ai_features = user_has_feature(request.user, SiteFeature.AI)
 
+        keyword_kind_enabled = {
+            KIND_CATEGORY: profile.keyword_label_categories,
+            KIND_TAG: profile.keyword_label_tags,
+            KIND_STATUS: profile.keyword_label_statuses,
+        }.get(label.kind, False)
+
         return render(
             request,
             "dashboard/partials/labels/organize_label_edit_form.html",
@@ -604,10 +610,14 @@ class LabelEditView(_LabelKindMixin, LoginRequiredMixin, View):
                 "is_global": label.kind == KIND_TAG and label.profile is None,
                 "show_kind_toggle": cfg.show_kind_toggle,
                 "can_use_ai_features": can_use_ai_features,
-                # Auto-tagging toggle needs the site feature on AND the user's own
-                # master + per-kind AI settings enabled - otherwise the option is
-                # offering a behavior the user has explicitly turned off.
-                "show_auto_tag_toggle": can_use_ai_features and profile.ai_enabled and ai_kind_enabled,
+                # Auto-tagging toggle needs either path to actually be able to assign
+                # this label kind - the AI site feature plus the user's own master +
+                # per-kind AI settings, OR the user's own keyword-tagging master +
+                # per-kind settings (keyword matching needs no site feature/subscription).
+                # Otherwise the option is offering a behavior the user has explicitly
+                # turned off, or that isn't available to them at all.
+                "show_auto_tag_toggle": (can_use_ai_features and profile.ai_enabled and ai_kind_enabled)
+                or (profile.keyword_tagging_enabled and keyword_kind_enabled),
             },
         )
 
@@ -640,10 +650,24 @@ class LabelEditView(_LabelKindMixin, LoginRequiredMixin, View):
         label.color = request.POST.get("color") or None
         label.order = int(request.POST.get("order", label.order))
 
-        # allow_auto_tag can only be changed when the user has AI features; and never
-        # on the protected "Visited" label.
+        # allow_auto_tag can only be changed when the user actually has some auto-tagging
+        # path available for this label's kind (AI or keyword-based); and never on the
+        # protected "Visited" label.
         if not label.is_protected:
-            if user_has_feature(request.user, SiteFeature.AI):
+            ai_kind_enabled = {
+                KIND_CATEGORY: profile.ai_label_categories,
+                KIND_TAG: profile.ai_label_tags,
+                KIND_STATUS: profile.ai_label_statuses,
+            }.get(label.kind, False)
+            keyword_kind_enabled = {
+                KIND_CATEGORY: profile.keyword_label_categories,
+                KIND_TAG: profile.keyword_label_tags,
+                KIND_STATUS: profile.keyword_label_statuses,
+            }.get(label.kind, False)
+            can_toggle_auto_tag = (user_has_feature(request.user, SiteFeature.AI) and profile.ai_enabled and ai_kind_enabled) or (
+                profile.keyword_tagging_enabled and keyword_kind_enabled
+            )
+            if can_toggle_auto_tag:
                 label.allow_auto_tag = "allow_auto_tag" in request.POST
             label.keywords = request.POST.get("keywords", "").strip() or None
 
