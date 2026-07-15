@@ -908,6 +908,20 @@ $notif-prefs-cols: minmax(10rem, 1fr) repeat(5, 4.5rem);
             display: inline-block;
             border-radius: 4px;
         }
+
+        // WhatsApp/SMS columns before a number is connected on the profile.
+        // Not the disabled attribute - that would drop the field from the
+        // form entirely, silently clearing any stored preference the next
+        // time an unrelated checkbox in this same auto-saving form changes.
+        &--unavailable {
+            cursor: not-allowed;
+
+            input[type="checkbox"] {
+                pointer-events: none !important;
+                opacity: .35 !important;
+                cursor: not-allowed;
+            }
+        }
     }
 
     &__sr-only {

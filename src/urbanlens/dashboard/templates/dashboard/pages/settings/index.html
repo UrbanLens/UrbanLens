@@ -557,144 +557,7 @@
             </div>
         </div>
 
-        <div class="settings-section-body">
-            <p class="settings-e2ee-status">
-                {% if passkeys or has_totp %}
-                Two-factor sign-in is <strong>on</strong>{% if passkeys %} ({{ passkeys|length }} passkey{{ passkeys|length|pluralize }}){% endif %}{% if has_totp %} + authenticator app{% endif %}.
-                {% else %}
-                Two-factor sign-in is <strong>off</strong>. Add a passkey or authenticator app below to turn it on.
-                {% endif %}
-            </p>
-
-            <p class="settings-help">
-                Passkeys work with Face ID, Windows Hello, security keys, and password managers
-                like Bitwarden. Once you've added one, signing in requires your password
-                <em>and</em> a passkey. Remove your last passkey to turn this off.
-            </p>
-
-            {% if passkeys %}
-            <ul class="passkey-list" id="passkey-list">
-                {% for cred in passkeys %}
-                <li class="passkey-list-item">
-                    <div class="passkey-list-item-info">
-                        <i class="material-symbols-outlined">passkey</i>
-                        <div>
-                            <form method="post" action="{% url 'settings.security.passkeys.rename' cred.pk %}" class="passkey-rename-form">
-                                {% csrf_token %}
-                                <input type="text" name="name" value="{{ cred.name }}" maxlength="100" class="passkey-name-input" aria-label="Passkey nickname">
-                                <button type="submit" class="btn btn--secondary btn--sm">Save</button>
-                            </form>
-                            <span class="settings-help">
-                                Added {{ cred.created|date:"M j, Y" }}{% if cred.last_used_at %} - last used {{ cred.last_used_at|date:"M j, Y" }}{% endif %}
-                            </span>
-                        </div>
-                    </div>
-                    <form method="post" action="{% url 'settings.security.passkeys.delete' cred.pk %}"
-                          onsubmit="return confirm('Remove this passkey? Make sure you have another way to sign in first.');">
-                        {% csrf_token %}
-                        <button type="submit" class="btn btn--danger btn--sm" title="Remove this passkey" aria-label="Remove this passkey">
-                            <i class="material-symbols-outlined">delete</i>
-                        </button>
-                    </form>
-                </li>
-                {% endfor %}
-            </ul>
-            {% endif %}
-
-            <div class="settings-actions" style="flex-direction:column;align-items:flex-start;gap:.5rem">
-                <input type="text" id="new-passkey-name" placeholder="Nickname (e.g. Bitwarden, YubiKey)" maxlength="100" class="passkey-name-input" style="max-width:320px">
-                <button type="button" class="settings-save-btn" id="add-passkey-btn">
-                    <i class="material-symbols-outlined">add</i>
-                    Add a passkey
-                </button>
-            </div>
-
-            {# -- Authenticator app (TOTP) subsection ------------------------------ #}
-            <div class="settings-subsection" id="totp-settings-section">
-                <h3 class="settings-subsection-title">
-                    <i class="material-symbols-outlined">qr_code_2</i>
-                    Authenticator app
-                </h3>
-                <p class="settings-section-desc">Use an app like Google Authenticator, Authy, or Bitwarden's TOTP field for two-factor sign-in.</p>
-
-                {% if has_totp %}
-                <p class="settings-help">An authenticator app is <strong>enabled</strong> on this account.</p>
-                <form method="post" action="{% url 'settings.security.totp.disable' %}"
-                      onsubmit="return confirm('Remove your authenticator app? Make sure you have another way to sign in first.');">
-                    {% csrf_token %}
-                    <button type="submit" class="btn btn--danger btn--sm">
-                        <i class="material-symbols-outlined">delete</i>
-                        Remove authenticator app
-                    </button>
-                </form>
-                {% elif pending_totp_secret %}
-                <div class="totp-setup">
-                    <img src="{% url 'settings.security.totp.qrcode' %}" alt="QR code for authenticator app setup" class="totp-qrcode">
-                    <p class="settings-help">
-                        Scan this with your authenticator app, or enter this key manually:
-                        <code class="totp-manual-key">{{ pending_totp_secret }}</code>
-                    </p>
-                    <form method="post" action="{% url 'settings.security.totp.confirm' %}" class="settings-form">
-                        {% csrf_token %}
-                        <div class="settings-field">
-                            <label class="settings-label" for="totp-confirm-code">Enter the 6-digit code from your app</label>
-                            <input type="text" name="code" id="totp-confirm-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]*" required>
-                        </div>
-                        <div class="settings-actions">
-                            <button type="submit" class="settings-save-btn">Verify &amp; enable</button>
-                        </div>
-                    </form>
-                    <form method="post" action="{% url 'settings.security.totp.cancel' %}">
-                        {% csrf_token %}
-                        <button type="submit" class="btn btn--ghost btn--sm">Cancel setup</button>
-                    </form>
-                </div>
-                {% else %}
-                <form method="post" action="{% url 'settings.security.totp.start' %}">
-                    {% csrf_token %}
-                    <button type="submit" class="settings-save-btn">
-                        <i class="material-symbols-outlined">add</i>
-                        Set up an authenticator app
-                    </button>
-                </form>
-                {% endif %}
-            </div>
-
-            {# -- Backup codes subsection ------------------------------------------- #}
-            <div class="settings-subsection" id="backup-codes-settings-section">
-                <h3 class="settings-subsection-title">
-                    <i class="material-symbols-outlined">key</i>
-                    Backup codes
-                </h3>
-                <p class="settings-section-desc">One-time codes to sign in if you lose access to your passkey and authenticator app.</p>
-
-                {% if new_backup_codes %}
-                <div class="backup-codes-reveal">
-                    <p class="settings-help">
-                        <strong>Save these codes somewhere safe.</strong> Each one works once, and you won't be able to see them again.
-                    </p>
-                    <ul class="backup-codes-list">
-                        {% for code in new_backup_codes %}
-                        <li><code>{{ code }}</code></li>
-                        {% endfor %}
-                    </ul>
-                </div>
-                {% endif %}
-
-                {% if passkeys or has_totp %}
-                <p class="settings-help">{{ backup_code_count }} unused backup code{{ backup_code_count|pluralize }} remaining.</p>
-                <form method="post" action="{% url 'settings.security.backup_codes.generate' %}"
-                      {% if backup_code_count %}onsubmit="return confirm('Generate new backup codes? Your existing codes will stop working.');"{% endif %}>
-                    {% csrf_token %}
-                    <button type="submit" class="btn btn--secondary btn--sm">
-                        {% if backup_code_count %}Regenerate backup codes{% else %}Generate backup codes{% endif %}
-                    </button>
-                </form>
-                {% else %}
-                <p class="settings-help">Set up a passkey or authenticator app first to enable backup codes.</p>
-                {% endif %}
-            </div>
-        </div>
+        {% include "dashboard/partials/settings/_security_section_body.html" %}
     </section>
     </div> {# /tab-panel-security #}
 
@@ -1294,12 +1157,16 @@
         <div class="settings-section-header">
             <i class="material-symbols-outlined">tune</i>
             <div>
-                <h2 class="settings-section-title">Custom Fields</h2>
+                <h2 class="settings-section-title">Custom Fields
+                    {% include "dashboard/partials/ui/_page_explainer_anchor.html" with explainer_id="custom-fields-explainer" %}
+                </h2>
                 <p class="settings-section-desc">Define your own fields for pins, photos, people, and maps. Only you can see them.</p>
             </div>
         </div>
 
         <div class="settings-section-body">
+            {% include "dashboard/partials/ui/_page_explainer.html" with explainer_id="custom-fields-explainer" kicker="Personal metadata" heading="Track anything about a pin, photo, person, or map that UrbanLens doesn't already have a field for." body="Add a text, number, date, or dropdown field, then fill it in per item. Custom fields are private to you - they never show up to anyone else, even on a pin or map you've shared." %}
+
             <div id="custom-fields-settings"
                  hx-get="{% url 'custom_fields.settings' %}"
                  hx-trigger="load"
@@ -1372,16 +1239,22 @@
 }());
 </script>
 <script>
-// -- Security card: add a passkey ----------------------------------------------
+// -- Security section: add-passkey, passkey rename autosave, TOTP code entry --
+// Event-delegated on document (rather than bound directly to the elements)
+// because #security-settings-section-body is swapped wholesale by htmx after
+// every TOTP/backup-code action - a direct binding would go stale the first
+// time any of those forms submit.
 (function () {
-    var addBtn = document.getElementById('add-passkey-btn');
-    if (!addBtn || !window.UrbanLensWebAuthn) return;
-    addBtn.addEventListener('click', function () {
+    document.addEventListener('click', function (e) {
+        var addBtn = e.target.closest('#add-passkey-btn');
+        if (!addBtn || !window.UrbanLensWebAuthn) return;
+        var name = window.prompt('Nickname for this passkey (e.g. Bitwarden, YubiKey):', '');
+        if (name === null) return;  // cancelled
         addBtn.disabled = true;
         UrbanLensWebAuthn.registerPasskey({
             optionsUrl: "{% url 'settings.security.passkeys.options' %}",
             registerUrl: "{% url 'settings.security.passkeys.register' %}",
-            nameInputId: "new-passkey-name",
+            name: name,
         }).then(function (result) {
             addBtn.disabled = false;
             if (result.ok) {
@@ -1391,6 +1264,46 @@
                 toastr.error(result.error || 'Could not add that passkey.');
             }
         });
+    });
+
+    // -- Passkey rename: autosave on blur/Enter, no separate Save button ------
+    function getCsrf() {
+        var m = document.cookie.match(/csrftoken=([^;]+)/);
+        return m ? m[1] : '';
+    }
+    function savePasskeyName(input) {
+        var form = input.closest('.passkey-rename-form');
+        if (!form) return;
+        input.disabled = true;
+        fetch(form.action, {
+            method: 'POST',
+            body: new FormData(form),
+            headers: { 'X-CSRFToken': getCsrf(), 'X-Requested-With': 'XMLHttpRequest' },
+        }).then(function (r) { return r.ok; }).then(function (ok) {
+            input.disabled = false;
+            if (!ok && window.toastr) toastr.error('Could not rename that passkey.');
+        }).catch(function () {
+            input.disabled = false;
+            if (window.toastr) toastr.error('Could not rename that passkey.');
+        });
+    }
+    document.addEventListener('focusout', function (e) {
+        if (e.target.matches && e.target.matches('.passkey-rename-form .passkey-name-input')) {
+            savePasskeyName(e.target);
+        }
+    });
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' && e.target.matches && e.target.matches('.passkey-rename-form .passkey-name-input')) {
+            e.preventDefault();
+            e.target.blur();
+        }
+    });
+
+    // -- TOTP code entry: strip spaces/non-digits as the user types or pastes -
+    document.addEventListener('input', function (e) {
+        if (e.target.id === 'totp-confirm-code') {
+            e.target.value = e.target.value.replace(/\D/g, '').slice(0, 6);
+        }
     });
 }());
 </script>
@@ -1622,10 +1535,13 @@ function applyGuidancePreview(level) {
             marker.dragging.disable();
             customField.style.display = 'none';
         }
-        // Update active pill styling.
-        document.querySelectorAll('.settings-map-view-option').forEach(function (el) {
-            var radio = el.querySelector('input[type=radio]');
-            el.classList.toggle('active', radio && radio.value === mode);
+        // Update active pill styling. Scoped to this radio group specifically -
+        // other pill groups on the page (Default Map View, Cluster Radius) reuse
+        // some of the same values ("remember", "auto"), so an unscoped selector
+        // here would cross-highlight their pills too.
+        document.querySelectorAll('input[name="map_center_mode"]').forEach(function (radio) {
+            var el = radio.closest('.settings-map-view-option');
+            if (el) el.classList.toggle('active', radio.value === mode);
         });
     }
 

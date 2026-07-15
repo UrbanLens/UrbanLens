@@ -31,7 +31,6 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.subscriptions.model import SiteFeature, user_has_feature
 from urbanlens.dashboard.services.apis.flickr.oauth import is_configured as flickr_is_configured
 from urbanlens.dashboard.services.storage import allowed_user_dimension_values, allowed_user_video_height_values, get_storage_settings_context
-from urbanlens.dashboard.services.webauthn import list_credentials
 
 if TYPE_CHECKING:
     from django.http import HttpRequest, HttpResponse
@@ -97,20 +96,13 @@ def _e2ee_enrolled(profile: Profile) -> bool:
 def _security_context(user: User, request: HttpRequest) -> dict:
     """Context for the Security section: passkeys, TOTP status, backup codes.
 
-    Also pops ``new_backup_codes`` from the session, which
-    ``BackupCodesGenerateView`` stashes there as a one-time flash - the
-    plaintext codes are only ever available on the response immediately
-    after generating them.
+    Thin wrapper around ``services.two_factor.security_settings_context``,
+    which is also called directly by the 2FA action views (``two_factor.py``)
+    so they can re-render just this section for htmx requests.
     """
-    from urbanlens.dashboard.services.two_factor import SESSION_PENDING_TOTP_SECRET, has_totp, remaining_backup_code_count
+    from urbanlens.dashboard.services.two_factor import security_settings_context
 
-    return {
-        "passkeys": list_credentials(user),
-        "has_totp": has_totp(user),
-        "pending_totp_secret": request.session.get(SESSION_PENDING_TOTP_SECRET),
-        "backup_code_count": remaining_backup_code_count(user),
-        "new_backup_codes": request.session.pop("new_backup_codes", None),
-    }
+    return security_settings_context(user, request)
 
 
 class SettingsView(LoginRequiredMixin, View):

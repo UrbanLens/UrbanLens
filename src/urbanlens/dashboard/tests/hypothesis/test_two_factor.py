@@ -72,6 +72,13 @@ class TOTPEnrollmentTests(TestCase):
         secret = two_factor.generate_totp_secret()
         self.assertFalse(two_factor.verify_totp_setup_code(secret, "000000"))
 
+    def test_setup_code_with_a_middle_space_still_verifies(self) -> None:
+        """Some authenticator apps display/copy codes as "123 456" - must still match."""
+        secret = two_factor.generate_totp_secret()
+        code = pyotp.TOTP(secret).now()
+        spaced = f"{code[:3]} {code[3:]}"
+        self.assertTrue(two_factor.verify_totp_setup_code(secret, spaced))
+
     def test_enroll_persists_a_totp_device(self) -> None:
         user: User = baker.make(User)
         secret = two_factor.generate_totp_secret()
@@ -136,6 +143,11 @@ class VerifyTotpCodeTests(TestCase):
         other_user: User = baker.make(User)
         code = pyotp.TOTP(self.secret).now()
         self.assertFalse(two_factor.verify_totp_code(other_user, code))
+
+    def test_code_with_a_middle_space_still_succeeds(self) -> None:
+        code = pyotp.TOTP(self.secret).now()
+        spaced = f"{code[:3]} {code[3:]}"
+        self.assertTrue(two_factor.verify_totp_code(self.user, spaced))
 
 
 class BackupCodeTests(TestCase):
@@ -249,6 +261,38 @@ class TOTPSetupControllerTests(TestCase):
         two_factor.enroll_totp(self.user, two_factor.generate_totp_secret())
         self.client.post(reverse("settings.security.totp.disable"))
         self.assertFalse(two_factor.has_totp(self.user))
+
+    def test_htmx_confirm_with_correct_code_returns_partial_not_a_redirect(self) -> None:
+        self.client.post(reverse("settings.security.totp.start"))
+        secret = self.client.session[two_factor.SESSION_PENDING_TOTP_SECRET]
+        code = pyotp.TOTP(secret).now()
+
+        response = self.client.post(reverse("settings.security.totp.confirm"), {"code": code}, HTTP_HX_REQUEST="true")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(two_factor.has_totp(self.user))
+        self.assertContains(response, "security-settings-section-body")
+        self.assertContains(response, "enabled")
+
+    def test_htmx_confirm_with_wrong_code_shows_inline_error_not_a_redirect(self) -> None:
+        self.client.post(reverse("settings.security.totp.start"))
+
+        response = self.client.post(reverse("settings.security.totp.confirm"), {"code": "000000"}, HTTP_HX_REQUEST="true")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(two_factor.has_totp(self.user))
+        self.assertContains(response, "didn&#x27;t match")
+
+    def test_htmx_confirm_strips_a_middle_space_before_verifying(self) -> None:
+        self.client.post(reverse("settings.security.totp.start"))
+        secret = self.client.session[two_factor.SESSION_PENDING_TOTP_SECRET]
+        code = pyotp.TOTP(secret).now()
+        spaced = f"{code[:3]} {code[3:]}"
+
+        response = self.client.post(reverse("settings.security.totp.confirm"), {"code": spaced}, HTTP_HX_REQUEST="true")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(two_factor.has_totp(self.user))
 
 
 class BackupCodesControllerTests(TestCase):

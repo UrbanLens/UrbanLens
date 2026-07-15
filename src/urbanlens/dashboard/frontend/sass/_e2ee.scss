@@ -104,10 +104,9 @@
 // -- Settings encryption card --------------------------------------------------
 
 .settings-e2ee-card {
+    @include surface($radius: $radius-lg);
     margin-top: 1.25rem;
     padding: 1.1rem 1.25rem;
-    border: 1px solid var(--ul-border, #e5e7eb);
-    border-radius: 12px;
 }
 
 .settings-e2ee-title {

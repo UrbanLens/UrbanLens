@@ -117,7 +117,7 @@ class NotificationMarkAllReadView(LoginRequiredMixin, View):
 class NotificationPreferencesView(LoginRequiredMixin, View):
     """GET/POST /notifications/preferences/ - view or save per-type delivery prefs."""
 
-    def _render(self, request, prefs, *, saved: bool = False) -> HttpResponse:
+    def _render(self, request, profile: Profile, prefs, *, saved: bool = False) -> HttpResponse:
         return render(
             request,
             "dashboard/partials/notifications/notification_preferences.html",
@@ -125,17 +125,27 @@ class NotificationPreferencesView(LoginRequiredMixin, View):
                 "prefs": prefs,
                 "pref_fields": _PREF_FIELDS,
                 "saved": saved,
+                # WhatsApp/SMS delivery only makes sense once the profile has a
+                # number to deliver to - the template disables those columns
+                # (without touching stored preferences) until then.
+                "has_whatsapp_number": bool(profile.whatsapp_number),
+                "has_phone_number": bool(profile.phone_number),
             },
         )
 
     def get(self, request):
         profile = request.user.profile
         prefs = _get_or_create_prefs(profile)
-        return self._render(request, prefs)
+        return self._render(request, profile, prefs)
 
     def post(self, request):
         profile = request.user.profile
         prefs = _get_or_create_prefs(profile)
+        # Mirrors the template's disabled WhatsApp/SMS columns: without a
+        # number on file there's nowhere to deliver to, so neither channel
+        # can be turned on server-side either, regardless of what a client sends.
+        can_whatsapp = bool(profile.whatsapp_number)
+        can_sms = bool(profile.phone_number)
         for field, _ in _PREF_FIELDS:
             site = f"{field}__site" in request.POST
             email = f"{field}__email" in request.POST
@@ -148,10 +158,10 @@ class NotificationPreferencesView(LoginRequiredMixin, View):
             else:
                 value = DeliveryPreference.NONE
             setattr(prefs, field, value)
-            setattr(prefs, f"{field}_whatsapp", f"{field}_whatsapp" in request.POST)
-            setattr(prefs, f"{field}_sms", f"{field}_sms" in request.POST)
+            setattr(prefs, f"{field}_whatsapp", can_whatsapp and f"{field}_whatsapp" in request.POST)
+            setattr(prefs, f"{field}_sms", can_sms and f"{field}_sms" in request.POST)
         prefs.save()
-        return self._render(request, prefs, saved=True)
+        return self._render(request, profile, prefs, saved=True)
 
 
 class NotificationUnreadCountView(LoginRequiredMixin, View):

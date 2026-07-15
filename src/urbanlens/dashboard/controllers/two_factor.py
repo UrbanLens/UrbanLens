@@ -1,9 +1,13 @@
 """TOTP (authenticator app) enrollment and backup-code management for Settings > Security.
 
-Unlike passkey registration, none of this needs browser-side JavaScript - an
-authenticator app just needs to scan a QR code and the user types back a
-6-digit code, so every view here is a plain server-rendered form POST/GET,
-consistent with the rest of the settings page.
+Unlike passkey registration, none of this needs browser-side WebAuthn ceremony
+JavaScript - an authenticator app just needs to scan a QR code and the user
+types back a 6-digit code. Every view here is still a plain server-rendered
+form POST that works with no JS at all (progressive enhancement): on success
+or failure it redirects back to the settings page. When the request carries
+an ``HX-Request`` header (the forms in ``_security_section_body.html`` all
+do), it instead re-renders just that partial in place, so the section
+updates without a full page navigation.
 """
 
 from __future__ import annotations
@@ -15,7 +19,7 @@ from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User
 from django.http import Http404, HttpResponse
-from django.shortcuts import redirect
+from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.views import View
 import qrcode
@@ -27,6 +31,7 @@ from urbanlens.dashboard.services.two_factor import (
     generate_backup_codes,
     generate_totp_secret,
     has_second_factor,
+    security_settings_context,
     totp_provisioning_uri,
     verify_totp_setup_code,
 )
@@ -34,12 +39,27 @@ from urbanlens.dashboard.services.two_factor import (
 if TYPE_CHECKING:
     from django.http import HttpRequest
 
+_SECURITY_SECTION_PARTIAL = "dashboard/partials/settings/_security_section_body.html"
+
+
+def _is_htmx(request: HttpRequest) -> bool:
+    return request.headers.get("HX-Request") == "true"
+
+
+def _security_section_response(request: HttpRequest, user: User, **extra: object) -> HttpResponse:
+    """Render the Security section partial for an htmx swap, with fresh state."""
+    return render(request, _SECURITY_SECTION_PARTIAL, security_settings_context(user, request, **extra))
+
 
 class TOTPSetupStartView(LoginRequiredMixin, View):
     """POST: generate a pending TOTP secret and stash it in the session for confirmation."""
 
     def post(self, request: HttpRequest) -> HttpResponse:
+        if not isinstance(request.user, User):
+            return redirect("login")
         request.session[SESSION_PENDING_TOTP_SECRET] = generate_totp_secret()
+        if _is_htmx(request):
+            return _security_section_response(request, request.user)
         return redirect(f"{reverse('settings.view')}#security-settings-section")
 
 
@@ -71,15 +91,21 @@ class TOTPSetupConfirmView(LoginRequiredMixin, View):
         secret = request.session.get(SESSION_PENDING_TOTP_SECRET)
         code = request.POST.get("code", "")
         if not secret:
+            if _is_htmx(request):
+                return _security_section_response(request, request.user, code_error="That setup session expired. Please start again.")
             messages.error(request, "That setup session expired. Please start again.")
             return redirect(f"{reverse('settings.view')}#security-settings-section")
 
         if not verify_totp_setup_code(secret, code):
+            if _is_htmx(request):
+                return _security_section_response(request, request.user, code_error="That code didn't match. Please try again.")
             messages.error(request, "That code didn't match. Please try again.")
             return redirect(f"{reverse('settings.view')}#security-settings-section")
 
         enroll_totp(request.user, secret)
         del request.session[SESSION_PENDING_TOTP_SECRET]
+        if _is_htmx(request):
+            return _security_section_response(request, request.user)
         messages.success(request, "Authenticator app added.")
         return redirect(f"{reverse('settings.view')}#security-settings-section")
 
@@ -89,6 +115,8 @@ class TOTPSetupCancelView(LoginRequiredMixin, View):
 
     def post(self, request: HttpRequest) -> HttpResponse:
         request.session.pop(SESSION_PENDING_TOTP_SECRET, None)
+        if _is_htmx(request) and isinstance(request.user, User):
+            return _security_section_response(request, request.user)
         return redirect(f"{reverse('settings.view')}#security-settings-section")
 
 
@@ -99,6 +127,8 @@ class TOTPDisableView(LoginRequiredMixin, View):
         if not isinstance(request.user, User):
             return redirect("login")
         disable_totp(request.user)
+        if _is_htmx(request):
+            return _security_section_response(request, request.user)
         messages.success(request, "Authenticator app removed.")
         return redirect(f"{reverse('settings.view')}#security-settings-section")
 
@@ -110,10 +140,16 @@ class BackupCodesGenerateView(LoginRequiredMixin, View):
         if not isinstance(request.user, User):
             return redirect("login")
         if not has_second_factor(request.user):
-            messages.error(request, "Set up a passkey or authenticator app before generating backup codes.")
+            message = "Set up a passkey or authenticator app before generating backup codes."
+            if _is_htmx(request):
+                return _security_section_response(request, request.user, backup_codes_error=message)
+            messages.error(request, message)
             return redirect(f"{reverse('settings.view')}#security-settings-section")
 
         codes = generate_backup_codes(request.user)
-        # One-time display: SettingsView.get() pops this on the very next render.
+        # One-time display: SettingsView.get() (or the htmx partial below) pops
+        # this on the very next render.
         request.session["new_backup_codes"] = codes
+        if _is_htmx(request):
+            return _security_section_response(request, request.user)
         return redirect(f"{reverse('settings.view')}#security-settings-section")

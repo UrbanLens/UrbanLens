@@ -12,7 +12,14 @@
           hx-swap="outerHTML"
           hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
         <p class="settings-label notif-prefs__heading">Notifications</p>
-        <p class="settings-help notif-prefs__intro">Choose how you want to be notified.</p>
+        <p class="settings-help notif-prefs__intro">
+            Choose how you want to be notified.
+            {% if not has_whatsapp_number or not has_phone_number %}
+            WhatsApp and SMS are disabled until you connect a
+            {% if not has_whatsapp_number and not has_phone_number %}WhatsApp number and phone number{% elif not has_whatsapp_number %}WhatsApp number{% else %}phone number{% endif %}
+            in your <a href="{% url 'profile.edit' %}">profile</a>.
+            {% endif %}
+        </p>
 
         <div class="notif-prefs__grid" role="group" aria-label="Notification delivery preferences">
             <div class="notif-prefs__header">
@@ -62,26 +69,31 @@
                            onchange="notifDelivery(this)">
                 </label>
 
-                {# WhatsApp - independent boolean toggle, not part of the site/email enum above #}
-                <label class="notif-prefs__cell">
+                {# WhatsApp - independent boolean toggle, not part of the site/email enum above.
+                   Greyed out (not the disabled attribute) when no WhatsApp number is on file, so
+                   an unrelated field's change still round-trips this one's stored value instead
+                   of the browser silently dropping it from the submitted form. #}
+                <label class="notif-prefs__cell{% if not has_whatsapp_number %} notif-prefs__cell--unavailable{% endif %}"
+                       {% if not has_whatsapp_number %}title="Connect a WhatsApp number in your profile to enable this."{% endif %}>
                     <span class="notif-prefs__sr-only">{{ title }}: WhatsApp</span>
                     <input type="checkbox"
                            name="{{ wa_field }}"
                            class="notif-delivery-box"
                            data-field="{{ field }}"
                            {% if prefs|get_attr:wa_field %}checked{% endif %}
-                           onchange="notifDelivery(this)">
+                           {% if not has_whatsapp_number %}onclick="return false;"{% else %}onchange="notifDelivery(this)"{% endif %}>
                 </label>
 
                 {# SMS - independent boolean toggle #}
-                <label class="notif-prefs__cell">
+                <label class="notif-prefs__cell{% if not has_phone_number %} notif-prefs__cell--unavailable{% endif %}"
+                       {% if not has_phone_number %}title="Connect a phone number in your profile to enable this."{% endif %}>
                     <span class="notif-prefs__sr-only">{{ title }}: SMS</span>
                     <input type="checkbox"
                            name="{{ sms_field }}"
                            class="notif-delivery-box"
                            data-field="{{ field }}"
                            {% if prefs|get_attr:sms_field %}checked{% endif %}
-                           onchange="notifDelivery(this)">
+                           {% if not has_phone_number %}onclick="return false;"{% else %}onchange="notifDelivery(this)"{% endif %}>
                 </label>
             </div>
             {% endwith %}

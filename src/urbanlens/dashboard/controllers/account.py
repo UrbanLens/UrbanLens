@@ -28,6 +28,7 @@ from django.views.decorators.http import require_GET
 
 from urbanlens.dashboard.models.account import EmailVerification
 from urbanlens.dashboard.services.site_admin import should_redirect_to_site_admin
+from urbanlens.dashboard.services.two_factor import SESSION_WEBAUTHN_PENDING_REDIRECT as _WEBAUTHN_PENDING_REDIRECT_KEY, SESSION_WEBAUTHN_PENDING_USER as _WEBAUTHN_PENDING_USER_KEY
 from urbanlens.dashboard.services.username import USERNAME_RE, username_is_taken
 
 if TYPE_CHECKING:
@@ -496,10 +497,6 @@ class CustomLoginView(LoginView):
                         ],
                     )
         return super().form_invalid(form)
-
-
-_WEBAUTHN_PENDING_USER_KEY = "webauthn_pending_user_id"
-_WEBAUTHN_PENDING_REDIRECT_KEY = "webauthn_pending_redirect"
 
 
 def _pending_2fa_user(request: HttpRequest) -> User | None:

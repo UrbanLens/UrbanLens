@@ -411,6 +411,10 @@ SOCIAL_AUTH_PIPELINE = (
     "urbanlens.dashboard.services.social_auth.pipeline.mark_new_user_onboarding",
     # Save Discord username as a social link for Discord SSO users.
     "urbanlens.dashboard.services.social_auth.pipeline.save_discord_social_link",
+    # Must be last: detours through the 2FA challenge (instead of the implicit
+    # login social-auth performs once the pipeline finishes) for any account
+    # that already has a passkey or authenticator app enrolled.
+    "urbanlens.dashboard.services.social_auth.pipeline.enforce_two_factor_for_sso",
 )
 
 # After login/signup, send users through post-login routing (map or site admin setup).

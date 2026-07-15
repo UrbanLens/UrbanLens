@@ -23,12 +23,21 @@ from urbanlens.dashboard.services.webauthn import has_passkeys
 
 if TYPE_CHECKING:
     from django.contrib.auth.models import User
+    from django.http import HttpRequest
 
 TOTP_ISSUER = "UrbanLens"
 BACKUP_CODE_COUNT = 10
 BACKUP_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # no 0/O/1/I - avoids transcription errors
 BACKUP_CODE_LENGTH = 10  # rendered as two 5-char groups, e.g. "AB3XZ-9KLMN"
 SESSION_PENDING_TOTP_SECRET = "pending_totp_secret"  # noqa: S105 - session key, not a credential
+
+# Session keys for a password-verified (or SSO-verified) login that's paused
+# pending a second factor. Shared between CustomLoginView (password login,
+# account.py), LoginTwoFactorView and friends (the challenge page itself,
+# account.py), and the social-auth pipeline step below (SSO login) - all
+# three need to agree on where the pending user id/redirect live.
+SESSION_WEBAUTHN_PENDING_USER = "webauthn_pending_user_id"
+SESSION_WEBAUTHN_PENDING_REDIRECT = "webauthn_pending_redirect"
 
 
 # -- Account-wide status -----------------------------------------------------
@@ -46,6 +55,37 @@ def has_second_factor(user: User) -> bool:
     decide whether a password login needs a follow-up challenge.
     """
     return has_passkeys(user) or has_totp(user)
+
+
+def security_settings_context(user: User, request: HttpRequest, **extra: object) -> dict:
+    """Context for Settings > Security: passkeys, TOTP status, backup codes.
+
+    Shared by the full settings page render and every 2FA action view
+    (``TOTPSetupStartView`` etc.) so an htmx request can re-render just the
+    security section with fully up-to-date state after a mutation, instead
+    of falling back to a full page redirect.
+
+    Also pops ``new_backup_codes`` from the session, which
+    ``BackupCodesGenerateView`` stashes there as a one-time flash - the
+    plaintext codes are only ever available on the response immediately
+    after generating them.
+
+    Args:
+        user: The account whose security state to describe.
+        request: The current request (used for the session).
+        **extra: Additional context to merge in, e.g. ``code_error`` for an
+            inline TOTP-confirm failure message.
+    """
+    from urbanlens.dashboard.services.webauthn import list_credentials
+
+    return {
+        "passkeys": list_credentials(user),
+        "has_totp": has_totp(user),
+        "pending_totp_secret": request.session.get(SESSION_PENDING_TOTP_SECRET),
+        "backup_code_count": remaining_backup_code_count(user),
+        "new_backup_codes": request.session.pop("new_backup_codes", None),
+        **extra,
+    }
 
 
 def maybe_clear_backup_codes(user: User) -> None:
@@ -80,9 +120,14 @@ def _totp_matched_step(secret: str, code: str, valid_window: int = 1) -> int | N
     for replay protection, which ``verify()`` alone can't provide.
     """
     totp = pyotp.TOTP(secret)
+    # Some authenticator apps display/copy the code with a middle space
+    # (e.g. "123 456") - strip all whitespace, not just the ends, so a
+    # pasted code still matches. Client-side JS does the same, but this is
+    # the authoritative check and must not depend on JS having run.
+    normalized = "".join(code.split())
     current_step = int(time.time() / totp.interval)
     for step in range(current_step - valid_window, current_step + valid_window + 1):
-        if secrets.compare_digest(totp.generate_otp(step), code.strip()):
+        if secrets.compare_digest(totp.generate_otp(step), normalized):
             return step
     return None
 

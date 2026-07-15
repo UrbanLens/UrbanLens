@@ -8,6 +8,10 @@ Step contracts
 - Return ``None`` or an empty dict to do nothing and pass through.
 - Return a dict to merge extra data into the pipeline state.
 - Raise ``StopPipeline`` to abort the login.
+- Return an ``HttpResponse`` (e.g. a redirect) to interrupt the pipeline and
+  send that response straight back to the browser instead of continuing -
+  used by ``enforce_two_factor_for_sso`` below to detour through the 2FA
+  challenge page instead of letting python-social-auth log the user in.
 
 All steps must accept ``**kwargs`` because the pipeline may pass extra
 keyword arguments that we do not care about.
@@ -20,12 +24,16 @@ import re
 from typing import TYPE_CHECKING, Any
 
 from django.core.files.base import ContentFile
+from django.shortcuts import redirect
+from django.urls import reverse
 
 from urbanlens.dashboard.services.avatar import AvatarService
+from urbanlens.dashboard.services.two_factor import SESSION_WEBAUTHN_PENDING_REDIRECT, SESSION_WEBAUTHN_PENDING_USER, has_second_factor
 from urbanlens.dashboard.services.username import USERNAME_RE, UsernameGenerator, username_is_taken
 
 if TYPE_CHECKING:
     from django.contrib.auth.models import User
+    from django.http import HttpResponseRedirect
 
 logger = logging.getLogger(__name__)
 
@@ -214,6 +222,50 @@ def save_discord_social_link(
         defaults={"handle": username},
     )
     logger.debug("Saved Discord social link for user %s: %s", user.username, username)
+
+
+def enforce_two_factor_for_sso(
+    strategy: Any,
+    backend: Any,
+    user: User | None,
+    is_new: bool = False,
+    *args: Any,
+    **kwargs: Any,
+) -> HttpResponseRedirect | None:
+    """Detour through the 2FA challenge if this account has a second factor enabled.
+
+    python-social-auth logs the user in automatically once the pipeline
+    finishes - there is no equivalent of ``CustomLoginView.form_valid()``'s
+    ``has_second_factor()`` gate in the SSO path, so without this step an
+    account with a passkey/authenticator app configured could bypass 2FA
+    entirely by signing in with Google/Discord instead of a password.
+
+    Must run as the last pipeline step: everything before it (user/profile
+    creation, avatar fetch, onboarding flags) should still complete normally
+    on every SSO login: only whether *this* step goes on to call
+    ``auth_login()`` is gated. Returning an ``HttpResponseRedirect`` here
+    interrupts the pipeline (see the module docstring) instead of falling
+    through to python-social-auth's own login.
+
+    Args:
+        strategy: The social-auth strategy, used here for ``strategy.request``.
+        backend: The social-auth backend in use.
+        user: The Django User resolved by the pipeline so far, or None.
+        is_new: True for a brand-new account - can't have 2FA configured yet.
+
+    Returns:
+        A redirect to the 2FA challenge page if a factor is enrolled, else None.
+    """
+    if user is None or is_new:
+        return None
+    if not has_second_factor(user):
+        return None
+
+    request = strategy.request
+    request.session[SESSION_WEBAUTHN_PENDING_USER] = user.pk
+    request.session[SESSION_WEBAUTHN_PENDING_REDIRECT] = reverse("post_login")
+    logger.debug("Detouring SSO login for user %s through the 2FA challenge", user.username)
+    return redirect("login.2fa")
 
 
 # -- Internal helpers ----------------------------------------------------------

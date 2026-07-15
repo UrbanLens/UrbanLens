@@ -66,6 +66,8 @@ class PasskeyRenameView(LoginRequiredMixin, View):
         name = request.POST.get("name", "").strip()[:100]
         credential.name = name or "Passkey"
         credential.save(update_fields=["name", "updated"])
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return JsonResponse({"ok": True, "name": credential.name})
         messages.success(request, "Passkey renamed.")
         return redirect(f"{reverse('settings.view')}#security-settings-section")
 
