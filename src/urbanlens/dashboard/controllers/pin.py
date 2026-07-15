@@ -153,6 +153,10 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                     {"action": "not_relevant", "icon": "thumb_down", "label": "Mark not relevant"},
                     {"action": "wiki", "icon": "public", "label": "Send to wiki"},
                 ],
+                "detail_pin_bulk_actions": [
+                    {"action": "promote", "icon": "move_up", "label": "Promote to top level"},
+                    {"action": "delete", "icon": "delete", "label": "Delete"},
+                ],
                 "pin_security_values": [
                     ("fences", "Fences", pin.fences),
                     ("alarms", "Alarms", pin.alarms),

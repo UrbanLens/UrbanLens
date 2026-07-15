@@ -362,6 +362,7 @@ function init(): void {
         // Nothing to show yet (brand-new pin: no detail pins, markup, or photos) -
         // hide the edge handle entirely rather than exposing an empty sidebar.
         if (handle) handle.style.display = total ? "" : "none";
+        refreshDetailPinSelectButton();
     }
 
     function buildDetailList(): void {
@@ -529,6 +530,14 @@ function init(): void {
                         // direct click-to-edit behavior there.
                         marker.on("click", () => openDetailPinEditDialog(entry));
                     }
+                    // Select-mode click toggles selection instead of opening the popup
+                    // or the editor - mirrors the main map's marker click handling.
+                    marker.on("click", (e) => {
+                        if (!detailSelectMode || entry.owner_name) return;
+                        marker.closePopup();
+                        L.DomEvent.stop(e);
+                        toggleDpSelection(entry.uuid);
+                    });
                     marker.on("dragend", () => {
                         const pos = marker.getLatLng();
                         fetch(`${dpEditBase}${dp.uuid}/`, {
@@ -558,6 +567,159 @@ function init(): void {
             })
             .catch((err) => console.warn("Could not load detail pins:", err));
     }
+
+    // -- Detail pin multi-select: promote or delete several sub pins at once --
+    // Pin-only (cfg.pinSlug is empty on the wiki page, which shares this module
+    // but has no reparentable Pin-backed detail pins to act on) - the button is
+    // removed there. Nested entries (entry.owner_name set) are display-only and
+    // never selectable, matching their existing non-draggable/non-editable state.
+    let detailSelectMode = false;
+    const selectedDpUuids = new Set<string>();
+    let dpDragSelectRect: L.Rectangle | null = null;
+
+    function detailSelectableEntries(): DetailPinEntry[] {
+        return detailPins.filter((d) => !d.owner_name);
+    }
+
+    function refreshDetailPinSelectButton(): void {
+        const btn = document.getElementById("select-detail-pins-button") as HTMLButtonElement | null;
+        if (!btn) return;
+        if (!cfg.pinSlug) {
+            btn.remove();
+            return;
+        }
+        const hasSelectable = detailSelectableEntries().length > 0;
+        btn.disabled = !hasSelectable;
+        btn.setAttribute("data-tooltip", hasSelectable ? "Select multiple sub pins to promote or delete" : "This pin has no sub pins to select");
+        if (!hasSelectable && detailSelectMode) exitDetailPinSelectMode();
+    }
+
+    function toggleDetailPinSelectMode(): void {
+        if (detailSelectMode) exitDetailPinSelectMode();
+        else enterDetailPinSelectMode();
+    }
+    window.toggleDetailPinSelectMode = toggleDetailPinSelectMode;
+
+    function enterDetailPinSelectMode(): void {
+        if (detailSelectMode || !detailSelectableEntries().length) return;
+        detailSelectMode = true;
+        document.getElementById("select-detail-pins-button")?.classList.add("active");
+        document.getElementById("map")?.classList.add("select-mode");
+        map.dragging.disable();
+    }
+
+    function exitDetailPinSelectMode(): void {
+        if (!detailSelectMode) return;
+        detailSelectMode = false;
+        document.getElementById("select-detail-pins-button")?.classList.remove("active");
+        document.getElementById("map")?.classList.remove("select-mode");
+        map.dragging.enable();
+        clearDpSelection();
+    }
+
+    function toggleDpSelection(uuid: string): void {
+        if (selectedDpUuids.has(uuid)) selectedDpUuids.delete(uuid);
+        else selectedDpUuids.add(uuid);
+        const dp = detailPins.find((d) => d.uuid === uuid);
+        dp?.marker?.getElement()?.classList.toggle("is-selected", selectedDpUuids.has(uuid));
+        renderDetailBulkToolbar();
+    }
+
+    function clearDpSelection(): void {
+        selectedDpUuids.forEach((uuid) => {
+            detailPins.find((d) => d.uuid === uuid)?.marker?.getElement()?.classList.remove("is-selected");
+        });
+        selectedDpUuids.clear();
+        window.ulBulkToolbar?.clear("detailpins");
+    }
+
+    function renderDetailBulkToolbar(): void {
+        const n = selectedDpUuids.size;
+        window.ulBulkToolbar?.sync(
+            "detailpins",
+            n,
+            n
+                ? {
+                      promote: doPromoteSelectedDp,
+                      delete: doDeleteSelectedDp,
+                      deselect: clearDpSelection,
+                  }
+                : {},
+        );
+    }
+
+    async function doPromoteSelectedDp(): Promise<void> {
+        const uuids = Array.from(selectedDpUuids);
+        if (!uuids.length) return;
+        const n = uuids.length;
+        if (!(await confirmAction({ title: "Promote sub pins?", message: `Promote ${n} sub pin${n === 1 ? "" : "s"} to top-level pins on your main map?`, confirmLabel: "Promote" }))) return;
+        const results = await Promise.all(
+            uuids.map((uuid) => {
+                const slug = detailPins.find((d) => d.uuid === uuid)?.slug || uuid;
+                return fetch(`/dashboard/map/pin/${encodeURIComponent(slug)}/detach-parent/`, {
+                    method: "POST",
+                    headers: { "X-CSRFToken": getCsrfToken() },
+                }).then((r) => r.ok);
+            }),
+        );
+        const promoted = results.filter(Boolean).length;
+        if (promoted) toast.success(`${promoted} pin${promoted === 1 ? "" : "s"} promoted.`);
+        if (promoted < n) toast.warning(`${n - promoted} pin${n - promoted === 1 ? "" : "s"} could not be promoted (location conflict).`);
+        clearDpSelection();
+        loadDetailPins();
+    }
+
+    async function doDeleteSelectedDp(): Promise<void> {
+        const uuids = Array.from(selectedDpUuids);
+        if (!uuids.length) return;
+        const n = uuids.length;
+        if (!(await confirmAction({ title: "Delete sub pins?", message: `Delete ${n} sub pin${n === 1 ? "" : "s"}? This also removes reviews, visit history, and notes.`, confirmLabel: "Delete" }))) return;
+        const results = await Promise.all(uuids.map((uuid) => fetch(`${dpEditBase}${uuid}/`, { method: "DELETE", headers: { "X-CSRFToken": getCsrfToken() } }).then((r) => r.ok)));
+        const deleted = results.filter(Boolean).length;
+        if (deleted) toast.success(`${deleted} pin${deleted === 1 ? "" : "s"} deleted.`);
+        if (deleted < n) toast.warning(`${n - deleted} pin${n - deleted === 1 ? "" : "s"} could not be deleted.`);
+        clearDpSelection();
+        loadDetailPins();
+    }
+
+    // Rectangle drag-select over detail-pin markers, mirroring the main map's
+    // multi-select tool (_initSelectDragRectangle in pages/map/index.html).
+    (function initDetailPinDragSelect() {
+        mapEl.addEventListener("mousedown", (e: MouseEvent) => {
+            if (!detailSelectMode || e.button !== 0) return;
+            const startLL = map.mouseEventToLatLng(e);
+            const startX = e.clientX;
+            const startY = e.clientY;
+            let dragging = false;
+
+            function onMove(ev: MouseEvent): void {
+                if (!dragging && Math.hypot(ev.clientX - startX, ev.clientY - startY) < 6) return;
+                dragging = true;
+                if (dpDragSelectRect) map.removeLayer(dpDragSelectRect);
+                dpDragSelectRect = L.rectangle(L.latLngBounds(startLL, map.mouseEventToLatLng(ev)), {
+                    color: "#1E88E5",
+                    weight: 2,
+                    fillOpacity: 0.08,
+                    dashArray: "4 4",
+                    interactive: false,
+                }).addTo(map);
+            }
+            function onUp(ev: MouseEvent): void {
+                document.removeEventListener("mousemove", onMove);
+                if (dpDragSelectRect) {
+                    map.removeLayer(dpDragSelectRect);
+                    dpDragSelectRect = null;
+                }
+                if (!dragging) return;
+                const bounds = L.latLngBounds(startLL, map.mouseEventToLatLng(ev));
+                detailSelectableEntries().forEach((dp) => {
+                    if (dp.marker && !selectedDpUuids.has(dp.uuid) && bounds.contains(dp.marker.getLatLng())) toggleDpSelection(dp.uuid);
+                });
+            }
+            document.addEventListener("mousemove", onMove);
+            document.addEventListener("mouseup", onUp, { once: true });
+        });
+    })();
 
     // -- Markup toolbar (shared factory - see ts/shared/markup-toolbar.ts) --
     const toolbar: MarkupToolbar = window.createMarkupToolbar(map, markupLayer, {
@@ -1554,6 +1716,7 @@ declare global {
 
         // Detail-pin/boundary functions, exposed for this page's own template onclick= attributes.
         _toggleDetailPinListPanel: () => void;
+        toggleDetailPinSelectMode: () => void;
         openAddPinDialog: () => void;
         startEditBoundary: (type: "property" | "building") => void;
         saveBoundary: (options?: { type?: "property" | "building"; exitEdit?: boolean; quiet?: boolean }) => void;

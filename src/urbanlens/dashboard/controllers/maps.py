@@ -8,7 +8,7 @@ import urllib.request
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import DatabaseError
-from django.db.models import Prefetch
+from django.db.models import Count, Prefetch
 from django.db.models.functions import Coalesce, Lower
 from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, render
@@ -649,11 +649,17 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         layer to matching child pins too.
 
         Returns:
-            JsonResponse: ``{"pins": [{...to_detail_json(), parent_slug,
-            parent_name, parent_url}, ...]}``
+            JsonResponse: ``{"pins": [{...to_detail_json(), child_count,
+            parent_slug, parent_name, parent_url}, ...]}``
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        query = Pin.objects.filter(profile=profile).detail_pins().select_related("location", "parent_pin", "parent_pin__location").prefetch_related(Prefetch("labels", queryset=Label.objects.exclude(kind="user").order_by("-order", "name")))
+        query = (
+            Pin.objects.filter(profile=profile)
+            .detail_pins()
+            .select_related("location", "parent_pin", "parent_pin__location")
+            .prefetch_related(Prefetch("labels", queryset=Label.objects.exclude(kind="user").order_by("-order", "name")))
+            .annotate(child_count=Count("detail_pins", distinct=True))
+        )
 
         search_form = SearchForm(request.GET, profile=profile)
         if search_form.is_valid():
@@ -670,6 +676,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         pins = []
         for child in query:
             entry = child.to_detail_json()
+            entry["child_count"] = getattr(child, "child_count", 0) or 0
             parent = child.parent_pin
             if parent is not None:
                 parent_slug = parent.slug or str(parent.uuid)

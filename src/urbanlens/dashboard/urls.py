@@ -148,6 +148,7 @@ urlpatterns = [
                     pin_bulk.PinBulkEditLabelOptionsView.as_view(),
                     name="pin.bulk_edit.label_options",
                 ),
+                path("pins/parent-search/", pin_bulk.PinParentSearchView.as_view(), name="pin.parent_search"),
                 path("pins/<slug:pin_slug>/", maps.MapController.as_view({"get": "map_pin_json"}), name="map.pin.json"),
                 path(
                     "boundaries/",
@@ -377,6 +378,11 @@ urlpatterns = [
                                 "<slug:pin_slug>/detach-parent/",
                                 pin_edit.PinDetachChildView.as_view(),
                                 name="pin.detach_parent",
+                            ),
+                            path(
+                                "<slug:pin_slug>/promote-children/",
+                                pin_edit.PinPromoteChildrenView.as_view(),
+                                name="pin.promote_children",
                             ),
                             path(
                                 "<slug:pin_slug>/link/",

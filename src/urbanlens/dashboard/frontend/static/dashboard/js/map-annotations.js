@@ -1,8 +1,29 @@
-import {
-  confirmAction,
-  getCsrfToken,
-  toast
-} from "./map-annotations-9jdqkrz7.js";
+// src/urbanlens/dashboard/frontend/ts/shared/csrf.ts
+function getCsrfToken() {
+  return window.csrftoken ?? "";
+}
+
+// src/urbanlens/dashboard/frontend/ts/shared/dialogs.ts
+async function confirmAction(options) {
+  if (window.confirmDialog) {
+    return window.confirmDialog(options);
+  }
+  return window.confirm(options.message ?? "Are you sure?");
+}
+var toast = {
+  success(message) {
+    window.toastr.success(message);
+  },
+  error(message) {
+    window.toastr.error(message);
+  },
+  warning(message) {
+    window.toastr.warning(message);
+  },
+  info(message) {
+    window.toastr.info(message);
+  }
+};
 
 // src/urbanlens/dashboard/frontend/ts/shared/map-layers.ts
 var TILE_DEFS = {
@@ -671,6 +692,7 @@ function init() {
       countLabel.textContent = `${total} Layer${total === 1 ? "" : "s"}`;
     if (handle)
       handle.style.display = total ? "" : "none";
+    refreshDetailPinSelectButton();
   }
   function buildDetailList() {
     const ul = document.getElementById("detail-pin-list-ul");
@@ -824,6 +846,13 @@ function init() {
         } else {
           marker.on("click", () => openDetailPinEditDialog(entry));
         }
+        marker.on("click", (e) => {
+          if (!detailSelectMode || entry.owner_name)
+            return;
+          marker.closePopup();
+          L.DomEvent.stop(e);
+          toggleDpSelection(entry.uuid);
+        });
         marker.on("dragend", () => {
           const pos = marker.getLatLng();
           fetch(`${dpEditBase}${dp.uuid}/`, {
@@ -850,6 +879,152 @@ function init() {
       buildDetailList();
     }).catch((err) => console.warn("Could not load detail pins:", err));
   }
+  let detailSelectMode = false;
+  const selectedDpUuids = new Set;
+  let dpDragSelectRect = null;
+  function detailSelectableEntries() {
+    return detailPins.filter((d) => !d.owner_name);
+  }
+  function refreshDetailPinSelectButton() {
+    const btn = document.getElementById("select-detail-pins-button");
+    if (!btn)
+      return;
+    if (!cfg.pinSlug) {
+      btn.remove();
+      return;
+    }
+    const hasSelectable = detailSelectableEntries().length > 0;
+    btn.disabled = !hasSelectable;
+    btn.setAttribute("data-tooltip", hasSelectable ? "Select multiple sub pins to promote or delete" : "This pin has no sub pins to select");
+    if (!hasSelectable && detailSelectMode)
+      exitDetailPinSelectMode();
+  }
+  function toggleDetailPinSelectMode() {
+    if (detailSelectMode)
+      exitDetailPinSelectMode();
+    else
+      enterDetailPinSelectMode();
+  }
+  window.toggleDetailPinSelectMode = toggleDetailPinSelectMode;
+  function enterDetailPinSelectMode() {
+    if (detailSelectMode || !detailSelectableEntries().length)
+      return;
+    detailSelectMode = true;
+    document.getElementById("select-detail-pins-button")?.classList.add("active");
+    document.getElementById("map")?.classList.add("select-mode");
+    map.dragging.disable();
+  }
+  function exitDetailPinSelectMode() {
+    if (!detailSelectMode)
+      return;
+    detailSelectMode = false;
+    document.getElementById("select-detail-pins-button")?.classList.remove("active");
+    document.getElementById("map")?.classList.remove("select-mode");
+    map.dragging.enable();
+    clearDpSelection();
+  }
+  function toggleDpSelection(uuid) {
+    if (selectedDpUuids.has(uuid))
+      selectedDpUuids.delete(uuid);
+    else
+      selectedDpUuids.add(uuid);
+    const dp = detailPins.find((d) => d.uuid === uuid);
+    dp?.marker?.getElement()?.classList.toggle("is-selected", selectedDpUuids.has(uuid));
+    renderDetailBulkToolbar();
+  }
+  function clearDpSelection() {
+    selectedDpUuids.forEach((uuid) => {
+      detailPins.find((d) => d.uuid === uuid)?.marker?.getElement()?.classList.remove("is-selected");
+    });
+    selectedDpUuids.clear();
+    window.ulBulkToolbar?.clear("detailpins");
+  }
+  function renderDetailBulkToolbar() {
+    const n = selectedDpUuids.size;
+    window.ulBulkToolbar?.sync("detailpins", n, n ? {
+      promote: doPromoteSelectedDp,
+      delete: doDeleteSelectedDp,
+      deselect: clearDpSelection
+    } : {});
+  }
+  async function doPromoteSelectedDp() {
+    const uuids = Array.from(selectedDpUuids);
+    if (!uuids.length)
+      return;
+    const n = uuids.length;
+    if (!await confirmAction({ title: "Promote sub pins?", message: `Promote ${n} sub pin${n === 1 ? "" : "s"} to top-level pins on your main map?`, confirmLabel: "Promote" }))
+      return;
+    const results = await Promise.all(uuids.map((uuid) => {
+      const slug = detailPins.find((d) => d.uuid === uuid)?.slug || uuid;
+      return fetch(`/dashboard/map/pin/${encodeURIComponent(slug)}/detach-parent/`, {
+        method: "POST",
+        headers: { "X-CSRFToken": getCsrfToken() }
+      }).then((r) => r.ok);
+    }));
+    const promoted = results.filter(Boolean).length;
+    if (promoted)
+      toast.success(`${promoted} pin${promoted === 1 ? "" : "s"} promoted.`);
+    if (promoted < n)
+      toast.warning(`${n - promoted} pin${n - promoted === 1 ? "" : "s"} could not be promoted (location conflict).`);
+    clearDpSelection();
+    loadDetailPins();
+  }
+  async function doDeleteSelectedDp() {
+    const uuids = Array.from(selectedDpUuids);
+    if (!uuids.length)
+      return;
+    const n = uuids.length;
+    if (!await confirmAction({ title: "Delete sub pins?", message: `Delete ${n} sub pin${n === 1 ? "" : "s"}? This also removes reviews, visit history, and notes.`, confirmLabel: "Delete" }))
+      return;
+    const results = await Promise.all(uuids.map((uuid) => fetch(`${dpEditBase}${uuid}/`, { method: "DELETE", headers: { "X-CSRFToken": getCsrfToken() } }).then((r) => r.ok)));
+    const deleted = results.filter(Boolean).length;
+    if (deleted)
+      toast.success(`${deleted} pin${deleted === 1 ? "" : "s"} deleted.`);
+    if (deleted < n)
+      toast.warning(`${n - deleted} pin${n - deleted === 1 ? "" : "s"} could not be deleted.`);
+    clearDpSelection();
+    loadDetailPins();
+  }
+  (function initDetailPinDragSelect() {
+    mapEl.addEventListener("mousedown", (e) => {
+      if (!detailSelectMode || e.button !== 0)
+        return;
+      const startLL = map.mouseEventToLatLng(e);
+      const startX = e.clientX;
+      const startY = e.clientY;
+      let dragging = false;
+      function onMove(ev) {
+        if (!dragging && Math.hypot(ev.clientX - startX, ev.clientY - startY) < 6)
+          return;
+        dragging = true;
+        if (dpDragSelectRect)
+          map.removeLayer(dpDragSelectRect);
+        dpDragSelectRect = L.rectangle(L.latLngBounds(startLL, map.mouseEventToLatLng(ev)), {
+          color: "#1E88E5",
+          weight: 2,
+          fillOpacity: 0.08,
+          dashArray: "4 4",
+          interactive: false
+        }).addTo(map);
+      }
+      function onUp(ev) {
+        document.removeEventListener("mousemove", onMove);
+        if (dpDragSelectRect) {
+          map.removeLayer(dpDragSelectRect);
+          dpDragSelectRect = null;
+        }
+        if (!dragging)
+          return;
+        const bounds = L.latLngBounds(startLL, map.mouseEventToLatLng(ev));
+        detailSelectableEntries().forEach((dp) => {
+          if (dp.marker && !selectedDpUuids.has(dp.uuid) && bounds.contains(dp.marker.getLatLng()))
+            toggleDpSelection(dp.uuid);
+        });
+      }
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp, { once: true });
+    });
+  })();
   const toolbar = window.createMarkupToolbar(map, markupLayer, {
     markupJsonUrl: cfg.markupJsonUrl,
     markupCreateUrl: cfg.markupCreateUrl,

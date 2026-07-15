@@ -25,6 +25,19 @@
         </div>
 
         <div class="form-field">
+            <label class="form-label" for="bulk-edit-parent-search">Set parent pin</label>
+            <div class="apdlg-label-field" id="bulk-edit-parent-field">
+                <div class="apdlg-label-chips" id="bulk-edit-parent-chip"></div>
+                <div class="apdlg-label-input-wrap form-input-wrap" id="bulk-edit-parent-input-wrap">
+                    <input type="text" id="bulk-edit-parent-search" class="form-input apdlg-label-input"
+                           placeholder="Search your pins by name or alias..." autocomplete="off" autocorrect="off">
+                    <div id="bulk-edit-parent-suggestions" class="apdlg-label-suggestions" hidden></div>
+                </div>
+            </div>
+            <p class="form-hint">Makes every selected pin a sub pin of the one you pick here.</p>
+        </div>
+
+        <div class="form-field">
             <label class="form-label">Remove labels</label>
             <div class="apdlg-label-field" id="bulk-edit-remove-label-field">
                 <div class="apdlg-label-chips" id="bulk-edit-remove-label-chips"></div>

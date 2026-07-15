@@ -208,6 +208,96 @@ class PinDetachChildViewTests(TestCase):
         self.assertEqual(self.child.parent_pin_id, self.root.pk)
 
 
+class PinPromoteChildrenViewTests(TestCase):
+    """POST /map/pin/<slug>/promote-children/ moves a pin's direct children up one level."""
+
+    def setUp(self) -> None:
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+        self.client.force_login(self.user)
+        self.grandparent = _make_pin(self.profile, name="Grandparent")
+        self.grandparent.slug = self.grandparent.ensure_slug()
+        self.parent = _make_pin(self.profile, name="Parent", parent_pin=self.grandparent)
+        self.parent.slug = self.parent.ensure_slug()
+        self.child_a = _make_pin(self.profile, name="Child A", parent_pin=self.parent)
+        self.child_b = _make_pin(self.profile, name="Child B", parent_pin=self.parent)
+        self.grandchild = _make_pin(self.profile, name="Grandchild", parent_pin=self.child_a)
+
+    def _promote(self, pin: Pin):
+        return self.client.post(reverse("pin.promote_children", kwargs={"pin_slug": pin.slug or str(pin.uuid)}))
+
+    def test_children_move_to_pins_own_parent(self) -> None:
+        response = self._promote(self.parent)
+        self.assertEqual(response.status_code, 200)
+        self.child_a.refresh_from_db()
+        self.child_b.refresh_from_db()
+        self.assertEqual(self.child_a.parent_pin_id, self.grandparent.pk)
+        self.assertEqual(self.child_b.parent_pin_id, self.grandparent.pk)
+
+    def test_children_become_top_level_when_pin_has_no_parent(self) -> None:
+        root = _make_pin(self.profile, name="Root")
+        root.slug = root.ensure_slug()
+        child = _make_pin(self.profile, name="Root's Child", parent_pin=root)
+        response = self._promote(root)
+        self.assertEqual(response.status_code, 200)
+        child.refresh_from_db()
+        self.assertIsNone(child.parent_pin_id)
+
+    def test_the_pin_itself_is_unaffected(self) -> None:
+        self._promote(self.parent)
+        self.parent.refresh_from_db()
+        self.assertEqual(self.parent.parent_pin_id, self.grandparent.pk)
+
+    def test_grandchildren_stay_nested_under_their_promoted_parent(self) -> None:
+        self._promote(self.parent)
+        self.grandchild.refresh_from_db()
+        self.assertEqual(self.grandchild.parent_pin_id, self.child_a.pk)
+
+    def test_returns_promoted_count(self) -> None:
+        response = self._promote(self.parent)
+        self.assertEqual(response.json()["promoted"], 2)
+
+    def test_no_children_returns_400(self) -> None:
+        response = self._promote(self.child_b)
+        self.assertEqual(response.status_code, 400)
+
+    def test_rejects_other_users_pin(self) -> None:
+        other = baker.make(User)
+        self.client.force_login(other)
+        response = self._promote(self.parent)
+        self.assertEqual(response.status_code, 404)
+        self.child_a.refresh_from_db()
+        self.assertEqual(self.child_a.parent_pin_id, self.parent.pk)
+
+    def test_child_sharing_a_root_pins_own_location_is_left_in_place(self) -> None:
+        """A root pin being promoted-from isn't deleted, so it keeps occupying its
+        own root slot forever - a child at that same Location can't become root
+        (there's no parent to move it under instead) and must stay put."""
+        root = _make_pin(self.profile, name="Root")
+        root.slug = root.ensure_slug()
+        same_loc_child = _make_pin(self.profile, name="Same Spot", parent_pin=root, location=root.location)
+        self._promote(root)
+        same_loc_child.refresh_from_db()
+        self.assertEqual(same_loc_child.parent_pin_id, root.pk)
+
+    def test_child_sharing_a_non_root_pins_location_is_still_promoted(self) -> None:
+        """When the pin being promoted-from itself has a parent, a child sharing
+        its Location can still move to that parent - only *root* pins are
+        constrained by Location, and the child isn't becoming one here."""
+        same_loc_child = _make_pin(self.profile, name="Same Spot", parent_pin=self.parent, location=self.parent.location)
+        self._promote(self.parent)
+        same_loc_child.refresh_from_db()
+        self.assertEqual(same_loc_child.parent_pin_id, self.grandparent.pk)
+
+    def test_promoted_child_nests_under_existing_root_at_same_location(self) -> None:
+        root = _make_pin(self.profile, name="Standalone Root")
+        root.slug = root.ensure_slug()
+        colliding_child = _make_pin(self.profile, name="Colliding Child", parent_pin=root, location=self.grandparent.location)
+        self._promote(root)
+        colliding_child.refresh_from_db()
+        self.assertEqual(colliding_child.parent_pin_id, self.grandparent.pk)
+
+
 class DetailPinJsonChildrenTests(TestCase):
     """?children=1 expands the pin page's detail-pin JSON to the full subtree."""
 

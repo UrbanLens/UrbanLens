@@ -7,7 +7,7 @@ import logging
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import DatabaseError
-from django.http import Http404, HttpResponse
+from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
 
@@ -488,6 +488,29 @@ class PinDetachChildView(LoginRequiredMixin, View):
         response = HttpResponse("", status=200)
         response["HX-Refresh"] = "true"
         return response
+
+
+class PinPromoteChildrenView(LoginRequiredMixin, View):
+    """Promote a pin's direct children up one level, from the map popup.
+
+    POST /map/pin/<pin_slug>/promote-children/
+
+    Children move to this pin's own parent (or become top-level pins if this
+    pin has none); the pin itself is untouched. Returns JSON so the map popup
+    can update in place without a full page reload.
+    """
+
+    def post(self, request, pin_slug):
+        result = _pin_for_user(pin_slug, request)
+        if isinstance(result, HttpResponse):
+            return result
+        pin = result
+        child_count = Pin.objects.filter(parent_pin=pin).count()
+        if not child_count:
+            return JsonResponse({"error": "This pin has no sub pins to promote."}, status=400)
+        promoted = pin.promote_children()
+        logger.info("User %s promoted %s child pin(s) of pin %s", request.user.id, promoted, pin.id)
+        return JsonResponse({"ok": True, "promoted": promoted})
 
 
 class PinRelinkView(LoginRequiredMixin, View):

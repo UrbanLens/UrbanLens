@@ -425,6 +425,17 @@ register_map_tool(
 )
 register_map_tool(
     MapToolSpec(
+        key="select_detail_pins",
+        icon="check_box",
+        aria_label="Select sub pins",
+        tooltip="Select multiple sub pins to promote or delete",
+        tooltip_pos="below",
+        button_id="select-detail-pins-button",
+        onclick="toggleDetailPinSelectMode()",
+    )
+)
+register_map_tool(
+    MapToolSpec(
         key="screenshot",
         icon="photo_camera",
         aria_label="Take a screenshot",

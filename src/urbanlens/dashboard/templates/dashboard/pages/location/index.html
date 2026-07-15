@@ -144,6 +144,7 @@
         <div class="map-wrapper">
 
             {% include "dashboard/partials/layout/_map_annotations_panels.html" with layers="street,terrain,satellite,weather,borders,details,photos,nearby" %}
+            {% include "dashboard/partials/ui/_bulk_toolbar.html" with namespace="detailpins" actions=detail_pin_bulk_actions %}
 
         </div>
     </div>{# end .location-map #}

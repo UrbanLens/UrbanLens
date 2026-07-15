@@ -170,10 +170,6 @@
                 <div class="fp-accordion-body">
                     {# Label query submitted as structured JSON; falls back to tags/exclude_tags for compat #}
                     <input type="hidden" name="label_groups" id="fp-label-groups">
-                    {# Geographic include/exclude regions carried through from an applied saved filter
-                       (Organize's Filters tab - _organize_filters_panel.html - is the only place these
-                       are authored - there's no drawing UI here, this is just a pass-through so results
-                       still narrow correctly when such a filter is applied). #}
                     <input type="hidden" name="include_regions" id="fp-include-regions">
                     <input type="hidden" name="exclude_regions" id="fp-exclude-regions">
 
@@ -1334,6 +1330,7 @@
                 <div class="popup-actions">
                     <a href="${_escHtml(pin.viewLocationUrl)}" class="view-full-pin">View Details</a>
                     ${pin.id ? `<button class="add-to-list-button" onclick="event.stopPropagation(); openAddToListDialog(${pin.id})" title="Add to list"><i class="material-symbols-outlined">playlist_add</i></button>` : ''}
+                    ${pin.child_count > 0 ? `<button class="promote-children-button" onclick="event.stopPropagation(); promoteChildPins('${pin.slug || pin.uuid}', ${pin.child_count})" title="Promote all sub pins up one level"><i class="material-symbols-outlined">move_up</i></button>` : ''}
                     <button class="edit-pin-button" onclick="openEditPinDialog('${pin.uuid}')" title="Edit pin"><i class="material-symbols-outlined">edit</i></button>
                     <button class="delete-button" onclick="deletePin(this)" title="Delete pin"><i class="material-symbols-outlined">delete</i></button>
                 </div>
@@ -1815,8 +1812,18 @@
                 ${pin.description ? `<div class="popup-desc">${_escHtml(pin.description)}</div>` : ''}
                 <div class="popup-actions">
                     <a href="${_escHtml(pin.url || '#')}" class="view-full-pin">View Details</a>
+                    ${pin.child_count > 0 ? `<button class="promote-children-button" onclick="event.stopPropagation(); promoteChildPins('${pin.slug || pin.uuid}', ${pin.child_count})" title="Promote all sub pins up one level"><i class="material-symbols-outlined">move_up</i></button>` : ''}
                 </div>
             </div>`);
+
+        // Select-mode click toggles selection instead of opening the popup,
+        // matching the root-marker behavior in _buildMarker.
+        marker.on('click', function (e) {
+            if (!_selectMode) return;
+            marker.closePopup();
+            L.DomEvent.stop(e);
+            _togglePinSelection(pin.uuid);
+        });
         return marker;
     }
 
@@ -2590,6 +2597,29 @@
         await _deletePinByUuid(pinUuid, pinName);
     }
 
+    async function promoteChildPins(pinSlug, childCount) {
+        const n = childCount || 0;
+        const confirmed = await window.confirmDialog({
+            title: 'Promote sub pins?',
+            message: `This moves ${n} sub pin${n === 1 ? '' : 's'} up one level, so ${n === 1 ? 'it is' : 'they are'} no longer nested under this pin.`,
+            confirmLabel: 'Promote',
+        });
+        if (!confirmed) return;
+        fetch('/dashboard/map/pin/' + encodeURIComponent(pinSlug) + '/promote-children/', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': '{{ csrf_token }}' },
+        })
+        .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
+        .then(function (data) {
+            map.closePopup();
+            toastr.success(`${data.promoted} pin${data.promoted === 1 ? '' : 's'} promoted.`);
+            try { localStorage.setItem('ul_pins_dirty', '1'); } catch (e) { /* poll covers it */ }
+            _refreshAllPins();
+            if (_childPinsActive) _loadChildPins();
+        })
+        .catch(function () { toastr.error('Failed to promote sub pins.'); });
+    }
+
     // ============================================================
     // Multi-select tool: select, merge, delete (+undo), bulk edit
     // ============================================================
@@ -2621,16 +2651,25 @@
         document.getElementById('bulk-select-toolbar').hidden = true;
     }
 
+    // Root and child (sub) pin markers/data live in separate registries - these
+    // helpers resolve either kind so selection works the same for both.
+    function _anyMarker(uuid) {
+        return _markerMap.get(uuid) || _childMarkerMap.get(uuid);
+    }
+    function _anyPinData(uuid) {
+        return _pinStore.get(uuid) || _childPinStore.get(uuid);
+    }
+
     function _togglePinSelection(uuid) {
         if (_selectedPinUuids.has(uuid)) { _selectedPinUuids.delete(uuid); } else { _selectedPinUuids.add(uuid); }
-        const marker = _markerMap.get(uuid);
+        const marker = _anyMarker(uuid);
         marker?.getElement()?.classList.toggle('is-selected', _selectedPinUuids.has(uuid));
         _renderBulkSelectToolbar();
         _refreshBulkMergeDialogIfOpen();
     }
 
     function _clearSelection() {
-        _selectedPinUuids.forEach(function (uuid) { _markerMap.get(uuid)?.getElement()?.classList.remove('is-selected'); });
+        _selectedPinUuids.forEach(function (uuid) { _anyMarker(uuid)?.getElement()?.classList.remove('is-selected'); });
         _selectedPinUuids.clear();
         _renderBulkSelectToolbar();
         _refreshBulkMergeDialogIfOpen();
@@ -2642,7 +2681,7 @@
     function _syncSelectionClasses() {
         if (!_selectedPinUuids.size) return;
         _selectedPinUuids.forEach(function (uuid) {
-            _markerMap.get(uuid)?.getElement()?.classList.add('is-selected');
+            _anyMarker(uuid)?.getElement()?.classList.add('is-selected');
         });
     }
     clusterGroup.on('animationend spiderfied unspiderfied layeradd', _syncSelectionClasses);
@@ -2666,14 +2705,14 @@
     // picker the pin popup and the filtered sidebar list use.
     function _openAddToListForSelection() {
         const ids = Array.from(_selectedPinUuids)
-            .map((uuid) => _pinStore.get(uuid)?.id)
+            .map((uuid) => _anyPinData(uuid)?.id)
             .filter((id) => id != null);
         if (!ids.length) return;
         openAddToListDialog(ids);
     }
 
     function _selectedPinName(uuid) {
-        const pin = _pinStore.get(uuid);
+        const pin = _anyPinData(uuid);
         return (pin && (pin.name || pin.address)) || 'Untitled pin';
     }
 
@@ -2701,9 +2740,11 @@
                 if (_dragSelectRect) { map.removeLayer(_dragSelectRect); _dragSelectRect = null; }
                 if (!dragging) return;
                 const bounds = L.latLngBounds(startLL, map.mouseEventToLatLng(ev));
-                _markerMap.forEach(function (marker, uuid) {
+                function selectInBounds(marker, uuid) {
                     if (!_selectedPinUuids.has(uuid) && bounds.contains(marker.getLatLng())) _togglePinSelection(uuid);
-                });
+                }
+                _markerMap.forEach(selectInBounds);
+                if (_childPinsActive) _childMarkerMap.forEach(selectInBounds);
             }
             document.addEventListener('mousemove', onMove);
             document.addEventListener('mouseup', onUp, { once: true });
@@ -2744,7 +2785,9 @@
             document.getElementById('bulk-delete-dialog').close();
             uuids.forEach(function (uuid) {
                 if (_markerMap.has(uuid)) { clusterGroup.removeLayer(_markerMap.get(uuid)); _markerMap.delete(uuid); }
+                if (_childMarkerMap.has(uuid)) { clusterGroup.removeLayer(_childMarkerMap.get(uuid)); _childMarkerMap.delete(uuid); }
                 _pinStore.delete(uuid);
+                _childPinStore.delete(uuid);
             });
             _totalPins = _pinStore.size;
             exitSelectMode();
@@ -2786,7 +2829,7 @@
     }
 
     function _pinMiniCardHtml(uuid, isTarget) {
-        const pin = _pinStore.get(uuid) || {};
+        const pin = _anyPinData(uuid) || {};
         const style = pin.color ? `color:${pin.color}` : '';
         const swapBtn = isTarget ? '' : `<button type="button" class="cat-merge-swap-btn" data-swap-uuid="${uuid}" title="Make this the top-level pin"><i class="material-symbols-outlined">swap_vert</i></button>`;
         const removeBtn = `<button type="button" class="cat-merge-remove-btn" data-remove-uuid="${uuid}" title="Remove from this merge (also deselects it on the map)"><i class="material-symbols-outlined">close</i></button>`;
@@ -2972,6 +3015,67 @@
     const _bulkEditAddPicker = _makeLabelChipPicker('bulk-edit-add-label-chips', 'bulk-edit-add-label-search', 'bulk-edit-add-label-suggestions');
     const _bulkEditRemovePicker = _makeLabelChipPicker('bulk-edit-remove-label-chips', 'bulk-edit-remove-label-search', 'bulk-edit-remove-label-suggestions');
 
+    // -- Bulk edit: set parent pin (single-pick search, not a label chip set) --
+    const _bulkEditParentPicker = (function () {
+        const chipEl = document.getElementById('bulk-edit-parent-chip');
+        const searchEl = document.getElementById('bulk-edit-parent-search');
+        const suggEl = document.getElementById('bulk-edit-parent-suggestions');
+        const inputWrap = document.getElementById('bulk-edit-parent-input-wrap');
+        let selected = null;
+        let debounceTimer = null;
+
+        function renderChip() {
+            chipEl.innerHTML = '';
+            inputWrap.hidden = !!selected;
+            if (!selected) return;
+            const chip = document.createElement('span');
+            chip.className = 'apdlg-label-chip-item';
+            chip.innerHTML = `<span class="apdlg-chip-name">${_escHtml(selected.name)}</span><button class="apdlg-chip-remove" type="button" aria-label="Remove">x</button>`;
+            chip.querySelector('.apdlg-chip-remove').addEventListener('click', function () { selected = null; renderChip(); });
+            chipEl.appendChild(chip);
+        }
+
+        function renderSuggestions(list) {
+            if (!list.length) { suggEl.hidden = true; suggEl.innerHTML = ''; return; }
+            suggEl.innerHTML = '';
+            list.forEach(function (r) {
+                const item = document.createElement('button');
+                item.type = 'button';
+                item.className = 'apdlg-label-sugg-item';
+                const subtitle = r.subtitle ? ` <span class="cat-merge-empty-hint">${_escHtml(r.subtitle)}</span>` : '';
+                item.innerHTML = `<span class="apdlg-sugg-name">${_escHtml(r.name)}</span>${subtitle}`;
+                item.addEventListener('click', function () {
+                    selected = { uuid: r.uuid, name: r.name };
+                    renderChip();
+                    searchEl.value = '';
+                    suggEl.hidden = true;
+                });
+                suggEl.appendChild(item);
+            });
+            suggEl.hidden = false;
+        }
+
+        searchEl.addEventListener('input', function () {
+            clearTimeout(debounceTimer);
+            const q = searchEl.value.trim();
+            if (q.length < 2) { suggEl.hidden = true; return; }
+            debounceTimer = setTimeout(function () {
+                const params = new URLSearchParams({ q: q });
+                _selectedPinUuids.forEach(function (u) { params.append('exclude', u); });
+                fetch('{% url "pin.parent_search" %}?' + params.toString())
+                    .then(function (r) { return r.ok ? r.json() : { results: [] }; })
+                    .then(function (data) { renderSuggestions(data.results || []); })
+                    .catch(function () { suggEl.hidden = true; });
+            }, 250);
+        });
+        searchEl.addEventListener('blur', function () { setTimeout(function () { suggEl.hidden = true; }, 150); });
+
+        return {
+            reset: function () { selected = null; renderChip(); searchEl.value = ''; suggEl.hidden = true; },
+            getSelectedUuid: function () { return selected ? selected.uuid : null; },
+        };
+    }());
+
     function openBulkEditDialog() {
         const uuids = Array.from(_selectedPinUuids);
         if (!uuids.length) return;
@@ -2982,6 +3086,7 @@
         _bulkEditAddPicker.setCandidates(_apdlgAllLabels);
         _bulkEditRemovePicker.reset();
         _bulkEditRemovePicker.setCandidates([]);
+        _bulkEditParentPicker.reset();
         const removeHint = document.getElementById('bulk-edit-remove-label-hint');
         removeHint.textContent = 'Loading...';
         fetch('{% url "pin.bulk_edit.label_options" %}?' + uuids.map(function (u) { return 'uuids=' + encodeURIComponent(u); }).join('&'))
@@ -3007,16 +3112,26 @@
         }
         payload.add_label_ids = _bulkEditAddPicker.getSelectedIds();
         payload.remove_label_ids = _bulkEditRemovePicker.getSelectedIds();
+        const parentUuid = _bulkEditParentPicker.getSelectedUuid();
+        if (parentUuid) payload.parent_uuid = parentUuid;
         fetch('{% url "pin.bulk_edit" %}', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
             body: JSON.stringify(payload),
         })
         .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
-        .then(function () {
+        .then(function (data) {
             document.getElementById('bulk-edit-dialog').close();
             toastr.success('Pins updated.');
+            exitSelectMode();
             _refreshAllPins();
+            // Pins reparented via this dialog become sub pins and stop appearing
+            // as root-level markers - refresh the Sub Pins layer so they don't
+            // look like they vanished (same treatment as bulk merge).
+            if (data.reparented) {
+                if (_childPinsActive) _loadChildPins();
+                else _mapLayers.toggleCustom('childpins');
+            }
         })
         .catch(function () { toastr.error('Update failed.'); })
         .finally(function () { btn.disabled = false; btn.innerHTML = saved; });

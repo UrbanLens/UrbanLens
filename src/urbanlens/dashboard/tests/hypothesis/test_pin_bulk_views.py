@@ -76,6 +76,13 @@ class PinBulkDeleteViewTests(TestCase):
         activity.refresh_from_db()
         self.assertIsNone(activity.pin_id)
 
+    def test_a_child_pin_can_be_deleted_directly(self) -> None:
+        """The multi-select tool can select child pins now, so bulk actions must accept them."""
+        response = self._delete([str(self.child.uuid)])
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Pin.objects.filter(pk=self.child.pk).exists())
+        self.assertTrue(Pin.objects.filter(pk=self.pin_a.pk).exists())
+
 
 @override_settings(CACHES=_LOCMEM_CACHES)
 class PinBulkUndoViewTests(TestCase):
@@ -175,20 +182,42 @@ class PinBulkMergeViewTests(TestCase):
         self.grandchild.refresh_from_db()
         self.assertEqual(self.grandchild.parent_pin_id, self.source_a.pk)
 
-    def test_rejects_merge_that_would_create_a_cycle(self) -> None:
-        # Force an already-corrupted setup where target descends from source_a,
-        # then attempt to merge source_a into target - would close a loop.
+    def test_re_merging_a_pins_own_existing_child_is_a_harmless_no_op(self) -> None:
+        """target is already source's parent here - would_create_cycle can never
+        reject this merge endpoint's own loop because the target is always root
+        (promoted first if needed) by the time each source is checked, so it has
+        no ancestor chain left to find a cycle in. Confirms that's genuinely safe."""
         self.target.parent_pin = self.source_a
         self.target.save(update_fields=["parent_pin"])
         response = self._merge(str(self.source_a.uuid), [str(self.target.uuid)])
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.status_code, 200)
+        self.target.refresh_from_db()
+        self.assertEqual(self.target.parent_pin_id, self.source_a.pk)
 
-    def test_scoped_to_root_pins_only(self) -> None:
-        """A detail pin can't be used as a merge source - it's excluded from selection."""
+    def test_a_child_pin_can_be_used_as_a_merge_source(self) -> None:
+        """The multi-select tool can select child pins now, so bulk actions must accept them."""
         response = self._merge(str(self.target.uuid), [str(self.grandchild.uuid)])
+        self.assertEqual(response.status_code, 200)
+        self.grandchild.refresh_from_db()
+        self.assertEqual(self.grandchild.parent_pin_id, self.target.pk)
+
+    def test_a_child_pin_can_be_used_as_a_merge_target(self) -> None:
+        """Picking a sub pin as the merge target promotes it to top-level first."""
+        response = self._merge(str(self.grandchild.uuid), [str(self.source_b.uuid)])
+        self.assertEqual(response.status_code, 200)
+        self.grandchild.refresh_from_db()
+        self.source_b.refresh_from_db()
+        self.assertIsNone(self.grandchild.parent_pin_id)
+        self.assertEqual(self.source_b.parent_pin_id, self.grandchild.pk)
+
+    def test_promoting_a_child_target_rejects_a_location_conflict(self) -> None:
+        conflicting_root = baker.make(Pin, profile=self.profile, location=self.grandchild.location)
+        response = self._merge(str(self.grandchild.uuid), [str(self.source_b.uuid)])
         self.assertEqual(response.status_code, 400)
         self.grandchild.refresh_from_db()
+        conflicting_root.refresh_from_db()
         self.assertEqual(self.grandchild.parent_pin_id, self.source_a.pk)
+        self.assertIsNone(conflicting_root.parent_pin_id)
 
 
 class PinBulkEditViewTests(TestCase):
@@ -242,6 +271,36 @@ class PinBulkEditViewTests(TestCase):
         self._edit({"uuids": [str(self.pin_a.uuid)], "remove_label_ids": [self.tag_present.id]})
         self.assertNotIn(self.tag_present, self.pin_a.labels.all())
 
+    def test_sets_parent_pin_on_all_selected_pins(self) -> None:
+        parent = baker.make(Pin, profile=self.profile)
+        response = self._edit({"uuids": [str(self.pin_a.uuid), str(self.pin_b.uuid)], "parent_uuid": str(parent.uuid)})
+        self.pin_a.refresh_from_db()
+        self.pin_b.refresh_from_db()
+        self.assertEqual(self.pin_a.parent_pin_id, parent.pk)
+        self.assertEqual(self.pin_b.parent_pin_id, parent.pk)
+        self.assertEqual(response.json()["reparented"], 2)
+
+    def test_leaves_parent_unset_when_parent_uuid_absent(self) -> None:
+        self._edit({"uuids": [str(self.pin_a.uuid)]})
+        self.pin_a.refresh_from_db()
+        self.assertIsNone(self.pin_a.parent_pin_id)
+
+    def test_skips_reparenting_that_would_create_a_cycle(self) -> None:
+        child = baker.make(Pin, profile=self.profile, parent_pin=self.pin_a)
+        response = self._edit({"uuids": [str(self.pin_a.uuid)], "parent_uuid": str(child.uuid)})
+        self.pin_a.refresh_from_db()
+        self.assertIsNone(self.pin_a.parent_pin_id)
+        self.assertEqual(response.json()["reparented"], 0)
+
+    def test_a_child_pin_can_be_bulk_edited(self) -> None:
+        """The multi-select tool can select child pins now, so bulk actions must accept them."""
+        parent = baker.make(Pin, profile=self.profile)
+        child = baker.make(Pin, profile=self.profile, parent_pin=parent)
+        response = self._edit({"uuids": [str(child.uuid)], "description": "child note"})
+        self.assertEqual(response.status_code, 200)
+        child.refresh_from_db()
+        self.assertEqual(child.description, "child note")
+
 
 class PinBulkEditLabelOptionsViewTests(TestCase):
     """GET /map/pins/bulk-edit/label-options/ only offers labels present on the selection."""
@@ -264,3 +323,45 @@ class PinBulkEditLabelOptionsViewTests(TestCase):
         ids = {b["id"] for b in response.json()["labels"]}
         self.assertIn(self.tag_on_a.id, ids)
         self.assertNotIn(self.tag_unused.id, ids)
+
+
+class PinParentSearchViewTests(TestCase):
+    """GET /map/pins/parent-search/ finds the requester's own pins by name or alias."""
+
+    def setUp(self) -> None:
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+        self.client.force_login(self.user)
+        self.pin = baker.make(Pin, profile=self.profile, name="Old Mill")
+
+    def _search(self, params: dict):
+        return self.client.get(reverse("pin.parent_search"), params)
+
+    def test_finds_pin_by_name(self) -> None:
+        response = self._search({"q": "Old Mill"})
+        uuids = {r["uuid"] for r in response.json()["results"]}
+        self.assertIn(str(self.pin.uuid), uuids)
+
+    def test_finds_pin_by_alias(self) -> None:
+        from urbanlens.dashboard.models.aliases.model import PinAlias
+
+        PinAlias.objects.create(pin=self.pin, name="The Sawmill")
+        response = self._search({"q": "Sawmill"})
+        uuids = {r["uuid"] for r in response.json()["results"]}
+        self.assertIn(str(self.pin.uuid), uuids)
+
+    def test_excludes_uuids_passed_via_exclude_param(self) -> None:
+        response = self._search({"q": "Old Mill", "exclude": str(self.pin.uuid)})
+        uuids = {r["uuid"] for r in response.json()["results"]}
+        self.assertNotIn(str(self.pin.uuid), uuids)
+
+    def test_excludes_other_users_pins(self) -> None:
+        other = baker.make(User)
+        other_pin = baker.make(Pin, profile=other.profile, name="Old Mill")
+        response = self._search({"q": "Old Mill"})
+        uuids = {r["uuid"] for r in response.json()["results"]}
+        self.assertNotIn(str(other_pin.uuid), uuids)
+
+    def test_short_query_returns_no_results(self) -> None:
+        response = self._search({"q": "O"})
+        self.assertEqual(response.json()["results"], [])

@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from django.db.models import OuterRef, Prefetch, QuerySet, Subquery
+from django.db.models import Count, OuterRef, Prefetch, QuerySet, Subquery
 
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.reviews.model import Review
@@ -38,7 +38,12 @@ class MapPinPayloadService:
 
     def prepare_queryset(self, query: QuerySet[Pin]) -> QuerySet[Pin]:
         latest_rating = Review.objects.filter(pin_id=OuterRef("pk")).order_by("-created").values("rating")[:1]
-        return query.select_related("location").annotate(map_rating=Subquery(latest_rating)).prefetch_related(Prefetch("labels", queryset=Label.objects.with_customizations_for(self.profile))).order_by("pk")
+        return (
+            query.select_related("location")
+            .annotate(map_rating=Subquery(latest_rating), child_count=Count("detail_pins", distinct=True))
+            .prefetch_related(Prefetch("labels", queryset=Label.objects.with_customizations_for(self.profile)))
+            .order_by("pk")
+        )
 
     def page(self, query: QuerySet[Pin], *, cursor: int | None = None, limit: int | None = None, include_total: bool = False) -> MapPinPage:
         limit = min(max(int(limit or self.DEFAULT_LIMIT), 1), self.MAX_LIMIT)
@@ -88,6 +93,7 @@ class MapPinPayloadService:
             "own_icon": pin.icon,
             "own_custom_icon_url": pin.custom_icon.url if pin.custom_icon else None,
             "own_color": pin.color,
+            "child_count": getattr(pin, "child_count", 0) or 0,
         }
 
     @staticmethod

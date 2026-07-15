@@ -324,6 +324,17 @@ div.section {
             background-color: rgba($color-blue-500, .18);
             border-color: rgba($color-blue-500, .45);
         }
+
+        &:disabled {
+            opacity: .35;
+            cursor: not-allowed;
+
+            &:hover, &:focus {
+                opacity: .35;
+                background-color: transparent;
+                border-color: transparent;
+            }
+        }
     }
 
     @include up($breakpoint-sm) {

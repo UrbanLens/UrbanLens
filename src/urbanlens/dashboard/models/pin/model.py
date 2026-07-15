@@ -293,6 +293,34 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
         """
         return Pin.objects.filter(pk=self.pk).with_descendants().exclude(pk=self.pk)
 
+    def promote_children(self) -> int:
+        """Move this pin's direct children up one level, without deleting this pin.
+
+        Children move to this pin's own parent, or become top-level pins if
+        this pin has none. In the latter case, a child that shares this pin's
+        own Location can't be promoted without violating the
+        one-root-pin-per-Location-per-profile constraint (this pin still
+        occupies that slot), so it is left in place; that conflict doesn't
+        exist when there's a parent to move to instead, since only *root*
+        pins are constrained by Location.
+
+        Returns:
+            The number of children actually promoted.
+        """
+        new_parent_id = self.parent_pin_id
+        promoted = 0
+        for child in Pin.objects.filter(parent_pin=self):
+            if new_parent_id is None and child.location_id == self.location_id:
+                continue
+            if new_parent_id is not None:
+                child.parent_pin_id = new_parent_id
+            else:
+                other_root = Pin.objects.filter(profile_id=self.profile_id, location_id=child.location_id, parent_pin__isnull=True).exclude(pk=child.pk).first()
+                child.parent_pin_id = other_root.pk if other_root is not None else None
+            child.save(update_fields=["parent_pin", "updated"])
+            promoted += 1
+        return promoted
+
     # ------------------------------------------------------------------
     # Effective values
     # ------------------------------------------------------------------
@@ -571,6 +599,7 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
         """Compact serialisation for detail-pin map markers."""
         slug = self.slug or str(self.uuid)
         return {
+            "id": self.pk,
             "uuid": str(self.uuid),
             "slug": slug,
             "url": f"/dashboard/map/pin/{slug}/",
