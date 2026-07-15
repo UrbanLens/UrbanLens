@@ -1185,6 +1185,39 @@ def prune_expired_undo_actions() -> int:
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def hard_delete_expired_direct_messages() -> int:
+    """Permanently delete every direct message past its sender's disappearing-message window.
+
+    Unlike delete_message_for_everyone (a tombstone - the row and its content
+    stay in the DB, just hidden from both parties' rendered view),
+    DirectMessage.is_expired_for_recipient only ever gated *display*: the row
+    and its body/ciphertext sat in the DB untouched forever. This sweep is
+    what actually removes it. Image.direct_message is SET_NULL (not CASCADE),
+    so attached images are explicitly deleted here too - otherwise they'd
+    survive as orphaned, still-unencrypted files after the message is gone.
+    """
+    from urbanlens.dashboard.models.direct_messages.model import DirectMessage
+    from urbanlens.dashboard.models.images.model import Image
+
+    due_ids = list(DirectMessage.objects.due_for_hard_delete().values_list("id", flat=True))
+    if not due_ids:
+        return 0
+
+    for image in Image.objects.filter(direct_message_id__in=due_ids):
+        if image.image:
+            try:
+                image.image.delete(save=False)
+            except OSError:
+                logger.exception("Failed to delete image file %s for expiring direct message %s", image.pk, image.direct_message_id)
+    Image.objects.filter(direct_message_id__in=due_ids).delete()
+
+    count = len(due_ids)
+    DirectMessage.objects.filter(id__in=due_ids).delete()
+    logger.info("Hard-deleted %s expired direct message(s)", count)
+    return count
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def send_account_deletion_reminders() -> int:
     """Send the "1 day left" reminder for every account approaching its hard delete."""
     from urbanlens.dashboard.models.profile.model import Profile

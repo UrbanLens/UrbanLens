@@ -48,7 +48,7 @@
         border-color: var(--ul-grey-0b);
     }
 
-    .settings-theme-option {
+    .settings-option-tile {
         span {
             color: var(--ul-grey-3a);
         }
@@ -57,12 +57,13 @@
             color: var(--ul-grey-5a);
         }
 
-        &:hover:not(.active) {
+        &:hover:not(.active):not(:has(input:checked)) {
             background: var(--ul-grey-8a);
             border-color: var(--ul-grey-6b);
         }
 
-        &.active {
+        &.active,
+        &:has(input:checked) {
             background: rgba($primary-color, 0.40);
             border-color: var(--primary-color);
             color: var(--ul-grey-8);
@@ -1207,5 +1208,10 @@
     .loc-conflict-badge {
         background: rgba($color-blue-500, .15);
         color: $color-blue-300;
+
+        &--warn {
+            background: rgba($color-amber-500, .15);
+            color: $color-amber-300;
+        }
     }
 }

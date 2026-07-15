@@ -121,9 +121,12 @@ class DirectMessage(abstract.DashboardModel):
     def is_expired_for_recipient(self) -> bool:
         """True once this message's disappearing-message timer has elapsed.
 
-        Only ever hides the message from the recipient - the sender always
-        keeps their own copy. Unread messages never expire (the timer starts
-        at `read_at`), regardless of how long they've sat unread.
+        Gates the recipient's *display* of this message - the row itself is
+        physically removed shortly after by the periodic
+        ``tasks.hard_delete_expired_direct_messages`` sweep (see
+        ``DirectMessageQuerySet.due_for_hard_delete``, same threshold), which
+        deletes it for both parties. Unread messages never expire (the timer
+        starts at `read_at`), regardless of how long they've sat unread.
 
         Returns:
             True when the recipient's view of this message should show a

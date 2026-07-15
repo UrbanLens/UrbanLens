@@ -69,7 +69,7 @@ def resolve_visible_wiki(request: HttpRequest, location_slug: str) -> tuple[Loca
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.models.wiki.model import Wiki
 
-    location = get_object_or_404(Location, slug=location_slug)
+    location = get_object_or_404(Location.objects.slug_or_uuid(location_slug))
     wiki = get_object_or_404(Wiki, location=location)
     profile, _ = Profile.objects.get_or_create(user=request.user)
     if not location_visible_to(location, profile):

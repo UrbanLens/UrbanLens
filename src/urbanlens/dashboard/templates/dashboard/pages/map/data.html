@@ -47,6 +47,12 @@
     })();
     {% endfor %}
     if (batch.length) clusterGroup.addLayers(batch);
+    if (window._fitToFilteredPinsOnce) {
+        window._fitToFilteredPinsOnce = false;
+        if (batch.length) {
+            try { map.fitBounds(L.featureGroup(batch).getBounds().pad(0.15)); } catch (e) { /* single pin or no valid bounds */ }
+        }
+    }
     if (window.updatePinCounter) window.updatePinCounter();
 }
 </script>

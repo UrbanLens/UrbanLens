@@ -6,12 +6,15 @@ from urbanlens.dashboard.models.abstract.choices import TextChoices
 
 
 class MessageRetentionChoice(TextChoices):
-    """How long after being read a sent direct message disappears from the recipient's view.
+    """How long after being read a sent direct message is permanently deleted.
 
     Chosen by the sender (``Profile.direct_message_delete_after``) and
     snapshotted onto each ``DirectMessage.sender_delete_after`` at send time,
-    so changing the setting later only affects messages sent afterward. Never
-    affects the sender's own view of their own messages.
+    so changing the setting later only affects messages sent afterward. The
+    message is tombstoned in the recipient's view as soon as the timer
+    elapses (``DirectMessage.is_expired_for_recipient``), then physically
+    deleted for both parties - including the sender - by the periodic
+    ``tasks.hard_delete_expired_direct_messages`` sweep shortly after.
     """
 
     NEVER = "never", "Never"

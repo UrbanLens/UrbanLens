@@ -839,13 +839,19 @@
     }
 }
 
-.settings-theme-row {
+// Generic option-tile picker: a row of clickable icon+label tiles backing a
+// hidden radio input, used for every mutually-exclusive visual choice on the
+// settings page (theme, map dark mode, guidance level, default map view,
+// starting point, cluster radius mode). Was named .settings-theme-option
+// (theme picker only) before being generalized to every group of this shape.
+.settings-option-row {
     display: flex;
     gap: 1rem;
+    flex-wrap: wrap;
     margin-top: 0.5rem;
 }
 
-.settings-theme-option {
+.settings-option-tile {
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -874,7 +880,12 @@
         transition: color 0.15s;
     }
 
-    &.active {
+    // Groups wired with explicit JS toggle the .active class directly; groups
+    // that only ever set the radio's checked state rely on :has() instead -
+    // both are supported so a new group doesn't need its own JS just to
+    // reflect selection.
+    &.active,
+    &:has(input:checked) {
         border-color: var(--primary-color);
         background: rgba($primary-color, 0.06);
 
@@ -887,7 +898,7 @@
         }
     }
 
-    &:hover:not(.active) {
+    &:hover:not(.active):not(:has(input:checked)) {
         border-color: $text-muted;
         background: var(--ul-surface);
     }

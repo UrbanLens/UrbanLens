@@ -3741,6 +3741,10 @@
         if (!params.size) return;
         const form = document.getElementById('filter-form');
         if (!form) return;
+        // Deep link from Organize > Labels "View on map" - zoom to the filtered
+        // result once the first filtered batch of pins comes back (see data.html),
+        // rather than leaving the user at whatever the map's default view was.
+        if (params.has('label_groups')) window._fitToFilteredPinsOnce = true;
         let anySet = false;
         for (const [key, value] of params.entries()) {
             if (_MAP_VIEW_PARAM_KEYS.has(key)) continue;
@@ -5539,7 +5543,7 @@
                 }
                 // When multiple locations cover the same coordinates, prompt the user to choose.
                 if (data && data.conflicting_locations && data.conflicting_locations.length > 1) {
-                    _showLocationConflictPicker(data.pin_slug, data.conflicting_locations);
+                    _showLocationConflictPicker(data.pin_slug, data.pin_uuid, data.conflicting_locations);
                 }
                 // Remove the external-source marker that the user pinned - the user's
                 // own pin now represents this place, so showing both would be redundant.
@@ -5557,48 +5561,102 @@
     });
 
     // -- Location conflict picker -----------------------------------------------
-    function _showLocationConflictPicker(pinSlug, locations) {
+    function _showLocationConflictPicker(pinSlug, pinUuid, locations) {
         var dlg = document.getElementById('loc-conflict-dialog');
         var list = document.getElementById('loc-conflict-list');
+        var cancelBtn = document.getElementById('loc-conflict-cancel-btn');
         if (!dlg || !list) return;
+
+        function escapeHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
+        function escapeAttr(s) { return String(s).replace(/"/g, '&quot;'); }
 
         list.innerHTML = '';
         locations.forEach(function (loc) {
             var displayName = loc.display_name || loc.name || 'Unnamed';
             var item = document.createElement('div');
             item.className = 'loc-conflict-option' + (loc.is_current ? ' loc-conflict-option--current' : '');
+            var actions;
+            if (loc.is_current) {
+                actions = '<a href="' + loc.wiki_url + '" target="_blank" class="btn btn--ghost btn--sm">Wiki</a>';
+            } else if (loc.existing_pin_url) {
+                // A pin can only exist once per location for this profile - offer to
+                // merge the new pin into the existing one instead of "switching" to it.
+                actions =
+                    '<a href="' + loc.existing_pin_url + '" target="_blank" class="btn btn--ghost btn--sm">View pin</a>' +
+                    '<button class="btn btn--primary btn--sm loc-conflict-merge-btn" data-slug="' + escapeAttr(loc.slug) + '" data-name="' + escapeAttr(loc.existing_pin_name || displayName) + '">Merge into this pin</button>';
+            } else {
+                actions =
+                    '<a href="' + loc.wiki_url + '" target="_blank" class="btn btn--ghost btn--sm">Wiki</a>' +
+                    '<button class="btn btn--primary btn--sm loc-conflict-switch-btn" data-slug="' + escapeAttr(loc.slug) + '" data-name="' + escapeAttr(displayName) + '">Use this</button>';
+            }
             item.innerHTML =
                 '<div class="loc-conflict-option-name">' +
-                    displayName.replace(/&/g, '&amp;').replace(/</g, '&lt;') +
+                    escapeHtml(displayName) +
                     (loc.is_current ? ' <span class="loc-conflict-badge">Current</span>' : '') +
+                    (loc.existing_pin_url ? ' <span class="loc-conflict-badge loc-conflict-badge--warn">You already have a pin here</span>' : '') +
                 '</div>' +
-                '<div class="loc-conflict-option-actions">' +
-                    '<a href="' + loc.wiki_url + '" target="_blank" class="btn btn--ghost btn--sm">Wiki</a>' +
-                    (!loc.is_current
-                        ? '<button class="btn btn--primary btn--sm loc-conflict-switch-btn" data-slug="' + loc.slug + '" data-name="' + displayName.replace(/"/g, '&quot;') + '">Use this</button>'
-                        : '') +
-                '</div>';
+                '<div class="loc-conflict-option-actions">' + actions + '</div>';
             list.appendChild(item);
         });
 
+        function _linkPin(locSlug, btn, onSuccess) {
+            return fetch('/dashboard/map/pin/' + pinSlug + '/link/' + locSlug + '/', {
+                method: 'POST',
+                headers: { 'X-CSRFToken': '{{ csrf_token }}', 'X-Requested-With': 'XMLHttpRequest' },
+            })
+            .then(function (r) { return r.ok ? r.json() : Promise.reject(); })
+            .then(onSuccess)
+            .catch(function () { toastr.error('Failed to update this pin\'s location.'); btn.disabled = false; });
+        }
+
         list.querySelectorAll('.loc-conflict-switch-btn').forEach(function (btn) {
             btn.addEventListener('click', function () {
-                var locSlug = btn.dataset.slug;
                 var locName = btn.dataset.name;
                 btn.disabled = true;
                 btn.textContent = 'Switching...';
-                fetch('/dashboard/map/pin/' + pinSlug + '/link/' + locSlug + '/', {
+                _linkPin(btn.dataset.slug, btn, function () {
+                    toastr.success('Switched to ' + locName);
+                    dlg.close();
+                    window.invalidatePinCache();
+                    _refreshAllPins();
+                });
+            });
+        });
+
+        list.querySelectorAll('.loc-conflict-merge-btn').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var locName = btn.dataset.name;
+                btn.disabled = true;
+                btn.textContent = 'Merging...';
+                _linkPin(btn.dataset.slug, btn, function () {
+                    toastr.success('Merged into ' + locName);
+                    dlg.close();
+                    window.invalidatePinCache();
+                    _refreshAllPins();
+                });
+            });
+        });
+
+        if (cancelBtn) {
+            cancelBtn.onclick = function () {
+                if (!pinUuid) { dlg.close(); return; }
+                cancelBtn.disabled = true;
+                fetch('{% url "pin.bulk_delete" %}', {
                     method: 'POST',
-                    headers: { 'X-CSRFToken': '{{ csrf_token }}', 'X-Requested-With': 'XMLHttpRequest' },
+                    headers: { 'X-CSRFToken': '{{ csrf_token }}', 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ uuids: [pinUuid] }),
                 })
                 .then(function (r) { return r.ok ? Promise.resolve() : Promise.reject(); })
                 .then(function () {
-                    toastr.success('Switched to ' + locName);
+                    toastr.success('Pin creation cancelled.');
                     dlg.close();
+                    window.invalidatePinCache();
+                    _refreshAllPins();
                 })
-                .catch(function () { toastr.error('Failed to switch location.'); btn.disabled = false; btn.textContent = 'Use this'; });
-            });
-        });
+                .catch(function () { toastr.error('Failed to cancel pin creation.'); })
+                .finally(function () { cancelBtn.disabled = false; });
+            };
+        }
 
         dlg.showModal();
     }
@@ -5619,9 +5677,13 @@
     <div class="loc-conflict-body">
         <p class="loc-conflict-intro">
             Your pin's coordinates fall inside more than one shared location boundary.
-            It was automatically linked to the first match, but you can switch below.
+            It was automatically linked to the first match, but you can switch below - or
+            merge into an existing pin if you already have one at another match.
         </p>
         <div id="loc-conflict-list" class="loc-conflict-list"></div>
+        <div class="loc-conflict-footer">
+            <button type="button" id="loc-conflict-cancel-btn" class="btn btn--ghost btn--sm">Cancel pin creation</button>
+        </div>
     </div>
 </dialog>
 

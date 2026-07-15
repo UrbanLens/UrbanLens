@@ -650,22 +650,22 @@
             <div class="settings-field">
                 <label class="settings-label">Color Theme</label>
                 <p class="settings-help">System follows your OS preference automatically.</p>
-                <div class="settings-theme-row">
-                    <label class="settings-theme-option {% if style_form.instance.theme_mode == 'system' %}active{% endif %}" id="theme-opt-system">
+                <div class="settings-option-row">
+                    <label class="settings-option-tile {% if style_form.instance.theme_mode == 'system' %}active{% endif %}" id="theme-opt-system">
                         <input type="radio" name="theme_mode" value="system"
                                {% if style_form.instance.theme_mode == 'system' %}checked{% endif %}
                                onchange="applyThemePreview('system')">
                         <i class="material-symbols-outlined">brightness_auto</i>
                         <span>System</span>
                     </label>
-                    <label class="settings-theme-option {% if style_form.instance.theme_mode == 'light' %}active{% endif %}" id="theme-opt-light">
+                    <label class="settings-option-tile {% if style_form.instance.theme_mode == 'light' %}active{% endif %}" id="theme-opt-light">
                         <input type="radio" name="theme_mode" value="light"
                                {% if style_form.instance.theme_mode == 'light' %}checked{% endif %}
                                onchange="applyThemePreview('light')">
                         <i class="material-symbols-outlined">light_mode</i>
                         <span>Light</span>
                     </label>
-                    <label class="settings-theme-option {% if style_form.instance.theme_mode == 'dark' %}active{% endif %}" id="theme-opt-dark">
+                    <label class="settings-option-tile {% if style_form.instance.theme_mode == 'dark' %}active{% endif %}" id="theme-opt-dark">
                         <input type="radio" name="theme_mode" value="dark"
                                {% if style_form.instance.theme_mode == 'dark' %}checked{% endif %}
                                onchange="applyThemePreview('dark')">
@@ -681,22 +681,22 @@
                     {% include "dashboard/partials/ui/_tooltip_help.html" with text="When to switch the base map to a dark tile layer. System follows your OS preference. Topographic filter is included." %}
                 </label>
                 <p class="settings-help">System follows your OS preference. Satellite is always unaffected.</p>
-                <div class="settings-theme-row">
-                    <label class="settings-theme-option {% if style_form.instance.map_dark_mode == 'system' %}active{% endif %}" id="map-dark-opt-system">
+                <div class="settings-option-row">
+                    <label class="settings-option-tile {% if style_form.instance.map_dark_mode == 'system' %}active{% endif %}" id="map-dark-opt-system">
                         <input type="radio" name="map_dark_mode" value="system"
                                {% if style_form.instance.map_dark_mode == 'system' %}checked{% endif %}
                                onchange="applyMapDarkPreview('system')">
                         <i class="material-symbols-outlined">brightness_auto</i>
                         <span>System</span>
                     </label>
-                    <label class="settings-theme-option {% if style_form.instance.map_dark_mode == 'light' %}active{% endif %}" id="map-dark-opt-light">
+                    <label class="settings-option-tile {% if style_form.instance.map_dark_mode == 'light' %}active{% endif %}" id="map-dark-opt-light">
                         <input type="radio" name="map_dark_mode" value="light"
                                {% if style_form.instance.map_dark_mode == 'light' %}checked{% endif %}
                                onchange="applyMapDarkPreview('light')">
                         <i class="material-symbols-outlined">light_mode</i>
                         <span>Light</span>
                     </label>
-                    <label class="settings-theme-option {% if style_form.instance.map_dark_mode == 'dark' %}active{% endif %}" id="map-dark-opt-dark">
+                    <label class="settings-option-tile {% if style_form.instance.map_dark_mode == 'dark' %}active{% endif %}" id="map-dark-opt-dark">
                         <input type="radio" name="map_dark_mode" value="dark"
                                {% if style_form.instance.map_dark_mode == 'dark' %}checked{% endif %}
                                onchange="applyMapDarkPreview('dark')">
@@ -712,9 +712,9 @@
             <div class="settings-field">
                 <label class="settings-label">{{ style_form.guidance_level.label }}</label>
                 <p class="settings-help">{{ style_form.guidance_level.help_text }}</p>
-                <div class="settings-map-view-row">
+                <div class="settings-option-row">
                     {% for radio in style_form.guidance_level %}
-                    <label class="settings-map-view-option ul-radio-button {% if radio.data.value == style_form.instance.guidance_level %}active{% endif %}"
+                    <label class="settings-option-tile {% if radio.data.value == style_form.instance.guidance_level %}active{% endif %}"
                            id="guidance-opt-{{ radio.data.value }}"
                            onclick="applyGuidancePreview('{{ radio.data.value }}')">
                         {{ radio.tag }}
@@ -783,9 +783,9 @@
                     {% include "dashboard/partials/ui/_tooltip_help.html" with text="The basemap shown when you open the map. Remember keeps whichever view you used last." %}
                 </label>
                 <p class="settings-help">{{ map_display_form.default_map_view.help_text }}</p>
-                <div class="settings-map-view-row">
+                <div class="settings-option-row">
                     {% for radio in map_display_form.default_map_view %}
-                    <label class="settings-map-view-option ul-radio-button {% if radio.data.value == map_display_form.instance.default_map_view %}active{% endif %}">
+                    <label class="settings-option-tile {% if radio.data.value == map_display_form.instance.default_map_view %}active{% endif %}">
                         {{ radio.tag }}
                         {% if radio.data.value == "satellite" %}<i class="material-symbols-outlined">globe</i>
                         {% elif radio.data.value == "topographic" %}<i class="material-symbols-outlined">terrain</i>
@@ -805,9 +805,9 @@
                     Starting Point
                     {% include "dashboard/partials/ui/_tooltip_help.html" with text="Where the map opens when you visit it. My Pins centers on your pin cluster; My Location uses GPS; Remember keeps your last view; Custom uses the address below." wide=True %}
                 </label>
-                <div class="settings-map-view-row">
+                <div class="settings-option-row">
                     {% for radio in map_center_form.map_center_mode %}
-                    <label class="settings-map-view-option ul-radio-button{% if radio.data.value == map_center_form.instance.map_center_mode %} active{% endif %}"
+                    <label class="settings-option-tile{% if radio.data.value == map_center_form.instance.map_center_mode %} active{% endif %}"
                            onclick="selectMapMode('{{ radio.data.value }}')">
                         {{ radio.tag }}
                         {% if radio.data.value == 'auto' %}
@@ -862,14 +862,14 @@
 
                 {# Auto / Custom mode pills #}
                 {% with is_custom=map_display_form.cluster_radius.value %}
-                <div class="settings-map-view-row" style="margin-top:.5rem">
-                    <label class="settings-map-view-option ul-radio-button{% if not is_custom %} active{% endif %}"
+                <div class="settings-option-row" style="margin-top:.5rem">
+                    <label class="settings-option-tile{% if not is_custom %} active{% endif %}"
                            id="cluster-auto-label" onclick="setClusterMode('auto')">
                         <input type="radio" name="_cluster_mode" value="auto"{% if not is_custom %} checked{% endif %}>
                         <i class="material-symbols-outlined">auto_awesome</i>
                         <span>Auto</span>
                     </label>
-                    <label class="settings-map-view-option ul-radio-button{% if is_custom %} active{% endif %}"
+                    <label class="settings-option-tile{% if is_custom %} active{% endif %}"
                            id="cluster-custom-label" onclick="setClusterMode('custom')">
                         <input type="radio" name="_cluster_mode" value="custom"{% if is_custom %} checked{% endif %}>
                         <i class="material-symbols-outlined">tune</i>
@@ -1607,7 +1607,7 @@ function applyGuidancePreview(level) {
         // some of the same values ("remember", "auto"), so an unscoped selector
         // here would cross-highlight their pills too.
         document.querySelectorAll('input[name="map_center_mode"]').forEach(function (radio) {
-            var el = radio.closest('.settings-map-view-option');
+            var el = radio.closest('.settings-option-tile');
             if (el) el.classList.toggle('active', radio.value === mode);
         });
     }

@@ -3421,6 +3421,11 @@ body.page-location-details {
     padding: .1rem .4rem;
     margin-left: .4rem;
     white-space: nowrap;
+
+    &--warn {
+        background: $color-amber-100;
+        color: $color-amber-700;
+    }
 }
 
 .loc-conflict-option-actions {
@@ -3428,6 +3433,14 @@ body.page-location-details {
     align-items: center;
     gap: .35rem;
     flex-shrink: 0;
+}
+
+.loc-conflict-footer {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: .75rem;
+    padding-top: .65rem;
+    border-top: 1px solid var(--ul-surface-raised-border);
 }
 
 // -- Wiki "other locations" conflict notice ------------------------------------

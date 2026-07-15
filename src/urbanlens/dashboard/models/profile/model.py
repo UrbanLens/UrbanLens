@@ -201,7 +201,7 @@ class Profile(abstract.PublicDashboardModel):
         max_length=20,
         choices=MessageRetentionChoice.choices,
         default=MessageRetentionChoice.NEVER,
-        help_text="Messages you send disappear from the recipient's view this long after they've read them. You can always see your own messages.",
+        help_text="Messages you send are permanently deleted from our systems this long after the recipient reads them - this removes your own copy too. Set to Never to keep them indefinitely.",
     )
     allow_friend_recommendations = BooleanField(
         default=True,

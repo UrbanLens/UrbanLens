@@ -550,27 +550,53 @@ class PinRelinkView(LoginRequiredMixin, View):
         )
 
     def post(self, request, pin_slug, location_slug=None):
-        """Relink or detach the pin.
+        """Relink or detach the pin, or merge it into an existing pin at the target location.
 
         Args:
             request: The HTTP request.
-            pin_slug: UUID of the pin.
-            location_slug: Optional UUID of an existing Location to link to.
+            pin_slug: Slug (or uuid) of the pin.
+            location_slug: Optional slug (or uuid) of an existing Location to link to.
                 If omitted, detaches the pin (creates a fresh bare Location).
 
         Returns:
-            Re-rendered pin overview partial.
+            For the raw-fetch caller (map.html's location-conflict dialog,
+            identified by ``X-Requested-With``): a JSON verdict. Otherwise
+            (the HTMX-driven pin-location picker): the re-rendered pin
+            overview partial.
         """
         result = _pin_for_user(pin_slug, request)
         if isinstance(result, HttpResponse):
             return result
         pin = result
+        is_xhr = request.headers.get("X-Requested-With") == "XMLHttpRequest"
 
         from urbanlens.dashboard.models.location.model import Location
         from urbanlens.dashboard.models.wiki.model import Wiki
 
         if location_slug:
-            location = get_object_or_404(Location, slug=location_slug)
+            location = get_object_or_404(Location.objects.slug_or_uuid(location_slug))
+            # A profile can only ever have one root pin per location
+            # (db_pin_unique_location_per_profile) - if one already exists at the
+            # target, reassigning `pin.location` would collide with it. Merge
+            # into the existing pin instead (same reparent-as-child mechanism as
+            # PinBulkMergeView) rather than failing with an IntegrityError.
+            existing = Pin.objects.filter(profile=pin.profile, location=location, parent_pin__isnull=True).exclude(pk=pin.pk).first()
+            if existing is not None:
+                if not pin.would_create_cycle(existing):
+                    pin.parent_pin = existing
+                    pin.save(update_fields=["parent_pin"])
+                    pin.refresh_from_db()
+                if is_xhr:
+                    from django.urls import reverse
+
+                    return JsonResponse(
+                        {
+                            "merged": True,
+                            "existing_pin_url": reverse("pin.details", kwargs={"pin_slug": existing.slug or str(existing.uuid)}),
+                            "existing_pin_name": existing.effective_name,
+                        },
+                    )
+                return render(request, "dashboard/partials/pins/pin_overview_partial.html", _overview_context(pin))
         else:
             # Detach: create a new bare Location at this pin's coordinates.
             # Use the existing location's canonical name if available; otherwise
@@ -596,4 +622,6 @@ class PinRelinkView(LoginRequiredMixin, View):
         pin.save(update_fields=["location", "wiki"])
         pin.refresh_from_db()
 
+        if is_xhr:
+            return JsonResponse({"merged": False})
         return render(request, "dashboard/partials/pins/pin_overview_partial.html", _overview_context(pin))

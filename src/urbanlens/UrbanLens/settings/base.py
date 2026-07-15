@@ -261,6 +261,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "urbanlens.dashboard.tasks.prune_expired_undo_actions",
         "schedule": 60 * 60,
     },
+    "direct-message-hard-delete": {
+        "task": "urbanlens.dashboard.tasks.hard_delete_expired_direct_messages",
+        "schedule": 60 * 60,
+    },
 }
 
 

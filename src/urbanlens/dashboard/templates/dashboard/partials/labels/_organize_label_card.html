@@ -43,6 +43,9 @@
         </div>
 
         <div class="tag-card-actions">
+            {% if kind == 'tag' or kind == 'category' or kind == 'status' %}
+            <a class="btn btn--icon" title="View on map" href="{{ label.id|label_map_url }}"><i class="material-symbols-outlined">travel_explore</i></a>
+            {% endif %}
             {% if kind != 'people' and not label.profile %}
                 <button type="button" class="btn btn--icon{% if label.is_customized %} btn-icon--active{% endif %}" title="Customize your display of this global label" hx-get="{% url 'label.customize' label_kind=kind label_id=label.id %}" hx-target="#label-edit-dialog-body" hx-swap="innerHTML"><i class="material-symbols-outlined">tune</i></button>
                 {% if can_edit_global %}<button type="button" class="btn btn--icon btn-icon--global-edit" title="Edit global label" hx-get="{% url 'label.edit' label_kind=kind label_id=label.id %}" hx-target="#label-edit-dialog-body" hx-swap="innerHTML"><i class="material-symbols-outlined">edit</i></button><form hx-post="{{ delete_url }}" hx-target="{{ rows_target }}" hx-swap="innerHTML" hx-confirm="Delete '{{ label.name }}'? Pins will NOT be deleted." style="display:inline;">{% csrf_token %}<button type="submit" class="btn-icon btn-icon--danger" title="Delete"><i class="material-symbols-outlined">delete</i></button></form>{% endif %}

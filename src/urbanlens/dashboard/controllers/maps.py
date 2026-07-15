@@ -336,23 +336,33 @@ class MapController(LoginRequiredMixin, GenericViewSet):
 
                 safely_enqueue_task(suggest_pin_category, pin.pk)
 
-            response = {"ok": True, "pin_slug": pin.slug or str(pin.uuid)}
+            response = {"ok": True, "pin_slug": pin.slug or str(pin.uuid), "pin_uuid": str(pin.uuid)}
             # When a coordinate falls inside multiple bounding boxes, tell the
             # client so it can offer the user a choice of which location to use.
             if len(all_locations) > 1:
                 from django.urls import reverse
 
-                response["conflicting_locations"] = [
-                    {
+                conflicting_locations = []
+                for loc in all_locations:
+                    is_current = loc.pk == location.pk
+                    entry = {
                         "uuid": str(loc.uuid),
                         "slug": loc.slug or str(loc.uuid),
                         "name": loc.display_name,  # Back-compat for existing JS consumers.
                         "display_name": loc.display_name,
-                        "is_current": loc.pk == location.pk,
+                        "is_current": is_current,
                         "wiki_url": reverse("location.wiki", kwargs={"location_slug": loc.slug or str(loc.uuid)}),
                     }
-                    for loc in all_locations
-                ]
+                    if not is_current:
+                        # A profile can only ever have one root pin per location - if this
+                        # candidate already has one, "Use this" can't relink the new pin
+                        # there (it would collide); the client offers to merge instead.
+                        existing_pin = Pin.objects.filter(profile=request.user.profile, location=loc, parent_pin__isnull=True).exclude(pk=pin.pk).first()
+                        if existing_pin is not None:
+                            entry["existing_pin_url"] = reverse("pin.details", kwargs={"pin_slug": existing_pin.slug or str(existing_pin.uuid)})
+                            entry["existing_pin_name"] = existing_pin.effective_name
+                    conflicting_locations.append(entry)
+                response["conflicting_locations"] = conflicting_locations
             from django.http import JsonResponse
 
             return JsonResponse(response)

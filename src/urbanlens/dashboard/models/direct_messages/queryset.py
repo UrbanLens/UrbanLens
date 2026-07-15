@@ -8,6 +8,7 @@ from django.db.models import Case, Count, F, IntegerField, Max, Q, When
 from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.direct_messages.meta import RETENTION_DELTAS, MessageRetentionChoice
 
 if TYPE_CHECKING:
     from django.db.models import QuerySet
@@ -86,6 +87,24 @@ class DirectMessageQuerySet(abstract.DashboardQuerySet):
             The number of distinct senders with an unread message to `profile`.
         """
         return self.unread_for(profile).values("sender_id").distinct().count()
+
+    def due_for_hard_delete(self) -> Self:
+        """Return messages whose disappearing-message timer has fully elapsed.
+
+        Mirrors ``DirectMessage.is_expired_for_recipient`` (same read_at + delta
+        threshold per ``sender_delete_after``), but as a queryset filter so a
+        sweep task can physically delete the rows rather than just hiding them
+        from the recipient's view. ``NEVER`` messages and unread messages are
+        never included - the timer only starts once the recipient reads it.
+
+        Returns:
+            Messages ready for permanent deletion.
+        """
+        now = timezone.now()
+        q = Q(sender_delete_after=MessageRetentionChoice.WHEN_READ, read_at__isnull=False)
+        for choice, delta in RETENTION_DELTAS.items():
+            q |= Q(sender_delete_after=choice, read_at__lte=now - delta)
+        return self.filter(q)
 
     def mark_read(self) -> int:
         """Mark every unread message in this queryset as read now.

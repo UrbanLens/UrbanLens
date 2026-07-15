@@ -31,6 +31,25 @@ def in_list(value: Any, collection: Collection[Any]) -> bool:
 
 
 @register.filter
+def label_map_url(label_id: int) -> str:
+    """Return the main map URL, pre-filtered to pins carrying this one label.
+
+    Used by the Organize > Labels page's "View on map" button - the main
+    map's ``_restoreFiltersFromUrl()`` (map/index.html) reads the
+    ``label_groups`` query param on load and applies it as a filter, using
+    the same JSON shape the filter panel itself builds
+    (``[{"op": "or", "ids": [...]}]``, see ``SearchForm.parse_label_groups``).
+
+    Usage: {{ label.id|label_map_url }}
+    """
+    from django.urls import reverse
+    from django.utils.http import urlencode
+
+    groups = json.dumps([{"op": "or", "ids": [label_id]}])
+    return f"{reverse('map.view')}?{urlencode({'label_groups': groups})}"
+
+
+@register.filter
 def reaction_summary(message: Any) -> list[dict[str, Any]]:
     """Group a DirectMessage's reactions by emoji for template rendering.
 
