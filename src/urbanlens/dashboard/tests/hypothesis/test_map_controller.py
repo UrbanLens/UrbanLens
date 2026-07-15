@@ -181,6 +181,21 @@ class ViewMapContextTests(TestCase):
         self.assertFalse(resp.context["geolocation_tracking_allowed"])
         self.assertIn(b"_GEOLOCATION_TRACKING_ALLOWED = false;", resp.content)
 
+    def test_geolocate_button_shown_when_tracking_allowed(self) -> None:
+        Profile.objects.filter(pk=self.profile.pk).update(track_geolocation=True)
+        resp = self.client.get(_MAP_URL)
+        self.assertContains(resp, 'id="addr-search-geolocate"')
+
+    def test_geolocate_button_hidden_when_tracking_disallowed(self) -> None:
+        Profile.objects.filter(pk=self.profile.pk).update(track_geolocation=False)
+        resp = self.client.get(_MAP_URL)
+        self.assertNotContains(resp, 'id="addr-search-geolocate"')
+
+    def test_search_history_button_no_longer_rendered(self) -> None:
+        """The unused history arrow was replaced by the geolocate button."""
+        resp = self.client.get(_MAP_URL)
+        self.assertNotContains(resp, 'id="addr-search-history"')
+
     @given(n=st.integers(min_value=0, max_value=6))
     @_db_settings
     def test_pin_count_equals_root_pin_count_for_n_pins(self, n: int) -> None:

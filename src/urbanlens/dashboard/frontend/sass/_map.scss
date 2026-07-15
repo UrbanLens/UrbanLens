@@ -2307,7 +2307,8 @@ div.container .addr-search-bar {
 }
 
 .addr-search-history,
-.addr-search-clear {
+.addr-search-clear,
+.addr-search-geolocate {
     background: none;
     border: none;
     color: var(--ul-grey-6);

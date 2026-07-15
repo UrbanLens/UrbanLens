@@ -295,6 +295,7 @@ def map_search_bar(
     prefix: str = "addr",
     placeholder: str = "Search pins, addresses, coordinates...",
     show_history: bool = True,
+    show_geolocate: bool = False,
     extra_class: str = "",
 ) -> dict[str, Any]:
     """Render the shared "jump to location" search bar.
@@ -306,6 +307,10 @@ def map_search_bar(
         prefix: Id prefix; must be unique per page.
         placeholder: Input placeholder text.
         show_history: Whether to render the search-history button.
+        show_geolocate: Whether to render the "center on my location" button.
+            Callers should only pass True when the profile's Live Location
+            history setting is enabled - this tag has no profile access of
+            its own to check that.
         extra_class: Extra CSS classes for the bar element.
 
     Returns:
@@ -315,6 +320,7 @@ def map_search_bar(
         "prefix": prefix,
         "placeholder": placeholder,
         "show_history": show_history,
+        "show_geolocate": show_geolocate,
         "extra_class": extra_class,
     }
 

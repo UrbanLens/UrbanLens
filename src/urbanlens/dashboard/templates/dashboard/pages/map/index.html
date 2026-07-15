@@ -47,7 +47,7 @@
     {% include "dashboard/partials/pin_lists/_add_to_list_dialog.html" %}
 
     {# -- Floating address search bar (shared component) -------------------- #}
-    {% map_search_bar prefix="addr" %}
+    {% map_search_bar prefix="addr" show_history=False show_geolocate=geolocation_tracking_allowed %}
 
     {# -- Filter panel ---------------------------------------------------- #}
     <div id="filter-panel">
@@ -1425,6 +1425,15 @@
     // blocking map use. Dismissals are stored per profile so users stay in control.
     const _ONBOARDING_PREFIX = `ul_onboarding_v1_${_PROFILE_UUID}`;
     const _ONBOARDING_SESSION_KEY = `${_ONBOARDING_PREFIX}_later`;
+    // Declared (as null) here rather than where it's actually built further down
+    // this script (window.MapLayers.create(...)), so the 'map-layers' card's
+    // shouldShow()/action() below - which read it via closure - see `null`
+    // instead of hitting the temporal dead zone. A `const` declared later would
+    // throw "Cannot access '_mapLayers' before initialization" if the onboarding
+    // trigger ever ran before that later line executes (e.g. if something else
+    // earlier in this very long script throws first and the assignment is never
+    // reached) - null is a safe, checkable placeholder instead of a crash.
+    let _mapLayers = null;
     const _onboardingCards = [
         {
             id: 'import-pins',
@@ -1470,9 +1479,9 @@
             body: 'Topographic, satellite, and weather overlays can reveal access, terrain, and conditions.',
             button: 'Show satellite',
             target: 'satellite-button',
-            shouldShow: () => _mapLayers.baseKey() !== 'satellite',
+            shouldShow: () => !!_mapLayers && _mapLayers.baseKey() !== 'satellite',
             watchSelector: '#satellite-button',
-            action: () => { if (_mapLayers.baseKey() !== 'satellite') _mapLayers.setBase('satellite'); },
+            action: () => { if (_mapLayers && _mapLayers.baseKey() !== 'satellite') _mapLayers.setBase('satellite'); },
         },
     ];
 
@@ -1763,10 +1772,12 @@
                 if (txt) txt.textContent = 'Could not load pins. Try refreshing.';
             }
         }
-        // Deferred to a macrotask: on a cache hit this whole branch runs with no
-        // `await`, so calling this synchronously here would run before `_mapLayers`
-        // (declared further down this same script) exists yet - the 'map-layers'
-        // onboarding card's shouldShow() reads it and would throw a ReferenceError.
+        // Deferred to a macrotask so the loading indicator has a chance to clear
+        // and other post-load UI settles first. _mapLayers may not be built yet
+        // at this point (it's assigned further down this script) - the
+        // 'map-layers' card's shouldShow()/action() guard against that (see
+        // where _mapLayers is declared, above _onboardingCards) instead of
+        // assuming ordering here.
         setTimeout(initMapOnboarding, 0);
         // Begin background polling.  First call compares cache.lastUpdated to the
         // server's value and triggers _refreshAllPins() only when they differ.
@@ -1888,7 +1899,7 @@
     // persistence, tile-loading feedback, and footer attribution all live in
     // window.MapLayers - the exact same code every other map on the site runs.
     // This page only contributes its own custom toggles (pins, places).
-    const _mapLayers = window.MapLayers.create(map, {
+    _mapLayers = window.MapLayers.create(map, {
         root: document.getElementById('map-layers-panel'),
         apiKey: '{{ openweathermap_api_key }}',
         darkMode: _MAP_DARK_MODE,
@@ -4048,6 +4059,10 @@
         onMultiResult: _onLocationMultiResult,
         onSearchStart: _clearSearchMarker,
         onFetchingChange: _setFetching,
+    });
+
+    document.getElementById('addr-search-geolocate')?.addEventListener('click', function () {
+        _addrSearch?.recenterToUserLocation();
     });
 
     // Track recently viewed pins via Leaflet popup events, so they can surface

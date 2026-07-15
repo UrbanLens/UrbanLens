@@ -871,10 +871,20 @@ class LabelBulkEditView(_LabelKindMixin, LoginRequiredMixin, View):
         labels = list(Label.objects.filter(id__in=ids, profile=profile, kind=self.kind))
         if self.kind == KIND_STATUS:
             labels = [label for label in labels if not label.is_protected]
+        changed_labels = []
         for label in labels:
             update_fields = _apply_bulk_fields(label, payload)
             if update_fields:
                 label.save(update_fields=update_fields)
+                changed_labels.append(label)
+
+        if changed_labels:
+            # Bumping the label alone (its own post_save signal refreshes the
+            # server-side map pin cache) isn't enough - the client's own pin
+            # cache only refetches when Max(Pin.updated) advances, and this
+            # bulk path never touches a Pin row directly. Same pattern as the
+            # single-label edit/customize views below.
+            Pin.objects.filter(profile=profile, labels__in=changed_labels).update(updated=timezone.now())
 
         if payload["add_parent_ids"]:
             valid_parents = list(Label.objects.visible_to(profile).filter(id__in=payload["add_parent_ids"]))
@@ -938,6 +948,12 @@ class LabelBulkConvertView(_LabelKindMixin, LoginRequiredMixin, View):
             label.save()
             if valid_parents:
                 label.parents.add(*[p for p in valid_parents if p.id != label.id])
+
+        if labels:
+            # See LabelBulkEditView.post - the client's pin cache only refetches
+            # when Max(Pin.updated) advances, and this bulk path never touches a
+            # Pin row directly.
+            Pin.objects.filter(profile=profile, labels__in=labels).update(updated=timezone.now())
 
         if payload["add_child_ids"]:
             valid_children = list(Label.objects.visible_to(profile).filter(id__in=payload["add_child_ids"]))

@@ -4,6 +4,8 @@ from django.db import transaction
 from django.db.models.signals import m2m_changed, post_delete, post_save
 from django.dispatch import receiver
 
+from urbanlens.dashboard.models.labels.customization.model import LabelCustomization
+from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin import Pin
 from urbanlens.dashboard.models.reviews.model import Review
 
@@ -76,6 +78,29 @@ def delete_map_pin_cache(sender: type[Pin], instance: Pin, **kwargs) -> None:
 def refresh_map_pin_cache_for_labels(sender, instance: Pin, action: str, **kwargs) -> None:
     if action in {"post_add", "post_remove", "post_clear"} and instance.profile_id:
         _refresh_cached_pin(instance.pk, instance.profile_id)
+
+
+@receiver(post_save, sender=Label, dispatch_uid="label_refresh_map_pin_cache")
+def refresh_map_pin_cache_for_label(sender: type[Label], instance: Label, created: bool, **kwargs) -> None:
+    """A label's icon/color can appear on any pin carrying it (Pin.effective_icon).
+
+    Unlike the m2m-add/remove case above, editing the label itself never
+    touches Pin.labels.through, so nothing else here would invalidate the
+    server-side Redis pin cache for pins that already carry this label - they'd
+    keep serving the old baked-in icon/color until something else happened to
+    touch that specific pin, or the cache TTL lapsed.
+    """
+    if created:
+        return  # not attached to any pin yet
+    for pin_id, profile_id in Pin.objects.filter(labels=instance).values_list("pk", "profile_id"):
+        _refresh_cached_pin(pin_id, profile_id)
+
+
+@receiver(post_save, sender=LabelCustomization, dispatch_uid="label_customization_refresh_map_pin_cache")
+def refresh_map_pin_cache_for_label_customization(sender: type[LabelCustomization], instance: LabelCustomization, **kwargs) -> None:
+    """Per-profile icon/color overrides need the same cache refresh as editing the label itself."""
+    for pin_id in Pin.objects.filter(profile_id=instance.profile_id, labels=instance.label_id).values_list("pk", flat=True):
+        _refresh_cached_pin(pin_id, instance.profile_id)
 
 
 @receiver(m2m_changed, sender=Pin.labels.through, dispatch_uid="pin_labels_propagate_visited")
