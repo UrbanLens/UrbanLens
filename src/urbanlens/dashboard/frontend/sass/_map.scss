@@ -1717,6 +1717,48 @@ img.leaflet-marker-icon.is-selected {
     }
 }
 
+/* Always-visible shortcut handle for #filter-panel - right-docked mirror of .pin-list-handle,
+   same mechanic/look (desktop only - the layers-menu entry covers mobile). */
+.filter-panel-handle {
+    position: absolute;
+    top: 50%;
+    right: 0;
+    transform: translateY(-50%);
+    z-index: 1002;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 56px;
+    background: var(--ul-surface-1);
+    border: 1px solid var(--ul-surface-1-border);
+    border-right: none;
+    border-radius: 10px 0 0 10px;
+    box-shadow: -2px 0 8px rgba(0, 0, 0, .12);
+    color: var(--ul-grey-6);
+    cursor: pointer;
+    transition: right 0.22s cubic-bezier(.4, 0, .2, 1), background .12s, color .12s;
+    padding: 0;
+
+    .material-symbols-outlined,
+    .material-icons {
+        font-size: 1.1rem;
+    }
+
+    &:hover {
+        background: var(--ul-hover-bg);
+        color: var(--ul-grey-9);
+    }
+
+    &.open {
+        right: 272px;
+    }
+
+    @include up($breakpoint-sm) {
+        display: flex;
+    }
+}
+
 .fp-header {
     display: flex;
     align-items: center;
@@ -4487,6 +4529,7 @@ div.container .addr-search-bar {
 .pin-list-item__btn,
 .pin-list-item__edit,
 .pin-list-handle,
+.filter-panel-handle,
 .pagination-btn,
 .leaflet-control-zoom a,
 .leaflet-control-attribution a,

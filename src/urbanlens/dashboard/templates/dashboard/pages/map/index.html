@@ -297,6 +297,13 @@
         </form>
     </div>
 
+    {# -- Filter panel handle (right-docked mirror of #pin-list-handle, always-visible shortcut, desktop only) -- #}
+    <button id="filter-panel-handle" class="filter-panel-handle" onclick="toggleFilterPanel()"
+            aria-label="Toggle filters" aria-expanded="false"
+            data-tooltip="Filters" data-tooltip-pos="left">
+        <i class="material-symbols-outlined">chevron_left</i>
+    </button>
+
     {# -- Save Filter dialog ------------------------------------------------ #}
     <dialog id="save-filter-dialog" class="ul-dialog">
         {% include "dashboard/partials/ui/_dialog_header.html" with title="Save Filter" %}
@@ -3204,10 +3211,17 @@
     function toggleFilterPanel() {
         const panel = document.getElementById('filter-panel');
         const btn = document.getElementById('search-pins-button');
+        const handle = document.getElementById('filter-panel-handle');
         const mapEl = document.getElementById('map');
         const isOpen = panel.classList.toggle('open');
         btn.classList.toggle('active', isOpen);
         mapEl.classList.toggle('filter-open', isOpen);
+        if (handle) {
+            handle.classList.toggle('open', isOpen);
+            handle.setAttribute('aria-expanded', String(isOpen));
+            const icon = handle.querySelector('.material-symbols-outlined, .material-icons');
+            if (icon) icon.textContent = isOpen ? 'chevron_right' : 'chevron_left';
+        }
         if (isOpen) requestAnimationFrame(_autoFitFilterSections);
     }
 
