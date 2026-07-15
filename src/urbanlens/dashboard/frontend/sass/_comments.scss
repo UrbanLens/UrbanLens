@@ -739,6 +739,18 @@
     }
 }
 
+// Layer toggles (unlike the one-shot tool/undo/download actions above) persist an
+// on/off state - dim the off ones so active layers stand out at a glance.
+.map-layers-strip-btn {
+    opacity: .6;
+    transition: background .1s, border-color .1s, color .1s, opacity .1s;
+
+    &:hover, &:focus-visible { opacity: .85; }
+
+    &.is-active,
+    &.active { opacity: 1; }
+}
+
 .cmc-color-wrap {
     display: inline-flex;
     align-items: center;

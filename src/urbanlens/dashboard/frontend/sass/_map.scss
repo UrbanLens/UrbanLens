@@ -3992,7 +3992,9 @@ div.container .addr-search-bar {
     font-weight: 600;
     color: var(--ul-grey-7);
     text-align: center;
-    transition: background .12s, color .12s, border-color .12s;
+    // Inactive layers recede (greyed via opacity) so active ones stand out at a glance.
+    opacity: .6;
+    transition: background .12s, color .12s, border-color .12s, opacity .12s;
     min-width: 0;
     box-sizing: border-box;
     overflow: hidden;
@@ -4016,12 +4018,13 @@ div.container .addr-search-bar {
         max-height: clamp(70px, 24cqmin, 112px);
     }
 
-    &:hover { background: var(--ul-hover-bg); color: var(--ul-grey-9); }
+    &:hover, &:focus-visible { background: var(--ul-hover-bg); color: var(--ul-grey-9); opacity: .85; }
 
     &.active {
         background: rgba($color-blue-500, .1);
         border-color: rgba($color-blue-500, .35);
         color: $color-blue-700;
+        opacity: 1;
 
         .map-layer-thumb--icon .material-icons { color: $color-blue-700; }
     }

@@ -179,9 +179,11 @@ def add_pending_account_deletion(request: HttpRequest) -> dict[str, object]:
 def add_direct_messages(request: HttpRequest) -> dict[str, bool]:
     """Expose whether the navbar messages icon should render for this user.
 
-    The icon only appears once the user has ever sent or received a direct
-    message - users who have never touched the feature don't get an extra
-    navbar icon competing for attention.
+    The icon appears once the user has ever sent or received a direct
+    message, OR has ever had an accepted friend (even if that friend was
+    later removed) - users with no way to reach the feature don't get an
+    extra navbar icon competing for attention, but the icon stays visible
+    once it's been relevant at all rather than flickering away.
 
     Args:
         request: The current HttpRequest.
@@ -194,11 +196,13 @@ def add_direct_messages(request: HttpRequest) -> dict[str, bool]:
     if isinstance(request.user, User):
         try:
             from urbanlens.dashboard.models.e2ee import MessagingKeyBundle
+            from urbanlens.dashboard.models.friendship import Friendship
             from urbanlens.dashboard.services.direct_messages import has_used_direct_messages
 
             needs_oauth_enroll = not request.user.has_usable_password() and not MessagingKeyBundle.objects.filter(profile__user=request.user).exists()
+            show_messages_icon = has_used_direct_messages(request.user.profile) or Friendship.objects.profile(request.user.profile).ever_friends().exists()
             return {
-                "show_messages_icon": has_used_direct_messages(request.user.profile),
+                "show_messages_icon": show_messages_icon,
                 "e2ee_needs_oauth_enroll": needs_oauth_enroll,
             }
         except (ImportError, AttributeError, DatabaseError):

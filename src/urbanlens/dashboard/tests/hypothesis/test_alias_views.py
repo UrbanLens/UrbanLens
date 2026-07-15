@@ -34,6 +34,42 @@ class PinAliasViewTestsBase(TestCase):
         )
 
 
+class PinDetailHasEverUsedAliasesContextTests(TestCase):
+    """has_ever_used_aliases (drives the aliases onboarding card) is profile-wide.
+
+    Regression coverage: it used to be scoped per-pin (checking only the
+    viewed pin's own alias list), so a user who had thoroughly used the alias
+    feature on other pins still got nagged with "Save private alternate
+    names for this pin" on every new, not-yet-named pin.
+    """
+
+    def setUp(self) -> None:
+        baker.make("auth.User")  # first user is auto-promoted to bootstrap site admin
+        self.user = baker.make("auth.User")
+        self.profile = Profile.objects.get(user=self.user)
+        self.client.force_login(self.user)
+
+    def _mock_place_name(self):
+        return patch(
+            "urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name",
+            return_value=None,
+        )
+
+    def test_false_when_profile_has_never_used_aliases(self) -> None:
+        pin = baker.make(Pin, profile=self.profile, name=None)
+        with self._mock_place_name():
+            response = self.client.get(reverse("pin.details", args=[pin.slug]))
+        self.assertFalse(response.context["has_ever_used_aliases"])
+
+    def test_true_when_a_different_pin_has_an_alias(self) -> None:
+        other_pin = baker.make(Pin, profile=self.profile, name="Named Elsewhere", name_is_user_provided=True)
+        PinAlias.objects.create(pin=other_pin, name="Extra Alias")
+        pin = baker.make(Pin, profile=self.profile, name=None)
+        with self._mock_place_name():
+            response = self.client.get(reverse("pin.details", args=[pin.slug]))
+        self.assertTrue(response.context["has_ever_used_aliases"])
+
+
 class PinAliasUseViewTests(PinAliasViewTestsBase):
     """POST pin.alias.use renames the pin and keeps both names as aliases."""
 

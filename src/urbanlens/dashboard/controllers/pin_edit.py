@@ -16,6 +16,7 @@ from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.model import Pin, PinType
 from urbanlens.dashboard.models.pin.note import PinNote
 from urbanlens.dashboard.models.reviews.model import Review
+from urbanlens.dashboard.services.rate_limiter import RequestCancelledError
 from urbanlens.dashboard.services.text_limits import MAX_PIN_DESCRIPTION_LENGTH, text_length_error
 
 logger = logging.getLogger(__name__)
@@ -176,7 +177,7 @@ def _ensure_location_address(location) -> None:
 
         if update_fields:
             location.save(update_fields=update_fields)
-    except (ImportError, OSError, ValueError, DatabaseError):
+    except (ImportError, OSError, ValueError, DatabaseError, RequestCancelledError):
         logger.exception("Reverse geocoding failed for location pk=%s", getattr(location, "pk", None))
 
 

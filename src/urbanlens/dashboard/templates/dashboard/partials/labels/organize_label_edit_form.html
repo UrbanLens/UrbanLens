@@ -99,7 +99,7 @@
     </div>
     {% endif %}
 
-    {% if can_use_ai_features and label.kind != 'people' and label.kind != 'media' %}
+    {% if show_auto_tag_toggle and label.kind != 'people' and label.kind != 'media' %}
     <div class="form-field">
         <label class="settings-toggle-row" title="When unchecked, auto-tagging will never assign this label">
             <input type="checkbox" name="allow_auto_tag" class="settings-toggle-input"

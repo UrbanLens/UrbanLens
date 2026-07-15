@@ -581,6 +581,13 @@ class LabelEditView(_LabelKindMixin, LoginRequiredMixin, View):
         selected_ids = {b.id for b in selected_parents} | {b.id for b in selected_children}
         available_parents = _parent_candidates(profile, self.kind, label_id)
 
+        ai_kind_enabled = {
+            KIND_CATEGORY: profile.ai_label_categories,
+            KIND_TAG: profile.ai_label_tags,
+            KIND_STATUS: profile.ai_label_statuses,
+        }.get(label.kind, False)
+        can_use_ai_features = user_has_feature(request.user, SiteFeature.AI)
+
         return render(
             request,
             "dashboard/partials/labels/organize_label_edit_form.html",
@@ -596,7 +603,11 @@ class LabelEditView(_LabelKindMixin, LoginRequiredMixin, View):
                 "selected_ids": selected_ids,
                 "is_global": label.kind == KIND_TAG and label.profile is None,
                 "show_kind_toggle": cfg.show_kind_toggle,
-                "can_use_ai_features": user_has_feature(request.user, SiteFeature.AI),
+                "can_use_ai_features": can_use_ai_features,
+                # Auto-tagging toggle needs the site feature on AND the user's own
+                # master + per-kind AI settings enabled - otherwise the option is
+                # offering a behavior the user has explicitly turned off.
+                "show_auto_tag_toggle": can_use_ai_features and profile.ai_enabled and ai_kind_enabled,
             },
         )
 

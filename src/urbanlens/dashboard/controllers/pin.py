@@ -55,7 +55,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         from django.db.models import Case, When
 
-        from urbanlens.dashboard.models.aliases.model import AliasType
+        from urbanlens.dashboard.models.aliases.model import AliasType, PinAlias
         from urbanlens.dashboard.models.labels.model import COLOR_CHOICES, Label
         from urbanlens.dashboard.models.location.model import Location
         from urbanlens.dashboard.models.wiki.model import Wiki
@@ -117,6 +117,11 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         simple_info_panels = [source for source in panel_sources().values() if isinstance(source, InfoPanelSource)]
 
+        # Whether the profile has ever added/kept an alias on ANY pin - not just this
+        # one - so the aliases onboarding card stops nagging once the feature is
+        # familiar, rather than re-introducing it on every new pin.
+        has_ever_used_aliases = PinAlias.objects.filter(pin__profile=profile).exists()
+
         return render(
             request,
             "dashboard/pages/location/index.html",
@@ -145,6 +150,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 "pin_lists": pin_lists,
                 "pin_cover_candidates": pin_cover_candidates,
                 "simple_info_panels": simple_info_panels,
+                "has_ever_used_aliases": has_ever_used_aliases,
                 "media_bulk_actions": [
                     {"action": "relevant", "icon": "thumb_up", "label": "Mark relevant"},
                     {"action": "not_relevant", "icon": "thumb_down", "label": "Mark not relevant"},

@@ -85,6 +85,17 @@ class QuerySet(abstract.DashboardQuerySet["Friendship"]):
         """
         return self.exclude(status=FriendshipStatus.ACCEPTED)
 
+    def ever_friends(self) -> Self:
+        """
+        Return friendships that are (or once were) an accepted friendship.
+
+        ``remove()`` never deletes the row, it just moves status to
+        ``REMOVED`` - so this is the set of rows that reached ``ACCEPTED``
+        at some point, unlike ``is_friend()`` which only sees the current
+        state.
+        """
+        return self.filter(status__in=(FriendshipStatus.ACCEPTED, FriendshipStatus.REMOVED))
+
     def relationship_type(self, relationship_type: str) -> Self:
         """
         Return a list of all friendships with a given type.

@@ -858,7 +858,7 @@
                     panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
                     panel.querySelector('input[type="text"], button')?.focus();
                 },
-                ready: function () { return {{ pin.aliases.exists|yesno:'false,true' }} && !!document.getElementById('pin-aliases-panel'); },
+                ready: function () { return {{ has_ever_used_aliases|yesno:'false,true' }} && !!document.getElementById('pin-aliases-panel'); },
             },
             {
                 id: 'community-wiki', icon: 'public', target: '.pin-location-name, .wiki-back-link',

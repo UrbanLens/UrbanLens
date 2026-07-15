@@ -10,9 +10,10 @@ from django.test import RequestFactory
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.controllers.pin_edit import PinEditView
+from urbanlens.dashboard.controllers.pin_edit import PinEditView, PinOverviewView
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.model import Pin
+from urbanlens.dashboard.services.rate_limiter import RateLimitExceededError
 
 
 class PinEditCategoryUpdateTests(TestCase):
@@ -131,3 +132,40 @@ class PinEditNameAliasTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(list(self.pin.aliases.values_list("name", flat=True)), ["Old Factory"])
+
+
+class PinOverviewGeocodingFailureTests(TestCase):
+    """The Details card must degrade gracefully, not 500, when geocoding fails.
+
+    Regression test for a bug where a pin whose Location has no street data
+    yet (true for any new pin, and for any pin never previously backfilled)
+    re-triggers a synchronous Google Geocoding call on every /overview/ visit.
+    Once the geocoding service's rate limit is exhausted or it's disabled,
+    that call raises RequestCancelledError/RateLimitExceededError, which
+    _ensure_location_address didn't catch - unlike every other Google Places
+    call site in this codebase - so the whole request 500'd instead of just
+    rendering without the freshly-geocoded address fields.
+    """
+
+    def setUp(self) -> None:
+        self.factory = RequestFactory()
+        self.profile = baker.make(User).profile
+        self.user = self.profile.user
+        self.pin = baker.make(Pin, profile=self.profile)
+        self.pin.location.route = ""
+        self.pin.location.save(update_fields=["route"])
+
+    def test_rate_limit_exceeded_during_geocoding_does_not_500(self) -> None:
+        req = self.factory.get(f"/map/pin/{self.pin.slug}/overview/")
+        req.user = self.user
+        with (
+            patch("urbanlens.UrbanLens.settings.app.settings.google_unrestricted_api_key", "test-key"),
+            patch(
+                "urbanlens.dashboard.services.apis.locations.google.geocoding.GoogleGeocodingGateway.geocode_coordinates",
+                side_effect=RateLimitExceededError("google_geocoding"),
+            ),
+            patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None),
+        ):
+            response = PinOverviewView.as_view()(req, pin_slug=self.pin.slug)
+
+        self.assertEqual(response.status_code, 200)
