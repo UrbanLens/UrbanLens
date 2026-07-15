@@ -1,0 +1,33 @@
+{% comment %}
+"Regional Data" tab strip: condenses several niche, secondary-to-our-core-
+purpose plugin panels (US Census Geography, EPA Regulated Facilities,
+iNaturalist, Recent Seismic Activity) into one card instead of four
+standalone auto-loading cards. Each tab's content is fetched only once the
+user actually clicks it - see PinController.panel_info, which every tab
+shares (already fully generic per-key dispatch, no new backend needed).
+
+Context:
+  pin                 - the Pin being viewed
+  condensed_panel_tabs - list of {key, label, icon} dicts, in tab order
+{% endcomment %}
+<div id="pin-plugin-tabs-section" class="card card--secondary"
+     data-collapse-scope="pin" data-collapse-section="plugin_tabs" data-collapse-label="Regional Data">
+    <div class="card-header">
+        <i class="material-symbols-outlined">layers</i>
+        <h3>Regional Data</h3>
+    </div>
+    <div class="pin-plugin-tabs-nav" role="tablist">
+        {% for tab in condensed_panel_tabs %}
+        <button type="button" class="pin-plugin-tab-btn" role="tab" aria-selected="false"
+                hx-get="{% url 'pin.panel' pin.slug tab.key %}"
+                hx-target="#pin-plugin-tab-body" hx-swap="innerHTML"
+                onclick="document.querySelectorAll('#pin-plugin-tabs-section .pin-plugin-tab-btn').forEach(function (b) { b.classList.remove('active'); b.setAttribute('aria-selected', 'false'); }); this.classList.add('active'); this.setAttribute('aria-selected', 'true');">
+            <i class="material-symbols-outlined">{{ tab.icon }}</i>
+            <span>{{ tab.label }}</span>
+        </button>
+        {% endfor %}
+    </div>
+    <div id="pin-plugin-tab-body" class="card__body">
+        <p class="pin-plugin-tab-placeholder">Select a category above to load its data.</p>
+    </div>
+</div>

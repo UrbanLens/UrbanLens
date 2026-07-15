@@ -441,6 +441,10 @@
         </div>
         {% endfor %}
 
+        {% if condensed_panel_tabs %}
+        {% include "dashboard/partials/pins/_pin_plugin_tabs.html" %}
+        {% endif %}
+
         <div id="yelp-section" class="card card--secondary"
             hx-get="{% url 'pin.yelp' pin.slug %}"
             hx-trigger="load[!window.ulSectionCollapsed('pin','yelp')], ul:unhide"

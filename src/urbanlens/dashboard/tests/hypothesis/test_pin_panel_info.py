@@ -142,3 +142,36 @@ class PinDetailPageSimpleInfoPanelsContextTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, reverse("pin.panel", args=[self.pin.slug, "photon"]))
         self.assertContains(response, reverse("pin.panel", args=[self.pin.slug, "usgs_earthquakes"]))
+
+    def test_condensed_panels_are_excluded_from_the_autoloading_list(self) -> None:
+        """Census/EPA/iNaturalist/Seismic move into the Regional Data tab strip
+        instead of auto-loading as their own standalone cards - see condensed_panel_tabs."""
+        response = self.client.get(reverse("pin.details", args=[self.pin.slug]))
+        keys = [panel.key for panel in response.context["simple_info_panels"]]
+        for condensed_key in ("census_tigerweb", "epa_echo", "inaturalist", "usgs_earthquakes"):
+            self.assertNotIn(condensed_key, keys)
+        self.assertIn("photon", keys)
+
+    def test_condensed_panel_tabs_context_has_the_expected_order_and_labels(self) -> None:
+        response = self.client.get(reverse("pin.details", args=[self.pin.slug]))
+        tabs = response.context["condensed_panel_tabs"]
+        self.assertEqual([tab["key"] for tab in tabs], ["census_tigerweb", "epa_echo", "inaturalist", "usgs_earthquakes"])
+        self.assertEqual([tab["label"] for tab in tabs], ["US Census", "EPA", "Wildlife", "Seismic"])
+
+    def test_page_renders_the_regional_data_tab_strip(self) -> None:
+        response = self.client.get(reverse("pin.details", args=[self.pin.slug]))
+        self.assertContains(response, "Regional Data")
+        self.assertContains(response, "pin-plugin-tab-btn")
+        self.assertContains(response, ">US Census<")
+        self.assertContains(response, ">EPA<")
+        self.assertContains(response, ">Wildlife<")
+        self.assertContains(response, ">Seismic<")
+        # Each tab button still points at the same generic per-key dispatch
+        # route used everywhere else - just triggered by a click, not page load.
+        self.assertContains(response, reverse("pin.panel", args=[self.pin.slug, "census_tigerweb"]))
+
+    def test_condensed_panels_no_longer_have_an_autoload_trigger(self) -> None:
+        response = self.client.get(reverse("pin.details", args=[self.pin.slug]))
+        content = response.content.decode()
+        for condensed_key in ("census_tigerweb", "epa_echo", "inaturalist", "usgs_earthquakes"):
+            self.assertNotIn(f"hx-trigger=\"load[!window.ulSectionCollapsed('pin','{condensed_key}')]", content)

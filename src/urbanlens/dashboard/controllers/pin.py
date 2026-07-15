@@ -42,6 +42,19 @@ _ADAPTIVE_PAGE_BATCH_MULTIPLIER = 2
 _WEB_SEARCH_PAGE_SIZE = _WEB_SEARCH_CLIENT_PAGE_SIZE * _ADAPTIVE_PAGE_BATCH_MULTIPLIER
 _WEB_SEARCH_MIN_REFRESH_AGE = timedelta(days=1)
 
+# InfoPanelSource keys condensed into the "Regional Data" tab strip instead of
+# their own standalone card - niche, secondary-to-our-core-purpose data that's
+# only occasionally useful, so each tab's content is fetched only once the
+# user actually clicks it (see pin.panel / _pin_plugin_tabs.html), unlike the
+# rest of simple_info_panels which still auto-fetch on page load. Dict order
+# is the tab display order (US Census, EPA, Wildlife, Seismic).
+_CONDENSED_PLUGIN_TABS = {
+    "census_tigerweb": "US Census",
+    "epa_echo": "EPA",
+    "inaturalist": "Wildlife",
+    "usgs_earthquakes": "Seismic",
+}
+
 
 class PinController(LoginRequiredMixin, GenericViewSet):
     """
@@ -116,7 +129,9 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         from urbanlens.dashboard.services.external_data import InfoPanelSource, panel_sources
 
-        simple_info_panels = [source for source in panel_sources().values() if isinstance(source, InfoPanelSource)]
+        all_info_panels = {source.key: source for source in panel_sources().values() if isinstance(source, InfoPanelSource)}
+        condensed_panel_tabs = [{"key": key, "label": label, "icon": all_info_panels[key].icon} for key, label in _CONDENSED_PLUGIN_TABS.items() if key in all_info_panels]
+        simple_info_panels = [source for key, source in all_info_panels.items() if key not in _CONDENSED_PLUGIN_TABS]
 
         # Whether the profile has ever added/kept an alias on ANY pin - not just this
         # one - so the aliases onboarding card stops nagging once the feature is
@@ -151,6 +166,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 "pin_lists": pin_lists,
                 "pin_cover_candidates": pin_cover_candidates,
                 "simple_info_panels": simple_info_panels,
+                "condensed_panel_tabs": condensed_panel_tabs,
                 "has_ever_used_aliases": has_ever_used_aliases,
                 "media_bulk_actions": [
                     {"action": "relevant", "icon": "thumb_up", "label": "Mark relevant"},

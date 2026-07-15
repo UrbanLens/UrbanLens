@@ -6,8 +6,16 @@ styled like the other detail-item rows (Official Name, Address, ...).
 Usage: rendered via PinLinksView/LocationLinksView, which supply `links`,
 `add_url`, `delete_url_name`, `row_id`, `owner_slug` (the url's first
 argument), and either `pin` or `wiki` for display purposes.
+
+hide_when_empty: when true and there are no links, the whole row (including
+the "No links yet." placeholder and its own inline add-toggle) stays hidden -
+the caller is expected to provide its own "Add a link" icon button elsewhere
+(e.g. in the section header) that reveals this row's add-form directly. See
+pin_overview_partial.html's Details card header for the pin page's version.
+Unset/false (the wiki page's usage) keeps the original always-visible row.
 {% endcomment %}
-<div class="detail-item detail-item--links full-width" id="{{ row_id }}">
+<div class="detail-item detail-item--links full-width" id="{{ row_id }}"
+     {% if hide_when_empty and not links %}hidden{% endif %}>
     <span class="field-label">Links</span>
     <span class="field-value pin-links-value">
         {% for link in links %}
@@ -28,9 +36,12 @@ argument), and either `pin` or `wiki` for display purposes.
             </button>
         </span>
         {% empty %}
+        {% if not hide_when_empty %}
         <span class="pin-links-empty">No links yet.</span>
+        {% endif %}
         {% endfor %}
         <button type="button" class="pin-link-add-toggle" title="Add a link"
+                {% if hide_when_empty and not links %}hidden{% endif %}
                 onclick="this.hidden=true; this.nextElementSibling.hidden=false; this.nextElementSibling.querySelector('input').focus();">
             <i class="material-symbols-outlined">add_link</i>
         </button>

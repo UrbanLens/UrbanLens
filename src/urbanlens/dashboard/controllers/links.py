@@ -54,6 +54,7 @@ def _render_pin_links(request, pin: Pin) -> HttpResponse:
             "delete_url_name": "pin.link.delete",
             "row_id": "pin-links-row",
             "owner_slug": pin.slug,
+            "hide_when_empty": True,
         },
     )
 

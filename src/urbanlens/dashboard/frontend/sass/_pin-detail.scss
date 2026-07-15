@@ -1469,6 +1469,77 @@
     }
 }
 
+// -- Condensed plugin-panel tabs (Regional Data: US Census, EPA, Wildlife, Seismic) --
+// Secondary-to-our-core-purpose data, condensed into one card with tabs
+// instead of four standalone auto-loading cards - each tab's content is
+// fetched only once clicked (see pin.panel / _pin_plugin_tabs.html).
+.pin-plugin-tabs-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px;
+    padding: 0 $space-md;
+    border-bottom: 1px solid var(--ul-border);
+}
+
+.pin-plugin-tab-btn {
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+    padding: .6rem .9rem;
+    border: none;
+    border-bottom: 2px solid transparent;
+    background: transparent;
+    color: var(--ul-grey-6);
+    font-size: .85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: color .15s ease, border-color .15s ease;
+
+    .material-symbols-outlined {
+        font-size: 1.05rem;
+    }
+
+    &:hover {
+        color: var(--ul-grey-9);
+    }
+
+    &.active {
+        color: var(--ul-primary-color);
+        border-bottom-color: var(--ul-primary-color);
+    }
+}
+
+.pin-plugin-tab-body {
+    padding: $space-md;
+
+    // Any panel fragment swapped in here (the pending placeholder or the
+    // final _simple_info_panel.html render) arrives as its own nested .card -
+    // strip its chrome so it blends into this tab body instead of looking
+    // like a card-within-a-card, and hide its icon+title header since the
+    // active tab button already names it.
+    .card {
+        border: none;
+        box-shadow: none;
+        background: transparent;
+    }
+
+    .card-header {
+        display: none;
+    }
+
+    .card__body {
+        padding: 0;
+    }
+}
+
+.pin-plugin-tab-placeholder {
+    margin: 0;
+    padding: 1.5rem 0;
+    text-align: center;
+    color: var(--ul-grey-5);
+    font-size: .85rem;
+}
+
 // -- Azure Maps address/POI panel ----------------------------------------------
 .azure-maps-info {
     .azure-maps-heading {
@@ -3765,6 +3836,14 @@ body.page-location-details .pin-detail-grid {
             .detail-item--links {
                 flex: 1 0 100%;
                 border-left: none;
+
+                // .detail-item's own `display: flex` above has equal specificity
+                // to the [hidden] UA rule it would otherwise lose to, so an empty
+                // links row (hidden until "Add a link" is clicked in the header -
+                // see pin_overview_partial.html) needs this to actually disappear.
+                &[hidden] {
+                    display: none;
+                }
             }
         }
     }
