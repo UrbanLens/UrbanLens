@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import datetime
 import itertools
+import json
 
 from django.contrib.auth.models import User
 from django.urls import reverse
@@ -177,6 +178,15 @@ class MemoriesVisitsViewTests(TestCase):
         self.assertContains(response, "memories-unlogged-grid")
         self.assertContains(response, reverse("memories.visits"))
 
+    def test_lists_unlogged_pins_shows_the_shared_select_map(self) -> None:
+        """Reuses the same map/selection UX as Memories > Locations - see pin-select-map.js."""
+        _make_pin(self.profile, last_visited=_aware(2024, 6, 1), name="My Place")
+        response = self.client.get(reverse("memories.visits"))
+        self.assertContains(response, 'id="unlogged-visits-map"')
+        self.assertContains(response, "pin-select-map")
+        self.assertContains(response, reverse("memories.visits.map_data"))
+        self.assertContains(response, "ul-bulk-bar-unlogged_visits")
+
     def test_empty_queue_shows_caught_up_body(self) -> None:
         response = self.client.get(reverse("memories.visits"))
         self.assertEqual(response.status_code, 200)
@@ -185,6 +195,10 @@ class MemoriesVisitsViewTests(TestCase):
         self.assertContains(response, "View your timeline")
         self.assertNotContains(response, "memories-unlogged-grid")
         self.assertNotContains(response, reverse("memories.visits"))
+
+    def test_empty_queue_has_no_map(self) -> None:
+        response = self.client.get(reverse("memories.visits"))
+        self.assertNotContains(response, 'id="unlogged-visits-map"')
 
     def test_requires_login(self) -> None:
         self.client.logout()
@@ -243,3 +257,114 @@ class MemoriesUnloggedActionViewTests(TestCase):
         self.assertEqual(response.status_code, 404)
         other_pin.refresh_from_db()
         self.assertFalse(other_pin.unlogged_visit_dismissed)
+
+
+class MemoriesVisitsMapDataViewTests(TestCase):
+    """MemoriesVisitsMapDataView - JSON for the Visits page's shared select-map."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+        self.client.force_login(self.user)
+
+    def test_returns_coordinates_and_name_for_unlogged_pins(self) -> None:
+        pin = _make_pin(self.profile, last_visited=_aware(2024, 6, 1), name="My Place")
+        response = self.client.get(reverse("memories.visits.map_data"))
+        self.assertEqual(response.status_code, 200)
+        data = response.json()["pins"]
+        self.assertEqual(len(data), 1)
+        self.assertEqual(data[0]["id"], pin.slug)
+        self.assertEqual(data[0]["name"], "My Place")
+        self.assertEqual(data[0]["latitude"], pin.effective_latitude)
+        self.assertEqual(data[0]["longitude"], pin.effective_longitude)
+        self.assertEqual(data[0]["last_visited"], "2024-06-01")
+
+    def test_excludes_pins_with_a_logged_visit(self) -> None:
+        pin = _make_pin(self.profile, last_visited=_aware(2024, 6, 1))
+        PinVisit.objects.create(pin=pin, visited_at=_aware(2024, 6, 1), source=VisitSource.MANUAL)
+        response = self.client.get(reverse("memories.visits.map_data"))
+        self.assertEqual(response.json()["pins"], [])
+
+    def test_scoped_to_the_requesting_profile(self) -> None:
+        other = baker.make(User)
+        _make_pin(other.profile, last_visited=_aware(2024, 6, 1), name="Not Mine")
+        response = self.client.get(reverse("memories.visits.map_data"))
+        self.assertEqual(response.json()["pins"], [])
+
+    def test_requires_login(self) -> None:
+        self.client.logout()
+        response = self.client.get(reverse("memories.visits.map_data"))
+        self.assertEqual(response.status_code, 302)
+
+
+class MemoriesVisitsBulkActionViewTests(TestCase):
+    """MemoriesVisitsBulkActionView - bulk quick-log/unmark, owned+unlogged only."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+        self.client.force_login(self.user)
+
+    def _post(self, action: str, slugs: list[str]):
+        return self.client.post(reverse("memories.visits.bulk", args=[action]), data=json.dumps({"pin_slugs": slugs}), content_type="application/json")
+
+    def test_log_creates_a_dated_visit_for_each_pin(self) -> None:
+        first = _make_pin(self.profile, last_visited=_aware(2024, 6, 1))
+        second = _make_pin(self.profile, last_visited=_aware(2024, 6, 2))
+        response = self._post("log", [first.slug, second.slug])
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["processed"], 2)
+        self.assertTrue(PinVisit.objects.filter(pin=first).exists())
+        self.assertTrue(PinVisit.objects.filter(pin=second).exists())
+        self.assertNotIn(first, unlogged_visited_pins(self.profile))
+
+    def test_log_visit_is_dated_today(self) -> None:
+        pin = _make_pin(self.profile, last_visited=_aware(2024, 6, 1))
+        self._post("log", [pin.slug])
+        visit = PinVisit.objects.get(pin=pin)
+        self.assertEqual(visit.visited_at.date(), timezone.now().date())
+
+    def test_log_respects_visit_logging_disabled(self) -> None:
+        self.profile.track_pin_visits = False
+        self.profile.save(update_fields=["track_pin_visits"])
+        pin = _make_pin(self.profile, last_visited=_aware(2024, 6, 1))
+        response = self._post("log", [pin.slug])
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(PinVisit.objects.filter(pin=pin).exists())
+
+    def test_unmark_clears_visited_status_for_each_pin(self) -> None:
+        first = _make_pin(self.profile, last_visited=_aware(2024, 6, 1))
+        second = _make_pin(self.profile, last_visited=_aware(2024, 6, 2))
+        response = self._post("unmark", [first.slug, second.slug])
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["processed"], 2)
+        first.refresh_from_db()
+        second.refresh_from_db()
+        self.assertIsNone(first.last_visited)
+        self.assertIsNone(second.last_visited)
+
+    def test_skips_another_profiles_pin(self) -> None:
+        other = baker.make(User)
+        foreign = _make_pin(other.profile, last_visited=_aware(2024, 6, 1))
+        mine = _make_pin(self.profile, last_visited=_aware(2024, 6, 1))
+        response = self._post("unmark", [foreign.slug, mine.slug])
+        self.assertEqual(response.json()["processed"], 1)
+        foreign.refresh_from_db()
+        self.assertIsNotNone(foreign.last_visited)
+
+    def test_skips_already_logged_pin(self) -> None:
+        pin = _make_pin(self.profile, last_visited=_aware(2024, 6, 1))
+        PinVisit.objects.create(pin=pin, visited_at=_aware(2024, 6, 1), source=VisitSource.MANUAL)
+        response = self._post("log", [pin.slug])
+        self.assertEqual(response.json()["processed"], 0)
+
+    def test_empty_pin_slugs_is_400(self) -> None:
+        response = self._post("log", [])
+        self.assertEqual(response.status_code, 400)
+
+    def test_unknown_action_is_404(self) -> None:
+        pin = _make_pin(self.profile, last_visited=_aware(2024, 6, 1))
+        response = self.client.post(reverse("memories.visits.bulk", args=["explode"]), data=json.dumps({"pin_slugs": [pin.slug]}), content_type="application/json")
+        self.assertEqual(response.status_code, 404)

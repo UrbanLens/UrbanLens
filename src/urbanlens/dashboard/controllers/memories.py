@@ -48,6 +48,11 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_WINDOW_DAYS = 90
 _ON_THIS_DAY_LIMIT = 10
+_MAX_BULK_VISITS = 60  # matches unlogged.UNLOGGED_VISIT_LIMIT - never more pins than the page can show
+_VISITS_BULK_ACTIONS = [
+    {"action": "log", "icon": "check", "label": "Log visit (today)"},
+    {"action": "unmark", "icon": "cancel", "label": "Not visited"},
+]
 
 
 class _ShareGroup(TypedDict):
@@ -182,7 +187,8 @@ def _toast(message: str, level: str = "success", *, unlogged_count: int | None =
         level: toastr level (``success``/``info``/``warning``/``error``).
         unlogged_count: When given, also tells the shared _photos_tabs.html nav
             (outside this card's own swap target) to update or remove its
-            "Visits" tab label instead of leaving it stale.
+            "Visits" tab label instead of leaving it stale, and refreshes the
+            Visits page's map markers (see pin-select-map.js).
 
     Returns:
         An empty-body response carrying an ``HX-Trigger`` header; swapping it with
@@ -191,6 +197,7 @@ def _toast(message: str, level: str = "success", *, unlogged_count: int | None =
     triggers: dict[str, object] = {"showToast": {"message": message, "level": level}}
     if unlogged_count is not None:
         triggers["unloggedVisitsCountChanged"] = {"count": unlogged_count}
+        triggers["refreshQueue"] = True
     response = HttpResponse("")
     response["HX-Trigger"] = json.dumps(triggers)
     return response
@@ -601,6 +608,8 @@ class MemoriesVisitView(LoginRequiredMixin, View):
                 # The "Visits" tab label lives outside #memories-unlogged-band, in
                 # the shared _photos_tabs.html nav - tell it to catch up.
                 "unloggedVisitsCountChanged": {"count": len(unlogged_visited_pins(profile))},
+                # Refreshes the Visits page's map markers (see pin-select-map.js).
+                "refreshQueue": True,
             },
         )
         return response
@@ -628,9 +637,86 @@ class MemoriesVisitsView(LoginRequiredMixin, View):
             {
                 "profile": profile,
                 "page_name": "memories",
+                "bulk_actions": _VISITS_BULK_ACTIONS,
                 **_unlogged_band_context(profile),
             },
         )
+
+
+class MemoriesVisitsMapDataView(LoginRequiredMixin, View):
+    """Lightweight JSON of every visited-but-unlogged pin, for the Visits page map.
+
+    GET /memories/visits/map-data/
+
+    Mirrors ``PinSuggestionMapDataView`` (Memories > Locations) - see
+    ``static/js/pin-select-map.js``, which drives both pages' maps.
+    """
+
+    def get(self, request: HttpRequest) -> JsonResponse:
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        pins = unlogged_visited_pins(profile)
+        data = [
+            {
+                "id": pin.slug,
+                "latitude": pin.effective_latitude,
+                "longitude": pin.effective_longitude,
+                "name": pin.effective_name,
+                "last_visited": pin.last_visited.date().isoformat() if pin.last_visited else None,
+            }
+            for pin in pins
+        ]
+        return JsonResponse({"pins": data})
+
+
+class MemoriesVisitsBulkActionView(LoginRequiredMixin, View):
+    """Quick-log or un-mark many visited-but-unlogged pins at once.
+
+    POST /memories/visits/bulk/<action>/, JSON body ``{"pin_slugs": [...]}``.
+
+    Modeled on ``PinSuggestionBulkActionView`` (Memories > Locations):
+    non-owned, already-resolved, or nonexistent slugs are silently skipped
+    rather than erroring the whole batch.
+
+    - ``log``: creates a dated ``PinVisit`` for each pin, dated today - the
+      same minimal path as the single-item quick-log form (date only, no
+      notes/photos/participants/map).
+    - ``unmark``: clears each pin's "visited" status entirely, same as the
+      single-item "Not visited" button.
+    """
+
+    def post(self, request: HttpRequest, action: str) -> JsonResponse:
+        if action not in {"log", "unmark"}:
+            raise Http404
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        try:
+            body = json.loads(request.body)
+        except (json.JSONDecodeError, TypeError, UnicodeDecodeError):
+            return JsonResponse({"error": "Invalid request body."}, status=400)
+
+        raw_slugs = body.get("pin_slugs") if isinstance(body, dict) else None
+        if not isinstance(raw_slugs, list) or not raw_slugs:
+            return JsonResponse({"error": "No pins provided."}, status=400)
+        if len(raw_slugs) > _MAX_BULK_VISITS:
+            return JsonResponse({"error": f"Too many pins at once (max {_MAX_BULK_VISITS})."}, status=400)
+
+        if action == "log" and not visit_logging_allowed(profile):
+            return JsonResponse({"error": "Visit logging is turned off - enable it in Settings to log a visit."}, status=403)
+
+        pins = Pin.objects.filter(profile=profile, slug__in=raw_slugs).visited_without_record()
+        processed = 0
+        for pin in pins:
+            try:
+                if action == "unmark":
+                    remove_visited_status(pin)
+                else:
+                    visited_at = datetime.datetime.combine(timezone.now().date(), datetime.time.min, tzinfo=datetime.UTC)
+                    PinVisit.objects.create(pin=pin, visited_at=visited_at, source=VisitSource.MANUAL)
+                    add_visited_status(pin)
+                    sync_last_visited(pin)
+                processed += 1
+            except Exception:
+                logger.exception("Bulk unlogged-visit action '%s' failed for pin %s", action, pin.pk)
+        return JsonResponse({"ok": True, "processed": processed, "requested": len(raw_slugs)})
 
 
 class MemoriesSharingView(LoginRequiredMixin, View):

@@ -661,6 +661,31 @@ class PinSuggestionBulkActionViewTests(TestCase):
         self.assertEqual(response.status_code, 404)
 
 
+class PinSuggestionQueueViewSelectMapTests(TestCase):
+    """The Locations page's map/selection UX is shared with Memories > Visits -
+    see pin-select-map.js. Regression guard for the shared class names."""
+
+    def setUp(self) -> None:
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+        self.client.force_login(self.user)
+
+    def test_page_with_suggestions_shows_the_shared_select_map(self) -> None:
+        location = baker.make_recipe("dashboard.location", latitude=_PIN_LAT, longitude=_PIN_LON)
+        pin = baker.make_recipe("dashboard.pin", profile=self.profile, location=location)
+        PinSuggestion.objects.create(profile=self.profile, pin=pin, latitude=_PIN_LAT, longitude=_PIN_LON, origin=PinSuggestionOrigin.IMMICH, visit_dates=["2024-01-01"], hit_count=1)
+
+        response = self.client.get(reverse("memories.locations"))
+        self.assertContains(response, 'id="pin-suggestions-map"')
+        self.assertContains(response, "pin-select-map")
+        self.assertContains(response, 'class="pin-select-cb"')
+        self.assertContains(response, "ul-bulk-bar-pin_suggestions")
+
+    def test_empty_queue_has_no_map(self) -> None:
+        response = self.client.get(reverse("memories.locations"))
+        self.assertNotContains(response, 'id="pin-suggestions-map"')
+
+
 class PinSuggestionQueuePaginationTests(TestCase):
     """The Locations queue view paginates rather than loading every suggestion at once."""
 

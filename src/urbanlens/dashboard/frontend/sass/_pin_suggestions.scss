@@ -1,104 +1,9 @@
 // Memories > Locations - the batch-scan pin suggestion review queue.
-// Map + multi-select is driven by inline JS in
-// templates/dashboard/pages/memories/locations.html.
+// Map + multi-select behavior/chrome is shared with Memories > Visits -
+// see static/js/pin-select-map.js and _pin_select_map.scss. Only
+// suggestion-card-specific styling (photo picker, prompts, etc.) lives here.
 
 @use 'variables' as *;
-
-// -- Map -------------------------------------------------------------------
-
-.pin-suggestions-map-wrap {
-    position: relative;
-    margin-bottom: $space-sm;
-    border-radius: $radius-md;
-    overflow: hidden;
-    box-shadow: var(--ul-shadow-sm);
-}
-
-#pin-suggestions-map {
-    height: 320px;
-    width: 100%;
-    background: var(--ul-surface);
-
-    @include up($breakpoint-sm) {
-        height: 420px;
-    }
-}
-
-.pin-suggestions-select-toggle {
-    position: absolute;
-    top: $space-sm;
-    right: $space-sm;
-    z-index: 1000;
-    display: flex;
-    align-items: center;
-    gap: $space-xs;
-    padding: .4rem .7rem;
-    border-radius: $radius-full;
-    border: 1px solid var(--ul-border);
-    background: var(--ul-grey-0a);
-    color: var(--ul-grey-8);
-    font-size: .78rem;
-    cursor: pointer;
-    box-shadow: var(--ul-shadow-sm);
-
-    .material-symbols-outlined {
-        font-size: 18px;
-    }
-
-    &.active {
-        background: var(--ul-primary-color);
-        border-color: var(--ul-primary-color);
-        color: #fff;
-    }
-}
-
-#pin-suggestions-map.select-mode {
-    cursor: crosshair;
-}
-
-.pin-suggestions-map-hint {
-    display: flex;
-    align-items: center;
-    gap: $space-xs;
-    font-size: .82rem;
-    color: var(--ul-grey-6);
-    margin: 0 0 $space-lg;
-
-    .material-symbols-outlined {
-        font-size: 18px;
-        flex-shrink: 0;
-    }
-}
-
-.pin-suggestion-marker {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 30px;
-    height: 30px;
-    border-radius: 50% 50% 50% 0;
-    transform: rotate(-45deg);
-    background: var(--ul-primary-color);
-    border: 2px solid var(--ul-grey-0a);
-    box-shadow: var(--ul-shadow-sm);
-    transition: transform .12s ease, box-shadow .12s ease;
-
-    .material-symbols-outlined {
-        transform: rotate(45deg);
-        color: #fff;
-        font-size: 16px;
-    }
-}
-
-.pin-suggestion-marker--visit {
-    background: #{$color-teal-500};
-}
-
-.pin-suggestion-marker.is-selected {
-    transform: rotate(-45deg) scale(1.25);
-    box-shadow: 0 0 0 3px rgba(33, 150, 243, .35), var(--ul-shadow-md);
-    z-index: 1000 !important;
-}
 
 // -- Grid & cards ------------------------------------------------------------
 
@@ -130,40 +35,6 @@
     display: flex;
     flex-direction: column;
     gap: $space-xs;
-}
-
-.pin-suggestion-select {
-    flex-shrink: 0;
-    cursor: pointer;
-}
-
-.pin-suggestion-select-cb {
-    position: absolute;
-    opacity: 0;
-    width: 1px;
-    height: 1px;
-}
-
-.pin-suggestion-select-box {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 22px;
-    height: 22px;
-    border-radius: $radius-xs;
-    border: 2px solid var(--ul-grey-3);
-    color: transparent;
-    transition: background .12s ease, border-color .12s ease, color .12s ease;
-
-    .material-symbols-outlined {
-        font-size: 16px;
-    }
-}
-
-.pin-suggestion-select-cb:checked + .pin-suggestion-select-box {
-    background: var(--ul-primary-color);
-    border-color: var(--ul-primary-color);
-    color: #fff;
 }
 
 .pin-suggestion-card-meta {

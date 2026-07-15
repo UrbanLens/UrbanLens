@@ -21,6 +21,10 @@ Context:
             hx-target="#unlogged-card-{{ pin.slug }}" hx-swap="outerHTML swap:0.2s">
         <i class="material-symbols-outlined">close</i>
     </button>
+    <label class="pin-select" title="Select for bulk actions">
+        <input type="checkbox" class="pin-select-cb" data-pin-slug="{{ pin.slug }}">
+        <span class="pin-select-box"><i class="material-symbols-outlined">check</i></span>
+    </label>
     <div class="unlogged-card-icon"><i class="material-symbols-outlined">location_on</i></div>
     <div class="unlogged-card-body">
         <div class="unlogged-card-title" title="{{ pin.effective_name }}">{{ pin.effective_name }}</div>

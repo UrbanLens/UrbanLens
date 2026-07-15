@@ -1,5 +1,6 @@
 {% extends 'dashboard/themes/base.html' %}
 {% load static %}
+{% load map_components %}
 {% load memories_components %}
 
 {% block header %}
@@ -28,6 +29,18 @@
 
     <div class="page-inner">
         {% if unlogged_visits %}
+        <div class="pin-select-map-wrap">
+            <div id="unlogged-visits-map" class="pin-select-map" data-map-data-url="{% url 'memories.visits.map_data' %}"></div>
+            {% map_layers_panel "street,terrain,satellite,dark" panel_id="unlogged-visits-map-layers" %}
+            <button type="button" class="pin-select-toggle" id="unlogged-visits-select-toggle" title="Drag-select multiple pins">
+                <i class="material-symbols-outlined">select_all</i>
+                <span>Select multiple</span>
+            </button>
+        </div>
+        <p class="pin-select-map-hint">
+            <i class="material-symbols-outlined">info</i>
+            Click a pin to select it, or turn on "Select multiple" to drag across the map - then use the toolbar below to log or dismiss your selection.
+        </p>
         {% include "dashboard/partials/memories/_unlogged_visits.html" %}
         {% else %}
         <section class="visits-empty-state" aria-labelledby="visits-empty-title">
@@ -50,6 +63,66 @@
         {% endif %}
     </div>
 </div>
+
+{% if unlogged_visits %}
+{% include "dashboard/partials/ui/_bulk_toolbar.html" with namespace="unlogged_visits" actions=bulk_actions %}
+<script src="{% static 'js/bulk-toolbar.js' %}"></script>
+<script src="{% static 'js/pin-select-map.js' %}"></script>
+
+<script>
+(function () {
+    var mapEl = document.getElementById('unlogged-visits-map');
+    if (!mapEl) return;
+
+    var bulkUrls = { log: '{% url "memories.visits.bulk" "log" %}', unmark: '{% url "memories.visits.bulk" "unmark" %}' };
+    var csrfToken = '{{ csrf_token }}';
+
+    function markerIcon(item, selected) {
+        return L.divIcon({
+            className: 'pin-select-marker' + (selected ? ' is-selected' : ''),
+            html: '<i class="material-symbols-outlined">location_on</i>',
+            iconSize: [30, 30],
+            iconAnchor: [15, 15],
+        });
+    }
+
+    function runBulkAction(action, ids) {
+        return fetch(bulkUrls[action], {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+            body: JSON.stringify({ pin_slugs: ids }),
+        })
+        .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
+        .then(function (data) {
+            var n = data.processed || 0;
+            var verb = action === 'log' ? 'Logged' : 'Unmarked';
+            if (window.toastr) toastr.success(verb + ' ' + n + ' visit' + (n === 1 ? '' : 's') + '.');
+        });
+    }
+
+    window.PinSelectMap.create(mapEl, {
+        dataUrl: mapEl.dataset.mapDataUrl,
+        itemsKey: 'pins',
+        idKey: 'id',
+        icon: markerIcon,
+        tooltip: function (item) { return item.name || (item.latitude.toFixed(5) + ', ' + item.longitude.toFixed(5)); },
+        cardEl: function (id) { return document.getElementById('unlogged-card-' + id); },
+        wrapEl: document.getElementById('memories-unlogged-band'),
+        checkboxSelector: '.pin-select-cb',
+        checkboxIdAttr: 'pinSlug',
+        layersPanelId: 'unlogged-visits-map-layers',
+        selectToggleBtnId: 'unlogged-visits-select-toggle',
+        namespace: 'unlogged_visits',
+        bulkActions: { log: function (ids) { return runBulkAction('log', ids); }, unmark: function (ids) { return runBulkAction('unmark', ids); } },
+        onMarkerClick: function (item) {
+            var card = document.getElementById('unlogged-card-' + item.id);
+            if (card) card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        },
+        refreshEvent: 'refreshQueue',
+    });
+})();
+</script>
+{% endif %}
 
 {% include "dashboard/partials/memories/_visit_dialog.html" %}
 {% endblock %}
