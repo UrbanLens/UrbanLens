@@ -12,10 +12,12 @@ from django.views import View
 
 from urbanlens.dashboard.forms.search import SearchForm
 from urbanlens.dashboard.models.labels.meta import ICON_CATEGORIES
+from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.saved_filter.model import SavedFilter
 from urbanlens.dashboard.services.filter_criteria import deserialize_criteria, serialize_form_criteria
 from urbanlens.dashboard.services.geo import dissolve_polygons
+from urbanlens.dashboard.services.saved_filter_cache import get_or_compute_matching_uuids
 
 if TYPE_CHECKING:
     from django.contrib.gis.geos import MultiPolygon
@@ -215,6 +217,58 @@ class SavedFilterSuggestNameView(LoginRequiredMixin, View):
         summary = filter_criteria_summary(criteria)
         suggested = summary[:100] if summary and summary != "No conditions set" else None
         return JsonResponse({"name": suggested})
+
+
+class SavedFilterMatchCountsView(LoginRequiredMixin, View):
+    """Live per-filter matching-pin counts for the map toolbar's icon-less filter badges.
+
+    GET /saved-filters/counts/ → JSON ``{"counts": {filter_uuid: count}}``
+
+    An icon-less saved filter's toolbar button shows a live count instead of a
+    generic fallback icon (otherwise every icon-less filter looks identical).
+    The count is "how many pins would be visible if this filter were turned
+    on right now" - the candidate filter combined with the sidebar's own
+    ``SearchForm`` criteria AND every OTHER toolbar filter currently active
+    (excluding the candidate itself, so an already-active filter's own count
+    isn't AND-ed against itself). Reads the same fields ``SearchForm`` and
+    ``_apply_toolbar_filters`` read, sent via the same ``hx-include``/params
+    the map page already builds for ``map.pins.list``/``map.search``.
+    """
+
+    def get(self, request):
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+
+        saved_filters = list(SavedFilter.objects.filter(profile=profile))
+        if not saved_filters:
+            return JsonResponse({"counts": {}})
+
+        base_query = Pin.objects.filter(profile=profile).root_pins()
+        search_form = SearchForm(request.GET, profile=profile)
+        if search_form.is_valid():
+            criteria = dict(search_form.cleaned_data)
+            parsed_groups = search_form.parse_label_groups()
+            if parsed_groups is not None:
+                criteria["label_groups"] = parsed_groups
+            if (custom_field_criteria := search_form.parse_custom_field_criteria()) is not None:
+                criteria["custom_fields"] = custom_field_criteria
+            criteria["include_regions"] = search_form.parse_region_geojson("include_regions")
+            criteria["exclude_regions"] = search_form.parse_region_geojson("exclude_regions")
+            base_query = base_query.filter_by_criteria(criteria)
+
+        active_ids = {v for v in request.GET.get("toolbar_filter_ids", "").split(",") if v.strip()}
+        active_filters = [f for f in saved_filters if str(f.uuid) in active_ids]
+
+        counts: dict[str, int] = {}
+        for candidate in saved_filters:
+            query = base_query
+            for other in active_filters:
+                if other.uuid == candidate.uuid:
+                    continue
+                query = query.filter(uuid__in=get_or_compute_matching_uuids(profile, other))
+            query = query.filter(uuid__in=get_or_compute_matching_uuids(profile, candidate))
+            counts[str(candidate.uuid)] = query.count()
+
+        return JsonResponse({"counts": counts})
 
 
 class SavedFilterDeleteView(LoginRequiredMixin, View):

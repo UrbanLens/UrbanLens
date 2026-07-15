@@ -354,6 +354,7 @@ div.section {
     bottom: 28px !important;
     right: 10px !important;
     max-width: min(70vw, 22rem);
+    transition: right 0.22s cubic-bezier(.4, 0, .2, 1), opacity 0.2s ease;
 
     .sf-toolbar-nav {
         background: transparent;
@@ -403,6 +404,14 @@ div.section {
             font-size: 1.2rem;
             line-height: 1;
             pointer-events: none;
+        }
+
+        .sf-toolbar-count {
+            font-size: .78rem;
+            font-weight: 700;
+            line-height: 1;
+            pointer-events: none;
+            font-variant-numeric: tabular-nums;
         }
 
         &:hover,

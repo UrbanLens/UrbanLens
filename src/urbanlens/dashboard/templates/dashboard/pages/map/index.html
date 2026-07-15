@@ -3309,6 +3309,31 @@
         htmx.ajax('GET', `{% url 'map.pins.list' %}?${params.toString()}`, { target: '#pin-list-body', swap: 'innerHTML' });
     }
 
+    // Icon-less saved filters show a live "how many pins would match" count
+    // instead of a generic fallback icon (see _saved_filters_toolbar.html) -
+    // refreshed whenever the sidebar's filter criteria or the set of active
+    // toolbar filters changes, same trigger points as _refreshPinList().
+    function sfToolbarRefreshCounts() {
+        const placeholders = document.querySelectorAll('#map-saved-filters-toolbar [data-count-placeholder]');
+        if (!placeholders.length) return;
+        const form = document.getElementById('filter-form');
+        if (!form) return;
+        const params = new URLSearchParams(new FormData(form));
+        fetch(`{% url 'saved_filters.counts' %}?${params.toString()}`)
+            .then((r) => (r.ok ? r.json() : null))
+            .then((data) => {
+                if (!data) return;
+                placeholders.forEach((el) => {
+                    const btn = el.closest('.sf-toolbar-btn');
+                    const uuid = btn ? btn.dataset.filterUuid : null;
+                    if (uuid && Object.prototype.hasOwnProperty.call(data.counts, uuid)) {
+                        el.textContent = String(data.counts[uuid]);
+                    }
+                });
+            })
+            .catch(() => {});
+    }
+
     function _flyToPinFromList(slug, lat, lng) {
         if (lat == null || lng == null) return;
         _programmaticMove = true;
@@ -3395,7 +3420,7 @@
         });
     }
 
-    document.getElementById('filter-form').addEventListener('change', () => _refreshPinList());
+    document.getElementById('filter-form').addEventListener('change', () => { _refreshPinList(); sfToolbarRefreshCounts(); });
     let _pinListInputTimer;
     document.getElementById('filter-form').addEventListener('input', (e) => {
         if (e.target.name !== 'name') return;
@@ -3700,6 +3725,7 @@
         const form = document.getElementById('filter-form');
         htmx.trigger(form, 'change');
         _refreshPinList();
+        sfToolbarRefreshCounts();
         _updateFilterLabel();
     }
 
@@ -3714,7 +3740,11 @@
     function _sfToolbarVisibleCount() {
         const viewport = document.querySelector('.sf-toolbar-viewport');
         if (!viewport) return 10;
-        return Math.max(1, Math.floor(viewport.clientWidth / _sfToolbarPageSize())) || 10;
+        // +4 compensates for there being no trailing gap after the last button
+        // (the track is exactly N*width + (N-1)*gap wide) - without it, this
+        // undercounts by one whenever everything fits exactly (e.g. a viewport
+        // sized for exactly 2 buttons was computing room for only 1).
+        return Math.max(1, Math.floor((viewport.clientWidth + 4) / _sfToolbarPageSize())) || 10;
     }
     function sfToolbarPage(direction) {
         const total = _sfToolbarButtonCount();
@@ -3725,13 +3755,18 @@
     }
     function _sfToolbarRender() {
         const track = document.getElementById('sf-toolbar-track');
+        const viewport = document.querySelector('.sf-toolbar-viewport');
         const root = document.getElementById('map-saved-filters-toolbar');
-        if (!track || !root) return;
-        track.style.transform = `translateX(-${_sfToolbarPageIdx * _sfToolbarPageSize()}px)`;
-        const total = _sfToolbarButtonCount();
-        const perPage = _sfToolbarVisibleCount();
-        root.classList.toggle('has-prev', _sfToolbarPageIdx > 0);
-        root.classList.toggle('has-next', _sfToolbarPageIdx + perPage < total);
+        if (!track || !root || !viewport) return;
+        const offset = _sfToolbarPageIdx * _sfToolbarPageSize();
+        track.style.transform = `translateX(-${offset}px)`;
+        // Whether there's actually more content is a direct pixel-geometry
+        // question, not a perPage/total arithmetic estimate (which inherits the
+        // same "assumes a trailing gap" rounding the page-size calc above has to
+        // work around) - a 1px tolerance avoids sub-pixel rounding flicker for
+        // content that fits exactly.
+        root.classList.toggle('has-prev', offset > 1);
+        root.classList.toggle('has-next', track.scrollWidth - offset - viewport.clientWidth > 1);
     }
 
     // Re-sync toggle state + paging whenever the toolbar is (re)rendered - initial page
@@ -3761,6 +3796,7 @@
         }
         _sfToolbarPageIdx = 0;
         _sfToolbarRender();
+        sfToolbarRefreshCounts();
     }
     document.body.addEventListener('htmx:oobAfterSwap', (e) => {
         if (e.detail?.target?.id === 'map-saved-filters-toolbar') _sfToolbarInit();

@@ -31,7 +31,10 @@ DOM, the OOB fragment is simply ignored by htmx.
                 {% elif filter.icon %}
                 <span class="sf-toolbar-emoji">{{ filter.icon }}</span>
                 {% else %}
-                <i class="material-symbols-outlined">bookmark</i>
+                {# No custom icon - show a live "how many pins would match" count instead
+                   of a generic icon, so icon-less filters are distinguishable from each
+                   other (see sfToolbarRefreshCounts() in map/index.html). #}
+                <span class="sf-toolbar-count" data-count-placeholder>&nbsp;</span>
                 {% endif %}
             </button>
             {% endfor %}

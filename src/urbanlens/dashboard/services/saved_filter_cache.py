@@ -1,11 +1,17 @@
 """Backend cache for a saved filter's matching pin uuids.
 
 Mirrors the ``community_counts.py`` pattern: a plain Redis-backed
-``django.core.cache`` entry, not a DB table. The cache key embeds the
+``django.core.cache`` entry, not a DB table. The cache key embeds both the
 profile's pins ``last_updated`` fingerprint (the same aggregate the
-``map.pins.meta`` endpoint already computes), so an entry self-invalidates
-the moment any of that profile's pins change - no manual invalidation
+``map.pins.meta`` endpoint already computes) AND the saved filter's own
+``updated`` timestamp, so an entry self-invalidates the moment either the
+matching pins OR the filter's own criteria change - no manual invalidation
 signal is needed, and a stale entry can never outlive the data it describes.
+(The filter's own timestamp was missing here for a while: editing a saved
+filter's criteria alone, with no pin edited in between, left old - sometimes
+empty - results cached indefinitely, which is exactly why the map toolbar
+could show 0 matches for a filter that a Lists page smart-list, which never
+caches this and always recomputes fresh, correctly showed 400+ matches for.)
 
 Security note: every function here takes a ``Profile`` and only ever queries
 ``Pin.objects.filter(profile=profile)`` / reads ``saved_filter.criteria`` for
@@ -27,8 +33,8 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.models.saved_filter.model import SavedFilter
 
-_CACHE_TIMEOUT = 60 * 60 * 24  # 1 day - the last-updated fingerprint in the key is the real expiry
-_CACHE_KEY_TEMPLATE = "saved_filter_pins:{profile_id}:{filter_uuid}:{fingerprint}"
+_CACHE_TIMEOUT = 60 * 60 * 24  # 1 day - the last-updated fingerprints in the key are the real expiry
+_CACHE_KEY_TEMPLATE = "saved_filter_pins:{profile_id}:{filter_uuid}:{filter_updated}:{fingerprint}"
 
 
 def _pins_fingerprint(profile: Profile) -> str:
@@ -54,7 +60,12 @@ def get_or_compute_matching_uuids(profile: Profile, saved_filter: SavedFilter) -
     from urbanlens.dashboard.models.pin import Pin
     from urbanlens.dashboard.services.filter_criteria import deserialize_criteria
 
-    key = _CACHE_KEY_TEMPLATE.format(profile_id=profile.pk, filter_uuid=saved_filter.uuid, fingerprint=_pins_fingerprint(profile))
+    key = _CACHE_KEY_TEMPLATE.format(
+        profile_id=profile.pk,
+        filter_uuid=saved_filter.uuid,
+        filter_updated=saved_filter.updated.isoformat(),
+        fingerprint=_pins_fingerprint(profile),
+    )
     cached = cache.get(key)
     if cached is not None:
         return cached

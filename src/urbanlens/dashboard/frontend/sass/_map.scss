@@ -3287,6 +3287,18 @@ div.container .addr-search-bar {
     }
 }
 
+/* Same shift for the bottom-right saved-filters toolbar - needs !important since
+   .map-saved-filters-toolbar (_layout.scss) already pins `right` with !important
+   to stay bottom-right at every breakpoint (unlike .map-buttons, which flips to
+   top-right on desktop) - without matching !important here, that unconditional
+   pin always won regardless of source order/specificity, so the toolbar never
+   moved out from under the filter panel when it opened. */
+#map.filter-open .map-saved-filters-toolbar {
+    @include up($breakpoint-sm) {
+        right: calc(272px + 12px) !important;
+    }
+}
+
 /* Shift left-side map elements right when the pin list panel is open so they don't overlap */
 .map-layers-panel,
 #addr-search-bar,
