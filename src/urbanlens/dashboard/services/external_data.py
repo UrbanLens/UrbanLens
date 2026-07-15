@@ -633,7 +633,7 @@ def schedule_panel_fetch(source_key: str, pin: Pin) -> bool:
     """
     source = get_panel_source(source_key)
     if source is None:
-        logger.warning("schedule_panel_fetch: unknown source '%s' for pin %s", source_key, pin.pk)
+        logger.warning("schedule_panel_fetch: unknown source '%s' for pin %s", source_key, getattr(pin, "pk", None))
         return False
     if not pin.profile.external_apis_enabled:
         return False
