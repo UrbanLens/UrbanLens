@@ -125,8 +125,12 @@ class WebhookHandler(BaseHTTPRequestHandler):
             self._respond(400, "invalid JSON body")
             return
 
+        # Strip the fixed "refs/heads/" prefix rather than splitting on "/" -
+        # branch names routinely contain slashes themselves (e.g. "feature/x"),
+        # which a rsplit("/", 1) would truncate down to just the last segment.
         ref = payload.get("ref", "")
-        pushed_branch = ref.rsplit("/", 1)[-1] if ref else ""
+        prefix = "refs/heads/"
+        pushed_branch = ref[len(prefix):] if ref.startswith(prefix) else ""
         if pushed_branch != BRANCH:
             self._respond(200, f"ignored: push to '{pushed_branch or 'unknown'}', watching '{BRANCH}'")
             return
