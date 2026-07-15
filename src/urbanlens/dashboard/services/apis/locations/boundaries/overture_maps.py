@@ -85,8 +85,16 @@ class OvertureMapsGateway(Gateway, BoundaryProvider):
         release: Pin a specific release tag (e.g. "2026-06-17.0"). Leave as
             None to always resolve the latest release via Overture's STAC
             catalog.
-        connect_timeout: Optional S3 connection timeout, seconds.
-        request_timeout: Optional S3 request timeout, seconds.
+        connect_timeout: S3 connection timeout, seconds. Defaults to a bound
+            rather than None (unbounded) - a slow/stalled S3 read otherwise
+            blocks the Celery worker running it well past the panel's own
+            soft/hard time limits, since pyarrow's read isn't itself
+            interruptible the way a plain requests call is. Pass None
+            explicitly to opt back into no timeout.
+        request_timeout: S3 request timeout, seconds. Same reasoning as
+            connect_timeout, just a larger bound since a range-read over a
+            GeoParquet shard can legitimately take longer than a bare TCP
+            connect.
     """
 
     service_key: ClassVar[str | None] = None  # no HTTP endpoint of ours to rate-limit
@@ -94,8 +102,8 @@ class OvertureMapsGateway(Gateway, BoundaryProvider):
     boundary_kind: ClassVar[str] = "building"
 
     release: str | None = None
-    connect_timeout: int | None = None
-    request_timeout: int | None = None
+    connect_timeout: int | None = 10
+    request_timeout: int | None = 30
     bbox_delta: float = BOUNDARY_LOOKUP_BBOX_DEGREES
 
     def __post_init__(self) -> None:
