@@ -42,22 +42,25 @@ logger = logging.getLogger(__name__)
 
 _CACHE_SOURCE = "epa_echo"
 
-#: Nearby-search candidates (closest-first is NOT guaranteed - see
-#: EpaEchoGateway.get_nearby_facilities) whose Detailed Facility Report gets
-#: fetched to look for an exact-site match. Bounded to limit the extra API
-#: calls this adds; there's no cheaper way to find the truly closest facility
-#: since the nearby-search response has no per-facility longitude to sort by.
-_EXACT_MATCH_CANDIDATES = 2
 #: A facility whose DFR coordinates are within this distance of the pin's own
 #: coordinates is treated as "this facility IS the pin", not just nearby.
 _EXACT_MATCH_RADIUS_MILES = 0.1
-#: Wall-clock ceiling on the exact-match DFR lookup loop, independent of the
-#: per-call timeout or candidate count - this whole fetch runs inside a Celery
-#: task sharing a worker pool with ~10 other panel fetches on a cold pin page
-#: (see docker-compose.yml's celery-worker concurrency comment), so a
-#: degraded ECHO API must not be allowed to hold a worker slot for anywhere
-#: near the task's own 110s soft time limit and starve the other panels.
-_EXACT_MATCH_BUDGET_SECONDS = 20.0
+#: Wall-clock ceiling on the exact-match DFR lookup loop - the real bound on
+#: how many of the (up to 10) nearby-search candidates get checked, not a
+#: fixed candidate count. Earlier versions of this loop capped the candidate
+#: count directly (first 3, then 2, to bound worst-case latency) - but that
+#: traded away correctness for no reason once this budget existed: closest-
+#: first is NOT guaranteed in the nearby-search response (see
+#: EpaEchoGateway.get_nearby_facilities, no per-facility longitude to sort by
+#: client-side), so checking fewer candidates directly means missing more
+#: genuine exact-site matches whenever the right one isn't near the front of
+#: an unsorted list - confirmed in production, where reducing the cap to 2
+#: caused a facility that WAS in the nearby results to stop being found. The
+#: budget alone already bounds worst-case latency (this whole fetch runs
+#: inside a Celery task sharing a worker pool with ~10 other panel fetches on
+#: a cold pin page - see docker-compose.yml's celery-worker concurrency
+#: comment), so there's no latency reason left to also cap the count.
+_EXACT_MATCH_BUDGET_SECONDS = 30.0
 
 
 def _miles_between(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
@@ -86,7 +89,7 @@ def _fetch_epa_echo_data(pin: Pin) -> dict[str, Any]:
     exact_site = None
     best_distance = _EXACT_MATCH_RADIUS_MILES
     started = time.monotonic()
-    for facility in facilities[:_EXACT_MATCH_CANDIDATES]:
+    for facility in facilities:
         if time.monotonic() - started >= _EXACT_MATCH_BUDGET_SECONDS:
             logger.warning("EPA ECHO exact-site match budget exceeded for pin %s; stopping early", pin.pk)
             break

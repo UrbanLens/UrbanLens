@@ -9,6 +9,8 @@ boundary-provider chain (``services.apis.locations.boundaries.overture_maps``).
 
 from __future__ import annotations
 
+import logging
+import time
 from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
@@ -17,6 +19,18 @@ from urbanlens.dashboard.services.external_data import InfoPanelSource
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.services.external_data import PanelSource
+
+logger = logging.getLogger(__name__)
+
+#: get_building_attributes() and get_nearby_places() are each independent S3
+#: GeoParquet range reads (connect/request timeouts of 10s/30s each - see
+#: OvertureMapsGateway), and observed in production to occasionally each take
+#: close to their own ceiling, compounding to 100s+ for one fetch() call when
+#: run back-to-back. get_nearby_places() is the less essential of the two
+#: (building attributes are this panel's primary content); skip it once the
+#: first call has already eaten most of a reasonable total budget, rather
+#: than always paying for both regardless of how slow the first one was.
+_NEARBY_PLACES_BUDGET_SECONDS = 20.0
 
 
 class OvertureBuildingAttributesPanelSource(InfoPanelSource):
@@ -43,8 +57,21 @@ class OvertureBuildingAttributesPanelSource(InfoPanelSource):
         lat = float(pin.effective_latitude or 0)
         lng = float(pin.effective_longitude or 0)
         gateway = OvertureMapsGateway()
+
+        started = time.monotonic()
         attributes = gateway.get_building_attributes(lat, lng) or {}
-        nearby_places = gateway.get_nearby_places(lat, lng, radius_m=150, limit=5)
+
+        nearby_places: list = []
+        elapsed = time.monotonic() - started
+        if elapsed < _NEARBY_PLACES_BUDGET_SECONDS:
+            nearby_places = gateway.get_nearby_places(lat, lng, radius_m=150, limit=5)
+        else:
+            logger.warning(
+                "Overture building-attributes fetch for pin %s skipping get_nearby_places - get_building_attributes already took %.1fs",
+                pin.pk,
+                elapsed,
+            )
+
         LocationCache.set(pin.location, self.cache_source, {**attributes, "nearby_places": nearby_places}, query_key=f"{lat:.5f},{lng:.5f}")
 
     def render_context(self, pin: Pin, data: dict) -> dict | None:
