@@ -106,6 +106,21 @@ class TripQuerySet(abstract.DashboardQuerySet):
 
         return sorted(qs, key=bucket_key)
 
+    def upcoming(self, profile: Profile) -> TripQuerySet:
+        """Return the viewer's upcoming (or still-planning, undated) trips.
+
+        A trip counts as upcoming if it has a future/today start date, or has
+        no start date at all but at least one activity scheduled today or later.
+
+        Args:
+            profile: The viewer's profile; only their trips are included.
+
+        Returns:
+            Matching trips, unordered (callers apply their own ordering/limit).
+        """
+        today = timezone.now().date()
+        return self.filter(profiles=profile).filter(Q(start_date__gte=today) | Q(start_date__isnull=True, activities__scheduled_at__date__gte=today)).distinct()
+
     def recently_updated(self, profile: Profile, limit: int = 5) -> TripQuerySet:
         """Return the viewer's trips ordered by most recently updated, for the overview page.
 

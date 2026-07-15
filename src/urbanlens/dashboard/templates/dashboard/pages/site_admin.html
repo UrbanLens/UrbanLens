@@ -46,6 +46,42 @@
                        value="{{ settings.max_trip_members }}" min="1" max="500">
             </div>
             <div class="form-row">
+                <label for="max-trip-activities">Maximum activities per trip</label>
+                <p class="form-help">Users cannot add more than this many activities to a single trip. Set to <strong>0</strong> for unlimited.</p>
+                <input type="number" name="max_trip_activities" id="max-trip-activities"
+                       value="{{ settings.max_trip_activities }}" min="0" max="10000">
+            </div>
+            <div class="form-row">
+                <label for="max-upcoming-trips-per-user">Maximum upcoming trips per user</label>
+                <p class="form-help">Users cannot belong to more than this many upcoming (or still-planning) trips at once. Set to <strong>0</strong> for unlimited.</p>
+                <input type="number" name="max_upcoming_trips_per_user" id="max-upcoming-trips-per-user"
+                       value="{{ settings.max_upcoming_trips_per_user }}" min="0" max="10000">
+            </div>
+            <div class="form-row">
+                <label for="max-pins-per-list">Maximum pins per list</label>
+                <p class="form-help">Users cannot add more than this many pins to a single list. Set to <strong>0</strong> for unlimited.</p>
+                <input type="number" name="max_pins_per_list" id="max-pins-per-list"
+                       value="{{ settings.max_pins_per_list }}" min="0" max="1000000">
+            </div>
+            <div class="form-row">
+                <label for="max-friends-per-user">Maximum friends per user</label>
+                <p class="form-help">Users cannot have more than this many friends. Set to <strong>0</strong> for unlimited.</p>
+                <input type="number" name="max_friends_per_user" id="max-friends-per-user"
+                       value="{{ settings.max_friends_per_user }}" min="0" max="1000000">
+            </div>
+            <div class="form-row">
+                <label for="max-group-chat-members">Maximum group chat members</label>
+                <p class="form-help">Users cannot add more than this many members to a direct message group chat. Set to <strong>0</strong> for unlimited.</p>
+                <input type="number" name="max_group_chat_members" id="max-group-chat-members"
+                       value="{{ settings.max_group_chat_members }}" min="0" max="10000">
+            </div>
+            <div class="form-row">
+                <label for="max-safety-checkin-contacts">Maximum contacts per safety check-in</label>
+                <p class="form-help">Users cannot notify more than this many contacts on a single safety check-in. Set to <strong>0</strong> for unlimited.</p>
+                <input type="number" name="max_safety_checkin_contacts" id="max-safety-checkin-contacts"
+                       value="{{ settings.max_safety_checkin_contacts }}" min="0" max="1000">
+            </div>
+            <div class="form-row">
                 <label for="environment-override">Environment</label>
                 <p class="form-help">
                     Controls site-wide behavior such as the admin dev toolbar.

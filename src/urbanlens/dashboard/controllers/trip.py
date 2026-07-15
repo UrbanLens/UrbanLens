@@ -727,6 +727,10 @@ class TripCreateView(LoginRequiredMixin, View):
         if length_error:
             return HttpResponse(length_error, status=400)
 
+        max_upcoming = SiteSettings.get_current().max_upcoming_trips_per_user
+        if max_upcoming > 0 and Trip.objects.upcoming(profile).count() >= max_upcoming:
+            return HttpResponse(f"You already have the maximum of {max_upcoming} upcoming trips.", status=400)
+
         trip = Trip.objects.create(
             name=name,
             description=description,
@@ -914,6 +918,10 @@ class TripActivitiesView(LoginRequiredMixin, View):
             status = "proposed"
 
         location_hidden = body.get("location_hidden") in {"true", "1", "on", True}
+
+        max_activities = SiteSettings.get_current().max_trip_activities
+        if max_activities > 0 and trip.activities.count() >= max_activities:
+            return HttpResponse(f"This trip already has the maximum of {max_activities} activities.", status=400)
 
         TripActivity.objects.create(
             trip=trip,

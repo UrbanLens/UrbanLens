@@ -549,6 +549,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 "page_obj": page_obj,
                 "pins": page_obj.object_list,
                 "total_count": page_obj.paginator.count,
+                "max_pins_per_list": SiteSettings.get_current().max_pins_per_list,
             },
         )
 

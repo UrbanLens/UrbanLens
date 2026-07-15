@@ -39,6 +39,54 @@ class SiteSettings(abstract.FrontendDashboardModel):
         help_text="Maximum number of members allowed per trip.",
         validators=[MinValueValidator(0.0), MaxValueValidator(100.0)],
     )
+    max_trip_activities = IntegerField(
+        default=100,
+        help_text="Maximum number of activities allowed per trip. Set to 0 for unlimited.",
+        verbose_name="Max activities per trip",
+        validators=[MinValueValidator(0), MaxValueValidator(10_000)],
+    )
+    max_upcoming_trips_per_user = IntegerField(
+        default=100,
+        help_text="Maximum number of upcoming (or undated, still-planning) trips a user may belong to at once. Set to 0 for unlimited.",
+        verbose_name="Max upcoming trips per user",
+        validators=[MinValueValidator(0), MaxValueValidator(10_000)],
+    )
+
+    # --- Pin lists ---
+
+    max_pins_per_list = IntegerField(
+        default=0,
+        help_text="Maximum number of pins allowed in a single list. Set to 0 for unlimited.",
+        verbose_name="Max pins per list",
+        validators=[MinValueValidator(0), MaxValueValidator(1_000_000)],
+    )
+
+    # --- Friendships ---
+
+    max_friends_per_user = IntegerField(
+        default=0,
+        help_text="Maximum number of friends a user may have. Set to 0 for unlimited.",
+        verbose_name="Max friends per user",
+        validators=[MinValueValidator(0), MaxValueValidator(1_000_000)],
+    )
+
+    # --- Direct message group chats ---
+
+    max_group_chat_members = IntegerField(
+        default=20,
+        help_text="Maximum number of members allowed in a direct message group chat. Set to 0 for unlimited.",
+        verbose_name="Max group chat members",
+        validators=[MinValueValidator(0), MaxValueValidator(10_000)],
+    )
+
+    # --- Safety check-ins ---
+
+    max_safety_checkin_contacts = IntegerField(
+        default=5,
+        help_text="Maximum number of contacts a user may notify per safety check-in. Set to 0 for unlimited.",
+        verbose_name="Max contacts per safety check-in",
+        validators=[MinValueValidator(0), MaxValueValidator(1_000)],
+    )
 
     # Chernobyl Exclusion Zone ≈ 2,600 km².  Used as a sanity cap on how large
     # a user-drawn bounding box for a location can be.
@@ -472,4 +520,10 @@ class SiteSettings(abstract.FrontendDashboardModel):
             CheckConstraint(condition=Q(image_downscale_max_dimension__gte=256), name="image_downscale_max_dim_gte_256"),
             CheckConstraint(condition=Q(max_upload_file_size_mb__gte=1), name="max_upload_file_size_mb_gte_1"),
             CheckConstraint(condition=Q(video_downscale_max_height__gte=240), name="video_downscale_max_height_gte_240"),
+            CheckConstraint(condition=Q(max_trip_activities__gte=0), name="max_trip_activities_gte_0"),
+            CheckConstraint(condition=Q(max_upcoming_trips_per_user__gte=0), name="max_upcoming_trips_per_user_gte_0"),
+            CheckConstraint(condition=Q(max_pins_per_list__gte=0), name="max_pins_per_list_gte_0"),
+            CheckConstraint(condition=Q(max_friends_per_user__gte=0), name="max_friends_per_user_gte_0"),
+            CheckConstraint(condition=Q(max_group_chat_members__gte=0), name="max_group_chat_members_gte_0"),
+            CheckConstraint(condition=Q(max_safety_checkin_contacts__gte=0), name="max_safety_checkin_contacts_gte_0"),
         ]

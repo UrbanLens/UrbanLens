@@ -279,7 +279,8 @@ def validate_notifiable_contacts(
         (e.g. a friend picked by avatar *and* separately typed in by their own email -
         two different-looking chips that ``_resolve_contact`` resolves to the same account);
       - a contact who has opted out and would never actually be notified (see
-        ``is_contact_opted_out``).
+        ``is_contact_opted_out``);
+      - a contact submitted past the site's ``max_safety_checkin_contacts`` limit.
 
     Args:
         owner: The profile these contacts are being added for.
@@ -289,6 +290,10 @@ def validate_notifiable_contacts(
     Returns:
         (allowed, rejected_messages).
     """
+    from urbanlens.dashboard.models.site_settings.model import SiteSettings
+
+    max_contacts = SiteSettings.get_current().max_safety_checkin_contacts
+
     allowed: list[ContactInput] = []
     rejected: list[str] = []
     seen: set[tuple[int | None, str | None]] = set()
@@ -304,6 +309,8 @@ def validate_notifiable_contacts(
             rejected.append(f"{label} was already added.")
         elif is_contact_opted_out(resolved_profile, resolved_email, owner=owner, checkin=checkin):
             rejected.append(f"{label} has opted out of notifications and wasn't added.")
+        elif max_contacts > 0 and len(allowed) >= max_contacts:
+            rejected.append(f"{label} wasn't added - a check-in can have at most {max_contacts} contacts.")
         else:
             seen.add(key)
             allowed.append((contact_profile, email, name))

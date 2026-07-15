@@ -285,6 +285,8 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
             return HttpResponse("Friend request not found.", status=404)
 
         if not friendship.accept():
+            if Friendship.profile_at_max_friends(request.user.profile) or Friendship.profile_at_max_friends(friendship.from_profile):
+                return HttpResponse("This would exceed the maximum number of friends allowed.", status=403)
             return HttpResponse("Enable Community in Settings to accept friend requests.", status=403)
 
         # Notify the original requester that their request was accepted.

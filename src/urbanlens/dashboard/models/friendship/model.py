@@ -107,17 +107,42 @@ class Friendship(DashboardModel):
         friendship.save()
         return friendship
 
+    @staticmethod
+    def profile_at_max_friends(profile: Profile) -> bool:
+        """Return whether ``profile`` is already at the site's max-friends limit.
+
+        Args:
+            profile: Profile to check.
+
+        Returns:
+            True when the site's ``max_friends_per_user`` is set (non-zero)
+            and ``profile`` already has that many accepted friends.
+        """
+        from urbanlens.dashboard.models.site_settings.model import SiteSettings
+
+        max_friends = SiteSettings.get_current().max_friends_per_user
+        if max_friends <= 0:
+            return False
+        return Friendship.objects.profile(profile).is_friend().count() >= max_friends
+
     def accept(self) -> bool:
         """Accept a friendship request.
 
         Returns:
             True if accepted, False (no-op) if either profile has Community
             disabled - accepting would create a mutual, visible friendship,
-            which a Community-disabled profile cannot have.
+            which a Community-disabled profile cannot have - or if either
+            profile is already at the site's max-friends limit.
         """
         if not self.from_profile.community_enabled or not self.to_profile.community_enabled:
             logger.info("Friendship accept blocked: Community disabled for from=%s or to=%s", self.from_profile_id, self.to_profile_id)
             return False
+
+        for profile in (self.from_profile, self.to_profile):
+            if Friendship.profile_at_max_friends(profile):
+                logger.info("Friendship accept blocked: profile=%s already at max_friends_per_user", profile.pk)
+                return False
+
         self.status = FriendshipStatus.ACCEPTED
         self.save()
         return True

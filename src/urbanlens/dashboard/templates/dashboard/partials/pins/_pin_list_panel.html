@@ -6,6 +6,7 @@ Context:
   page_obj - a django.core.paginator.Page of matching Pin objects
   pins - page_obj.object_list (convenience alias)
   total_count - total number of pins matching the current filter criteria
+  max_pins_per_list - site's max pins per list setting (0 = unlimited)
 
 hx-include lets the pagination buttons (inherited from _pagination_controls.html)
 resend the filter-form fields on every page click, so filters stay applied.
@@ -15,9 +16,11 @@ resend the filter-form fields on every page click, so filters stay applied.
         <strong>{{ total_count }}</strong> place{{ total_count|pluralize }}
     </div>
     {% if total_count %}
-    <button type="button" class="pin-list-add-to-list-btn" onclick="openAddToListDialog()">
-        <i class="material-symbols-outlined">playlist_add</i> Add these pins to a list
-    </button>
+        {% if not max_pins_per_list or total_count < max_pins_per_list %}
+        <button type="button" class="pin-list-add-to-list-btn" onclick="openAddToListDialog()">
+            <i class="material-symbols-outlined">playlist_add</i> Add these pins to a list
+        </button>
+        {% endif %}
     {% endif %}
     {% if pins %}
     <ul class="pin-list">

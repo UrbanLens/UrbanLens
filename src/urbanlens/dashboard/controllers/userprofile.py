@@ -96,7 +96,6 @@ class ViewProfileView(LoginRequiredMixin, View):
         from urbanlens.dashboard.models.undo.model import UndoAction
         from urbanlens.dashboard.models.wiki_edit import WikiEdit
 
-        today = timezone.localdate()
         recent_pin_comments = Comment.objects.filter(profile=profile).select_related("pin", "wiki", "wiki__location").order_by("-created")[:5]
         recent_trip_comments = TripComment.objects.filter(author=profile).select_related("trip").order_by("-created")[:5]
         recent_comments = sorted(
@@ -139,7 +138,7 @@ class ViewProfileView(LoginRequiredMixin, View):
             ),
             "profile_recent_comments": recent_comments,
             "profile_recent_trips": Trip.objects.recently_active_past(profile, since=timezone.now() - timedelta(days=7)),
-            "profile_upcoming_trips": (Trip.objects.filter(profiles=profile).filter(Q(start_date__gte=today) | Q(start_date__isnull=True, activities__scheduled_at__date__gte=today)).distinct().order_by("start_date", "name")[:6]),
+            "profile_upcoming_trips": Trip.objects.upcoming(profile).order_by("start_date", "name")[:6],
             "profile_active_checkin": (SafetyCheckin.objects.filter(profile=profile, status__in=active_checkin_statuses).select_related("destination_location").order_by("checkin_by").first()),
         }
 

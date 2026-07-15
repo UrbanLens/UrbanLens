@@ -20,6 +20,7 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_list.model import PinList, PinListItem
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.saved_filter.model import SavedFilter
+from urbanlens.dashboard.models.site_settings.model import SiteSettings
 from urbanlens.dashboard.models.trips.model import Trip, TripMembership
 from urbanlens.dashboard.services.filter_criteria import serialize_form_criteria
 from urbanlens.dashboard.services.map_snapshot import materialize_markup_map
@@ -102,6 +103,23 @@ def _items_map_data(items: list[PinListItem]) -> list[dict[str, Any]]:
 def _render_items_panel(request: HttpRequest, pin_list: PinList) -> HttpResponse:
     items = _list_items_with_labels(pin_list)
     return render(request, _ITEMS_PANEL_TEMPLATE, {"pin_list": pin_list, "items": items, "items_map_data": _items_map_data(items)})
+
+
+def _show_toast(response: HttpResponse, message: str, level: str = "success") -> HttpResponse:
+    """Attach a showToast HX-Trigger to a response.
+
+    Args:
+        response: The response to annotate.
+        message: Toast message text.
+        level: toastr level (``success``, ``info``, ``warning``, ``error``).
+
+    Returns:
+        The same response, with the trigger header merged in.
+    """
+    triggers = json.loads(response.headers.get("HX-Trigger", "{}")) if response.headers.get("HX-Trigger") else {}
+    triggers["showToast"] = {"level": level, "message": message}
+    response["HX-Trigger"] = json.dumps(triggers)
+    return response
 
 
 def _parse_body(request: HttpRequest) -> dict[str, Any]:
@@ -379,10 +397,24 @@ class PinListAddPinsView(LoginRequiredMixin, View):
             return JsonResponse({"confirm_required": True, "count": len(new_pins)}, status=409)
 
         base_order = pin_list.items.count()
+
+        max_pins = SiteSettings.get_current().max_pins_per_list
+        truncated = False
+        if max_pins > 0:
+            remaining = max(0, max_pins - base_order)
+            if remaining <= 0:
+                return _show_toast(_render_items_panel(request, pin_list), f"This list is already at the maximum of {max_pins} pins.", level="warning")
+            if len(new_pins) > remaining:
+                new_pins = new_pins[:remaining]
+                truncated = True
+
         PinListItem.objects.bulk_create(
             [PinListItem(pin_list=pin_list, pin=pin, order=base_order + i, added_via=PinListItem.ADDED_MANUAL) for i, pin in enumerate(new_pins)],
         )
-        return _render_items_panel(request, pin_list)
+        response = _render_items_panel(request, pin_list)
+        if truncated:
+            response = _show_toast(response, f"Only added {len(new_pins)} pin(s) - this list is capped at {max_pins} pins.", level="warning")
+        return response
 
 
 class PinListRemoveItemView(LoginRequiredMixin, View):

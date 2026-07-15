@@ -151,6 +151,18 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
         except (ValueError, TypeError):
             pass
 
+        for limit_field in (
+            "max_trip_activities",
+            "max_upcoming_trips_per_user",
+            "max_pins_per_list",
+            "max_friends_per_user",
+            "max_group_chat_members",
+            "max_safety_checkin_contacts",
+        ):
+            if limit_field in request.POST:
+                with contextlib.suppress(ValueError, TypeError):
+                    setattr(settings, limit_field, max(0, int(request.POST.get(limit_field, getattr(settings, limit_field)))))
+
         app_title = request.POST.get("app_title", "").strip()
         if app_title:
             settings.app_title = app_title
@@ -250,6 +262,12 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
                 "image_downscale_max_dimension",
                 "max_upload_file_size_mb",
                 "video_downscale_max_height",
+                "max_trip_activities",
+                "max_upcoming_trips_per_user",
+                "max_pins_per_list",
+                "max_friends_per_user",
+                "max_group_chat_members",
+                "max_safety_checkin_contacts",
             )
             values = {field: getattr(settings, field) for field in clamped_fields if field in request.POST}
             return JsonResponse({"ok": True, "values": values})
