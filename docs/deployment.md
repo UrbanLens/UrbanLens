@@ -1,6 +1,6 @@
 # Automated deploys (staging / dev)
 
-Staging and dev redeploy automatically when the tracked branch is pushed,
+Staging and dev can redeploy automatically when the tracked branch is pushed,
 instead of someone ssh-ing in to run:
 
 ```bash
@@ -25,89 +25,101 @@ This is implemented as two pieces:
   `flock` so two triggers (e.g. a retried webhook delivery) can't race.
 - **`bin/deploy_webhook.py`** - a stdlib-only HTTP listener that verifies the
   webhook signature and, on a push to the configured branch, runs
-  `bin/deploy.sh` in the background. It runs as a plain host process (not a
-  docker compose service) specifically so that `docker compose down` doesn't
-  take it down with everything else.
+  `bin/deploy.sh` in the background. It's a plain script - no service
+  manager, no install step - so that `docker compose down` doesn't take it
+  down with everything else, and so it's trivial to start/stop by hand.
 
-Other established options considered:
+Other established options considered and not used: CI-driven deploy (GitHub
+Actions SSHing in) puts a deploy key with server access into CI secrets and
+costs Actions minutes per push; Watchtower polls a container *registry*,
+which doesn't fit since images here are built locally from source; a
+`post-receive` git hook only works if the server itself is the git remote,
+and this repo pushes to GitHub instead.
 
-- **CI-driven deploy (GitHub Actions + SSH)** - a workflow SSHes into the
-  server on push and runs the same commands. Centralizes config in the repo
-  instead of per-host, but means a deploy key with server access lives in CI
-  secrets, and every push consumes Actions minutes. Reasonable if you're
-  already leaning on Actions elsewhere.
-- **Watchtower** - polls a container registry for new image digests. Doesn't
-  fit here since images are built locally from source (`docker compose up
-  --build`) rather than pulled from a registry.
-- **A `post-receive` git hook** - only applies if the server itself is the git
-  remote you push to; this repo pushes to GitHub, so the server is always a
-  downstream clone.
+## Running it (manual, on demand)
 
-The webhook approach was chosen because it needs no extra service dependency,
-matches the existing pattern of host-side scripts in `bin/`, and keeps
-deploy credentials out of CI.
-
-## Setup
+This deliberately isn't a systemd service or anything else that installs
+itself into the host - the TrueNAS box this runs on is shared with other
+things, and host-level services there don't survive updates cleanly anyway.
+Instead, start the listener by hand when you're actively working and want
+pushes to auto-deploy, and stop it when you're done.
 
 1. **Add config to the checkout's `.env`** (see `.env-sample`):
 
    ```
    UL_DEPLOY_WEBHOOK_SECRET=<a long random value, e.g. `openssl rand -hex 32`>
-   UL_DEPLOY_WEBHOOK_BRANCH=staging   # or "development", etc - whatever this host tracks
+   UL_DEPLOY_WEBHOOK_BRANCH=main   # whatever branch *this checkout* tracks
+   UL_DEPLOY_WEBHOOK_HOST=0.0.0.0  # or a specific LAN IP - see the NPM note below
+   UL_DEPLOY_WEBHOOK_PORT=9123     # whatever port you point NPM at
    ```
 
-   `UL_DEPLOY_WEBHOOK_HOST`/`UL_DEPLOY_WEBHOOK_PORT` only need setting if you
-   want something other than the localhost-only default (`127.0.0.1:9000`).
+   `UL_DEPLOY_WEBHOOK_BRANCH` is just "the branch this listener redeploys on
+   push" - if this checkout is staging tracking `main`, use `main`; if you
+   later add a second checkout for a `staging` branch, that one gets its own
+   `.env` with `UL_DEPLOY_WEBHOOK_BRANCH=staging`.
 
-2. **Make the scripts executable** (once, on the server):
+2. **Make the scripts executable** (once):
 
    ```bash
    chmod +x bin/deploy.sh bin/deploy_webhook.py
    ```
 
-3. **Install the systemd unit.** Copy
-   `bin/systemd/urbanlens-deploy-webhook.service` to
-   `/etc/systemd/system/`, edit its `WorkingDirectory`/`EnvironmentFile`
-   paths and `User`/`Group` for this host (the user needs to be in the
-   `docker` group so `docker compose` works without `sudo`), then:
+3. **Start it** in a `tmux`/`screen` session (so it survives your ssh
+   session ending) from inside the checkout:
 
    ```bash
-   sudo systemctl daemon-reload
-   sudo systemctl enable --now urbanlens-deploy-webhook
-   sudo systemctl status urbanlens-deploy-webhook
+   tmux new -s ul-deploy-webhook
+   set -a; source .env; set +a
+   python3 bin/deploy_webhook.py
+   # Ctrl-b d to detach, leaving it running
    ```
 
-   If you run both a staging and a dev listener on the same host, copy the
-   unit file under two different names (e.g.
-   `urbanlens-deploy-webhook-staging.service`) with distinct
-   `WorkingDirectory`/port values, since each tracks a different checkout.
+   Or run it detached without tmux:
 
-4. **Expose the listener to the Git host.** `UL_DEPLOY_WEBHOOK_HOST` defaults
-   to `127.0.0.1`, so by default nothing outside the machine can reach it -
-   you need to deliberately open a path in. Two options:
-   - Point a location block on whatever reverse proxy already terminates TLS
-     for the host (this repo's own nginx runs inside docker compose and only
-     proxies the app, so it doesn't cover this) at
-     `http://127.0.0.1:9000/webhook`.
-   - Or set `UL_DEPLOY_WEBHOOK_HOST=0.0.0.0` and open the port directly in
-     the host firewall, ideally restricted to
-     [GitHub's published webhook IP ranges](https://api.github.com/meta)
-     (`hooks` key) as defense in depth on top of signature verification.
+   ```bash
+   set -a; source .env; set +a
+   nohup python3 bin/deploy_webhook.py >> deploy_webhook_stdout.log 2>&1 &
+   disown
+   echo $! > .deploy_webhook.pid
+   ```
 
-5. **Add the webhook on GitHub**: repo Settings → Webhooks → Add webhook.
-   - Payload URL: `https://<host>/webhook` (or whatever path you proxied to).
+   To stop it: reattach the tmux session and Ctrl-C, or
+   `kill "$(cat .deploy_webhook.pid)"` for the nohup form.
+
+   A `GET /healthz` on the configured host/port returns `200 ok` while it's up.
+
+## Reaching it from GitHub
+
+`deploy_webhook.py` binds directly (it's not in docker compose, and isn't
+proxied by this repo's own nginx, which only routes to the app). To make it
+reachable from the internet:
+
+1. In **Nginx Proxy Manager**, add a Proxy Host: domain of your choice ->
+   forward to the TrueNAS host's IP and `UL_DEPLOY_WEBHOOK_PORT`. NPM runs as
+   its own app/container, so `127.0.0.1` won't reach a process running
+   directly on the host - use the host's actual LAN IP as the forward target,
+   and set `UL_DEPLOY_WEBHOOK_HOST=0.0.0.0` (or that same LAN IP) so the
+   listener actually accepts the connection. Enable TLS on the NPM side.
+2. In **GitHub**: repo Settings -> Webhooks -> Add webhook.
+   - Payload URL: `https://<the NPM domain>/webhook`.
    - Content type: `application/json`.
    - Secret: the same value as `UL_DEPLOY_WEBHOOK_SECRET`.
    - Events: "Just the push event".
 
-   GitLab: Settings → Webhooks. Use the "Secret token" field (compared
+   GitLab: Settings -> Webhooks. Use the "Secret token" field (compared
    directly, not HMAC'd) instead of a signing secret, and select "Push events".
+
+Since the port ends up reachable on the LAN (and, via NPM, the internet),
+signature verification is the real access control here - `deploy_webhook.py`
+rejects anything without a valid `X-Hub-Signature-256`/`X-Gitlab-Token`
+before it looks at the payload at all. If your router/TrueNAS network setup
+makes it easy, restricting the port to NPM's address is a reasonable extra
+layer, but isn't required for it to be safe to run.
 
 ## Logs
 
 Both scripts append to `deploy_webhook.log` / `deploy.log` in the checkout
-root (paths overridable via `UL_DEPLOY_LOG_FILE`), and the listener's stdout
-also goes to the systemd journal (`journalctl -u urbanlens-deploy-webhook -f`).
+root (paths overridable via `UL_DEPLOY_LOG_FILE`).
 
 ## Production
 
