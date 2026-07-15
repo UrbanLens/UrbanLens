@@ -3050,14 +3050,21 @@ a.profile-stat--link {
 }
 
 .profile-private-stats {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    // Single row, same clip+fade treatment as .profile-card-strip/.profile-photo-strip
+    // below - up to 8 stats would otherwise wrap onto 2-4 rows depending on how many
+    // have a non-zero value, eating far more vertical space than a stat strip needs.
+    display: flex;
+    flex-wrap: nowrap;
     gap: .65rem;
     margin-bottom: 1rem;
+    overflow: hidden;
+    mask-image: linear-gradient(to right, #000 calc(100% - 2.5rem), transparent 100%);
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 2.5rem), transparent 100%);
 }
 
 .profile-private-stat {
     display: grid;
+    flex: 0 0 140px;
     grid-template-columns: auto 1fr;
     grid-template-areas:
         "icon value"
