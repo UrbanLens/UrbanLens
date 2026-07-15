@@ -237,11 +237,11 @@
     'use strict';
 
     const LIST_UUID = "{{ pin_list.uuid }}";
-    const ITEMS_ADD_URL = "{% url 'lists.items.add' pin_list.uuid %}";
-    const LIST_EDIT_URL = "{% url 'lists.edit' pin_list.uuid %}";
-    const LIST_DELETE_URL = "{% url 'lists.delete' pin_list.uuid %}";
-    const CREATE_TRIP_URL = "{% url 'lists.create_trip' pin_list.uuid %}";
-    const ADD_TO_TRIP_URL = "{% url 'lists.add_to_trip' pin_list.uuid %}";
+    const ITEMS_ADD_URL = "{% url 'lists.items.add' pin_list.slug %}";
+    const LIST_EDIT_URL = "{% url 'lists.edit' pin_list.slug %}";
+    const LIST_DELETE_URL = "{% url 'lists.delete' pin_list.slug %}";
+    const CREATE_TRIP_URL = "{% url 'lists.create_trip' pin_list.slug %}";
+    const ADD_TO_TRIP_URL = "{% url 'lists.add_to_trip' pin_list.slug %}";
     const PIN_ADD_URL = "{% url 'pin.add' %}";
     const CSRF = document.querySelector('input[name=csrfmiddlewaretoken]')?.value || '{{ csrf_token }}';
 
@@ -416,7 +416,7 @@
     };
 
     function refreshItems() {
-        fetch("{% url 'lists.items' pin_list.uuid %}").then((r) => r.text()).then((html) => {
+        fetch("{% url 'lists.items' pin_list.slug %}").then((r) => r.text()).then((html) => {
             document.getElementById('pin-list-items').outerHTML = html;
             initSortable();
             syncOverviewMap();

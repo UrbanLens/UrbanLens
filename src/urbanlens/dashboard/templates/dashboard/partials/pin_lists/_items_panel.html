@@ -3,7 +3,7 @@ Pin List items panel - sortable rows, swapped in after add/remove/reorder.
 Context: pin_list, items (PinListItem queryset/list, already ordered),
          items_map_data (list of dicts - see pin_lists.py's _pin_map_marker_data).
 {% endcomment %}
-<div class="pin-list-items" id="pin-list-items" data-save-url="{% url 'lists.items.reorder' pin_list.uuid %}">
+<div class="pin-list-items" id="pin-list-items" data-save-url="{% url 'lists.items.reorder' pin_list.slug %}">
     {{ items_map_data|json_script:"pin-list-items-map-data" }}
     {% if items %}
     {% for item in items %}
@@ -21,7 +21,7 @@ Context: pin_list, items (PinListItem queryset/list, already ordered),
         </span>
         {% endif %}
         <button type="button" class="pin-list-item-remove" aria-label="Remove from list"
-                hx-post="{% url 'lists.items.remove' pin_list.uuid item.id %}"
+                hx-post="{% url 'lists.items.remove' pin_list.slug item.id %}"
                 hx-target="#pin-list-items" hx-swap="outerHTML"
                 hx-confirm="Remove &quot;{{ item.pin.effective_name }}&quot; from this list?">
             <i class="material-symbols-outlined">close</i>

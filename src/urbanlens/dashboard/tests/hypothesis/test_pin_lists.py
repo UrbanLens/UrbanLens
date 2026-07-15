@@ -84,7 +84,7 @@ class PinListMarkupMapErrorIsJsonTests(TestCase):
 
     def test_no_geo_pins_returns_json_error(self) -> None:
         pin_list = baker.make(PinList, profile=self.profile, name="Empty list")
-        response = self.client.post(reverse("lists.markup_map", kwargs={"list_uuid": pin_list.uuid}))
+        response = self.client.post(reverse("lists.markup_map", kwargs={"list_slug": pin_list.slug}))
         self.assertEqual(response.status_code, 400)
         # Must not raise - this is exactly what broke: the client always calls
         # response.json(), and a plain-text body throws a SyntaxError.
@@ -111,7 +111,7 @@ class SelectingSavedFilterImmediatelyPopulatesListTests(TestCase):
 
     def test_selecting_filter_populates_matches_without_enabling_is_smart(self) -> None:
         response = self.client.post(
-            reverse("lists.edit", kwargs={"list_uuid": self.pin_list.uuid}),
+            reverse("lists.edit", kwargs={"list_slug": self.pin_list.slug}),
             data=json.dumps({"saved_filter_uuid": str(self.saved_filter.uuid)}),
             content_type="application/json",
         )
@@ -123,14 +123,14 @@ class SelectingSavedFilterImmediatelyPopulatesListTests(TestCase):
         self.assertNotIn(self.non_matching_pin.pk, member_pin_ids)
 
     def test_clearing_the_filter_removes_previously_matched_pins(self) -> None:
-        edit_url = reverse("lists.edit", kwargs={"list_uuid": self.pin_list.uuid})
+        edit_url = reverse("lists.edit", kwargs={"list_slug": self.pin_list.slug})
         self.client.post(edit_url, data=json.dumps({"saved_filter_uuid": str(self.saved_filter.uuid)}), content_type="application/json")
         self.client.post(edit_url, data=json.dumps({"saved_filter_uuid": ""}), content_type="application/json")
         self.pin_list.refresh_from_db()
         self.assertEqual(self.pin_list.items.count(), 0)
 
     def test_turning_is_smart_off_alone_does_not_touch_existing_membership(self) -> None:
-        edit_url = reverse("lists.edit", kwargs={"list_uuid": self.pin_list.uuid})
+        edit_url = reverse("lists.edit", kwargs={"list_slug": self.pin_list.slug})
         self.client.post(edit_url, data=json.dumps({"saved_filter_uuid": str(self.saved_filter.uuid)}), content_type="application/json")
         self.client.post(edit_url, data=json.dumps({"is_smart": True}), content_type="application/json")
         self.pin_list.refresh_from_db()
@@ -218,3 +218,55 @@ class SavedFilterSuggestNameViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         data = json.loads(response.content)
         self.assertIsNone(data["name"])
+
+
+class PinListSlugTests(TestCase):
+    """PinList URLs use a human-readable slug, unique per-profile (not globally).
+
+    See PublicDashboardModel / Pin._slugify_qs for the pattern this mirrors -
+    Pin is scoped the same way, since a slug only needs to be unique within
+    one user's own lists, not across every user's.
+    """
+
+    def setUp(self) -> None:
+        self.user = baker.make(User)
+        self.client.force_login(self.user)
+        self.profile = self.user.profile
+
+    def test_slug_is_minted_from_name_on_save(self) -> None:
+        pin_list = baker.make(PinList, profile=self.profile, name="Rooftop Ruins")
+        self.assertEqual(pin_list.slug, "rooftop-ruins")
+
+    def test_colliding_slug_base_for_same_profile_gets_a_distinct_slug(self) -> None:
+        # Different names that slugify to the same base ("Ruins" / "Ruins!!!"
+        # both -> "ruins") must still resolve to distinct slugs within one
+        # profile, rather than the second save raising IntegrityError.
+        first = baker.make(PinList, profile=self.profile, name="Ruins")
+        second = baker.make(PinList, profile=self.profile, name="Ruins!!!")
+        self.assertEqual(first.slug, "ruins")
+        self.assertNotEqual(first.slug, second.slug)
+        self.assertTrue(second.slug.startswith("ruins"))
+
+    def test_same_name_for_different_profiles_can_share_a_slug(self) -> None:
+        other_user = baker.make(User)
+        other_profile = other_user.profile
+        mine = baker.make(PinList, profile=self.profile, name="Bucket List")
+        theirs = baker.make(PinList, profile=other_profile, name="Bucket List")
+        self.assertEqual(mine.slug, theirs.slug)
+
+    def test_detail_view_resolves_by_slug(self) -> None:
+        pin_list = baker.make(PinList, profile=self.profile, name="My Spots")
+        response = self.client.get(reverse("lists.detail", kwargs={"list_slug": pin_list.slug}))
+        self.assertEqual(response.status_code, 200)
+
+    def test_detail_view_still_resolves_legacy_uuid_urls(self) -> None:
+        pin_list = baker.make(PinList, profile=self.profile, name="My Spots")
+        response = self.client.get(reverse("lists.detail", kwargs={"list_slug": str(pin_list.uuid)}))
+        self.assertEqual(response.status_code, 200)
+
+    def test_detail_view_404s_for_another_profiles_list(self) -> None:
+        other_user = baker.make(User)
+        other_profile = other_user.profile
+        pin_list = baker.make(PinList, profile=other_profile, name="Not Yours")
+        response = self.client.get(reverse("lists.detail", kwargs={"list_slug": pin_list.slug}))
+        self.assertEqual(response.status_code, 404)

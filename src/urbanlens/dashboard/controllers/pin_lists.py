@@ -9,7 +9,7 @@ import uuid as uuid_lib
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Prefetch, Q
-from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
+from django.http import Http404, HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.views import View
@@ -38,6 +38,27 @@ logger = logging.getLogger(__name__)
 _BULK_ADD_CONFIRM_THRESHOLD = 100
 
 _ITEMS_PANEL_TEMPLATE = "dashboard/partials/pin_lists/_items_panel.html"
+
+
+def _get_pin_list_or_404(list_slug: str, profile: Profile) -> PinList:
+    """Resolve a PinList by slug, falling back to uuid for pre-slug/legacy links.
+
+    Mirrors ``PinController``'s slug-then-uuid lookup for Pin - see
+    ``pin.py``. New URLs are always built from ``pin_list.slug`` (minted on
+    save), but old bookmarked/shared ``/lists/<uuid>/`` links must keep
+    working since the ``slug`` path converter's character class also matches
+    a uuid string.
+    """
+    try:
+        return PinList.objects.get(slug=list_slug, profile=profile)
+    except PinList.DoesNotExist:
+        try:
+            uuid_lib.UUID(list_slug)
+        except (ValueError, AttributeError, TypeError):
+            pass
+        else:
+            return get_object_or_404(PinList, uuid=list_slug, profile=profile)
+        raise Http404 from None
 
 
 def _default_trip_name_for_list(pin_list: PinList) -> str:
@@ -199,8 +220,8 @@ class PinListCreateView(LoginRequiredMixin, View):
         pin_list = PinList.objects.create(profile=profile, name=name, description=description)
 
         if request.headers.get("Accept") == "application/json" or request.headers.get("HX-Request"):
-            return JsonResponse({"ok": True, "uuid": str(pin_list.uuid), "name": pin_list.name, "redirect": reverse("lists.detail", kwargs={"list_uuid": pin_list.uuid})})
-        return HttpResponseRedirect(reverse("lists.detail", kwargs={"list_uuid": pin_list.uuid}))
+            return JsonResponse({"ok": True, "uuid": str(pin_list.uuid), "name": pin_list.name, "redirect": reverse("lists.detail", kwargs={"list_slug": pin_list.slug or str(pin_list.uuid)})})
+        return HttpResponseRedirect(reverse("lists.detail", kwargs={"list_slug": pin_list.slug or str(pin_list.uuid)}))
 
 
 class PinListDetailView(LoginRequiredMixin, View):
@@ -209,9 +230,9 @@ class PinListDetailView(LoginRequiredMixin, View):
     GET /lists/<uuid>/
     """
 
-    def get(self, request: HttpRequest, list_uuid: str) -> HttpResponse:
+    def get(self, request: HttpRequest, list_slug: str) -> HttpResponse:
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        pin_list = get_object_or_404(PinList, uuid=list_uuid, profile=profile)
+        pin_list = _get_pin_list_or_404(list_slug, profile)
         items = _list_items_with_labels(pin_list)
         saved_filters = list(profile.saved_filters.all())
         trips = list(Trip.objects.filter(profiles=profile).order_by("name"))
@@ -252,9 +273,9 @@ class PinListEditView(LoginRequiredMixin, View):
     pin/label edits keep re-triggering that sync.
     """
 
-    def post(self, request: HttpRequest, list_uuid: str) -> HttpResponse:
+    def post(self, request: HttpRequest, list_slug: str) -> HttpResponse:
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        pin_list = get_object_or_404(PinList, uuid=list_uuid, profile=profile)
+        pin_list = _get_pin_list_or_404(list_slug, profile)
         body = _parse_body(request)
 
         name = (body.get("name") or "").strip()
@@ -318,9 +339,9 @@ class PinListDeleteView(LoginRequiredMixin, View):
     POST /lists/<uuid>/delete/
     """
 
-    def post(self, request: HttpRequest, list_uuid: str) -> HttpResponse:
+    def post(self, request: HttpRequest, list_slug: str) -> HttpResponse:
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        pin_list = get_object_or_404(PinList, uuid=list_uuid, profile=profile)
+        pin_list = _get_pin_list_or_404(list_slug, profile)
         pin_list.delete()
         return HttpResponseRedirect(f"{reverse('organize.index')}?tab=lists")
 
@@ -331,9 +352,9 @@ class PinListItemsView(LoginRequiredMixin, View):
     GET /lists/<uuid>/items/
     """
 
-    def get(self, request: HttpRequest, list_uuid: str) -> HttpResponse:
+    def get(self, request: HttpRequest, list_slug: str) -> HttpResponse:
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        pin_list = get_object_or_404(PinList, uuid=list_uuid, profile=profile)
+        pin_list = _get_pin_list_or_404(list_slug, profile)
         return _render_items_panel(request, pin_list)
 
 
@@ -352,9 +373,9 @@ class PinListAddPinsView(LoginRequiredMixin, View):
     ``confirmed=true``.
     """
 
-    def post(self, request: HttpRequest, list_uuid: str) -> HttpResponse:
+    def post(self, request: HttpRequest, list_slug: str) -> HttpResponse:
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        pin_list = get_object_or_404(PinList, uuid=list_uuid, profile=profile)
+        pin_list = _get_pin_list_or_404(list_slug, profile)
 
         pin_id_values = request.POST.getlist("pin_ids")
         # The shared location-search engine identifies pins by slug, falling back to
@@ -423,9 +444,9 @@ class PinListRemoveItemView(LoginRequiredMixin, View):
     POST /lists/<uuid>/items/<id>/remove/
     """
 
-    def post(self, request: HttpRequest, list_uuid: str, item_id: int) -> HttpResponse:
+    def post(self, request: HttpRequest, list_slug: str, item_id: int) -> HttpResponse:
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        pin_list = get_object_or_404(PinList, uuid=list_uuid, profile=profile)
+        pin_list = _get_pin_list_or_404(list_slug, profile)
         PinListItem.objects.filter(pin_list=pin_list, pk=item_id).delete()
         return _render_items_panel(request, pin_list)
 
@@ -436,9 +457,9 @@ class PinListReorderView(LoginRequiredMixin, View):
     POST /lists/<uuid>/items/reorder/  body: ``{"items": [{"id": ...}, ...]}``
     """
 
-    def post(self, request: HttpRequest, list_uuid: str) -> HttpResponse:
+    def post(self, request: HttpRequest, list_slug: str) -> HttpResponse:
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        pin_list = get_object_or_404(PinList, uuid=list_uuid, profile=profile)
+        pin_list = _get_pin_list_or_404(list_slug, profile)
         body = _parse_body(request)
 
         item_ids = [int(entry["id"]) for entry in body.get("items", []) if str(entry.get("id", "")).isdigit()]
@@ -462,9 +483,9 @@ class PinListCreateTripView(LoginRequiredMixin, View):
     POST /lists/<uuid>/create-trip/
     """
 
-    def post(self, request: HttpRequest, list_uuid: str) -> HttpResponse:
+    def post(self, request: HttpRequest, list_slug: str) -> HttpResponse:
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        pin_list = get_object_or_404(PinList, uuid=list_uuid, profile=profile)
+        pin_list = _get_pin_list_or_404(list_slug, profile)
         body = _parse_body(request)
 
         trip_name = (body.get("name") or "").strip() or _default_trip_name_for_list(pin_list)
@@ -481,11 +502,11 @@ class PinListAddToTripView(LoginRequiredMixin, View):
     POST /lists/<uuid>/add-to-trip/  body: ``{"trip_slug": ...}``
     """
 
-    def post(self, request: HttpRequest, list_uuid: str) -> HttpResponse:
+    def post(self, request: HttpRequest, list_slug: str) -> HttpResponse:
         from urbanlens.dashboard.controllers.trip import _trip_or_403
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        pin_list = get_object_or_404(PinList, uuid=list_uuid, profile=profile)
+        pin_list = _get_pin_list_or_404(list_slug, profile)
         body = _parse_body(request)
 
         trip_slug = body.get("trip_slug")
@@ -506,9 +527,9 @@ class PinListMarkupMapView(LoginRequiredMixin, View):
     POST /lists/<uuid>/markup-map/
     """
 
-    def post(self, request: HttpRequest, list_uuid: str) -> HttpResponse:
+    def post(self, request: HttpRequest, list_slug: str) -> HttpResponse:
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        pin_list = get_object_or_404(PinList, uuid=list_uuid, profile=profile)
+        pin_list = _get_pin_list_or_404(list_slug, profile)
 
         snapshot = build_list_markup_snapshot(pin_list)
         if snapshot is None:

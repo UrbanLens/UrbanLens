@@ -27,8 +27,14 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class PinList(abstract.FrontendDashboardModel):
-    """A profile's named, ordered collection of their own Pins."""
+class PinList(abstract.PublicDashboardModel):
+    """A profile's named, ordered collection of their own Pins.
+
+    URLs identify a list by ``slug`` rather than ``uuid`` - see
+    ``abstract.PublicDashboardModel``. Slugs are unique per-profile (not
+    globally), matching ``Pin``'s scoping and this model's existing
+    per-profile name uniqueness.
+    """
 
     profile = ForeignKey("dashboard.Profile", on_delete=CASCADE, related_name="pin_lists")
     name = CharField(max_length=100)
@@ -58,10 +64,22 @@ class PinList(abstract.FrontendDashboardModel):
         """Number of pins currently on this list."""
         return self.items.count()
 
-    class Meta(abstract.FrontendDashboardModel.Meta):
+    def _slugify_base(self) -> str:
+        return self.name or "list"
+
+    def _slugify_qs(self):
+        qs = PinList.objects.filter(profile_id=self.profile_id)
+        if self.pk:
+            qs = qs.exclude(pk=self.pk)
+        return qs
+
+    class Meta(abstract.PublicDashboardModel.Meta):
         db_table = "dashboard_pin_lists"
         ordering = ["-updated"]
-        constraints = [UniqueConstraint(fields=["profile", "name"], name="uq_pin_list_profile_name")]
+        constraints = [
+            UniqueConstraint(fields=["profile", "name"], name="uq_pin_list_profile_name"),
+            UniqueConstraint(fields=["profile", "slug"], name="uq_pin_list_profile_slug"),
+        ]
         indexes = [Index(fields=["profile"], name="idxdb_pinlist_profile")]
 
 

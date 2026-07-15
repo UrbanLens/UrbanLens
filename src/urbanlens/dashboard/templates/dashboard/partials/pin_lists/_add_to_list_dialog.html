@@ -22,7 +22,7 @@ and (with `?pin_uuid=`) the pin detail page's Labels section. Context: pin_lists
             </li>
             {% for pin_list in pin_lists %}
             <li data-search="{{ pin_list.name|lower }}">
-                <button type="button" class="pin-list-add-results-item" onclick="addPinsToList('{{ pin_list.uuid }}')">
+                <button type="button" class="pin-list-add-results-item" onclick="addPinsToList('{{ pin_list.slug }}')">
                     <i class="material-symbols-outlined">bookmarks</i> {{ pin_list.name }}
                     <span class="pin-list-add-results-count">{{ pin_list.pin_count }}</span>
                 </button>

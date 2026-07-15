@@ -271,7 +271,7 @@ class PinListBoundaryDrawButtonTests(TestCase):
 
     def test_no_boundary_shows_draw_button_not_clear(self) -> None:
         pin_list = PinList.objects.create(profile=self.profile, name="No boundary yet")
-        response = self.client.get(reverse("lists.detail", kwargs={"list_uuid": pin_list.uuid}))
+        response = self.client.get(reverse("lists.detail", kwargs={"list_slug": pin_list.slug}))
         self.assertEqual(response.status_code, 200)
         html = response.content.decode()
         draw_btn = html.split('id="pin-list-boundary-draw-btn"', 1)[1][:80]
@@ -282,7 +282,7 @@ class PinListBoundaryDrawButtonTests(TestCase):
     def test_existing_boundary_shows_clear_button_not_draw(self) -> None:
         boundary = MultiPolygon(_square(-74.0, 40.0, 0.01), srid=4326)
         pin_list = PinList.objects.create(profile=self.profile, name="Has boundary", smart_boundary=boundary)
-        response = self.client.get(reverse("lists.detail", kwargs={"list_uuid": pin_list.uuid}))
+        response = self.client.get(reverse("lists.detail", kwargs={"list_slug": pin_list.slug}))
         self.assertEqual(response.status_code, 200)
         html = response.content.decode()
         draw_btn = html.split('id="pin-list-boundary-draw-btn"', 1)[1][:80]

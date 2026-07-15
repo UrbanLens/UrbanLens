@@ -31,7 +31,7 @@ Context:
 {% if pin_lists %}
 <div class="pin-lists-grid" id="pin-lists-grid">
     {% for pin_list in pin_lists %}
-    <a class="pin-list-card" href="{% url 'lists.detail' pin_list.uuid %}" data-search="{{ pin_list.name|lower }}">
+    <a class="pin-list-card" href="{% url 'lists.detail' pin_list.slug %}" data-search="{{ pin_list.name|lower }}">
         <div class="pin-list-card-header">
             <span class="pin-list-card-icon"><i class="material-symbols-outlined">bookmarks</i></span>
             {% if pin_list.is_smart %}<span class="pin-list-card-badge">Smart</span>{% endif %}

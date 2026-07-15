@@ -107,7 +107,7 @@ class MaxPinsPerListTests(TestCase):
         self.pin_list = PinList.objects.create(profile=self.profile, name="Test List")
 
     def _url(self) -> str:
-        return reverse("lists.items.add", kwargs={"list_uuid": self.pin_list.uuid})
+        return reverse("lists.items.add", kwargs={"list_slug": self.pin_list.slug})
 
     def test_add_is_truncated_to_fit_the_cap(self) -> None:
         settings = SiteSettings.get_current()
