@@ -3,9 +3,19 @@
 {# whether to swap #trip-list (list page) or redirect to the new trip (overview page). #}
 <dialog id="create-trip-dialog" class="trip-create-dialog ul-dialog">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="New Trip" %}
+    {# hx-target must match whichever page this dialog is opened from - the    #}
+    {# overview page has no #trip-list element (it redirects to the new trip  #}
+    {# via HX-Redirect instead, see TripController.create's source=="overview" #}
+    {# branch), so targeting #trip-list unconditionally threw htmx:targetError #}
+    {# for every submission from there, regardless of anything else on the form. #}
     <form hx-post="{% url 'trips.create' %}?sort={{ sort|default:'updated' }}&dir={{ dir|default:'desc' }}"
+          {% if source == "overview" %}
+          hx-target="this"
+          hx-swap="none"
+          {% else %}
           hx-target="#trip-list"
           hx-swap="innerHTML"
+          {% endif %}
           hx-on::after-request="if(event.detail.successful){this.closest('dialog').close();this.reset();_tripHideDates('trip-create')}"
           class="trip-create-form">
         {% csrf_token %}

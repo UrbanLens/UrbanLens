@@ -141,6 +141,38 @@ class TripCreateViewTests(TestCase):
         self.assertNotIn("HX-Redirect", resp)
 
 
+class CreateTripDialogHxTargetTests(TestCase):
+    """The create-trip dialog's hx-target/hx-swap must match whatever's actually
+    on the page it's opened from - see TripCreateViewTests.
+    test_post_from_overview_redirects_to_new_trip_via_hx_redirect for the
+    backend half of this fix. The overview page has no #trip-list element, so
+    targeting it unconditionally made htmx throw htmx:targetError client-side
+    (before the request was even sent) for every submission from there."""
+
+    def _render(self, source: str) -> str:
+        return render_to_string("dashboard/partials/trips/_create_trip_dialog.html", {"source": source})
+
+    def test_overview_source_does_not_target_trip_list(self) -> None:
+        html = self._render("overview")
+        self.assertNotIn('hx-target="#trip-list"', html)
+
+    def test_overview_source_targets_the_form_itself(self) -> None:
+        html = self._render("overview")
+        self.assertIn('hx-target="this"', html)
+        self.assertIn('hx-swap="none"', html)
+
+    def test_list_source_still_targets_trip_list(self) -> None:
+        html = self._render("list")
+        self.assertIn('hx-target="#trip-list"', html)
+        self.assertIn('hx-swap="innerHTML"', html)
+
+    def test_default_source_behaves_like_list(self) -> None:
+        """No source given (e.g. a stale include) should keep the original,
+        long-standing #trip-list behavior rather than the newer overview one."""
+        html = render_to_string("dashboard/partials/trips/_create_trip_dialog.html", {})
+        self.assertIn('hx-target="#trip-list"', html)
+
+
 class TripDetailViewTests(TestCase):
     """GET /trips/<slug>/ - access control and page render."""
 
