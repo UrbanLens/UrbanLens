@@ -47,12 +47,22 @@ _WEB_SEARCH_MIN_REFRESH_AGE = timedelta(days=1)
 # only occasionally useful, so each tab's content is fetched only once the
 # user actually clicks it (see pin.panel / _pin_plugin_tabs.html), unlike the
 # rest of simple_info_panels which still auto-fetch on page load. Dict order
-# is the tab display order (US Census, EPA, Wildlife, Seismic).
+# is the tab display order (US Census, Wildlife, Seismic).
 _CONDENSED_PLUGIN_TABS = {
     "census_tigerweb": "US Census",
-    "epa_echo": "EPA",
     "inaturalist": "Wildlife",
     "usgs_earthquakes": "Seismic",
+}
+
+# InfoPanelSource keys condensed into the subscription-gated "Nearby Research"
+# tab strip (see SiteFeature.NEARBY_RESEARCH / show_nearby_research) - data
+# about facilities/features *near* the pin rather than at its own coordinates,
+# which is exactly what a free EPA-facility-detail card at this pin's own
+# location doesn't cover. EPA's nearby-facility list (as opposed to its
+# unconditional exact-site detail card, "epa_echo_detail" - see
+# plugins/builtin/epa_echo.py) is the first tab; more sources land here later.
+_NEARBY_RESEARCH_TABS = {
+    "epa_echo": "EPA",
 }
 
 
@@ -131,7 +141,9 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         all_info_panels = {source.key: source for source in panel_sources().values() if isinstance(source, InfoPanelSource)}
         condensed_panel_tabs = [{"key": key, "label": label, "icon": all_info_panels[key].icon} for key, label in _CONDENSED_PLUGIN_TABS.items() if key in all_info_panels]
-        simple_info_panels = [source for key, source in all_info_panels.items() if key not in _CONDENSED_PLUGIN_TABS]
+        nearby_research_tabs = [{"key": key, "label": label, "icon": all_info_panels[key].icon} for key, label in _NEARBY_RESEARCH_TABS.items() if key in all_info_panels]
+        _tabbed_panel_keys = _CONDENSED_PLUGIN_TABS.keys() | _NEARBY_RESEARCH_TABS.keys()
+        simple_info_panels = [source for key, source in all_info_panels.items() if key not in _tabbed_panel_keys]
 
         # Whether the profile has ever added/kept an alias on ANY pin - not just this
         # one - so the aliases onboarding card stops nagging once the feature is
@@ -167,6 +179,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 "pin_cover_candidates": pin_cover_candidates,
                 "simple_info_panels": simple_info_panels,
                 "condensed_panel_tabs": condensed_panel_tabs,
+                "nearby_research_tabs": nearby_research_tabs,
                 "has_ever_used_aliases": has_ever_used_aliases,
                 "media_bulk_actions": [
                     {"action": "relevant", "icon": "thumb_up", "label": "Mark relevant"},

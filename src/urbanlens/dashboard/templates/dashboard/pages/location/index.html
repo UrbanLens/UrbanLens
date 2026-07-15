@@ -442,7 +442,11 @@
         {% endfor %}
 
         {% if condensed_panel_tabs %}
-        {% include "dashboard/partials/pins/_pin_plugin_tabs.html" %}
+        {% include "dashboard/partials/pins/_pin_plugin_tabs.html" with tabs=condensed_panel_tabs section_id="pin-plugin-tabs-section" body_id="pin-plugin-tab-body" heading="Regional Data" heading_icon="layers" collapse_section="plugin_tabs" collapse_label="Regional Data" %}
+        {% endif %}
+
+        {% if show_nearby_research and nearby_research_tabs %}
+        {% include "dashboard/partials/pins/_pin_plugin_tabs.html" with tabs=nearby_research_tabs section_id="pin-nearby-research-section" body_id="pin-nearby-research-body" heading="Nearby Research" heading_icon="travel_explore" collapse_section="nearby_research" collapse_label="Nearby Research" %}
         {% endif %}
 
         <div id="yelp-section" class="card card--secondary"

@@ -112,6 +112,7 @@ class SimpleInfoPanelsRegistryTests(TestCase):
             "photon",
             "census_tigerweb",
             "epa_echo",
+            "epa_echo_detail",
             "inaturalist",
             "gdelt",
             "overture_building_attributes",
@@ -144,26 +145,28 @@ class PinDetailPageSimpleInfoPanelsContextTests(TestCase):
         self.assertContains(response, reverse("pin.panel", args=[self.pin.slug, "usgs_earthquakes"]))
 
     def test_condensed_panels_are_excluded_from_the_autoloading_list(self) -> None:
-        """Census/EPA/iNaturalist/Seismic move into the Regional Data tab strip
-        instead of auto-loading as their own standalone cards - see condensed_panel_tabs."""
+        """Census/iNaturalist/Seismic move into the Regional Data tab strip and EPA's nearby-list
+        moves into the (subscription-gated) Nearby Research tab strip, instead of auto-loading as
+        their own standalone cards - see condensed_panel_tabs/nearby_research_tabs. EPA's exact-site
+        detail card is a different key (epa_echo_detail) and still auto-loads unconditionally."""
         response = self.client.get(reverse("pin.details", args=[self.pin.slug]))
         keys = [panel.key for panel in response.context["simple_info_panels"]]
         for condensed_key in ("census_tigerweb", "epa_echo", "inaturalist", "usgs_earthquakes"):
             self.assertNotIn(condensed_key, keys)
         self.assertIn("photon", keys)
+        self.assertIn("epa_echo_detail", keys)
 
     def test_condensed_panel_tabs_context_has_the_expected_order_and_labels(self) -> None:
         response = self.client.get(reverse("pin.details", args=[self.pin.slug]))
         tabs = response.context["condensed_panel_tabs"]
-        self.assertEqual([tab["key"] for tab in tabs], ["census_tigerweb", "epa_echo", "inaturalist", "usgs_earthquakes"])
-        self.assertEqual([tab["label"] for tab in tabs], ["US Census", "EPA", "Wildlife", "Seismic"])
+        self.assertEqual([tab["key"] for tab in tabs], ["census_tigerweb", "inaturalist", "usgs_earthquakes"])
+        self.assertEqual([tab["label"] for tab in tabs], ["US Census", "Wildlife", "Seismic"])
 
     def test_page_renders_the_regional_data_tab_strip(self) -> None:
         response = self.client.get(reverse("pin.details", args=[self.pin.slug]))
         self.assertContains(response, "Regional Data")
         self.assertContains(response, "pin-plugin-tab-btn")
         self.assertContains(response, ">US Census<")
-        self.assertContains(response, ">EPA<")
         self.assertContains(response, ">Wildlife<")
         self.assertContains(response, ">Seismic<")
         # Each tab button still points at the same generic per-key dispatch
@@ -175,3 +178,58 @@ class PinDetailPageSimpleInfoPanelsContextTests(TestCase):
         content = response.content.decode()
         for condensed_key in ("census_tigerweb", "epa_echo", "inaturalist", "usgs_earthquakes"):
             self.assertNotIn(f"hx-trigger=\"load[!window.ulSectionCollapsed('pin','{condensed_key}')]", content)
+
+    def test_epa_exact_site_detail_panel_still_has_an_autoload_trigger(self) -> None:
+        """Unlike epa_echo (nearby list), epa_echo_detail is not tab-gated - it's a normal auto-loading card."""
+        response = self.client.get(reverse("pin.details", args=[self.pin.slug]))
+        content = response.content.decode()
+        self.assertIn("hx-trigger=\"load[!window.ulSectionCollapsed('pin','epa_echo_detail')]", content)
+
+
+class NearbyResearchTabGatingTests(TestCase):
+    """The "Nearby Research" tab strip (EPA's nearby-facility list, for now) is subscription-gated."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        baker.make(User)  # first user is auto-promoted to bootstrap site admin (has_perm bypasses feature gating)
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+        self.client.force_login(self.user)
+        self.pin: Pin = baker.make_recipe("dashboard.pin", profile=self.profile)
+
+    def test_hidden_without_the_feature(self) -> None:
+        response = self.client.get(reverse("pin.details", args=[self.pin.slug]))
+        self.assertNotContains(response, "Nearby Research")
+
+    def test_shown_with_the_feature(self) -> None:
+        from urbanlens.dashboard.models.subscriptions import SiteFeature, SubscriptionRole, grant_subscription
+
+        role = baker.make(SubscriptionRole, features=SiteFeature.NEARBY_RESEARCH)
+        grant_subscription(self.user, role, self.user, None)
+
+        response = self.client.get(reverse("pin.details", args=[self.pin.slug]))
+        self.assertContains(response, "Nearby Research")
+        self.assertContains(response, reverse("pin.panel", args=[self.pin.slug, "epa_echo"]))
+
+    def test_nearby_research_tabs_context_has_epa(self) -> None:
+        from urbanlens.dashboard.models.subscriptions import SiteFeature, SubscriptionRole, grant_subscription
+
+        role = baker.make(SubscriptionRole, features=SiteFeature.NEARBY_RESEARCH)
+        grant_subscription(self.user, role, self.user, None)
+
+        response = self.client.get(reverse("pin.details", args=[self.pin.slug]))
+        tabs = response.context["nearby_research_tabs"]
+        self.assertEqual([tab["key"] for tab in tabs], ["epa_echo"])
+        self.assertEqual([tab["label"] for tab in tabs], ["EPA"])
+
+    def test_epa_nearby_list_not_in_autoloading_panels_even_with_the_feature(self) -> None:
+        """Nearby Research tabs are still click-to-load, like Regional Data - the feature only
+        controls whether the tab strip is shown at all, not whether it auto-fetches."""
+        from urbanlens.dashboard.models.subscriptions import SiteFeature, SubscriptionRole, grant_subscription
+
+        role = baker.make(SubscriptionRole, features=SiteFeature.NEARBY_RESEARCH)
+        grant_subscription(self.user, role, self.user, None)
+
+        response = self.client.get(reverse("pin.details", args=[self.pin.slug]))
+        keys = [panel.key for panel in response.context["simple_info_panels"]]
+        self.assertNotIn("epa_echo", keys)

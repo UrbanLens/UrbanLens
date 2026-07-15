@@ -220,6 +220,7 @@ def add_feature_access(request: HttpRequest) -> dict[str, bool]:
             "show_places_layer": user_has_feature(request.user, SiteFeature.PLACES),
             "can_use_web_search": user_has_feature(request.user, SiteFeature.SEARCH),
             "can_upload_videos": user_has_feature(request.user, SiteFeature.VIDEO_UPLOADS),
+            "show_nearby_research": user_has_feature(request.user, SiteFeature.NEARBY_RESEARCH),
         }
     except (ImportError, DatabaseError):
-        return {"can_use_ai_features": False, "show_places_layer": False, "can_use_web_search": False, "can_upload_videos": False}
+        return {"can_use_ai_features": False, "show_places_layer": False, "can_use_web_search": False, "can_upload_videos": False, "show_nearby_research": False}

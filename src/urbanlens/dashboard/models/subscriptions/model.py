@@ -33,6 +33,10 @@ class SiteFeature(TextChoices):
     # which costs meaningfully more CPU than a photo upload - kept as its own
     # grant for the same reason as VIDEO_UPLOADS.
     DOCUMENT_UPLOADS = "document_uploads", "Document uploads"
+    # Nearby-facility/feature research tabs on the pin detail page (e.g. EPA's
+    # nearby-regulated-facilities list) - separate from each plugin's own
+    # unconditional "data about this exact pin" card, which everyone gets.
+    NEARBY_RESEARCH = "nearby_research", "Nearby research data"
 
 
 class SubscriptionRole(abstract.DashboardModel):
@@ -75,7 +79,7 @@ class SubscriptionRole(abstract.DashboardModel):
     # Canonical features every VIP role must include.  Add new SiteFeature values here
     # when they should be automatically granted to VIPs; ensure_defaults will merge them
     # into existing rows without removing any admin-configured extras.
-    _VIP_CANONICAL_FEATURES: frozenset[str] = frozenset({SiteFeature.AI, SiteFeature.PLACES, SiteFeature.SEARCH})
+    _VIP_CANONICAL_FEATURES: frozenset[str] = frozenset({SiteFeature.AI, SiteFeature.PLACES, SiteFeature.SEARCH, SiteFeature.NEARBY_RESEARCH})
 
     # Default storage quota (GB) granted to the built-in VIP role on creation.
     _VIP_DEFAULT_STORAGE_QUOTA_GB: int = 500
