@@ -3969,17 +3969,25 @@ body.page-location-details .pin-detail-grid {
 
         .media-gallery-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(min(100%, 128px), 1fr));
-            gap: clamp(.65rem, 2vw, 1rem);
+            // auto-fit (not auto-fill): empty tracks collapse to 0 instead of
+            // reserving unused space, so a page with fewer than 5 items lets
+            // those items' `1fr` share grow to fill the row - auto-fill would
+            // keep the leftover tracks empty-but-present, holding items at
+            // their minimum width.
+            grid-template-columns: repeat(auto-fit, minmax(min(100%, 96px), 1fr));
+            gap: clamp(.5rem, 1.5vw, .85rem);
             padding: .75rem;
             min-height: 12rem;
 
             @include up($breakpoint-sm) {
-                grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+                grid-template-columns: repeat(auto-fit, minmax(108px, 1fr));
             }
 
             @include up($breakpoint-md) {
-                grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+                // Tuned so 5 columns is the common case in the aux-grid panel
+                // width; a max-width on .media-item below caps how large any
+                // one tile grows when there are fewer than 5 on the page.
+                grid-template-columns: repeat(auto-fit, minmax(116px, 1fr));
             }
         }
 
@@ -3987,6 +3995,13 @@ body.page-location-details .pin-detail-grid {
             position: relative;
             display: flex;
             flex-direction: column;
+            // Bounds how far a tile can grow when auto-fit gives it more than
+            // one column's worth of space (few items on the page) - without
+            // this, a single leftover item on a wide row would stretch edge
+            // to edge instead of just looking comfortably larger.
+            max-width: 240px;
+            margin-inline: auto;
+            width: 100%;
 
             &[hidden] {
                 display: none;
@@ -4036,7 +4051,14 @@ body.page-location-details .pin-detail-grid {
         .media-item-thumb {
             display: block;
             width: 100%;
-            aspect-ratio: 3 / 4;
+            min-height: 96px;
+            max-height: 220px;
+            // A fixed aspect-ratio crops tall/wide originals hard against that
+            // exact ratio; min/max-height instead just bounds how short/tall
+            // the tile can get, so an oddly-shaped photo keeps more of its
+            // natural framing (still object-fit: cover, so it always fills
+            // the tile - no letterboxing - just not forced to one fixed ratio).
+            aspect-ratio: 4 / 5;
             object-fit: cover;
             object-position: top center;
             background: linear-gradient(145deg, var(--ul-surface-raised) 0%, var(--ul-surface-raised-border) 100%);
@@ -4196,48 +4218,57 @@ body.page-location-details .pin-detail-grid {
         }
 
         // -- Source tabs ---------------------------------------------------------
+        // Underline tab-bar (matches .import-photos-tab in the Import Photos
+        // dialog) instead of the old pill/chip look - a row of always-visible
+        // buttons reads more like navigation than a set of toggleable filters.
         .media-tabs {
             display: flex;
-            flex-wrap: wrap;
-            gap: .35rem;
-            padding: 0 .75rem .6rem;
+            flex-wrap: nowrap;
+            overflow-x: auto;
+            scrollbar-width: none;
+            gap: .1rem;
+            padding: 0 .75rem;
+            border-bottom: 1px solid var(--ul-surface-raised-border);
+
+            &::-webkit-scrollbar {
+                display: none;
+            }
         }
         .media-tab {
-            display: inline-flex;
+            display: flex;
             align-items: center;
             gap: .35rem;
-            padding: .35rem .75rem;
-            font-size: .78rem;
+            flex-shrink: 0;
+            padding: .55rem .7rem;
+            border: none;
+            background: none;
+            font-size: .82rem;
             font-weight: 600;
             color: var(--ul-grey-6, #64748b);
-            background: var(--ul-surface-raised);
-            border: 1px solid var(--ul-surface-raised-border);
-            border-radius: 999px;
+            border-bottom: 2px solid transparent;
             cursor: pointer;
-            transition: background .12s ease, color .12s ease, border-color .12s ease, box-shadow .12s ease;
+            transition: color .15s ease, border-color .15s ease;
 
             &:hover {
-                background: var(--ul-hover-bg);
-                border-color: var(--ul-grey-4, #94a3b8);
+                color: var(--ul-grey-9, #1e293b);
             }
 
             &.active {
-                color: #fff;
-                background: var(--ul-primary, #2563eb);
-                border-color: var(--ul-primary, #2563eb);
-                box-shadow: 0 1px 3px rgba(37, 99, 235, .35);
+                color: var(--ul-primary, #2563eb);
+                border-bottom-color: var(--ul-primary, #2563eb);
             }
         }
         .media-tab-count {
             padding: 0 .4rem;
             font-size: .68rem;
             font-weight: 700;
-            color: inherit;
-            background: rgba(0, 0, 0, .1);
+            color: var(--ul-grey-5);
+            background: var(--ul-surface-raised);
             border-radius: 999px;
         }
         .media-tab.active .media-tab-count {
-            background: rgba(255, 255, 255, .25);
+            color: var(--ul-primary, #2563eb);
+            background: rgba(37, 99, 235, .12);
         }
 
         // -- Header icon buttons (select / settings) --------------------------
