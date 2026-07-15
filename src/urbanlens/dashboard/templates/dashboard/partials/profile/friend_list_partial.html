@@ -28,29 +28,46 @@
     </div>
 
     {# -- Outgoing friend requests (own profile only) ------------------------ #}
-    {% if is_own_profile and outgoing_requests %}
+    {# Deliberately no identity (name/avatar/username/profile link) shown here #}
+    {# - the sender must not learn who they reached, or even whether an       #}
+    {# invited email belongs to a registered account, until it's accepted.    #}
+    {# Friendship (registered target) and FriendInvitation (unmatched email)  #}
+    {# rows render identically so neither is distinguishable from the other.  #}
+    {% if is_own_profile and outgoing_pending_count %}
     <div class="friend-requests-section friend-requests-section--outgoing">
         <p class="friend-requests-label">
             <i class="material-symbols-outlined">hourglass_top</i>
-            {{ outgoing_requests|length }} pending sent request{{ outgoing_requests|length|pluralize }}
+            {{ outgoing_pending_count }} pending sent request{{ outgoing_pending_count|pluralize }}
         </p>
         <ul class="friend-request-list">
             {% for req in outgoing_requests %}
-            <li class="friend-request-item">
-                {% if req.to_profile.avatar %}
-                <img class="friend-avatar-sm" src="{{ req.to_profile.avatar.url }}" alt="">
-                {% else %}
-                <div class="friend-avatar-sm friend-avatar-placeholder">{{ req.to_profile.username|first|upper }}</div>
-                {% endif %}
+            <li class="friend-request-item friend-request-item--pending">
+                <div class="friend-avatar-sm friend-avatar-placeholder"><i class="material-symbols-outlined">hourglass_top</i></div>
                 <div class="friend-request-info">
-                    <a href="{% url 'profile.view_user' req.to_profile.slug %}" class="friend-request-name">
-                        {{ req.to_profile.full_name|default:req.to_profile.username }}
-                    </a>
-                    <span class="friend-request-sub">@{{ req.to_profile.username }}</span>
+                    <span class="friend-request-name">Pending request</span>
+                    <span class="friend-request-sub">Hidden until accepted</span>
                 </div>
                 <div class="friend-request-actions">
                     <button type="button" class="btn btn-friend btn-friend--reject"
                             hx-post="{% url 'friend.remove' req.to_profile.id %}"
+                            hx-target="#friend_list"
+                            hx-swap="outerHTML"
+                            title="Cancel request">
+                        <i class="material-symbols-outlined">cancel</i> Cancel
+                    </button>
+                </div>
+            </li>
+            {% endfor %}
+            {% for invitation in outgoing_email_invitations %}
+            <li class="friend-request-item friend-request-item--pending">
+                <div class="friend-avatar-sm friend-avatar-placeholder"><i class="material-symbols-outlined">hourglass_top</i></div>
+                <div class="friend-request-info">
+                    <span class="friend-request-name">Pending request</span>
+                    <span class="friend-request-sub">Hidden until accepted</span>
+                </div>
+                <div class="friend-request-actions">
+                    <button type="button" class="btn btn-friend btn-friend--reject"
+                            hx-post="{% url 'friend.cancel_invitation' invitation.id %}"
                             hx-target="#friend_list"
                             hx-swap="outerHTML"
                             title="Cancel request">

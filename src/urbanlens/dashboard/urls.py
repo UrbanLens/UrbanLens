@@ -829,6 +829,11 @@ urlpatterns = [
                     name="friend.remove",
                 ),
                 path(
+                    "invite/<int:invitation_id>/cancel/",
+                    friendship.FriendController.as_view({"post": "cancel_invitation"}),
+                    name="friend.cancel_invitation",
+                ),
+                path(
                     "block/<int:profile_id>",
                     friendship.FriendController.as_view({"post": "block_friend"}),
                     name="friend.block",

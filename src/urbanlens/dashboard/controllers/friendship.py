@@ -28,13 +28,27 @@ def _friend_list_ctx(viewer: Profile | None, profile: Profile) -> dict:
     Determines:
     - friends: accepted friendship records for this profile
     - incoming_requests: pending requests TO this profile (only if viewer == profile)
+    - outgoing_requests / outgoing_email_invitations: this profile's own pending
+      sent requests (only if viewer == profile) - templates must render these
+      WITHOUT the target's identity (name/avatar/username/profile link). Until
+      a request is accepted, the sender must not be able to learn who they
+      reached, nor even whether an invited email belongs to a registered
+      account at all - showing full identity only for Friendship rows (which
+      always resolve to a real account) while FriendInvitation rows (unmatched
+      emails) were invisible turned "does a pending card exist" into an
+      account-enumeration side channel. Both are rendered identically instead.
     - viewer_friendship_status: status of the friendship between viewer and this profile
     - viewer_can_request: whether the viewer can send a friend request to this profile
     """
+    from django.utils import timezone
+
+    from urbanlens.dashboard.models.friendship.invitation import FriendInvitation
+
     friend_profiles = get_connections(profile)
 
     incoming_requests: list[Friendship] = []
     outgoing_requests: list[Friendship] = []
+    outgoing_email_invitations: list[FriendInvitation] = []
     viewer_friendship: Friendship | None = None
     viewer_can_request = False
     mutual_friends: list[Profile] = []
@@ -53,6 +67,13 @@ def _friend_list_ctx(viewer: Profile | None, profile: Profile) -> dict:
                     from_profile=profile,
                     status=FriendshipStatus.REQUESTED,
                 ).select_related("to_profile__user"),
+            )
+            outgoing_email_invitations = list(
+                FriendInvitation.objects.filter(
+                    inviter=profile,
+                    accepted_at__isnull=True,
+                    expires_at__gt=timezone.now(),
+                ),
             )
 
         # Determine viewer's relationship with this profile
@@ -79,6 +100,8 @@ def _friend_list_ctx(viewer: Profile | None, profile: Profile) -> dict:
         "mutual_friends": mutual_friends,
         "incoming_requests": incoming_requests,
         "outgoing_requests": outgoing_requests,
+        "outgoing_email_invitations": outgoing_email_invitations,
+        "outgoing_pending_count": len(outgoing_requests) + len(outgoing_email_invitations),
         "viewer_friendship": viewer_friendship,
         "viewer_can_request": viewer_can_request,
         "is_own_profile": viewer is not None and viewer.pk == profile.pk,
@@ -393,6 +416,28 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
         if request.headers.get("HX-Request"):
             return _own_friend_widget_response(request)
         return _redirect_to_profile(profile_id)
+
+    def cancel_invitation(self, request: HttpRequest, invitation_id: int):
+        """Cancel a pending email invitation the current user sent (unmatched-address case).
+
+        Mirrors remove_friend's ownership check and response shape so an
+        outgoing FriendInvitation can be cancelled the same way an outgoing
+        Friendship request can - see _friend_list_ctx's docstring for why both
+        must be indistinguishable to the sender until accepted.
+        """
+        if not isinstance(request.user, User):
+            return HttpResponse("Authentication required.", status=401)
+
+        from urbanlens.dashboard.models.friendship.invitation import FriendInvitation
+
+        invitation = FriendInvitation.objects.filter(pk=invitation_id, inviter=request.user.profile).first()
+        if not invitation:
+            return HttpResponse("Invitation not found.", status=404)
+
+        invitation.delete()
+        if request.headers.get("HX-Request"):
+            return _own_friend_widget_response(request)
+        return redirect("profile.view_user", profile_slug=request.user.profile.slug or str(request.user.profile.uuid))
 
     def friend_list(self, request: HttpRequest, profile_id: int):
         """HTMX partial: friend list shown on the profile page."""
