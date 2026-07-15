@@ -96,3 +96,32 @@ class LibraryOfCongressPlugin(UrbanLensPlugin):
         from urbanlens.dashboard.services.apis.assets.loc import LOCJsonGateway
 
         return [MediaPanelSource("loc", LOCJsonGateway.service_key, LOCJsonGateway)]
+
+
+class InternetArchivePlugin(UrbanLensPlugin):
+    """Internet Archive media for pinned locations."""
+
+    name: ClassVar[str] = "internet_archive"
+    verbose_name: ClassVar[str] = "Internet Archive"
+    description: ClassVar[str] = (
+        "Free, keyless, open-source full-text/media search across archive.org's books, photos, "
+        "newspapers, and recordings for the pin detail page's Media gallery."
+    )
+    author: ClassVar[str] = "UrbanLens"
+
+    def get_service_defaults(self) -> dict[str, ServiceDefaults]:
+        """Rate-limit defaults for the Internet Archive search API."""
+        return {
+            "internet_archive": ServiceDefaults(
+                display_name="Internet Archive",
+                calls_per_minute=20,
+                calls_per_day=1000,
+                notes="Free, keyless, open-source (archive.org).",
+            ),
+        }
+
+    def get_panel_sources(self) -> list[PanelSource]:
+        """Contribute the Internet Archive media-gallery provider."""
+        from urbanlens.dashboard.services.apis.assets.internet_archive import InternetArchiveGateway
+
+        return [MediaPanelSource("internet_archive", InternetArchiveGateway.service_key, InternetArchiveGateway)]

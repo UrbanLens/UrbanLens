@@ -481,6 +481,41 @@ urlpatterns = [
                                 name="pin.azure_maps",
                             ),
                             path(
+                                "<slug:pin_slug>/photon/",
+                                pin.PinController.as_view({"get": "photon_info"}),
+                                name="pin.photon",
+                            ),
+                            path(
+                                "<slug:pin_slug>/census-tigerweb/",
+                                pin.PinController.as_view({"get": "census_tigerweb_info"}),
+                                name="pin.census_tigerweb",
+                            ),
+                            path(
+                                "<slug:pin_slug>/epa-echo/",
+                                pin.PinController.as_view({"get": "epa_echo_info"}),
+                                name="pin.epa_echo",
+                            ),
+                            path(
+                                "<slug:pin_slug>/inaturalist/",
+                                pin.PinController.as_view({"get": "inaturalist_info"}),
+                                name="pin.inaturalist",
+                            ),
+                            path(
+                                "<slug:pin_slug>/gdelt/",
+                                pin.PinController.as_view({"get": "gdelt_info"}),
+                                name="pin.gdelt",
+                            ),
+                            path(
+                                "<slug:pin_slug>/overture-building/",
+                                pin.PinController.as_view({"get": "overture_building_info"}),
+                                name="pin.overture_building",
+                            ),
+                            path(
+                                "<slug:pin_slug>/usgs-earthquakes/",
+                                pin.PinController.as_view({"get": "usgs_earthquakes_info"}),
+                                name="pin.usgs_earthquakes",
+                            ),
+                            path(
                                 "<slug:pin_slug>/usgs-topo/",
                                 pin.PinController.as_view({"get": "usgs_topo_info"}),
                                 name="pin.usgs_topo",

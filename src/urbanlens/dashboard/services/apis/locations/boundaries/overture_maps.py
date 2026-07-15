@@ -25,9 +25,20 @@ separately, since it's a peer dependency, not a hard one, of overturemaps).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import ClassVar
+import math
+from typing import Any, ClassVar
 
-from urbanlens.dashboard.services.apis.locations.base import BOUNDARY_LOOKUP_BBOX_DEGREES, BBox, BoundaryProvider, best_containing_polygon, create_bbox, validate_bbox
+from django.contrib.gis.geos import Point
+
+from urbanlens.dashboard.services.apis.locations.base import (
+    BOUNDARY_LOOKUP_BBOX_DEGREES,
+    BBox,
+    BoundaryProvider,
+    _polygon_from_feature,
+    best_containing_polygon,
+    create_bbox,
+    validate_bbox,
+)
 
 # Adjust this import to wherever Gateway/Gateway actually live.
 from urbanlens.dashboard.services.gateway import Gateway
@@ -41,6 +52,17 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from django.contrib.gis.geos import Polygon
+
+
+def _clean_value(value: Any) -> Any:
+    """Turn Overture's pandas ``NaN``/blank-string "no value" markers into ``None``."""
+    if value is None:
+        return None
+    if isinstance(value, float) and math.isnan(value):
+        return None
+    if isinstance(value, str) and not value.strip():
+        return None
+    return value
 
 
 @dataclass(slots=True, kw_only=True)
@@ -138,6 +160,49 @@ class OvertureMapsGateway(Gateway, BoundaryProvider):
             latitude,
             longitude,
         )
+
+    def get_building_attributes(self, latitude: float, longitude: float) -> dict[str, Any] | None:
+        """Return the pinned building's physical attributes from Overture's Buildings theme.
+
+        "Real estate" context Overture actually publishes (Overture has no
+        year-built field): the building class/subtype, height, floor count,
+        and roof construction, plus its primary name when Overture has one.
+
+        Args:
+            latitude: WGS-84 latitude.
+            longitude: WGS-84 longitude.
+
+        Returns:
+            Dict with ``class_``, ``subtype``, ``height_m``, ``num_floors``,
+            ``roof_shape``, ``roof_material``, ``primary_name`` (each ``None``
+            when Overture has no value), or None when no building footprint
+            contains the point.
+        """
+        point = Point(float(longitude), float(latitude), srid=4326)
+        best_area: float | None = None
+        best_properties: dict[str, Any] | None = None
+        for feature in _features_from_geodataframe(self.get_buildings(create_bbox(latitude, longitude, self.bbox_delta))):
+            polygon = _polygon_from_feature(feature)
+            if polygon is None or not (polygon.contains(point) or polygon.touches(point)):
+                continue
+            if best_area is None or polygon.area < best_area:
+                best_area = polygon.area
+                best_properties = feature.get("properties") or {}
+
+        if best_properties is None:
+            return None
+
+        names = _clean_value(best_properties.get("names"))
+        primary_name = names.get("primary") if isinstance(names, dict) else None
+        return {
+            "class_": _clean_value(best_properties.get("class")),
+            "subtype": _clean_value(best_properties.get("subtype")),
+            "height_m": _clean_value(best_properties.get("height")),
+            "num_floors": _clean_value(best_properties.get("num_floors")),
+            "roof_shape": _clean_value(best_properties.get("roof_shape")),
+            "roof_material": _clean_value(best_properties.get("roof_material")),
+            "primary_name": _clean_value(primary_name),
+        }
 
 
 def _features_from_geodataframe(frame) -> list[dict]:

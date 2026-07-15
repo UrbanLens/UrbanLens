@@ -9,15 +9,16 @@
             {% for item in forecast %}
             <div class="wx-entry">
                 <div class="wx-time">{{ item.date|date:"D" }}<br>{{ item.date|date:"g A" }}</div>
-                <img class="wx-icon"
-                     src="https://openweathermap.org/img/wn/{{ item.weather.0.icon }}@2x.png"
-                     alt="{{ item.weather.0.main }}"
-                     width="48" height="48">
-                <div class="wx-temp">{{ item.main.temp|floatformat:"0" }}°<span class="wx-unit">F</span></div>
-                <div class="wx-condition">{{ item.weather.0.main }}</div>
+                <i class="material-symbols-outlined wx-icon">{{ item.icon }}</i>
+                <div class="wx-temp">{{ item.temp|floatformat:"0" }}°<span class="wx-unit">F</span></div>
+                <div class="wx-condition">{{ item.condition }}</div>
                 <div class="wx-meta">
-                    <span title="Humidity"><i class="material-symbols-outlined">water_drop</i>{{ item.main.humidity }}%</span>
-                    <span title="Wind"><i class="material-symbols-outlined">air</i>{{ item.wind.speed|floatformat:"0" }}</span>
+                    {% if item.humidity %}
+                    <span title="Humidity"><i class="material-symbols-outlined">water_drop</i>{{ item.humidity }}%</span>
+                    {% endif %}
+                    {% if item.wind_speed %}
+                    <span title="Wind"><i class="material-symbols-outlined">air</i>{{ item.wind_speed|floatformat:"0" }}</span>
+                    {% endif %}
                 </div>
             </div>
             {% endfor %}

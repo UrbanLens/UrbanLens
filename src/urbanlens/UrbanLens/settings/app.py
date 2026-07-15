@@ -150,6 +150,8 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     mapbox_api_key: str | None = Field(default=None, description="The Mapbox public access token (pk.* token)")
     bing_maps_api_key: str | None = Field(default=None, description="The Bing Maps API key (from Azure portal)")
     azure_maps_subscription_key: str | None = Field(default=None, description="The Azure Maps subscription key (Azure Portal -> Azure Maps account -> Authentication)")
+    ollama_base_url: str | None = Field(default=None, description="Base URL of a self-hosted Ollama server (e.g. http://localhost:11434) for local, free AI photo-keyword generation")
+    ollama_vision_model: str = Field(default="llava", description="Ollama vision model name used for photo keyword generation")
     mapillary_access_token: str | None = Field(default=None, description="The Mapillary client access token")
     brave_search_api_key: str | None = Field(default=None, description="The Brave Search API key")
     smithsonian_api_key: str | None = Field(default=None, description="The smithsonian key")
