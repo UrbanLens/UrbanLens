@@ -1,5 +1,4 @@
-{# Google Photos: session complete - grid of everything the user picked.
-   Context: pin, session_id, assets #}
+
 <div id="google-photos-picker-grid">
     <form hx-post="{% url 'pin.google_photos.import' pin.slug %}"
           hx-target="#pin-import-photos-body"

@@ -69,10 +69,7 @@
                            onchange="notifDelivery(this)">
                 </label>
 
-                {# WhatsApp - independent boolean toggle, not part of the site/email enum above.
-                   Greyed out (not the disabled attribute) when no WhatsApp number is on file, so
-                   an unrelated field's change still round-trips this one's stored value instead
-                   of the browser silently dropping it from the submitted form. #}
+
                 <label class="notif-prefs__cell{% if not has_whatsapp_number %} notif-prefs__cell--unavailable{% endif %}"
                        {% if not has_whatsapp_number %}title="Connect a WhatsApp number in your profile to enable this."{% endif %}>
                     <span class="notif-prefs__sr-only">{{ title }}: WhatsApp</span>
