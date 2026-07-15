@@ -199,7 +199,7 @@ class WebSearchViewTests(TestCase):
         request.user = pin.profile.user
 
         with (
-            patch("urbanlens.dashboard.controllers.pin.get_search_gateway") as mock_factory,
+            patch("urbanlens.dashboard.controllers.pin.search_web") as mock_search_web,
             patch.object(Pin.objects, "select_related") as mock_select_related,
         ):
             mock_select_related.return_value.get.return_value = pin
@@ -207,7 +207,7 @@ class WebSearchViewTests(TestCase):
             response = view.web_search(request, pin_slug=pin.slug)
 
         self.assertEqual(response.status_code, 403)
-        mock_factory.assert_not_called()
+        mock_search_web.assert_not_called()
 
     def test_successful_search_returns_200(self):
         from django.test import RequestFactory
@@ -223,21 +223,19 @@ class WebSearchViewTests(TestCase):
         mock_results = [{"title": "Result", "link": "http://example.com/page", "snippet": "A snippet"}]
 
         with (
-            patch("urbanlens.dashboard.controllers.pin.get_search_gateway") as mock_factory,
+            patch("urbanlens.dashboard.controllers.pin.search_web") as mock_search_web,
             patch.object(Pin.objects, "select_related") as mock_select_related,
         ):
-            mock_gw = MagicMock()
-            mock_gw.search.return_value = mock_results
-            mock_factory.return_value = mock_gw
+            mock_search_web.return_value = mock_results
             mock_select_related.return_value.get.return_value = pin
 
             view = PinController()
             response = view.web_search(request, pin_slug=pin.slug)
 
         self.assertEqual(response.status_code, 200)
-        mock_gw.search.assert_called_once()
-        self.assertIn("Official Test Location", mock_gw.search.call_args.args[0])
-        self.assertNotIn("User Edited Location", mock_gw.search.call_args.args[0])
+        mock_search_web.assert_called_once()
+        self.assertIn("Official Test Location", mock_search_web.call_args.args[0])
+        self.assertNotIn("User Edited Location", mock_search_web.call_args.args[0])
 
     def test_search_skips_pins_without_official_name(self):
         from django.test import RequestFactory
@@ -252,7 +250,7 @@ class WebSearchViewTests(TestCase):
         request.user = pin.profile.user
 
         with (
-            patch("urbanlens.dashboard.controllers.pin.get_search_gateway") as mock_factory,
+            patch("urbanlens.dashboard.controllers.pin.search_web") as mock_search_web,
             patch.object(Pin.objects, "select_related") as mock_select_related,
         ):
             mock_select_related.return_value.get.return_value = pin
@@ -260,7 +258,7 @@ class WebSearchViewTests(TestCase):
             response = view.web_search(request, pin_slug=pin.slug)
 
         self.assertEqual(response.status_code, 204)
-        mock_factory.assert_not_called()
+        mock_search_web.assert_not_called()
 
     def test_domain_key_added_to_each_result(self):
         from django.test import RequestFactory
@@ -285,13 +283,11 @@ class WebSearchViewTests(TestCase):
         ]
 
         with (
-            patch("urbanlens.dashboard.controllers.pin.get_search_gateway") as mock_factory,
+            patch("urbanlens.dashboard.controllers.pin.search_web") as mock_search_web,
             patch.object(Pin.objects, "select_related") as mock_select_related,
             patch("urbanlens.dashboard.controllers.pin.render", side_effect=fake_render),
         ):
-            mock_gw = MagicMock()
-            mock_gw.search.return_value = mock_results
-            mock_factory.return_value = mock_gw
+            mock_search_web.return_value = mock_results
             mock_select_related.return_value.get.return_value = pin
 
             view = PinController()
@@ -320,12 +316,10 @@ class WebSearchViewTests(TestCase):
         mock_results = [{"title": "Result", "link": "http://example.com/page", "snippet": "s"}]
 
         with (
-            patch("urbanlens.dashboard.controllers.pin.get_search_gateway") as mock_factory,
+            patch("urbanlens.dashboard.controllers.pin.search_web") as mock_search_web,
             patch.object(Pin.objects, "select_related") as mock_select_related,
         ):
-            mock_gw = MagicMock()
-            mock_gw.search.return_value = mock_results
-            mock_factory.return_value = mock_gw
+            mock_search_web.return_value = mock_results
             mock_select_related.return_value.get.side_effect = [pin_a, pin_b]
 
             view = PinController()
@@ -339,7 +333,7 @@ class WebSearchViewTests(TestCase):
 
         self.assertEqual(response_a.status_code, 200)
         self.assertEqual(response_b.status_code, 200)
-        mock_gw.search.assert_called_once()
+        mock_search_web.assert_called_once()
 
     def test_refresh_rejected_when_cache_is_too_recent(self):
         from django.test import RequestFactory
@@ -381,19 +375,17 @@ class WebSearchViewTests(TestCase):
         mock_results = [{"title": "Fresh Result", "link": "http://example.com/new", "snippet": "s"}]
 
         with (
-            patch("urbanlens.dashboard.controllers.pin.get_search_gateway") as mock_factory,
+            patch("urbanlens.dashboard.controllers.pin.search_web") as mock_search_web,
             patch.object(Pin.objects, "select_related") as mock_select_related,
         ):
-            mock_gw = MagicMock()
-            mock_gw.search.return_value = mock_results
-            mock_factory.return_value = mock_gw
+            mock_search_web.return_value = mock_results
             mock_select_related.return_value.get.return_value = pin
 
             view = PinController()
             response = view.web_search_refresh(request, pin_slug=pin.slug)
 
         self.assertEqual(response.status_code, 200)
-        mock_gw.search.assert_called_once()
+        mock_search_web.assert_called_once()
 
     def test_gateway_exception_returns_error_template(self):
         from django.test import RequestFactory
@@ -413,13 +405,11 @@ class WebSearchViewTests(TestCase):
             return HttpResponse("")
 
         with (
-            patch("urbanlens.dashboard.controllers.pin.get_search_gateway") as mock_factory,
+            patch("urbanlens.dashboard.controllers.pin.search_web") as mock_search_web,
             patch.object(Pin.objects, "select_related") as mock_select_related,
             patch("urbanlens.dashboard.controllers.pin.render", side_effect=fake_render),
         ):
-            mock_gw = MagicMock()
-            mock_gw.search.side_effect = RuntimeError("API down")
-            mock_factory.return_value = mock_gw
+            mock_search_web.side_effect = RuntimeError("API down")
             mock_select_related.return_value.get.return_value = pin
 
             view = PinController()

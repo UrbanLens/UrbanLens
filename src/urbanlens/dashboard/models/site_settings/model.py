@@ -205,7 +205,7 @@ class SiteSettings(abstract.FrontendDashboardModel):
         max_length=20,
         choices=SearchProviderChoice.choices,
         default=SearchProviderChoice.BRAVE,
-        help_text="Which web search provider to use for pin news/search results.",
+        help_text="Preferred web search provider for pin news/search results, tried first. If it's unconfigured, rate-limited, or fails, the remaining providers (SearXNG, Google, Brave, DuckDuckGo, Mojeek, Marginalia) are tried automatically in that order.",
         verbose_name="Search provider",
     )
 

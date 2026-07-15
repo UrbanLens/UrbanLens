@@ -6,9 +6,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-from hypothesis import given
-from hypothesis import settings as hyp_settings
-from hypothesis import strategies as st
+from hypothesis import given, settings as hyp_settings, strategies as st
 from requests import HTTPError
 
 from urbanlens.core.tests.testcase import TestCase
@@ -122,3 +120,20 @@ class SearxngHTTPTests(TestCase):
         result = gw.search("test")
         self.assertIsInstance(result, list)
         self.assertEqual(len(result), 1)
+
+
+class SearxngRateLimitDefaultsTests(TestCase):
+    """SearXNG is self-hosted infrastructure, not a metered third-party quota."""
+
+    def test_no_daily_cap(self):
+        from urbanlens.dashboard.plugins.builtin.searxng import SearxngPlugin
+
+        defaults = SearxngPlugin().get_service_defaults()["searxng"]
+        self.assertIsNone(defaults.calls_per_day)
+
+    def test_per_minute_limit_still_protects_upstream_engines(self):
+        from urbanlens.dashboard.plugins.builtin.searxng import SearxngPlugin
+
+        defaults = SearxngPlugin().get_service_defaults()["searxng"]
+        self.assertIsNotNone(defaults.calls_per_minute)
+        self.assertGreater(defaults.calls_per_minute, 0)

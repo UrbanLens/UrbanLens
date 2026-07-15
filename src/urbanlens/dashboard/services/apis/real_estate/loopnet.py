@@ -134,17 +134,18 @@ class LoopNetGateway(Gateway):
         Returns parsed snippet data that can still surface property info.
         """
         try:
-            from urbanlens.dashboard.services.search import get_search_gateway
+            from urbanlens.dashboard.services.search import search_web
         except ImportError:
             return None
 
         try:
             import requests.exceptions
 
-            gateway = get_search_gateway()
+            from urbanlens.dashboard.services.rate_limiter import RequestCancelledError
+
             query = _LOOPNET_SITE_SEARCH.format(address=address)
-            results = gateway.search(query)
-        except (RuntimeError, requests.exceptions.RequestException, OSError):
+            results = search_web(query)
+        except (RuntimeError, requests.exceptions.RequestException, OSError, RequestCancelledError):
             logger.debug("LoopNet web-search fallback failed for %r", address)
             return None
 

@@ -24,8 +24,9 @@ from urbanlens.dashboard.models.profile import Profile
 from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
 from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
 from urbanlens.dashboard.services.pagination import get_page
+from urbanlens.dashboard.services.rate_limiter import RequestCancelledError
 from urbanlens.dashboard.services.redact import redact_coordinate
-from urbanlens.dashboard.services.search import format_search_date, get_search_gateway
+from urbanlens.dashboard.services.search import format_search_date, search_web
 from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
@@ -589,13 +590,14 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         from urbanlens.dashboard.services.timeout_utils import EXTERNAL_CALL_DEADLINE, call_with_deadline
 
         try:
-            search_gateway = get_search_gateway()
             # Deadline-bounded: this is the one external fetch still made on
             # the request path (interactive, VIP-gated, and cached below), so
             # a slow search backend degrades to the error card instead of
-            # holding the request open.
+            # holding the request open. search_web() tries every configured
+            # provider in priority order, so one unconfigured/rate-limited
+            # provider doesn't fail the whole request.
             search_results = call_with_deadline(
-                lambda: search_gateway.search(search_name),
+                lambda: search_web(search_name),
                 timeout=EXTERNAL_CALL_DEADLINE,
                 default=None,
                 name="web_search",
@@ -606,7 +608,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                     "dashboard/pages/location/web_search.html",
                     {"pin": pin, "error": "Search unavailable. Please try again later."},
                 )
-        except (OSError, ValueError, RuntimeError) as e:
+        except (OSError, ValueError, RuntimeError, RequestCancelledError) as e:
             logger.exception("Unable to contact web search API: %s", e)
             return render(
                 request,

@@ -20,12 +20,19 @@ class SearxngPlugin(UrbanLensPlugin):
     author: ClassVar[str] = "UrbanLens"
 
     def get_service_defaults(self) -> dict[str, ServiceDefaults]:
-        """Rate-limit defaults for a self-hosted/trusted SearXNG instance."""
+        """Rate-limit defaults for a self-hosted/trusted SearXNG instance.
+
+        No daily cap: it's our own infrastructure, not a metered third-party
+        quota. The per-minute limit stays conservative instead, since a
+        single SearXNG query fans out to several upstream engines (Google,
+        Bing, Brave, DuckDuckGo, etc.) that could rate-limit or block our
+        instance's IP if hit too fast - that's the only real constraint here.
+        """
         return {
             "searxng": ServiceDefaults(
                 display_name="SearXNG",
                 calls_per_minute=20,
-                calls_per_day=1000,
-                notes="Free, keyless, self-hosted metasearch. Limits depend entirely on the configured instance's own capacity.",
+                calls_per_day=None,
+                notes="Free, keyless, self-hosted metasearch - no daily cap since it's our own infrastructure. The per-minute limit protects the upstream engines SearXNG scrapes on our behalf, not our own capacity.",
             ),
         }
