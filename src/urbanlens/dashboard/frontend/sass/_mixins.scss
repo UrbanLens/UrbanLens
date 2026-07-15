@@ -144,12 +144,24 @@ $inputs: (
 		--ul-surface-raised: #{surface-rung($next)};
 		--ul-surface-raised-border: #{surface-rung-border($next)};
 	} @else {
-		background: var(--ul-surface);
-		border: 1px solid var(--ul-surface-border);
-		--ul-surface: color-mix(in srgb, var(--ul-surface), var(--mix-color, #000) var(--mix-amount, 10%));
-		--ul-surface-border: color-mix(in srgb, var(--ul-surface-border), var(--mix-color, #000) var(--mix-amount, 10%));
-		--ul-surface-raised: color-mix(in srgb, var(--ul-surface-raised), var(--mix-color, #000) var(--mix-amount, 10%));
-		--ul-surface-raised-border: color-mix(in srgb, var(--ul-surface-raised-border), var(--mix-color, #000) var(--mix-amount, 10%));
+		// A custom property that references itself inside its own value (e.g.
+		// `--ul-surface: color-mix(in srgb, var(--ul-surface), ...)`) is
+		// invalid at computed-value time per the CSS spec - it silently stops
+		// updating instead of progressively mixing, which is what broke
+		// contrast between nested containers. Route each mix through a
+		// differently-named property first, then copy the result across, so
+		// the property being declared never appears inside its own value.
+		--ul-surface-mixed: color-mix(in srgb, var(--ul-surface), var(--mix-color, #000) var(--mix-amount, 10%));
+		--ul-surface-border-mixed: color-mix(in srgb, var(--ul-surface-border), var(--mix-color, #000) var(--mix-amount, 10%));
+		--ul-surface-raised-mixed: color-mix(in srgb, var(--ul-surface-raised), var(--mix-color, #000) var(--mix-amount, 10%));
+		--ul-surface-raised-border-mixed: color-mix(in srgb, var(--ul-surface-raised-border), var(--mix-color, #000) var(--mix-amount, 10%));
+
+		background: var(--ul-surface-mixed);
+		border: 1px solid var(--ul-surface-border-mixed);
+		--ul-surface: var(--ul-surface-mixed);
+		--ul-surface-border: var(--ul-surface-border-mixed);
+		--ul-surface-raised: var(--ul-surface-raised-mixed);
+		--ul-surface-raised-border: var(--ul-surface-raised-border-mixed);
 	}
 	border-radius: $radius;
 }
