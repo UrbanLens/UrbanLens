@@ -27,6 +27,13 @@ class OvertureBuildingAttributesPanelSource(InfoPanelSource):
     section_id = "overture-building-section"
     icon = "apartment"
     title = "Building Characteristics"
+    # Stays on the default (prefork) queue, not the fast thread-pool queue -
+    # OvertureMapsGateway reads GeoParquet via pyarrow/geopandas (real
+    # CPU-bound parsing/geometry work, same class of cost as BoundaryPanelSource's
+    # shapely work), and several of those running concurrently on a thread
+    # pool would cause enough GIL contention to slow down every other panel
+    # sharing it. See PanelSource.queue.
+    queue = "celery"
 
     def fetch(self, pin: Pin) -> None:
         """Look up the pinned building's Overture attributes and cache the result."""

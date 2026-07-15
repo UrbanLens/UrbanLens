@@ -109,6 +109,16 @@ class PanelSource(ABC):
         outer_class: CSS classes for the pending placeholder's outer element.
         outer_is_card: True when the section element is itself the card (the
             satellite/street layout) rather than wrapping an inner card div.
+        queue: Celery queue this source's fetch is dispatched to. Defaults to
+            the dedicated ``panel_fetch`` queue (a high-concurrency thread
+            pool - see docker-compose.yml's celery-worker-panels service),
+            appropriate for the common case of "one or two small HTTP calls."
+            Override to ``"celery"`` (the default queue, prefork pool) for a
+            source whose fetch does real CPU-bound work (e.g. Overture's
+            GeoParquet/Shapely geometry parsing) - many of those running at
+            once on a thread pool would cause GIL contention that slows down
+            every other panel sharing it, defeating the point of splitting
+            the queue in the first place.
     """
 
     key: ClassVar[str]
@@ -117,6 +127,7 @@ class PanelSource(ABC):
     title: ClassVar[str] = ""
     outer_class: ClassVar[str] = ""
     outer_is_card: ClassVar[bool] = False
+    queue: ClassVar[str] = "panel_fetch"
 
     def scope(self, pin: Pin) -> str:
         """Cache-key scope identifying which rows/entries this pin's fetch fills.
@@ -379,6 +390,12 @@ class BoundaryPanelSource(PanelSource):
     """
 
     key = "boundary"
+    # Stays on the default (prefork) queue, not the fast thread-pool queue -
+    # generate_location_boundaries does real CPU-bound work (gunzipping
+    # building-footprint shards, shapely geometry ops), and several of those
+    # running concurrently on a thread pool would cause enough GIL contention
+    # to slow down every other panel sharing it. See PanelSource.queue.
+    queue = "celery"
 
     def scope(self, pin: Pin) -> str:
         """Location-scoped: default boundaries are keyed by Location."""
@@ -623,7 +640,7 @@ def schedule_panel_fetch(source_key: str, pin: Pin) -> bool:
     if cache.add(source.flight_key(pin), 1, FLIGHT_TTL_SECONDS):
         from urbanlens.dashboard.tasks import fetch_panel_source
 
-        fetch_panel_source.delay(source_key, pin.pk)
+        fetch_panel_source.apply_async(args=[source_key, pin.pk], queue=source.queue)
     return True
 
 

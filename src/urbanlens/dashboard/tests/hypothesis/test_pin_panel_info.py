@@ -70,7 +70,7 @@ class PanelInfoDispatchTests(TestCase):
         with mock.patch("urbanlens.dashboard.tasks.fetch_panel_source") as fetch_task:
             response = self.client.get(reverse("pin.panel", args=[self.pin.slug, "photon"]))
         self.assertEqual(response.status_code, 200)
-        fetch_task.delay.assert_called_once()
+        fetch_task.apply_async.assert_called_once_with(args=["photon", self.pin.pk], queue="panel_fetch")
         self.assertContains(response, "Photon (OpenStreetMap)")
 
     def test_render_context_returning_none_yields_204(self) -> None:

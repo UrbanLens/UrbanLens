@@ -208,10 +208,12 @@ services:
     build:
       <<: *app-build
     entrypoint: ["/docker-entrypoint.sh", "python", "-m", "celery"]
-    # Concurrency sized for the external-data panel fetches (see
-    # services/external_data.py): a cold pin detail page enqueues ~10 small
-    # IO-bound tasks at once, and 2 workers made the last panels wait through
-    # every earlier provider's network time before starting.
+    # Handles every task EXCEPT external-data panel fetches, which now run on
+    # celery-worker-panels below (see that service's comment for why they're
+    # split out). Concurrency=4 (prefork - one OS process per slot) is plenty
+    # for this queue's remaining traffic: photo/backup/export jobs and the
+    # scheduled housekeeping tasks (safety check-ins, account deletion, etc),
+    # none of which arrive in the same "~10 at once" bursts panel fetches did.
     # loglevel=warning: info logs a "received"/"succeeded" line for every task,
     # including the safety-checkin scheduled tasks that fire every 5 minutes -
     # that drowns out real signal in production. Failures/retries are still
@@ -227,6 +229,53 @@ services:
       - logs:/var/log/urbanlens
       - media_volume:/app/src/urbanlens/media
       - backups:/app/src/backups
+    networks:
+      - app_network
+    environment:
+      <<: *app-env
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "10"
+
+  celery-worker-panels:
+    container_name: urbanlens_${UL_ENVIRONMENT:-production}_celery_worker_panels
+    build:
+      <<: *app-build
+    entrypoint: ["/docker-entrypoint.sh", "python", "-m", "celery"]
+    # Dedicated queue + worker for external-data panel fetches
+    # (services/external_data.py's fetch_panel_source task, dispatched to the
+    # "panel_fetch" queue via PanelSource.queue). Split out from celery-worker
+    # above because a cold pin detail page enqueues ~10 of these small,
+    # mostly-IO-bound tasks at once, all sharing celery-worker's 4 process
+    # slots - one slow/degraded external API could occupy a slot long enough
+    # that unrelated panels queued behind it were still "Loading..." when the
+    # client's poll budget ran out (see the pin-page bug report this fixed).
+    #
+    # --pool=threads (real OS threads, no extra dependency - built into
+    # Celery) instead of prefork: these tasks are >95% spent waiting on HTTP
+    # responses, so one thread per task costs kilobytes instead of a whole
+    # Python/Django process's worth of memory, letting --concurrency go much
+    # higher for the same resource budget. Deliberately NOT gevent/eventlet:
+    # this app already got burned once by cooperative-scheduling greenlets
+    # (see WEB_CONCURRENCY's comment above) - a CPU-bound unit of work never
+    # yields control in a gevent loop, freezing every other greenlet in that
+    # process indefinitely, whereas the GIL still preempts between OS threads
+    # every few ms regardless. The couple of panels that DO real CPU-bound
+    # work (BoundaryPanelSource, OvertureBuildingAttributesPanelSource -
+    # GeoParquet/Shapely geometry parsing) opt out via PanelSource.queue and
+    # stay on celery-worker's prefork pool instead, so they can't cause GIL
+    # contention here for the panels that are genuinely just waiting on I/O.
+    command: ["-A", "urbanlens.UrbanLens", "worker", "--loglevel=warning", "--pool=threads", "--concurrency=20", "-Q", "panel_fetch"]
+    restart: on-failure
+    depends_on:
+      db:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    volumes:
+      - logs:/var/log/urbanlens
     networks:
       - app_network
     environment:

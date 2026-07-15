@@ -67,7 +67,7 @@ def test_schedule_panel_fetch_skipped_when_external_apis_disabled() -> None:
         result = schedule_panel_fetch("boundary", pin)
 
     assert result is False
-    fetch_task.delay.assert_not_called()
+    fetch_task.apply_async.assert_not_called()
 
 
 @pytest.mark.django_db
@@ -81,7 +81,37 @@ def test_schedule_panel_fetch_runs_when_external_apis_enabled() -> None:
         result = schedule_panel_fetch("boundary", pin)
 
     assert result is True
-    fetch_task.delay.assert_called_once()
+    fetch_task.apply_async.assert_called_once_with(args=["boundary", pin.pk], queue="celery")
+
+
+@pytest.mark.django_db
+def test_fast_panel_dispatches_to_the_panel_fetch_queue() -> None:
+    """Most panels (pure HTTP + JSON, no CPU-heavy parsing) default to the
+    high-concurrency thread-pool queue - see PanelSource.queue and
+    docker-compose.yml's celery-worker-panels service."""
+    from model_bakery import baker
+
+    pin: Pin = baker.make_recipe("dashboard.pin")
+
+    with mock.patch("urbanlens.dashboard.tasks.fetch_panel_source") as fetch_task:
+        schedule_panel_fetch("photon", pin)
+
+    fetch_task.apply_async.assert_called_once_with(args=["photon", pin.pk], queue="panel_fetch")
+
+
+@pytest.mark.django_db
+def test_cpu_heavy_panels_stay_on_the_default_queue() -> None:
+    """BoundaryPanelSource and OvertureBuildingAttributesPanelSource do real CPU-bound
+    work (gunzipping/parsing GeoParquet, shapely geometry) - several of those running
+    concurrently on the thread-pool queue would cause enough GIL contention to slow
+    down every other panel sharing it, so they opt out via PanelSource.queue."""
+    from urbanlens.dashboard.services.external_data import BoundaryPanelSource, get_panel_source
+
+    assert BoundaryPanelSource().queue == "celery"
+
+    overture = get_panel_source("overture_building_attributes")
+    assert overture is not None
+    assert overture.queue == "celery"
 
 
 @pytest.mark.django_db
