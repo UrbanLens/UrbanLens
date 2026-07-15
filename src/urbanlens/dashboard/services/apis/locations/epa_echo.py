@@ -31,6 +31,7 @@ _BASE_URL = "https://echodata.epa.gov/echo"
 def _normalize_facility(facility: dict[str, Any]) -> dict[str, Any]:
     """Flatten one ECHO facility record into a display-friendly dict."""
     address_parts = [facility.get("FacStreet"), facility.get("FacCity"), facility.get("FacState"), facility.get("FacZip")]
+    fac_lat = facility.get("FacLat")
     return {
         "name": facility.get("FacName") or "",
         "address": ", ".join(part for part in address_parts if part),
@@ -41,6 +42,12 @@ def _normalize_facility(facility: dict[str, Any]) -> dict[str, Any]:
         "last_inspection_date": facility.get("FacDateLastInspection") or "",
         "active": facility.get("FacActiveFlag") == "Y",
         "registry_id": facility.get("RegistryID") or "",
+        # ECHO's nearby-search rows include a latitude but no longitude (see
+        # get_nearby_facilities' docstring) - not enough for a real distance
+        # sort, but epa_echo.py's exact-match loop uses it as a cheap proxy to
+        # prioritize which of these get their (rate-limited) DFR detail lookup
+        # first, since the true match is usually among the closest by latitude.
+        "latitude": float(fac_lat) if fac_lat else None,
     }
 
 

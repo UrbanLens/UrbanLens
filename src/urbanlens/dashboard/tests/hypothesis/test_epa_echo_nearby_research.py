@@ -43,6 +43,30 @@ class MilesBetweenTests(TestCase):
         self.assertAlmostEqual(_miles_between(0.0, 0.0, 0.0, 1.0), 69.17, delta=0.5)
 
 
+class NormalizeFacilityLatitudeTests(TestCase):
+    """EpaEchoGateway._normalize_facility's 'latitude' field - used to prioritize
+    which candidates the exact-match loop spends its rate-limited DFR lookups on
+    (see _fetch_epa_echo_data)."""
+
+    def test_valid_fac_lat_is_parsed_as_float(self) -> None:
+        from urbanlens.dashboard.services.apis.locations.epa_echo import _normalize_facility
+
+        result = _normalize_facility({"FacLat": "40.1234", "FacName": "Test"})
+        self.assertEqual(result["latitude"], 40.1234)
+
+    def test_missing_fac_lat_yields_none(self) -> None:
+        from urbanlens.dashboard.services.apis.locations.epa_echo import _normalize_facility
+
+        result = _normalize_facility({"FacName": "Test"})
+        self.assertIsNone(result["latitude"])
+
+    def test_empty_fac_lat_yields_none(self) -> None:
+        from urbanlens.dashboard.services.apis.locations.epa_echo import _normalize_facility
+
+        result = _normalize_facility({"FacLat": "", "FacName": "Test"})
+        self.assertIsNone(result["latitude"])
+
+
 class EpaEchoDetailPanelSourceTests(TestCase):
     """render_context() for the unconditional exact-site card."""
 
@@ -333,6 +357,64 @@ class FetchEpaEchoDataExactMatchTests(TestCase):
         self.assertEqual(result["facilities"], facilities)
         assert result["exact_site"] is not None
         self.assertEqual(result["exact_site"]["registry_id"], "R1")
+
+    def test_candidates_are_checked_closest_by_latitude_first(self) -> None:
+        """Regression guard: ECHO's own rate limit usually allows checking only a
+        couple of candidates per fetch before RateLimitExceededError cuts the loop
+        short (see _EXACT_MATCH_BUDGET_SECONDS's comment) - that scarce budget must
+        be spent on the candidates most likely to be the true match, not just
+        whichever ones ECHO happened to list first. The true match here (RC) is
+        LAST in the raw facilities array but closest by latitude - the mocked
+        rate limit allows exactly one successful DFR lookup before the next
+        call trips it, so this only passes if RC (not RA, the array-order-
+        first candidate) was the one checked first. The loop keeps going after
+        finding a match (a closer candidate could still beat it), so a second
+        call happens too - checking that RA (the farthest, array-order-first
+        candidate) was never reached confirms the rate limit trips before the
+        loop gets that far, which is exactly why checking order matters here."""
+        from urbanlens.dashboard.services.rate_limiter import RateLimitExceededError
+
+        facilities = [
+            {"name": "Far Facility A", "address": "1 Far St", "registry_id": "RA", "latitude": 45.0},
+            {"name": "Far Facility B", "address": "2 Far St", "registry_id": "RB", "latitude": 44.0},
+            {"name": "True Match", "address": "1 Main St", "registry_id": "RC", "latitude": 40.0001},
+        ]
+        gateway = mock.Mock()
+        gateway.get_nearby_facilities.return_value = facilities
+        gateway.get_facility_detail.side_effect = [
+            {"latitude": 40.0, "longitude": -74.0, "programs": []},
+            RateLimitExceededError("epa_echo"),
+        ]
+        with (
+            mock.patch("urbanlens.dashboard.services.apis.locations.epa_echo.EpaEchoGateway", return_value=gateway),
+            mock.patch("urbanlens.dashboard.plugins.builtin.epa_echo.time.monotonic", return_value=0.0),
+        ):
+            result = _fetch_epa_echo_data(self.pin)
+        checked_registry_ids = [call.args[0] for call in gateway.get_facility_detail.call_args_list]
+        self.assertEqual(checked_registry_ids[0], "RC")
+        self.assertNotIn("RA", checked_registry_ids)
+        assert result["exact_site"] is not None
+        self.assertEqual(result["exact_site"]["registry_id"], "RC")
+
+    def test_facilities_without_latitude_data_fall_back_to_original_order(self) -> None:
+        """No latitude on any candidate (e.g. a stale ECHO response shape) must not
+        crash the sort - ties should preserve the original array order."""
+        facilities = [
+            {"name": "First Facility", "address": "1 Main St", "registry_id": "R1"},
+            {"name": "Second Facility", "address": "2 Main St", "registry_id": "R2"},
+        ]
+        details = {
+            "R1": {"latitude": 41.0, "longitude": -75.0, "programs": []},
+            "R2": {"latitude": 40.0, "longitude": -74.0, "programs": []},
+        }
+        gateway = self._gateway(facilities=facilities, detail_by_registry_id=details)
+        with (
+            mock.patch("urbanlens.dashboard.services.apis.locations.epa_echo.EpaEchoGateway", return_value=gateway),
+            mock.patch("urbanlens.dashboard.plugins.builtin.epa_echo.time.monotonic", return_value=0.0),
+        ):
+            result = _fetch_epa_echo_data(self.pin)
+        assert result["exact_site"] is not None
+        self.assertEqual(result["exact_site"]["registry_id"], "R2")
 
     def test_rate_limit_on_the_very_first_candidate_still_keeps_the_facilities_list(self) -> None:
         from urbanlens.dashboard.services.rate_limiter import RateLimitExceededError

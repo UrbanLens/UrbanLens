@@ -49,17 +49,20 @@ _EXACT_MATCH_RADIUS_MILES = 0.1
 #: how many of the (up to 10) nearby-search candidates get checked, not a
 #: fixed candidate count. Earlier versions of this loop capped the candidate
 #: count directly (first 3, then 2, to bound worst-case latency) - but that
-#: traded away correctness for no reason once this budget existed: closest-
-#: first is NOT guaranteed in the nearby-search response (see
-#: EpaEchoGateway.get_nearby_facilities, no per-facility longitude to sort by
-#: client-side), so checking fewer candidates directly means missing more
-#: genuine exact-site matches whenever the right one isn't near the front of
-#: an unsorted list - confirmed in production, where reducing the cap to 2
-#: caused a facility that WAS in the nearby results to stop being found. The
-#: budget alone already bounds worst-case latency (this whole fetch runs
-#: inside a Celery task sharing a worker pool with ~10 other panel fetches on
-#: a cold pin page - see docker-compose.yml's celery-worker concurrency
-#: comment), so there's no latency reason left to also cap the count.
+#: traded away correctness for no reason once this budget existed: checking
+#: fewer candidates directly means missing more genuine exact-site matches
+#: whenever the right one isn't checked early - confirmed in production,
+#: where reducing the cap to 2 caused a facility that WAS in the nearby
+#: results to stop being found. The budget alone already bounds worst-case
+#: latency (this whole fetch runs inside a Celery task sharing a worker pool
+#: with ~10 other panel fetches on a cold pin page - see docker-compose.yml's
+#: celery-worker concurrency comment), so there's no latency reason left to
+#: also cap the count. In practice ECHO's OWN 5-calls/minute rate limit (see
+#: EpaEchoPlugin.get_service_defaults) is the tighter constraint - it usually
+#: allows checking only 2-3 candidates per fetch before RateLimitExceededError
+#: cuts the loop short (see _fetch_epa_echo_data) - which is why the loop
+#: below checks candidates in latitude-proximity order rather than raw array
+#: order, to spend that scarce budget on the ones most likely to be the match.
 _EXACT_MATCH_BUDGET_SECONDS = 30.0
 
 
@@ -98,10 +101,22 @@ def _fetch_epa_echo_data(pin: Pin) -> dict[str, Any]:
     gateway = EpaEchoGateway()
     facilities = gateway.get_nearby_facilities(lat, lng, radius_miles=0.5, limit=10)
 
+    # ECHO's nearby-search rows aren't distance-sorted (see get_nearby_facilities'
+    # docstring) and the rate limit above usually can't survive checking every
+    # candidate - so check the ones most likely to actually be the match FIRST.
+    # Latitude is the only per-facility coordinate ECHO's search rows include;
+    # not a full distance, but a solid cheap proxy given the tight (0.5mi)
+    # search radius, and far better than raw array order for finding the real
+    # match within whatever budget survives the rate limit. The unsorted
+    # `facilities` list (below) is still what gets returned/cached/rendered -
+    # this ordering is only used to decide which few candidates spend the
+    # scarce DFR-lookup budget.
+    facilities_by_proximity = sorted(facilities, key=lambda f: abs(f["latitude"] - lat) if f.get("latitude") is not None else float("inf"))
+
     exact_site = None
     best_distance = _EXACT_MATCH_RADIUS_MILES
     started = time.monotonic()
-    for facility in facilities:
+    for facility in facilities_by_proximity:
         if time.monotonic() - started >= _EXACT_MATCH_BUDGET_SECONDS:
             logger.warning("EPA ECHO exact-site match budget exceeded for pin %s; stopping early", pin.pk)
             break
