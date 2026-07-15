@@ -22,6 +22,17 @@ _API_URL = "https://photon.komoot.io"
 _USER_AGENT = "UrbanLens/1.0 (https://github.com/urbanlens/urbanlens; hello@urbanlens.org) python-requests/2.x"
 
 
+_OSM_TYPE_PATHS = {"N": "node", "W": "way", "R": "relation"}
+
+
+def _osm_url(osm_type: str, osm_id: int | str | None) -> str:
+    """Build a deep link to a feature's raw OSM entry, or "" if not resolvable."""
+    path = _OSM_TYPE_PATHS.get(osm_type or "")
+    if not path or not osm_id:
+        return ""
+    return f"https://www.openstreetmap.org/{path}/{osm_id}"
+
+
 def _normalize_feature(feature: dict[str, Any]) -> dict[str, Any]:
     """Flatten one Photon GeoJSON ``Feature`` into a display-friendly dict."""
     properties = feature.get("properties") or {}
@@ -30,6 +41,7 @@ def _normalize_feature(feature: dict[str, Any]) -> dict[str, Any]:
         "name": properties.get("name") or "",
         "osm_key": properties.get("osm_key") or "",
         "osm_value": properties.get("osm_value") or "",
+        "osm_url": _osm_url(str(properties.get("osm_type") or ""), properties.get("osm_id")),
         "housenumber": properties.get("housenumber") or "",
         "street": properties.get("street") or "",
         "locality": properties.get("locality") or "",

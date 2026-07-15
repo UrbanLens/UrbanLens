@@ -52,7 +52,8 @@ class PhotonPanelSource(CoordinateGatedInfoPanelSource):
             if data.get(key):
                 meta.append({"label": label, "value": data[key]})
 
-        return {"heading_name": data.get("name"), "chips": chips, "meta": meta}
+        footer_link = {"url": data["osm_url"], "label": "View raw OSM entry"} if data.get("osm_url") else None
+        return {"heading_name": data.get("name"), "chips": chips, "meta": meta, "footer_link": footer_link}
 
 
 class PhotonPlugin(UrbanLensPlugin):

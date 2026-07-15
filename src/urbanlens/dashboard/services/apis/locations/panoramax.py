@@ -88,7 +88,7 @@ class PanoramaxGateway(StreetViewProvider):
         """
         for feature in self.search_near_coordinates(latitude, longitude, radius=radius, limit=limit):
             assets = feature.get("assets") or {}
-            image_url = (assets.get("sd") or assets.get("hd") or {}).get("href")
+            image_url = (assets.get("hd") or assets.get("sd") or {}).get("href")
             if not image_url:
                 continue
 

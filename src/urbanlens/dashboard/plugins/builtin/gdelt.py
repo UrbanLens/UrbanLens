@@ -28,8 +28,10 @@ class GdeltPanelSource(InfoPanelSource):
         from urbanlens.dashboard.services.apis.search.gdelt import GdeltGateway
 
         search_term = pin.get_unique_search_name(quote_name=True)
-        articles = GdeltGateway().search_articles(search_term, limit=10) if search_term else []
-        LocationCache.set(pin.location, self.cache_source, {"articles": articles}, query_key=search_term or "")
+        gateway = GdeltGateway()
+        articles = gateway.search_articles(search_term, limit=10) if search_term else []
+        tone = gateway.get_tone_summary(search_term) if search_term else None
+        LocationCache.set(pin.location, self.cache_source, {"articles": articles, "tone": tone}, query_key=search_term or "")
 
     def render_context(self, pin: Pin, data: dict) -> dict | None:
         """Build the article list from GDELT's name-search results."""
@@ -42,7 +44,19 @@ class GdeltPanelSource(InfoPanelSource):
             for article in articles[:8]
         ]
 
-        return {"meta": meta}
+        facts = []
+        tone = (data or {}).get("tone")
+        if tone:
+            average_tone = tone.get("average_tone") or 0
+            if average_tone <= -5:
+                skew = "leans negative"
+            elif average_tone >= 5:
+                skew = "leans positive"
+            else:
+                skew = "neutral"
+            facts.append({"icon": "sentiment_satisfied", "text": f"Coverage tone {skew} (avg {average_tone:+.1f} across {tone.get('article_count')} articles)"})
+
+        return {"facts": facts, "meta": meta}
 
     def debug_count(self, data: dict) -> int:
         """Number of articles found."""

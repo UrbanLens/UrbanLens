@@ -40,12 +40,24 @@ class CensusTigerwebPanelSource(CoordinateGatedInfoPanelSource):
             return None
 
         meta = [{"label": "State", "value": state["name"]}]
-        for key, label in (("county", "County"), ("place", "Place"), ("tract", "Census Tract")):
+        for key, label in (
+            ("county", "County"),
+            ("place", "Place"),
+            ("tract", "Census Tract"),
+            ("zcta", "ZIP Code Area"),
+            ("urban_area", "Urban Area"),
+            ("cbsa", "Metro/Micro Area"),
+        ):
             entry = data.get(key)
             if entry and entry.get("name"):
                 meta.append({"label": label, "value": entry["name"]})
 
-        return {"meta": meta}
+        facts = []
+        tribal_land = data.get("tribal_land")
+        if tribal_land and tribal_land.get("name"):
+            facts.append({"icon": "warning", "text": f"Within {tribal_land['name']} - tribal land, access rules may differ"})
+
+        return {"facts": facts, "meta": meta}
 
 
 class CensusTigerwebPlugin(UrbanLensPlugin):

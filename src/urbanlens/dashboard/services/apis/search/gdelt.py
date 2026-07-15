@@ -34,6 +34,15 @@ def _normalize_article(article: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _normalize_tonechart(bins: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Reduce a GDELT tonechart histogram to a single count-weighted average tone."""
+    total_count = sum(int(tone_bin.get("count") or 0) for tone_bin in bins)
+    if not total_count:
+        return None
+    weighted_sum = sum(int(tone_bin.get("bin") or 0) * int(tone_bin.get("count") or 0) for tone_bin in bins)
+    return {"average_tone": round(weighted_sum / total_count, 1), "article_count": total_count}
+
+
 @dataclass(slots=True, kw_only=True)
 class GdeltGateway(Gateway):
     """Gateway for the GDELT Project's DOC 2.0 news search API."""
@@ -75,3 +84,35 @@ class GdeltGateway(Gateway):
             logger.warning("GDELT returned a non-JSON response for %r", query)
             return []
         return [_normalize_article(article) for article in body.get("articles") or []]
+
+    def get_tone_summary(self, query: str) -> dict[str, Any] | None:
+        """Return an aggregate sentiment/tone summary of news coverage for a query.
+
+        Uses GDELT's ``tonechart`` mode: a histogram of article tone scores
+        (roughly -100..+100, negative meaning more negative sentiment) for
+        the same query used by ``search_articles``. A coarse "is coverage of
+        this place skewing negative" signal - e.g. disaster/crime/hazard
+        reporting versus routine local-interest coverage.
+
+        Args:
+            query: Free-text search query, same format as ``search_articles``.
+
+        Returns:
+            Dict with ``average_tone`` (count-weighted mean of the histogram
+            bins) and ``article_count`` (total articles across all bins), or
+            None when nothing matched or the request failed.
+        """
+        if not query:
+            return None
+        params: dict[str, Any] = {"query": query, "mode": "tonechart", "format": "json"}
+        try:
+            response = self.session.get(_DOC_API_URL, params=params, timeout=15)
+            response.raise_for_status()
+            body = response.json()
+        except requests.exceptions.RequestException:
+            logger.warning("GDELT tone chart lookup failed for %r", query, exc_info=True)
+            return None
+        except ValueError:
+            logger.warning("GDELT returned a non-JSON response for tone chart %r", query)
+            return None
+        return _normalize_tonechart(body.get("tonechart") or [])

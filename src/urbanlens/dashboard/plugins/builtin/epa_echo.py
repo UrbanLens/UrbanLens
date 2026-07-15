@@ -34,8 +34,15 @@ class EpaEchoPanelSource(CoordinateGatedInfoPanelSource):
             LocationCache.set(pin.location, self.cache_source, {"facilities": []}, query_key=f"{lat:.5f},{lng:.5f}")
             return
 
-        facilities = EpaEchoGateway().get_nearby_facilities(lat, lng, radius_miles=0.5, limit=10)
-        LocationCache.set(pin.location, self.cache_source, {"facilities": facilities}, query_key=f"{lat:.5f},{lng:.5f}")
+        gateway = EpaEchoGateway()
+        facilities = gateway.get_nearby_facilities(lat, lng, radius_miles=0.5, limit=10)
+
+        top_detail = None
+        if facilities:
+            registry_id = facilities[0].get("registry_id") or ""
+            top_detail = gateway.get_facility_detail(registry_id)
+
+        LocationCache.set(pin.location, self.cache_source, {"facilities": facilities, "top_detail": top_detail}, query_key=f"{lat:.5f},{lng:.5f}")
 
     def render_context(self, pin: Pin, data: dict) -> dict | None:
         """Build the facility list from EPA ECHO's nearby-facilities search."""
@@ -50,8 +57,25 @@ class EpaEchoPanelSource(CoordinateGatedInfoPanelSource):
                 status = f"{status} (significant violator)"
             meta.append({"label": facility.get("name") or "Unnamed facility", "value": f"{facility.get('address') or ''} - {status}".strip(" -")})
 
+        facts = []
+        top_detail = (data or {}).get("top_detail")
+        if top_detail:
+            nearest_name = facilities[0].get("name") or "Nearest facility"
+            for program in top_detail.get("programs") or []:
+                statute = program.get("statute") or "Program"
+                penalties = program.get("total_penalties") or "$0"
+                formal_actions = program.get("formal_actions") or "0"
+                last_inspection = program.get("last_inspection") or "no recorded inspection"
+                facts.append(
+                    {
+                        "icon": "gavel",
+                        "text": f"{nearest_name} ({statute}): {formal_actions} formal enforcement action(s), {penalties} in penalties - last inspected {last_inspection}",
+                    }
+                )
+
         return {
             "chips": [f"{len(facilities)} nearby"],
+            "facts": facts,
             "meta": meta,
             "footer_link": {"url": "https://echo.epa.gov/", "label": "View on EPA ECHO"},
         }

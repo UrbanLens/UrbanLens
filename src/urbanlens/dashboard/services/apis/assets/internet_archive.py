@@ -23,8 +23,19 @@ _SEARCH_URL = "https://archive.org/advancedsearch.php"
 _THUMBNAIL_URL = "https://archive.org/services/img/{identifier}"
 _DETAILS_URL = "https://archive.org/details/{identifier}"
 
+
+def _first_str(value: Any) -> str:
+    """Archive.org fields are inconsistently a bare string or a list of strings."""
+    if isinstance(value, list):
+        return str(value[0]) if value else ""
+    return str(value) if value else ""
+
 #: Fields requested from advancedsearch.php - keep in sync with ``_parse``.
-_FIELDS = ("identifier", "title", "description", "date", "mediatype")
+_FIELDS = ("identifier", "title", "description", "date", "mediatype", "creator")
+
+#: Restrict results to media types with a displayable preview image - excludes
+#: books/audio/software/data noise that isn't useful in a photo gallery.
+_MEDIA_TYPE_FILTER = "mediatype:(image OR movies)"
 
 
 @dataclass(slots=True, kw_only=True)
@@ -49,11 +60,12 @@ class InternetArchiveGateway(MediaProvider):
 
         Returns:
             List of normalized dicts with keys ``identifier``, ``title``,
-            ``description``, ``date``, ``mediatype``.
+            ``description``, ``date``, ``mediatype``, ``creator``. Restricted
+            to media types with a displayable preview (photos/film).
         """
         if not query:
             return []
-        params: dict[str, Any] = {"q": query, "fl[]": list(_FIELDS), "rows": rows, "output": "json"}
+        params: dict[str, Any] = {"q": f"{query} AND {_MEDIA_TYPE_FILTER}", "fl[]": list(_FIELDS), "rows": rows, "output": "json"}
         response = self.session.get(_SEARCH_URL, params=params, timeout=(5, 15))
         response.raise_for_status()
         docs = (response.json().get("response") or {}).get("docs") or []
@@ -64,6 +76,7 @@ class InternetArchiveGateway(MediaProvider):
                 "description": doc.get("description") or "",
                 "date": (doc.get("date") or "")[:10],
                 "mediatype": doc.get("mediatype") or "",
+                "creator": _first_str(doc.get("creator")),
             }
             for doc in docs
             if doc.get("identifier")
@@ -79,7 +92,7 @@ class InternetArchiveGateway(MediaProvider):
             yield MediaItem(
                 url=_DETAILS_URL.format(identifier=identifier),
                 thumb_url=_THUMBNAIL_URL.format(identifier=identifier),
-                caption=item.get("title") or description[:120] or identifier,
+                caption=item.get("title") or item.get("creator") or description[:120] or identifier,
                 source=self.display_name,
                 page_url=_DETAILS_URL.format(identifier=identifier),
             )

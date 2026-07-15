@@ -26,6 +26,11 @@ _LAYER_STATE = 80
 _LAYER_COUNTY = 82
 _LAYER_PLACE = 28
 _LAYER_TRACT = 8
+_LAYER_ZCTA = 2
+_LAYER_URBAN_AREA = 88
+_LAYER_CBSA = 93
+_LAYER_FEDERAL_RESERVATION = 36
+_LAYER_STATE_RESERVATION = 40
 
 
 @dataclass(slots=True, kw_only=True)
@@ -70,19 +75,28 @@ class CensusTigerwebGateway(Gateway):
             longitude: WGS-84 longitude.
 
         Returns:
-            Dict with ``state``, ``county``, ``place``, ``tract`` sub-dicts
-            (each ``{"name": ..., "geoid": ...}``, or None when the point
-            isn't in that geography type, e.g. an unincorporated area with no
-            enclosing place); an empty dict outside the US entirely.
+            Dict with ``state``, ``county``, ``place``, ``tract``, ``zcta``,
+            ``urban_area``, ``cbsa``, ``tribal_land`` sub-dicts (each
+            ``{"name": ..., "geoid": ...}``, or None when the point isn't in
+            that geography type, e.g. an unincorporated area with no
+            enclosing place, or a rural point outside any urban area/reservation);
+            an empty dict outside the US entirely.
         """
         state = self._normalize(self._query_layer(_LAYER_STATE, latitude, longitude))
         if not state:
             return {}
+        tribal_land = self._normalize(self._query_layer(_LAYER_FEDERAL_RESERVATION, latitude, longitude)) or self._normalize(
+            self._query_layer(_LAYER_STATE_RESERVATION, latitude, longitude)
+        )
         return {
             "state": state,
             "county": self._normalize(self._query_layer(_LAYER_COUNTY, latitude, longitude)),
             "place": self._normalize(self._query_layer(_LAYER_PLACE, latitude, longitude)),
             "tract": self._normalize(self._query_layer(_LAYER_TRACT, latitude, longitude)),
+            "zcta": self._normalize(self._query_layer(_LAYER_ZCTA, latitude, longitude)),
+            "urban_area": self._normalize(self._query_layer(_LAYER_URBAN_AREA, latitude, longitude)),
+            "cbsa": self._normalize(self._query_layer(_LAYER_CBSA, latitude, longitude)),
+            "tribal_land": tribal_land,
         }
 
     @staticmethod

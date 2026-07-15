@@ -44,6 +44,34 @@ def _normalize_facility(facility: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _normalize_facility_detail(dfr: dict[str, Any]) -> dict[str, Any]:
+    """Flatten a Detailed Facility Report (DFR) into display-friendly enforcement/location data."""
+    permits = dfr.get("Permits") or []
+    primary_permit = permits[0] if permits else {}
+    lat = primary_permit.get("Latitude")
+    lon = primary_permit.get("Longitude")
+
+    programs = []
+    for summary in (dfr.get("EnforcementComplianceSummaries") or {}).get("Summaries") or []:
+        programs.append(
+            {
+                "statute": summary.get("Statute") or "",
+                "current_status": summary.get("CurrentStatus") or "",
+                "last_inspection": summary.get("LastInspection") or "",
+                "quarters_in_noncompliance": summary.get("QtrsInNC") or "0",
+                "quarters_in_significant_noncompliance": summary.get("QtrsInSNC") or "0",
+                "formal_actions": summary.get("FormalActions") or "0",
+                "total_penalties": summary.get("TotalPenalties") or "",
+            }
+        )
+
+    return {
+        "latitude": float(lat) if lat else None,
+        "longitude": float(lon) if lon else None,
+        "programs": programs,
+    }
+
+
 @dataclass(slots=True, kw_only=True)
 class EpaEchoGateway(Gateway):
     """Gateway for the EPA ECHO facility search REST API. USA only."""
@@ -85,3 +113,33 @@ class EpaEchoGateway(Gateway):
             return []
 
         return [_normalize_facility(facility) for facility in facilities]
+
+    def get_facility_detail(self, registry_id: str) -> dict[str, Any] | None:
+        """Return the Detailed Facility Report (DFR) for one EPA-regulated facility.
+
+        Unlike ``get_nearby_facilities``, the DFR includes the facility's exact
+        coordinates plus per-program (RCRA/CAA/CWA/SDWIS) enforcement summaries:
+        current compliance status, last inspection date, quarters in
+        noncompliance, formal enforcement action counts, and total penalties.
+
+        Args:
+            registry_id: EPA FRS Registry ID, as returned in a facility's
+                ``registry_id`` field from ``get_nearby_facilities``.
+
+        Returns:
+            Normalized detail dict, or ``None`` when the lookup fails or the
+            registry ID is unknown to ECHO.
+        """
+        if not registry_id:
+            return None
+        try:
+            params: dict[str, str] = {"output": "JSON", "p_id": registry_id}
+            response = self.session.get(f"{_BASE_URL}/dfr_rest_services.get_dfr", params=params, timeout=20)
+            response.raise_for_status()
+            dfr = response.json().get("Results") or {}
+        except requests.exceptions.RequestException:
+            logger.warning("EPA ECHO facility detail lookup failed for registry ID %s", registry_id, exc_info=True)
+            return None
+        if not dfr or dfr.get("Message") != "Success":
+            return None
+        return _normalize_facility_detail(dfr)

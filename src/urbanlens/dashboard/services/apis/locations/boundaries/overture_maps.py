@@ -54,6 +54,18 @@ if TYPE_CHECKING:
     from django.contrib.gis.geos import Polygon
 
 
+_EARTH_RADIUS_M = 6_371_000.0
+
+
+def _haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Great-circle distance between two WGS-84 points, in meters."""
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    d_phi = math.radians(lat2 - lat1)
+    d_lambda = math.radians(lon2 - lon1)
+    a = math.sin(d_phi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(d_lambda / 2) ** 2
+    return 2 * _EARTH_RADIUS_M * math.asin(math.sqrt(a))
+
+
 def _clean_value(value: Any) -> Any:
     """Turn Overture's pandas ``NaN``/blank-string "no value" markers into ``None``."""
     if value is None:
@@ -203,6 +215,58 @@ class OvertureMapsGateway(Gateway, BoundaryProvider):
             "roof_material": _clean_value(best_properties.get("roof_material")),
             "primary_name": _clean_value(primary_name),
         }
+
+    def get_nearby_places(self, latitude: float, longitude: float, *, radius_m: float = 150.0, limit: int = 5) -> list[dict[str, Any]]:
+        """Return named points of interest near a coordinate from Overture's Places theme.
+
+        Same free S3/parquet source already used for building footprints -
+        surfaces what's actually nearby (shops, landmarks, defunct
+        businesses), including an ``operating_status`` flag Overture derives
+        from crowd signals, which is useful "is this still open" context.
+
+        Args:
+            latitude: WGS-84 latitude.
+            longitude: WGS-84 longitude.
+            radius_m: Search radius in meters.
+            limit: Maximum number of places to return, nearest first.
+
+        Returns:
+            Dicts with ``name``, ``category``, ``confidence``,
+            ``operating_status``, ``distance_m``, nearest first; empty when
+            nothing named is within range.
+        """
+        candidates: list[dict[str, Any]] = []
+        for feature in _features_from_geodataframe(self.get_places(create_bbox(latitude, longitude, self.bbox_delta))):
+            geometry = feature.get("geometry") or {}
+            coordinates = geometry.get("coordinates") or (None, None)
+            place_lon, place_lat = coordinates[0], coordinates[1]
+            if place_lon is None or place_lat is None:
+                continue
+
+            properties = feature.get("properties") or {}
+            names = _clean_value(properties.get("names"))
+            primary_name = names.get("primary") if isinstance(names, dict) else None
+            if not primary_name:
+                continue  # unnamed POIs aren't useful location context
+
+            distance_m = _haversine_m(latitude, longitude, float(place_lat), float(place_lon))
+            if distance_m > radius_m:
+                continue
+
+            categories = _clean_value(properties.get("categories"))
+            primary_category = categories.get("primary") if isinstance(categories, dict) else None
+            candidates.append(
+                {
+                    "name": primary_name,
+                    "category": _clean_value(primary_category),
+                    "confidence": _clean_value(properties.get("confidence")),
+                    "operating_status": _clean_value(properties.get("operating_status")),
+                    "distance_m": round(distance_m, 1),
+                }
+            )
+
+        candidates.sort(key=lambda place: place["distance_m"])
+        return candidates[: max(1, limit)]
 
 
 def _features_from_geodataframe(frame) -> list[dict]:

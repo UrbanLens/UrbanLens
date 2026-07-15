@@ -41,6 +41,26 @@ def get_search_gateway() -> SearchGateway:
 
         return GoogleCustomSearchGateway()
 
+    if provider == SearchProviderChoice.SEARXNG:
+        from urbanlens.dashboard.services.apis.search.searxng import SearxngGateway
+
+        return SearxngGateway()
+
+    if provider == SearchProviderChoice.DUCKDUCKGO:
+        from urbanlens.dashboard.services.apis.search.duckduckgo import DuckDuckGoGateway
+
+        return DuckDuckGoGateway()
+
+    if provider == SearchProviderChoice.MOJEEK:
+        from urbanlens.dashboard.services.apis.search.mojeek import MojeekGateway
+
+        return MojeekGateway()
+
+    if provider == SearchProviderChoice.MARGINALIA:
+        from urbanlens.dashboard.services.apis.search.marginalia import MarginaliaGateway
+
+        return MarginaliaGateway()
+
     from urbanlens.dashboard.services.apis.search.brave.search import BraveSearchGateway
 
     return BraveSearchGateway()
