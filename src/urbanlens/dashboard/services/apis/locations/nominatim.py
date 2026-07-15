@@ -221,7 +221,17 @@ class NominatimGateway(Gateway):
             # rather than trying to hotlink an unresolved image.
             image = f"https://commons.wikimedia.org/wiki/{image}"
 
-        extra_details = [{"key": key, "label": label, "value": _humanize_osm_value(str(extra[key]))} for key, label in _EXTRA_DETAIL_FIELDS if extra.get(key)]
+        # Address-breakdown facts (from addressdetails=1, not extratags) - these
+        # exist for nearly every reverse-geocode result, even a bare point with
+        # no OSM tags of its own beyond geometry, so surfacing them keeps the
+        # panel from looking sparse/empty for the common "no extra tags" case.
+        address_details = [
+            {"key": key, "label": label, "value": address[key]}
+            for key, label in (("neighbourhood", "Neighbourhood"), ("suburb", "Suburb"), ("county", "County"), ("postcode", "Postcode"))
+            if address.get(key) and not (key == "suburb" and address.get("neighbourhood") == address.get("suburb"))
+        ]
+
+        extra_details = address_details + [{"key": key, "label": label, "value": _humanize_osm_value(str(extra[key]))} for key, label in _EXTRA_DETAIL_FIELDS if extra.get(key)]
 
         return {
             "name": name,

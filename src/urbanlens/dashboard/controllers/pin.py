@@ -1173,7 +1173,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             return self._pending_panel(request, pin, "nominatim")
         data = cached.data or None
 
-        useful_fields = ("website", "phone", "opening_hours", "operator", "wikipedia", "wikidata", "image", "extra_details", "kind_label")
+        useful_fields = ("website", "phone", "email", "opening_hours", "operator", "wikipedia", "wikidata", "image", "extra_details", "kind_label")
         if not data or not any(data.get(k) for k in useful_fields):
             logger.debug("nominatim_info: no enrichment data for pin %s at (%s, %s)", pin_slug, redact_coordinate(lat), redact_coordinate(lng))
             return HttpResponse(status=204)

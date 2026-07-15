@@ -365,3 +365,98 @@ class NominatimGatewayTests(TestCase):
 
         osm_ids = session.get.call_args.kwargs["params"]["osm_ids"]
         self.assertEqual(len(osm_ids.split(",")), 50)
+
+    def test_reverse_geocode_surfaces_address_breakdown_as_extra_details(self) -> None:
+        """A point with no OSM tags of its own still gets neighbourhood/postcode/
+        county from addressdetails=1, so the pin-detail panel isn't empty for
+        the common "no extra tags" case."""
+        from urbanlens.dashboard.services.apis.locations.nominatim import NominatimGateway
+
+        response = mock.Mock()
+        response.json.return_value = {
+            "display_name": "1265 Section Rd, Cincinnati, OH 45237, USA",
+            "address": {"neighbourhood": "College Hill", "county": "Hamilton County", "postcode": "45237"},
+        }
+        session = mock.Mock()
+        session.get.return_value = response
+        gateway = NominatimGateway(session=session)
+
+        result = gateway.reverse_geocode(39.19749, -84.46964)
+
+        assert result is not None
+        labels = [detail["label"] for detail in result["extra_details"]]
+        self.assertIn("Neighbourhood", labels)
+        self.assertIn("County", labels)
+        self.assertIn("Postcode", labels)
+
+    def test_suburb_is_dropped_when_identical_to_neighbourhood(self) -> None:
+        from urbanlens.dashboard.services.apis.locations.nominatim import NominatimGateway
+
+        response = mock.Mock()
+        response.json.return_value = {"address": {"neighbourhood": "College Hill", "suburb": "College Hill"}}
+        session = mock.Mock()
+        session.get.return_value = response
+        gateway = NominatimGateway(session=session)
+
+        result = gateway.reverse_geocode(39.19749, -84.46964)
+
+        assert result is not None
+        labels = [detail["label"] for detail in result["extra_details"]]
+        self.assertEqual(labels.count("Neighbourhood") + labels.count("Suburb"), 1)
+
+    def test_missing_address_breakdown_is_not_an_error(self) -> None:
+        from urbanlens.dashboard.services.apis.locations.nominatim import NominatimGateway
+
+        response = mock.Mock()
+        response.json.return_value = {"display_name": "Nowhere"}
+        session = mock.Mock()
+        session.get.return_value = response
+        gateway = NominatimGateway(session=session)
+
+        result = gateway.reverse_geocode(0, 0)
+
+        assert result is not None
+        self.assertEqual(result["extra_details"], [])
+
+
+class NominatimInfoViewTests(TestCase):
+    """PinController.nominatim_info's "is this worth rendering" gate."""
+
+    def setUp(self) -> None:
+        from django.contrib.auth.models import User
+        from model_bakery import baker
+
+        from urbanlens.dashboard.models.profile.model import Profile
+
+        baker.make(User)  # first user is auto-promoted to bootstrap site admin
+        user = baker.make(User)
+        self.profile = Profile.objects.get(user=user)
+        self.pin = baker.make_recipe("dashboard.pin", profile=self.profile)
+        self.client.force_login(user)
+
+    def _cache_and_fetch(self, data: dict):
+        from django.urls import reverse
+
+        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+
+        LocationCache.set(self.pin.location, "nominatim", data, query_key="")
+        return self.client.get(reverse("pin.nominatim", args=[self.pin.slug]))
+
+    def test_email_only_result_is_rendered_not_204(self) -> None:
+        """email was previously missing from the gate's useful-fields tuple even
+        though the template already renders it - a place with only an email
+        would 204 instead of showing that one fact."""
+        response = self._cache_and_fetch({"email": "info@example.com"})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "info@example.com")
+
+    def test_address_breakdown_only_result_is_rendered_not_204(self) -> None:
+        """A point with no OSM tags of its own, only the neighbourhood/postcode/
+        county now folded into extra_details, still renders."""
+        response = self._cache_and_fetch({"extra_details": [{"key": "postcode", "label": "Postcode", "value": "45237"}]})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "45237")
+
+    def test_no_useful_fields_returns_204(self) -> None:
+        response = self._cache_and_fetch({"lat": "39.19749", "lon": "-84.46964"})
+        self.assertEqual(response.status_code, 204)
