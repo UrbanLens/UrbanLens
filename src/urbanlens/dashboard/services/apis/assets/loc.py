@@ -27,6 +27,22 @@ class LOCJsonGateway(MediaProvider):
     # newspaper archives) once the name was wrapped in quotes, likely because
     # its query parser doesn't handle a quoted phrase containing punctuation
     # (apostrophes, periods) the way a phrase-search operator normally would.
+    # Street addresses are excluded for the same underlying reason: LOC's
+    # relevance ranking appears to treat each word as an independent OR term
+    # rather than requiring a phrase match, so a house number or generic
+    # street-type word ("Road", "Street") coincidentally matches unrelated
+    # historical records nationwide instead of narrowing results - a query
+    # like "1265 Section Rd Cincinnati OH" returned newspaper archives from
+    # Maryland and California. Searching on name + city/state only is both
+    # more selective (no noise words) and a better fit for how LOC's
+    # collections are actually catalogued (historical documents/photos rarely
+    # carry modern street-address-level metadata anyway).
+    include_address: ClassVar[bool] = False
+    # A pin with no real landmark name (just its raw street address as a
+    # fallback "name") produces a search with no genuine narrowing power for
+    # LOC's word-independent relevance ranking - skip the provider entirely
+    # for such a pin instead of guaranteeing noisy results.
+    reject_address_derived_names: ClassVar[bool] = True
 
     base_url: str = "https://www.loc.gov"
 

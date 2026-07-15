@@ -320,7 +320,20 @@ class MediaPanelSource(GalleryMediaSource):
         Returns:
             Ordered, de-duplicated list of query strings; may be empty.
         """
-        search_term = pin.get_unique_search_name(include_country=gateway.search_with_country, quote_name=gateway.quote_name)
+        if gateway.reject_address_derived_names and pin.location is not None:
+            from urbanlens.dashboard.services.locations.naming import is_address_derived_name
+
+            fallback_name = pin.meaningful_official_name or pin.meaningful_name
+            # A pin with no real landmark name falls back to its raw street
+            # address as the "name" - a query built from that has no genuine
+            # narrowing power (just a house number and a generic street-type
+            # word), so a provider whose relevance ranking treats query words
+            # as independent OR terms is skipped entirely rather than fed a
+            # guaranteed-noisy query (see LOCJsonGateway).
+            if fallback_name and is_address_derived_name(fallback_name, pin.location):
+                return []
+
+        search_term = pin.get_unique_search_name(include_country=gateway.search_with_country, quote_name=gateway.quote_name, include_address=gateway.include_address)
         if not search_term:
             return []
         terms = [search_term]

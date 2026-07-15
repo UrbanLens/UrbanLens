@@ -60,6 +60,21 @@ class MediaProvider(Gateway, ABC):
     search_with_country: ClassVar[bool] = True
     quote_name: ClassVar[bool] = False
     multi_query: ClassVar[bool] = False
+    # Whether the street address is included in the search query at all. A
+    # provider whose full-text relevance ranking treats every word as an
+    # independent OR term (rather than requiring a phrase match) can turn a
+    # street address into noise instead of a useful narrowing signal - a
+    # street number or a generic street-type word ("Road", "Street") is
+    # liable to coincidentally match unrelated records nationwide. Such a
+    # provider should set this False to search on name + city/state only.
+    include_address: ClassVar[bool] = True
+    # Whether to skip this provider entirely (no search attempted) for a pin
+    # whose only available "name" is address-derived (see
+    # services.locations.naming.is_address_derived_name) - a query built from
+    # a raw street address has no real narrowing power for a provider whose
+    # relevance ranking isn't a phrase match, so searching guarantees noise
+    # rather than useful results for such a pin.
+    reject_address_derived_names: ClassVar[bool] = False
 
     @abstractmethod
     def _generate_media(self, search_term: str, address: str | None = None) -> Generator[MediaItem]:
