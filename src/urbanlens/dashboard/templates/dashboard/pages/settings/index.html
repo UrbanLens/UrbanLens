@@ -371,6 +371,45 @@
         </div>
     </section>
 
+    {# -- Browser Permissions ----------------------------------------------------- #}
+    <section class="settings-section ul-section" id="browser-permissions-settings-section">
+        <div class="settings-section-header">
+            <i class="material-symbols-outlined">verified_user</i>
+            <div>
+                <h2 class="settings-section-title">Browser Permissions</h2>
+                <p class="settings-section-desc">Permissions UrbanLens can ask your browser for. Enabling one opens your browser's own permission prompt - we never grant access silently.</p>
+            </div>
+        </div>
+
+        <div class="settings-section-body">
+            <div class="settings-permissions-list" id="browser-permissions-list">
+
+                <div class="settings-permission-card" data-permission="location">
+                    <span class="settings-permission-icon"><i class="material-symbols-outlined">my_location</i></span>
+                    <div class="settings-permission-body">
+                        <div class="settings-permission-name">Location</div>
+                        <p class="settings-permission-status" data-status>Checking status…</p>
+                    </div>
+                    <div class="settings-permission-actions">
+                        <button type="button" class="btn btn--secondary settings-secondary-btn" data-enable hidden>Enable</button>
+                    </div>
+                </div>
+
+                <div class="settings-permission-card" data-permission="notifications">
+                    <span class="settings-permission-icon"><i class="material-symbols-outlined">notifications</i></span>
+                    <div class="settings-permission-body">
+                        <div class="settings-permission-name">Notifications</div>
+                        <p class="settings-permission-status" data-status>Checking status…</p>
+                    </div>
+                    <div class="settings-permission-actions">
+                        <button type="button" class="btn btn--secondary settings-secondary-btn" data-enable hidden>Enable</button>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </section>
+
     {# -- AI Features ----------------------------------------------------------- #}
     {% if can_use_ai_features %}
     <section class="settings-section ul-section" id="ai-settings-section">
@@ -1253,6 +1292,7 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="{% static 'dashboard/js/e2ee.js' %}"></script>
 <script src="{% static 'dashboard/js/webauthn.js' %}"></script>
+<script src="{% static 'dashboard/js/permissions.js' %}"></script>
 {% include "dashboard/partials/ui/_priority_list_script.html" %}
 <script>
 // -- Tabs: switch panels, keep deep links (e.g. #immich-settings-section) working -----
@@ -1450,6 +1490,56 @@
             } else if (window.toastr) {
                 toastr.error('Could not reset your encryption keys.');
             }
+        });
+    });
+}());
+</script>
+<script>
+// -- Browser permission cards: status + enable buttons --------------------------
+(function () {
+    var list = document.getElementById('browser-permissions-list');
+    if (!list || !window.UrbanLensPermissions) return;
+
+    var STATUS_TEXT = {
+        granted: 'Enabled.',
+        denied: "Blocked - change this in your browser's site settings to re-enable.",
+        prompt: 'Not enabled yet.',
+        unsupported: "Not supported by this browser.",
+    };
+
+    var GETTERS = {
+        location: UrbanLensPermissions.getLocationPermissionState,
+        notifications: UrbanLensPermissions.getNotificationPermissionState,
+    };
+    var REQUESTERS = {
+        location: UrbanLensPermissions.requestLocationPermission,
+        notifications: UrbanLensPermissions.requestNotificationPermission,
+    };
+
+    function applyState(card, state) {
+        var statusEl = card.querySelector('[data-status]');
+        var enableBtn = card.querySelector('[data-enable]');
+        statusEl.textContent = STATUS_TEXT[state] || STATUS_TEXT.unsupported;
+        statusEl.classList.remove('settings-permission-status--granted', 'settings-permission-status--denied');
+        if (state === 'granted') statusEl.classList.add('settings-permission-status--granted');
+        if (state === 'denied') statusEl.classList.add('settings-permission-status--denied');
+        enableBtn.hidden = state !== 'prompt';
+    }
+
+    Array.prototype.forEach.call(list.querySelectorAll('.settings-permission-card'), function (card) {
+        var key = card.dataset.permission;
+        var getState = GETTERS[key];
+        if (!getState) return;
+
+        getState().then(function (state) { applyState(card, state); });
+
+        var enableBtn = card.querySelector('[data-enable]');
+        enableBtn.addEventListener('click', function () {
+            REQUESTERS[key]().then(function (state) {
+                applyState(card, state);
+                if (state === 'granted' && window.toastr) toastr.success('Permission enabled.');
+                if (state === 'denied' && window.toastr) toastr.warning('Permission was denied.');
+            });
         });
     });
 }());
