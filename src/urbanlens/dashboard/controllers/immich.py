@@ -41,6 +41,11 @@ _PICKER_PARTIAL = "dashboard/partials/pins/_immich_picker_dialog.html"
 _PROGRESS_PARTIAL = "dashboard/partials/pins/_immich_import_progress.html"
 _SCAN_PROGRESS_PARTIAL = "dashboard/partials/settings/_immich_scan_progress.html"
 _THUMBNAIL_CACHE_TTL = 60 * 60 * 24
+#: How long a profile's active library-scan task id is remembered, so
+#: navigating away from Tools and coming back later resumes the progress bar
+#: instead of losing track of an already-running scan. Generous relative to
+#: how long even a very large library sweep should realistically take.
+_SCAN_TASK_ID_TTL = 60 * 60 * 6
 _RADIUS_CHOICES_M = ((100, "100 m"), (250, "250 m"), (500, "500 m"), (1000, "1 km"), (2000, "2 km"), (5000, "5 km"))
 _DEFAULT_RADIUS_M = 500
 _EMPTY_MESSAGES: dict[str, str] = {
@@ -58,6 +63,28 @@ def _request_profile(request: HttpRequest) -> Profile:
 def _with_toast(response: HttpResponse, message: str, level: str = "success") -> HttpResponse:
     response["HX-Trigger"] = json.dumps({"showToast": {"level": level, "message": message}})
     return response
+
+
+def _scan_task_cache_key(profile_id: int) -> str:
+    return f"dashboard:immich_scan_task:{profile_id}"
+
+
+def get_active_scan_task_id(profile_id: int) -> str | None:
+    """Return the task id of `profile_id`'s in-progress library scan, if any.
+
+    Lets a fresh page load (a new visit, or returning after navigating away)
+    resume polling an already-running scan instead of only ever offering the
+    bare "start a scan" button - see ToolsIndexView.get().
+    """
+    return cache.get(_scan_task_cache_key(profile_id))
+
+
+def _set_active_scan_task_id(profile_id: int, task_id: str) -> None:
+    cache.set(_scan_task_cache_key(profile_id), task_id, timeout=_SCAN_TASK_ID_TTL)
+
+
+def _clear_active_scan_task_id(profile_id: int) -> None:
+    cache.delete(_scan_task_cache_key(profile_id))
 
 
 # -- Settings: connect / disconnect -------------------------------------------
@@ -125,6 +152,7 @@ class ImmichLibraryScanStartView(LoginRequiredMixin, View):
         result = safely_enqueue_task(sweep_immich_library_locations, profile.pk)
         if result is None:
             return render(request, _SCAN_PROGRESS_PARTIAL, {"state": "FAILURE", "message": "Scan queue is unavailable. Please try again later."}, status=503)
+        _set_active_scan_task_id(profile.pk, result.id)
         return render(request, _SCAN_PROGRESS_PARTIAL, {"task_id": result.id, "state": "PENDING", "percent": 0, "message": "Starting scan..."})
 
 
@@ -132,10 +160,12 @@ class ImmichLibraryScanProgressView(LoginRequiredMixin, View):
     """GET /settings/immich/scan/<task_id>/progress/ - polled progress fragment."""
 
     def get(self, request: HttpRequest, task_id: str) -> HttpResponse:
+        profile = _request_profile(request)
         progress = get_task_progress(task_id)
         context = {"task_id": task_id, "state": progress.state, "percent": progress.percent, "message": progress.message, "error": progress.error}
         response = render(request, _SCAN_PROGRESS_PARTIAL, context)
         if progress.state == "SUCCESS":
+            _clear_active_scan_task_id(profile.pk)
             result = progress.result or {}
             total = int(result.get("matched_suggestions", 0)) + int(result.get("new_pin_suggestions", 0))
             if total:
@@ -144,6 +174,7 @@ class ImmichLibraryScanProgressView(LoginRequiredMixin, View):
                 summary = f"Scanned {result.get('scanned', 0)} photo(s) - no new locations found."
             response["HX-Trigger"] = json.dumps({"showToast": {"level": "success", "message": summary}})
         elif progress.state in {"FAILURE", "REVOKED"}:
+            _clear_active_scan_task_id(profile.pk)
             response["HX-Trigger"] = json.dumps({"showToast": {"level": "error", "message": progress.error or "Scan failed."}})
         return response
 

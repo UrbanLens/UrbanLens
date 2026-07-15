@@ -266,6 +266,7 @@ def _notify_recipient(message: DirectMessage) -> None:
     """
     from django.urls import reverse
 
+    from urbanlens.dashboard.models.direct_messages.mute import DirectMessageMute
     from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, Importance, NotificationType, Status
     from urbanlens.dashboard.models.notifications.model import NotificationLog
 
@@ -274,6 +275,9 @@ def _notify_recipient(message: DirectMessage) -> None:
     except AttributeError:
         pref = DeliveryPreference.SITE
     if pref == DeliveryPreference.NONE:
+        return
+
+    if DirectMessageMute.objects.filter(viewer=message.recipient, sender=message.sender).exists():
         return
 
     already_unread = DirectMessage.objects.filter(sender=message.sender, recipient=message.recipient, read_at__isnull=True).exclude(pk=message.pk).exists()
@@ -380,6 +384,7 @@ def _schedule_message_email(message: DirectMessage) -> None:
     Args:
         message: The freshly created, still-unread message.
     """
+    from urbanlens.dashboard.models.direct_messages.mute import DirectMessageMute
     from urbanlens.dashboard.models.notifications.meta import DeliveryPreference
 
     try:
@@ -387,6 +392,9 @@ def _schedule_message_email(message: DirectMessage) -> None:
     except AttributeError:
         pref = DeliveryPreference.SITE
     if pref not in (DeliveryPreference.EMAIL, DeliveryPreference.BOTH):
+        return
+
+    if DirectMessageMute.objects.filter(viewer=message.recipient, sender=message.sender).exists():
         return
 
     from urbanlens.dashboard.services.celery import safely_enqueue_task
@@ -777,6 +785,7 @@ def conversations_for(profile: Profile) -> list[dict[str, Any]]:
         (DirectMessage), ``unread_count`` (int), and the
         ``display_identity_for`` keys for rendering the partner's identity.
     """
+    from urbanlens.dashboard.models.direct_messages.mute import DirectMessageMute
     from urbanlens.dashboard.models.profile.model import Profile as ProfileModel
 
     rows = list(DirectMessage.objects.conversation_rows(profile))
@@ -785,6 +794,7 @@ def conversations_for(profile: Profile) -> list[dict[str, Any]]:
 
     partners = ProfileModel.objects.select_related("user").in_bulk([row["partner_id"] for row in rows])
     last_messages = DirectMessage.objects.in_bulk([row["last_message_id"] for row in rows])
+    muted_sender_ids = set(DirectMessageMute.objects.filter(viewer=profile).values_list("sender_id", flat=True))
 
     conversations = []
     for row in rows:
@@ -797,6 +807,7 @@ def conversations_for(profile: Profile) -> list[dict[str, Any]]:
                 "partner": partner,
                 "last_message": last_message,
                 "unread_count": row["unread_count"],
+                "is_muted": partner.pk in muted_sender_ids,
                 **display_identity_for(profile, partner),
             },
         )

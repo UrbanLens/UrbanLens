@@ -196,7 +196,7 @@ class ImmichGatewayTests(TestCase):
         results = gw.list_recent(limit=10)
         self.assertEqual([asset.id for asset in results], ["a1"])
         _args, kwargs = gw.session.post.call_args
-        self.assertEqual(kwargs["json"], {"size": 10})
+        self.assertEqual(kwargs["json"], {"size": 10, "withExif": True})
 
     def test_search_metadata_parses_gps_and_city_from_exif_info(self) -> None:
         gw = ImmichGateway(account=_account(), session=mock.MagicMock())
@@ -236,6 +236,26 @@ class ImmichGatewayTests(TestCase):
         gw.session.post.return_value = _mock_response(json_data={"assets": {"items": [], "nextPage": None, "total": 0}})
         pages = list(gw.iter_library_assets())
         self.assertEqual(pages, [])
+
+    def test_metadata_search_requests_exif_data(self) -> None:
+        """Without withExif=True, Immich omits exifInfo entirely and every GPS coordinate parses as None."""
+        gw = ImmichGateway(account=_account(), session=mock.MagicMock())
+        gw.session.post.return_value = _mock_response(json_data={"assets": {"items": []}})
+        list(gw.iter_library_assets())
+        _args, kwargs = gw.session.post.call_args
+        self.assertTrue(kwargs["json"]["withExif"])
+
+    def test_library_asset_count_reads_search_statistics(self) -> None:
+        gw = ImmichGateway(account=_account(), session=mock.MagicMock())
+        gw.session.post.return_value = _mock_response(json_data={"total": 194000})
+        self.assertEqual(gw.library_asset_count(), 194000)
+        args, _kwargs = gw.session.post.call_args
+        self.assertTrue(args[0].endswith("/search/statistics"))
+
+    def test_library_asset_count_defaults_to_zero_when_missing(self) -> None:
+        gw = ImmichGateway(account=_account(), session=mock.MagicMock())
+        gw.session.post.return_value = _mock_response(json_data={})
+        self.assertEqual(gw.library_asset_count(), 0)
 
 
 # -- Settings: connect / disconnect ------------------------------------------------
@@ -351,6 +371,54 @@ class ImmichLibraryScanStartViewTests(TestCase):
             response = self.client.post(reverse("settings.immich.scan"))
         self.assertEqual(response.status_code, 400)
         enqueue.assert_not_called()
+
+
+class ImmichLibraryScanResumeTests(TestCase):
+    """The active scan task id survives navigation, so a page reload can resume polling
+    instead of only ever offering a fresh "start scan" button (see get_active_scan_task_id)."""
+
+    def setUp(self) -> None:
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+        ImmichAccount.objects.create(profile=self.profile, server_url="https://photos.example.com", api_key="k")
+        self.client.force_login(self.user)
+
+    def test_starting_a_scan_persists_the_task_id(self) -> None:
+        from urbanlens.dashboard.controllers.immich import get_active_scan_task_id
+
+        fake_result = mock.MagicMock(id="task-123")
+        with mock.patch("urbanlens.dashboard.controllers.immich.safely_enqueue_task", return_value=fake_result):
+            self.client.post(reverse("settings.immich.scan"))
+        self.assertEqual(get_active_scan_task_id(self.profile.pk), "task-123")
+
+    def test_tools_page_resumes_polling_an_active_scan(self) -> None:
+        from urbanlens.dashboard.controllers.immich import _set_active_scan_task_id
+
+        _set_active_scan_task_id(self.profile.pk, "task-123")
+        response = self.client.get(reverse("tools.index"))
+        self.assertContains(response, "task-123")
+
+    def test_tools_page_shows_bare_button_with_no_active_scan(self) -> None:
+        response = self.client.get(reverse("tools.index"))
+        self.assertNotContains(response, "settings.immich.scan.progress")
+
+    def test_completed_scan_clears_the_persisted_task_id(self) -> None:
+        from urbanlens.dashboard.controllers.immich import _set_active_scan_task_id, get_active_scan_task_id
+
+        _set_active_scan_task_id(self.profile.pk, "task-123")
+        with mock.patch("urbanlens.dashboard.controllers.immich.get_task_progress") as get_progress:
+            get_progress.return_value = mock.MagicMock(state="SUCCESS", percent=100, message="Done", error="", result={"scanned": 5, "matched_suggestions": 0, "new_pin_suggestions": 0})
+            self.client.get(reverse("settings.immich.scan.progress", args=["task-123"]))
+        self.assertIsNone(get_active_scan_task_id(self.profile.pk))
+
+    def test_failed_scan_clears_the_persisted_task_id(self) -> None:
+        from urbanlens.dashboard.controllers.immich import _set_active_scan_task_id, get_active_scan_task_id
+
+        _set_active_scan_task_id(self.profile.pk, "task-123")
+        with mock.patch("urbanlens.dashboard.controllers.immich.get_task_progress") as get_progress:
+            get_progress.return_value = mock.MagicMock(state="FAILURE", percent=0, message="", error="boom", result=None)
+            self.client.get(reverse("settings.immich.scan.progress", args=["task-123"]))
+        self.assertIsNone(get_active_scan_task_id(self.profile.pk))
 
 
 # -- Pin detail: search -------------------------------------------------------------
@@ -517,6 +585,7 @@ class SweepImmichLibraryLocationsTaskTests(TestCase):
     def _run(self, pages):
         with (
             mock.patch.object(ImmichGateway, "iter_library_assets", return_value=iter(pages)),
+            mock.patch.object(ImmichGateway, "library_asset_count", return_value=sum(len(page) for page, _total in pages)),
             mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
         ):
             return tasks.sweep_immich_library_locations(self.profile.pk)
@@ -557,6 +626,7 @@ class SweepImmichLibraryLocationsTaskTests(TestCase):
 
         with (
             mock.patch.object(ImmichGateway, "iter_library_assets", failing_iter),
+            mock.patch.object(ImmichGateway, "library_asset_count", return_value=5),
             mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
         ):
             result = tasks.sweep_immich_library_locations(self.profile.pk)
@@ -581,6 +651,34 @@ class SweepImmichLibraryLocationsTaskTests(TestCase):
         iter_assets.assert_not_called()
         self.assertEqual(result, {"scanned": 0, "matched_suggestions": 0, "new_pin_suggestions": 0})
         self.assertFalse(PinSuggestion.objects.exists())
+
+    def test_progress_message_uses_the_real_total_not_the_deprecated_page_total(self) -> None:
+        """Regression test: Immich's per-page 'total' field mirrors the page size (a
+        deprecated field), so a naive "Scanned N of <page total>" message goes stale
+        and nonsensical once scanned outgrows a single page (e.g. "Scanned 194000 of
+        1000"). The real library-wide count must come from library_asset_count()."""
+        asset = SearchAsset(id="a1", taken_at=datetime.datetime(2024, 1, 1, tzinfo=datetime.UTC), lat=40.0001, lon=-74.0)
+        with (
+            mock.patch.object(ImmichGateway, "iter_library_assets", return_value=iter([([asset], 1000)])),
+            mock.patch.object(ImmichGateway, "library_asset_count", return_value=194000),
+            mock.patch("urbanlens.dashboard.tasks.update_task_progress") as progress,
+        ):
+            tasks.sweep_immich_library_locations(self.profile.pk)
+        messages = [call.kwargs["message"] for call in progress.call_args_list]
+        self.assertTrue(any("194000" in message for message in messages))
+        self.assertFalse(any("of 1000" in message for message in messages))
+
+    def test_progress_message_falls_back_gracefully_when_statistics_endpoint_fails(self) -> None:
+        asset = SearchAsset(id="a1", taken_at=datetime.datetime(2024, 1, 1, tzinfo=datetime.UTC), lat=40.0001, lon=-74.0)
+        with (
+            mock.patch.object(ImmichGateway, "iter_library_assets", return_value=iter([([asset], 1000)])),
+            mock.patch.object(ImmichGateway, "library_asset_count", side_effect=GatewayRequestError("boom")),
+            mock.patch("urbanlens.dashboard.tasks.update_task_progress") as progress,
+        ):
+            result = tasks.sweep_immich_library_locations(self.profile.pk)
+        self.assertEqual(result["scanned"], 1)
+        messages = [call.kwargs["message"] for call in progress.call_args_list]
+        self.assertTrue(any("so far" in message for message in messages))
 
     def test_undecryptable_account_is_a_noop_not_a_crash(self) -> None:
         """Regression test for the InvalidToken crash seen in production (see tasks.py).

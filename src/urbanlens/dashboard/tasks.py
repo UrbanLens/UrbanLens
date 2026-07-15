@@ -825,16 +825,28 @@ def sweep_immich_library_locations(self, profile_id: int) -> dict[str, int]:
         return empty
 
     gateway = ImmichGateway(account=account)
+    try:
+        library_total = gateway.library_asset_count()
+    except GatewayRequestError:
+        library_total = 0
+
     hits: list[LocationHit] = []
     scanned = 0
     try:
-        for page, total in gateway.iter_library_assets():
+        for page, _page_total in gateway.iter_library_assets():
             for asset in page:
                 scanned += 1
                 if asset.lat is None or asset.lon is None or asset.taken_at is None:
                     continue
                 hits.append(LocationHit(latitude=asset.lat, longitude=asset.lon, taken_at=asset.taken_at, label=asset.city, asset_id=asset.id))
-            update_task_progress(self, current=scanned, total=max(total, scanned, 1), message=f"Scanned {scanned} of {total} photo(s)...")
+            # library_total is the true library-wide count (see library_asset_count) -
+            # unlike the deprecated per-page "total" iter_library_assets also yields,
+            # which mirrors the current page size and would make this message read
+            # "Scanned 194000 of 1000" once scanned outgrows a single page.
+            if library_total:
+                update_task_progress(self, current=scanned, total=max(library_total, scanned, 1), message=f"Scanned {scanned} of {library_total} photo(s)...")
+            else:
+                update_task_progress(self, current=scanned, total=max(scanned, 1), message=f"Scanned {scanned} photo(s) so far...")
     except GatewayRequestError as exc:
         update_task_progress(self, current=scanned, total=max(scanned, 1), message=f"Scan failed: {exc}")
         return {**empty, "scanned": scanned}

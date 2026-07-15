@@ -145,6 +145,8 @@ def _thread_context(profile: Profile, partner: Profile) -> dict:
     Returns:
         Context dict for ``_thread.html``.
     """
+    from urbanlens.dashboard.models.direct_messages.mute import DirectMessageMute
+
     DirectMessage.objects.between(profile, partner).filter(recipient=profile).mark_read()
     clear_email_debounce(partner.pk, profile.pk)
     mark_thread_open(profile.pk, partner.pk)
@@ -168,6 +170,7 @@ def _thread_context(profile: Profile, partner: Profile) -> dict:
         "partner_e2ee_enrolled": _e2ee_enrolled(partner),
         "has_more_older": has_more_older,
         "oldest_message_id": thread_messages[0].pk if thread_messages else None,
+        "is_muted": DirectMessageMute.objects.filter(viewer=profile, sender=partner).exists(),
         **identity,
     }
 
@@ -272,6 +275,27 @@ class ConversationView(LoginRequiredMixin, View):
             "profile": profile,
         }
         return render(request, "dashboard/pages/messages/index.html", context)
+
+
+class ConversationMuteToggleView(LoginRequiredMixin, View):
+    """POST /messages/<profile_slug>/mute/ - toggle notification muting for one conversation.
+
+    Only suppresses notifications (in-app + the delayed "new message" email) -
+    the conversation, unread counts, and message delivery are unaffected.
+    """
+
+    def post(self, request: HttpRequest, profile_slug: str) -> HttpResponse:
+        from urbanlens.dashboard.models.direct_messages.mute import DirectMessageMute
+
+        profile = _get_profile(request)
+        partner = _get_partner(profile, profile_slug)
+        mute, created = DirectMessageMute.objects.get_or_create(viewer=profile, sender=partner)
+        if not created:
+            mute.delete()
+
+        response = render(request, "dashboard/partials/messages/_thread.html", _thread_context(profile, partner))
+        response["HX-Trigger"] = json.dumps({"dmListRefresh": {"target": "body"}})
+        return response
 
 
 class ConversationSendView(LoginRequiredMixin, View):

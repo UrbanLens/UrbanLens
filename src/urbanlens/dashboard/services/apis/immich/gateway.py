@@ -183,6 +183,25 @@ class ImmichGateway(Gateway):
         markers = self._get("/map/markers", params={"isArchived": is_archived})
         return [MapMarker(id=marker["id"], lat=float(marker["lat"]), lon=float(marker["lon"]), city=marker.get("city")) for marker in markers if marker.get("lat") is not None and marker.get("lon") is not None]
 
+    def library_asset_count(self) -> int:
+        """Return the true total number of assets in the user's library.
+
+        ``POST /search/metadata``'s own ``assets.total`` field is deprecated
+        and, on current Immich servers, actually mirrors the current page's
+        item count rather than a library-wide total - so it must never be used
+        as a progress-bar denominator (see ``iter_library_assets``, which
+        yields it unchanged for pagination bookkeeping only, not for display).
+        ``POST /search/statistics`` returns the real count.
+
+        Returns:
+            Total matching assets, or 0 if the endpoint errors.
+
+        Raises:
+            GatewayRequestError: On a network error or non-2xx response.
+        """
+        body = self._post("/search/statistics", json={})
+        return int(body.get("total") or 0)
+
     def _search_metadata_page(self, filters: dict[str, Any], *, page: Any = None, size: int = _DEFAULT_RECENT_LIMIT) -> tuple[list[SearchAsset], Any, int]:
         """Run one page of a ``POST /api/search/metadata`` query.
 
@@ -198,7 +217,10 @@ class ImmichGateway(Gateway):
         Raises:
             GatewayRequestError: On a network error or non-2xx response.
         """
-        request: dict[str, Any] = {**filters, "size": size}
+        # withExif=True is required to get GPS coordinates back at all - without it
+        # Immich omits exifInfo entirely, so _parse_asset's lat/lon always come back
+        # None even for photos with real GPS EXIF data.
+        request: dict[str, Any] = {**filters, "size": size, "withExif": True}
         if page is not None:
             request["page"] = page
         body = self._post("/search/metadata", json=request)

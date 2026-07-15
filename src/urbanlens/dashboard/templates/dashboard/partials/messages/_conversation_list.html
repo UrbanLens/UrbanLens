@@ -24,7 +24,10 @@ open conversation, or empty string).
         </span>
         <span class="dm-conv-item__text">
           <span class="dm-conv-item__top">
-            <span class="dm-conv-item__name">{{ conv.display_name }}</span>
+            <span class="dm-conv-item__name-group">
+              <span class="dm-conv-item__name">{{ conv.display_name }}</span>
+              {% if conv.is_muted %}<i class="material-symbols-outlined dm-conv-item__muted-icon" title="Notifications muted">volume_off</i>{% endif %}
+            </span>
             <span class="dm-conv-item__time">{{ conv.last_message.created|human_timesince }}</span>
           </span>
           <span class="dm-conv-item__bottom">

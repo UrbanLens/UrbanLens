@@ -347,7 +347,12 @@
                         Scan library for new locations
                     </button>
                 </div>
+                {% if immich_active_scan_task_id %}
+                {# A scan is already running (started before a navigation away from this page) - resume polling immediately instead of showing a fresh, misleading "start" button state. #}
+                {% include "dashboard/partials/settings/_immich_scan_progress.html" with task_id=immich_active_scan_task_id state="PROGRESS" %}
+                {% else %}
                 <div id="immich-scan-progress"></div>
+                {% endif %}
                 {% else %}
                 <p class="tools-card-desc">
                     Connect a self-hosted Immich server in

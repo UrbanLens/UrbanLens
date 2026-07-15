@@ -43,12 +43,15 @@ live messages and fall back to the plain POST endpoint when the socket is down.
         <button type="button" class="dm-bubble-menu__item" id="dm-download-transcript">
           <i class="material-symbols-outlined">download</i> Download transcript
         </button>
-        <form method="post" action="{% url 'friend.mute' partner.id %}">
-          {% csrf_token %}
-          <button type="submit" class="dm-bubble-menu__item">
-            <i class="material-symbols-outlined">volume_off</i> Mute
-          </button>
-        </form>
+        <button type="button" class="dm-bubble-menu__item"
+                hx-post="{% url 'messages.mute' partner.slug %}"
+                hx-target="#dm-thread-pane" hx-swap="innerHTML">
+          {% if is_muted %}
+          <i class="material-symbols-outlined">volume_up</i> Unmute notifications
+          {% else %}
+          <i class="material-symbols-outlined">volume_off</i> Mute notifications
+          {% endif %}
+        </button>
         <button type="button" class="dm-bubble-menu__item"
                 hx-post="{% url 'messages.image_permission' partner.slug %}"
                 hx-vals='{"decision": "{% if image_permission_status == 'rejected' %}allow{% else %}reject{% endif %}"}'

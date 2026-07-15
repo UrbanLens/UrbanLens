@@ -139,6 +139,19 @@
         @include truncate;
     }
 
+    &__name-group {
+        display: flex;
+        align-items: center;
+        gap: .3rem;
+        min-width: 0;
+    }
+
+    &__muted-icon {
+        flex-shrink: 0;
+        font-size: .9rem;
+        color: var(--ul-grey-5);
+    }
+
     &__preview {
         min-width: 0;
         flex: 1;

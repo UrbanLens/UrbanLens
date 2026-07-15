@@ -104,6 +104,8 @@ class ToolsIndexView(LoginRequiredMixin, View):
         Returns:
             Rendered tools page.
         """
+        from urbanlens.dashboard.controllers.immich import get_active_scan_task_id
+
         profile, _ = Profile.objects.get_or_create(user=request.user)
         return render(
             request,
@@ -112,6 +114,7 @@ class ToolsIndexView(LoginRequiredMixin, View):
                 "show_backup_tools": request.user.has_perm("dashboard.view_site_admin"),
                 "profile_uuid": profile.uuid,
                 "immich_account": ImmichAccount.objects.get_for_profile(profile),
+                "immich_active_scan_task_id": get_active_scan_task_id(profile.pk),
             },
         )
 
