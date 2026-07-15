@@ -21,6 +21,7 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.plugins.builtin.epa_echo import (
+    _EXACT_MATCH_BUDGET_SECONDS,
     EpaEchoDetailPanelSource,
     EpaEchoNearbyPanelSource,
     EpaFacilityNameProvider,
@@ -261,3 +262,47 @@ class FetchEpaEchoDataExactMatchTests(TestCase):
             result = _fetch_epa_echo_data(pin)
         self.assertEqual(result, {"facilities": [], "exact_site": None})
         gateway.get_nearby_facilities.assert_not_called()
+
+    def test_exceeding_the_wall_clock_budget_stops_checking_further_candidates(self) -> None:
+        """Regression guard: a slow/degraded ECHO API must not be able to hold this Celery
+        task open anywhere near its 110s soft time limit and starve the ~10 other panel
+        fetches sharing the same worker pool on a cold pin page (docker-compose.yml's
+        celery-worker concurrency comment) - the loop must bail out on wall-clock time,
+        independent of the per-call timeout or candidate count."""
+        facilities = [
+            {"name": "First Facility", "address": "1 Main St", "registry_id": "R1"},
+            {"name": "Second Facility", "address": "2 Main St", "registry_id": "R2"},
+        ]
+        details = {
+            "R1": {"latitude": 41.0, "longitude": -75.0, "programs": []},  # not a match
+            "R2": {"latitude": 40.0, "longitude": -74.0, "programs": []},  # would match, if reached
+        }
+        gateway = self._gateway(facilities=facilities, detail_by_registry_id=details)
+        # Call 1 = loop start ("started"). Call 2 = budget check before candidate 1 (still
+        # within budget). Call 3 = budget check before candidate 2 (past the budget - stop).
+        monotonic_values = [0.0, 1.0, _EXACT_MATCH_BUDGET_SECONDS + 1]
+        with (
+            mock.patch("urbanlens.dashboard.services.apis.locations.epa_echo.EpaEchoGateway", return_value=gateway),
+            mock.patch("urbanlens.dashboard.plugins.builtin.epa_echo.time.monotonic", side_effect=monotonic_values),
+        ):
+            result = _fetch_epa_echo_data(self.pin)
+        self.assertIsNone(result["exact_site"])
+        gateway.get_facility_detail.assert_called_once_with("R1")
+
+    def test_within_budget_checks_every_candidate(self) -> None:
+        facilities = [
+            {"name": "First Facility", "address": "1 Main St", "registry_id": "R1"},
+            {"name": "Second Facility", "address": "2 Main St", "registry_id": "R2"},
+        ]
+        details = {
+            "R1": {"latitude": 41.0, "longitude": -75.0, "programs": []},  # not a match
+            "R2": {"latitude": 40.0, "longitude": -74.0, "programs": []},  # exact match
+        }
+        gateway = self._gateway(facilities=facilities, detail_by_registry_id=details)
+        with (
+            mock.patch("urbanlens.dashboard.services.apis.locations.epa_echo.EpaEchoGateway", return_value=gateway),
+            mock.patch("urbanlens.dashboard.plugins.builtin.epa_echo.time.monotonic", return_value=0.0),
+        ):
+            result = _fetch_epa_echo_data(self.pin)
+        assert result["exact_site"] is not None
+        self.assertEqual(result["exact_site"]["registry_id"], "R2")

@@ -24,6 +24,8 @@ conservative rate limit ever gets tripped by that.
 
 from __future__ import annotations
 
+import logging
+import time
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
@@ -36,6 +38,8 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.services.external_data import PanelSource
 
+logger = logging.getLogger(__name__)
+
 _CACHE_SOURCE = "epa_echo"
 
 #: Nearby-search candidates (closest-first is NOT guaranteed - see
@@ -43,10 +47,17 @@ _CACHE_SOURCE = "epa_echo"
 #: fetched to look for an exact-site match. Bounded to limit the extra API
 #: calls this adds; there's no cheaper way to find the truly closest facility
 #: since the nearby-search response has no per-facility longitude to sort by.
-_EXACT_MATCH_CANDIDATES = 3
+_EXACT_MATCH_CANDIDATES = 2
 #: A facility whose DFR coordinates are within this distance of the pin's own
 #: coordinates is treated as "this facility IS the pin", not just nearby.
 _EXACT_MATCH_RADIUS_MILES = 0.1
+#: Wall-clock ceiling on the exact-match DFR lookup loop, independent of the
+#: per-call timeout or candidate count - this whole fetch runs inside a Celery
+#: task sharing a worker pool with ~10 other panel fetches on a cold pin page
+#: (see docker-compose.yml's celery-worker concurrency comment), so a
+#: degraded ECHO API must not be allowed to hold a worker slot for anywhere
+#: near the task's own 110s soft time limit and starve the other panels.
+_EXACT_MATCH_BUDGET_SECONDS = 20.0
 
 
 def _miles_between(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
@@ -74,7 +85,11 @@ def _fetch_epa_echo_data(pin: Pin) -> dict[str, Any]:
 
     exact_site = None
     best_distance = _EXACT_MATCH_RADIUS_MILES
+    started = time.monotonic()
     for facility in facilities[:_EXACT_MATCH_CANDIDATES]:
+        if time.monotonic() - started >= _EXACT_MATCH_BUDGET_SECONDS:
+            logger.warning("EPA ECHO exact-site match budget exceeded for pin %s; stopping early", pin.pk)
+            break
         registry_id = facility.get("registry_id") or ""
         if not registry_id:
             continue

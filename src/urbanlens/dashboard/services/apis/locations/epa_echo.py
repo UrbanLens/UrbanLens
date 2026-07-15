@@ -134,7 +134,13 @@ class EpaEchoGateway(Gateway):
             return None
         try:
             params: dict[str, str] = {"output": "JSON", "p_id": registry_id}
-            response = self.session.get(f"{_BASE_URL}/dfr_rest_services.get_dfr", params=params, timeout=20)
+            # Kept tight (rather than matching get_nearby_facilities' 15s) because the
+            # exact-site match in epa_echo.py's _fetch_epa_echo_data calls this in a
+            # sequential loop over several candidates, inside a Celery task shared with
+            # ~10 other panel fetches on a cold pin page (see docker-compose.yml's
+            # celery-worker concurrency comment) - a slow/degraded ECHO API here must
+            # not be allowed to tie up a worker slot long enough to starve the others.
+            response = self.session.get(f"{_BASE_URL}/dfr_rest_services.get_dfr", params=params, timeout=10)
             response.raise_for_status()
             dfr = response.json().get("Results") or {}
         except requests.exceptions.RequestException:
