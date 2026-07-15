@@ -1667,6 +1667,9 @@ a.trip-activity-name {
 }
 
 #add-activity-more-fields {
+    display: flex;
+    flex-direction: column;
+    gap: .9rem;
     animation: activity-fields-in .18s ease-out;
 }
 
@@ -1854,6 +1857,15 @@ a.trip-activity-name {
     &--active {
         color: $color-blue-500;
         border-bottom-color: $color-blue-500;
+    }
+
+    &:disabled {
+        opacity: .4;
+        cursor: not-allowed;
+
+        &:hover {
+            color: var(--ul-grey-6);
+        }
     }
 }
 

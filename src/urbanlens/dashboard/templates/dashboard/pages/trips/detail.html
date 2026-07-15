@@ -246,10 +246,9 @@
                 <input type="hidden" name="status" id="add-activity-status-input" value="confirmed">
                 <label class="activity-hide-label" id="add-activity-propose-label">
                     <input type="checkbox" id="add-activity-propose-checkbox" onchange="_syncAddActivityStatus()">
-                    <i class="material-symbols-outlined">help</i>
                     Propose for discussion
+                    {% include "dashboard/partials/ui/_tooltip_help.html" with text="Left unchecked, the activity is added as confirmed. Checked, other members can vote on it first." %}
                 </label>
-                <p class="form-help">Left unchecked, the activity is added as confirmed. Checked, other members can vote on it first.</p>
             </div>
             <div class="form-row form-row--toggle">
                 <label class="activity-hide-label" id="add-activity-hide-label">
@@ -257,8 +256,8 @@
                            value="true" onchange="_syncAddActivityHideLabel()">
                     <i class="material-symbols-outlined" id="add-activity-hide-icon">visibility</i>
                     Hide location
+                    {% include "dashboard/partials/ui/_tooltip_help.html" with text="Location won't appear on the map. Shows as 'Secret Location' in the list." %}
                 </label>
-                <p class="form-help">Location won't appear on the map. Shows as "Secret Location" in the list.</p>
             </div>
         </div>
 
@@ -326,7 +325,7 @@
             </div>
         </div>
 
-        <div class="form-row">
+        <div class="form-row" id="edit-activity-end-date-wrap" hidden>
             <label>End</label>
             <div class="activity-datetime-row">
                 <input type="date" name="scheduled_end_date" id="edit-activity-end-date">
@@ -337,6 +336,13 @@
                     <i class="material-icons" style="font-size:.9rem;vertical-align:middle">clear</i>
                 </button>
             </div>
+        </div>
+        <div class="form-row" id="edit-activity-end-date-toggle-row" style="margin-bottom:.1rem">
+            <button type="button" class="btn btn--ghost" id="edit-activity-end-date-toggle"
+                    style="font-size:.8rem;padding:.25rem .5rem"
+                    onclick="_revealEditActivityEndDate()">
+                <i class="material-icons" style="font-size:.95rem;vertical-align:middle">add</i> Add end date
+            </button>
         </div>
 
         <div class="form-row" style="margin-bottom:.1rem">
@@ -373,10 +379,9 @@
             <input type="hidden" name="status" id="edit-activity-status-input" value="proposed">
             <label class="activity-hide-label" id="edit-activity-propose-label">
                 <input type="checkbox" id="edit-activity-propose-checkbox" onchange="_syncEditActivityStatus()">
-                <i class="material-symbols-outlined">help</i>
                 Propose for discussion
+                {% include "dashboard/partials/ui/_tooltip_help.html" with text="Left unchecked, the activity is confirmed. Checked, other members can vote on it first." %}
             </label>
-            <p class="form-help">Left unchecked, the activity is confirmed. Checked, other members can vote on it first.</p>
         </div>
         <div class="form-row form-row--toggle" id="edit-activity-hide-wrap" hidden>
             <label class="activity-hide-label" id="edit-activity-hide-label">
@@ -384,8 +389,8 @@
                        value="true" onchange="_syncHideLocationLabel('edit-activity-hide-label', 'edit-activity-hide-icon', this.checked)">
                 <i class="material-symbols-outlined" id="edit-activity-hide-icon">visibility_off</i>
                 Hide location
+                {% include "dashboard/partials/ui/_tooltip_help.html" with text="Location won't appear on the map. Shows as 'Secret Location' in the list." %}
             </label>
-            <p class="form-help">Location won't appear on the map. Shows as "Secret Location" in the list.</p>
         </div>
         <div class="form-actions form-actions--split">
             <button type="button" class="btn btn--danger" id="edit-activity-delete-btn"
@@ -1077,11 +1082,31 @@ function _clearAddActivityLocation() {
     });
 }());
 
+// -- A freshly-revealed date field defaults to today rather than sitting
+// blank - the user can change it, but usually won't need to.
+function _defaultDateFieldToToday(id) {
+    var input = document.getElementById(id);
+    if (input && !input.value) input.value = new Date().toISOString().slice(0, 10);
+}
+// Add-activity Start date defaults to the trip's start date server-side;
+// fall back to today when the trip itself has no start date set yet.
+_defaultDateFieldToToday('activity-date');
+
 // -- Add-activity: end date stays hidden until requested -------------------
 function _revealAddActivityEndDate() {
     document.getElementById('add-activity-end-date-wrap').hidden = false;
     document.getElementById('add-activity-end-date-toggle-row').hidden = true;
+    _defaultDateFieldToToday('activity-end-date');
     document.getElementById('activity-end-date').focus();
+}
+
+// -- Edit-activity: end date stays hidden until requested, unless the
+// activity being edited already has one (see tripOpenEditDialog).
+function _revealEditActivityEndDate() {
+    document.getElementById('edit-activity-end-date-wrap').hidden = false;
+    document.getElementById('edit-activity-end-date-toggle-row').hidden = true;
+    _defaultDateFieldToToday('edit-activity-end-date');
+    document.getElementById('edit-activity-end-date').focus();
 }
 
 // -- Add-activity: "Propose for discussion" checkbox drives the status field
@@ -1114,6 +1139,7 @@ function _resetAddActivityForm() {
     document.getElementById('activity-child-trip-uuid').value = '';
     document.getElementById('activity-end-date').value = '';
     document.getElementById('activity-end-time').value = '';
+    _defaultDateFieldToToday('activity-date');
     // Back to step 1: hide the chip + revealed fields, show the picker again
     document.getElementById('activity-location-chip').hidden = true;
     document.getElementById('add-activity-location-picker').hidden = false;
@@ -1130,7 +1156,7 @@ function _resetAddActivityForm() {
     var nameWrap = document.getElementById('add-activity-name-wrap');
     if (nameWrap) nameWrap.setAttribute('hidden', '');
     var nameToggle = document.getElementById('add-activity-name-toggle');
-    if (nameToggle) nameToggle.innerHTML = '<i class="material-icons" style="font-size:.95rem;vertical-align:middle">add</i> Add custom name';
+    if (nameToggle) nameToggle.hidden = false;
     // map + view restore are handled by the activities section listener below
 }
 function _onAddActivitySuccess() {
@@ -1414,34 +1440,18 @@ function _syncEditActivityStatus() {
     document.getElementById('edit-activity-status-input').value = checked ? 'proposed' : 'confirmed';
 }
 
-// -- Add activity name toggle ---------------------------------------------
+// -- Add/edit activity name toggle -----------------------------------------
+// One-way reveal: once the user opts into a custom name, the field stays -
+// there's no need for a "hide name" control to collapse it back (clearing
+// the field's text does the same thing).
 function _toggleAddActivityName() {
-    var wrap = document.getElementById('add-activity-name-wrap');
-    var btn  = document.getElementById('add-activity-name-toggle');
-    var hidden = wrap.hasAttribute('hidden');
-    if (hidden) {
-        wrap.removeAttribute('hidden');
-        btn.innerHTML = '<i class="material-icons" style="font-size:.95rem;vertical-align:middle">remove</i> Hide name';
-    } else {
-        wrap.setAttribute('hidden', '');
-        btn.innerHTML = '<i class="material-icons" style="font-size:.95rem;vertical-align:middle">add</i> Add custom name';
-        document.getElementById('activity-title').value = '';
-    }
+    document.getElementById('add-activity-name-wrap').removeAttribute('hidden');
+    document.getElementById('add-activity-name-toggle').hidden = true;
 }
 
-// -- Edit activity name toggle --------------------------------------------
 function _toggleEditActivityName() {
-    var wrap = document.getElementById('edit-activity-name-wrap');
-    var btn  = document.getElementById('edit-activity-name-toggle');
-    var hidden = wrap.hasAttribute('hidden');
-    if (hidden) {
-        wrap.removeAttribute('hidden');
-        btn.innerHTML = '<i class="material-icons" style="font-size:.95rem;vertical-align:middle">remove</i> Hide name';
-    } else {
-        wrap.setAttribute('hidden', '');
-        btn.innerHTML = '<i class="material-icons" style="font-size:.95rem;vertical-align:middle">add</i> Add custom name';
-        document.getElementById('edit-activity-title').value = '';
-    }
+    document.getElementById('edit-activity-name-wrap').removeAttribute('hidden');
+    document.getElementById('edit-activity-name-toggle').hidden = true;
 }
 
 // -- Edit activity child trip toggle (mirrors the name/end-date opt-in reveal
@@ -1470,20 +1480,23 @@ function tripOpenEditDialog(li) {
     var nameWrap   = document.getElementById('edit-activity-name-wrap');
     var nameToggle = document.getElementById('edit-activity-name-toggle');
     if (nameWrap) {
-        if (hasTitle) {
-            nameWrap.removeAttribute('hidden');
-            if (nameToggle) nameToggle.innerHTML = '<i class="material-icons" style="font-size:.95rem;vertical-align:middle">remove</i> Hide name';
-        } else {
-            nameWrap.setAttribute('hidden', '');
-            if (nameToggle) nameToggle.innerHTML = '<i class="material-icons" style="font-size:.95rem;vertical-align:middle">add</i> Add custom name';
-        }
+        nameWrap.hidden = !hasTitle;
+        if (nameToggle) nameToggle.hidden = hasTitle;
     }
     document.getElementById('edit-activity-title').value        = li.dataset.actTitle  || '';
     document.getElementById('edit-activity-notes').value        = li.dataset.actNotes  || '';
     document.getElementById('edit-activity-date').value         = li.dataset.actDate   || '';
     document.getElementById('edit-activity-time').value         = li.dataset.actTime   || '';
+
+    var hasEndDate = !!(li.dataset.actEndDate);
     document.getElementById('edit-activity-end-date').value     = li.dataset.actEndDate || '';
     document.getElementById('edit-activity-end-time').value     = li.dataset.actEndTime || '';
+    var endDateWrap = document.getElementById('edit-activity-end-date-wrap');
+    var endDateToggleRow = document.getElementById('edit-activity-end-date-toggle-row');
+    if (endDateWrap && endDateToggleRow) {
+        endDateWrap.hidden = !hasEndDate;
+        endDateToggleRow.hidden = hasEndDate;
+    }
     document.getElementById('edit-activity-location-uuid').value = li.dataset.actLocationUuid  || '';
     document.getElementById('edit-activity-pin-uuid').value      = '';
     document.getElementById('edit-activity-geocoded-lat').value  = '';
@@ -1632,12 +1645,27 @@ async function _deleteEditActivity() {
 // -- Activity tabs (Upcoming / Proposed / Confirmed / Completed) -----------
 window._tripCurrentTab = 'upcoming';
 
+// Grey out (and disable) Proposed/Confirmed/Completed when there's nothing
+// in that bucket - Upcoming always stays clickable since it's the default view.
+function _updateActivityTabAvailability(panel) {
+    var counts = { proposed: 0, confirmed: 0, completed: 0 };
+    panel.querySelectorAll('.trip-activity-item').forEach(function (li) {
+        var status = li.dataset.actStatus || 'proposed';
+        if (status in counts) counts[status]++;
+    });
+    ['proposed', 'confirmed', 'completed'].forEach(function (tab) {
+        var btn = panel.querySelector('.activity-tab[data-tab="' + tab + '"]');
+        if (btn) btn.disabled = counts[tab] === 0;
+    });
+}
+
 window.tripSetTab = function (tab) {
     window._tripCurrentTab = tab;
     try { localStorage.setItem(_tripActiveTabKey, tab); } catch (e) {}
 
     var panel = document.getElementById('trip-activities-panel');
     if (panel) {
+        _updateActivityTabAvailability(panel);
         panel.querySelectorAll('.activity-tab').forEach(function (btn) {
             btn.classList.toggle('activity-tab--active', btn.dataset.tab === tab);
         });

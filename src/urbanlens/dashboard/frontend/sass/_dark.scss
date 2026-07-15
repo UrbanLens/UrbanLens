@@ -49,8 +49,6 @@
     }
 
     .settings-theme-option {
-        border-color: var(--ul-grey-7b);
-
         span {
             color: var(--ul-grey-3a);
         }
@@ -65,8 +63,13 @@
         }
 
         &.active {
-            background: rgba($primary-color, 0.12);
+            background: rgba($primary-color, 0.40);
             border-color: var(--primary-color);
+            color: var(--ul-grey-8);
+
+            i {
+                color: var(--ul-grey-8);
+            }
         }
     }
 

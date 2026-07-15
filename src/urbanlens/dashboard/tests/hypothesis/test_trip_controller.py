@@ -206,6 +206,43 @@ class TripDetailViewTests(TestCase):
         self.assertIn('id="edit-activity-child-trip-toggle"', html)
         self.assertIn('id="edit-activity-child-trip-wrap" hidden', html)
 
+    def test_edit_activity_end_date_is_opt_in_like_add_activity(self):
+        """Regression guard: the Edit-Activity dialog's End date used to always be
+        visible, unlike Add-Activity's opt-in "+ Add end date" toggle."""
+        client = Client()
+        client.force_login(self.creator_user)
+        html = client.get(self._url()).content.decode()
+
+        self.assertIn('id="edit-activity-end-date-wrap" hidden', html)
+        self.assertIn('id="edit-activity-end-date-toggle-row"', html)
+        self.assertIn('onclick="_revealEditActivityEndDate()"', html)
+
+    def test_propose_and_hide_location_explainers_are_behind_a_tooltip(self):
+        """Regression guard: these used to be always-visible <p class="form-help">
+        paragraphs in both dialogs instead of a click-to-reveal tooltip icon,
+        matching the rest of the site's explainer convention."""
+        client = Client()
+        client.force_login(self.creator_user)
+        html = client.get(self._url()).content.decode()
+
+        # The old always-visible wrapper is gone from both dialogs' propose/hide-location rows.
+        self.assertNotIn('<p class="form-help">Left unchecked', html)
+        self.assertNotIn('<p class="form-help">Location won', html)
+        # The same copy now lives on a click-to-reveal tooltip icon instead.
+        self.assertIn("Left unchecked, the activity is added as confirmed.", html)
+        self.assertIn("Left unchecked, the activity is confirmed.", html)
+        self.assertGreaterEqual(html.count("ul-tooltip-help"), 4)
+
+    def test_no_dialog_offers_a_hide_name_control(self):
+        """Regression guard: "Add custom name" used to flip into a "Hide name"
+        collapse-back control once clicked - unnecessary, since clearing the
+        field's text already does the same thing."""
+        client = Client()
+        client.force_login(self.creator_user)
+        html = client.get(self._url()).content.decode()
+
+        self.assertNotIn("Hide name", html)
+
 
 class TripDeleteViewTests(TestCase):
     """DELETE /trips/<slug>/delete/ - only creator can delete."""

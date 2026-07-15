@@ -1,6 +1,8 @@
 // End-to-end encryption UI: recovery-key overlay, settings card, locked
 // banner, and the decrypt-in-place states shared by the messages page.
 
+@use 'variables' as *;
+
 .e2ee-recovery-overlay {
     position: fixed;
     inset: 0;
@@ -104,7 +106,7 @@
 // -- Settings encryption card --------------------------------------------------
 
 .settings-e2ee-card {
-    @include surface($radius: $radius-lg);
+    @include surface;
     margin-top: 1.25rem;
     padding: 1.1rem 1.25rem;
 }
