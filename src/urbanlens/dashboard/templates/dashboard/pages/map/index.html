@@ -537,6 +537,7 @@
     const _markerMap    = new Map();   // uuid → L.Marker
     let   _filterMode        = false;  // true while search/filter results are shown
     let   _viewportTid       = null;   // debounce timer for viewport changes
+    let   _pinListTid        = null;   // debounce timer for pin-list-sidebar viewport refresh
     let   _cacheTid          = null;   // debounce timer for cache writes
     let   _lastKnownUpdated  = null;   // server last_updated from most recent meta poll
     let   pinsVisible        = true;
@@ -1665,8 +1666,20 @@
         }, 220);
     }
 
+    // The pin-list sidebar shows only pins within the map's current viewport
+    // (see _refreshPinList) - unlike marker loading above, this always needs a
+    // fresh server request per pan/zoom (no client-side cache to fall back on),
+    // but _refreshPinList itself is already a no-op while the panel is closed.
+    function _onPinListViewportChange() {
+        if (_pinListTid) clearTimeout(_pinListTid);
+        _pinListTid = setTimeout(_refreshPinList, 220);
+    }
+
     map.on('moveend', _onViewportChange);
     map.on('zoomend', _onViewportChange);
+
+    map.on('moveend', _onPinListViewportChange);
+    map.on('zoomend', _onPinListViewportChange);
 
     map.on('moveend', _onMapViewUrlChange);
     map.on('zoomend', _onMapViewUrlChange);
@@ -3286,6 +3299,13 @@
         if (!panel || !panel.classList.contains('open')) return;
         const form = document.getElementById('filter-form');
         const params = new URLSearchParams(new FormData(form));
+        // Scopes the sidebar's list (and its total count) to pins within the
+        // map's current viewport - kept as a plain query param here rather
+        // than a #filter-form field, since #filter-form is also read by
+        // map.search and "add these pins to a list" (addPinsToList), neither
+        // of which should become viewport-scoped.
+        const b = map.getBounds();
+        params.set('bounds', `${b.getSouth()},${b.getWest()},${b.getNorth()},${b.getEast()}`);
         htmx.ajax('GET', `{% url 'map.pins.list' %}?${params.toString()}`, { target: '#pin-list-body', swap: 'innerHTML' });
     }
 

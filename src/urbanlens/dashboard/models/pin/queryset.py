@@ -129,6 +129,29 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
             .order_by("distance")
         )
 
+    def within_bounds(self, south: float, west: float, north: float, east: float) -> Self:
+        """Return pins whose location falls within a lat/lng bounding box.
+
+        Used by the pin-list sidebar to scope its results to the map's
+        current viewport. Same ``Polygon.from_bbox`` + ``location__point__within``
+        idiom as ``MapController.map_pins_json``'s inline bbox handling and
+        ``filter_by_criteria``'s ``include_regions`` support.
+
+        Args:
+            south: Southern (minimum) latitude.
+            west: Western (minimum) longitude.
+            north: Northern (maximum) latitude.
+            east: Eastern (maximum) longitude.
+
+        Returns:
+            This queryset filtered to pins within the box.
+        """
+        from django.contrib.gis.geos import Polygon
+
+        bbox = Polygon.from_bbox((west, south, east, north))
+        bbox.srid = 4326
+        return self.filter(location__point__within=bbox)
+
     def nearby_pins(self, latitude, longitude, radius):
 
         R = 6371  # radius of the Earth in km

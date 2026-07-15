@@ -507,7 +507,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         return HttpResponse(status=400, content="Invalid search criteria.")
 
     def pin_list_panel(self, request, *args, **kwargs):
-        """Render the paginated pin-list sidebar for the current filter criteria.
+        """Render the paginated pin-list sidebar for the current filter criteria and map viewport.
 
         Reads the same fields as ``SearchForm`` from the query string (sent via
         ``hx-include="#filter-form"`` on the client) so the list panel always
@@ -517,12 +517,14 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         a form submission.
 
         Args:
-            request: GET request, optionally carrying ``SearchForm`` fields and
-                a ``page`` parameter for pagination.
+            request: GET request, optionally carrying ``SearchForm`` fields, a
+                ``bounds`` "south,west,north,east" viewport box, and a
+                ``page`` parameter for pagination.
 
         Returns:
             Rendered ``_pin_list_panel.html`` partial with the matching pins
-            for the requested page, plus the total match count.
+            for the requested page, plus the total match count - both scoped
+            to the current map viewport when ``bounds`` is present.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
         query = Pin.objects.filter(profile=profile).root_pins().select_related("location").prefetch_related(Prefetch("labels", queryset=Label.objects.exclude(kind="user").order_by("-order", "name")))
@@ -540,6 +542,10 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             query = query.filter_by_criteria(criteria)
 
         query = _apply_toolbar_filters(query, profile, request.GET.get("toolbar_filter_ids", ""))
+        bounds_param = request.GET.get("bounds", "")
+        bounds = _parse_bbox(bounds_param)
+        if bounds:
+            query = query.within_bounds(*bounds)
         query = query.order_by(Lower(Coalesce("name", "location__wiki__name", "location__official_name")))
         page_obj = get_page(request, query, _PIN_LIST_PAGE_SIZE)
         return render(
@@ -550,6 +556,8 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 "pins": page_obj.object_list,
                 "total_count": page_obj.paginator.count,
                 "max_pins_per_list": SiteSettings.get_current().max_pins_per_list,
+                "is_viewport_scoped": bool(bounds),
+                "pagination_extra_query": f"bounds={urllib.parse.quote(bounds_param)}" if bounds else "",
             },
         )
 
@@ -610,22 +618,11 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         Query params:
             bbox: "south,west,north,east" floats - restrict to this bounding box.
         """
-        from django.contrib.gis.geos import Polygon
-
         profile, _ = Profile.objects.get_or_create(user=request.user)
         query = Pin.objects.filter(profile=profile).root_pins().select_related("location")
 
-        bbox_str = request.GET.get("bbox", "").strip()
-        if bbox_str:
-            try:
-                parts = [float(x) for x in bbox_str.split(",")]
-                if len(parts) == 4:
-                    south, west, north, east = parts
-                    bbox_poly = Polygon.from_bbox((west, south, east, north))
-                    bbox_poly.srid = 4326
-                    query = query.filter(location__point__within=bbox_poly)
-            except (ValueError, TypeError) as e:
-                logger.warning("Invalid bbox parameter: %s -> %s", bbox_str, e)
+        if bbox := _parse_bbox(request.GET.get("bbox", "")):
+            query = query.within_bounds(*bbox)
 
         cursor = _safe_positive_int(request.GET.get("cursor"))
         limit = _safe_positive_int(request.GET.get("limit"))
@@ -1100,6 +1097,30 @@ def _safe_positive_int(value: str | None) -> int | None:
     except (TypeError, ValueError):
         return None
     return parsed if parsed and parsed > 0 else None
+
+
+def _parse_bbox(bbox_str: str) -> tuple[float, float, float, float] | None:
+    """Parse a "south,west,north,east" bbox query param into its four floats.
+
+    Args:
+        bbox_str: Raw query-param value (may be empty or malformed).
+
+    Returns:
+        ``(south, west, north, east)``, or None when absent/invalid.
+    """
+    bbox_str = (bbox_str or "").strip()
+    if not bbox_str:
+        return None
+    try:
+        parts = [float(x) for x in bbox_str.split(",")]
+    except (TypeError, ValueError):
+        logger.warning("Invalid bbox parameter: %s", bbox_str)
+        return None
+    if len(parts) != 4:
+        logger.warning("Invalid bbox parameter: %s", bbox_str)
+        return None
+    south, west, north, east = parts
+    return south, west, north, east
 
 
 def _create_location_with_canonical_name(lat: float, lon: float, *, place_name: str | None = None) -> Location:

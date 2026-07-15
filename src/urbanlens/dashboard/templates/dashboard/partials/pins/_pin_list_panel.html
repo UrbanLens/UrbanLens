@@ -6,14 +6,20 @@ Context:
   page_obj - a django.core.paginator.Page of matching Pin objects
   pins - page_obj.object_list (convenience alias)
   total_count - total number of pins matching the current filter criteria
+                and map viewport
   max_pins_per_list - site's max pins per list setting (0 = unlimited)
+  is_viewport_scoped - True when the current results are restricted to the
+                map's current viewport (a "bounds" param was sent and parsed)
+  pagination_extra_query - ready-made "bounds=..." query fragment, passed to
+                pagination links via extra_query so paging doesn't drop back
+                to the full unscoped pin set (empty string when unscoped).
 
 hx-include lets the pagination buttons (inherited from _pagination_controls.html)
 resend the filter-form fields on every page click, so filters stay applied.
 {% endcomment %}
 <div id="pin-list-results" class="card pin-list-results" hx-include="#filter-form">
     <div class="pin-list-count">
-        <strong>{{ total_count }}</strong> place{{ total_count|pluralize }}
+        <strong>{{ total_count }}</strong> place{{ total_count|pluralize }}{% if is_viewport_scoped %} in view{% endif %}
     </div>
     {% if total_count %}
         {% if not max_pins_per_list or total_count < max_pins_per_list %}
@@ -67,7 +73,7 @@ resend the filter-form fields on every page click, so filters stay applied.
         </li>
         {% endfor %}
     </ul>
-    {% include "dashboard/partials/ui/_pagination_controls.html" %}
+    {% include "dashboard/partials/ui/_pagination_controls.html" with extra_query=pagination_extra_query %}
     {% else %}
     <p class="pin-list-empty">No pins match the current filters.</p>
     {% endif %}

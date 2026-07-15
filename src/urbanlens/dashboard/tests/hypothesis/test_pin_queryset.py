@@ -59,6 +59,40 @@ class PinQuerySetStructureTests(TestCase):
         self.assertNotIn(self.root, self._qs().detail_pins())
 
 
+class PinQuerySetWithinBoundsTests(TestCase):
+    """within_bounds() scopes pins to a lat/lng bounding box (used by the map's pin-list sidebar)."""
+
+    def setUp(self):
+        self.profile = baker.make("auth.User").profile
+        self.inside = baker.make(Pin, profile=self.profile, location=baker.make("dashboard.Location", latitude="40.0", longitude="-74.0"))
+        self.outside = baker.make(Pin, profile=self.profile, location=baker.make("dashboard.Location", latitude="45.0", longitude="-80.0"))
+
+    def _qs(self):
+        return Pin.objects.filter(profile=self.profile)
+
+    def test_includes_pin_inside_the_box(self) -> None:
+        result = self._qs().within_bounds(south=39.0, west=-75.0, north=41.0, east=-73.0)
+        self.assertIn(self.inside, result)
+
+    def test_excludes_pin_outside_the_box(self) -> None:
+        result = self._qs().within_bounds(south=39.0, west=-75.0, north=41.0, east=-73.0)
+        self.assertNotIn(self.outside, result)
+
+    def test_point_just_inside_the_edge_is_included(self) -> None:
+        # PostGIS __within uses strict OGC "within" semantics - a point exactly ON the
+        # boundary is not guaranteed to count (it's boundary, not interior), so this
+        # checks a point just inside the edge rather than asserting exact-edge inclusion.
+        near_edge_location = baker.make("dashboard.Location", latitude="40.999", longitude="-73.001")
+        near_edge_pin = baker.make(Pin, profile=self.profile, location=near_edge_location)
+        result = self._qs().within_bounds(south=39.0, west=-75.0, north=41.0, east=-73.0)
+        self.assertIn(near_edge_pin, result)
+
+    def test_empty_box_excludes_everything(self) -> None:
+        result = self._qs().within_bounds(south=10.0, west=10.0, north=11.0, east=11.0)
+        self.assertNotIn(self.inside, result)
+        self.assertNotIn(self.outside, result)
+
+
 class WikiQuerySetStructureTests(TestCase):
     """root_wikis / child_wikis partition wikis by the parent_wiki FK."""
 
