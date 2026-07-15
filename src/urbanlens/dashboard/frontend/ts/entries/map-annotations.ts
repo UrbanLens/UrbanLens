@@ -136,10 +136,16 @@ function init(): void {
     map.createPane("boundaryPane")!.style.zIndex = "540";
 
     // Enable scroll-wheel zoom only after the user has hovered over the map
-    // for a moment, so normal page scrolling is not hijacked.
+    // for a moment, so normal page scrolling is not hijacked by a mouse that's
+    // merely passing over the map on its way down the page. 750ms erred too
+    // far the other way though: a user who actually paused on the map to zoom
+    // still had to wait most of a second, past when their scroll gesture had
+    // already been read as a page scroll - 350ms is enough to reject a quick
+    // pass-through while responding promptly to real zoom intent.
+    const SCROLL_ZOOM_ENABLE_DELAY_MS = 350;
     let scrollEnableTimer: ReturnType<typeof setTimeout> | undefined;
     mapEl.addEventListener("mouseenter", () => {
-        scrollEnableTimer = setTimeout(() => map.scrollWheelZoom.enable(), 750);
+        scrollEnableTimer = setTimeout(() => map.scrollWheelZoom.enable(), SCROLL_ZOOM_ENABLE_DELAY_MS);
     });
     mapEl.addEventListener("mouseleave", () => {
         clearTimeout(scrollEnableTimer);

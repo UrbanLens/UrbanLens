@@ -1,29 +1,8 @@
-// src/urbanlens/dashboard/frontend/ts/shared/csrf.ts
-function getCsrfToken() {
-  return window.csrftoken ?? "";
-}
-
-// src/urbanlens/dashboard/frontend/ts/shared/dialogs.ts
-async function confirmAction(options) {
-  if (window.confirmDialog) {
-    return window.confirmDialog(options);
-  }
-  return window.confirm(options.message ?? "Are you sure?");
-}
-var toast = {
-  success(message) {
-    window.toastr.success(message);
-  },
-  error(message) {
-    window.toastr.error(message);
-  },
-  warning(message) {
-    window.toastr.warning(message);
-  },
-  info(message) {
-    window.toastr.info(message);
-  }
-};
+import {
+  confirmAction,
+  getCsrfToken,
+  toast
+} from "./map-annotations-9jdqkrz7.js";
 
 // src/urbanlens/dashboard/frontend/ts/shared/map-layers.ts
 var TILE_DEFS = {
@@ -503,9 +482,10 @@ function init() {
   window.map = map;
   map.createPane("markupPane").style.zIndex = "550";
   map.createPane("boundaryPane").style.zIndex = "540";
+  const SCROLL_ZOOM_ENABLE_DELAY_MS = 350;
   let scrollEnableTimer;
   mapEl.addEventListener("mouseenter", () => {
-    scrollEnableTimer = setTimeout(() => map.scrollWheelZoom.enable(), 750);
+    scrollEnableTimer = setTimeout(() => map.scrollWheelZoom.enable(), SCROLL_ZOOM_ENABLE_DELAY_MS);
   });
   mapEl.addEventListener("mouseleave", () => {
     clearTimeout(scrollEnableTimer);
