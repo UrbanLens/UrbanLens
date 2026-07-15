@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import TYPE_CHECKING, Any
 
 from django.contrib.gis.db.models import PointField
@@ -39,6 +40,13 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.visits import PinVisit
 
 logger = logging.getLogger(__name__)
+
+_DEDUP_NORMALIZE_RE = re.compile(r"[^a-z0-9]+")
+
+
+def _normalize_for_dedup(text: str) -> str:
+    """Casefold and strip punctuation/whitespace differences for near-duplicate text comparison."""
+    return _DEDUP_NORMALIZE_RE.sub(" ", text.casefold()).strip()
 
 
 class PinType(TextChoices):
@@ -407,6 +415,42 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
         if state := self.effective_state:
             parts.append(state)
         return ", ".join(parts)
+
+    @property
+    def deduplicated_identity_fields(self) -> list[tuple[str, str]]:
+        """(label, value) pairs for Place Name/Official Name/Address, with near-duplicate text collapsed.
+
+        These three fields often carry the same core address text at
+        different levels of formatting completeness (e.g. "123 Main St" vs.
+        "123 Main St, Springfield, IL 62704, USA") rather than genuinely
+        distinct information - a plain equality check only catches an exact
+        match, not one string being a formatting-level superset of another.
+        Keeps the most detailed version of any duplicated text and drops the
+        rest, restoring Place Name / Official Name / Address display order.
+
+        Returns:
+            (label, value) pairs to render.
+        """
+        candidates: list[tuple[str, str]] = []
+        if self.has_place_name() and self.place_name:
+            candidates.append(("Place Name", self.place_name))
+        if self.effective_official_name:
+            candidates.append(("Official Name", self.effective_official_name))
+        if self.effective_address:
+            candidates.append(("Address", self.effective_address))
+
+        kept: list[tuple[str, str]] = []
+        kept_normalized: list[str] = []
+        for label, value in sorted(candidates, key=lambda pair: len(pair[1]), reverse=True):
+            normalized = _normalize_for_dedup(value)
+            if any(normalized in existing for existing in kept_normalized):
+                continue
+            kept.append((label, value))
+            kept_normalized.append(normalized)
+
+        display_order = {"Place Name": 0, "Official Name": 1, "Address": 2}
+        kept.sort(key=lambda pair: display_order[pair[0]])
+        return kept
 
     def get_unique_search_name(self, *, include_country: bool = True, quote_name: bool = False, include_address: bool = True) -> str | None:
         """Name to use when searching for this location in external APIs.

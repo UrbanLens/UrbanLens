@@ -103,6 +103,11 @@ class PinDetailsPageDetailsCardTests(TestCase):
         # tests block outbound network access.
         self.pin.location.route = "Test St"
         self.pin.location.save(update_fields=["route"])
+        # deduplicated_identity_fields reads Location.place_name, which falls
+        # through to a live Google Places lookup when no GooglePlace is cached
+        # yet - setting this (fetch_if_missing=False under the hood) avoids
+        # that network call.
+        self.pin.location.cached_place_name = "Old Mill"
         self.client.force_login(self.user)
 
     def test_add_link_header_button_shown_when_no_links(self) -> None:
