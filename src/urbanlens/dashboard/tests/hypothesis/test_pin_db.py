@@ -250,9 +250,15 @@ class PinQuerySetByNameTests(TestCase):
     @given(nonempty_name)
     @_db_settings
     def test_pin_is_found_by_exact_name(self, name: str) -> None:
+        # Pin.save() sanitizes name (see services.locations.naming.sanitize_name)
+        # before it's persisted, so the *stored* name - not the raw input - is
+        # what a search must be able to find. A name built entirely from
+        # characters the sanitizer strips (e.g. "\", ";", "%") saves as empty
+        # and has nothing meaningful left to search for.
         assume(len(name.strip()) >= 1)
         pin = baker.make(Pin, profile=self.profile, name=name)
-        qs = Pin.objects.filter(profile=self.profile).by_name(name)
+        assume(pin.name)
+        qs = Pin.objects.filter(profile=self.profile).by_name(pin.name)
         self.assertIn(pin.pk, qs.values_list("pk", flat=True))
 
     @given(nonempty_name)
@@ -260,7 +266,8 @@ class PinQuerySetByNameTests(TestCase):
     def test_pin_is_found_by_lowercase_name(self, name: str) -> None:
         assume(len(name.strip()) >= 1)
         pin = baker.make(Pin, profile=self.profile, name=name)
-        qs = Pin.objects.filter(profile=self.profile).by_name(name.lower())
+        assume(pin.name)
+        qs = Pin.objects.filter(profile=self.profile).by_name(pin.name.lower())
         self.assertIn(pin.pk, qs.values_list("pk", flat=True))
 
     @given(nonempty_name)
@@ -268,7 +275,8 @@ class PinQuerySetByNameTests(TestCase):
     def test_pin_is_found_by_uppercase_name(self, name: str) -> None:
         assume(len(name.strip()) >= 1)
         pin = baker.make(Pin, profile=self.profile, name=name)
-        qs = Pin.objects.filter(profile=self.profile).by_name(name.upper())
+        assume(pin.name)
+        qs = Pin.objects.filter(profile=self.profile).by_name(pin.name.upper())
         self.assertIn(pin.pk, qs.values_list("pk", flat=True))
 
 

@@ -79,6 +79,19 @@ class ImportPinsStreamingCreatesPinsTests(TestCase):
         self.assertEqual(pin.latitude, 40.0)
         self.assertEqual(pin.longitude, -74.0)
 
+    def test_html_description_is_stripped_and_link_extracted(self) -> None:
+        csv_bytes = (
+            b'name,latitude,longitude,description\n'
+            b'Old Mill,40.0,-74.0,"City: Poughkeepsie<br>Tour: https://example.com/story"\n'
+        )
+
+        list(self.gateway.import_pins_streaming([("pins.csv", csv_bytes)], self.profile))
+
+        pin = Pin.objects.get(profile=self.profile, name="Old Mill")
+        self.assertNotIn("<br>", pin.description)
+        self.assertIn("City: Poughkeepsie", pin.description)
+        self.assertTrue(pin.links.filter(url="https://example.com/story").exists())
+
     def test_oversized_description_is_clamped_not_left_unbounded(self) -> None:
         """Pin.save() never calls full_clean(), so this direct-create path must
         clamp itself - nothing else enforces the model's own MaxLengthValidator."""

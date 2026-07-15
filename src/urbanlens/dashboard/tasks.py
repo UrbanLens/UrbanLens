@@ -270,6 +270,57 @@ def suggest_pin_category(self, pin_id: int) -> list[str]:
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def archive_link_to_wayback(link_model: str, link_id: int) -> bool:
+    """Best-effort archive a PinLink's or WikiLink's URL to the Wayback Machine.
+
+    Prefers an existing recent snapshot (cheap availability check) over asking
+    the Wayback Machine to crawl the page again. HTTP-level failures (dead
+    link, the Archive refusing the URL, ...) are logged and left for the user
+    to retry later rather than retried automatically - only transport-level
+    errors (OSError) get Celery's automatic retry, since a permanently
+    unarchivable URL would otherwise retry forever.
+
+    Args:
+        link_model: ``"PinLink"`` or ``"WikiLink"``.
+        link_id: PK of the link row to archive.
+
+    Returns:
+        True when a wayback_url was saved, False otherwise.
+    """
+    import requests
+
+    from urbanlens.dashboard.models.links.model import PinLink, WikiLink
+    from urbanlens.dashboard.services.apis.locations.wayback_machine import WaybackMachineGateway
+
+    model = {"PinLink": PinLink, "WikiLink": WikiLink}.get(link_model)
+    if model is None:
+        logger.warning("archive_link_to_wayback: unknown link_model %r", link_model)
+        return False
+
+    link = model.objects.filter(pk=link_id).first()
+    if link is None or link.wayback_url:
+        return False
+
+    gateway = WaybackMachineGateway()
+    try:
+        availability = gateway.get_availability(link.url)
+        wayback_url = (availability.get("archived_snapshots") or {}).get("closest", {}).get("url", "")
+        if not wayback_url:
+            saved = gateway.save_url(link.url)
+            wayback_url = saved.get("archived_url", "")
+    except requests.RequestException:
+        logger.warning("archive_link_to_wayback: could not archive %s", link.url, exc_info=True)
+        return False
+
+    if not wayback_url:
+        return False
+
+    link.wayback_url = wayback_url
+    link.save(update_fields=["wayback_url", "updated"])
+    return True
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def prefetch_location_external_data(location_id: int, google_place_id: str | None = None, profile_id: int | None = None) -> None:
     """Pre-warm LocationCache for a newly created Location.
 

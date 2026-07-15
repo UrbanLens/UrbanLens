@@ -4,10 +4,13 @@ must actually be added to that label, not just create it unattached.
 """
 from __future__ import annotations
 
+from unittest import mock
+
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.labels.model import Label
+from urbanlens.dashboard.models.links.model import PinLink
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
 from urbanlens.dashboard.services.text_limits import MAX_PIN_DESCRIPTION_LENGTH
@@ -121,3 +124,60 @@ class ImportPreviewDescriptionLengthTests(TestCase):
 
         pin = Pin.objects.get(profile=self.profile, name="Old Mill")
         self.assertEqual(pin.description, long_description)
+
+
+class ImportPreviewDescriptionExtrasTests(TestCase):
+    """HTML in a KMZ description is stripped, and any <img>/link URLs it embeds
+    are turned into a Pin photo / PinLink - but only for pins the import
+    actually creates, never for a pin it merges into."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.profile = baker.make("auth.User").profile
+        self.gateway = GoogleMapsGateway(api_key="test-key")
+
+    def _run(self, description: str, *, name: str = "Old Mill", lat: float = 40.0, lng: float = -74.0):
+        return list(
+            self.gateway.import_preview_streaming(
+                [{"stem": "", "create_category": False, "label_ids": [], "pins": [{"name": name, "lat": lat, "lng": lng, "description": description}]}],
+                self.profile,
+                auto_tag=False,
+            ),
+        )
+
+    def test_html_is_stripped_from_the_saved_description(self) -> None:
+        self._run('<img src="https://example.com/a.jpg"><br><br>City: Poughkeepsie<br>State: NY')
+        pin = Pin.objects.get(profile=self.profile, name="Old Mill")
+        self.assertNotIn("<img", pin.description)
+        self.assertIn("City: Poughkeepsie", pin.description)
+
+    def test_anchor_link_becomes_a_pin_link(self) -> None:
+        self._run('Read more: <a href="https://example.com/story">here</a>')
+        pin = Pin.objects.get(profile=self.profile, name="Old Mill")
+        self.assertTrue(pin.links.filter(url="https://example.com/story").exists())
+
+    def test_bare_url_becomes_a_pin_link(self) -> None:
+        self._run("Tour: https://example.com/story")
+        pin = Pin.objects.get(profile=self.profile, name="Old Mill")
+        self.assertTrue(pin.links.filter(url="https://example.com/story").exists())
+
+    def test_img_src_becomes_a_pin_photo_not_a_link(self) -> None:
+        fake_image = mock.Mock(pin_id=None)
+        with mock.patch(
+            "urbanlens.dashboard.services.media_materialize.materialize_media_item",
+            return_value=fake_image,
+        ) as materialize:
+            self._run('<img src="https://example.com/a.jpg">')
+        materialize.assert_called_once()
+        self.assertEqual(materialize.call_args.kwargs["url"], "https://example.com/a.jpg")
+        fake_image.save.assert_called_once_with(update_fields=["pin", "updated"])
+        pin = Pin.objects.get(profile=self.profile, name="Old Mill")
+        self.assertEqual(pin.links.count(), 0)
+        self.assertEqual(fake_image.pin, pin)
+
+    def test_extras_are_not_applied_when_merging_into_an_existing_pin(self) -> None:
+        existing, _created = Pin.objects.get_nearby_or_create(40.0, -74.0, self.profile, defaults={"name": "Existing Pin"})
+        self._run('<a href="https://example.com/story">link</a>', name="Old Mill", lat=40.0, lng=-74.0)
+        existing.refresh_from_db()
+        self.assertEqual(existing.links.count(), 0)
+        self.assertEqual(existing.name, "Existing Pin")

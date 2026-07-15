@@ -35,12 +35,52 @@ from urbanlens.dashboard.services.import_formats.heuristics import (
     pick_latlon,
     pick_name_and_description,
 )
+from urbanlens.dashboard.services.import_formats.html_description import extract_image_urls, extract_link_urls, strip_html
 from urbanlens.dashboard.services.labels.style_suggestions import suggest_label_style
 from urbanlens.dashboard.services.redact import redact_coordinate, redact_text
 from urbanlens.dashboard.services.text_limits import MAX_PIN_DESCRIPTION_LENGTH
 from urbanlens.UrbanLens.settings.app import settings
 
+if TYPE_CHECKING:
+    from urbanlens.dashboard.models.profile.model import Profile
+
 _CID_RE = re.compile(r"!1s0x[0-9a-fA-F]+:0x([0-9a-fA-F]+)")
+
+
+def _attach_description_extras(pin: Pin, image_urls: list[str], link_urls: list[str], profile: Profile) -> None:
+    """Best-effort: attach a freshly-created pin's extracted image/link URLs.
+
+    Only meant for pins the import just created - an existing pin merged into
+    by ``get_nearby_or_create`` is never touched, matching how its description
+    itself is left alone on a merge.
+
+    Args:
+        pin: The newly created pin.
+        image_urls: ``<img src="...">`` URLs pulled from its raw description.
+        link_urls: ``<a href="...">``/bare URLs pulled from its raw description.
+        profile: The importing user - becomes each photo's uploader.
+    """
+    from urbanlens.dashboard.models.images.model import ImageSource
+    from urbanlens.dashboard.models.links.model import MAX_LINK_URL_LENGTH, PinLink
+    from urbanlens.dashboard.services.media_materialize import MaterializeError, materialize_media_item
+
+    for url in link_urls:
+        if len(url) > MAX_LINK_URL_LENGTH:
+            continue
+        try:
+            PinLink.objects.create(pin=pin, url=url)
+        except DatabaseError:
+            logger.warning("Skipping malformed link %r extracted from import description for pin %s", url, pin.pk, exc_info=True)
+
+    for url in image_urls:
+        try:
+            image = materialize_media_item(location=pin.location, profile=profile, source=ImageSource.GOOGLE_MAPS, url=url)
+        except MaterializeError as exc:
+            logger.warning("Skipping image %r extracted from import description for pin %s: %s", url, pin.pk, exc)
+            continue
+        if image.pin_id is None:
+            image.pin = pin
+            image.save(update_fields=["pin", "updated"])
 
 
 def _notify_pin_import_parse_failure(fmt: str) -> None:
@@ -497,11 +537,14 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                             pin_data["location"] = location
                             pin_data.setdefault("latitude", location.latitude)
                             pin_data.setdefault("longitude", location.longitude)
-                        if pin_data.get("description"):
+                        raw_description = pin_data.get("description") or ""
+                        image_urls = extract_image_urls(raw_description)
+                        link_urls = extract_link_urls(raw_description)
+                        if raw_description:
                             # Pin.save() never calls full_clean(), so nothing else
                             # enforces the model's own MaxLengthValidator on this
                             # direct create path - clamp defensively.
-                            pin_data["description"] = pin_data["description"][:MAX_PIN_DESCRIPTION_LENGTH]
+                            pin_data["description"] = strip_html(raw_description)[:MAX_PIN_DESCRIPTION_LENGTH]
 
                         pin_name = pin_data.get("name") or (location.display_name if location else "")
                         lookup_lat = pin_data.get("latitude") or (location.latitude if location else None)
@@ -516,6 +559,8 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                             if pin:
                                 if created:
                                     created_count += 1
+                                    if image_urls or link_urls:
+                                        _attach_description_extras(pin, image_urls, link_urls, user_profile)
                                 else:
                                     exists_count += 1
                                 if tags:
@@ -789,6 +834,10 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                     cid = pin_dict.get("cid")
                     pin_label_ids = pin_dict.get("label_ids") or []
 
+                    image_urls = extract_image_urls(description)
+                    link_urls = extract_link_urls(description)
+                    description = strip_html(description)[:MAX_PIN_DESCRIPTION_LENGTH]
+
                     try:
                         location = Location.objects.by_cid(cid).first() if cid else None
 
@@ -817,6 +866,8 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                         if pin:
                             if created:
                                 created_count += 1
+                                if image_urls or link_urls:
+                                    _attach_description_extras(pin, image_urls, link_urls, user_profile)
                                 if auto_tag:
                                     from urbanlens.dashboard.services.celery import safely_enqueue_task
                                     from urbanlens.dashboard.tasks import suggest_pin_category

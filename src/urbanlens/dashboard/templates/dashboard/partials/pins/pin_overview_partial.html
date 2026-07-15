@@ -151,6 +151,7 @@
                     <span class="field-value">{{ pin.effective_date_last_active|date:"M j, Y" }}</span>
                 </div>
                 {% endif %}
+                {% include "dashboard/partials/pins/_pin_links_row.html" with pin=pin links=pin.links.all add_url="pin.links" delete_url_name="pin.link.delete" row_id="pin-links-row" owner_slug=pin.slug %}
             </div>
         </div>
         {# Security indicators - only shown when at least one is non-unknown #}

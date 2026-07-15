@@ -703,6 +703,22 @@
             });
         };
 
+        // -- Confirm-before-leaving for untrusted community-added links (wiki links) --
+        // Returning false from the onclick= that calls this cancels the native
+        // navigation; a confirmed click re-opens the url itself via window.open,
+        // since the original click's user-activation is already spent by the
+        // time the async confirmDialog promise resolves.
+        window.urbanlensConfirmExternalLink = function (event, url) {
+            event.preventDefault();
+            window.confirmDialog({
+                title: 'Leaving this site',
+                message: 'This link was added by the community and leads to an external, untrusted site:\n' + url,
+                confirmLabel: 'Continue',
+                danger: false,
+            }).then(function (ok) { if (ok) window.open(url, '_blank', 'noopener'); });
+            return false;
+        };
+
         // -- Shared pin delete flow (map popup, pin edit dialog, pin detail page) --
         // Confirms the delete, then lets the server veto with a 409 when the pin
         // has sub pins so the user decides whether those are deleted too or kept.

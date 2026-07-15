@@ -12,6 +12,7 @@ class DashboardConfig(AppConfig):
         from django.db.models.signals import post_save
 
         from urbanlens.dashboard.models.labels.signals import create_default_tags
+        import urbanlens.dashboard.models.links.signals
         import urbanlens.dashboard.models.location.signals
         import urbanlens.dashboard.models.markup.signals
         import urbanlens.dashboard.models.notifications.signals

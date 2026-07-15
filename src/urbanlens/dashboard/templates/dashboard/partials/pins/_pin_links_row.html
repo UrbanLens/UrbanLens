@@ -1,0 +1,47 @@
+{% comment %}
+Compact "Links" row for the Details section (pin_overview_partial.html) and the
+Location wiki page - a list of external website links with an inline add form,
+styled like the other detail-item rows (Official Name, Address, ...).
+
+Usage: rendered via PinLinksView/LocationLinksView, which supply `links`,
+`add_url`, `delete_url_name`, `row_id`, `owner_slug` (the url's first
+argument), and either `pin` or `wiki` for display purposes.
+{% endcomment %}
+<div class="detail-item detail-item--links full-width" id="{{ row_id }}">
+    <span class="field-label">Links</span>
+    <span class="field-value pin-links-value">
+        {% for link in links %}
+        <span class="pin-link-chip">
+            <a href="{{ link.url }}" target="_blank" rel="noopener noreferrer" title="{{ link.url }}"
+               {% if wiki %}onclick="return window.urbanlensConfirmExternalLink(event, this.href)"{% endif %}>{{ link.display_name }}</a>
+            {% if link.wayback_url %}
+            <a href="{{ link.wayback_url }}" target="_blank" rel="noopener noreferrer" class="pin-link-chip-wayback" title="View archived snapshot (Wayback Machine)">
+                <i class="material-symbols-outlined">history</i>
+            </a>
+            {% endif %}
+            <button type="button" class="pin-link-chip-remove"
+                    hx-delete="{% url delete_url_name owner_slug link.id %}"
+                    hx-target="#{{ row_id }}" hx-swap="outerHTML"
+                    hx-confirm="Remove this link?"
+                    title="Remove link">
+                <i class="material-symbols-outlined">close</i>
+            </button>
+        </span>
+        {% empty %}
+        <span class="pin-links-empty">No links yet.</span>
+        {% endfor %}
+        <button type="button" class="pin-link-add-toggle" title="Add a link"
+                onclick="this.hidden=true; this.nextElementSibling.hidden=false; this.nextElementSibling.querySelector('input').focus();">
+            <i class="material-symbols-outlined">add_link</i>
+        </button>
+        <form class="pin-link-add-form" hidden
+              hx-post="{% url add_url owner_slug %}"
+              hx-target="#{{ row_id }}" hx-swap="outerHTML">
+            {% csrf_token %}
+            <input type="text" name="name" placeholder="Site name (optional)" maxlength="255" autocomplete="off">
+            <input type="url" name="url" placeholder="https://..." required autocomplete="off">
+            <button type="submit" class="btn btn--primary btn--sm">Add</button>
+            <button type="button" class="btn btn--ghost btn--sm" onclick="this.closest('form').hidden=true; this.closest('form').previousElementSibling.hidden=false;">Cancel</button>
+        </form>
+    </span>
+</div>

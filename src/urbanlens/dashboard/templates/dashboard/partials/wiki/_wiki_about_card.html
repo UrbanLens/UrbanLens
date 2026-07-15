@@ -9,7 +9,7 @@ as a fresh HTML fragment swapped in by the client (see wiki.html's
 wiki-edit-form submit handler) so edited description/dates/security chips
 show up immediately instead of only after a reload.
 {% endcomment %}
-{% if wiki.description or wiki.date_abandoned or wiki.effective_date_last_active %}
+{% if wiki.description or wiki.date_abandoned or wiki.effective_date_last_active or wiki.links.exists %}
 <div class="card wiki-card wiki-meta" id="wiki-about-card" data-collapse-scope="wiki" data-collapse-section="about">
     <div class="card-header">
         <i class="material-symbols-outlined">info</i>
@@ -19,6 +19,7 @@ show up immediately instead of only after a reload.
         {% if wiki.description %}
         <p id="wiki-field-description" class="wiki-description">{{ wiki.description }}</p>
         {% endif %}
+        {% include "dashboard/partials/pins/_pin_links_row.html" with wiki=wiki links=wiki.links.all add_url="location.wiki.links" delete_url_name="location.wiki.link.delete" row_id="wiki-links-row" owner_slug=wiki.location.slug %}
         {% if wiki.date_abandoned or wiki.effective_date_last_active %}
         <div class="wiki-meta-dates">
             {% if wiki.date_abandoned %}

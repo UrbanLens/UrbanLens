@@ -27,6 +27,7 @@ from urbanlens.dashboard.controllers import (
     image_gallery,
     immich,
     labels,
+    links,
     location_wiki,
     map_sharing,
     maps,
@@ -413,6 +414,16 @@ urlpatterns = [
                                 "<slug:pin_slug>/aliases/<int:alias_id>/toggle-nickname/",
                                 aliases.PinAliasToggleNicknameView.as_view(),
                                 name="pin.alias.toggle_nickname",
+                            ),
+                            path(
+                                "<slug:pin_slug>/links/",
+                                links.PinLinksView.as_view(),
+                                name="pin.links",
+                            ),
+                            path(
+                                "<slug:pin_slug>/links/<int:link_id>/delete/",
+                                links.PinLinkDeleteView.as_view(),
+                                name="pin.link.delete",
                             ),
                             path(
                                 "<slug:pin_slug>/custom-fields/",
@@ -927,6 +938,16 @@ urlpatterns = [
                     "<slug:location_slug>/wiki/aliases/<int:alias_id>/toggle-nickname/",
                     aliases.LocationAliasToggleNicknameView.as_view(),
                     name="location.wiki.alias.toggle_nickname",
+                ),
+                path(
+                    "<slug:location_slug>/wiki/links/",
+                    links.LocationLinksView.as_view(),
+                    name="location.wiki.links",
+                ),
+                path(
+                    "<slug:location_slug>/wiki/links/<int:link_id>/delete/",
+                    links.LocationLinkDeleteView.as_view(),
+                    name="location.wiki.link.delete",
                 ),
                 path(
                     "<slug:location_slug>/wiki/gallery/",

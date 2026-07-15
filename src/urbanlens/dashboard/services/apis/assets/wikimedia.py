@@ -164,6 +164,6 @@ class WikimediaGateway(MediaProvider):
 
 def _strip_html(text: str) -> str:
     """Remove HTML tags from a string without importing a full parser."""
-    import re
+    from urbanlens.dashboard.services.import_formats.html_description import strip_html
 
-    return re.sub(r"<[^>]+>", "", text).strip()
+    return strip_html(text)
