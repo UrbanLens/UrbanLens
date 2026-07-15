@@ -86,9 +86,18 @@ def _fetch_epa_echo_data(pin: Pin) -> dict[str, Any]:
     suppresses the panel for 30 minutes (``DISABLED_SKIP_TTL_SECONDS``) - which
     is exactly what was happening in production before this fix.
 
+    Every facility this function ever sees (from either the nearby-search or a
+    full Detailed Facility Report lookup) is recorded in ``EpaFacility``,
+    project-wide - so a candidate already fetched while checking some OTHER
+    pin's exact-site match is reused directly from the database instead of
+    spending any more of ECHO's rate-limited budget on it. This is what lets
+    fetching nearby facilities for any one pin passively build up reusable
+    knowledge for the whole area (see EpaFacility's own docstring).
+
     Returns the shape persisted to the shared LocationCache row:
     ``{"facilities": [...], "exact_site": {...} | None}``.
     """
+    from urbanlens.dashboard.models.epa_facility import EpaFacility
     from urbanlens.dashboard.services.apis.locations.epa_echo import EpaEchoGateway
     from urbanlens.dashboard.services.geo_filter import is_usa_coordinates
     from urbanlens.dashboard.services.rate_limiter import RateLimitExceededError
@@ -100,6 +109,20 @@ def _fetch_epa_echo_data(pin: Pin) -> dict[str, Any]:
 
     gateway = EpaEchoGateway()
     facilities = gateway.get_nearby_facilities(lat, lng, radius_miles=0.5, limit=10)
+
+    for facility in facilities:
+        EpaFacility.record_search_result(
+            facility.get("registry_id") or "",
+            name=facility.get("name") or "",
+            address=facility.get("address") or "",
+            latitude=facility.get("latitude"),
+            data={k: v for k, v in facility.items() if k not in ("registry_id", "latitude")},
+        )
+
+    # Candidates whose Detailed Facility Report we've already fetched for some
+    # OTHER pin near here don't cost anything to check again - reuse them and
+    # spend the rate-limited budget only on genuinely new candidates.
+    known_details = EpaFacility.known_details_by_registry_id(facility.get("registry_id") or "" for facility in facilities)
 
     # ECHO's nearby-search rows aren't distance-sorted (see get_nearby_facilities'
     # docstring) and the rate limit above usually can't survive checking every
@@ -117,17 +140,32 @@ def _fetch_epa_echo_data(pin: Pin) -> dict[str, Any]:
     best_distance = _EXACT_MATCH_RADIUS_MILES
     started = time.monotonic()
     for facility in facilities_by_proximity:
-        if time.monotonic() - started >= _EXACT_MATCH_BUDGET_SECONDS:
-            logger.warning("EPA ECHO exact-site match budget exceeded for pin %s; stopping early", pin.pk)
-            break
         registry_id = facility.get("registry_id") or ""
         if not registry_id:
             continue
-        try:
-            detail = gateway.get_facility_detail(registry_id)
-        except RateLimitExceededError:
-            logger.warning("EPA ECHO rate limit exhausted mid exact-site match for pin %s; keeping partial results", pin.pk)
-            break
+
+        known = known_details.get(registry_id)
+        if known is not None:
+            detail: dict[str, Any] | None = {"latitude": known.latitude, "longitude": known.longitude, **known.data}
+        else:
+            if time.monotonic() - started >= _EXACT_MATCH_BUDGET_SECONDS:
+                logger.warning("EPA ECHO exact-site match budget exceeded for pin %s; stopping early", pin.pk)
+                break
+            try:
+                detail = gateway.get_facility_detail(registry_id)
+            except RateLimitExceededError:
+                logger.warning("EPA ECHO rate limit exhausted mid exact-site match for pin %s; keeping partial results", pin.pk)
+                break
+            if detail and detail.get("latitude") is not None and detail.get("longitude") is not None:
+                EpaFacility.record_detail_result(
+                    registry_id,
+                    name=facility.get("name") or "",
+                    address=facility.get("address") or "",
+                    latitude=detail["latitude"],
+                    longitude=detail["longitude"],
+                    data={k: v for k, v in detail.items() if k not in ("latitude", "longitude")},
+                )
+
         if not detail or detail.get("latitude") is None or detail.get("longitude") is None:
             continue
         distance = _miles_between(lat, lng, detail["latitude"], detail["longitude"])
