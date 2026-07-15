@@ -69,6 +69,13 @@ class CustomFieldsAddFormVisibilityTests(TestCase):
         response = self.client.get(reverse("pin.custom_fields", args=[self.pin.slug]))
         self.assertContains(response, 'class="cf-add-form" hidden')
 
+    def test_add_form_still_hidden_when_pin_already_has_custom_fields(self) -> None:
+        """The add form must start hidden regardless of whether any rows are shown above it."""
+        baker.make("dashboard.CustomField", profile=self.profile, entity_type="pin", name="Gate Code")
+        response = self.client.get(reverse("pin.custom_fields", args=[self.pin.slug]))
+        self.assertContains(response, "Gate Code")
+        self.assertContains(response, 'class="cf-add-form" hidden')
+
 
 class PinWikiLinkVisibilityTests(TestCase):
     """A pin's wiki create/view link must render even when the Location predates slugs."""

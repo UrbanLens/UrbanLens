@@ -1279,10 +1279,17 @@
             if (!g || !tabsEl) return;
             var counts = {};
             var notRelevantCount = 0;
+            var total = 0;
             g.querySelectorAll('.media-item').forEach(function (item) {
                 var src = item.dataset.mediaSource;
-                if (src) counts[src] = (counts[src] || 0) + 1;
-                if (item.classList.contains('media-item--not-relevant')) notRelevantCount += 1;
+                var isNotRelevant = item.classList.contains('media-item--not-relevant');
+                total += 1;
+                // Not-relevant items don't count toward their source's tab, so a
+                // source whose only items have all been marked not relevant drops
+                // out of `sources` below and its tab disappears entirely, instead
+                // of lingering with a stale, unopenable count.
+                if (src && !isNotRelevant) counts[src] = (counts[src] || 0) + 1;
+                if (isNotRelevant) notRelevantCount += 1;
             });
             var sources = Object.keys(counts);
             if (sources.length < 2 && !notRelevantCount) {
@@ -1292,7 +1299,6 @@
             }
             if (activeTab !== 'not_relevant' && !sources.includes(activeTab)) activeTab = 'all';
             if (activeTab === 'not_relevant' && !notRelevantCount) activeTab = 'all';
-            var total = sources.reduce(function (sum, s) { return sum + counts[s]; }, 0);
             var html = '<button type="button" class="media-tab' + (activeTab === 'all' ? ' active' : '') +
                 '" data-tab="all">All<span class="media-tab-count">' + total + '</span></button>';
             sources.sort().forEach(function (src) {
