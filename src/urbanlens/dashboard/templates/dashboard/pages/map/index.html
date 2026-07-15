@@ -2301,6 +2301,8 @@
             _resizeTimer = setTimeout(function () { map.invalidateSize(); }, 150);
             clearTimeout(_fitTimer);
             _fitTimer = setTimeout(function () { _autoFitFilterSections(); }, 150);
+            clearTimeout(_pinListResizeTimer);
+            _pinListResizeTimer = setTimeout(function () { _refreshPinList(); }, 150);
         }
         window.addEventListener('resize', onResize);
         window.addEventListener('orientationchange', function () {
@@ -3294,6 +3296,19 @@
         if (isOpen) _refreshPinList();
     }
 
+    // The pin list sidebar's page size adapts to however many .pin-list-item
+    // rows actually fit in the scrollable body without a scrollbar, instead of
+    // a fixed count - row height varies with label/meta content, so this is
+    // measured from the actually-rendered DOM after each fetch rather than
+    // computed up front from CSS alone. Seeded with the server's own default
+    // (matches _PIN_LIST_PAGE_SIZE) and refined once real rows exist to
+    // measure.
+    let _pinListPageSize = 25;
+    const _PIN_LIST_MIN_PAGE_SIZE = 5;
+    const _PIN_LIST_MAX_PAGE_SIZE = 100;
+    let _pinListAutoAdjusting = false;
+    let _pinListResizeTimer;
+
     function _refreshPinList() {
         const panel = document.getElementById('pin-list-panel');
         if (!panel || !panel.classList.contains('open')) return;
@@ -3306,8 +3321,57 @@
         // of which should become viewport-scoped.
         const b = map.getBounds();
         params.set('bounds', `${b.getSouth()},${b.getWest()},${b.getNorth()},${b.getEast()}`);
+        params.set('page_size', String(_pinListPageSize));
         htmx.ajax('GET', `{% url 'map.pins.list' %}?${params.toString()}`, { target: '#pin-list-body', swap: 'innerHTML' });
     }
+
+    // Measures the just-rendered page against the body's available height and
+    // updates _pinListPageSize when it's meaningfully off. Returns true when
+    // an adjustment was made (caller should re-fetch with the new size).
+    function _pinListAdjustPageSize() {
+        const body = document.getElementById('pin-list-body');
+        const results = document.getElementById('pin-list-results');
+        const list = body?.querySelector('.pin-list');
+        const items = list ? list.querySelectorAll('.pin-list-item') : [];
+        if (!body || !results || !list || !items.length) return false;
+
+        const rowHeight = list.scrollHeight / items.length;
+        if (!rowHeight) return false;
+
+        // Everything sharing the scrollable body with the <ul> itself (the
+        // count line, "add to list" button, pagination bar) counts against
+        // the space available for rows.
+        const chromeHeight = results.scrollHeight - list.scrollHeight;
+        const availableForList = body.clientHeight - chromeHeight;
+        if (availableForList <= 0) return false;
+
+        const idealCount = Math.max(_PIN_LIST_MIN_PAGE_SIZE, Math.min(_PIN_LIST_MAX_PAGE_SIZE, Math.floor(availableForList / rowHeight)));
+
+        const totalCountEl = results.querySelector('.pin-list-count strong');
+        const totalCount = totalCountEl ? (parseInt(totalCountEl.textContent, 10) || 0) : 0;
+        const isOverflowing = body.scrollHeight > body.clientHeight + 1;
+        const hasRoomToGrow = items.length < totalCount && !isOverflowing;
+        if (Math.abs(idealCount - _pinListPageSize) < 2 || (!isOverflowing && !hasRoomToGrow)) {
+            return false;
+        }
+
+        _pinListPageSize = idealCount;
+        return true;
+    }
+
+    document.getElementById('pin-list-body').addEventListener('htmx:afterSwap', (e) => {
+        if (e.target.id !== 'pin-list-body') return;
+        if (_pinListAutoAdjusting) {
+            // Second swap in this adjust-and-refetch cycle - accept it even if
+            // still imperfect, rather than chasing convergence indefinitely.
+            _pinListAutoAdjusting = false;
+            return;
+        }
+        if (_pinListAdjustPageSize()) {
+            _pinListAutoAdjusting = true;
+            _refreshPinList();
+        }
+    });
 
     // Icon-less saved filters show a live "how many pins would match" count
     // instead of a generic fallback icon (see _saved_filters_toolbar.html) -

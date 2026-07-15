@@ -1,3 +1,4 @@
+import contextlib
 from datetime import datetime
 import json
 import logging
@@ -39,7 +40,15 @@ from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)
 
+#: Default/fallback page size for the pin-list sidebar, used when the client
+#: hasn't measured a "how many rows fit in the container" size yet (e.g. the
+#: very first request of a session) or sends an invalid/missing page_size.
 _PIN_LIST_PAGE_SIZE = 25
+#: Bounds for the client-supplied page_size (see pin_list_panel) - the sidebar
+#: adapts this to the visible container height, but a corrupted or malicious
+#: value must not be able to force an unbounded query.
+_PIN_LIST_MIN_PAGE_SIZE = 5
+_PIN_LIST_MAX_PAGE_SIZE = 100
 
 _US_STATE_CODES: dict[str, str] = {
     "AL": "Alabama",
@@ -518,8 +527,13 @@ class MapController(LoginRequiredMixin, GenericViewSet):
 
         Args:
             request: GET request, optionally carrying ``SearchForm`` fields, a
-                ``bounds`` "south,west,north,east" viewport box, and a
-                ``page`` parameter for pagination.
+                ``bounds`` "south,west,north,east" viewport box, a ``page``
+                parameter for pagination, and a ``page_size`` override - the
+                client measures how many rows actually fit in the sidebar's
+                scrollable container without a scrollbar and sends that back,
+                so pagination adapts to the container size instead of a fixed
+                count (see _refreshPinList/_pinListAdjustPageSize in
+                map/index.html).
 
         Returns:
             Rendered ``_pin_list_panel.html`` partial with the matching pins
@@ -547,7 +561,13 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         if bounds:
             query = query.within_bounds(*bounds)
         query = query.order_by(Lower(Coalesce("name", "location__wiki__name", "location__official_name")))
-        page_obj = get_page(request, query, _PIN_LIST_PAGE_SIZE)
+
+        page_size = _PIN_LIST_PAGE_SIZE
+        with contextlib.suppress(TypeError, ValueError):
+            page_size = max(_PIN_LIST_MIN_PAGE_SIZE, min(_PIN_LIST_MAX_PAGE_SIZE, int(request.GET.get("page_size", page_size))))
+
+        page_obj = get_page(request, query, page_size)
+        extra_query_parts = [f"bounds={urllib.parse.quote(bounds_param)}" if bounds else "", f"page_size={page_size}"]
         return render(
             request,
             "dashboard/partials/pins/_pin_list_panel.html",
@@ -557,7 +577,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 "total_count": page_obj.paginator.count,
                 "max_pins_per_list": SiteSettings.get_current().max_pins_per_list,
                 "is_viewport_scoped": bool(bounds),
-                "pagination_extra_query": f"bounds={urllib.parse.quote(bounds_param)}" if bounds else "",
+                "pagination_extra_query": "&".join(part for part in extra_query_parts if part),
             },
         )
 

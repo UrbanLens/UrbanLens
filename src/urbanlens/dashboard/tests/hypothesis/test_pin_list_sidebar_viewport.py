@@ -76,9 +76,9 @@ class PinListPanelViewportScopingTests(TestCase):
         response = self.client.get(self._url(bounds="39.0,-75.0,41.0,-73.0"))
         self.assertIn("bounds=39.0", response.context["pagination_extra_query"])
 
-    def test_pagination_extra_query_empty_when_unscoped(self) -> None:
+    def test_pagination_extra_query_omits_bounds_when_unscoped(self) -> None:
         response = self.client.get(self._url())
-        self.assertEqual(response.context["pagination_extra_query"], "")
+        self.assertNotIn("bounds=", response.context["pagination_extra_query"])
 
     def test_viewport_scoped_count_label_says_in_view(self) -> None:
         response = self.client.get(self._url(bounds="39.0,-75.0,41.0,-73.0"))
@@ -87,3 +87,51 @@ class PinListPanelViewportScopingTests(TestCase):
     def test_unscoped_count_label_omits_in_view(self) -> None:
         response = self.client.get(self._url())
         self.assertNotContains(response, "in view")
+
+
+class PinListPanelPageSizeTests(TestCase):
+    """MapController.pin_list_panel's page_size param - see _pinListAdjustPageSize
+    in map/index.html, which measures how many rows actually fit in the sidebar's
+    scrollable container and sends that back instead of using a fixed page size."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+        self.client = Client()
+        self.client.force_login(self.user)
+        for i in range(10):
+            baker.make(Pin, profile=self.profile, location=baker.make(Location, latitude=f"{40.0 + i * 0.001}", longitude="-74.0"), name=f"Pin {i}")
+
+    def _url(self, **params) -> str:
+        base = reverse("map.pins.list")
+        return f"{base}?{urlencode(params)}" if params else base
+
+    def test_default_page_size_matches_the_server_default(self) -> None:
+        response = self.client.get(self._url())
+        self.assertEqual(response.context["page_obj"].paginator.per_page, 25)
+
+    def test_custom_page_size_is_honored(self) -> None:
+        response = self.client.get(self._url(page_size=8))
+        self.assertEqual(response.context["page_obj"].paginator.per_page, 8)
+        self.assertEqual(len(response.context["pins"]), 8)
+
+    def test_page_size_is_clamped_to_the_maximum(self) -> None:
+        response = self.client.get(self._url(page_size=99999))
+        self.assertEqual(response.context["page_obj"].paginator.per_page, 100)
+
+    def test_page_size_is_clamped_to_the_minimum(self) -> None:
+        response = self.client.get(self._url(page_size=0))
+        self.assertEqual(response.context["page_obj"].paginator.per_page, 5)
+
+    def test_negative_page_size_is_clamped_to_the_minimum(self) -> None:
+        response = self.client.get(self._url(page_size=-5))
+        self.assertEqual(response.context["page_obj"].paginator.per_page, 5)
+
+    def test_non_numeric_page_size_falls_back_to_the_default(self) -> None:
+        response = self.client.get(self._url(page_size="not-a-number"))
+        self.assertEqual(response.context["page_obj"].paginator.per_page, 25)
+
+    def test_pagination_extra_query_carries_the_chosen_page_size_forward(self) -> None:
+        response = self.client.get(self._url(page_size=8))
+        self.assertIn("page_size=8", response.context["pagination_extra_query"])
