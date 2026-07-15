@@ -72,11 +72,23 @@ def _miles_between(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
 def _fetch_epa_echo_data(pin: Pin) -> dict[str, Any]:
     """Search EPA ECHO for nearby facilities and look for an exact-site match among the closest few.
 
+    ECHO's own rate limit (5 calls/minute, see ``EpaEchoPlugin.get_service_defaults``)
+    is tight enough that the exact-match loop below - up to 10 ``get_facility_detail``
+    calls plus the initial search - routinely exhausts it before finishing. A
+    ``RateLimitExceededError`` raised mid-loop is caught and treated as "stop
+    checking further candidates", not a fetch failure: the facilities list (and
+    whatever exact-site checking completed before the budget ran out) is still
+    genuinely useful and must not be thrown away. Letting it propagate would
+    abort ``fetch()`` entirely, so nothing gets cached and ``run_panel_fetch``
+    suppresses the panel for 30 minutes (``DISABLED_SKIP_TTL_SECONDS``) - which
+    is exactly what was happening in production before this fix.
+
     Returns the shape persisted to the shared LocationCache row:
     ``{"facilities": [...], "exact_site": {...} | None}``.
     """
     from urbanlens.dashboard.services.apis.locations.epa_echo import EpaEchoGateway
     from urbanlens.dashboard.services.geo_filter import is_usa_coordinates
+    from urbanlens.dashboard.services.rate_limiter import RateLimitExceededError
 
     lat = float(pin.effective_latitude or 0)
     lng = float(pin.effective_longitude or 0)
@@ -96,7 +108,11 @@ def _fetch_epa_echo_data(pin: Pin) -> dict[str, Any]:
         registry_id = facility.get("registry_id") or ""
         if not registry_id:
             continue
-        detail = gateway.get_facility_detail(registry_id)
+        try:
+            detail = gateway.get_facility_detail(registry_id)
+        except RateLimitExceededError:
+            logger.warning("EPA ECHO rate limit exhausted mid exact-site match for pin %s; keeping partial results", pin.pk)
+            break
         if not detail or detail.get("latitude") is None or detail.get("longitude") is None:
             continue
         distance = _miles_between(lat, lng, detail["latitude"], detail["longitude"])

@@ -306,3 +306,44 @@ class FetchEpaEchoDataExactMatchTests(TestCase):
             result = _fetch_epa_echo_data(self.pin)
         assert result["exact_site"] is not None
         self.assertEqual(result["exact_site"]["registry_id"], "R2")
+
+    def test_rate_limit_mid_loop_keeps_partial_results_instead_of_raising(self) -> None:
+        """Regression guard: ECHO's own 5-calls/minute limit (get_nearby_facilities alone
+        spends 2 of those) means the exact-match loop routinely exhausts it before finishing
+        all candidates. A RateLimitExceededError from get_facility_detail must stop the loop
+        and keep the already-fetched facilities list + any exact_site found so far, not
+        propagate and wipe out everything fetch() already has - see the module docstring for
+        why that used to leave the panel suppressed for 30 minutes with no cached data at all."""
+        from urbanlens.dashboard.services.rate_limiter import RateLimitExceededError
+
+        facilities = [
+            {"name": "First Facility", "address": "1 Main St", "registry_id": "R1"},
+            {"name": "Second Facility", "address": "2 Main St", "registry_id": "R2"},
+        ]
+        gateway = self._gateway(facilities=facilities, detail_by_registry_id={"R1": {"latitude": 40.0, "longitude": -74.0, "programs": []}})
+        gateway.get_facility_detail.side_effect = [
+            {"latitude": 40.0, "longitude": -74.0, "programs": []},  # R1: exact match
+            RateLimitExceededError("epa_echo"),  # R2: rate limit trips here
+        ]
+        with (
+            mock.patch("urbanlens.dashboard.services.apis.locations.epa_echo.EpaEchoGateway", return_value=gateway),
+            mock.patch("urbanlens.dashboard.plugins.builtin.epa_echo.time.monotonic", return_value=0.0),
+        ):
+            result = _fetch_epa_echo_data(self.pin)
+        self.assertEqual(result["facilities"], facilities)
+        assert result["exact_site"] is not None
+        self.assertEqual(result["exact_site"]["registry_id"], "R1")
+
+    def test_rate_limit_on_the_very_first_candidate_still_keeps_the_facilities_list(self) -> None:
+        from urbanlens.dashboard.services.rate_limiter import RateLimitExceededError
+
+        facilities = [{"name": "First Facility", "address": "1 Main St", "registry_id": "R1"}]
+        gateway = self._gateway(facilities=facilities, detail_by_registry_id={})
+        gateway.get_facility_detail.side_effect = RateLimitExceededError("epa_echo")
+        with (
+            mock.patch("urbanlens.dashboard.services.apis.locations.epa_echo.EpaEchoGateway", return_value=gateway),
+            mock.patch("urbanlens.dashboard.plugins.builtin.epa_echo.time.monotonic", return_value=0.0),
+        ):
+            result = _fetch_epa_echo_data(self.pin)
+        self.assertEqual(result["facilities"], facilities)
+        self.assertIsNone(result["exact_site"])
