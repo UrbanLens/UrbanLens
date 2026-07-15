@@ -133,12 +133,8 @@ Expects:
                     </button>
                 </form>
             {% else %}
-                <form method="post" action="{% url 'friend.request' profile.id %}">
-                    {% csrf_token %}
-                    <button type="submit" class="btn friendship-btn btn--primary">
-                        <i class="material-symbols-outlined">person_add</i> Add Friend
-                    </button>
-                </form>
+                {% include "dashboard/partials/profile/_add_friend_button.html" with button_class="btn friendship-btn btn--primary" dialog_id="add-friend-dialog-hero" %}
+                {% include "dashboard/partials/profile/_add_friend_dialog.html" with target_profile_id=profile.id dialog_id="add-friend-dialog-hero" %}
                 <form method="post" action="{% url 'friend.block' profile.id %}">
                     {% csrf_token %}
                     <button type="submit" class="btn friendship-btn btn--ghost" title="Block this user">

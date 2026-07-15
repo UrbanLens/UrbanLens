@@ -3,12 +3,14 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from django.db.models import CASCADE, CharField, ForeignKey
+from django.core.validators import MaxLengthValidator
+from django.db.models import CASCADE, CharField, ForeignKey, TextField
 
 from urbanlens.dashboard.models.abstract import DashboardModel, TextChoices
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType, Permission
 from urbanlens.dashboard.models.friendship.queryset import Manager
 from urbanlens.dashboard.models.profile import Profile
+from urbanlens.dashboard.services.text_limits import MAX_FRIEND_REQUEST_MESSAGE_LENGTH
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +19,14 @@ class Friendship(DashboardModel):
     status = CharField(max_length=10, choices=FriendshipStatus.choices)
     relationship_type = CharField(max_length=12, choices=FriendshipType.choices)
     permissions = CharField(max_length=16, choices=Permission.choices)
+    # Optional note the requester attached when the request was first sent.
+    # Only ever set on creation - never touched by accept()/decline()/etc.
+    request_message = TextField(
+        null=True,
+        blank=True,
+        max_length=MAX_FRIEND_REQUEST_MESSAGE_LENGTH,
+        validators=[MaxLengthValidator(MAX_FRIEND_REQUEST_MESSAGE_LENGTH)],
+    )
 
     from_profile = ForeignKey(
         "dashboard.Profile",
@@ -41,9 +51,17 @@ class Friendship(DashboardModel):
         from_profile: Profile | int,
         to_profile: Profile | int,
         relationship_type: str = FriendshipType.FRIEND,
+        message: str | None = None,
     ) -> Friendship | None:
         """
         Create a new friendship request.
+
+        Args:
+            from_profile: Profile sending the request.
+            to_profile: Profile being requested.
+            relationship_type: Requested relationship tier.
+            message: Optional note from the requester, stored on the row and
+                surfaced in the recipient's notification.
         """
         if isinstance(from_profile, int):
             from_profile = Profile.objects.get(pk=from_profile)
@@ -75,6 +93,7 @@ class Friendship(DashboardModel):
 
             # Update the status to requested
             friendship.status = FriendshipStatus.REQUESTED
+            friendship.request_message = message
 
         else:
             friendship = cls.objects.create(
@@ -82,6 +101,7 @@ class Friendship(DashboardModel):
                 to_profile=to_profile,
                 relationship_type=relationship_type,
                 status=FriendshipStatus.REQUESTED,
+                request_message=message,
             )
 
         friendship.save()

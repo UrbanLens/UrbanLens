@@ -17,6 +17,7 @@ from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, Im
 from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.services.connections import get_connections
+from urbanlens.dashboard.services.text_limits import MAX_FRIEND_REQUEST_MESSAGE_LENGTH, text_length_error
 
 logger = logging.getLogger(__name__)
 
@@ -86,12 +87,13 @@ def _friend_list_ctx(viewer: Profile | None, profile: Profile) -> dict:
     }
 
 
-def notify_friend_request(from_profile: Profile, to_profile: Profile) -> None:
+def notify_friend_request(from_profile: Profile, to_profile: Profile, message: str | None = None) -> None:
     """Create an in-app notification when a friend request is sent.
 
     Args:
         from_profile: Profile sending the request.
         to_profile: Profile receiving the request.
+        message: Optional note the requester attached, appended to the notification.
     """
     try:
         pref = to_profile.notification_preferences.friend_request
@@ -101,19 +103,23 @@ def notify_friend_request(from_profile: Profile, to_profile: Profile) -> None:
     if pref == DeliveryPreference.NONE:
         return
 
+    body = f"{from_profile.username} wants to be your friend."
+    if message:
+        body += f' "{message}"'
+
     NotificationLog.objects.create(
         profile=to_profile,
         status=Status.UNREAD,
         importance=Importance.MEDIUM,
         notification_type=NotificationType.FRIEND_REQUEST,
         title="New friend request",
-        message=f"{from_profile.username} wants to be your friend.",
+        message=body,
         url=reverse("profile.view_user", kwargs={"profile_slug": from_profile.slug or str(from_profile.uuid)}),
         source_profile=from_profile,
     )
 
 
-def request_or_accept_friendship(from_profile: Profile, to_profile: Profile) -> Friendship | None:
+def request_or_accept_friendship(from_profile: Profile, to_profile: Profile, message: str | None = None) -> Friendship | None:
     """Send a friend request, auto-accepting instead if one is already pending in reverse.
 
     If `to_profile` already sent `from_profile` a pending request, the two profiles
@@ -123,6 +129,9 @@ def request_or_accept_friendship(from_profile: Profile, to_profile: Profile) -> 
     Args:
         from_profile: Profile initiating this request.
         to_profile: Profile being requested.
+        message: Optional note from the requester. Ignored when this call
+            resolves to an auto-accept (both profiles already wanted to be
+            friends, so there's no pending request left to attach a note to).
 
     Returns:
         The resulting Friendship (pending or newly accepted), or None if the request
@@ -150,9 +159,9 @@ def request_or_accept_friendship(from_profile: Profile, to_profile: Profile) -> 
         ).update(status=Status.READ)
         return existing
 
-    friendship = Friendship.request(from_profile=from_profile, to_profile=to_profile.pk)
+    friendship = Friendship.request(from_profile=from_profile, to_profile=to_profile.pk, message=message)
     if friendship:
-        notify_friend_request(from_profile, to_profile)
+        notify_friend_request(from_profile, to_profile, message)
     return friendship
 
 
@@ -248,7 +257,12 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
             }
             return HttpResponse(rejection_messages.get(visibility, "This user is not accepting friend requests."), status=403)
 
-        friendship = request_or_accept_friendship(requesting, to_profile)
+        message = request.POST.get("message", "").strip()
+        length_error = text_length_error(message, MAX_FRIEND_REQUEST_MESSAGE_LENGTH, "Message")
+        if length_error:
+            return HttpResponse(length_error, status=400)
+
+        friendship = request_or_accept_friendship(requesting, to_profile, message or None)
         if not friendship:
             return HttpResponse("Could not request friend.", status=400)
 
@@ -514,6 +528,11 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
         if normalize_email(email) == normalize_email(inviter.email):
             return HttpResponse("That's your own email address.", status=400)
 
+        message = request.POST.get("message", "").strip()
+        length_error = text_length_error(message, MAX_FRIEND_REQUEST_MESSAGE_LENGTH, "Message")
+        if length_error:
+            return HttpResponse(length_error, status=400)
+
         # Rate limiting must be checked before we know whether the address is
         # registered - erroring only on the actually-sends-an-email path would
         # let a capped caller distinguish member from non-member addresses.
@@ -535,7 +554,7 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
             to_profile = existing_user.profile
             # Respect visibility settings silently - no error, no distinguishable response.
             if to_profile != inviter and to_profile.friend_request_visibility != VisibilityChoice.NO_ONE:
-                friendship = request_or_accept_friendship(inviter, to_profile)
+                friendship = request_or_accept_friendship(inviter, to_profile, message or None)
                 if friendship and subscription_role is not None:
                     from urbanlens.dashboard.controllers.site_admin import _parse_duration_months
                     from urbanlens.dashboard.models.subscriptions import grant_subscription
@@ -550,7 +569,7 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
                 accepted_at__isnull=True,
             ).delete()
 
-            invitation = FriendInvitation(inviter=inviter, email=email)
+            invitation = FriendInvitation(inviter=inviter, email=email, message=message or None)
             invitation.save()
             if subscription_role is not None:
                 from urbanlens.dashboard.models.subscriptions import PendingSubscriptionGrant
@@ -572,9 +591,13 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
                 context = {
                     "inviter": inviter,
                     "signup_url": signup_url,
+                    "message": message or None,
                 }
                 subject = f"{inviter.username} invited you to join UrbanLens"
-                text_body = f"Hi,\n\n{inviter.username} invited you to join UrbanLens - a private mapping platform for urban explorers and photographers.\n\nAccept the invitation:\n{signup_url}\n\n- UrbanLens"
+                text_body = f"Hi,\n\n{inviter.username} invited you to join UrbanLens - a private mapping platform for urban explorers and photographers."
+                if message:
+                    text_body += f'\n\n"{message}"'
+                text_body += f"\n\nAccept the invitation:\n{signup_url}\n\n- UrbanLens"
                 html_body = render_to_string("dashboard/email/friend_invite.html", context)
 
                 try:

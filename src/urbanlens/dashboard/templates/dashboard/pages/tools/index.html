@@ -1,11 +1,41 @@
 {% extends 'dashboard/themes/base.html' %}
 {% load static %}
 
+{% block hero %}
+{% include "dashboard/partials/ui/_page_hero.html" with icon="build" title="Tools" subtitle="Manage your data." modifier="top" %}
+{% endblock %}
+
+{% block subnav %}
+<div class="ul-page-subnav">
+    <div class="ul-page-subnav__inner">
+        <nav class="ul-subnav-tabs tools-section-tabs" aria-label="Tools sections">
+            <button type="button" class="ul-subnav-tab tools-section-tab is-active"
+                    data-section="data" aria-controls="panel-data">
+                <i class="material-symbols-outlined">swap_vert</i>
+                <span>Data</span>
+            </button>
+            <button type="button" class="ul-subnav-tab tools-section-tab"
+                    data-section="find" aria-controls="panel-find">
+                <i class="material-symbols-outlined">travel_explore</i>
+                <span>Find Pins</span>
+            </button>
+            <button type="button" class="ul-subnav-tab tools-section-tab"
+                    data-section="account" aria-controls="panel-account">
+                <i class="material-symbols-outlined">person</i>
+                <span>Account</span>
+            </button>
+        </nav>
+    </div>
+</div>
+{% endblock %}
+
 {% block content %}
-{% include "dashboard/partials/ui/_page_hero.html" with icon="build" title="Tools" subtitle="Manage your data." %}
 <div class="tools-page page-content">
 
-    <div class="tools-grid">
+    {# ══════════════════════════════════════════════════════════════════ #}
+    {# DATA: export/import your own data                                  #}
+    {# ══════════════════════════════════════════════════════════════════ #}
+    <div class="tools-section-panel tools-grid" id="panel-data" role="tabpanel">
 
         {# -- Export card ------------------------------------------------------- #}
         <div class="ul-card tools-card tools-card--wide" id="export-card">
@@ -229,6 +259,13 @@
             </div>
         </div>
 
+    </div>{# /panel-data #}
+
+    {# ══════════════════════════════════════════════════════════════════ #}
+    {# FIND PINS: turn photos/library data you already have into pins     #}
+    {# ══════════════════════════════════════════════════════════════════ #}
+    <div class="tools-section-panel tools-grid" id="panel-find" role="tabpanel" hidden>
+
         {# -- Photo location scan card -------------------------------------------- #}
         <div class="ul-card tools-card tools-card--wide" id="photo-scan-card">
             <div class="ul-card-header">
@@ -321,6 +358,13 @@
             </div>
         </div>
 
+    </div>{# /panel-find #}
+
+    {# ══════════════════════════════════════════════════════════════════ #}
+    {# ACCOUNT: connecting with other people, admin utilities             #}
+    {# ══════════════════════════════════════════════════════════════════ #}
+    <div class="tools-section-panel tools-grid" id="panel-account" role="tabpanel" hidden>
+
         {# -- Admin Tools card (admins only) ------------------------------------ #}
         {% if perms.dashboard.view_site_admin %}
         <div class="ul-card tools-card" id="admin-tools-card">
@@ -362,7 +406,7 @@
             </div>
         </div>
 
-    </div>{# /tools-grid #}
+    </div>{# /panel-account #}
 
     {% include "dashboard/partials/profile/_invite_friend_dialog.html" with dialog_id="invite-friend-dialog-tools" result_id="invite-result-tools" %}
 </div>
@@ -984,6 +1028,20 @@
 </style>
 
 <script>
+(function () {
+    /* -- Section subnav (Data | Find Pins | Account) -- */
+    const sectionTabs = document.querySelectorAll('.tools-section-tab');
+    const sectionPanels = document.querySelectorAll('.tools-section-panel');
+    sectionTabs.forEach(function (tab) {
+        tab.addEventListener('click', function () {
+            const section = tab.dataset.section;
+            if (!section) return;
+            sectionTabs.forEach(function (t) { t.classList.toggle('is-active', t === tab); });
+            sectionPanels.forEach(function (p) { p.hidden = p.id !== ('panel-' + section); });
+        });
+    });
+})();
+
 (function () {
     /* -- Export: select-all ↔ individual checkbox sync -- */
     const selectAll = document.getElementById('export-select-all');

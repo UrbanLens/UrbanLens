@@ -1,0 +1,9 @@
+{% comment %}
+Opens {% include "dashboard/partials/profile/_add_friend_dialog.html" %} - see that
+file's docstring for the required/optional context.
+{% endcomment %}
+<button type="button"
+        class="{{ button_class|default:'btn friendship-btn btn--primary' }}"
+        onclick="document.getElementById('{{ dialog_id|default:'add-friend-dialog' }}').showModal()">
+    <i class="material-symbols-outlined">person_add</i> Add Friend
+</button>

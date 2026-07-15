@@ -703,9 +703,9 @@ def _apply_pending_invitation(invitation, profile) -> None:
 
     if invitation.inviter == profile:
         return
-    friendship = Friendship.request(from_profile=invitation.inviter, to_profile=profile.pk)
+    friendship = Friendship.request(from_profile=invitation.inviter, to_profile=profile.pk, message=invitation.message)
     if friendship:
-        notify_friend_request(invitation.inviter, profile)
+        notify_friend_request(invitation.inviter, profile, invitation.message)
     from urbanlens.dashboard.models.subscriptions import grant_subscription
 
     for pending_grant in invitation.pending_subscription_grants.select_related("role", "granted_by"):

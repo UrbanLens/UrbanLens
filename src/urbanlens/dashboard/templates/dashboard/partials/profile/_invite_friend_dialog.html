@@ -17,6 +17,8 @@
             {% csrf_token %}
             <input type="email" name="email" class="invite-email-input"
                 placeholder="friend@example.com" required autocomplete="email">
+            <textarea name="message" class="invite-email-input invite-message-input" rows="3" maxlength="1000"
+                placeholder="Add a message (optional)"></textarea>
             {% if perms.dashboard.view_site_admin %}
             <div class="invite-subscription-panel">
                 <label><i class="material-symbols-outlined">workspace_premium</i> Optional subscription</label>

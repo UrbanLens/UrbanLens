@@ -21,6 +21,7 @@ MAX_COMMENT_TEXT_LENGTH = 1_000
 MAX_MARKUP_LABEL_LENGTH = 500
 MAX_PIN_SHARE_MESSAGE_LENGTH = 5_000
 MAX_DIRECT_MESSAGE_LENGTH = 1_000
+MAX_FRIEND_REQUEST_MESSAGE_LENGTH = 1_000
 
 
 def text_length_error(value: str | None, max_length: int, field_label: str) -> str | None:

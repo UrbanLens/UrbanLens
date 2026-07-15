@@ -6,11 +6,13 @@ from datetime import timedelta
 from typing import TYPE_CHECKING
 import uuid
 
-from django.db.models import CASCADE, DateTimeField, EmailField, ForeignKey, UUIDField
+from django.core.validators import MaxLengthValidator
+from django.db.models import CASCADE, DateTimeField, EmailField, ForeignKey, TextField, UUIDField
 from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.friendship.invitation.queryset import FriendInvitationManager
+from urbanlens.dashboard.services.text_limits import MAX_FRIEND_REQUEST_MESSAGE_LENGTH
 
 
 class FriendInvitation(abstract.DashboardModel):
@@ -29,6 +31,13 @@ class FriendInvitation(abstract.DashboardModel):
     token = UUIDField(default=uuid.uuid4, unique=True, editable=False)
     expires_at = DateTimeField()
     accepted_at = DateTimeField(null=True, blank=True)
+    # Optional note the inviter attached, shown in the join-invite email.
+    message = TextField(
+        null=True,
+        blank=True,
+        max_length=MAX_FRIEND_REQUEST_MESSAGE_LENGTH,
+        validators=[MaxLengthValidator(MAX_FRIEND_REQUEST_MESSAGE_LENGTH)],
+    )
 
     if TYPE_CHECKING:
         inviter_id: int

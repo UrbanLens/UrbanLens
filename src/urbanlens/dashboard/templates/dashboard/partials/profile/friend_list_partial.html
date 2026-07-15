@@ -164,13 +164,9 @@
     {# -- Add friend button (only when not already friends) -------------------- #}
     {% if not is_own_profile and viewer and viewer_can_request %}
     <div class="friend-action-row">
-        <button type="button" class="btn-add-friend"
-                hx-post="{% url 'friend.request' friend_list_profile.id %}"
-                hx-target="#friend_list"
-                hx-swap="outerHTML">
-            <i class="material-symbols-outlined">person_add</i> Add Friend
-        </button>
+        {% include "dashboard/partials/profile/_add_friend_button.html" with button_class="btn-add-friend" dialog_id="add-friend-dialog-list" %}
     </div>
+    {% include "dashboard/partials/profile/_add_friend_dialog.html" with target_profile_id=friend_list_profile.id dialog_id="add-friend-dialog-list" hx_target="#friend_list" %}
     {% endif %}
 
     {% if is_own_profile %}

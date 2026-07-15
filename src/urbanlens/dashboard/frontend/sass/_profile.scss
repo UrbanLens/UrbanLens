@@ -1803,6 +1803,12 @@ body div.container .profile-annotation-notes {
     }
 }
 
+.invite-message-input {
+    margin-top: .6rem;
+    resize: vertical;
+    font-family: inherit;
+}
+
 .invite-subscription-panel {
     display: grid;
     grid-template-columns: 1fr minmax(8rem, auto) minmax(8rem, auto);
