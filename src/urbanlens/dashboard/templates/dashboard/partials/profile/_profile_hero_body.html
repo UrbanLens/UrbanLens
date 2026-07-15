@@ -16,9 +16,9 @@ Expects:
 <div class="profile-avatar-col">
     <div class="profile-avatar-wrap">
         {% if profile.avatar %}
-        <img class="profile-avatar-img" src="{{ profile.avatar.url }}" alt="Avatar">
+        <img class="profile-avatar-img" id="profile-hero-avatar" src="{{ profile.avatar.url }}" alt="Avatar">
         {% else %}
-        <div class="profile-avatar-placeholder">
+        <div class="profile-avatar-placeholder" id="profile-hero-avatar">
             {% if profile.first_name %}{{ profile.first_name|first|upper }}{% elif profile.username %}{{ profile.username|first|upper }}{% else %}?{% endif %}
         </div>
         {% endif %}
