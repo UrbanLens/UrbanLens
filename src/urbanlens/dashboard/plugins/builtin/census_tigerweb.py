@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
-from urbanlens.dashboard.services.external_data import LocationCachePanelSource
+from urbanlens.dashboard.services.external_data import CoordinateGatedInfoPanelSource
 from urbanlens.dashboard.services.rate_limiter import ServiceDefaults
 
 if TYPE_CHECKING:
@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.services.external_data import PanelSource
 
 
-class CensusTigerwebPanelSource(LocationCachePanelSource):
+class CensusTigerwebPanelSource(CoordinateGatedInfoPanelSource):
     """US Census state/county/place/tract geography for the pin's location."""
 
     key = "census_tigerweb"
@@ -31,6 +31,21 @@ class CensusTigerwebPanelSource(LocationCachePanelSource):
         lng = float(pin.effective_longitude or 0)
         geography = CensusTigerwebGateway().get_geography(lat, lng)
         LocationCache.set(pin.location, self.cache_source, geography, query_key=f"{lat:.5f},{lng:.5f}")
+
+    def render_context(self, pin: Pin, data: dict) -> dict | None:
+        """Build the geography card from TIGERweb's state/county/place/tract lookup."""
+        data = data or {}
+        state = data.get("state")
+        if not state:
+            return None
+
+        meta = [{"label": "State", "value": state["name"]}]
+        for key, label in (("county", "County"), ("place", "Place"), ("tract", "Census Tract")):
+            entry = data.get(key)
+            if entry and entry.get("name"):
+                meta.append({"label": label, "value": entry["name"]})
+
+        return {"meta": meta}
 
 
 class CensusTigerwebPlugin(UrbanLensPlugin):

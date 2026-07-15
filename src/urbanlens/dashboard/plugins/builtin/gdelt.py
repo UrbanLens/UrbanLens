@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
-from urbanlens.dashboard.services.external_data import LocationCachePanelSource
+from urbanlens.dashboard.services.external_data import InfoPanelSource
 from urbanlens.dashboard.services.rate_limiter import ServiceDefaults
 
 if TYPE_CHECKING:
@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.services.external_data import PanelSource
 
 
-class GdeltPanelSource(LocationCachePanelSource):
+class GdeltPanelSource(InfoPanelSource):
     """Recent news coverage of the pin's location, via GDELT."""
 
     key = "gdelt"
@@ -30,6 +30,23 @@ class GdeltPanelSource(LocationCachePanelSource):
         search_term = pin.get_unique_search_name(quote_name=True)
         articles = GdeltGateway().search_articles(search_term, limit=10) if search_term else []
         LocationCache.set(pin.location, self.cache_source, {"articles": articles}, query_key=search_term or "")
+
+    def render_context(self, pin: Pin, data: dict) -> dict | None:
+        """Build the article list from GDELT's name-search results."""
+        articles = (data or {}).get("articles") or []
+        if not articles:
+            return None
+
+        meta = [
+            {"label": article.get("date") or "Undated", "value": article.get("title") or article.get("domain") or "", "href": article.get("url") or ""}
+            for article in articles[:8]
+        ]
+
+        return {"meta": meta}
+
+    def debug_count(self, data: dict) -> int:
+        """Number of articles found."""
+        return len((data or {}).get("articles") or [])
 
 
 class GdeltPlugin(UrbanLensPlugin):

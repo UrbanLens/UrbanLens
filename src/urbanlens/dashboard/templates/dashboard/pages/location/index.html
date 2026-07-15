@@ -426,96 +426,20 @@
             <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
         </div>
 
-        <div id="photon-section" class="card card--secondary"
-            hx-get="{% url 'pin.photon' pin.slug %}"
-            hx-trigger="load[!window.ulSectionCollapsed('pin','photon')], ul:unhide"
+        {% for panel in simple_info_panels %}
+        <div id="{{ panel.section_id }}" class="card card--secondary"
+            hx-get="{% url 'pin.panel' pin.slug panel.key %}"
+            hx-trigger="load[!window.ulSectionCollapsed('pin','{{ panel.key }}')], ul:unhide"
             hx-swap="outerHTML"
             hx-timeout="25000"
-            data-collapse-scope="pin" data-collapse-section="photon">
+            data-collapse-scope="pin" data-collapse-section="{{ panel.key }}">
             <div class="card-header">
-                <i class="material-symbols-outlined">person_pin_circle</i>
-                <h3>Photon (OpenStreetMap)</h3>
+                <i class="material-symbols-outlined">{{ panel.icon }}</i>
+                <h3>{{ panel.title }}</h3>
             </div>
             <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
         </div>
-
-        <div id="census-tigerweb-section" class="card card--secondary"
-            hx-get="{% url 'pin.census_tigerweb' pin.slug %}"
-            hx-trigger="load[!window.ulSectionCollapsed('pin','census_tigerweb')], ul:unhide"
-            hx-swap="outerHTML"
-            hx-timeout="25000"
-            data-collapse-scope="pin" data-collapse-section="census_tigerweb">
-            <div class="card-header">
-                <i class="material-symbols-outlined">flag</i>
-                <h3>US Census Geography</h3>
-            </div>
-            <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
-        </div>
-
-        <div id="epa-echo-section" class="card card--secondary"
-            hx-get="{% url 'pin.epa_echo' pin.slug %}"
-            hx-trigger="load[!window.ulSectionCollapsed('pin','epa_echo')], ul:unhide"
-            hx-swap="outerHTML"
-            hx-timeout="25000"
-            data-collapse-scope="pin" data-collapse-section="epa_echo">
-            <div class="card-header">
-                <i class="material-symbols-outlined">factory</i>
-                <h3>EPA Regulated Facilities</h3>
-            </div>
-            <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
-        </div>
-
-        <div id="inaturalist-section" class="card card--secondary"
-            hx-get="{% url 'pin.inaturalist' pin.slug %}"
-            hx-trigger="load[!window.ulSectionCollapsed('pin','inaturalist')], ul:unhide"
-            hx-swap="outerHTML"
-            hx-timeout="25000"
-            data-collapse-scope="pin" data-collapse-section="inaturalist">
-            <div class="card-header">
-                <i class="material-symbols-outlined">forest</i>
-                <h3>iNaturalist</h3>
-            </div>
-            <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
-        </div>
-
-        <div id="gdelt-section" class="card card--secondary"
-            hx-get="{% url 'pin.gdelt' pin.slug %}"
-            hx-trigger="load[!window.ulSectionCollapsed('pin','gdelt')], ul:unhide"
-            hx-swap="outerHTML"
-            hx-timeout="25000"
-            data-collapse-scope="pin" data-collapse-section="gdelt">
-            <div class="card-header">
-                <i class="material-symbols-outlined">newspaper</i>
-                <h3>News</h3>
-            </div>
-            <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
-        </div>
-
-        <div id="overture-building-section" class="card card--secondary"
-            hx-get="{% url 'pin.overture_building' pin.slug %}"
-            hx-trigger="load[!window.ulSectionCollapsed('pin','overture_building_attributes')], ul:unhide"
-            hx-swap="outerHTML"
-            hx-timeout="25000"
-            data-collapse-scope="pin" data-collapse-section="overture_building_attributes">
-            <div class="card-header">
-                <i class="material-symbols-outlined">apartment</i>
-                <h3>Building Characteristics</h3>
-            </div>
-            <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
-        </div>
-
-        <div id="usgs-earthquakes-section" class="card card--secondary"
-            hx-get="{% url 'pin.usgs_earthquakes' pin.slug %}"
-            hx-trigger="load[!window.ulSectionCollapsed('pin','usgs_earthquakes')], ul:unhide"
-            hx-swap="outerHTML"
-            hx-timeout="25000"
-            data-collapse-scope="pin" data-collapse-section="usgs_earthquakes">
-            <div class="card-header">
-                <i class="material-symbols-outlined">vibration</i>
-                <h3>Recent Seismic Activity</h3>
-            </div>
-            <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
-        </div>
+        {% endfor %}
 
         <div id="yelp-section" class="card card--secondary"
             hx-get="{% url 'pin.yelp' pin.slug %}"

@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
-from urbanlens.dashboard.services.external_data import LocationCachePanelSource
+from urbanlens.dashboard.services.external_data import CoordinateGatedInfoPanelSource
 from urbanlens.dashboard.services.rate_limiter import ServiceDefaults
 
 if TYPE_CHECKING:
@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.services.external_data import PanelSource
 
 
-class UsgsEarthquakePanelSource(LocationCachePanelSource):
+class UsgsEarthquakePanelSource(CoordinateGatedInfoPanelSource):
     """Recent nearby seismic activity for the pin's location."""
 
     key = "usgs_earthquakes"
@@ -31,6 +31,31 @@ class UsgsEarthquakePanelSource(LocationCachePanelSource):
         lng = float(pin.effective_longitude or 0)
         events = UsgsEarthquakeGateway().get_recent_nearby_earthquakes(lat, lng, radius_km=100, min_magnitude=3.0, years=10, limit=10)
         LocationCache.set(pin.location, self.cache_source, {"events": events}, query_key=f"{lat:.5f},{lng:.5f}")
+
+    def render_context(self, pin: Pin, data: dict) -> dict | None:
+        """Build the seismic-event list from USGS's nearby-earthquakes search."""
+        events = (data or {}).get("events") or []
+        if not events:
+            return None
+
+        meta = []
+        for event in events[:8]:
+            occurred_at = event.get("occurred_at") or ""
+            date_label = occurred_at[:10] if occurred_at else "Unknown date"
+            magnitude = event.get("magnitude")
+            meta.append(
+                {
+                    "label": f"M{magnitude:.1f}" if isinstance(magnitude, (int, float)) else "Unknown magnitude",
+                    "value": f"{event.get('place') or 'Unknown location'} - {date_label}",
+                    "href": event.get("url") or "",
+                },
+            )
+
+        return {"chips": [f"{len(events)} in the last 10 years"], "meta": meta}
+
+    def debug_count(self, data: dict) -> int:
+        """Number of seismic events found."""
+        return len((data or {}).get("events") or [])
 
 
 class UsgsEarthquakePlugin(UrbanLensPlugin):

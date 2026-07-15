@@ -140,6 +140,22 @@ class PanelSource(ABC):
         """Suppression cache key set after a failed/disabled fetch."""
         return f"ulfetch:skip:{self.key}:{self.scope(pin)}"
 
+    def gate(self, pin: Pin) -> bool:
+        """Whether this source has enough information to fetch for ``pin``.
+
+        Checked before scheduling a fetch so a source with nothing to work
+        with (e.g. no coordinates, no address, no name) degrades to a quiet
+        204 instead of polling forever. The default always allows the fetch;
+        override when a source needs a precondition beyond "has a Location".
+
+        Args:
+            pin: The pin whose panel is being rendered.
+
+        Returns:
+            True when a fetch is worth scheduling.
+        """
+        return True
+
     @abstractmethod
     def is_ready(self, pin: Pin) -> bool:
         """Whether the panel's data has already been fetched and persisted.
@@ -183,6 +199,60 @@ class LocationCachePanelSource(PanelSource, ABC):
         return LocationCache.get_fresh(pin.location, self.cache_source) is not None
 
 
+class InfoPanelSource(LocationCachePanelSource, ABC):
+    """Base for panels that render through the generic ``_simple_info_panel.html`` template.
+
+    A subclass owns only ``fetch`` (writing to its ``LocationCache`` row,
+    inherited from ``LocationCachePanelSource``) and ``render_context``
+    (turning that row's cached data into the template's context shape). The
+    URL, controller dispatch, readiness/pending polling, and debug-overlay
+    wiring are all fully generic (see ``PinController.panel_info``), so a new
+    panel of this shape needs only a new ``InfoPanelSource`` subclass in a
+    plugin - no new route, controller method, or template block.
+
+    Panels with genuinely bespoke markup (their own JS, a listings grid, a
+    map, ...) don't fit this shape and should keep a dedicated controller
+    method, route, and template instead of forcing themselves in here.
+    """
+
+    @abstractmethod
+    def render_context(self, pin: Pin, data: dict) -> dict | None:
+        """Build ``_simple_info_panel.html``'s context from cached data.
+
+        ``section_id``/``icon``/``title`` are filled in by the caller from
+        this source's own class attributes - don't include them here.
+
+        Args:
+            pin: The pin whose panel is being rendered.
+            data: The ``LocationCache`` row's ``data`` dict (``{}`` when the
+                fetch found nothing).
+
+        Returns:
+            A context dict (may include ``heading_name``, ``chips``,
+            ``meta``, ``header_link``, ``footer_link``), or None when there's
+            nothing worth showing (renders a 204).
+        """
+
+    def debug_count(self, data: dict) -> int:
+        """Item count reported in the debug overlay.
+
+        Defaults to 1 (one record found); override for panels whose cached
+        data represents a list of distinct results.
+
+        Args:
+            data: The ``LocationCache`` row's ``data`` dict.
+        """
+        return 1
+
+
+class CoordinateGatedInfoPanelSource(InfoPanelSource, ABC):
+    """An ``InfoPanelSource`` that only makes sense when the pin has coordinates."""
+
+    def gate(self, pin: Pin) -> bool:
+        """Skip scheduling a fetch for a pin with no usable coordinates."""
+        return bool(pin.effective_latitude and pin.effective_longitude)
+
+
 class GalleryMediaSource(LocationCachePanelSource, ABC):
     """Base for anything that can appear as a source tab in the Media gallery.
 
@@ -207,22 +277,6 @@ class GalleryMediaSource(LocationCachePanelSource, ABC):
         Returns:
             The items to render as ``.media-item`` tiles; may be empty.
         """
-
-    def gate(self, pin: Pin) -> bool:
-        """Whether this source has enough information to search for ``pin``.
-
-        Called before scheduling a fetch so a source with nothing to search
-        on (e.g. no coordinates, no address, no name) degrades to a quiet
-        204 instead of polling forever. The default always allows the fetch;
-        override when a source needs a precondition beyond "has a Location".
-
-        Args:
-            pin: The pin whose Media gallery tab is being rendered.
-
-        Returns:
-            True when a fetch is worth scheduling.
-        """
-        return True
 
 
 class MediaPanelSource(GalleryMediaSource):

@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
-from urbanlens.dashboard.services.external_data import LocationCachePanelSource
+from urbanlens.dashboard.services.external_data import CoordinateGatedInfoPanelSource
 from urbanlens.dashboard.services.rate_limiter import ServiceDefaults
 
 if TYPE_CHECKING:
@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.services.external_data import PanelSource
 
 
-class EpaEchoPanelSource(LocationCachePanelSource):
+class EpaEchoPanelSource(CoordinateGatedInfoPanelSource):
     """EPA-regulated facilities and their compliance status near the pin's location."""
 
     key = "epa_echo"
@@ -36,6 +36,29 @@ class EpaEchoPanelSource(LocationCachePanelSource):
 
         facilities = EpaEchoGateway().get_nearby_facilities(lat, lng, radius_miles=0.5, limit=10)
         LocationCache.set(pin.location, self.cache_source, {"facilities": facilities}, query_key=f"{lat:.5f},{lng:.5f}")
+
+    def render_context(self, pin: Pin, data: dict) -> dict | None:
+        """Build the facility list from EPA ECHO's nearby-facilities search."""
+        facilities = (data or {}).get("facilities") or []
+        if not facilities:
+            return None
+
+        meta = []
+        for facility in facilities[:8]:
+            status = facility.get("compliance_status") or "Unknown"
+            if facility.get("significant_violator"):
+                status = f"{status} (significant violator)"
+            meta.append({"label": facility.get("name") or "Unnamed facility", "value": f"{facility.get('address') or ''} - {status}".strip(" -")})
+
+        return {
+            "chips": [f"{len(facilities)} nearby"],
+            "meta": meta,
+            "footer_link": {"url": "https://echo.epa.gov/", "label": "View on EPA ECHO"},
+        }
+
+    def debug_count(self, data: dict) -> int:
+        """Number of nearby facilities found."""
+        return len((data or {}).get("facilities") or [])
 
 
 class EpaEchoPlugin(UrbanLensPlugin):

@@ -14,8 +14,7 @@ from __future__ import annotations
 from typing import ClassVar
 from unittest.mock import patch
 
-from hypothesis import given
-from hypothesis import strategies as st
+from hypothesis import given, strategies as st
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.plugins import UrbanLensPlugin, plugin_registry
@@ -258,10 +257,19 @@ class BuiltinDiscoveryTests(TestCase):
         satellite = [type(p).__name__ for p in plugin_registry.satellite_providers()]
         self.assertEqual(
             satellite,
-            ["GoogleMapsGateway", "EsriGateway", "NasaGibsGateway", "MapboxGateway", "BingMapsGateway", "OpenAerialMapGateway"],
+            [
+                "GoogleMapsGateway",
+                "AzureMapsRenderGateway",
+                "EsriGateway",
+                "NasaGibsGateway",
+                "MapboxGateway",
+                "BingMapsGateway",
+                "OpenAerialMapGateway",
+                "OpenTopoMapGateway",
+            ],
         )
         street = [type(p).__name__ for p in plugin_registry.street_view_providers()]
-        self.assertEqual(street, ["GoogleMapsGateway", "MapillaryGateway", "KartaViewGateway"])
+        self.assertEqual(street, ["GoogleMapsGateway", "MapillaryGateway", "KartaViewGateway", "PanoramaxGateway"])
 
     def test_unknown_panel_source_is_rejected_cleanly(self) -> None:
         from urbanlens.dashboard.services.external_data import get_panel_source, schedule_panel_fetch

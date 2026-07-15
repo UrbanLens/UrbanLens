@@ -12,14 +12,14 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
-from urbanlens.dashboard.services.external_data import LocationCachePanelSource
+from urbanlens.dashboard.services.external_data import InfoPanelSource
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.services.external_data import PanelSource
 
 
-class OvertureBuildingAttributesPanelSource(LocationCachePanelSource):
+class OvertureBuildingAttributesPanelSource(InfoPanelSource):
     """Overture Maps building characteristics for the pin's location."""
 
     key = "overture_building_attributes"
@@ -37,6 +37,27 @@ class OvertureBuildingAttributesPanelSource(LocationCachePanelSource):
         lng = float(pin.effective_longitude or 0)
         attributes = OvertureMapsGateway().get_building_attributes(lat, lng)
         LocationCache.set(pin.location, self.cache_source, attributes or {}, query_key=f"{lat:.5f},{lng:.5f}")
+
+    def render_context(self, pin: Pin, data: dict) -> dict | None:
+        """Build the building-characteristics card from Overture's attribute lookup."""
+        if not data:
+            return None
+
+        chips = [data["subtype"].replace("_", " ").title()] if data.get("subtype") else []
+        meta = []
+        if data.get("height_m"):
+            meta.append({"label": "Height", "value": f"{data['height_m']:.0f} m"})
+        if data.get("num_floors"):
+            meta.append({"label": "Floors", "value": str(data["num_floors"])})
+        if data.get("roof_shape"):
+            meta.append({"label": "Roof Shape", "value": data["roof_shape"].replace("_", " ").title()})
+        if data.get("roof_material"):
+            meta.append({"label": "Roof Material", "value": data["roof_material"].replace("_", " ").title()})
+
+        if not chips and not meta:
+            return None
+
+        return {"heading_name": data.get("primary_name"), "chips": chips, "meta": meta}
 
 
 class OvertureBuildingAttributesPlugin(UrbanLensPlugin):

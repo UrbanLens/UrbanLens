@@ -113,6 +113,10 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         if pin.cover_photo_id:
             pin_cover_candidates = [{"id": img.pk, "url": img.image.url} for img in pin.images.exclude(pk=pin.cover_photo_id).order_by("-created")[:20] if img.image]
 
+        from urbanlens.dashboard.services.external_data import InfoPanelSource, panel_sources
+
+        simple_info_panels = [source for source in panel_sources().values() if isinstance(source, InfoPanelSource)]
+
         return render(
             request,
             "dashboard/pages/location/index.html",
@@ -140,6 +144,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 "security_level_choices": SecurityLevel.choices,
                 "pin_lists": pin_lists,
                 "pin_cover_candidates": pin_cover_candidates,
+                "simple_info_panels": simple_info_panels,
                 "media_bulk_actions": [
                     {"action": "relevant", "icon": "thumb_up", "label": "Mark relevant"},
                     {"action": "not_relevant", "icon": "thumb_down", "label": "Mark not relevant"},
@@ -1193,14 +1198,24 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         context = {"place": data, "debug": self._debug_entry(request, "azure_maps", cached.query_key, from_cache=True, count=1)}
         return render(request, "dashboard/partials/pins/pin_azure_maps.html", context)
 
-    def photon_info(self, request: HttpRequest, pin_slug: str):
+    def panel_info(self, request: HttpRequest, pin_slug: str, panel_key: str):
         """
-        HTMX partial: Photon (Komoot) reverse-geocoded address for the pin's location.
+        HTMX partial: generic external-data info panel, dispatched by registered source.
 
-        Free, keyless, OSM-backed geocoder shown as a redundant cross-check alongside
-        the Nominatim panel. Returns 204 when nothing resolved.
+        Backs every ``InfoPanelSource``-based panel (Photon, US Census Geography,
+        EPA Regulated Facilities, iNaturalist, News, Building Characteristics,
+        Recent Seismic Activity, and any future plugin panel of this shape).
+        A plugin ships a new simple info panel by contributing an
+        ``InfoPanelSource`` subclass alone - no new route or controller method
+        needed. Panels with bespoke markup (Wikipedia, Yelp, NPS, Nominatim,
+        Azure Maps, LoopNet, USGS Topo, ...) keep their own dedicated methods.
         """
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
+        from urbanlens.dashboard.services.external_data import InfoPanelSource, get_panel_source
+
+        panel = get_panel_source(panel_key)
+        if not isinstance(panel, InfoPanelSource):
+            return HttpResponse(status=404)
 
         try:
             pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)
@@ -1211,324 +1226,23 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         if not location:
             return HttpResponse(status=204)
 
-        lat = pin.effective_latitude
-        lng = pin.effective_longitude
-        if not lat or not lng:
+        if not panel.gate(pin):
             return HttpResponse(status=204)
 
-        cached = LocationCache.get_fresh(location, "photon")
+        cached = LocationCache.get_fresh(location, panel.cache_source)
         if cached is None:
-            return self._pending_panel(request, pin, "photon")
-        data = cached.data or None
+            return self._pending_panel(request, pin, panel_key)
+        data = cached.data or {}
 
-        if not data or not data.get("name"):
+        context = panel.render_context(pin, data)
+        if context is None:
             return HttpResponse(status=204)
 
-        chips = [data["osm_value"].replace("_", " ").title()] if data.get("osm_value") else []
-        street_parts = [data[key] for key in ("housenumber", "street") if data.get(key)]
-        meta = [{"label": "Street", "value": " ".join(street_parts)}] if street_parts else []
-        for key, label in (("locality", "Locality"), ("district", "District"), ("city", "City"), ("county", "County"), ("state", "State"), ("country", "Country"), ("postcode", "Postal Code")):
-            if data.get(key):
-                meta.append({"label": label, "value": data[key]})
+        context["section_id"] = panel.section_id
+        context["icon"] = panel.icon
+        context["title"] = panel.title
+        context["debug"] = self._debug_entry(request, panel_key, cached.query_key, from_cache=True, count=panel.debug_count(data))
 
-        context = {
-            "section_id": "photon-section",
-            "icon": "person_pin_circle",
-            "title": "Photon (OpenStreetMap)",
-            "heading_name": data.get("name"),
-            "chips": chips,
-            "meta": meta,
-            "debug": self._debug_entry(request, "photon", cached.query_key, from_cache=True, count=1),
-        }
-        return render(request, "dashboard/partials/pins/_simple_info_panel.html", context)
-
-    def census_tigerweb_info(self, request: HttpRequest, pin_slug: str):
-        """
-        HTMX partial: US Census geography (state/county/place/tract) for the pin's location.
-
-        Free, keyless US Census Bureau lookup. Returns 204 outside the US (no state
-        geography resolves) or when the location has no coordinates.
-        """
-        from urbanlens.dashboard.models.cache.location_cache import LocationCache
-
-        try:
-            pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)
-        except Pin.DoesNotExist:
-            return HttpResponse(status=404)
-
-        location = pin.location
-        if not location:
-            return HttpResponse(status=204)
-
-        lat = pin.effective_latitude
-        lng = pin.effective_longitude
-        if not lat or not lng:
-            return HttpResponse(status=204)
-
-        cached = LocationCache.get_fresh(location, "census_tigerweb")
-        if cached is None:
-            return self._pending_panel(request, pin, "census_tigerweb")
-        data = cached.data or None
-
-        data = data or {}
-        state = data.get("state")
-        if not state:
-            return HttpResponse(status=204)
-
-        meta = [{"label": "State", "value": state["name"]}]
-        for key, label in (("county", "County"), ("place", "Place"), ("tract", "Census Tract")):
-            entry = data.get(key)
-            if entry and entry.get("name"):
-                meta.append({"label": label, "value": entry["name"]})
-
-        context = {
-            "section_id": "census-tigerweb-section",
-            "icon": "flag",
-            "title": "US Census Geography",
-            "meta": meta,
-            "debug": self._debug_entry(request, "census_tigerweb", cached.query_key, from_cache=True, count=1),
-        }
-        return render(request, "dashboard/partials/pins/_simple_info_panel.html", context)
-
-    def epa_echo_info(self, request: HttpRequest, pin_slug: str):
-        """
-        HTMX partial: nearby EPA-regulated facilities and their compliance status.
-
-        Free, keyless EPA ECHO lookup, USA only. Returns 204 outside the US or when
-        no regulated facilities are nearby.
-        """
-        from urbanlens.dashboard.models.cache.location_cache import LocationCache
-
-        try:
-            pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)
-        except Pin.DoesNotExist:
-            return HttpResponse(status=404)
-
-        location = pin.location
-        if not location:
-            return HttpResponse(status=204)
-
-        lat = pin.effective_latitude
-        lng = pin.effective_longitude
-        if not lat or not lng:
-            return HttpResponse(status=204)
-
-        cached = LocationCache.get_fresh(location, "epa_echo")
-        if cached is None:
-            return self._pending_panel(request, pin, "epa_echo")
-        data = cached.data or None
-
-        facilities = (data or {}).get("facilities") or []
-        if not facilities:
-            return HttpResponse(status=204)
-
-        meta = []
-        for facility in facilities[:8]:
-            status = facility.get("compliance_status") or "Unknown"
-            if facility.get("significant_violator"):
-                status = f"{status} (significant violator)"
-            meta.append({"label": facility.get("name") or "Unnamed facility", "value": f"{facility.get('address') or ''} - {status}".strip(" -")})
-
-        context = {
-            "section_id": "epa-echo-section",
-            "icon": "factory",
-            "title": "EPA Regulated Facilities",
-            "chips": [f"{len(facilities)} nearby"],
-            "meta": meta,
-            "footer_link": {"url": "https://echo.epa.gov/", "label": "View on EPA ECHO"},
-            "debug": self._debug_entry(request, "epa_echo", cached.query_key, from_cache=True, count=len(facilities)),
-        }
-        return render(request, "dashboard/partials/pins/_simple_info_panel.html", context)
-
-    def inaturalist_info(self, request: HttpRequest, pin_slug: str):
-        """
-        HTMX partial: recent iNaturalist observations near the pin's location.
-
-        Free, keyless. Returns 204 when nothing has been recorded nearby.
-        """
-        from urbanlens.dashboard.models.cache.location_cache import LocationCache
-
-        try:
-            pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)
-        except Pin.DoesNotExist:
-            return HttpResponse(status=404)
-
-        location = pin.location
-        if not location:
-            return HttpResponse(status=204)
-
-        lat = pin.effective_latitude
-        lng = pin.effective_longitude
-        if not lat or not lng:
-            return HttpResponse(status=204)
-
-        cached = LocationCache.get_fresh(location, "inaturalist")
-        if cached is None:
-            return self._pending_panel(request, pin, "inaturalist")
-        data = cached.data or None
-
-        observations = (data or {}).get("observations") or []
-        if not observations:
-            return HttpResponse(status=204)
-
-        meta = [
-            {"label": obs.get("common_name") or obs.get("scientific_name") or "Unknown species", "value": obs.get("observed_on") or "Date unknown"}
-            for obs in observations[:8]
-        ]
-
-        context = {
-            "section_id": "inaturalist-section",
-            "icon": "forest",
-            "title": "iNaturalist",
-            "chips": [f"{len(observations)} nearby"],
-            "meta": meta,
-            "footer_link": {"url": "https://www.inaturalist.org/observations", "label": "View on iNaturalist"},
-            "debug": self._debug_entry(request, "inaturalist", cached.query_key, from_cache=True, count=len(observations)),
-        }
-        return render(request, "dashboard/partials/pins/_simple_info_panel.html", context)
-
-    def gdelt_info(self, request: HttpRequest, pin_slug: str):
-        """
-        HTMX partial: recent news coverage of the pin's location, via GDELT.
-
-        Free, keyless. Returns 204 when the pin has no usable search name or
-        nothing was found.
-        """
-        from urbanlens.dashboard.models.cache.location_cache import LocationCache
-
-        try:
-            pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)
-        except Pin.DoesNotExist:
-            return HttpResponse(status=404)
-
-        if not pin.location:
-            return HttpResponse(status=204)
-
-        cached = LocationCache.get_fresh(pin.location, "gdelt")
-        if cached is None:
-            return self._pending_panel(request, pin, "gdelt")
-        data = cached.data or None
-
-        articles = (data or {}).get("articles") or []
-        if not articles:
-            return HttpResponse(status=204)
-
-        meta = [
-            {"label": article.get("date") or "Undated", "value": article.get("title") or article.get("domain") or "", "href": article.get("url") or ""}
-            for article in articles[:8]
-        ]
-
-        context = {
-            "section_id": "gdelt-section",
-            "icon": "newspaper",
-            "title": "News",
-            "meta": meta,
-            "debug": self._debug_entry(request, "gdelt", cached.query_key, from_cache=True, count=len(articles)),
-        }
-        return render(request, "dashboard/partials/pins/_simple_info_panel.html", context)
-
-    def overture_building_info(self, request: HttpRequest, pin_slug: str):
-        """
-        HTMX partial: Overture Maps building characteristics for the pin's location.
-
-        Free, open-data. Returns 204 when no Overture building footprint
-        contains the pin's coordinates.
-        """
-        from urbanlens.dashboard.models.cache.location_cache import LocationCache
-
-        try:
-            pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)
-        except Pin.DoesNotExist:
-            return HttpResponse(status=404)
-
-        if not pin.location:
-            return HttpResponse(status=204)
-
-        cached = LocationCache.get_fresh(pin.location, "overture_building_attributes")
-        if cached is None:
-            return self._pending_panel(request, pin, "overture_building_attributes")
-        data = cached.data or None
-
-        if not data:
-            return HttpResponse(status=204)
-
-        chips = [data["subtype"].replace("_", " ").title()] if data.get("subtype") else []
-        meta = []
-        if data.get("height_m"):
-            meta.append({"label": "Height", "value": f"{data['height_m']:.0f} m"})
-        if data.get("num_floors"):
-            meta.append({"label": "Floors", "value": str(data["num_floors"])})
-        if data.get("roof_shape"):
-            meta.append({"label": "Roof Shape", "value": data["roof_shape"].replace("_", " ").title()})
-        if data.get("roof_material"):
-            meta.append({"label": "Roof Material", "value": data["roof_material"].replace("_", " ").title()})
-
-        if not chips and not meta:
-            return HttpResponse(status=204)
-
-        context = {
-            "section_id": "overture-building-section",
-            "icon": "apartment",
-            "title": "Building Characteristics",
-            "heading_name": data.get("primary_name"),
-            "chips": chips,
-            "meta": meta,
-            "debug": self._debug_entry(request, "overture_building_attributes", cached.query_key, from_cache=True, count=1),
-        }
-        return render(request, "dashboard/partials/pins/_simple_info_panel.html", context)
-
-    def usgs_earthquakes_info(self, request: HttpRequest, pin_slug: str):
-        """
-        HTMX partial: recent nearby seismic activity, via USGS.
-
-        Free, keyless. Returns 204 when nothing of note has occurred nearby.
-        """
-        from urbanlens.dashboard.models.cache.location_cache import LocationCache
-
-        try:
-            pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)
-        except Pin.DoesNotExist:
-            return HttpResponse(status=404)
-
-        location = pin.location
-        if not location:
-            return HttpResponse(status=204)
-
-        lat = pin.effective_latitude
-        lng = pin.effective_longitude
-        if not lat or not lng:
-            return HttpResponse(status=204)
-
-        cached = LocationCache.get_fresh(location, "usgs_earthquakes")
-        if cached is None:
-            return self._pending_panel(request, pin, "usgs_earthquakes")
-        data = cached.data or None
-
-        events = (data or {}).get("events") or []
-        if not events:
-            return HttpResponse(status=204)
-
-        meta = []
-        for event in events[:8]:
-            occurred_at = event.get("occurred_at") or ""
-            date_label = occurred_at[:10] if occurred_at else "Unknown date"
-            magnitude = event.get("magnitude")
-            meta.append(
-                {
-                    "label": f"M{magnitude:.1f}" if isinstance(magnitude, (int, float)) else "Unknown magnitude",
-                    "value": f"{event.get('place') or 'Unknown location'} - {date_label}",
-                    "href": event.get("url") or "",
-                },
-            )
-
-        context = {
-            "section_id": "usgs-earthquakes-section",
-            "icon": "vibration",
-            "title": "Recent Seismic Activity",
-            "chips": [f"{len(events)} in the last 10 years"],
-            "meta": meta,
-            "debug": self._debug_entry(request, "usgs_earthquakes", cached.query_key, from_cache=True, count=len(events)),
-        }
         return render(request, "dashboard/partials/pins/_simple_info_panel.html", context)
 
     def usgs_topo_info(self, request: HttpRequest, pin_slug: str):
