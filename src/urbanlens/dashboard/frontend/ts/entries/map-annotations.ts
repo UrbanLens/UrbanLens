@@ -466,6 +466,133 @@ function init(): void {
     }
     window._toggleDetailPinListPanel = toggleDetailPinListPanel;
 
+    // Satellite/street-view carousel controls (satellite_view.html / street_view.html
+    // fragments, HTMX-swapped into this page). Defined here - not inside those
+    // fragments' own <script> tags - because HTMX inserts a swapped fragment's DOM
+    // (including <img> tags, which start loading immediately) before it executes any
+    // <script> tags found within that same fragment: a fast-failing image (cached
+    // 404, empty src, ...) can fire its onerror before a same-fragment <script>
+    // defining the handler has run, throwing "X is not defined". Defining these
+    // globals here (this module loads and runs on page load, well before any panel
+    // fragment can be swapped in) guarantees they exist before any swap can happen.
+    let _satIdx = 0;
+    function _satSlides(): HTMLElement[] {
+        const c = document.getElementById("sat-carousel");
+        return c ? Array.from(c.querySelectorAll<HTMLElement>(".sat-slide")) : [];
+    }
+    function _satShow(idx: number): void {
+        const slides = _satSlides();
+        if (!slides.length) return;
+        _satIdx = ((idx % slides.length) + slides.length) % slides.length;
+        slides.forEach((s, i) => s.classList.toggle("is-active", i === _satIdx));
+        const active = slides[_satIdx];
+        if (!active) return;
+        const source = document.querySelector<HTMLElement>("#sat-carousel .sat-source");
+        const date = document.querySelector<HTMLElement>("#sat-carousel .sat-date");
+        const detail = document.querySelector<HTMLElement>("#sat-carousel .sat-detail");
+        if (source) source.textContent = active.dataset.source || "";
+        if (date) date.textContent = active.dataset.date || "";
+        if (detail) detail.textContent = active.dataset.detail || "";
+        _satRebuildDots(slides.length);
+    }
+    function _satRebuildDots(count: number): void {
+        const el = document.getElementById("sat-dots");
+        if (!el) return;
+        el.innerHTML = "";
+        for (let i = 0; i < count; i++) {
+            const dot = document.createElement("button");
+            dot.type = "button";
+            dot.className = "sat-dot" + (i === _satIdx ? " is-active" : "");
+            dot.setAttribute("aria-label", `Slide ${i + 1}`);
+            dot.addEventListener("click", () => _satShow(i));
+            el.appendChild(dot);
+        }
+    }
+    window._satRemoveSlide = function (img: HTMLImageElement): void {
+        const slide = img.closest<HTMLElement>(".sat-slide");
+        if (!slide) return;
+        const wasActive = slide.classList.contains("is-active");
+        slide.remove();
+        const slides = _satSlides();
+        if (!slides.length) {
+            const c = document.getElementById("sat-carousel");
+            if (c) {
+                c.innerHTML =
+                    '<div class="view-unavailable"><i class="material-symbols-outlined">broken_image</i>' +
+                    "<span>No satellite imagery available for this location.</span></div>";
+            }
+            return;
+        }
+        if (wasActive) _satIdx = Math.max(0, Math.min(_satIdx, slides.length - 1));
+        _satShow(_satIdx);
+    };
+    window._satPrev = function () {
+        _satShow(_satIdx - 1);
+    };
+    window._satNext = function () {
+        _satShow(_satIdx + 1);
+    };
+    window._satShow = _satShow;
+
+    let _svIdx = 0;
+    function _svSlides(): HTMLElement[] {
+        const c = document.getElementById("sv-carousel");
+        return c ? Array.from(c.querySelectorAll<HTMLElement>(".sv-slide")) : [];
+    }
+    function _svShow(idx: number): void {
+        const slides = _svSlides();
+        if (!slides.length) return;
+        _svIdx = ((idx % slides.length) + slides.length) % slides.length;
+        slides.forEach((s, i) => s.classList.toggle("is-active", i === _svIdx));
+        const active = slides[_svIdx];
+        if (!active) return;
+        const source = document.querySelector<HTMLElement>("#sv-carousel .sv-source");
+        const date = document.querySelector<HTMLElement>("#sv-carousel .sv-date");
+        const heading = document.querySelector<HTMLElement>("#sv-carousel .sv-heading");
+        if (source) source.textContent = active.dataset.source || "";
+        if (date) date.textContent = active.dataset.date || "";
+        if (heading) heading.textContent = active.dataset.heading !== undefined ? `⇨ ${active.dataset.heading}°` : "";
+        _svRebuildDots(slides.length);
+    }
+    function _svRebuildDots(count: number): void {
+        const el = document.getElementById("sv-dots");
+        if (!el) return;
+        el.innerHTML = "";
+        for (let i = 0; i < count; i++) {
+            const dot = document.createElement("button");
+            dot.type = "button";
+            dot.className = "sv-dot" + (i === _svIdx ? " is-active" : "");
+            dot.setAttribute("aria-label", `Slide ${i + 1}`);
+            dot.addEventListener("click", () => _svShow(i));
+            el.appendChild(dot);
+        }
+    }
+    window._svRemoveSlide = function (img: HTMLImageElement): void {
+        const slide = img.closest<HTMLElement>(".sv-slide");
+        if (!slide) return;
+        const wasActive = slide.classList.contains("is-active");
+        slide.remove();
+        const slides = _svSlides();
+        if (!slides.length) {
+            const c = document.getElementById("sv-carousel");
+            if (c) {
+                c.innerHTML =
+                    '<div class="view-unavailable"><i class="material-symbols-outlined">broken_image</i>' +
+                    "<span>No street-level imagery available for this location.</span></div>";
+            }
+            return;
+        }
+        if (wasActive) _svIdx = Math.max(0, Math.min(_svIdx, slides.length - 1));
+        _svShow(_svIdx);
+    };
+    window._svPrev = function () {
+        _svShow(_svIdx - 1);
+    };
+    window._svNext = function () {
+        _svShow(_svIdx + 1);
+    };
+    window._svShow = _svShow;
+
     // Popup shown when a child pin's marker is clicked: name, which sub pin it
     // belongs to (for nested entries), and a link to that pin's own detail
     // page - plus an Edit shortcut for this pin's own direct children.
@@ -1730,6 +1857,18 @@ declare global {
         cancelBoundaryEdit: () => void;
         finishBoundaryEdit: () => void;
         _boundaryDrawToggleWired?: boolean;
+
+        // Satellite/street-view carousel controls, exposed for satellite_view.html /
+        // street_view.html's onclick=/onerror= attributes - see their definitions
+        // above for why they live here instead of in those fragments' own scripts.
+        _satRemoveSlide: (img: HTMLImageElement) => void;
+        _satPrev: () => void;
+        _satNext: () => void;
+        _satShow: (idx: number) => void;
+        _svRemoveSlide: (img: HTMLImageElement) => void;
+        _svPrev: () => void;
+        _svNext: () => void;
+        _svShow: (idx: number) => void;
 
         // External photo-gallery integration hooks (gallery.ts, out of scope for
         // this migration) - this page calls out to them and also implements the

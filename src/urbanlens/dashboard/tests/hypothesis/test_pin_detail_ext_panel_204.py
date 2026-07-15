@@ -1,0 +1,114 @@
+"""Regression tests for the pin detail page's "external panel 204 removal" marker.
+
+A hardcoded JS Set of section ids (previously named `_extSections`) decided which
+auto-loading external-data cards got their "Loading..." placeholder removed when
+a fetch legitimately found nothing (204 No Content - HTMX does not swap on 204,
+so without this handling the placeholder is stuck forever). That Set had already
+drifted out of sync with the actual panels on the page - missing Azure Maps, GDELT
+(News), Photon, and (once added) EPA Site Details and Building Characteristics -
+so any of those returning 204 left a permanently-spinning card with no console
+error and no server-side error either, since the fetch itself succeeded.
+
+Replaced with a `data-ext-panel-204` attribute set directly on each qualifying
+card (including the generic simple_info_panels loop, so any future panel added
+there is covered automatically) and a JS handler keyed off that attribute instead
+of a hand-maintained id list. These tests just confirm every card that's supposed
+to carry the marker actually renders it - the JS 204/error/timeout handling itself
+isn't unit-testable here (no browser), matching this page's existing JS-only fixes.
+"""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from django.contrib.auth.models import User
+from django.urls import reverse
+from model_bakery import baker
+
+from urbanlens.core.tests.testcase import TestCase
+
+if TYPE_CHECKING:
+    from urbanlens.dashboard.models.pin.model import Pin
+
+
+class ExtPanel204MarkerTests(TestCase):
+    """Every auto-loading external-data card must carry data-ext-panel-204."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+        self.client.force_login(self.user)
+        self.pin: Pin = baker.make_recipe("dashboard.pin", profile=self.profile)
+
+    def _content(self) -> str:
+        response = self.client.get(reverse("pin.details", args=[self.pin.slug]))
+        self.assertEqual(response.status_code, 200)
+        return response.content.decode()
+
+    def test_bespoke_cards_carry_the_marker(self) -> None:
+        """Cards with their own dedicated controller/route (not the generic simple_info_panels loop)."""
+        content = self._content()
+        for section_id in (
+            "wikipedia-section",
+            "nominatim-section",
+            "azure-maps-section",
+            "yelp-section",
+            "nps-section",
+            "loopnet-section",
+            "usgs-topo-section",
+            "satellite-view-section",
+            "street-view-section",
+            "pin-markup-maps-panel",
+        ):
+            self.assertIn(
+                f'id="{section_id}"',
+                content,
+                f"{section_id} not found in rendered page",
+            )
+            # The marker must be on the same element as the id, not just anywhere on
+            # the page - check they're within a short distance of each other.
+            idx = content.index(f'id="{section_id}"')
+            self.assertIn("data-ext-panel-204", content[max(0, idx - 200) : idx + 200], f"{section_id} is missing data-ext-panel-204")
+
+    def test_web_search_section_carries_the_marker_when_rendered(self) -> None:
+        from urbanlens.dashboard.models.subscriptions import SiteFeature, SubscriptionRole, grant_subscription
+
+        self.pin.location.official_name = "Old Mill Factory"
+        self.pin.location.save(update_fields=["official_name"])
+
+        role = baker.make(SubscriptionRole, features=SiteFeature.SEARCH)
+        grant_subscription(self.user, role, self.user, None)
+
+        content = self._content()
+        self.assertIn('id="web-search-section"', content)
+        idx = content.index('id="web-search-section"')
+        self.assertIn("data-ext-panel-204", content[max(0, idx - 200) : idx + 200])
+
+    def test_generic_loop_panels_carry_the_marker(self) -> None:
+        """photon/gdelt/epa_echo_detail/overture_building_attributes - the panels this
+        bug report caught stuck on "Loading..." forever - all come from the same
+        simple_info_panels loop, which now carries the marker unconditionally."""
+        content = self._content()
+        response = self.client.get(reverse("pin.details", args=[self.pin.slug]))
+        panel_keys = [panel.key for panel in response.context["simple_info_panels"]]
+        self.assertTrue(panel_keys, "simple_info_panels was empty - can't verify the marker on it")
+        for key in ("photon", "gdelt", "epa_echo_detail", "overture_building_attributes"):
+            self.assertIn(key, panel_keys, f"{key} is no longer part of simple_info_panels - update this test")
+
+        # Every div opened by the simple_info_panels loop shares one hx-get pattern;
+        # confirm the marker attribute appears at least once per rendered panel by
+        # counting div-opens for the loop's pin.panel route against marker occurrences
+        # scoped to those same divs.
+        for key in panel_keys:
+            marker = f'hx-get="{reverse('pin.panel', args=[self.pin.slug, key])}"'
+            self.assertIn(marker, content, f"panel {key} not rendered with the expected hx-get")
+            idx = content.index(marker)
+            # data-ext-panel-204 is on the same <div ...> as the id, which precedes hx-get.
+            self.assertIn("data-ext-panel-204", content[max(0, idx - 300) : idx], f"panel {key} is missing data-ext-panel-204")
+
+    def test_js_handler_uses_the_attribute_not_a_hardcoded_list(self) -> None:
+        """Regression guard against reintroducing a hand-maintained id Set that can drift out of sync."""
+        content = self._content()
+        self.assertIn("hasAttribute('data-ext-panel-204')", content)
+        self.assertNotIn("_extSections", content)

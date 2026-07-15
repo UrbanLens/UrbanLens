@@ -39,6 +39,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 import logging
+import time
 from typing import TYPE_CHECKING, ClassVar
 
 from celery.exceptions import SoftTimeLimitExceeded
@@ -632,14 +633,17 @@ def schedule_panel_fetch(source_key: str, pin: Pin) -> bool:
     """
     source = get_panel_source(source_key)
     if source is None:
+        logger.warning("schedule_panel_fetch: unknown source '%s' for pin %s", source_key, pin.pk)
         return False
     if not pin.profile.external_apis_enabled:
         return False
     if cache.get(source.skip_key(pin)):
+        logger.debug("schedule_panel_fetch: %s for pin %s is suppressed, skipping", source_key, pin.pk)
         return False
     if cache.add(source.flight_key(pin), 1, FLIGHT_TTL_SECONDS):
         from urbanlens.dashboard.tasks import fetch_panel_source
 
+        logger.info("schedule_panel_fetch: dispatching %s for pin %s to queue '%s'", source_key, pin.pk, source.queue)
         fetch_panel_source.apply_async(args=[source_key, pin.pk], queue=source.queue)
     return True
 
@@ -670,6 +674,9 @@ def run_panel_fetch(source_key: str, pin: Pin) -> None:
         # skip without recording a failure so the panel just stays absent.
         cache.delete(source.flight_key(pin))
         return
+
+    started = time.monotonic()
+    logger.info("Panel fetch %s for pin %s starting on queue '%s'", source_key, pin.pk, source.queue)
     try:
         source.fetch(pin)
     except (RateLimitExceededError, ServiceDisabledError) as exc:
@@ -681,10 +688,18 @@ def run_panel_fetch(source_key: str, pin: Pin) -> None:
         # would just be noise for the same event. Suppress like any other
         # failure and let the task end - re-raising would still hit the hard
         # time limit before doing anything useful with the remaining budget.
-        logger.warning("Panel fetch %s for pin %s hit its soft time limit; suppressing for %ss", source_key, pin.pk, FAILURE_SKIP_TTL_SECONDS)
+        logger.warning(
+            "Panel fetch %s for pin %s hit its soft time limit after %.1fs; suppressing for %ss",
+            source_key,
+            pin.pk,
+            time.monotonic() - started,
+            FAILURE_SKIP_TTL_SECONDS,
+        )
         cache.set(source.skip_key(pin), 1, FAILURE_SKIP_TTL_SECONDS)
     except Exception:
-        logger.exception("Panel fetch %s for pin %s failed", source_key, pin.pk)
+        logger.exception("Panel fetch %s for pin %s failed after %.1fs", source_key, pin.pk, time.monotonic() - started)
         cache.set(source.skip_key(pin), 1, FAILURE_SKIP_TTL_SECONDS)
+    else:
+        logger.info("Panel fetch %s for pin %s finished in %.1fs", source_key, pin.pk, time.monotonic() - started)
     finally:
         cache.delete(source.flight_key(pin))

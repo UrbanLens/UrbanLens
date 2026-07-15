@@ -764,6 +764,134 @@ function init() {
     }
   }
   window._toggleDetailPinListPanel = toggleDetailPinListPanel;
+  let _satIdx = 0;
+  function _satSlides() {
+    const c = document.getElementById("sat-carousel");
+    return c ? Array.from(c.querySelectorAll(".sat-slide")) : [];
+  }
+  function _satShow(idx) {
+    const slides = _satSlides();
+    if (!slides.length)
+      return;
+    _satIdx = (idx % slides.length + slides.length) % slides.length;
+    slides.forEach((s, i) => s.classList.toggle("is-active", i === _satIdx));
+    const active = slides[_satIdx];
+    if (!active)
+      return;
+    const source = document.querySelector("#sat-carousel .sat-source");
+    const date = document.querySelector("#sat-carousel .sat-date");
+    const detail = document.querySelector("#sat-carousel .sat-detail");
+    if (source)
+      source.textContent = active.dataset.source || "";
+    if (date)
+      date.textContent = active.dataset.date || "";
+    if (detail)
+      detail.textContent = active.dataset.detail || "";
+    _satRebuildDots(slides.length);
+  }
+  function _satRebuildDots(count) {
+    const el = document.getElementById("sat-dots");
+    if (!el)
+      return;
+    el.innerHTML = "";
+    for (let i = 0;i < count; i++) {
+      const dot = document.createElement("button");
+      dot.type = "button";
+      dot.className = "sat-dot" + (i === _satIdx ? " is-active" : "");
+      dot.setAttribute("aria-label", `Slide ${i + 1}`);
+      dot.addEventListener("click", () => _satShow(i));
+      el.appendChild(dot);
+    }
+  }
+  window._satRemoveSlide = function(img) {
+    const slide = img.closest(".sat-slide");
+    if (!slide)
+      return;
+    const wasActive = slide.classList.contains("is-active");
+    slide.remove();
+    const slides = _satSlides();
+    if (!slides.length) {
+      const c = document.getElementById("sat-carousel");
+      if (c) {
+        c.innerHTML = '<div class="view-unavailable"><i class="material-symbols-outlined">broken_image</i>' + "<span>No satellite imagery available for this location.</span></div>";
+      }
+      return;
+    }
+    if (wasActive)
+      _satIdx = Math.max(0, Math.min(_satIdx, slides.length - 1));
+    _satShow(_satIdx);
+  };
+  window._satPrev = function() {
+    _satShow(_satIdx - 1);
+  };
+  window._satNext = function() {
+    _satShow(_satIdx + 1);
+  };
+  window._satShow = _satShow;
+  let _svIdx = 0;
+  function _svSlides() {
+    const c = document.getElementById("sv-carousel");
+    return c ? Array.from(c.querySelectorAll(".sv-slide")) : [];
+  }
+  function _svShow(idx) {
+    const slides = _svSlides();
+    if (!slides.length)
+      return;
+    _svIdx = (idx % slides.length + slides.length) % slides.length;
+    slides.forEach((s, i) => s.classList.toggle("is-active", i === _svIdx));
+    const active = slides[_svIdx];
+    if (!active)
+      return;
+    const source = document.querySelector("#sv-carousel .sv-source");
+    const date = document.querySelector("#sv-carousel .sv-date");
+    const heading = document.querySelector("#sv-carousel .sv-heading");
+    if (source)
+      source.textContent = active.dataset.source || "";
+    if (date)
+      date.textContent = active.dataset.date || "";
+    if (heading)
+      heading.textContent = active.dataset.heading !== undefined ? `⇨ ${active.dataset.heading}°` : "";
+    _svRebuildDots(slides.length);
+  }
+  function _svRebuildDots(count) {
+    const el = document.getElementById("sv-dots");
+    if (!el)
+      return;
+    el.innerHTML = "";
+    for (let i = 0;i < count; i++) {
+      const dot = document.createElement("button");
+      dot.type = "button";
+      dot.className = "sv-dot" + (i === _svIdx ? " is-active" : "");
+      dot.setAttribute("aria-label", `Slide ${i + 1}`);
+      dot.addEventListener("click", () => _svShow(i));
+      el.appendChild(dot);
+    }
+  }
+  window._svRemoveSlide = function(img) {
+    const slide = img.closest(".sv-slide");
+    if (!slide)
+      return;
+    const wasActive = slide.classList.contains("is-active");
+    slide.remove();
+    const slides = _svSlides();
+    if (!slides.length) {
+      const c = document.getElementById("sv-carousel");
+      if (c) {
+        c.innerHTML = '<div class="view-unavailable"><i class="material-symbols-outlined">broken_image</i>' + "<span>No street-level imagery available for this location.</span></div>";
+      }
+      return;
+    }
+    if (wasActive)
+      _svIdx = Math.max(0, Math.min(_svIdx, slides.length - 1));
+    _svShow(_svIdx);
+  };
+  window._svPrev = function() {
+    _svShow(_svIdx - 1);
+  };
+  window._svNext = function() {
+    _svShow(_svIdx + 1);
+  };
+  window._svShow = _svShow;
   function detailPinPopupContent(entry) {
     const el = document.createElement("div");
     el.className = "pin-popup child-pin-popup";
