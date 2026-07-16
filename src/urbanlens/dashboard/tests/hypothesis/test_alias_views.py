@@ -230,6 +230,48 @@ class LocationAliasNicknameTests(TestCase):
         self.assertEqual(alias.kind, AliasType.ALTERNATE)
 
 
+class PersistOfficialAliasesForLocationBackfillsPinsTests(TestCase):
+    """persist_official_aliases_for_location() backfills PinAlias rows too, not just WikiAlias.
+
+    Regression coverage: it used to only call _add_wiki_aliases, so a pin
+    whose location's external data was cached by something other than that
+    pin's own panel fetch (background enrichment, another user's pin at the
+    same location triggering the fetch first, ...) could go on showing no
+    aliases indefinitely even after the wiki for the same location had them.
+    """
+
+    def setUp(self) -> None:
+        baker.make("auth.User")  # bootstrap site admin
+        self.user = baker.make("auth.User")
+        self.profile = Profile.objects.get(user=self.user)
+        self.location = baker.make(Location, latitude="41.400000", longitude="-73.400000")
+        self.wiki = baker.make("dashboard.Wiki", location=self.location, name="Curated Mill")
+        self.pin = baker.make(Pin, profile=self.profile, location=self.location, name=None)
+
+    def _candidates(self):
+        from urbanlens.dashboard.services.locations.name_resolution import NameCandidate
+
+        return [NameCandidate(name="External Name", source="nominatim")]
+
+    def test_backfills_both_wiki_and_pin_aliases(self) -> None:
+        from urbanlens.dashboard.services.locations.naming import persist_official_aliases_for_location
+
+        with patch("urbanlens.dashboard.services.locations.naming.external_name_candidates_for_location", return_value=self._candidates()):
+            changed = persist_official_aliases_for_location(self.location)
+
+        self.assertTrue(changed)
+        self.assertTrue(self.wiki.aliases.filter(name="External Name").exists())
+        self.assertTrue(self.pin.aliases.filter(name="External Name").exists())
+
+    def test_pin_alias_view_triggers_the_backfill(self) -> None:
+        self.client.force_login(self.user)
+        with patch("urbanlens.dashboard.controllers.aliases.persist_official_aliases_for_location", return_value=True) as mocked:
+            response = self.client.get(reverse("pin.aliases", args=[self.pin.slug]))
+
+        self.assertEqual(response.status_code, 200)
+        mocked.assert_called_once_with(self.location)
+
+
 class SharedAliasesExplainerDismissalTests(TestCase):
     """The pin-details and wiki aliases panels share one explainer dismissal key.
 

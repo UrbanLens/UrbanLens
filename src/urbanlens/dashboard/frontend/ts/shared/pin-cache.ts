@@ -11,7 +11,11 @@
  * filtered here, since the caller always re-checks authoritatively server-side.
  */
 
-const CACHE_VERSION = 6;
+// Must match pages/map/index.html's own `_CACHE_KEY`/`v: 8` (the only writer
+// of this localStorage entry) - this constant drifted out of sync with that
+// page's cache-version bumps before (last matched v6), which silently made
+// every read here return [] since the real payload's `v` never matched.
+const CACHE_VERSION = 8;
 
 export interface CachedPinLocation {
     latitude: number;

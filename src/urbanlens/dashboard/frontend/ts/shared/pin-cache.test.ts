@@ -1,6 +1,6 @@
 /**
  * readCachedPinLocations parses the exact cache shape written by
- * pages/map/index.html's inline script (_writeCache, v6 payload) - these
+ * pages/map/index.html's inline script (_writeCache, v8 payload) - these
  * tests write that shape directly rather than importing the map page's script.
  */
 import { beforeEach, describe, expect, test } from "bun:test";
@@ -37,7 +37,7 @@ function writeCache(overrides: Record<string, unknown> = {}): void {
     localStorage.setItem(
         `ul_pins_v5_${PROFILE_UUID}`,
         JSON.stringify({
-            v: 6,
+            v: 8,
             ts: Date.now(),
             profileUuid: PROFILE_UUID,
             appUuid: "app-1",
@@ -63,7 +63,7 @@ describe("readCachedPinLocations", () => {
         expect(readCachedPinLocations(PROFILE_UUID)).toEqual([]);
     });
 
-    test("parses lat/lng out of a valid v6 cache", () => {
+    test("parses lat/lng out of a valid v8 cache", () => {
         writeCache();
         expect(readCachedPinLocations(PROFILE_UUID)).toEqual([
             { latitude: 40.1, longitude: -75.1 },
@@ -77,7 +77,7 @@ describe("readCachedPinLocations", () => {
     });
 
     test("ignores a stale cache version", () => {
-        writeCache({ v: 5 });
+        writeCache({ v: 7 });
         expect(readCachedPinLocations(PROFILE_UUID)).toEqual([]);
     });
 
@@ -85,7 +85,7 @@ describe("readCachedPinLocations", () => {
         localStorage.setItem(
             `ul_pins_v5_${PROFILE_UUID}`,
             JSON.stringify({
-                v: 6,
+                v: 8,
                 profileUuid: PROFILE_UUID,
                 pins: {
                     good: { latitude: 40.1, longitude: -75.1 },

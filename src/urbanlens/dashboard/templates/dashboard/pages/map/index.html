@@ -901,7 +901,12 @@
             const raw = localStorage.getItem(_CACHE_KEY);
             if (!raw) return null;
             const c = JSON.parse(raw);
-            if (c.v !== 8 || c.profileUuid !== _PROFILE_UUID) return null;
+            // Explicitly remove (not just ignore) an outdated/foreign-profile blob -
+            // otherwise it sits under this same key forever, re-parsed and rejected
+            // on every load, until a fresh _writeCache() happens to overwrite it
+            // (which isn't guaranteed - e.g. if the next fetch fails, or the tab
+            // closes before a scheduled write fires).
+            if (c.v !== 8 || c.profileUuid !== _PROFILE_UUID) { localStorage.removeItem(_CACHE_KEY); return null; }
             if (Date.now() - c.ts > _CACHE_MAX) { localStorage.removeItem(_CACHE_KEY); return null; }
             // App UUID mismatch = DB was wiped or app was redeployed with a fresh database.
             // Clear cache so ghost pins from the old DB don't appear on the map.

@@ -1686,7 +1686,7 @@ function partitionByCachedPins(clusters, pins, radiusM = EXISTING_PIN_RADIUS_M) 
 }
 
 // src/urbanlens/dashboard/frontend/ts/shared/pin-cache.ts
-var CACHE_VERSION = 6;
+var CACHE_VERSION = 8;
 function readRawCachedPins(profileUuid) {
   if (!profileUuid)
     return [];

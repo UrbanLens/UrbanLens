@@ -18,6 +18,26 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.services.locations.name_resolution import NameProvider
 
 
+class _SemicolonSplitNameProvider(LocationCacheNameProvider):
+    """Splits a semicolon-separated multi-value tag into separate candidates.
+
+    OSM's ``old_name`` tag is often two-or-more former names in one field
+    (e.g. ``"Pauline Warfield Lewis Center;Cincinnati State Hospital"``).
+    Left as one string, ``sanitize_name`` would strip the semicolon - not
+    split on it - running the two names together into one garbled string
+    instead of producing two real aliases.
+    """
+
+    def candidates(self, location: Location) -> list[str | None]:
+        split: list[str | None] = []
+        for value in super().candidates(location):
+            if isinstance(value, str) and ";" in value:
+                split.extend(part.strip() for part in value.split(";") if part.strip())
+            else:
+                split.append(value)
+        return split
+
+
 class NominatimPanelSource(LocationCachePanelSource):
     """OpenStreetMap Nominatim place metadata for the pin's location."""
 
@@ -61,6 +81,29 @@ class NominatimPanelSource(LocationCachePanelSource):
         name_needs_improvement = not is_meaningful_name(current_name) or bool(current_name and is_address_derived_name(current_name, location))
         if place and place.get("name") and name_needs_improvement:
             update_location_name_from_external_sources(location, profile=pin.profile)
+
+        if place and place.get("osm_url"):
+            self._add_osm_link(pin, location, place["osm_url"])
+
+    @staticmethod
+    def _add_osm_link(pin: Pin, location: Location, osm_url: str) -> None:
+        """Add the OSM way/node/relation URL to the pin's (and wiki's) links, if not already there.
+
+        Args:
+            pin: The pin whose links should include this URL.
+            location: The pin's location, for reaching its wiki (if any).
+            osm_url: The OSM element URL from the reverse-geocode result.
+        """
+        from django.core.exceptions import ObjectDoesNotExist
+
+        from urbanlens.dashboard.models.links.model import PinLink, WikiLink
+
+        PinLink.objects.get_or_create(pin=pin, url=osm_url, defaults={"name": "OpenStreetMap"})
+        try:
+            wiki = location.wiki
+        except ObjectDoesNotExist:
+            return
+        WikiLink.objects.get_or_create(wiki=wiki, url=osm_url, defaults={"name": "OpenStreetMap"})
 
 
 class NominatimEnrichmentSource(LocationCacheEnrichmentSource):
@@ -112,8 +155,11 @@ class NominatimPlugin(UrbanLensPlugin):
         return [NominatimPanelSource()]
 
     def get_name_providers(self) -> list[NameProvider]:
-        """Contribute the reverse-geocoded OSM place name as a place-name candidate."""
-        return [LocationCacheNameProvider(source="nominatim", cache_source="nominatim", keys=("name",), verbose_name="OpenStreetMap")]
+        """Contribute the reverse-geocoded OSM place name, and its former name(s), as candidates."""
+        return [
+            LocationCacheNameProvider(source="nominatim", cache_source="nominatim", keys=("name",), verbose_name="OpenStreetMap"),
+            _SemicolonSplitNameProvider(source="nominatim_old_name", cache_source="nominatim", keys=("old_name",), verbose_name="OpenStreetMap (former name)"),
+        ]
 
     def get_enrichment_sources(self) -> list[EnrichmentSource]:
         """Contribute the OSM reverse-geocode cache to scheduled background enrichment."""

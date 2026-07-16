@@ -129,6 +129,12 @@ class PinAliasView(LoginRequiredMixin, View):
 
     def get(self, request, pin_slug):
         pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
+        # External data for this pin's location may have been cached by
+        # something other than this pin's own panel fetch (background
+        # enrichment, another user's pin at the same location, ...) - backfill
+        # from it now, mirroring the wiki aliases panel's same backfill below.
+        if pin.location is not None:
+            persist_official_aliases_for_location(pin.location)
         return _render_pin_panel(request, pin)
 
     def post(self, request, pin_slug):

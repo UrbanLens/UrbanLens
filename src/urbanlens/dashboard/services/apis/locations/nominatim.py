@@ -51,6 +51,8 @@ _EXTRA_DETAIL_FIELDS: tuple[tuple[str, str], ...] = (
     ("population", "Population"),
     ("ele", "Elevation (m)"),
     ("email", "Email"),
+    ("operator:type", "Operator Type"),
+    ("gnis:feature_id", "GNIS Feature ID"),
 )
 
 _BOOLISH_VALUE_LABELS: dict[str, str] = {
@@ -243,6 +245,10 @@ class NominatimGateway(Gateway):
             "email": extra.get("email") or extra.get("contact:email") or "",
             "opening_hours": extra.get("opening_hours") or "",
             "operator": extra.get("operator") or "",
+            # Semicolon-separated former names (e.g. "Old Name A;Old Name B") -
+            # see plugins.builtin.nominatim for how this is split into
+            # separate alias candidates rather than kept as one garbled string.
+            "old_name": extra.get("old_name") or "",
             "building": building,
             "amenity": amenity,
             "tourism": tourism,

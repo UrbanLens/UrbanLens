@@ -445,14 +445,19 @@ def _add_pin_aliases(location: Location, candidates: Sequence[NameCandidate]) ->
 
 
 def persist_official_aliases_for_location(location: Location) -> bool:
-    """Backfill official aliases for a location's wiki from cached candidates.
+    """Backfill official aliases for a location's wiki and pins from cached candidates.
 
-    Used when a wiki comes into existence after external data was already
-    cached (wikis are created lazily): reads only already-cached candidates -
-    no network calls - and records them as official aliases.
+    Reads only already-cached candidates - no network calls - and records them
+    as official aliases. Covers two lazy-creation gaps at once: a wiki that
+    comes into existence after external data was already cached, and a pin
+    whose location's external data was populated by something other than that
+    pin's own panel view (e.g. background enrichment, or another user's pin
+    at the same location triggering the fetch first) - previously only the
+    wiki side was backfilled here, so a pin could go on showing no aliases
+    indefinitely even though the wiki for the same location had them.
 
     Args:
-        location: The location whose wiki should receive official aliases.
+        location: The location whose wiki and pins should receive official aliases.
 
     Returns:
         True when at least one alias row was created.
@@ -462,8 +467,11 @@ def persist_official_aliases_for_location(location: Location) -> bool:
     try:
         wiki = location.wiki
     except ObjectDoesNotExist:
-        return False
-    return _add_wiki_aliases(wiki, external_name_candidates_for_location(location))
+        wiki = None
+
+    candidates = external_name_candidates_for_location(location)
+    changed = _add_wiki_aliases(wiki, candidates)
+    return _add_pin_aliases(location, candidates) or changed
 
 
 def update_location_name_from_external_sources(
