@@ -34,6 +34,7 @@ class ServiceDefaults:
     display_name: str
     calls_per_minute: int | None = 20
     calls_per_day: int | None = 500
+    calls_per_30_days: int | None = None
     usa_only: bool = False
     notes: str = ""
 
@@ -184,6 +185,7 @@ def get_limit_config(service: str) -> Any:
                 "display_name": defaults_entry.display_name,
                 "calls_per_minute": defaults_entry.calls_per_minute,
                 "calls_per_day": defaults_entry.calls_per_day,
+                "calls_per_30_days": defaults_entry.calls_per_30_days,
                 "usa_only": defaults_entry.usa_only,
                 "notes": defaults_entry.notes,
             },
@@ -235,9 +237,9 @@ def check_rate_limit(service: str) -> bool:
     """Return ``True`` if a call to ``service`` is currently permitted.
 
     Queries the ``ApiCallLog`` table using a rolling window to enforce the
-    per-minute and per-day limits configured in ``ApiRateLimit``.  A ``False``
-    result means the call should be skipped; a ``_RateLimitedSession`` will
-    log the blocked attempt automatically.
+    per-minute, per-day, and per-30-day limits configured in
+    ``ApiRateLimit``.  A ``False`` result means the call should be skipped; a
+    ``_RateLimitedSession`` will log the blocked attempt automatically.
 
     Args:
         service: The service key.
@@ -274,6 +276,17 @@ def check_rate_limit(service: str) -> bool:
                     service,
                     today_count,
                     config.calls_per_day,
+                )
+                return False
+
+        if config.calls_per_30_days is not None:
+            recent_30_days = ApiCallLog.objects.for_service(service).since(timedelta(days=30)).exclude(was_geo_filtered=True).count()
+            if recent_30_days >= config.calls_per_30_days:
+                logger.warning(
+                    "30-day rate limit hit for %s: %d/%d calls in the last 30 days",
+                    service,
+                    recent_30_days,
+                    config.calls_per_30_days,
                 )
                 return False
     except Exception:

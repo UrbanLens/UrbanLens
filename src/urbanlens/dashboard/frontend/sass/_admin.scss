@@ -370,11 +370,84 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     flex-wrap: wrap;
     align-items: center;
     gap: .5rem;
-    margin-bottom: 1rem;
+    margin-bottom: .75rem;
 
     .ul-notice {
         margin: 0;
         flex: 1 1 280px;
+    }
+}
+
+.api-limits-search {
+    position: relative;
+    flex: 1 1 220px;
+    max-width: 320px;
+
+    .material-symbols-outlined {
+        position: absolute;
+        left: .6rem;
+        top: 50%;
+        transform: translateY(-50%);
+        font-size: 1.1rem;
+        color: var(--ul-grey-5);
+        pointer-events: none;
+    }
+
+    input {
+        width: 100%;
+        padding: .45rem .6rem .45rem 2rem;
+        font-size: .85rem;
+        border-radius: $radius-sm;
+        border: 1px solid var(--ul-surface-raised-border);
+        background: var(--ul-surface-raised);
+        color: var(--ul-grey-9);
+
+        &:focus {
+            outline: none;
+            border-color: var(--primary-color);
+        }
+    }
+}
+
+.api-limits-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .35rem;
+    margin-bottom: 1rem;
+
+    .api-limits-tab {
+        display: inline-flex;
+        align-items: center;
+        gap: .35rem;
+        padding: .4rem .75rem;
+        border-radius: $radius-full;
+        border: 1px solid var(--ul-surface-raised-border);
+        background: var(--ul-surface-raised);
+        color: var(--ul-grey-6);
+        font-size: .8rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background .15s, color .15s, border-color .15s;
+
+        .api-limits-tab-count {
+            font-size: .7rem;
+            font-weight: 700;
+            opacity: .7;
+        }
+
+        &:hover {
+            border-color: var(--primary-color);
+        }
+
+        &.is-active {
+            background: var(--primary-color);
+            border-color: var(--primary-color);
+            color: #fff;
+
+            .api-limits-tab-count {
+                opacity: .85;
+            }
+        }
     }
 }
 
@@ -522,7 +595,7 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
 
 .api-limit-fields {
     display: grid;
-    grid-template-columns: auto minmax(72px, 1fr) minmax(72px, 1fr);
+    grid-template-columns: auto minmax(64px, 1fr) minmax(64px, 1fr) minmax(64px, 1fr);
     gap: .55rem .65rem;
     align-items: end;
 
@@ -534,10 +607,15 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
         grid-column: 1 / -1;
 
         textarea {
-            min-height: 2.1rem;
+            min-height: 4.4rem;
             resize: vertical;
             font-size: .82rem;
             line-height: 1.35;
+            padding: .4rem .55rem;
+            border-radius: $radius-sm;
+            border: 1px solid var(--ul-surface-raised-border);
+            background: var(--ul-surface-raised);
+            color: var(--ul-grey-9);
         }
     }
 
@@ -546,11 +624,11 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
         margin: 0;
         white-space: nowrap;
         gap: .4rem;
+        display: flex;
+        align-items: center;
 
-        .settings-toggle-input {
-            margin-top: 0;
-            width: .95rem;
-            height: .95rem;
+        .ul-switch {
+            flex-shrink: 0;
         }
 
         .settings-toggle-label {
@@ -564,6 +642,16 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
         min-width: 0;
         padding: .4rem .55rem;
         font-size: .82rem;
+        border-radius: $radius-sm;
+        border: 1px solid var(--ul-surface-raised-border);
+        background: var(--ul-surface-raised);
+        color: var(--ul-grey-9);
+    }
+
+    input[type="number"]:focus,
+    textarea:focus {
+        outline: none;
+        border-color: var(--primary-color);
     }
 
     @media (max-width: 420px) {
@@ -1613,15 +1701,6 @@ $users-list-cols: minmax(180px, 1.3fr) minmax(170px, 1.15fr) minmax(110px, .75fr
     .api-limit-card.is-saving {
         border-color: rgba($color-blue-500, .35);
         box-shadow: 0 0 0 1px rgba($color-blue-500, .15);
-    }
-
-    .api-limit-fields input[type="number"] {
-        background: var(--ul-grey-1);
-        border-color: var(--ul-grey-3b);
-
-        &:focus {
-            border-color: color.adjust($primary-color, $lightness: 10%);
-        }
     }
 
 }

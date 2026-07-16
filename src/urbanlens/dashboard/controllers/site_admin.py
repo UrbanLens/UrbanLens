@@ -700,6 +700,83 @@ def _parse_duration_months(raw: str | None) -> int | None:
         return None
 
 
+#: Groups services into tabs on the API limits page. No such taxonomy exists
+#: on ServiceDefaults/ApiRateLimit itself (plugins declare only display_name/
+#: limits/usa_only/notes) - this is a manually curated, best-effort mapping
+#: rather than an exhaustive one; anything absent falls into "Other" so a new
+#: service is never hidden, just uncategorized until someone adds it here.
+_API_LIMIT_CATEGORIES: dict[str, str] = {
+    # Geocoding & Places
+    "google_geocoding": "Geocoding & Places",
+    "google_places": "Geocoding & Places",
+    "nominatim": "Geocoding & Places",
+    "photon": "Geocoding & Places",
+    "datagov": "Geocoding & Places",
+    # Search & News
+    "google_search": "Search & News",
+    "brave_search": "Search & News",
+    "news": "Search & News",
+    "gdelt": "Search & News",
+    "marginalia_search": "Search & News",
+    "mojeek_search": "Search & News",
+    "searxng": "Search & News",
+    "duckduckgo": "Search & News",
+    # Imagery & Maps
+    "azure_maps": "Imagery & Maps",
+    "bing_maps": "Imagery & Maps",
+    "google_maps": "Imagery & Maps",
+    "apple_maps": "Imagery & Maps",
+    "mapbox": "Imagery & Maps",
+    "opentopomap": "Imagery & Maps",
+    "esri": "Imagery & Maps",
+    "nasa_gibs": "Imagery & Maps",
+    "open_aerial_map": "Imagery & Maps",
+    "panoramax": "Imagery & Maps",
+    "mapillary": "Imagery & Maps",
+    "kartaview": "Imagery & Maps",
+    "google_earth": "Imagery & Maps",
+    "osrm": "Imagery & Maps",
+    "routexl": "Imagery & Maps",
+    "overture_building_attributes": "Imagery & Maps",
+    # Weather
+    "openweathermap": "Weather",
+    "open_meteo": "Weather",
+    # Boundaries & GIS
+    "overpass": "Boundaries & GIS",
+    "census_tigerweb": "Boundaries & GIS",
+    "openhistoricalmap": "Boundaries & GIS",
+    "open_elevation": "Boundaries & GIS",
+    # Reference & Archives
+    "wikipedia": "Reference & Archives",
+    "wikimedia": "Reference & Archives",
+    "smithsonian": "Reference & Archives",
+    "digital_commonwealth": "Reference & Archives",
+    "library_of_congress": "Reference & Archives",
+    "internet_archive": "Reference & Archives",
+    "wayback_machine": "Reference & Archives",
+    # Parks & Regulatory
+    "nps": "Parks & Regulatory",
+    "epa_echo": "Parks & Regulatory",
+    "usgs": "Parks & Regulatory",
+    "usgs_earthquakes": "Parks & Regulatory",
+    "inaturalist": "Parks & Regulatory",
+    # Business & Places Data
+    "yelp": "Business & Places Data",
+    "loopnet": "Business & Places Data",
+    # Notifications
+    "sms": "Notifications",
+    "whatsapp": "Notifications",
+    "hibp": "Notifications",
+    # Personal Media & Accounts
+    "flickr": "Personal Media & Accounts",
+    "google_photos": "Personal Media & Accounts",
+    "immich": "Personal Media & Accounts",
+    "google_calendar": "Personal Media & Accounts",
+    # AI
+    "ollama": "AI",
+}
+
+
 class SiteAdminApiLimitsView(LoginRequiredMixin, PermissionRequiredMixin, View):
     """API rate limit configuration page.
 
@@ -736,11 +813,15 @@ class SiteAdminApiLimitsView(LoginRequiredMixin, PermissionRequiredMixin, View):
         summaries = {row["service"]: row for row in ApiCallLog.objects.summary_by_service()}
 
         enriched = []
+        categories: dict[str, int] = {}
         for cfg in configs:
             summary = summaries.get(cfg.service, {})
+            category = _API_LIMIT_CATEGORIES.get(cfg.service, "Other")
+            categories[category] = categories.get(category, 0) + 1
             enriched.append(
                 {
                     "config": cfg,
+                    "category": category,
                     "calls_30d": summary.get("total", 0),
                     "blocked_30d": summary.get("blocked", 0),
                     "geo_skipped_30d": summary.get("geo_skipped", 0),
@@ -749,12 +830,18 @@ class SiteAdminApiLimitsView(LoginRequiredMixin, PermissionRequiredMixin, View):
                 }
             )
 
+        # "Other" always sorts last - it's the uncategorized catch-all, not a
+        # real grouping a user would look for by name.
+        tab_order = sorted(categories, key=lambda name: (name == "Other", name))
+        tabs = [{"name": name, "count": categories[name]} for name in tab_order]
+
         return render(
             request,
             "dashboard/pages/site_admin_api_limits.html",
             {
                 "page_name": "site-admin-api-limits",
                 "services": enriched,
+                "tabs": tabs,
             },
         )
 
@@ -773,6 +860,12 @@ class SiteAdminApiLimitsView(LoginRequiredMixin, PermissionRequiredMixin, View):
         try:
             raw_per_day = post_data.get("calls_per_day", "").strip()
             cfg.calls_per_day = int(raw_per_day) if raw_per_day else None
+        except (ValueError, TypeError):
+            pass
+
+        try:
+            raw_per_30_days = post_data.get("calls_per_30_days", "").strip()
+            cfg.calls_per_30_days = int(raw_per_30_days) if raw_per_30_days else None
         except (ValueError, TypeError):
             pass
 
