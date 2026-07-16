@@ -263,7 +263,13 @@ function updateOrgSectionHero(section: string): void {
     const subtitleEl = document.querySelector<HTMLElement>(".ul-page-hero__subtitle");
     if (iconEl) iconEl.textContent = hero.icon;
     if (titleEl) {
-        const textNode = Array.from(titleEl.childNodes).find((n) => n.nodeType === Node.TEXT_NODE);
+        // _page_hero.html's server-rendered markup is `<h1>{icon}{title}</h1>`,
+        // which Django's whitespace between tags turns into a whitespace-only
+        // text node BEFORE the icon too - `.find()` without filtering picked
+        // that one, so the title got written before the icon instead of after
+        // it, leaving the real (never-updated) title text node still showing
+        // the old section's name next to the icon.
+        const textNode = Array.from(titleEl.childNodes).find((n) => n.nodeType === Node.TEXT_NODE && !!n.textContent?.trim());
         if (textNode) textNode.textContent = ` ${hero.title} `;
     }
     if (subtitleEl) subtitleEl.textContent = hero.subtitle;

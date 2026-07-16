@@ -3137,7 +3137,7 @@ function updateOrgSectionHero(section) {
   if (iconEl)
     iconEl.textContent = hero.icon;
   if (titleEl) {
-    const textNode = Array.from(titleEl.childNodes).find((n) => n.nodeType === Node.TEXT_NODE);
+    const textNode = Array.from(titleEl.childNodes).find((n) => n.nodeType === Node.TEXT_NODE && !!n.textContent?.trim());
     if (textNode)
       textNode.textContent = ` ${hero.title} `;
   }
