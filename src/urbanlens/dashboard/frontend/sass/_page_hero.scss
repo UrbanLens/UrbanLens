@@ -180,7 +180,7 @@
 // hero's bottom margin so the two sit flush with no gap between them.
 .ul-page-subnav {
     width: 100%;
-    background-color: var(--ul-grey-0);
+    background-color: var(--ul-grey-0b);
     border-bottom: 1px solid var(--ul-grey-1a);
 
     &__inner {
@@ -256,5 +256,12 @@
         background-color: var(--ul-grey-0b);
 
         .material-symbols-outlined { color: $color-deep-purple-500; }
+    }
+}
+
+// Dark Mode
+[data-theme="dark"] {
+    .ul-page-subnav {
+        background-color: var(--ul-grey-0);
     }
 }

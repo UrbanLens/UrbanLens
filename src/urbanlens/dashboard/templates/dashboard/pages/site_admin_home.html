@@ -17,8 +17,6 @@
 
     {# -- Status & meta row -------------------------------------------------------- #}
     <div class="admin-home-status-row">
-        {# Service health + git update badges are real I/O (service pings, a git
-           fetch) - lazy-loaded so they never block this page's initial render. #}
         <span id="admin-home-health-status"
               hx-get="{% url 'site_admin_home_status' %}"
               hx-trigger="load"

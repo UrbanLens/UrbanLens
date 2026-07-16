@@ -98,6 +98,10 @@ body div.container {
             background-color: var(--ul-surface-2);
             color: var(--ul-grey-8);
         }
+
+        &::placeholder {
+            color: var(--ul-grey-7);
+        }
     }
 }
 

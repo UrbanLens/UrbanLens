@@ -4,6 +4,7 @@
 .page-map-view {
     > div.container {
         max-width: 100%;
+        min-height: calc(100vh - 4rem - 4rem);
     }
 }
 
@@ -4602,4 +4603,4 @@ div.container .addr-search-bar {
             border-color: transparent;
         }
     }
-}
+}

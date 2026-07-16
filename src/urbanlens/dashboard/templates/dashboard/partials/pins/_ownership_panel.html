@@ -1,10 +1,3 @@
-{# Shared Ownership card for Pins (private) and Wikis (shared) - configured
-   entirely via context, no per-caller branching (mirrors aliases_panel.html).
-   The pin-scoped and wiki-scoped controllers each query their own separate
-   model (PinOwner vs WikiOwner) - this template only ever renders whichever
-   one it was given, never both at once. Official (source=official) owners
-   only exist on the shared/wiki side - show_official_badge is False for the
-   pin-scoped render, so {{ owner.source }} is never accessed there. #}
 <div id="{{ panel_id }}" class="ownership-panel card"
      data-collapse-scope="{{ collapse_scope }}" data-collapse-section="ownership">
     <div class="card-header">

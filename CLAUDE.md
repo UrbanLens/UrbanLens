@@ -238,6 +238,7 @@ These are planned features - treat any missing implementation as a gap to fill, 
 - Any operation that is not near-instant must display a loading/progress indicator
 - Results and errors must surface as toast notifications (toastr is already integrated)
 - Prefer HTMX-driven partial page updates over full reloads
+- Do not put {# -- #} multi-line comments in template files. They will be displayed directly to the user on the frontend.
 
 ## Common Patterns
 

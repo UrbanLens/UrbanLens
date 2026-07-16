@@ -363,7 +363,7 @@ nav {
 // (Github link, and on the map page the live attribution text) sits at the
 // end, on every page - not just the map page.
 .page-footer {
-    background-color: rgb(5, 12, 22); // slightly muted nav-bg
+    background-color: var(--nav-bg);
     color: var(--ul-grey-4);
     position: sticky;
     bottom: 0;
@@ -1092,7 +1092,8 @@ $notif-prefs-cols: minmax(10rem, 1fr) repeat(5, 4.5rem);
     }
 
     .page-footer {
-        color: var(--ul-grey-6);
+        color: var(--ul-grey-6);    
+        background-color: rgb(5, 12, 22); // slightly muted nav-bg
 
         &__meta {
             a {

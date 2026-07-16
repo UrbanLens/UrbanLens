@@ -482,22 +482,22 @@ $z-nav: 1100;
 
     --ul-button-bg: #{$primary-color};
     --ul-button-border: #{$primary-color-dark};
-    --ul-button-text: var(--ul-grey-9);
+    --ul-button-text: #fff;
     --ul-button-hover-bg: #{$accent-1};
     --ul-button-hover-border: #{$accent-1-dark};
-    --ul-button-hover-text: var(--ul-grey-9);
+    --ul-button-hover-text: var(--ul-button-text);
     --ul-button-yes-bg: #{$color-green-300};
     --ul-button-yes-border: #{$color-green-700};
-    --ul-button-yes-text: #{$color-green-800};
+    --ul-button-yes-text: var(--ul-button-text);
     --ul-button-yes-hover-bg: #{$color-green-200};
     --ul-button-yes-hover-border: #{$color-green-700};
-    --ul-button-yes-hover-text: #{$color-green-800};
+    --ul-button-yes-hover-text: var(--ul-button-text);
     --ul-button-no-bg: #{$color-red-300};
     --ul-button-no-border: #{$color-red-700};
-    --ul-button-no-text: #{$color-red-800};
+    --ul-button-no-text: var(--ul-button-text);
     --ul-button-no-hover-bg: #{$color-red-200};
     --ul-button-no-hover-border: #{$color-red-700};
-    --ul-button-no-hover-text: #{$color-red-800};
+    --ul-button-no-hover-text: var(--ul-button-text);
 
     // Tooltips - intentionally dark in both themes for legibility
     --ul-tooltip-bg: rgba(14, 17, 26, 0.94);

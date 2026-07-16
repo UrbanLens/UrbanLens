@@ -1,9 +1,4 @@
-{# Shared Sale History tab body for Pins (private) and Wikis (shared) -
-   configured entirely via context, swapped into the Ownership card's sales
-   tab body (mirrors _ownership_panel.html's own convention). Every hx-target
-   here uses "closest .po-tab-body" rather than a fixed id, since this
-   fragment is swapped as the innerHTML of whichever tab body it was loaded
-   into (pin-scoped or wiki-scoped) without needing to know which. #}
+
 {% if sales %}
 <div class="po-sale-list">
     {% for sale in sales %}
