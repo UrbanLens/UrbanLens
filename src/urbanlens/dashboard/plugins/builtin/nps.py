@@ -5,12 +5,15 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
+from urbanlens.dashboard.services.enrichment import LocationCacheEnrichmentSource
 from urbanlens.dashboard.services.external_data import LocationCachePanelSource
 from urbanlens.dashboard.services.locations.name_resolution import LocationCacheNameProvider
 from urbanlens.dashboard.services.rate_limiter import ServiceDefaults
 
 if TYPE_CHECKING:
+    from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.services.enrichment import EnrichmentSource
     from urbanlens.dashboard.services.external_data import PanelSource
     from urbanlens.dashboard.services.locations.name_resolution import NameProvider
 
@@ -43,6 +46,38 @@ class NpsPanelSource(LocationCachePanelSource):
         LocationCache.set(location, self.cache_source, park or {}, query_key=query_key)
 
 
+class NpsEnrichmentSource(LocationCacheEnrichmentSource):
+    """Background-fills the containing-national-park cache (a name/alias source) per Location."""
+
+    key: ClassVar[str] = "nps"
+    verbose_name: ClassVar[str] = "National Park Service"
+    cache_source: ClassVar[str] = "nps"
+    service_keys: ClassVar[tuple[str, ...]] = ("nps",)
+    usa_only: ClassVar[bool] = True
+
+    def gate(self) -> bool:
+        """Requires the NPS API key."""
+        from urbanlens.UrbanLens.settings.app import settings as app_settings
+
+        return bool(app_settings.nps_api_key)
+
+    def fetch(self, location: Location) -> tuple[dict | None, str]:
+        """Look up the NPS unit containing a location, if any.
+
+        Args:
+            location: The location to check.
+
+        Returns:
+            Tuple of (park payload or None, coordinate query key).
+        """
+        from urbanlens.dashboard.services.apis.parks.nps.parks import NPSGateway
+
+        lat = float(location.latitude or 0)
+        lng = float(location.longitude or 0)
+        park = NPSGateway().find_park_containing_location(lat, lng)
+        return park, f"{lat:.5f},{lng:.5f}"
+
+
 class NpsPlugin(UrbanLensPlugin):
     """National Park Service information for pinned locations."""
 
@@ -70,3 +105,7 @@ class NpsPlugin(UrbanLensPlugin):
     def get_name_providers(self) -> list[NameProvider]:
         """Contribute the containing park's name as a place-name candidate."""
         return [LocationCacheNameProvider(source="nps", cache_source="nps", keys=("fullName", "name"), verbose_name="National Park Service")]
+
+    def get_enrichment_sources(self) -> list[EnrichmentSource]:
+        """Contribute the containing-park cache to scheduled background enrichment."""
+        return [NpsEnrichmentSource()]

@@ -5,12 +5,15 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
+from urbanlens.dashboard.services.enrichment import LocationCacheEnrichmentSource
 from urbanlens.dashboard.services.external_data import LocationCachePanelSource
 from urbanlens.dashboard.services.locations.name_resolution import LocationCacheNameProvider
 from urbanlens.dashboard.services.rate_limiter import ServiceDefaults
 
 if TYPE_CHECKING:
+    from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.services.enrichment import EnrichmentSource
     from urbanlens.dashboard.services.external_data import PanelSource
     from urbanlens.dashboard.services.locations.name_resolution import NameProvider
 
@@ -54,6 +57,31 @@ class NominatimPanelSource(LocationCachePanelSource):
             update_location_name_from_external_sources(location, profile=pin.profile)
 
 
+class NominatimEnrichmentSource(LocationCacheEnrichmentSource):
+    """Background-fills the OSM reverse-geocode cache (a name/alias source) per Location."""
+
+    key: ClassVar[str] = "nominatim"
+    verbose_name: ClassVar[str] = "OpenStreetMap (Nominatim)"
+    cache_source: ClassVar[str] = "nominatim"
+    service_keys: ClassVar[tuple[str, ...]] = ("nominatim",)
+
+    def fetch(self, location: Location) -> tuple[dict | None, str]:
+        """Reverse-geocode a location's coordinates via Nominatim.
+
+        Args:
+            location: The location to reverse-geocode.
+
+        Returns:
+            Tuple of (place payload or None, coordinate query key).
+        """
+        from urbanlens.dashboard.services.apis.locations.nominatim import NominatimGateway
+
+        lat = float(location.latitude or 0)
+        lng = float(location.longitude or 0)
+        place = NominatimGateway().reverse_geocode(lat, lng)
+        return place, f"{lat},{lng}"
+
+
 class NominatimPlugin(UrbanLensPlugin):
     """OpenStreetMap place metadata for pinned locations."""
 
@@ -80,3 +108,7 @@ class NominatimPlugin(UrbanLensPlugin):
     def get_name_providers(self) -> list[NameProvider]:
         """Contribute the reverse-geocoded OSM place name as a place-name candidate."""
         return [LocationCacheNameProvider(source="nominatim", cache_source="nominatim", keys=("name",), verbose_name="OpenStreetMap")]
+
+    def get_enrichment_sources(self) -> list[EnrichmentSource]:
+        """Contribute the OSM reverse-geocode cache to scheduled background enrichment."""
+        return [NominatimEnrichmentSource()]

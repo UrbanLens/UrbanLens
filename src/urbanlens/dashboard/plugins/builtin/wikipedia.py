@@ -5,12 +5,15 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
+from urbanlens.dashboard.services.enrichment import LocationCacheEnrichmentSource
 from urbanlens.dashboard.services.external_data import LocationCachePanelSource
 from urbanlens.dashboard.services.locations.name_resolution import LocationCacheNameProvider
 from urbanlens.dashboard.services.rate_limiter import ServiceDefaults
 
 if TYPE_CHECKING:
+    from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.services.enrichment import EnrichmentSource
     from urbanlens.dashboard.services.external_data import PanelSource
     from urbanlens.dashboard.services.locations.name_resolution import NameProvider
 
@@ -54,6 +57,38 @@ class WikipediaPanelSource(LocationCachePanelSource):
         LocationCache.set(location, self.cache_source, article or {}, query_key=query_key)
 
 
+class WikipediaEnrichmentSource(LocationCacheEnrichmentSource):
+    """Background-fills the Wikipedia article cache (a name/alias source) per Location."""
+
+    key: ClassVar[str] = "wikipedia"
+    verbose_name: ClassVar[str] = "Wikipedia article"
+    cache_source: ClassVar[str] = "wikipedia"
+    service_keys: ClassVar[tuple[str, ...]] = ("wikipedia",)
+
+    def fetch(self, location: Location) -> tuple[dict | None, str]:
+        """Find the best-matching Wikipedia article for a location.
+
+        Args:
+            location: The location to fetch an article for.
+
+        Returns:
+            Tuple of (article payload or None, query key).
+        """
+        from urbanlens.dashboard.services.apis.assets.wikipedia import WikipediaGateway
+
+        lat = float(location.latitude or 0)
+        lng = float(location.longitude or 0)
+        address_components = {
+            "locality": location.locality or "",
+            "route": location.route or "",
+            "street_number": location.street_number or "",
+            "administrative_area_level_1": location.administrative_area_level_1 or "",
+        }
+        name = location.official_name or ""
+        article = WikipediaGateway().get_article_for_location(lat, lng, address_components, name=name)
+        return article, name or f"{lat:.5f}, {lng:.5f}"
+
+
 class WikipediaPlugin(UrbanLensPlugin):
     """Wikipedia article summaries for pinned locations."""
 
@@ -80,3 +115,7 @@ class WikipediaPlugin(UrbanLensPlugin):
     def get_name_providers(self) -> list[NameProvider]:
         """Contribute the cached article's title as a place-name candidate."""
         return [LocationCacheNameProvider(source="wikipedia", cache_source="wikipedia", keys=("title",), verbose_name="Wikipedia")]
+
+    def get_enrichment_sources(self) -> list[EnrichmentSource]:
+        """Contribute the Wikipedia article cache to scheduled background enrichment."""
+        return [WikipediaEnrichmentSource()]

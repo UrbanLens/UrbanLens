@@ -242,6 +242,101 @@
 
     <div class="site-admin-card ul-section card">
         <div class="card-header">
+            <i class="material-symbols-outlined">auto_awesome</i>
+            <span>Background Enrichment</span>
+        </div>
+        <form method="post" action="{% url 'site_admin' %}" class="site-admin-form">
+            {% csrf_token %}
+            <div class="form-row">
+                <label for="enrichment-enabled">Scheduled enrichment</label>
+                <p class="form-help">
+                    Once an hour, proactively backfill official names, aliases, street addresses, and
+                    property/building boundaries for pins and wikis that are still missing them, prioritizing
+                    the locations most users will see. Only spends API budget left over after real traffic --
+                    per-service limits from the <a href="{% url 'site_admin_api_limits' %}">API Limits</a> page
+                    are always respected.
+                </p>
+                <select name="enrichment_enabled" id="enrichment-enabled">
+                    <option value="1"{% if settings.enrichment_enabled %} selected{% endif %}>Enabled</option>
+                    <option value="0"{% if not settings.enrichment_enabled %} selected{% endif %}>Disabled</option>
+                </select>
+            </div>
+            <div class="form-row">
+                <label for="enrichment-start-hour">Run window start (UTC hour)</label>
+                <p class="form-help">
+                    Hourly enrichment runs only between the start and end hours (UTC). Set both to the same
+                    value to allow enrichment at any hour; the window may wrap midnight (e.g. 22 to 4).
+                </p>
+                <input type="number" name="enrichment_start_hour" id="enrichment-start-hour"
+                       value="{{ settings.enrichment_start_hour }}" min="0" max="23" step="1">
+            </div>
+            <div class="form-row">
+                <label for="enrichment-end-hour">Run window end (UTC hour)</label>
+                <input type="number" name="enrichment_end_hour" id="enrichment-end-hour"
+                       value="{{ settings.enrichment_end_hour }}" min="0" max="23" step="1">
+            </div>
+            <div class="form-row">
+                <label for="enrichment-buffer-percent">Rate-limit buffer (%)</label>
+                <p class="form-help">
+                    Share of every API limit kept in reserve for traffic spikes. With a 10% buffer and a
+                    300-calls/30-days limit, enrichment paces itself to at most 9 calls per day and never
+                    spends past 270 in any 30-day window.
+                </p>
+                <input type="number" name="enrichment_buffer_percent" id="enrichment-buffer-percent"
+                       value="{{ settings.enrichment_buffer_percent }}" min="0" max="90" step="1">
+            </div>
+            <div class="form-row">
+                <label for="enrichment-max-per-service-per-run">Max items per service per run</label>
+                <p class="form-help">
+                    Hard cap per hourly run for each API service, even when its rate limit would allow more,
+                    so services with very generous limits are never hammered in bursts. Requests within a run
+                    are additionally staggered to stay under each service's per-minute limit.
+                </p>
+                <input type="number" name="enrichment_max_per_service_per_run" id="enrichment-max-per-service-per-run"
+                       value="{{ settings.enrichment_max_per_service_per_run }}" min="1" max="500" step="1">
+            </div>
+            {% if enrichment_sources %}
+            <div class="form-row">
+                <label>Enrichment sources</label>
+                <p class="form-help">
+                    Contributed by core and plugins; disable a source by disabling its API service on the
+                    <a href="{% url 'site_admin_api_limits' %}">API Limits</a> page.
+                </p>
+                <ul class="enrichment-source-list">
+                    {% for source in enrichment_sources %}
+                    <li>
+                        <strong>{{ source.verbose_name }}</strong>
+                        <span class="text-muted">({{ source.services }})</span>
+                        {% if not source.available %}<span class="badge badge--muted">unavailable</span>{% endif %}
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+            {% if enrichment_last_run %}
+            <div class="form-row">
+                <label>Last run</label>
+                <p class="form-help">
+                    {% if enrichment_last_run.skipped %}
+                        Skipped ({{ enrichment_last_run.skipped }}) at {{ enrichment_last_run.started }}.
+                    {% else %}
+                        Started {{ enrichment_last_run.started }}{% if enrichment_last_run.names_refreshed %};
+                        refreshed {{ enrichment_last_run.names_refreshed }} name(s){% endif %}.
+                        {% for key, result in enrichment_last_run.sources.items %}
+                            {{ key }}: {{ result.enriched }} enriched{% if result.failed %}, {{ result.failed }} failed{% endif %}{% if result.skipped %} ({{ result.skipped }}){% endif %}.
+                        {% endfor %}
+                    {% endif %}
+                </p>
+            </div>
+            {% endif %}
+            <div class="form-actions">
+                <button type="submit" class="btn btn--primary btn--lg btn--submit">Save Settings</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="site-admin-card ul-section card">
+        <div class="card-header">
             <i class="material-symbols-outlined">database</i>
             <span>Storage &amp; Uploads</span>
         </div>

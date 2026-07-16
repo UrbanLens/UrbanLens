@@ -6,7 +6,6 @@ import json
 import logging
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db import DatabaseError
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
@@ -16,7 +15,7 @@ from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.model import Pin, PinType
 from urbanlens.dashboard.models.pin.note import PinNote
 from urbanlens.dashboard.models.reviews.model import Review
-from urbanlens.dashboard.services.rate_limiter import RequestCancelledError
+from urbanlens.dashboard.services.locations.addresses import ensure_location_address as _ensure_location_address
 from urbanlens.dashboard.services.text_limits import MAX_PIN_DESCRIPTION_LENGTH, text_length_error
 
 logger = logging.getLogger(__name__)
@@ -128,57 +127,6 @@ def _overview_context(pin: Pin) -> dict:
             ("locked", "Locked", pin.locked),
         ],
     }
-
-
-def _ensure_location_address(location) -> None:
-    """Populate address fields on a Location that has coordinates but no street data.
-
-    Calls the Google Geocoding API (with GeocodedLocation as an intermediate cache),
-    then writes the parsed components back to the Location row so the next request
-    reads directly from the DB with no API call.
-    """
-    if not location or location.route:
-        return
-    lat = float(location.latitude) if location.latitude is not None else None
-    lng = float(location.longitude) if location.longitude is not None else None
-    if lat is None or lng is None:
-        return
-
-    try:
-        from urbanlens.dashboard.services.apis.locations.google.geocoding import GoogleGeocodingGateway, parse_address_components
-        from urbanlens.UrbanLens.settings.app import settings as app_settings
-
-        if not app_settings.google_unrestricted_api_key:
-            return
-
-        data = GoogleGeocodingGateway().geocode_coordinates(lat, lng)
-        if not data:
-            return
-        results = data.get("results", [])
-        if not results:
-            return
-
-        type_map = parse_address_components(results[0].get("address_components", []))
-
-        update_fields: list[str] = []
-
-        def _maybe_set(field: str, value: str | None) -> None:
-            if value and not getattr(location, field):
-                setattr(location, field, value)
-                update_fields.append(field)
-
-        _maybe_set("street_number", type_map.get("street_number"))
-        _maybe_set("route", type_map.get("route"))
-        _maybe_set("locality", type_map.get("locality"))
-        _maybe_set("administrative_area_level_1", type_map.get("administrative_area_level_1"))
-        _maybe_set("administrative_area_level_2", type_map.get("administrative_area_level_2"))
-        _maybe_set("zipcode", type_map.get("postal_code"))
-        _maybe_set("country", type_map.get("country"))
-
-        if update_fields:
-            location.save(update_fields=update_fields)
-    except (ImportError, OSError, ValueError, DatabaseError, RequestCancelledError):
-        logger.exception("Reverse geocoding failed for location pk=%s", getattr(location, "pk", None))
 
 
 class PinOverviewView(LoginRequiredMixin, View):

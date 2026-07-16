@@ -1109,6 +1109,46 @@ def run_scheduled_database_backup(self) -> bool:
     return _run_database_backup(self)
 
 
+# No autoretry, deliberately: the beat scheduler re-fires this every hour
+# anyway, and a retry racing the next scheduled run would double-spend the
+# API budget the cycle just computed. The time limits keep a slow cycle (many
+# sources with long stagger pauses) from ever overlapping the next hourly
+# firing; SoftTimeLimitExceeded propagates out of run_enrichment_cycle so the
+# task winds down cleanly mid-batch.
+@shared_task(bind=True, soft_time_limit=3000, time_limit=3300)
+def run_scheduled_enrichment(self) -> dict:
+    """Run one background-enrichment cycle when site settings allow it.
+
+    Fired hourly by Celery beat. ``services.enrichment.run_enrichment_cycle``
+    checks the admin's enabled toggle and UTC run window, computes how much of
+    each API's rate limit is safely spendable (keeping the configured buffer
+    in reserve), and enriches the highest-impact Locations still missing
+    official names, aliases, addresses, or boundaries.
+
+    Returns:
+        The cycle summary dict (also cached for the site-admin page), or a
+        skip marker when another run holds the single-flight lock.
+    """
+    from celery.exceptions import SoftTimeLimitExceeded
+    from django.core.cache import cache
+
+    from urbanlens.dashboard.services.enrichment import RUN_LOCK_CACHE_KEY, run_enrichment_cycle
+
+    if not cache.add(RUN_LOCK_CACHE_KEY, 1, 3300):
+        logger.info("run_scheduled_enrichment: another cycle is still running; skipping")
+        return {"skipped": "already_running"}
+    try:
+        update_task_progress(self, current=0, total=1, message="Enriching locations...")
+        summary = run_enrichment_cycle()
+        update_task_progress(self, current=1, total=1, message="Enrichment cycle complete")
+        return summary
+    except SoftTimeLimitExceeded:
+        logger.warning("run_scheduled_enrichment: cycle wound down at the soft time limit")
+        return {"skipped": "timed_out"}
+    finally:
+        cache.delete(RUN_LOCK_CACHE_KEY)
+
+
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def refresh_pin_web_search(self, pin_id: int) -> int:
     """Pre-warm the shared web-search cache for a pin's Location."""

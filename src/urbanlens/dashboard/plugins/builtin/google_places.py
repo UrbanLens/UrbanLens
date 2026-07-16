@@ -11,7 +11,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, ClassVar
 
+from django.db.models import Q
+
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
+from urbanlens.dashboard.services.enrichment import EnrichmentSource
 from urbanlens.dashboard.services.external_data import GalleryMediaSource
 from urbanlens.dashboard.services.locations.name_resolution import NameProvider
 from urbanlens.dashboard.services.rate_limiter import ServiceDefaults
@@ -103,6 +106,44 @@ class GooglePlacesNameProvider(NameProvider):
         return values
 
 
+class GooglePlaceLinkEnrichmentSource(EnrichmentSource):
+    """Background-links Locations to their shared GooglePlace row (a name source).
+
+    ``ensure_linked`` always creates and links the row - even when Google has
+    no name for the coordinates - so each location is attempted exactly once
+    and the linked row itself is the completion marker.
+    """
+
+    key: ClassVar[str] = "google_place_link"
+    verbose_name: ClassVar[str] = "Google Place link"
+    service_keys: ClassVar[tuple[str, ...]] = ("google_places", "google_geocoding")
+    refreshes_names: ClassVar[bool] = True
+
+    def gate(self) -> bool:
+        """Requires the unrestricted Google API key."""
+        from urbanlens.UrbanLens.settings.app import settings as app_settings
+
+        return bool(app_settings.google_unrestricted_api_key)
+
+    def missing_filter(self) -> Q:
+        """Locations not yet linked to a GooglePlace row."""
+        return Q(google_place__isnull=True)
+
+    def enrich(self, location: Location) -> bool:
+        """Link the location to its GooglePlace row, fetching the name if needed.
+
+        Args:
+            location: The location to link.
+
+        Returns:
+            True when the location is linked afterwards.
+        """
+        from urbanlens.dashboard.services.apis.locations.google.place_info import GooglePlaceService
+
+        GooglePlaceService().ensure_linked(location)
+        return location.google_place_id is not None
+
+
 class GooglePlacesPlugin(UrbanLensPlugin):
     """Google Places integration: place names and service defaults."""
 
@@ -130,3 +171,7 @@ class GooglePlacesPlugin(UrbanLensPlugin):
     def get_panel_sources(self) -> list[PanelSource]:
         """Contribute the Google Maps Media-gallery photos provider."""
         return [GoogleMapsPhotosPanelSource()]
+
+    def get_enrichment_sources(self) -> list[EnrichmentSource]:
+        """Contribute GooglePlace linking to scheduled background enrichment."""
+        return [GooglePlaceLinkEnrichmentSource()]

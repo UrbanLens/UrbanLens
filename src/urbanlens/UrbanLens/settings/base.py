@@ -233,6 +233,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "urbanlens.dashboard.tasks.cleanup_vestigial_assets_task",
         "schedule": 60 * 60,
     },
+    "scheduled-location-enrichment": {
+        "task": "urbanlens.dashboard.tasks.run_scheduled_enrichment",
+        "schedule": 60 * 60,
+    },
     "safety-checkin-due-reminders": {
         "task": "urbanlens.dashboard.tasks.send_due_checkin_reminders",
         "schedule": 5 * 60,

@@ -230,6 +230,42 @@ class SiteSettings(abstract.FrontendDashboardModel):
         verbose_name="Name source priority",
     )
 
+    # --- Background enrichment ---
+    # Hourly Celery task (tasks.run_scheduled_enrichment) that proactively
+    # backfills high-value external data (official names, aliases, addresses,
+    # boundaries) for every pinned/wiki'd Location, spending only the API
+    # budget left over after organic traffic. See services.enrichment.
+
+    enrichment_enabled = BooleanField(
+        default=True,
+        help_text="Proactively backfill official names, aliases, addresses, and boundaries for all pins and wikis in the background, within each API's configured rate limits.",
+        verbose_name="Background enrichment",
+    )
+    enrichment_start_hour = IntegerField(
+        default=0,
+        help_text="UTC hour (0-23) the daily enrichment window opens. Set start and end to the same value to allow enrichment at any hour.",
+        verbose_name="Enrichment window start (UTC hour)",
+        validators=[MinValueValidator(0), MaxValueValidator(23)],
+    )
+    enrichment_end_hour = IntegerField(
+        default=0,
+        help_text="UTC hour (0-23) the daily enrichment window closes. May be earlier than the start hour to wrap past midnight (e.g. 22 to 4).",
+        verbose_name="Enrichment window end (UTC hour)",
+        validators=[MinValueValidator(0), MaxValueValidator(23)],
+    )
+    enrichment_buffer_percent = IntegerField(
+        default=10,
+        help_text="Percentage of every API limit kept in reserve for organic traffic spikes. Background enrichment never spends into this buffer.",
+        verbose_name="Enrichment rate-limit buffer (%)",
+        validators=[MinValueValidator(0), MaxValueValidator(90)],
+    )
+    enrichment_max_per_service_per_run = IntegerField(
+        default=10,
+        help_text="Maximum locations enriched per API service in one hourly run, even when the service's rate limit would allow more - keeps bursts against generous APIs polite.",
+        verbose_name="Enrichment max items per service per run",
+        validators=[MinValueValidator(1), MaxValueValidator(500)],
+    )
+
     # --- Environment ---
 
     environment_override = CharField(

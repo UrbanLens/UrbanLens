@@ -120,6 +120,18 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
         ranked_slugs = {slug for slug, _label, _ranked in name_source_order}
         name_source_order += [(slug, label, False) for slug, label in providers_by_slug.items() if slug not in ranked_slugs]
 
+        from urbanlens.dashboard.services.enrichment import enrichment_sources, last_run_summary, self_reported_skip
+
+        enrichment_source_rows = [
+            {
+                "key": source.key,
+                "verbose_name": source.verbose_name or source.key,
+                "services": ", ".join(source.service_keys),
+                "available": self_reported_skip(source) is None,
+            }
+            for source in enrichment_sources()
+        ]
+
         return render(
             request,
             "dashboard/pages/site_admin.html",
@@ -132,6 +144,8 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
                 "effective_environment_label": settings.get_effective_environment_label(),
                 "env_var_environment": os.getenv("UL_ENVIRONMENT", ""),
                 "name_source_order": name_source_order,
+                "enrichment_sources": enrichment_source_rows,
+                "enrichment_last_run": last_run_summary(),
             },
         )
 
@@ -183,6 +197,18 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
             # never sees, so a disabled plugin's slug can stay configured.
             slugs = [token.strip().lower() for token in request.POST.get("default_name_source_priority", "").split(",")]
             settings.default_name_source_priority = ",".join(slug for slug in slugs if re.fullmatch(r"[a-z0-9_-]+", slug))
+
+        if "enrichment_enabled" in request.POST:
+            settings.enrichment_enabled = request.POST.get("enrichment_enabled") in {"1", "true", "on", "True"}
+        for enrichment_field, low, high in (
+            ("enrichment_start_hour", 0, 23),
+            ("enrichment_end_hour", 0, 23),
+            ("enrichment_buffer_percent", 0, 90),
+            ("enrichment_max_per_service_per_run", 1, 500),
+        ):
+            if enrichment_field in request.POST:
+                with contextlib.suppress(ValueError, TypeError):
+                    setattr(settings, enrichment_field, min(max(low, int(request.POST.get(enrichment_field, getattr(settings, enrichment_field)))), high))
 
         if "backup_enabled" in request.POST or "backup_frequency_hours" in request.POST or "backup_retention" in request.POST:
             settings.backup_enabled = request.POST.get("backup_enabled") in {"1", "true", "on", "True"}
@@ -268,6 +294,10 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
                 "max_friends_per_user",
                 "max_group_chat_members",
                 "max_safety_checkin_contacts",
+                "enrichment_start_hour",
+                "enrichment_end_hour",
+                "enrichment_buffer_percent",
+                "enrichment_max_per_service_per_run",
             )
             values = {field: getattr(settings, field) for field in clamped_fields if field in request.POST}
             return JsonResponse({"ok": True, "values": values})
