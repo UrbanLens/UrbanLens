@@ -3563,14 +3563,11 @@ body.page-location-details {
 }
 
 .wiki-lcn-link {
+    // Plain label, not a link - the other location's wiki page 404s until
+    // the pin is actually switched there via the Switch button next to it.
     font-size: .82rem;
     font-weight: 500;
     color: $color-blue-700;
-    text-decoration: none;
-
-    &:hover {
-        text-decoration: underline;
-    }
 }
 
 .wiki-lcn-switch-btn {

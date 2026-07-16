@@ -88,11 +88,16 @@
                 {% if other_locations|length == 1 %}covers{% else %}cover{% endif %}
                 the same area as your pin.
             </strong>
-            Your pin is currently linked here. You may want to browse the alternatives or switch:
+            Your pin is currently linked here. You may want to switch to one of these instead:
             <div class="wiki-lcn-list">
                 {% for other in other_locations %}
                 <span class="wiki-lcn-item">
-                    <a href="{% url 'location.wiki' other.slug %}" class="wiki-lcn-link">{{ other.display_name }}</a>
+                    {# Not a link to other's own wiki page - the viewer hasn't pinned #}
+                    {# `other` yet, and a wiki page 404s for anyone without a pin at   #}
+                    {# its location (see resolve_visible_wiki) by design, so this can  #}
+                    {# never resolve until after the Switch button below relinks the  #}
+                    {# pin there first. #}
+                    <span class="wiki-lcn-link">{{ other.display_name }}</span>
                     {% if user_pin %}
                     <button type="button" class="wiki-lcn-switch-btn"
                             hx-post="{% url 'pin.link.to' user_pin.slug other.slug %}"

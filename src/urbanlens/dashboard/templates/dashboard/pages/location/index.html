@@ -1181,6 +1181,13 @@
     // line-clamp applied instead of being hidden outright, since it's just
     // one element and clamping *that* works exactly like the old approach.
     (function () {
+        // A floor under the clamp budget so at least a paragraph or two always
+        // shows - without this, an early call (e.g. on first paint, before a
+        // slower sibling card like Media has loaded in and stretched the row
+        // to its eventual height) could compute a near-zero budget and hide
+        // the extract entirely, even though the article has plenty of text.
+        var MIN_BODY_HEIGHT_PX = 200;
+
         function clampExtract(section) {
             var extract = section.querySelector('.wikipedia-extract');
             var body = section.querySelector('.wikipedia-body');
@@ -1194,11 +1201,12 @@
             // sibling card's own image finishing load - leaving spare room unused.
             // .card-header sits outside .wikipedia-body, so whatever's left of the
             // card's own (grid-stretched) height after subtracting it is what
-            // .wikipedia-body is actually allowed to fill; raise the cap to that.
+            // .wikipedia-body is actually allowed to fill; raise the cap to that,
+            // never below the minimum floor above.
             var header = section.querySelector('.card-header');
             var headerHeight = header ? header.getBoundingClientRect().height : 0;
             var bodyBudget = section.getBoundingClientRect().height - headerHeight;
-            if (bodyBudget > 0) body.style.maxHeight = bodyBudget + 'px';
+            body.style.maxHeight = Math.max(bodyBudget, MIN_BODY_HEIGHT_PX) + 'px';
 
             var children = Array.prototype.slice.call(extract.children);
             children.forEach(function (el) {
