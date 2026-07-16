@@ -1,22 +1,17 @@
 """Property owner and sale-history models.
 
-Every record is either PRIVATE (attached to one Pin, visible only there) or
-SHARED (attached to a Location, visible to everyone with a pin there) - see
-``meta.OwnerVisibility``. This mirrors the codebase's existing private/shared
-split: private records are the ``PinNote`` pattern (``models.pin.note``, a
-private per-pin FK); shared records are the ``Location``/``Wiki`` pattern
-(shared, community-editable, gated by ``services.wiki_access.location_visible_to``).
-
-``source`` (``meta.OwnerSource``) distinguishes user-contributed data from
-data a future automated source would populate (``OFFICIAL``) - see the
-``OwnerSource`` docstring for why OFFICIAL records are never directly
-user-editable and why they're SHARED-only. Both ``Owner`` and ``PropertySale``
-use the same M2M-per-scope shape so a future plugin only ever needs to touch
-the SHARED/OFFICIAL surface (``Owner.locations``, ``PropertySale.location``) -
-exactly the single, de-duplicated, Location-keyed record every pin and the
-wiki already read from, with no per-viewer duplication and no separate cache
-layer needed (mirrors how ``EpaFacility`` is a persisted relational model,
-not a time-limited cache blob).
+Mirrors the ``PinAlias``/``WikiAlias`` split (``models.aliases.model``) - two
+entirely separate models per concept, never a single model with a
+visibility flag. ``PinOwner``/``PinPropertySale`` are private, FK'd straight
+to one ``Pin``, definitionally invisible to anyone else and to the wiki - no
+"private" flag exists because there is nothing else it could mean.
+``WikiOwner``/``WikiPropertySale`` are shared, community-editable data about
+the place (``Location``), visible to anyone with a pin there - the same
+access rule as the rest of the wiki (``services.wiki_access.location_visible_to``).
+A pin's own Ownership card must only ever query ``PinOwner``/``PinPropertySale``;
+the wiki's Ownership card must only ever query ``WikiOwner``/``WikiPropertySale``
+- never both in the same view, exactly like ``PinAlias``/``WikiAlias`` are
+never queried together.
 """
 
 from __future__ import annotations
@@ -26,19 +21,12 @@ from typing import TYPE_CHECKING
 from django.db.models import CASCADE, SET_NULL, CharField, CheckConstraint, DateField, DecimalField, EmailField, ForeignKey, Index, ManyToManyField, Q, TextField
 
 from urbanlens.dashboard.models import abstract
-from urbanlens.dashboard.models.property_owner.meta import OwnerSource, OwnerVisibility
-from urbanlens.dashboard.models.property_owner.queryset import OwnerManager, PropertySaleManager
+from urbanlens.dashboard.models.property_owner.meta import OwnerSource
+from urbanlens.dashboard.models.property_owner.queryset import PinOwnerManager, PinPropertySaleManager, WikiOwnerManager, WikiPropertySaleManager
 
 
-class Owner(abstract.DashboardModel):
-    """An individual or company that owns one or more properties.
-
-    ``pins`` (when ``visibility=PRIVATE``) or ``locations`` (when
-    ``visibility=SHARED``) is the M2M actually populated - either way an
-    owner can be linked to any number of properties, and unlinking a
-    property never deletes the Owner record (see the controller's remove
-    views): previous ownership is never lost, only no longer "current."
-    """
+class _OwnerBase(abstract.DashboardModel):
+    """Shared fields for PinOwner and WikiOwner."""
 
     name = CharField(max_length=200)
     company_name = CharField(max_length=200, blank=True, default="")
@@ -47,21 +35,9 @@ class Owner(abstract.DashboardModel):
     email = EmailField(blank=True, default="")
     notes = TextField(blank=True, default="")
 
-    visibility = CharField(max_length=10, choices=OwnerVisibility.choices, default=OwnerVisibility.SHARED)
-    source = CharField(max_length=10, choices=OwnerSource.choices, default=OwnerSource.USER)
-    created_by = ForeignKey("dashboard.Profile", on_delete=SET_NULL, null=True, blank=True, related_name="owners_created")
-
-    # Populated only when visibility=PRIVATE - the one pin this owner is
-    # private to. May list several of that pin's own profile's pins.
-    pins = ManyToManyField("dashboard.Pin", related_name="private_owners", blank=True)
-    # Populated only when visibility=SHARED - every location this owner
-    # currently owns, community-wide.
-    locations = ManyToManyField("dashboard.Location", related_name="owners", blank=True)
-
-    if TYPE_CHECKING:
-        created_by_id: int | None
-
-    objects = OwnerManager()
+    class Meta(abstract.DashboardModel.Meta):
+        abstract = True
+        ordering = ["name"]
 
     def __str__(self) -> str:
         """Return a human-readable label for this owner.
@@ -71,47 +47,113 @@ class Owner(abstract.DashboardModel):
         """
         return f"{self.name} ({self.company_name})" if self.company_name else self.name
 
-    class Meta(abstract.DashboardModel.Meta):
-        db_table = "dashboard_property_owner"
-        ordering = ["name"]
-        constraints = [
-            CheckConstraint(
-                condition=Q(source=OwnerSource.USER) | Q(visibility=OwnerVisibility.SHARED),
-                name="db_property_owner_official_is_shared",
-            ),
-        ]
 
+class PinOwner(_OwnerBase):
+    """An owner private to one Pin, visible only to that pin's own profile.
 
-class PropertySale(abstract.DashboardModel):
-    """A recorded sale of a Location, linking any number of previous and new owners.
-
-    ``previous_owners``/``new_owners`` are M2M (not single FKs) - a sale can
-    record any number of co-owners on either side, and nothing caps how many
-    sale records a location can accumulate over time, so the full ownership
-    chain is never lost to a fixed-size field.
+    Ownership is derived from pin.profile; no separate profile FK is needed
+    (mirrors ``PinAlias``).
     """
 
-    location = ForeignKey("dashboard.Location", on_delete=CASCADE, related_name="sales")
-    # Populated only when visibility=PRIVATE - the one pin this sale record
-    # is private to.
-    pin = ForeignKey("dashboard.Pin", on_delete=CASCADE, null=True, blank=True, related_name="private_sales")
+    pin = ForeignKey("dashboard.Pin", on_delete=CASCADE, related_name="owners")
 
-    visibility = CharField(max_length=10, choices=OwnerVisibility.choices, default=OwnerVisibility.SHARED)
+    if TYPE_CHECKING:
+        pin_id: int
+
+    objects = PinOwnerManager()
+
+    class Meta(_OwnerBase.Meta):
+        db_table = "dashboard_pin_owner"
+        indexes = [Index(fields=["pin"], name="idxdb_pinowner_pin")]
+
+
+class WikiOwner(_OwnerBase):
+    """An owner shared with everyone who has this location pinned.
+
+    ``locations`` (not a Wiki FK) so the same real-world owner can be linked
+    to any number of properties, the way one landlord or company genuinely
+    can own many distinct places - unlinking a location never deletes the
+    record (see the controller's remove view): previous ownership is never
+    lost, only no longer "current."
+    """
+
+    locations = ManyToManyField("dashboard.Location", related_name="owners", blank=True)
     source = CharField(max_length=10, choices=OwnerSource.choices, default=OwnerSource.USER)
-    created_by = ForeignKey("dashboard.Profile", on_delete=SET_NULL, null=True, blank=True, related_name="property_sales_created")
+    created_by = ForeignKey("dashboard.Profile", on_delete=SET_NULL, null=True, blank=True, related_name="wiki_owners_created")
+
+    if TYPE_CHECKING:
+        created_by_id: int | None
+
+    objects = WikiOwnerManager()
+
+    class Meta(_OwnerBase.Meta):
+        db_table = "dashboard_wiki_owner"
+
+
+class _PropertySaleBase(abstract.DashboardModel):
+    """Shared fields for PinPropertySale and WikiPropertySale."""
 
     sale_price = DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     sale_date = DateField(null=True, blank=True)
-    previous_owners = ManyToManyField(Owner, related_name="sales_as_previous_owner", blank=True)
-    new_owners = ManyToManyField(Owner, related_name="sales_as_new_owner", blank=True)
     notes = TextField(blank=True, default="")
+
+    class Meta(abstract.DashboardModel.Meta):
+        abstract = True
+        ordering = ["-sale_date", "-created"]
+
+
+class PinPropertySale(_PropertySaleBase):
+    """A sale record private to one Pin.
+
+    ``previous_owners``/``new_owners`` are M2M to ``PinOwner`` (not single
+    FKs) - a sale can record any number of co-owners on either side, and
+    nothing caps how many sale records a pin can accumulate over time.
+    """
+
+    pin = ForeignKey("dashboard.Pin", on_delete=CASCADE, related_name="property_sales")
+    previous_owners = ManyToManyField(PinOwner, related_name="sales_as_previous_owner", blank=True)
+    new_owners = ManyToManyField(PinOwner, related_name="sales_as_new_owner", blank=True)
+
+    if TYPE_CHECKING:
+        pin_id: int
+
+    objects = PinPropertySaleManager()
+
+    def __str__(self) -> str:
+        """Return a human-readable label for this sale record.
+
+        Returns:
+            A string like "Sale of pin <id> on <date>", or "(undated)" if unset.
+        """
+        when = self.sale_date.isoformat() if self.sale_date else "(undated)"
+        return f"Sale of pin {self.pin_id} on {when}"
+
+    class Meta(_PropertySaleBase.Meta):
+        db_table = "dashboard_pin_property_sale"
+        indexes = [Index(fields=["pin", "-sale_date"], name="idxdb_pin_sale_pin_date")]
+        constraints = [
+            CheckConstraint(condition=Q(sale_price__isnull=True) | Q(sale_price__gte=0), name="db_pin_sale_price_gte_0"),
+        ]
+
+
+class WikiPropertySale(_PropertySaleBase):
+    """A sale record shared with everyone who has this location pinned.
+
+    ``previous_owners``/``new_owners`` are M2M to ``WikiOwner`` for the same
+    reason as ``PinPropertySale``.
+    """
+
+    location = ForeignKey("dashboard.Location", on_delete=CASCADE, related_name="sales")
+    source = CharField(max_length=10, choices=OwnerSource.choices, default=OwnerSource.USER)
+    created_by = ForeignKey("dashboard.Profile", on_delete=SET_NULL, null=True, blank=True, related_name="wiki_property_sales_created")
+    previous_owners = ManyToManyField(WikiOwner, related_name="sales_as_previous_owner", blank=True)
+    new_owners = ManyToManyField(WikiOwner, related_name="sales_as_new_owner", blank=True)
 
     if TYPE_CHECKING:
         location_id: int
-        pin_id: int | None
         created_by_id: int | None
 
-    objects = PropertySaleManager()
+    objects = WikiPropertySaleManager()
 
     def __str__(self) -> str:
         """Return a human-readable label for this sale record.
@@ -122,23 +164,9 @@ class PropertySale(abstract.DashboardModel):
         when = self.sale_date.isoformat() if self.sale_date else "(undated)"
         return f"Sale of location {self.location_id} on {when}"
 
-    class Meta(abstract.DashboardModel.Meta):
-        db_table = "dashboard_property_sale"
-        ordering = ["-sale_date", "-created"]
-        indexes = [
-            Index(fields=["location", "-sale_date"], name="idxdb_property_sale_location_date"),
-        ]
+    class Meta(_PropertySaleBase.Meta):
+        db_table = "dashboard_wiki_property_sale"
+        indexes = [Index(fields=["location", "-sale_date"], name="idxdb_wiki_sale_location_date")]
         constraints = [
-            CheckConstraint(
-                condition=Q(sale_price__isnull=True) | Q(sale_price__gte=0),
-                name="db_property_sale_price_gte_0",
-            ),
-            CheckConstraint(
-                condition=Q(source=OwnerSource.USER) | Q(visibility=OwnerVisibility.SHARED),
-                name="db_property_sale_official_is_shared",
-            ),
-            CheckConstraint(
-                condition=Q(visibility=OwnerVisibility.SHARED) | Q(pin__isnull=False),
-                name="db_property_sale_private_requires_pin",
-            ),
+            CheckConstraint(condition=Q(sale_price__isnull=True) | Q(sale_price__gte=0), name="db_wiki_sale_price_gte_0"),
         ]

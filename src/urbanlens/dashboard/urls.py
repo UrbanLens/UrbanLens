@@ -455,27 +455,27 @@ urlpatterns = [
                             ),
                             path(
                                 "<slug:pin_slug>/ownership/",
-                                property_owner.OwnershipPanelView.as_view(),
+                                property_owner.PinOwnershipPanelView.as_view(),
                                 name="pin.ownership",
                             ),
                             path(
                                 "<slug:pin_slug>/ownership/<int:owner_id>/edit/",
-                                property_owner.OwnerUpdateView.as_view(),
+                                property_owner.PinOwnerUpdateView.as_view(),
                                 name="pin.ownership.edit",
                             ),
                             path(
                                 "<slug:pin_slug>/ownership/<int:owner_id>/remove/",
-                                property_owner.OwnerRemoveView.as_view(),
+                                property_owner.PinOwnerRemoveView.as_view(),
                                 name="pin.ownership.remove",
                             ),
                             path(
                                 "<slug:pin_slug>/sales/",
-                                property_owner.PropertySaleTabView.as_view(),
+                                property_owner.PinPropertySaleTabView.as_view(),
                                 name="pin.sales",
                             ),
                             path(
                                 "<slug:pin_slug>/sales/<int:sale_id>/delete/",
-                                property_owner.PropertySaleDeleteView.as_view(),
+                                property_owner.PinPropertySaleDeleteView.as_view(),
                                 name="pin.sales.delete",
                             ),
                             path(
@@ -992,6 +992,31 @@ urlpatterns = [
                     "<slug:location_slug>/wiki/aliases/<int:alias_id>/toggle-nickname/",
                     aliases.LocationAliasToggleNicknameView.as_view(),
                     name="location.wiki.alias.toggle_nickname",
+                ),
+                path(
+                    "<slug:location_slug>/wiki/ownership/",
+                    property_owner.WikiOwnershipPanelView.as_view(),
+                    name="location.wiki.ownership",
+                ),
+                path(
+                    "<slug:location_slug>/wiki/ownership/<int:owner_id>/edit/",
+                    property_owner.WikiOwnerUpdateView.as_view(),
+                    name="location.wiki.ownership.edit",
+                ),
+                path(
+                    "<slug:location_slug>/wiki/ownership/<int:owner_id>/remove/",
+                    property_owner.WikiOwnerRemoveView.as_view(),
+                    name="location.wiki.ownership.remove",
+                ),
+                path(
+                    "<slug:location_slug>/wiki/sales/",
+                    property_owner.WikiPropertySaleTabView.as_view(),
+                    name="location.wiki.sales",
+                ),
+                path(
+                    "<slug:location_slug>/wiki/sales/<int:sale_id>/delete/",
+                    property_owner.WikiPropertySaleDeleteView.as_view(),
+                    name="location.wiki.sales.delete",
                 ),
                 path(
                     "<slug:location_slug>/wiki/links/",

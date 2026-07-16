@@ -1,10 +1,12 @@
-{# Pin detail page: Ownership card - current owner(s) plus a Sale History tab.
-   Each owner is either private to this pin (visibility=private, never shared
-   with other users or the wiki) or shared with everyone who has a pin at
-   this location (visibility=shared, same access rule as the wiki). Official
-   (source=official) owners are locked - no edit/remove affordance. #}
-<div id="pin-ownership-panel" class="ownership-panel card"
-     data-collapse-scope="pin" data-collapse-section="ownership">
+{# Shared Ownership card for Pins (private) and Wikis (shared) - configured
+   entirely via context, no per-caller branching (mirrors aliases_panel.html).
+   The pin-scoped and wiki-scoped controllers each query their own separate
+   model (PinOwner vs WikiOwner) - this template only ever renders whichever
+   one it was given, never both at once. Official (source=official) owners
+   only exist on the shared/wiki side - show_official_badge is False for the
+   pin-scoped render, so {{ owner.source }} is never accessed there. #}
+<div id="{{ panel_id }}" class="ownership-panel card"
+     data-collapse-scope="{{ collapse_scope }}" data-collapse-section="ownership">
     <div class="card-header">
         <i class="material-symbols-outlined">real_estate_agent</i>
         <span>Ownership</span>
@@ -21,8 +23,8 @@
             Owners
         </button>
         <button type="button" class="po-tab" data-po-tab="sales"
-                hx-get="{% url 'pin.sales' pin.slug %}"
-                hx-target="#po-sales-body"
+                hx-get="{% url url_sales obj_slug %}"
+                hx-target="#po-sales-body-{{ panel_id }}"
                 hx-trigger="click once"
                 onclick="var p=this.closest('.ownership-panel'); p.querySelectorAll('.po-tab').forEach(function(b){b.classList.remove('is-active');}); this.classList.add('is-active'); p.querySelectorAll('.po-tab-body').forEach(function(b){b.hidden=true;}); p.querySelector('[data-po-body=sales]').hidden=false;">
             Sale History
@@ -38,27 +40,22 @@
                     <div class="po-owner-main">
                         <span class="po-owner-name">{{ owner.name }}</span>
                         {% if owner.company_name %}<span class="po-owner-company">{{ owner.company_name }}</span>{% endif %}
-                        {% if owner.visibility == "private" %}
-                        <span class="po-badge po-badge--private" title="Only visible to you">
-                            <i class="material-symbols-outlined">lock</i>Private
-                        </span>
-                        {% endif %}
-                        {% if owner.source == "official" %}
+                        {% if show_official_badge and owner.source == "official" %}
                         <span class="po-badge po-badge--official" title="Official data - not directly editable">
                             <i class="material-symbols-outlined">verified</i>Official
                         </span>
                         {% endif %}
                         <div class="po-owner-actions">
-                            {% if owner.source != "official" %}
+                            {% if not show_official_badge or owner.source != "official" %}
                             <button type="button" class="btn btn--icon-sm" title="Edit owner"
                                     onclick="var row=this.closest('.po-owner-row'); row.querySelector('.po-owner-display').hidden = true; row.querySelector('.po-owner-edit-form').hidden = false;">
                                 <i class="material-symbols-outlined">edit</i>
                             </button>
-                            <button type="button" class="btn btn--icon-sm" title="Remove from this property"
-                                    hx-delete="{% url 'pin.ownership.remove' pin.slug owner.id %}"
-                                    hx-target="#pin-ownership-panel"
+                            <button type="button" class="btn btn--icon-sm" title="Remove"
+                                    hx-delete="{% url url_remove obj_slug owner.id %}"
+                                    hx-target="#{{ panel_id }}"
                                     hx-swap="outerHTML"
-                                    hx-confirm="Remove &ldquo;{{ owner.name }}&rdquo; from this property?">
+                                    hx-confirm="Remove &ldquo;{{ owner.name }}&rdquo;?">
                                 <i class="material-symbols-outlined">close</i>
                             </button>
                             {% endif %}
@@ -71,10 +68,10 @@
                     </div>
                     {% if owner.notes %}<p class="po-owner-notes">{{ owner.notes|linebreaksbr }}</p>{% endif %}
                 </div>
-                {% if owner.source != "official" %}
+                {% if not show_official_badge or owner.source != "official" %}
                 <form class="po-owner-edit-form" hidden
-                      hx-post="{% url 'pin.ownership.edit' pin.slug owner.id %}"
-                      hx-target="#pin-ownership-panel"
+                      hx-post="{% url url_edit obj_slug owner.id %}"
+                      hx-target="#{{ panel_id }}"
                       hx-swap="outerHTML">
                     {% csrf_token %}
                     <input type="text" name="name" class="po-input" placeholder="Name" maxlength="200" value="{{ owner.name }}" required>
@@ -98,12 +95,12 @@
             {% endfor %}
         </div>
         {% else %}
-        <p class="po-panel-empty">No owner information yet for this property.</p>
+        <p class="po-panel-empty">No owner information yet.</p>
         {% endif %}
 
         <form class="po-add-form" hidden
-              hx-post="{% url 'pin.ownership' pin.slug %}"
-              hx-target="#pin-ownership-panel"
+              hx-post="{% url url_add obj_slug %}"
+              hx-target="#{{ panel_id }}"
               hx-swap="outerHTML">
             {% csrf_token %}
             <input type="text" name="name" class="po-input" placeholder="Owner name" maxlength="200" required>
@@ -112,20 +109,13 @@
             <input type="text" name="phone" class="po-input" placeholder="Phone" maxlength="50">
             <input type="email" name="email" class="po-input" placeholder="Email">
             <textarea name="notes" class="po-input po-notes-input" placeholder="Notes"></textarea>
-            <label class="po-visibility-checkbox" title="Only you will be able to see and edit this - not shared with other users or the wiki">
-                <span class="ul-checkbox-wrap">
-                    <input type="checkbox" name="visibility" value="private">
-                    <span class="ul-checkbox"></span>
-                </span>
-                Keep this private to me (not shared with other users or the wiki)
-            </label>
             <button type="submit" class="btn btn--icon-sm po-add-btn" title="Add owner">
                 <i class="material-symbols-outlined">add</i>
             </button>
         </form>
     </div>
 
-    <div class="po-tab-body" data-po-body="sales" id="po-sales-body" hidden>
+    <div class="po-tab-body" data-po-body="sales" id="po-sales-body-{{ panel_id }}" hidden>
         <p class="po-panel-empty">Loading...</p>
     </div>
 </div>

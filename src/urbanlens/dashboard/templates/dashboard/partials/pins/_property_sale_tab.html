@@ -1,5 +1,9 @@
-{# Pin detail page: Ownership card - Sale History tab body (swapped into #po-sales-body).
-   Sales are private-to-this-pin or shared-with-the-location, same as owners. #}
+{# Shared Sale History tab body for Pins (private) and Wikis (shared) -
+   configured entirely via context, swapped into the Ownership card's sales
+   tab body (mirrors _ownership_panel.html's own convention). Every hx-target
+   here uses "closest .po-tab-body" rather than a fixed id, since this
+   fragment is swapped as the innerHTML of whichever tab body it was loaded
+   into (pin-scoped or wiki-scoped) without needing to know which. #}
 {% if sales %}
 <div class="po-sale-list">
     {% for sale in sales %}
@@ -7,19 +11,14 @@
         <div class="po-sale-main">
             <span class="po-sale-date">{{ sale.sale_date|default:"Undated" }}</span>
             {% if sale.sale_price %}<span class="po-sale-price">${{ sale.sale_price|floatformat:2 }}</span>{% endif %}
-            {% if sale.visibility == "private" %}
-            <span class="po-badge po-badge--private" title="Only visible to you">
-                <i class="material-symbols-outlined">lock</i>Private
-            </span>
-            {% endif %}
-            {% if sale.source == "official" %}
+            {% if show_official_badge and sale.source == "official" %}
             <span class="po-badge po-badge--official" title="Official data - not directly editable">
                 <i class="material-symbols-outlined">verified</i>Official
             </span>
             {% else %}
             <button type="button" class="btn btn--icon-sm po-sale-delete" title="Delete sale record"
-                    hx-delete="{% url 'pin.sales.delete' pin.slug sale.id %}"
-                    hx-target="#po-sales-body"
+                    hx-delete="{% url url_delete obj_slug sale.id %}"
+                    hx-target="closest .po-tab-body"
                     hx-swap="innerHTML"
                     hx-confirm="Delete this sale record?">
                 <i class="material-symbols-outlined">close</i>
@@ -44,8 +43,8 @@
 {% endif %}
 
 <form class="po-add-form po-sale-add-form"
-      hx-post="{% url 'pin.sales' pin.slug %}"
-      hx-target="#po-sales-body"
+      hx-post="{% url url_add obj_slug %}"
+      hx-target="closest .po-tab-body"
       hx-swap="innerHTML">
     {% csrf_token %}
     <input type="text" name="previous_owners" class="po-input" placeholder="Previous owner(s), comma-separated (optional)" maxlength="500">
@@ -53,13 +52,6 @@
     <input type="number" name="sale_price" class="po-input po-price-input" placeholder="Sale price" min="0" step="0.01">
     <input type="date" name="sale_date" class="po-input">
     <input type="text" name="notes" class="po-input" placeholder="Notes (optional)">
-    <label class="po-visibility-checkbox" title="Only you will be able to see this - not shared with other users or the wiki">
-        <span class="ul-checkbox-wrap">
-            <input type="checkbox" name="visibility" value="private">
-            <span class="ul-checkbox"></span>
-        </span>
-        Keep this private to me (not shared with other users or the wiki)
-    </label>
     <button type="submit" class="btn btn--icon-sm po-add-btn" title="Record sale">
         <i class="material-symbols-outlined">add</i>
     </button>

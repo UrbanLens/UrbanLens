@@ -1,17 +1,22 @@
-"""Property owner and sale-history views - the pin detail page's Ownership card.
+"""Property owner and sale-history views.
 
-Every record is either PRIVATE (attached to the viewer's own Pin, never seen
-by anyone else or the wiki) or SHARED (attached to the pin's Location,
-visible/editable by anyone with a pin there - the same access rule as the
-wiki, see ``services.wiki_access.location_visible_to``). See the module
-docstring on ``models.property_owner.model`` for the full rationale.
+Pin-scoped views (``Pin*``) manage ``PinOwner``/``PinPropertySale`` - private
+to one pin, never shared with other users or the wiki, never intermingled
+with wiki data on the pin detail page. Wiki-scoped views (``Wiki*``) manage
+``WikiOwner``/``WikiPropertySale`` - shared with everyone who has this
+location pinned, visible only on the wiki page, never on any individual
+pin's own card. This mirrors the ``PinAlias``/``WikiAlias`` split
+(``models.aliases.model``, ``controllers.aliases``) exactly - two separate
+models, two separate view groups, one shared template per concept
+configured entirely via context (see ``partials/pins/_ownership_panel.html``'s
+own header comment).
 
-``source=OFFICIAL`` records (reserved for a future automated data source,
-see ``models.property_owner.meta.OwnerSource``) are never directly editable
-or removable here - see the guards in ``OwnerUpdateView``/``OwnerRemoveView``/
-``PropertySaleDeleteView``. Nothing in this codebase creates OFFICIAL records
-yet; the guard exists so that capability can be added later without also
-having to retrofit corruption protection at the same time.
+``WikiOwner``/``WikiPropertySale`` carry a ``source`` distinguishing
+user-contributed data from a future automated source (``source=OFFICIAL``) -
+never directly user-editable (see the guards in ``WikiOwnerUpdateView``/
+``WikiOwnerRemoveView``/``WikiPropertySaleDeleteView``). Nothing creates
+OFFICIAL records yet. ``PinOwner``/``PinPropertySale`` have no such concept -
+private, per-pin data is definitionally user-entered.
 """
 
 from __future__ import annotations
@@ -28,11 +33,14 @@ from django.views import View
 
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.models.property_owner.meta import OwnerSource, OwnerVisibility
-from urbanlens.dashboard.models.property_owner.model import Owner, PropertySale
+from urbanlens.dashboard.models.property_owner.meta import OwnerSource
+from urbanlens.dashboard.models.property_owner.model import PinOwner, PinPropertySale, WikiOwner, WikiPropertySale
+from urbanlens.dashboard.services.wiki_access import resolve_visible_wiki
 
 if TYPE_CHECKING:
     from django.http import HttpRequest, HttpResponse
+
+    from urbanlens.dashboard.models.location.model import Location
 
 logger = logging.getLogger(__name__)
 
@@ -68,19 +76,6 @@ def _get_pin(request: HttpRequest, pin_slug: str) -> Pin:
     return get_object_or_404(Pin.objects.select_related("location"), slug=pin_slug, profile=profile)
 
 
-def _visibility_from_post(request: HttpRequest) -> str:
-    """Return the visibility the submitter chose, defaulting to SHARED.
-
-    Args:
-        request: The POST request carrying a ``visibility`` field (any
-            truthy value means PRIVATE - the form sends it as a checkbox).
-
-    Returns:
-        An ``OwnerVisibility`` value.
-    """
-    return OwnerVisibility.PRIVATE if request.POST.get("visibility") == "private" else OwnerVisibility.SHARED
-
-
 def _owner_fields_from_post(request: HttpRequest) -> dict[str, str]:
     """Extract and strip the owner-form fields common to create and update.
 
@@ -88,7 +83,7 @@ def _owner_fields_from_post(request: HttpRequest) -> dict[str, str]:
         request: The POST request carrying the owner form.
 
     Returns:
-        Dict of stripped field values, ready to pass to ``Owner(**...)``.
+        Dict of stripped field values, ready to pass to an Owner model's constructor.
     """
     return {
         "name": (request.POST.get("name") or "").strip(),
@@ -113,61 +108,73 @@ def _parse_owner_names(raw: str) -> list[str]:
     return list(dict.fromkeys(name for name in names if name))
 
 
-def _get_or_create_owners(pin: Pin, names: list[str], visibility: str, profile: Profile) -> list[Owner]:
-    """Find-or-create owners by name, scoped to a sale's own visibility.
-
-    Matching is scoped to owners already in the same scope (this pin's
-    private owners, or this location's shared owners) - not a site-wide name
-    search - so the same name on two unrelated properties never accidentally
-    merges two different real-world people.
+def _parse_sale_owner_names(request: HttpRequest) -> tuple[list[str], list[str], str | None]:
+    """Parse and cross-validate a sale form's previous/new owner-name fields.
 
     Args:
-        pin: The pin providing the location (SHARED) or private scope (PRIVATE).
-        names: Already-parsed, non-empty owner names.
-        visibility: The scope to search/create within.
-        profile: The requester, recorded as ``created_by`` on new owners.
+        request: The POST request carrying ``previous_owners``/``new_owners``.
 
     Returns:
-        The matching or newly created Owner for each name, linked to `pin`
-        (PRIVATE) or `pin.location` (SHARED).
+        ``(previous_names, new_names, error)`` - error is None on success,
+        and both lists are empty when an error is returned.
     """
-    owners = []
-    for name in names:
-        if visibility == OwnerVisibility.PRIVATE:
-            owner = Owner.objects.filter(visibility=OwnerVisibility.PRIVATE, pins=pin, name__iexact=name).first()
-            if owner is None:
-                owner = Owner.objects.create(name=name, visibility=OwnerVisibility.PRIVATE, created_by=profile)
-            owner.pins.add(pin)
-        else:
-            owner = Owner.objects.filter(visibility=OwnerVisibility.SHARED, locations=pin.location, name__iexact=name).first()
-            if owner is None:
-                owner = Owner.objects.create(name=name, visibility=OwnerVisibility.SHARED, created_by=profile)
-            owner.locations.add(pin.location)
-        owners.append(owner)
-    return owners
+    previous_names = _parse_owner_names(request.POST.get("previous_owners") or "")
+    new_names = _parse_owner_names(request.POST.get("new_owners") or "")
+    if {name.lower() for name in previous_names} & {name.lower() for name in new_names}:
+        return [], [], "Previous and new owner can't be the same."
+    return previous_names, new_names, None
 
 
-def _unlink_current_owner(pin: Pin, owner: Owner) -> None:
-    """Remove `owner` from a property's *current* ownership after a sale.
+def _parse_sale_price_and_date(request: HttpRequest) -> tuple[Decimal | None, datetime.date | None, str | None]:
+    """Parse and validate a sale form's price/date fields.
 
     Args:
-        pin: The pin providing the location (SHARED) or private scope (PRIVATE).
-        owner: The (former) owner to unlink - matches `owner.visibility`.
+        request: The POST request carrying ``sale_price``/``sale_date``.
+
+    Returns:
+        ``(sale_price, sale_date, error)`` - error is None on success.
     """
-    if owner.visibility == OwnerVisibility.PRIVATE:
-        owner.pins.remove(pin)
-    else:
-        owner.locations.remove(pin.location)
+    raw_price = (request.POST.get("sale_price") or "").strip()
+    sale_price: Decimal | None = None
+    if raw_price:
+        try:
+            sale_price = Decimal(raw_price)
+        except InvalidOperation:
+            return None, None, "Invalid sale price."
+        if sale_price < 0:
+            return None, None, "Sale price can't be negative."
+
+    raw_date = (request.POST.get("sale_date") or "").strip()
+    sale_date: datetime.date | None = None
+    if raw_date:
+        try:
+            sale_date = datetime.date.fromisoformat(raw_date)
+        except ValueError:
+            return None, None, "Invalid sale date."
+
+    return sale_price, sale_date, None
 
 
-def _render_ownership_panel(request: HttpRequest, pin: Pin, error: str | None = None) -> HttpResponse:
-    """Render the pin detail page's Ownership card."""
+# ======================================================================
+# Pin-scoped (private) - PinOwner/PinPropertySale, never shared
+# ======================================================================
+
+
+def _render_pin_ownership_panel(request: HttpRequest, pin: Pin, error: str | None = None) -> HttpResponse:
+    """Render the pin detail page's private Ownership card."""
     response = render(
         request,
         "dashboard/partials/pins/_ownership_panel.html",
         {
-            "pin": pin,
-            "owners": Owner.objects.visible_on(pin),
+            "owners": PinOwner.objects.for_pin(pin),
+            "panel_id": "pin-ownership-panel",
+            "collapse_scope": "pin",
+            "show_official_badge": False,
+            "obj_slug": pin.slug,
+            "url_add": "pin.ownership",
+            "url_edit": "pin.ownership.edit",
+            "url_remove": "pin.ownership.remove",
+            "url_sales": "pin.sales",
         },
     )
     if error:
@@ -175,69 +182,65 @@ def _render_ownership_panel(request: HttpRequest, pin: Pin, error: str | None = 
     return response
 
 
-class OwnershipPanelView(LoginRequiredMixin, View):
-    """GET: the pin's Ownership card.  POST: add a new owner for this property."""
+class PinOwnershipPanelView(LoginRequiredMixin, View):
+    """GET: the pin's private Ownership card.  POST: add a new owner, private to this pin."""
 
     def get(self, request: HttpRequest, pin_slug: str) -> HttpResponse:
         pin = _get_pin(request, pin_slug)
-        return _render_ownership_panel(request, pin)
+        return _render_pin_ownership_panel(request, pin)
 
     def post(self, request: HttpRequest, pin_slug: str) -> HttpResponse:
         pin = _get_pin(request, pin_slug)
         fields = _owner_fields_from_post(request)
         if not fields["name"]:
-            return _render_ownership_panel(request, pin, error="Owner name is required.")
-        profile, _ = Profile.objects.get_or_create(user=request.user)
-        visibility = _visibility_from_post(request)
-        owner = Owner.objects.create(**fields, visibility=visibility, created_by=profile)
-        if visibility == OwnerVisibility.PRIVATE:
-            owner.pins.add(pin)
-        else:
-            owner.locations.add(pin.location)
-        return _render_ownership_panel(request, pin)
+            return _render_pin_ownership_panel(request, pin, error="Owner name is required.")
+        PinOwner.objects.create(pin=pin, **fields)
+        return _render_pin_ownership_panel(request, pin)
 
 
-class OwnerUpdateView(LoginRequiredMixin, View):
-    """POST: edit an existing owner's details (not its visibility, and never an OFFICIAL record)."""
+class PinOwnerUpdateView(LoginRequiredMixin, View):
+    """POST: edit one of this pin's private owners."""
 
     def post(self, request: HttpRequest, pin_slug: str, owner_id: int) -> HttpResponse:
         pin = _get_pin(request, pin_slug)
-        owner = get_object_or_404(Owner.objects.visible_on(pin), id=owner_id)
-        if owner.source == OwnerSource.OFFICIAL:
-            return _render_ownership_panel(request, pin, error="Official data can't be edited directly.")
+        owner = get_object_or_404(PinOwner, id=owner_id, pin=pin)
         fields = _owner_fields_from_post(request)
         if not fields["name"]:
-            return _render_ownership_panel(request, pin, error="Owner name is required.")
+            return _render_pin_ownership_panel(request, pin, error="Owner name is required.")
         for attr, value in fields.items():
             setattr(owner, attr, value)
         owner.save(update_fields=[*fields.keys(), "updated"])
-        return _render_ownership_panel(request, pin)
+        return _render_pin_ownership_panel(request, pin)
 
 
-class OwnerRemoveView(LoginRequiredMixin, View):
-    """DELETE: unlink an owner from this property (the Owner record itself is kept - they
-    may own other properties, or be referenced by this property's own sale history)."""
+class PinOwnerRemoveView(LoginRequiredMixin, View):
+    """DELETE: remove one of this pin's private owners.
+
+    Unlike the shared/wiki side, there is nowhere else a PinOwner could be
+    "still current" - it belongs to exactly this one pin, so removal is a
+    real delete rather than an unlink.
+    """
 
     def delete(self, request: HttpRequest, pin_slug: str, owner_id: int) -> HttpResponse:
         pin = _get_pin(request, pin_slug)
-        owner = get_object_or_404(Owner.objects.visible_on(pin), id=owner_id)
-        if owner.source == OwnerSource.OFFICIAL:
-            response = _render_ownership_panel(request, pin)
-            return _show_toast(response, "Official data can't be removed directly.", level="error")
+        owner = get_object_or_404(PinOwner, id=owner_id, pin=pin)
         owner_name = owner.name
-        _unlink_current_owner(pin, owner)
-        response = _render_ownership_panel(request, pin)
-        return _show_toast(response, f"Removed “{owner_name}” from this property.")
+        owner.delete()
+        response = _render_pin_ownership_panel(request, pin)
+        return _show_toast(response, f"Removed “{owner_name}”.")
 
 
-def _render_sale_tab(request: HttpRequest, pin: Pin, error: str | None = None) -> HttpResponse:
-    """Render the pin detail page's Sale History tab."""
+def _render_pin_sale_tab(request: HttpRequest, pin: Pin, error: str | None = None) -> HttpResponse:
+    """Render the pin detail page's private Sale History tab."""
     response = render(
         request,
         "dashboard/partials/pins/_property_sale_tab.html",
         {
-            "pin": pin,
-            "sales": PropertySale.objects.visible_on(pin).prefetch_related("previous_owners", "new_owners"),
+            "sales": PinPropertySale.objects.for_pin(pin).prefetch_related("previous_owners", "new_owners"),
+            "show_official_badge": False,
+            "obj_slug": pin.slug,
+            "url_add": "pin.sales",
+            "url_delete": "pin.sales.delete",
         },
     )
     if error:
@@ -245,72 +248,192 @@ def _render_sale_tab(request: HttpRequest, pin: Pin, error: str | None = None) -
     return response
 
 
-class PropertySaleTabView(LoginRequiredMixin, View):
-    """GET: the pin's Sale History tab.  POST: record a new sale."""
+class PinPropertySaleTabView(LoginRequiredMixin, View):
+    """GET: the pin's private Sale History tab.  POST: record a new sale, private to this pin."""
 
     def get(self, request: HttpRequest, pin_slug: str) -> HttpResponse:
         pin = _get_pin(request, pin_slug)
-        return _render_sale_tab(request, pin)
+        return _render_pin_sale_tab(request, pin)
 
     def post(self, request: HttpRequest, pin_slug: str) -> HttpResponse:
         pin = _get_pin(request, pin_slug)
-        profile, _ = Profile.objects.get_or_create(user=request.user)
-        visibility = _visibility_from_post(request)
 
-        raw_price = (request.POST.get("sale_price") or "").strip()
-        sale_price: Decimal | None = None
-        if raw_price:
-            try:
-                sale_price = Decimal(raw_price)
-            except InvalidOperation:
-                return _render_sale_tab(request, pin, error="Invalid sale price.")
-            if sale_price < 0:
-                return _render_sale_tab(request, pin, error="Sale price can't be negative.")
+        sale_price, sale_date, price_date_error = _parse_sale_price_and_date(request)
+        if price_date_error:
+            return _render_pin_sale_tab(request, pin, error=price_date_error)
 
-        raw_date = (request.POST.get("sale_date") or "").strip()
-        sale_date: datetime.date | None = None
-        if raw_date:
-            try:
-                sale_date = datetime.date.fromisoformat(raw_date)
-            except ValueError:
-                return _render_sale_tab(request, pin, error="Invalid sale date.")
+        previous_names, new_names, names_error = _parse_sale_owner_names(request)
+        if names_error:
+            return _render_pin_sale_tab(request, pin, error=names_error)
 
-        previous_names = _parse_owner_names(request.POST.get("previous_owners") or "")
-        new_names = _parse_owner_names(request.POST.get("new_owners") or "")
-        if {name.lower() for name in previous_names} & {name.lower() for name in new_names}:
-            return _render_sale_tab(request, pin, error="Previous and new owner can't be the same.")
+        def get_or_create(name: str) -> PinOwner:
+            owner = PinOwner.objects.for_pin(pin).filter(name__iexact=name).first()
+            return owner or PinOwner.objects.create(pin=pin, name=name)
 
-        previous_owners = _get_or_create_owners(pin, previous_names, visibility, profile)
-        new_owners = _get_or_create_owners(pin, new_names, visibility, profile)
+        previous_owners = [get_or_create(name) for name in previous_names]
+        new_owners = [get_or_create(name) for name in new_names]
+
+        sale = PinPropertySale.objects.create(pin=pin, sale_price=sale_price, sale_date=sale_date, notes=(request.POST.get("notes") or "").strip())
+        sale.previous_owners.set(previous_owners)
+        sale.new_owners.set(new_owners)
+        return _render_pin_sale_tab(request, pin)
+
+
+class PinPropertySaleDeleteView(LoginRequiredMixin, View):
+    """DELETE: remove one of this pin's private sale records."""
+
+    def delete(self, request: HttpRequest, pin_slug: str, sale_id: int) -> HttpResponse:
+        pin = _get_pin(request, pin_slug)
+        sale = get_object_or_404(PinPropertySale, id=sale_id, pin=pin)
+        sale.delete()
+        return _render_pin_sale_tab(request, pin)
+
+
+# ======================================================================
+# Wiki-scoped (shared) - WikiOwner/WikiPropertySale, visible to everyone
+# with a pin at this location
+# ======================================================================
+
+
+def _render_wiki_ownership_panel(request: HttpRequest, location: Location, error: str | None = None) -> HttpResponse:
+    """Render the wiki page's shared Ownership card."""
+    response = render(
+        request,
+        "dashboard/partials/pins/_ownership_panel.html",
+        {
+            "owners": WikiOwner.objects.for_location(location),
+            "panel_id": "location-ownership-panel",
+            "collapse_scope": "wiki",
+            "show_official_badge": True,
+            "obj_slug": location.slug,
+            "url_add": "location.wiki.ownership",
+            "url_edit": "location.wiki.ownership.edit",
+            "url_remove": "location.wiki.ownership.remove",
+            "url_sales": "location.wiki.sales",
+        },
+    )
+    if error:
+        return _show_toast(response, error, level="error")
+    return response
+
+
+class WikiOwnershipPanelView(LoginRequiredMixin, View):
+    """GET: the wiki's shared Ownership card.  POST: add a new owner, shared with the wiki."""
+
+    def get(self, request: HttpRequest, location_slug: str) -> HttpResponse:
+        location, _wiki, _profile = resolve_visible_wiki(request, location_slug)
+        return _render_wiki_ownership_panel(request, location)
+
+    def post(self, request: HttpRequest, location_slug: str) -> HttpResponse:
+        location, _wiki, profile = resolve_visible_wiki(request, location_slug)
+        fields = _owner_fields_from_post(request)
+        if not fields["name"]:
+            return _render_wiki_ownership_panel(request, location, error="Owner name is required.")
+        owner = WikiOwner.objects.create(created_by=profile, **fields)
+        owner.locations.add(location)
+        return _render_wiki_ownership_panel(request, location)
+
+
+class WikiOwnerUpdateView(LoginRequiredMixin, View):
+    """POST: edit a shared owner (not an OFFICIAL record)."""
+
+    def post(self, request: HttpRequest, location_slug: str, owner_id: int) -> HttpResponse:
+        location, _wiki, _profile = resolve_visible_wiki(request, location_slug)
+        owner = get_object_or_404(WikiOwner.objects.for_location(location), id=owner_id)
+        if owner.source == OwnerSource.OFFICIAL:
+            return _render_wiki_ownership_panel(request, location, error="Official data can't be edited directly.")
+        fields = _owner_fields_from_post(request)
+        if not fields["name"]:
+            return _render_wiki_ownership_panel(request, location, error="Owner name is required.")
+        for attr, value in fields.items():
+            setattr(owner, attr, value)
+        owner.save(update_fields=[*fields.keys(), "updated"])
+        return _render_wiki_ownership_panel(request, location)
+
+
+class WikiOwnerRemoveView(LoginRequiredMixin, View):
+    """DELETE: unlink a shared owner from this property (the record itself is kept - they
+    may own other properties, or be referenced by this property's own sale history);
+    never an OFFICIAL record."""
+
+    def delete(self, request: HttpRequest, location_slug: str, owner_id: int) -> HttpResponse:
+        location, _wiki, _profile = resolve_visible_wiki(request, location_slug)
+        owner = get_object_or_404(WikiOwner.objects.for_location(location), id=owner_id)
+        if owner.source == OwnerSource.OFFICIAL:
+            response = _render_wiki_ownership_panel(request, location)
+            return _show_toast(response, "Official data can't be removed directly.", level="error")
+        owner_name = owner.name
+        owner.locations.remove(location)
+        response = _render_wiki_ownership_panel(request, location)
+        return _show_toast(response, f"Removed “{owner_name}” from this property.")
+
+
+def _render_wiki_sale_tab(request: HttpRequest, location: Location, error: str | None = None) -> HttpResponse:
+    """Render the wiki page's shared Sale History tab."""
+    response = render(
+        request,
+        "dashboard/partials/pins/_property_sale_tab.html",
+        {
+            "sales": WikiPropertySale.objects.for_location(location).prefetch_related("previous_owners", "new_owners"),
+            "show_official_badge": True,
+            "obj_slug": location.slug,
+            "url_add": "location.wiki.sales",
+            "url_delete": "location.wiki.sales.delete",
+        },
+    )
+    if error:
+        return _show_toast(response, error, level="error")
+    return response
+
+
+class WikiPropertySaleTabView(LoginRequiredMixin, View):
+    """GET: the wiki's shared Sale History tab.  POST: record a new sale, shared with the wiki."""
+
+    def get(self, request: HttpRequest, location_slug: str) -> HttpResponse:
+        location, _wiki, _profile = resolve_visible_wiki(request, location_slug)
+        return _render_wiki_sale_tab(request, location)
+
+    def post(self, request: HttpRequest, location_slug: str) -> HttpResponse:
+        location, _wiki, profile = resolve_visible_wiki(request, location_slug)
+
+        sale_price, sale_date, price_date_error = _parse_sale_price_and_date(request)
+        if price_date_error:
+            return _render_wiki_sale_tab(request, location, error=price_date_error)
+
+        previous_names, new_names, names_error = _parse_sale_owner_names(request)
+        if names_error:
+            return _render_wiki_sale_tab(request, location, error=names_error)
+
+        def get_or_create(name: str) -> WikiOwner:
+            owner = WikiOwner.objects.for_location(location).filter(name__iexact=name).first()
+            if owner is None:
+                owner = WikiOwner.objects.create(name=name, created_by=profile)
+            owner.locations.add(location)
+            return owner
+
+        previous_owners = [get_or_create(name) for name in previous_names]
+        new_owners = [get_or_create(name) for name in new_names]
 
         # A sale updates who currently owns the property - a seller no
         # longer does (they may still show up elsewhere, e.g. as an owner of
         # a different property, or referenced by this property's own history).
         for owner in previous_owners:
-            _unlink_current_owner(pin, owner)
+            owner.locations.remove(location)
 
-        sale = PropertySale.objects.create(
-            location=pin.location,
-            pin=pin if visibility == OwnerVisibility.PRIVATE else None,
-            visibility=visibility,
-            created_by=profile,
-            sale_price=sale_price,
-            sale_date=sale_date,
-            notes=(request.POST.get("notes") or "").strip(),
-        )
+        sale = WikiPropertySale.objects.create(location=location, created_by=profile, sale_price=sale_price, sale_date=sale_date, notes=(request.POST.get("notes") or "").strip())
         sale.previous_owners.set(previous_owners)
         sale.new_owners.set(new_owners)
-        return _render_sale_tab(request, pin)
+        return _render_wiki_sale_tab(request, location)
 
 
-class PropertySaleDeleteView(LoginRequiredMixin, View):
-    """DELETE: remove a sale record (never an OFFICIAL one)."""
+class WikiPropertySaleDeleteView(LoginRequiredMixin, View):
+    """DELETE: remove a shared sale record (never an OFFICIAL one)."""
 
-    def delete(self, request: HttpRequest, pin_slug: str, sale_id: int) -> HttpResponse:
-        pin = _get_pin(request, pin_slug)
-        sale = get_object_or_404(PropertySale.objects.visible_on(pin), id=sale_id)
+    def delete(self, request: HttpRequest, location_slug: str, sale_id: int) -> HttpResponse:
+        location, _wiki, _profile = resolve_visible_wiki(request, location_slug)
+        sale = get_object_or_404(WikiPropertySale.objects.for_location(location), id=sale_id)
         if sale.source == OwnerSource.OFFICIAL:
-            response = _render_sale_tab(request, pin)
+            response = _render_wiki_sale_tab(request, location)
             return _show_toast(response, "Official data can't be removed directly.", level="error")
         sale.delete()
-        return _render_sale_tab(request, pin)
+        return _render_wiki_sale_tab(request, location)

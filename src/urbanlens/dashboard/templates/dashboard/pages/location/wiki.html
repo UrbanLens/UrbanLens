@@ -190,6 +190,20 @@
                 <div class="card__body wiki-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
             </div>
 
+            {# -- Ownership ------------------------------------------------------ #}
+            <div hx-get="{% url 'location.wiki.ownership' location.slug %}"
+                 hx-trigger="load[!window.ulSectionCollapsed('wiki','ownership')], ul:unhide"
+                 hx-swap="outerHTML"
+                 id="location-ownership-panel"
+                 class="card wiki-card ownership-panel"
+                 data-collapse-scope="wiki" data-collapse-section="ownership">
+                <div class="card-header">
+                    <i class="material-symbols-outlined">real_estate_agent</i>
+                    <span>Ownership</span>
+                </div>
+                <div class="card__body wiki-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
+            </div>
+
             {# -- Photo gallery ------------------------------------------------ #}
             <div id="wiki-gallery-panel" class="card"
                  hx-get="{% url 'location.wiki.gallery' location.slug %}"

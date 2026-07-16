@@ -1,77 +1,87 @@
-"""QuerySets and Managers for Owner and PropertySale."""
+"""QuerySets and Managers for PinOwner/WikiOwner and PinPropertySale/WikiPropertySale."""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Self
 
-from django.db.models import Q
-
 from urbanlens.dashboard.models import abstract
-from urbanlens.dashboard.models.property_owner.meta import OwnerVisibility
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import Pin
 
 
-class OwnerQuerySet(abstract.DashboardQuerySet):
-    """QuerySet for Owner."""
+class PinOwnerQuerySet(abstract.DashboardQuerySet):
+    """QuerySet for PinOwner."""
+
+    def for_pin(self, pin: Pin) -> Self:
+        """Return the owners private to a specific pin.
+
+        Args:
+            pin: The pin to filter by.
+
+        Returns:
+            Owners attached to that pin.
+        """
+        return self.filter(pin=pin)
+
+
+class PinOwnerManager(abstract.DashboardManager.from_queryset(PinOwnerQuerySet)):
+    """Manager for PinOwner."""
+
+
+class WikiOwnerQuerySet(abstract.DashboardQuerySet):
+    """QuerySet for WikiOwner."""
 
     def for_location(self, location: Location) -> Self:
-        """Return the shared owners associated with a specific location.
+        """Return the owners shared for a specific location.
 
         Args:
             location: The Location to filter by.
 
         Returns:
-            SHARED-visibility owners linked to that location.
+            Owners linked to that location.
         """
-        return self.filter(visibility=OwnerVisibility.SHARED, locations=location)
+        return self.filter(locations=location)
 
-    def visible_on(self, pin: Pin) -> Self:
-        """Return every owner visible while viewing a specific pin.
+
+class WikiOwnerManager(abstract.DashboardManager.from_queryset(WikiOwnerQuerySet)):
+    """Manager for WikiOwner."""
+
+
+class PinPropertySaleQuerySet(abstract.DashboardQuerySet):
+    """QuerySet for PinPropertySale."""
+
+    def for_pin(self, pin: Pin) -> Self:
+        """Return the sale records private to a specific pin.
 
         Args:
-            pin: The pin being viewed.
+            pin: The pin to filter by.
 
         Returns:
-            The location's SHARED owners, plus any PRIVATE owners attached to
-            this exact pin (private owners on a different pin, even at the
-            same location, are excluded).
+            Sales for that pin, newest first (model default ordering).
         """
-        return self.filter(Q(visibility=OwnerVisibility.SHARED, locations=pin.location_id) | Q(visibility=OwnerVisibility.PRIVATE, pins=pin)).distinct()
+        return self.filter(pin=pin)
 
 
-class OwnerManager(abstract.DashboardManager.from_queryset(OwnerQuerySet)):
-    """Manager for Owner."""
+class PinPropertySaleManager(abstract.DashboardManager.from_queryset(PinPropertySaleQuerySet)):
+    """Manager for PinPropertySale."""
 
 
-class PropertySaleQuerySet(abstract.DashboardQuerySet):
-    """QuerySet for PropertySale."""
+class WikiPropertySaleQuerySet(abstract.DashboardQuerySet):
+    """QuerySet for WikiPropertySale."""
 
     def for_location(self, location: Location) -> Self:
-        """Return the shared sale records for a specific location.
+        """Return the sale records shared for a specific location.
 
         Args:
             location: The Location to filter by.
 
         Returns:
-            SHARED-visibility sales for that location, newest first (model default ordering).
+            Sales for that location, newest first (model default ordering).
         """
-        return self.filter(visibility=OwnerVisibility.SHARED, location=location)
-
-    def visible_on(self, pin: Pin) -> Self:
-        """Return every sale record visible while viewing a specific pin.
-
-        Args:
-            pin: The pin being viewed.
-
-        Returns:
-            The location's SHARED sales, plus any PRIVATE sales attached to
-            this exact pin, newest first.
-        """
-        return self.filter(Q(visibility=OwnerVisibility.SHARED, location=pin.location_id) | Q(visibility=OwnerVisibility.PRIVATE, pin=pin))
+        return self.filter(location=location)
 
 
-class PropertySaleManager(abstract.DashboardManager.from_queryset(PropertySaleQuerySet)):
-    """Manager for PropertySale."""
+class WikiPropertySaleManager(abstract.DashboardManager.from_queryset(WikiPropertySaleQuerySet)):
+    """Manager for WikiPropertySale."""

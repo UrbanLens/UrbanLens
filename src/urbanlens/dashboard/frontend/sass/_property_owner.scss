@@ -1,4 +1,5 @@
-// Ownership card on the pin detail page: owner list/edit forms + Sale History tab.
+// Ownership card (pin detail page, private; wiki page, shared): owner
+// list/edit forms + Sale History tab. Shared styling for both scopes.
 
 @use 'variables' as *;
 
@@ -84,22 +85,9 @@
   .material-symbols-outlined { font-size: .85rem; }
 }
 
-.po-badge--private {
-  background: var(--ul-surface-raised);
-  color: var(--ul-grey-6);
-}
-
 .po-badge--official {
   background: var(--ul-color-accent-ring);
   color: var(--ul-color-accent);
-}
-
-.po-visibility-checkbox {
-  align-items: center;
-  color: var(--ul-grey-6);
-  display: flex;
-  font-size: .78rem;
-  gap: .4rem;
 }
 
 .po-owner-actions {
