@@ -54,9 +54,9 @@
     {% endif %}
 
     {% if visits %}
-    <ul class="visit-list">
+    <ul class="visit-list" data-adaptive-pagination-list data-adaptive-pagination-min-page-size="3">
         {% for visit in visits %}
-        <li class="visit-item">
+        <li class="visit-item" data-adaptive-pagination-item>
             {# -- Leading source icon, doubles as a timeline marker -------------- #}
             <span class="visit-item-icon visit-source--{{ visit.source }}" title="{{ visit.get_source_display }}">
                 {% if visit.source == "history" %}<i class="material-symbols-outlined">cloud_download</i>

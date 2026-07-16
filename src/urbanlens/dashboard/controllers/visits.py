@@ -29,7 +29,17 @@ from urbanlens.dashboard.services.visits import (
 
 logger = logging.getLogger(__name__)
 
-_VISITS_PAGE_SIZE = 6
+# The server still paginates in fixed-size batches, but the client slices each
+# batch further by actual rendered height (see the adaptive-pagination system
+# in pages/location/index.html, also used by the Web Search panel) - a batch
+# needs to be comfortably bigger than a typical visible page so the
+# height-measurer has real rows to count against, not just whatever the
+# server happened to hand back. Visit rows vary a lot in height (photos, a
+# map snapshot, a long note), more so than a search result, hence the wider
+# multiplier than Web Search's.
+_VISITS_CLIENT_PAGE_SIZE = 6
+_VISITS_BATCH_MULTIPLIER = 3
+_VISITS_PAGE_SIZE = _VISITS_CLIENT_PAGE_SIZE * _VISITS_BATCH_MULTIPLIER
 
 
 def _visit_dialog_context(pin: Pin, visit: PinVisit | None = None) -> dict[str, object]:
@@ -96,6 +106,7 @@ def _render_visit_history(request: HttpRequest, pin: Pin) -> HttpResponse:
             "visits": page_obj.object_list,
             "pending_suggestions": pending_suggestions,
             "include_children": include_children,
+            "adaptive_pagination": True,
             "extra_query": "children=1" if include_children else "",
             # The embedded "Log a Visit" dialog's add form prefills its date field
             # with this - see _visit_form.html.

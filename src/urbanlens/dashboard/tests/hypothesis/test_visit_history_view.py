@@ -38,3 +38,25 @@ class VisitHistoryViewTests(TestCase):
         response = self.client.get(reverse("pin.visit.edit", args=[self.pin.slug, visit.id]))
 
         self.assertEqual(response.status_code, 200)
+
+    def test_visit_list_carries_adaptive_pagination_markup(self):
+        """Regression coverage: pagination used to be a fixed 6-per-page count
+        regardless of each visit's actual rendered height (photos/notes/maps
+        make some visits much taller than others) - it now hands the client
+        the same height-based adaptive-pagination system Web Search uses, via
+        data-adaptive-pagination-list/-item and adaptive_pagination context."""
+        baker.make(PinVisit, pin=self.pin, notes="First visit")
+
+        response = self.client.get(reverse("pin.visits", args=[self.pin.slug]))
+
+        self.assertContains(response, "data-adaptive-pagination-list")
+        self.assertContains(response, "data-adaptive-pagination-item")
+        self.assertContains(response, "data-adaptive-pagination-controls")
+
+    def test_visit_list_batch_size_exceeds_typical_client_page_size(self):
+        """The server-side batch must be comfortably larger than a typical
+        visible page, or the client-side height measurer has nothing to
+        actually paginate against - see _VISITS_BATCH_MULTIPLIER."""
+        from urbanlens.dashboard.controllers.visits import _VISITS_CLIENT_PAGE_SIZE, _VISITS_PAGE_SIZE
+
+        self.assertGreater(_VISITS_PAGE_SIZE, _VISITS_CLIENT_PAGE_SIZE)
