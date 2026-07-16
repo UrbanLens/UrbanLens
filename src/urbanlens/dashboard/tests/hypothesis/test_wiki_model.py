@@ -44,6 +44,19 @@ class WikiLocationRelationTests(TestCase):
         loc.refresh_from_db()
         self.assertEqual(loc.wiki.pk, wiki.pk)
 
+    def test_unnamed_location_placeholder_includes_area_when_known(self) -> None:
+        """Matches Location.display_name's own area-suffixed placeholder, so an
+        unnamed wiki reads as "Unnamed Location in Albany, NY" instead of a
+        bare "Unnamed Location" that's indistinguishable from every other one."""
+        loc = baker.make(Location, official_name="", city="Albany", state="NY", country="USA", latitude="40.0", longitude="-74.0")
+        wiki, _created = Wiki.objects.get_or_create_for_location(loc)
+        self.assertEqual(wiki.name, "Unnamed Location in Albany, NY")
+
+    def test_unnamed_location_placeholder_stays_bare_without_area_data(self) -> None:
+        loc = baker.make(Location, official_name="", city="", state="", country="", latitude="40.0", longitude="-74.0")
+        wiki, _created = Wiki.objects.get_or_create_for_location(loc)
+        self.assertEqual(wiki.name, "Unnamed Location")
+
 
 class DisplayNameResolutionTests(TestCase):
     """Location.display_name and Pin.effective_name resolve through the wiki."""

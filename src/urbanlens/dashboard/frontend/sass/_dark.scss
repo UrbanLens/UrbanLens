@@ -556,7 +556,9 @@
 
     .trip-activity-item {
         &.trip-activity--highlighted {
-            background: $dk-cal-event-bg;
+            background: rgba($color-amber-500, .12);
+            border-left: 3px solid $color-amber-500;
+            padding-left: calc(1rem - 3px);
         }
     }
 

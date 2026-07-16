@@ -54,7 +54,9 @@ def enrich_wiki_location(self, wiki_id: int) -> bool:
     except Exception:
         logger.exception("enrich_wiki_location: Google place linking failed for location %s", location.pk)
 
-    if not wiki.name or wiki.name == "Unnamed Location":
+    from urbanlens.dashboard.services.locations.naming import is_meaningful_name
+
+    if not is_meaningful_name(wiki.name):
         from urbanlens.dashboard.services.locations.naming import sanitize_name
 
         try:
@@ -65,8 +67,15 @@ def enrich_wiki_location(self, wiki_id: int) -> bool:
         # This bypasses Wiki.save() (a bulk .update()), so sanitize here too -
         # location.official_name is already sanitized by Location.save(), but
         # name_resolver.resolve() is a live external-source result that isn't.
+        # The name__in filter re-checks the name is still a placeholder at
+        # write time (atomically, in the same query) so a concurrent
+        # user-driven rename isn't clobbered. Wiki.get_or_create_for_location
+        # may have seeded either the bare or area-suffixed placeholder.
+        placeholder_names = {"", "Unnamed Location"}
+        if location.area_label:
+            placeholder_names.add(f"Unnamed Location in {location.area_label}")
         if place_name := sanitize_name(place_name):
-            Wiki.objects.filter(pk=wiki.pk, name__in=["", "Unnamed Location"]).update(name=place_name)
+            Wiki.objects.filter(pk=wiki.pk, name__in=placeholder_names).update(name=place_name)
 
     update_task_progress(self, current=1, total=2, message="Generating boundaries...")
     if not boundary_generation_ran(location):

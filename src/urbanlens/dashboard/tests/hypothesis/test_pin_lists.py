@@ -92,6 +92,28 @@ class PinListMarkupMapErrorIsJsonTests(TestCase):
         self.assertFalse(data["ok"])
         self.assertIn("error", data)
 
+    def test_detail_page_has_a_create_markup_map_button(self) -> None:
+        """The list-detail page overhaul dropped this button's trigger from the
+        more-actions menu entirely - the backend endpoint above was reachable
+        but nothing in the UI called it. Regression guard for the button/JS
+        handler wiring, not just the endpoint's own behavior."""
+        pin_list = baker.make(PinList, profile=self.profile, name="Has pins")
+        PinListItem.objects.create(pin_list=pin_list, pin=_make_pin(self.profile), added_via=PinListItem.ADDED_MANUAL)
+        response = self.client.get(reverse("lists.detail", kwargs={"list_slug": pin_list.slug}))
+        self.assertContains(response, "pinListCreateMarkupMap()")
+        self.assertContains(response, "Create Markup Map")
+        self.assertNotContains(response, 'disabled title="Add pins to this list first">\n                    <i class="material-symbols-outlined">map</i>')
+
+    def test_create_markup_map_button_disabled_when_list_is_empty(self) -> None:
+        pin_list = baker.make(PinList, profile=self.profile, name="Empty list")
+        response = self.client.get(reverse("lists.detail", kwargs={"list_slug": pin_list.slug}))
+        content = response.content.decode()
+        markup_btn_start = content.index("pinListCreateMarkupMap()")
+        # The disabled attribute is on the same <button ...> tag as the onclick handler.
+        tag_start = content.rindex("<button", 0, markup_btn_start)
+        tag_end = content.index(">", markup_btn_start)
+        self.assertIn("disabled", content[tag_start:tag_end])
+
 
 class SelectingSavedFilterImmediatelyPopulatesListTests(TestCase):
     """Picking a saved filter must show matching pins right away, not only after also enabling "is_smart"."""

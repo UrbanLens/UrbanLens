@@ -100,6 +100,7 @@ class WikiManager(abstract.PublicDashboardManager.from_queryset(WikiQuerySet)):
             pass
 
         defaults = dict(defaults or {})
-        name = defaults.pop("name", None) or location.official_name or "Unnamed Location"
+        placeholder = f"Unnamed Location in {location.area_label}" if location.area_label else "Unnamed Location"
+        name = defaults.pop("name", None) or location.official_name or placeholder
         wiki = self.create(location=location, name=name, **defaults)
         return wiki, True

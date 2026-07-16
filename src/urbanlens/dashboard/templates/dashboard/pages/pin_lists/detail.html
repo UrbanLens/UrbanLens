@@ -67,6 +67,10 @@
                         {% if not pin_list.pin_count %}disabled title="Add pins to this list first"{% endif %}>
                     <i class="material-symbols-outlined">luggage</i> Add to trip
                 </button>
+                <button type="button" onclick="pinListCloseMoreMenu(); pinListCreateMarkupMap()"
+                        {% if not pin_list.pin_count %}disabled title="Add pins to this list first"{% endif %}>
+                    <i class="material-symbols-outlined">map</i> Create Markup Map
+                </button>
                 <div class="pin-list-more-menu-divider"></div>
                 <button type="button" class="pin-list-more-menu-danger" onclick="pinListCloseMoreMenu(); pinListDelete()">
                     <i class="material-symbols-outlined">delete</i> Delete list
@@ -242,6 +246,7 @@
     const LIST_DELETE_URL = "{% url 'lists.delete' pin_list.slug %}";
     const CREATE_TRIP_URL = "{% url 'lists.create_trip' pin_list.slug %}";
     const ADD_TO_TRIP_URL = "{% url 'lists.add_to_trip' pin_list.slug %}";
+    const MARKUP_MAP_URL = "{% url 'lists.markup_map' pin_list.slug %}";
     const PIN_ADD_URL = "{% url 'pin.add' %}";
     const CSRF = document.querySelector('input[name=csrfmiddlewaretoken]')?.value || '{{ csrf_token }}';
 
@@ -490,6 +495,10 @@
     // -- Create / add to trip ------------------------------------------------
     window.pinListCreateTrip = function () {
         _postJson(CREATE_TRIP_URL, {}).then((data) => { if (data.ok) window.location = data.redirect; }).catch(_toastError);
+    };
+
+    window.pinListCreateMarkupMap = function () {
+        _postJson(MARKUP_MAP_URL, {}).then((data) => { if (data.ok) window.location = data.redirect; }).catch(_toastError);
     };
 
     window.pinListAddToTrip = function (tripSlug) {

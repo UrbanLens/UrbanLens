@@ -209,6 +209,74 @@ class MessageShareRespondViewTests(TestCase):
         )
 
 
+class ShareStatusNotLeakedToSharerTests(TestCase):
+    """The sharer must never see the recipient's accept/reject decision in the
+    DM thread itself - that's the recipient's own choice to disclose or not.
+    _message_share_card.html already gates this on viewer_id == recipient_id;
+    this locks the guarantee in with a regression test (there wasn't one)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.sender = _profile()
+        self.recipient = _profile()
+        _make_accepted_friendship(self.sender, self.recipient)
+        _set_dm_visibility(self.recipient, VisibilityChoice.ANYONE)
+        self.sender.ensure_slug()
+        self.recipient.ensure_slug()
+        self.pin = baker.make(Pin, profile=self.sender, parent_pin=None)
+
+    def _accept_as_recipient(self, message: DirectMessage) -> None:
+        self.client.force_login(self.recipient.user)
+        self.client.post(
+            reverse("messages.share.pin.respond", kwargs={"profile_slug": self.sender.slug, "message_id": message.pk}),
+            {"action": "accept"},
+            HTTP_HX_REQUEST="true",
+        )
+        self.client.logout()
+
+    def _reject_as_recipient(self, message: DirectMessage) -> None:
+        self.client.force_login(self.recipient.user)
+        self.client.post(
+            reverse("messages.share.pin.respond", kwargs={"profile_slug": self.sender.slug, "message_id": message.pk}),
+            {"action": "reject"},
+            HTTP_HX_REQUEST="true",
+        )
+        self.client.logout()
+
+    def test_sharer_does_not_see_accepted_status(self) -> None:
+        message = share_pin_in_message(self.sender, self.recipient, self.pin, "hi")
+        self._accept_as_recipient(message)
+        self.client.force_login(self.sender.user)
+        response = self.client.get(reverse("messages.conversation", kwargs={"profile_slug": self.recipient.slug}))
+        content = response.content.decode()
+        self.assertNotIn("Added to your map", content)
+        self.assertIn("Pin shared.", content)
+
+    def test_sharer_does_not_see_rejected_status(self) -> None:
+        message = share_pin_in_message(self.sender, self.recipient, self.pin, "hi")
+        self._reject_as_recipient(message)
+        self.client.force_login(self.sender.user)
+        response = self.client.get(reverse("messages.conversation", kwargs={"profile_slug": self.recipient.slug}))
+        content = response.content.decode()
+        self.assertNotIn("Declined", content)
+        self.assertIn("Pin shared.", content)
+
+    def test_sharer_does_not_see_pending_accept_reject_buttons(self) -> None:
+        message = share_pin_in_message(self.sender, self.recipient, self.pin, "hi")
+        self.client.force_login(self.sender.user)
+        response = self.client.get(reverse("messages.conversation", kwargs={"profile_slug": self.recipient.slug}))
+        content = response.content.decode()
+        self.assertNotContains(response, reverse("messages.share.pin.respond", kwargs={"profile_slug": self.sender.slug, "message_id": message.pk}))
+        self.assertIn("Pin shared.", content)
+
+    def test_recipient_does_see_their_own_status(self) -> None:
+        message = share_pin_in_message(self.sender, self.recipient, self.pin, "hi")
+        self._accept_as_recipient(message)
+        self.client.force_login(self.recipient.user)
+        response = self.client.get(reverse("messages.conversation", kwargs={"profile_slug": self.sender.slug}))
+        self.assertContains(response, "Added to your map")
+
+
 class ThreadImagePermissionSerializationTests(TestCase):
     """serialize_direct_message carries images_revealed for the live consent path."""
 
