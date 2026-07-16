@@ -3122,6 +3122,28 @@ function installOrgTabSwitching() {
     window._orgBulk?.deselect?.();
   });
 }
+var ORG_SECTION_HERO = {
+  labels: { icon: "tune", title: "Organize", subtitle: "Manage the tags, categories, statuses, and people labels used to organize your data." },
+  lists: { icon: "bookmarks", title: "Lists", subtitle: "Group your pins into curated collections you can browse, share, and filter by." },
+  filters: { icon: "filter_alt", title: "Filters", subtitle: "Save reusable filter criteria to quickly narrow down pins on the map and elsewhere." }
+};
+function updateOrgSectionHero(section) {
+  const hero = ORG_SECTION_HERO[section];
+  if (!hero)
+    return;
+  const titleEl = document.querySelector(".ul-page-hero__title");
+  const iconEl = titleEl?.querySelector(".material-symbols-outlined");
+  const subtitleEl = document.querySelector(".ul-page-hero__subtitle");
+  if (iconEl)
+    iconEl.textContent = hero.icon;
+  if (titleEl) {
+    const textNode = Array.from(titleEl.childNodes).find((n) => n.nodeType === Node.TEXT_NODE);
+    if (textNode)
+      textNode.textContent = ` ${hero.title} `;
+  }
+  if (subtitleEl)
+    subtitleEl.textContent = hero.subtitle;
+}
 function installOrgSectionSwitching() {
   const tabs = document.querySelectorAll(".organize-section-tab");
   const panels = document.querySelectorAll(".organize-section-panel");
@@ -3136,6 +3158,7 @@ function installOrgSectionSwitching() {
       panels.forEach((p) => {
         p.hidden = p.id !== `panel-${section}`;
       });
+      updateOrgSectionHero(section);
       const url = new URL(window.location.href);
       const tabParam = section === "labels" ? localStorage.getItem("organize_tab") ?? "tags" : section;
       url.searchParams.set("tab", tabParam);

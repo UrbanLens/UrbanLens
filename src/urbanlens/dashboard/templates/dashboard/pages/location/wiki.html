@@ -430,7 +430,9 @@
     // -- Community wiki onboarding -------------------------------------------
     (function initWikiOnboarding() {
         {% if not request.user.profile.show_onboarding_tips %}return;{% endif %}
-        const prefix = 'ul_onboarding_v1_wiki_{{ location.uuid|default:location.id }}';
+        // Global (per-user, not per-location) - see the matching comment in
+        // pages/location/index.html's initPinDetailOnboarding for why.
+        const prefix = 'ul_onboarding_v1_wiki';
         const sessionKey = prefix + '_later';
         const cards = [
             {

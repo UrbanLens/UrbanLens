@@ -852,7 +852,12 @@
     // -- Pin detail onboarding ------------------------------------------------
     (function initPinDetailOnboarding() {
         {% if not request.user.profile.show_onboarding_tips %}return;{% endif %}
-        const prefix = 'ul_onboarding_v1_pin_detail_{{ pin.uuid|default:pin.id }}';
+        // Global (per-user, not per-pin) so "Don't show again" on one pin
+        // actually stays dismissed when visiting a different pin - cards are
+        // already uniquely identified by their own `id` below, so scoping the
+        // prefix to this pin's uuid on top of that just fragmented the same
+        // dismissal into a separate localStorage key per pin ever visited.
+        const prefix = 'ul_onboarding_v1_pin_detail';
         const sessionKey = prefix + '_later';
         const cards = [
             {

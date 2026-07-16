@@ -472,7 +472,9 @@
 
 (function initTripOnboarding() {
     {% if not request.user.profile.show_onboarding_tips %}return;{% endif %}
-    const prefix = 'ul_onboarding_v1_trip_{{ trip.uuid }}';
+    // Global (per-user, not per-trip) - see the matching comment in
+    // pages/location/index.html's initPinDetailOnboarding for why.
+    const prefix = 'ul_onboarding_v1_trip';
     const sessionKey = prefix + '_later';
     const cards = [
         {

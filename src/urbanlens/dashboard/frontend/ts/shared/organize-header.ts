@@ -245,6 +245,30 @@ export function installOrgTabSwitching(): void {
 // and Filters lazy-load their content via HTMX the first time they're shown
 // (hx-trigger="revealed" on `.organize-section-panel`, see organize/index.html) -
 // this only ever toggles which section is visible, it never touches that content.
+// Kept in sync with the server-side hero branch in organize/index.html's
+// {% block hero %} - the section switch below is client-side only (no page
+// reload), so the hero has to be updated here too or it stays stuck on
+// whatever section was active on the initial page load.
+const ORG_SECTION_HERO: Record<string, { icon: string; title: string; subtitle: string }> = {
+    labels: { icon: "tune", title: "Organize", subtitle: "Manage the tags, categories, statuses, and people labels used to organize your data." },
+    lists: { icon: "bookmarks", title: "Lists", subtitle: "Group your pins into curated collections you can browse, share, and filter by." },
+    filters: { icon: "filter_alt", title: "Filters", subtitle: "Save reusable filter criteria to quickly narrow down pins on the map and elsewhere." },
+};
+
+function updateOrgSectionHero(section: string): void {
+    const hero = ORG_SECTION_HERO[section];
+    if (!hero) return;
+    const titleEl = document.querySelector<HTMLElement>(".ul-page-hero__title");
+    const iconEl = titleEl?.querySelector<HTMLElement>(".material-symbols-outlined");
+    const subtitleEl = document.querySelector<HTMLElement>(".ul-page-hero__subtitle");
+    if (iconEl) iconEl.textContent = hero.icon;
+    if (titleEl) {
+        const textNode = Array.from(titleEl.childNodes).find((n) => n.nodeType === Node.TEXT_NODE);
+        if (textNode) textNode.textContent = ` ${hero.title} `;
+    }
+    if (subtitleEl) subtitleEl.textContent = hero.subtitle;
+}
+
 export function installOrgSectionSwitching(): void {
     const tabs = document.querySelectorAll<HTMLElement>(".organize-section-tab");
     const panels = document.querySelectorAll<HTMLElement>(".organize-section-panel");
@@ -258,6 +282,7 @@ export function installOrgSectionSwitching(): void {
             panels.forEach((p) => {
                 p.hidden = p.id !== `panel-${section}`;
             });
+            updateOrgSectionHero(section);
             const url = new URL(window.location.href);
             // "labels" isn't a real ?tab= value server-side - it's implied by
             // whichever label sub-tab (tags/categories/...) was last active,
