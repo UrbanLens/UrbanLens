@@ -40,7 +40,7 @@ Expects:
             <h1 class="profile-full-name">
                 {% if profile.full_name %}{{ profile.full_name }}{% else %}{{ profile.username }}{% endif %}
                 {% if profile.user == request.user %}
-                {% include "dashboard/partials/ui/_privacy_hint.html" with label="Name, avatar & bio" value=profile.get_profile_visibility_display %}
+                {% include "dashboard/partials/ui/_privacy_hint.html" with label="Name, avatar & bio" value=profile.get_profile_visibility_display field="profile_visibility" raw_value=profile.profile_visibility owner=profile %}
                 {% endif %}
             </h1>
             <p class="profile-username">@{{ profile.username }}</p>
@@ -194,7 +194,7 @@ Expects:
         <span class="profile-meta-item{% if profile.user == request.user %} ul-privacy-hint-row{% endif %}">
             <i class="material-symbols-outlined">email</i>{{ profile.email }}
             {% if profile.user == request.user %}
-            {% include "dashboard/partials/ui/_privacy_hint.html" with value=profile.get_contact_visibility_display %}
+            {% include "dashboard/partials/ui/_privacy_hint.html" with value=profile.get_contact_visibility_display field="contact_visibility" raw_value=profile.contact_visibility owner=profile %}
             {% endif %}
         </span>
         {% endif %}

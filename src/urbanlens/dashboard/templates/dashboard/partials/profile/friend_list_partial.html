@@ -12,7 +12,7 @@
             {% if is_own_profile and friends %}<span class="profile-section-count">{{ friends|length }}</span>{% endif %}
             {% if not is_own_profile and mutual_friends %}<span class="profile-section-count">{{ mutual_friends|length }}</span>{% endif %}
             {% if is_own_profile %}
-            {% include "dashboard/partials/ui/_privacy_hint.html" with label="Profile" value=viewer.get_profile_visibility_display note="They only see friends you have in common with them. Your full list is only visible to you." %}
+            {% include "dashboard/partials/ui/_privacy_hint.html" with label="Profile" value=viewer.get_profile_visibility_display note="They only see friends you have in common with them. Your full list is only visible to you." field="profile_visibility" raw_value=viewer.profile_visibility owner=viewer %}
             {% endif %}
         </h3>
         <div class="profile-section-actions">

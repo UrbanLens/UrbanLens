@@ -23,7 +23,7 @@
         <h3 class="profile-section-title{% if profile.user == request.user %} ul-privacy-hint-row{% endif %}">
             About
             {% if profile.user == request.user %}
-            {% include "dashboard/partials/ui/_privacy_hint.html" with label="Name, avatar & bio" value=profile.get_profile_visibility_display %}
+            {% include "dashboard/partials/ui/_privacy_hint.html" with label="Name, avatar & bio" value=profile.get_profile_visibility_display field="profile_visibility" raw_value=profile.profile_visibility owner=profile %}
             {% endif %}
         </h3>
         <p class="profile-bio-full">{{ profile.bio }}</p>
@@ -67,7 +67,7 @@
         <h3 class="profile-section-title{% if profile.user == request.user %} ul-privacy-hint-row{% endif %}">
             Social
             {% if profile.user == request.user %}
-            {% include "dashboard/partials/ui/_privacy_hint.html" with value=profile.get_profile_visibility_display %}
+            {% include "dashboard/partials/ui/_privacy_hint.html" with value=profile.get_profile_visibility_display field="profile_visibility" raw_value=profile.profile_visibility owner=profile %}
             {% endif %}
         </h3>
         <div class="social-links">
@@ -101,7 +101,7 @@
         <h3 class="profile-section-title{% if profile.user == request.user %} ul-privacy-hint-row{% endif %}">
             Contact
             {% if profile.user == request.user %}
-            {% include "dashboard/partials/ui/_privacy_hint.html" with value=profile.get_contact_visibility_display %}
+            {% include "dashboard/partials/ui/_privacy_hint.html" with value=profile.get_contact_visibility_display field="contact_visibility" raw_value=profile.contact_visibility owner=profile %}
             {% endif %}
         </h3>
         <div class="contact-info-list">
