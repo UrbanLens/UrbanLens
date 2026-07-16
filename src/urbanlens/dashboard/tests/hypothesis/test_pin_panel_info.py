@@ -133,6 +133,7 @@ class PinDetailPageSimpleInfoPanelsContextTests(TestCase):
 
     def setUp(self) -> None:
         super().setUp()
+        baker.make(User)  # first user is auto-promoted to bootstrap site admin (has_perm bypasses feature gating)
         self.user = baker.make(User)
         self.profile = self.user.profile
         self.client.force_login(self.user)
@@ -145,10 +146,10 @@ class PinDetailPageSimpleInfoPanelsContextTests(TestCase):
         self.assertContains(response, reverse("pin.panel", args=[self.pin.slug, "usgs_earthquakes"]))
 
     def test_condensed_panels_are_excluded_from_the_autoloading_list(self) -> None:
-        """Census/iNaturalist/Seismic move into the Regional Data tab strip and EPA's nearby-list
-        moves into the (subscription-gated) Nearby Research tab strip, instead of auto-loading as
-        their own standalone cards - see condensed_panel_tabs/nearby_research_tabs. EPA's exact-site
-        detail card is a different key (epa_echo_detail) and still auto-loads unconditionally."""
+        """Census/iNaturalist/Seismic/EPA's nearby-list all move into the single "Regional Data"
+        tab strip (panel_tabs) instead of auto-loading as their own standalone cards. EPA's
+        exact-site detail card is a different key (epa_echo_detail) and still auto-loads
+        unconditionally."""
         response = self.client.get(reverse("pin.details", args=[self.pin.slug]))
         keys = [panel.key for panel in response.context["simple_info_panels"]]
         for condensed_key in ("census_tigerweb", "epa_echo", "inaturalist", "usgs_earthquakes"):
@@ -156,9 +157,11 @@ class PinDetailPageSimpleInfoPanelsContextTests(TestCase):
         self.assertIn("photon", keys)
         self.assertIn("epa_echo_detail", keys)
 
-    def test_condensed_panel_tabs_context_has_the_expected_order_and_labels(self) -> None:
+    def test_panel_tabs_context_has_the_expected_order_and_labels(self) -> None:
+        """Without the Nearby Research feature, panel_tabs is just the always-available ones -
+        see NearbyResearchTabGatingTests for the combined-with-EPA case."""
         response = self.client.get(reverse("pin.details", args=[self.pin.slug]))
-        tabs = response.context["condensed_panel_tabs"]
+        tabs = response.context["panel_tabs"]
         self.assertEqual([tab["key"] for tab in tabs], ["census_tigerweb", "inaturalist", "usgs_earthquakes"])
         self.assertEqual([tab["label"] for tab in tabs], ["US Census", "Wildlife", "Seismic"])
 
@@ -185,9 +188,20 @@ class PinDetailPageSimpleInfoPanelsContextTests(TestCase):
         content = response.content.decode()
         self.assertIn("hx-trigger=\"load[!window.ulSectionCollapsed('pin','epa_echo_detail')]", content)
 
+    def test_tab_body_carries_the_chrome_stripping_class(self) -> None:
+        """Regression guard: the nested-card-chrome-stripping CSS rule
+        (_pin-detail.scss's .pin-plugin-tab-body) is a class selector, but the
+        tab body div used to only ever carry that string as its id - a class
+        selector never matches an id, so it silently never applied to any
+        panel rendered inside a tab."""
+        response = self.client.get(reverse("pin.details", args=[self.pin.slug]))
+        self.assertContains(response, 'id="pin-plugin-tab-body" class="card__body pin-plugin-tab-body"')
+
 
 class NearbyResearchTabGatingTests(TestCase):
-    """The "Nearby Research" tab strip (EPA's nearby-facility list, for now) is subscription-gated."""
+    """EPA's nearby-facility list tab (appended to the single "Regional Data" tab
+    strip - see PinController.view's panel_tabs) is subscription-gated; the always-
+    available tabs (Census/Wildlife/Seismic) show either way, in the same card."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -199,7 +213,11 @@ class NearbyResearchTabGatingTests(TestCase):
 
     def test_hidden_without_the_feature(self) -> None:
         response = self.client.get(reverse("pin.details", args=[self.pin.slug]))
-        self.assertNotContains(response, "Nearby Research")
+        self.assertNotContains(response, reverse("pin.panel", args=[self.pin.slug, "epa_echo"]))
+        tabs = response.context["panel_tabs"]
+        self.assertNotIn("epa_echo", [tab["key"] for tab in tabs])
+        # The always-available tabs still render in the same "Regional Data" card.
+        self.assertContains(response, "Regional Data")
 
     def test_shown_with_the_feature(self) -> None:
         from urbanlens.dashboard.models.subscriptions import SiteFeature, SubscriptionRole, grant_subscription
@@ -208,19 +226,32 @@ class NearbyResearchTabGatingTests(TestCase):
         grant_subscription(self.user, role, self.user, None)
 
         response = self.client.get(reverse("pin.details", args=[self.pin.slug]))
-        self.assertContains(response, "Nearby Research")
         self.assertContains(response, reverse("pin.panel", args=[self.pin.slug, "epa_echo"]))
+        self.assertContains(response, ">EPA<")
 
-    def test_nearby_research_tabs_context_has_epa(self) -> None:
+    def test_panel_tabs_context_has_epa_appended_last(self) -> None:
         from urbanlens.dashboard.models.subscriptions import SiteFeature, SubscriptionRole, grant_subscription
 
         role = baker.make(SubscriptionRole, features=SiteFeature.NEARBY_RESEARCH)
         grant_subscription(self.user, role, self.user, None)
 
         response = self.client.get(reverse("pin.details", args=[self.pin.slug]))
-        tabs = response.context["nearby_research_tabs"]
-        self.assertEqual([tab["key"] for tab in tabs], ["epa_echo"])
-        self.assertEqual([tab["label"] for tab in tabs], ["EPA"])
+        tabs = response.context["panel_tabs"]
+        self.assertEqual([tab["key"] for tab in tabs], ["census_tigerweb", "inaturalist", "usgs_earthquakes", "epa_echo"])
+        self.assertEqual(tabs[-1]["label"], "EPA")
+
+    def test_only_one_tab_strip_card_renders_on_the_page(self) -> None:
+        """Regression guard: Regional Data and Nearby Research used to be two
+        separate cards - now there's exactly one, so the old second section id
+        must never appear."""
+        from urbanlens.dashboard.models.subscriptions import SiteFeature, SubscriptionRole, grant_subscription
+
+        role = baker.make(SubscriptionRole, features=SiteFeature.NEARBY_RESEARCH)
+        grant_subscription(self.user, role, self.user, None)
+
+        response = self.client.get(reverse("pin.details", args=[self.pin.slug]))
+        self.assertContains(response, 'id="pin-plugin-tabs-section"')
+        self.assertNotContains(response, "pin-nearby-research-section")
 
     def test_epa_nearby_list_not_in_autoloading_panels_even_with_the_feature(self) -> None:
         """Nearby Research tabs are still click-to-load, like Regional Data - the feature only

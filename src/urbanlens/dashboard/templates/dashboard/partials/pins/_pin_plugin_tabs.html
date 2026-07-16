@@ -3,10 +3,13 @@ Generic plugin-panel tab strip: condenses several InfoPanelSource panels into
 one card's tabs instead of N standalone auto-loading cards. Each tab's content
 is fetched only once the user actually clicks it - see PinController.panel_info,
 which every tab shares (already fully generic per-key dispatch, no new backend
-needed). Shared by the "Regional Data" tab group (US Census, EPA nearby-facility
-search moved out as of the Nearby Research split, iNaturalist, Seismic) and the
-subscription-gated "Nearby Research" tab group - each {% include %} passes its
-own ids/heading so two copies can coexist on one page without DOM collisions.
+needed). The "Regional Data" card is the only user of this template - its tabs
+combine the always-available panels (US Census, iNaturalist, Seismic) with the
+subscription-gated "Nearby Research" ones (EPA nearby-facility search) into a
+single ordered list (see PinController.view's panel_tabs) rather than two
+separate cards, which is what this template originally supported and still
+could again if a second use ever needs it (hence still taking ids/heading as
+params rather than hardcoding them).
 
 Context (all required, pass explicitly via {% include ... with %}):
   pin              - the Pin being viewed
@@ -35,7 +38,12 @@ Context (all required, pass explicitly via {% include ... with %}):
         </button>
         {% endfor %}
     </div>
-    <div id="{{ body_id }}" class="card__body">
+    {# pin-plugin-tab-body is a real class (not just this div's id) so the     #}
+    {# nested-card-chrome-stripping rule in _pin-detail.scss actually matches -#}
+    {# it used to only be a coincidentally-matching id string, which a class   #}
+    {# selector never matches, so every panel rendered into a tab kept its own #}
+    {# nested .card-header regardless of which tab strip it was in.           #}
+    <div id="{{ body_id }}" class="card__body pin-plugin-tab-body">
         <p class="pin-plugin-tab-placeholder">Select a category above to load its data.</p>
     </div>
 </div>

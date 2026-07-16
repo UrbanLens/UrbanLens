@@ -54,13 +54,15 @@ _CONDENSED_PLUGIN_TABS = {
     "usgs_earthquakes": "Seismic",
 }
 
-# InfoPanelSource keys condensed into the subscription-gated "Nearby Research"
-# tab strip (see SiteFeature.NEARBY_RESEARCH / show_nearby_research) - data
-# about facilities/features *near* the pin rather than at its own coordinates,
-# which is exactly what a free EPA-facility-detail card at this pin's own
-# location doesn't cover. EPA's nearby-facility list (as opposed to its
-# unconditional exact-site detail card, "epa_echo_detail" - see
+# InfoPanelSource keys appended to the same "Regional Data" tab strip (see
+# panel_tabs below) only when the viewer has SiteFeature.NEARBY_RESEARCH -
+# data about facilities/features *near* the pin rather than at its own
+# coordinates, which is exactly what a free EPA-facility-detail card at this
+# pin's own location doesn't cover. EPA's nearby-facility list (as opposed to
+# its unconditional exact-site detail card, "epa_echo_detail" - see
 # plugins/builtin/epa_echo.py) is the first tab; more sources land here later.
+# Kept as a separate dict from _CONDENSED_PLUGIN_TABS (rather than merged into
+# one) purely so the subscription gate has a clean boundary to filter on.
 _NEARBY_RESEARCH_TABS = {
     "epa_echo": "EPA",
 }
@@ -145,6 +147,13 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         _tabbed_panel_keys = _CONDENSED_PLUGIN_TABS.keys() | _NEARBY_RESEARCH_TABS.keys()
         simple_info_panels = [source for key, source in all_info_panels.items() if key not in _tabbed_panel_keys]
 
+        # Regional Data and Nearby Research used to be two separate cards, each
+        # with their own tab strip - merged into one "Regional Data" section.
+        # The (subscription-gated) Nearby Research tabs are appended after the
+        # always-available ones rather than interleaved, so the free tabs stay
+        # in a stable position regardless of the viewer's subscription.
+        panel_tabs = condensed_panel_tabs + (nearby_research_tabs if user_has_feature(request.user, SiteFeature.NEARBY_RESEARCH) else [])
+
         # Whether the profile has ever added/kept an alias on ANY pin - not just this
         # one - so the aliases onboarding card stops nagging once the feature is
         # familiar, rather than re-introducing it on every new pin.
@@ -178,8 +187,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 "pin_lists": pin_lists,
                 "pin_cover_candidates": pin_cover_candidates,
                 "simple_info_panels": simple_info_panels,
-                "condensed_panel_tabs": condensed_panel_tabs,
-                "nearby_research_tabs": nearby_research_tabs,
+                "panel_tabs": panel_tabs,
                 "has_ever_used_aliases": has_ever_used_aliases,
                 "media_bulk_actions": [
                     {"action": "relevant", "icon": "thumb_up", "label": "Mark relevant"},
