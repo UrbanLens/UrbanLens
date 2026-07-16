@@ -5,22 +5,22 @@
 {% block hero %}
 {% if standalone_mode %}
     {% if active_tab == 'tags' %}
-    {% include "dashboard/partials/ui/_page_hero.html" with icon="label" title=standalone_title subtitle=standalone_subtitle modifier="top" %}
+        {% include "dashboard/partials/ui/_page_hero.html" with icon="label" title=standalone_title subtitle=standalone_subtitle modifier="top" %}
     {% elif active_tab == 'categories' %}
-    {% include "dashboard/partials/ui/_page_hero.html" with icon="category" title=standalone_title subtitle=standalone_subtitle modifier="top" %}
+        {% include "dashboard/partials/ui/_page_hero.html" with icon="category" title=standalone_title subtitle=standalone_subtitle modifier="top" %}
     {% elif active_tab == 'status' %}
-    {% include "dashboard/partials/ui/_page_hero.html" with icon="flag_circle" title=standalone_title subtitle=standalone_subtitle modifier="top" %}
+        {% include "dashboard/partials/ui/_page_hero.html" with icon="flag_circle" title=standalone_title subtitle=standalone_subtitle modifier="top" %}
     {% elif active_tab == 'people' %}
-    {% include "dashboard/partials/ui/_page_hero.html" with icon="people" title=standalone_title subtitle=standalone_subtitle modifier="top" %}
+        {% include "dashboard/partials/ui/_page_hero.html" with icon="people" title=standalone_title subtitle=standalone_subtitle modifier="top" %}
     {% elif active_tab == 'media' %}
-    {% include "dashboard/partials/ui/_page_hero.html" with icon="perm_media" title=standalone_title subtitle=standalone_subtitle modifier="top" %}
+        {% include "dashboard/partials/ui/_page_hero.html" with icon="perm_media" title=standalone_title subtitle=standalone_subtitle modifier="top" %}
     {% endif %}
 {% elif active_section == 'lists' %}
-{% include "dashboard/partials/ui/_page_hero.html" with icon="bookmarks" title="Lists" subtitle="Group your pins into curated collections you can browse, share, and filter by." modifier="top" %}
+    {% include "dashboard/partials/ui/_page_hero.html" with icon="bookmarks" title="Lists" subtitle="Group your pins into curated collections you can browse, share, and filter by." modifier="top" %}
 {% elif active_section == 'filters' %}
-{% include "dashboard/partials/ui/_page_hero.html" with icon="filter_alt" title="Filters" subtitle="Save reusable filter criteria to quickly narrow down pins on the map and elsewhere." modifier="top" %}
+    {% include "dashboard/partials/ui/_page_hero.html" with icon="filter_alt" title="Filters" subtitle="Save reusable filter criteria to quickly narrow down pins on the map and elsewhere." modifier="top" %}
 {% else %}
-{% include "dashboard/partials/ui/_page_hero.html" with icon="tune" title="Organize" subtitle="Manage the tags, categories, statuses, and people labels used to organize your data." modifier="top" %}
+    {% include "dashboard/partials/ui/_page_hero.html" with icon="tune" title="Organize" subtitle="Manage the labels used to organize your data." modifier="top" %}
 {% endif %}
 {% endblock %}
 

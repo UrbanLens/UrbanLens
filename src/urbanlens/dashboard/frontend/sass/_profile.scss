@@ -2902,7 +2902,7 @@ a.profile-stat--link {
     padding: .85rem;
     border: 1px solid var(--ul-surface-border);
     border-radius: .95rem;
-    background: color-mix(in srgb, var(--ul-surface) 88%, var(--ul-surface-border));
+    background: rgba(0,0,0,0.1);
     color: var(--ul-grey-8);
     text-decoration: none;
     transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease;

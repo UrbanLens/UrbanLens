@@ -55,11 +55,11 @@ $memories-type-colors: (
         align-items: center;
         justify-content: center;
         flex-shrink: 0;
-        background: rgba(156, 39, 176, .12);
+        background: rgba(156, 39, 176, .22);
 
         .material-symbols-outlined {
             font-size: 1.4rem;
-            color: $color-deep-purple-500;
+            color: $color-deep-purple-100;
         }
     }
 
