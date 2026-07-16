@@ -4558,6 +4558,11 @@ body.page-location-details .pin-detail-grid {
             align-items: flex-start;
         }
 
+        .search-result-bookmark-btn {
+            flex-shrink: 0;
+            align-self: center;
+        }
+
         .search-result-thumb-wrap {
             flex-shrink: 0;
             width: 72px;

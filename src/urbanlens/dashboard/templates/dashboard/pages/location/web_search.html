@@ -59,6 +59,13 @@
                     <p class="search-result-snippet">{{ result.snippet }}</p>
                     {% endif %}
                 </div>
+                <button type="button" class="btn btn--icon-sm search-result-bookmark-btn"
+                        title="Save to this pin's links"
+                        hx-post="{% url 'pin.links' pin.slug %}"
+                        hx-target="#pin-links-row" hx-swap="outerHTML"
+                        hx-vals='{"name": "{{ result.title|escapejs }}", "url": "{{ result.link|escapejs }}"}'>
+                    <i class="material-symbols-outlined">bookmark_add</i>
+                </button>
             </div>
         </li>
         {% endif %}

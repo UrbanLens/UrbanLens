@@ -238,6 +238,38 @@ class WebSearchViewTests(TestCase):
         self.assertIn("Official Test Location", mock_search_web.call_args.args[0])
         self.assertNotIn("User Edited Location", mock_search_web.call_args.args[0])
 
+    def test_result_carries_a_bookmark_button_posting_to_pin_links(self) -> None:
+        """Bookmarking a web search result reuses the same pin.links endpoint (and
+        therefore the same Wayback-archiving-on-create signal) as the Links card's
+        own add-link dialog - see _pin_link_add_dialog.html."""
+        from django.test import RequestFactory
+        from django.urls import reverse
+
+        from urbanlens.dashboard.controllers.pin import PinController
+
+        pin = self._make_pin()
+        rf = RequestFactory()
+        request = rf.get("/")
+        request.user = pin.profile.user
+
+        mock_results = [{"title": "Old Mill Historical Society", "link": "http://example.com/page", "snippet": "A snippet"}]
+
+        with (
+            patch("urbanlens.dashboard.controllers.pin.search_web") as mock_search_web,
+            patch.object(Pin.objects, "select_related") as mock_select_related,
+        ):
+            mock_search_web.return_value = mock_results
+            mock_select_related.return_value.get.return_value = pin
+
+            view = PinController()
+            response = view.web_search(request, pin_slug=pin.slug)
+
+        content = response.content.decode()
+        self.assertIn(f'hx-post="{reverse("pin.links", args=[pin.slug])}"', content)
+        self.assertIn('hx-target="#pin-links-row"', content)
+        self.assertIn("Old Mill Historical Society", content)
+        self.assertIn("http://example.com/page", content)
+
     def test_empty_fresh_results_return_204_not_a_no_results_card(self) -> None:
         """Regression guard: an empty search must hide the panel (204, the
         site-wide data-ext-panel-204 convention) rather than rendering a

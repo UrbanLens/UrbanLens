@@ -1,9 +1,11 @@
 {% comment %}
-Add-link dialog for the pin details page's Details card. Replaces the old
-inline-reveal form (still used as-is by the wiki page's own always-visible
-links row - see _pin_links_row.html's hide_when_empty docs) since Cancel
-there only hid the form, not the row itself, leaving a redundant "add link"
-icon showing where the inputs had been.
+Add-link dialog for the pin details page's standalone Links card. Replaces
+the old inline-reveal form (still used as-is by the wiki page's own
+always-visible links row - see _pin_links_row.html's use_dialog docs) since
+Cancel there only hid the form, not the row itself, leaving a redundant
+"add link" icon showing where the inputs had been. Also reused directly by
+web search results' bookmark button (web_search.html) - same endpoint,
+same target, so a bookmarked result shows up in this same card immediately.
 
 Submitting re-renders #pin-links-row (same target/swap the old inline form
 used) so the new link appears in place, then closes itself on success.

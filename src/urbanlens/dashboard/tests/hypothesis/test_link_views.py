@@ -68,30 +68,27 @@ class PinLinkViewTests(TestCase):
         self.assertEqual(response.status_code, 404)
         self.assertTrue(PinLink.objects.filter(pk=other_link.pk).exists())
 
-    def test_empty_row_is_hidden_and_has_no_visible_placeholder_text(self) -> None:
-        """Pin links: an empty row stays hidden - a header icon button is the entry
-        point instead (pin_overview_partial.html), unlike the wiki page's row."""
+    def test_empty_row_shows_placeholder_text(self) -> None:
+        """The pin links row now lives in its own always-visible card (the header's
+        "Add a link" button is the entry point regardless of link count), so it no
+        longer needs to hide itself when empty - matches the wiki page's row now."""
         response = self.client.get(reverse("pin.links", args=[self.pin.slug]))
-        self.assertContains(response, "hidden")
+        self.assertContains(response, "No links yet.")
+
+    def test_row_shows_the_new_link_once_added(self) -> None:
+        response = self.client.post(reverse("pin.links", args=[self.pin.slug]), {"url": "https://example.com/story"})
+        self.assertContains(response, "example.com")
         self.assertNotContains(response, "No links yet.")
 
-    def test_row_becomes_visible_once_a_link_is_added(self) -> None:
-        response = self.client.post(reverse("pin.links", args=[self.pin.slug]), {"url": "https://example.com/story"})
-        content = response.content.decode()
-        # The outer row div itself must not carry the `hidden` attribute anymore.
-        self.assertNotRegex(content, r'id="pin-links-row"[^>]*\bhidden\b')
-        self.assertContains(response, "example.com")
-
-    def test_row_hides_again_once_the_last_link_is_deleted(self) -> None:
+    def test_row_shows_the_placeholder_again_once_the_last_link_is_deleted(self) -> None:
         link = baker.make(PinLink, pin=self.pin, url="https://example.com/a")
         response = self.client.delete(reverse("pin.link.delete", args=[self.pin.slug, link.id]))
-        content = response.content.decode()
-        self.assertRegex(content, r'id="pin-links-row"[^>]*\bhidden\b')
-        self.assertNotContains(response, "No links yet.")
+        self.assertContains(response, "No links yet.")
 
 
-class PinDetailsPageDetailsCardTests(TestCase):
-    """The Details card's "Add a link" header button and description position."""
+class PinDetailsPageLinksCardTests(TestCase):
+    """Links moved out of the Details card into their own standalone card -
+    see docs/prompts.txt's resolution note for why."""
 
     def setUp(self) -> None:
         baker.make("auth.User")  # first user is auto-promoted to bootstrap site admin
@@ -109,24 +106,29 @@ class PinDetailsPageDetailsCardTests(TestCase):
         self.pin.location.cached_place_name = "Old Mill"
         self.client.force_login(self.user)
 
+    def test_links_card_renders_with_its_own_heading(self) -> None:
+        response = self.client.get(reverse("pin.overview", args=[self.pin.slug]))
+        self.assertContains(response, 'class="pin-links-card card card--secondary"')
+        self.assertContains(response, "<span>Links</span>")
+
     def test_add_link_header_button_shown_when_no_links(self) -> None:
         response = self.client.get(reverse("pin.overview", args=[self.pin.slug]))
         self.assertContains(response, 'class="btn btn--icon-sm" title="Add a link"')
 
-    def test_add_link_header_button_hidden_once_a_link_exists(self) -> None:
-        """The header button (distinct from the row's own inline "+" toggle, which
-        shares the same title text) only makes sense as an entry point for the
-        empty case - once there's a link, the row's own control takes over."""
+    def test_add_link_header_button_stays_shown_once_a_link_exists(self) -> None:
+        """Unlike the old Details-card version, the Links card header button is
+        always the entry point now - no more disappearing once a link exists
+        (that was the old row's own inline toggle's job; it no longer renders one)."""
         baker.make(PinLink, pin=self.pin, url="https://example.com/a")
         response = self.client.get(reverse("pin.overview", args=[self.pin.slug]))
-        self.assertNotContains(response, 'class="btn btn--icon-sm" title="Add a link"')
+        self.assertContains(response, 'class="btn btn--icon-sm" title="Add a link"')
 
-    def test_description_renders_after_the_links_row(self) -> None:
+    def test_links_card_renders_after_the_details_card(self) -> None:
         response = self.client.get(reverse("pin.overview", args=[self.pin.slug]))
         content = response.content.decode()
-        description_pos = content.index("A creaky old mill.")
-        links_row_pos = content.index('id="pin-links-row"')
-        self.assertLess(links_row_pos, description_pos)
+        details_pos = content.index('class="pin-details location-details card"')
+        links_card_pos = content.index('class="pin-links-card card card--secondary"')
+        self.assertLess(details_pos, links_card_pos)
 
     def test_add_link_header_button_opens_the_dialog(self) -> None:
         """Regression guard: this used to inline-reveal the row's own add-form,
@@ -135,11 +137,12 @@ class PinDetailsPageDetailsCardTests(TestCase):
         response = self.client.get(reverse("pin.overview", args=[self.pin.slug]))
         self.assertContains(response, "document.getElementById('pin-link-add-dialog').showModal()")
 
-    def test_row_add_toggle_also_opens_the_dialog_once_a_link_exists(self) -> None:
+    def test_row_never_renders_its_own_inline_form(self) -> None:
+        """The row's inline add-toggle/form only exists for the wiki page now -
+        on the pin page the Links card header button is the sole entry point,
+        regardless of link count."""
         baker.make(PinLink, pin=self.pin, url="https://example.com/a")
         response = self.client.get(reverse("pin.overview", args=[self.pin.slug]))
-        self.assertContains(response, "document.getElementById('pin-link-add-dialog').showModal()")
-        # No inline form left to accidentally leave visible after a broken Cancel.
         self.assertNotContains(response, 'class="pin-link-add-form"')
 
 
@@ -174,16 +177,13 @@ class LocationLinkViewTests(TestCase):
         response = self.client.post(reverse("location.wiki.links", args=[self.location.slug]), {"url": "https://example.org"})
         self.assertEqual(response.status_code, 404)
 
-    def test_empty_row_still_shows_placeholder_text_unlike_the_pin_page(self) -> None:
-        """The wiki page never opted into hide_when_empty - its row stays always-visible."""
+    def test_empty_row_shows_placeholder_text(self) -> None:
         response = self.client.get(reverse("location.wiki.links", args=[self.location.slug]))
         self.assertContains(response, "No links yet.")
-        content = response.content.decode()
-        self.assertNotRegex(content, r'id="wiki-links-row"[^>]*\bhidden\b')
 
     def test_still_uses_its_own_inline_add_form_not_the_pin_pages_dialog(self) -> None:
         """The wiki page's inline reveal-form UX is unaffected by the pin page's
-        add-link-dialog conversion - hide_when_empty is unset here."""
+        add-link-dialog conversion - use_dialog is unset here."""
         response = self.client.get(reverse("location.wiki.links", args=[self.location.slug]))
         self.assertContains(response, 'class="pin-link-add-form"')
         self.assertNotContains(response, "pin-link-add-dialog")

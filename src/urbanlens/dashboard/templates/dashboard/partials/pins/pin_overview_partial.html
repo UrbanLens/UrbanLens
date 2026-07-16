@@ -79,12 +79,6 @@
         <div class="card-header">
             <i class="material-symbols-outlined">info</i>
             <span>Details</span>
-            {% if not pin.links.all %}
-            <button type="button" class="btn btn--icon-sm" title="Add a link"
-                    onclick="document.getElementById('pin-link-add-dialog').showModal()">
-                <i class="material-symbols-outlined">add_link</i>
-            </button>
-            {% endif %}
             <button type="button" class="btn btn--icon-sm" title="Share pin"
                     hx-get="{% url 'pin.share.dialog' pin.slug %}"
                     hx-target="#pin-share-dialog"
@@ -139,7 +133,6 @@
                     <span class="field-value">{{ pin.effective_date_last_active|date:"M j, Y" }}</span>
                 </div>
                 {% endif %}
-                {% include "dashboard/partials/pins/_pin_links_row.html" with pin=pin links=pin.links.all add_url="pin.links" delete_url_name="pin.link.delete" row_id="pin-links-row" owner_slug=pin.slug hide_when_empty=True %}
             </div>
             {% if pin.description %}
             <div class="detail-row full-width">
@@ -164,5 +157,22 @@
             </div>
         </div>
         {% endif %}
+    </div>
+
+    {# -- Links card (its own section - see docs/prompts.txt for why this moved -- #}
+    {# out of Details) ------------------------------------------------------- #}
+    <div class="pin-links-card card card--secondary"
+         data-collapse-scope="pin" data-collapse-section="links">
+        <div class="card-header">
+            <i class="material-symbols-outlined">link</i>
+            <span>Links</span>
+            <button type="button" class="btn btn--icon-sm" title="Add a link"
+                    onclick="document.getElementById('pin-link-add-dialog').showModal()">
+                <i class="material-symbols-outlined">add_link</i>
+            </button>
+        </div>
+        <div class="card__body">
+            {% include "dashboard/partials/pins/_pin_links_row.html" with pin=pin links=pin.links.all add_url="pin.links" delete_url_name="pin.link.delete" row_id="pin-links-row" owner_slug=pin.slug use_dialog=True %}
+        </div>
     </div>
 </div>
