@@ -401,7 +401,7 @@ nav {
         font-size: 0.72rem;
         font-weight: 600;
         letter-spacing: 0.02em;
-        color: var(--ul-grey-4);
+        color: var(--ul-grey-5);
         opacity: 0.55;
         user-select: none;
     }
@@ -444,13 +444,6 @@ nav {
             margin-left: 0.35rem;
             font-weight: 600;
             white-space: nowrap;
-
-            &::before {
-                content: '·';
-                margin-right: 0.35rem;
-                font-weight: 400;
-                opacity: 0.65;
-            }
         }
     }
 

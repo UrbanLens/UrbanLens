@@ -910,7 +910,7 @@
     }
 
     &--has-events {
-        background: var(--ul-surface-raised);
+        background: linear-gradient(135deg, rgba(31, 111, 235, 0.2), rgba(23, 185, 120, 0.15));
         border-color: var(--ul-surface-raised-border);
 
         &:hover {
@@ -957,7 +957,7 @@
     gap: 3px;
     font-size: .66rem;
     font-weight: 500;
-    background: $color-blue-500;
+    background: rgba(0,0,0,0.3);
     color: #fff;
     border-radius: 4px;
     padding: 2px 5px;
@@ -968,7 +968,7 @@
     transition: background .15s ease, box-shadow .15s ease, transform .1s ease;
 
     &:hover {
-        background: $color-blue-600;
+        background: rgba(0,0,0,0.5);
         box-shadow: 0 2px 6px rgba(0, 0, 0, .18);
         transform: translateY(-1px);
     }
