@@ -16,9 +16,12 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.cache import cache
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
+from django.urls import reverse
 from django.views import View
 
 from urbanlens.dashboard.models.immich.model import ImmichAccount
+from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_STATUS, KIND_TAG
+from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin_suggestions.model import PinSuggestion, PinSuggestionStatus
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.apis.immich import ImmichGateway
@@ -27,6 +30,13 @@ from urbanlens.dashboard.services.gateway import GatewayRequestError
 from urbanlens.dashboard.services.memories.unlogged import unlogged_visited_pins
 from urbanlens.dashboard.services.pagination import get_page
 from urbanlens.dashboard.services.pin_suggestions import accept_pin_suggestion, reject_pin_suggestion
+
+_ORGANIZE_LABEL_KINDS = (KIND_TAG, KIND_CATEGORY, KIND_STATUS)
+
+
+def _available_labels(profile: Profile) -> QuerySet[Label]:
+    """Organize labels (tags/categories/statuses) visible to ``profile``, for the create-pin dialog's picker."""
+    return Label.objects.visible_to(profile).filter(kind__in=_ORGANIZE_LABEL_KINDS).order_by("name")
 
 if TYPE_CHECKING:
     from django.db.models import QuerySet
@@ -50,11 +60,24 @@ def _pending_suggestions(profile: Profile) -> QuerySet[PinSuggestion]:
     return PinSuggestion.objects.for_profile(profile).pending().select_related("pin", "pin__location").prefetch_related("candidate_images").order_by("-created")
 
 
-def _toast(message: str, level: str = "success", *, status: int = 200, refresh_queue: bool = False) -> HttpResponse:
+def _toast(message: str, level: str = "success", *, status: int = 200, refresh_queue: bool = False, view_pin_url: str | None = None) -> HttpResponse:
     """Return an empty HTMX response that removes the swapped card and fires a toast.
 
-    Mirrors ``controllers.photos._toast``.
+    Mirrors ``controllers.photos._toast``. When ``view_pin_url`` is given (a
+    brand-new pin was just created), the toast includes a "View pin" link -
+    toastr renders the message as HTML, same as the bulk-delete undo toast on
+    the main map.
+
+    Args:
+        message: Toast body text (HTML-escaped by the caller if it embeds
+            any dynamic value).
+        level: toastr level ("success", "info", "warning", "error").
+        status: HTTP status code for the (otherwise empty) response.
+        refresh_queue: Whether to also fire the ``refreshQueue`` htmx event.
+        view_pin_url: If set, appends a "View pin" link to the toast.
     """
+    if view_pin_url:
+        message += f' <a href="{view_pin_url}" class="toast-undo-btn">View pin</a>'
     triggers: dict[str, Any] = {"showToast": {"message": message, "level": level}}
     if refresh_queue:
         triggers["refreshQueue"] = True
@@ -83,6 +106,7 @@ class PinSuggestionQueueView(LoginRequiredMixin, View):
                 "unlogged_visits_count": len(unlogged_visited_pins(profile)),
                 "pin_suggestions_count": page_obj.paginator.count,
                 "bulk_actions": _BULK_ACTIONS,
+                "available_labels": _available_labels(profile),
             },
         )
 
@@ -96,7 +120,7 @@ class PinSuggestionQueuePartialView(LoginRequiredMixin, View):
     def get(self, request: HttpRequest) -> HttpResponse:
         profile, _ = Profile.objects.get_or_create(user=request.user)
         page_obj = get_page(request, _pending_suggestions(profile), _PAGE_SIZE)
-        return render(request, _QUEUE_PARTIAL, {"suggestions": page_obj.object_list, "page_obj": page_obj})
+        return render(request, _QUEUE_PARTIAL, {"suggestions": page_obj.object_list, "page_obj": page_obj, "available_labels": _available_labels(profile)})
 
 
 class PinSuggestionMapDataView(LoginRequiredMixin, View):
@@ -244,7 +268,10 @@ class PinSuggestionActionView(LoginRequiredMixin, View):
 
             image_ids = [int(raw_id) for raw_id in request.POST.getlist("image_ids") if raw_id.isdigit()]
             asset_ids = request.POST.getlist("asset_ids")
-            result = accept_pin_suggestion(suggestion, profile, image_ids=image_ids, asset_ids=asset_ids)
+            was_new_pin = suggestion.is_new_pin
+            name = request.POST.get("name", "").strip() or None
+            label_ids = [int(raw_id) for raw_id in request.POST.getlist("label_ids") if raw_id.isdigit()]
+            result = accept_pin_suggestion(suggestion, profile, image_ids=image_ids, asset_ids=asset_ids, name=name, label_ids=label_ids)
             if result.immich_import_visits:
                 from urbanlens.dashboard.tasks import import_immich_photos
 
@@ -255,15 +282,16 @@ class PinSuggestionActionView(LoginRequiredMixin, View):
                     list(result.immich_import_visits),
                     result.immich_import_visits,
                 )
+            view_pin_url = reverse("pin.details", args=[result.pin.slug or result.pin.uuid]) if was_new_pin else None
             if not result.visits:
-                message = f"{'Pin created' if suggestion.is_new_pin else 'Saved'}. Visit logging is turned off, so no visit was recorded."
-                return _toast(message, "info", refresh_queue=True)
+                message = f"{'Pin created' if was_new_pin else 'Saved'}. Visit logging is turned off, so no visit was recorded."
+                return _toast(message, "info", refresh_queue=True, view_pin_url=view_pin_url)
             plural = "s" if len(result.visits) != 1 else ""
-            verb = "Pin created and" if suggestion.is_new_pin else ""
+            verb = "Pin created and" if was_new_pin else ""
             message = f"{verb} {len(result.visits)} visit{plural} logged for {result.pin.effective_name}.".strip()
-            return _toast(message, refresh_queue=True)
+            return _toast(message, refresh_queue=True, view_pin_url=view_pin_url)
         except Exception:
             logger.exception("Pin suggestion action '%s' failed for suggestion %s", action, suggestion_id)
-            response = render(request, _CARD_PARTIAL, {"suggestion": suggestion})
+            response = render(request, _CARD_PARTIAL, {"suggestion": suggestion, "available_labels": _available_labels(profile)})
             response["HX-Trigger"] = json.dumps({"showToast": {"message": "Something went wrong. Please try again.", "level": "error"}})
             return response

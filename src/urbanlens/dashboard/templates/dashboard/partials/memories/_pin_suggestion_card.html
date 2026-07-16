@@ -1,16 +1,23 @@
 {% comment %}
 A single pending PinSuggestion card. Accept/reject post to memories.locations.action
 and target this card by id, swapping outerHTML - a success response is empty (the
-card vanishes and a toast fires), an error response re-renders the card unchanged
-with an error toast.
+card vanishes and a toast fires, with a "View pin" link when a new pin was just
+created), an error response re-renders the card unchanged with an error toast.
 
 Any checked photo checkboxes inside this card are included in the accept POST
 (via hx-include) as `image_ids` (local-scan candidate photos) or `asset_ids`
 (Immich sample assets) - unchecked by default, so nothing is imported into the
 pin's gallery unless the user explicitly opts in.
 
+For a brand-new pin (suggestion.is_new_pin), the primary action opens a small
+dialog to confirm the name and pick labels first, instead of posting straight
+through with just the auto-detected name and no labels - the dialog's own
+form still includes this same article's photo checkboxes (hx-include="closest
+article" resolves the same regardless of the dialog's own nesting).
+
 Context:
-  suggestion - the pending PinSuggestion
+  suggestion       - the pending PinSuggestion
+  available_labels - Labels selectable in the create-pin dialog (tags/categories/statuses)
 {% endcomment %}
 <article class="pin-suggestion-card" id="pin-suggestion-card-{{ suggestion.pk }}"
          data-suggestion-id="{{ suggestion.pk }}"
@@ -86,13 +93,21 @@ Context:
         {% endif %}
 
         <div class="pin-suggestion-card-actions">
+            {% if suggestion.is_new_pin %}
+            <button type="button" class="btn btn--sm btn--primary"
+                    onclick="document.getElementById('pin-suggestion-create-dialog-{{ suggestion.pk }}').showModal()">
+                <i class="material-symbols-outlined">check</i>
+                Create pin
+            </button>
+            {% else %}
             <button type="button" class="btn btn--sm btn--primary"
                     hx-post="{% url 'memories.locations.action' suggestion.pk 'accept' %}"
                     hx-include="closest article"
                     hx-target="#pin-suggestion-card-{{ suggestion.pk }}" hx-swap="outerHTML">
                 <i class="material-symbols-outlined">check</i>
-                {% if suggestion.is_new_pin %}Create pin{% else %}Log visit{{ suggestion.visit_dates|length|pluralize }}{% endif %}
+                Log visit{{ suggestion.visit_dates|length|pluralize }}
             </button>
+            {% endif %}
             <button type="button" class="btn btn--sm btn--ghost"
                     hx-post="{% url 'memories.locations.action' suggestion.pk 'reject' %}"
                     hx-target="#pin-suggestion-card-{{ suggestion.pk }}" hx-swap="outerHTML">
@@ -101,4 +116,43 @@ Context:
             </button>
         </div>
     </div>
+
+    {% if suggestion.is_new_pin %}
+    <dialog id="pin-suggestion-create-dialog-{{ suggestion.pk }}" class="pin-suggestion-create-dialog ul-dialog">
+        {% include "dashboard/partials/ui/_dialog_header.html" with title="Create Pin" %}
+        <div class="ul-dialog-body">
+            {# No explicit close-dialog-on-success handler needed: both outcomes #}
+            {# replace this dialog's own containing article (outerHTML) - on   #}
+            {# success with nothing (card gone), on error with a fresh, closed #}
+            {# dialog - so the dialog is never left open with stale input.     #}
+            <form hx-post="{% url 'memories.locations.action' suggestion.pk 'accept' %}"
+                  hx-include="closest article"
+                  hx-target="#pin-suggestion-card-{{ suggestion.pk }}" hx-swap="outerHTML">
+                {% csrf_token %}
+                <div class="form-row">
+                    <label for="pin-suggestion-name-{{ suggestion.pk }}">Pin name</label>
+                    <input type="text" id="pin-suggestion-name-{{ suggestion.pk }}" name="name"
+                           value="{{ suggestion.suggested_name|default:'' }}" maxlength="255" autocomplete="off">
+                </div>
+                {% if available_labels %}
+                <div class="form-row">
+                    <label>Labels</label>
+                    <div class="pin-suggestion-label-picker">
+                        {% for label in available_labels %}
+                        <label class="pin-suggestion-label-option">
+                            <input type="checkbox" name="label_ids" value="{{ label.pk }}">
+                            <span>{{ label.name }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+                <div class="form-actions">
+                    <button type="submit" class="btn btn--primary">Create Pin</button>
+                    <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </dialog>
+    {% endif %}
 </article>

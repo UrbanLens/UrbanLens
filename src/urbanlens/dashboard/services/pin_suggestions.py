@@ -363,6 +363,8 @@ def accept_pin_suggestion(
     *,
     image_ids: list[int] | None = None,
     asset_ids: list[str] | None = None,
+    name: str | None = None,
+    label_ids: list[int] | None = None,
 ) -> AcceptResult:
     """Accept a pending PinSuggestion: reuse/create its pin and log any missing dated visits.
 
@@ -389,6 +391,12 @@ def accept_pin_suggestion(
             deleted. Ignored ids (wrong owner/suggestion) are silently skipped.
         asset_ids: Immich asset ids (must be a subset of
             ``suggestion.sample_assets``) the user chose to import.
+        name: User-chosen name for a brand-new pin (the "Create pin" dialog),
+            taking priority over ``suggestion.suggested_name``. Ignored when
+            the suggestion matches an existing pin - that pin's name is never
+            overwritten by accepting a suggestion.
+        label_ids: Label pks to apply to a brand-new pin, filtered to labels
+            visible to ``profile``. Also ignored for an existing pin.
 
     Returns:
         An :class:`AcceptResult` describing the pin, any newly-created visits,
@@ -404,10 +412,17 @@ def accept_pin_suggestion(
         pin = Pin.objects.filter(profile=profile, location=location, parent_pin__isnull=True).select_related("location").first()
         if pin is None:
             pin = Pin.objects.create(profile=profile, location=location)
-        if suggestion.suggested_name and pin.name is None:
-            pin.name = suggestion.suggested_name
+        chosen_name = (name or "").strip() or suggestion.suggested_name
+        if chosen_name and pin.name is None:
+            pin.name = chosen_name
             pin.name_is_user_provided = True
             pin.save(update_fields=["name", "name_is_user_provided", "updated"])
+        if label_ids:
+            from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_STATUS, KIND_TAG
+            from urbanlens.dashboard.models.labels.model import Label
+
+            valid_labels = Label.objects.visible_to(profile).filter(id__in=label_ids, kind__in=(KIND_TAG, KIND_CATEGORY, KIND_STATUS))
+            pin.labels.add(*valid_labels)
         suggestion.location = location
 
     visits: list[PinVisit] = []

@@ -251,6 +251,54 @@ class AcceptPinSuggestionTests(TestCase):
         self.assertEqual(result.pin.pk, self.pin.pk)
         self.assertEqual(result.pin.name, "Existing Name")
 
+    def test_accept_new_pin_suggestion_uses_provided_name_over_suggested_name(self) -> None:
+        suggestion = PinSuggestion.objects.create(
+            profile=self.profile,
+            pin=None,
+            latitude=Decimal("41.000000"),
+            longitude=Decimal("-76.000000"),
+            origin=PinSuggestionOrigin.LOCAL_SCAN,
+            visit_dates=["2024-02-01"],
+            hit_count=1,
+            suggested_name="Suggested Name",
+        )
+        with mock.patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None):
+            result = accept_pin_suggestion(suggestion, self.profile, name="User Chosen Name")
+
+        self.assertEqual(result.pin.name, "User Chosen Name")
+
+    def test_accept_new_pin_suggestion_applies_valid_label_ids(self) -> None:
+        from urbanlens.dashboard.models.labels.meta import KIND_TAG
+        from urbanlens.dashboard.models.labels.model import Label
+
+        label = baker.make(Label, kind=KIND_TAG, profile=self.profile, name="Abandoned")
+        suggestion = PinSuggestion.objects.create(
+            profile=self.profile,
+            pin=None,
+            latitude=Decimal("41.000000"),
+            longitude=Decimal("-76.000000"),
+            origin=PinSuggestionOrigin.LOCAL_SCAN,
+            visit_dates=["2024-02-01"],
+            hit_count=1,
+        )
+        with mock.patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None):
+            result = accept_pin_suggestion(suggestion, self.profile, label_ids=[label.pk])
+
+        self.assertIn(label, result.pin.labels.all())
+
+    def test_accept_matched_suggestion_ignores_name_and_label_ids(self) -> None:
+        from urbanlens.dashboard.models.labels.meta import KIND_TAG
+        from urbanlens.dashboard.models.labels.model import Label
+
+        label = baker.make(Label, kind=KIND_TAG, profile=self.profile, name="Should Not Apply")
+        suggestion = self._matched_suggestion(["2024-01-01"])
+
+        result = accept_pin_suggestion(suggestion, self.profile, name="Should Not Rename", label_ids=[label.pk])
+
+        self.assertEqual(result.pin.pk, self.pin.pk)
+        self.assertNotEqual(result.pin.name, "Should Not Rename")
+        self.assertNotIn(label, result.pin.labels.all())
+
     def test_accept_skips_visits_when_visit_logging_disabled(self) -> None:
         self.profile.track_pin_visits = False
         self.profile.save(update_fields=["track_pin_visits"])
@@ -448,6 +496,32 @@ class PinSuggestionActionViewTests(TestCase):
         response = self.client.post(reverse("memories.locations.action", args=[suggestion.pk, "accept"]))
         self.assertEqual(response.status_code, 200)
         self.assertEqual(PinVisit.objects.filter(pin=self.pin).count(), 0)
+
+    def test_accept_new_pin_toast_includes_a_view_pin_link(self) -> None:
+        suggestion = self._suggestion(pin=None, latitude=Decimal("41.000000"), longitude=Decimal("-76.000000"), suggested_name="Old Mill")
+        with mock.patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None):
+            response = self.client.post(reverse("memories.locations.action", args=[suggestion.pk, "accept"]), {"name": "Old Mill"})
+        self.assertEqual(response.status_code, 200)
+        new_pin = Pin.objects.get(profile=self.profile, name="Old Mill")
+        trigger = json.loads(response.headers["HX-Trigger"])
+        self.assertIn(f"/{new_pin.slug}/", trigger["showToast"]["message"])
+
+    def test_accept_existing_pin_toast_has_no_view_pin_link(self) -> None:
+        suggestion = self._suggestion()
+        response = self.client.post(reverse("memories.locations.action", args=[suggestion.pk, "accept"]))
+        trigger = json.loads(response.headers["HX-Trigger"])
+        self.assertNotIn("View pin", trigger["showToast"]["message"])
+
+    def test_accept_new_pin_applies_submitted_labels(self) -> None:
+        from urbanlens.dashboard.models.labels.meta import KIND_TAG
+        from urbanlens.dashboard.models.labels.model import Label
+
+        label = baker.make(Label, kind=KIND_TAG, profile=self.profile, name="Abandoned")
+        suggestion = self._suggestion(pin=None, latitude=Decimal("41.000000"), longitude=Decimal("-76.000000"), suggested_name="Old Mill")
+        with mock.patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None):
+            self.client.post(reverse("memories.locations.action", args=[suggestion.pk, "accept"]), {"name": "Old Mill", "label_ids": [str(label.pk)]})
+        new_pin = Pin.objects.get(profile=self.profile, name="Old Mill")
+        self.assertIn(label, new_pin.labels.all())
 
 
 class PhotoLocationScanUploadViewTests(TestCase):
