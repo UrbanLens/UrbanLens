@@ -529,6 +529,7 @@ class SiteSettings(abstract.FrontendDashboardModel):
             return False
 
         return self.get_effective_environment_type() in {
+            EnvironmentTypes.STAGING,
             EnvironmentTypes.DEVELOPMENT,
             EnvironmentTypes.LOCAL,
             EnvironmentTypes.TESTING,
