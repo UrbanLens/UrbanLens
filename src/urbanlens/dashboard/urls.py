@@ -44,6 +44,7 @@ from urbanlens.dashboard.controllers import (
     pin_lists,
     pin_sharing,
     pin_suggestions,
+    property_owner,
     region_search,
     safety,
     saved_filters,
@@ -451,6 +452,31 @@ urlpatterns = [
                                 "<slug:pin_slug>/markup-maps/",
                                 markup.PinMarkupMapsView.as_view(),
                                 name="pin.markup_maps",
+                            ),
+                            path(
+                                "<slug:pin_slug>/ownership/",
+                                property_owner.OwnershipPanelView.as_view(),
+                                name="pin.ownership",
+                            ),
+                            path(
+                                "<slug:pin_slug>/ownership/<int:owner_id>/edit/",
+                                property_owner.OwnerUpdateView.as_view(),
+                                name="pin.ownership.edit",
+                            ),
+                            path(
+                                "<slug:pin_slug>/ownership/<int:owner_id>/remove/",
+                                property_owner.OwnerRemoveView.as_view(),
+                                name="pin.ownership.remove",
+                            ),
+                            path(
+                                "<slug:pin_slug>/sales/",
+                                property_owner.PropertySaleTabView.as_view(),
+                                name="pin.sales",
+                            ),
+                            path(
+                                "<slug:pin_slug>/sales/<int:sale_id>/delete/",
+                                property_owner.PropertySaleDeleteView.as_view(),
+                                name="pin.sales.delete",
                             ),
                             path(
                                 "<slug:pin_slug>/comments/",

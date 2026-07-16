@@ -262,6 +262,19 @@
             <div style="padding:1rem;color:#888;font-size:.85rem;">Loading...</div>
         </div>
 
+        <div hx-get="{% url 'pin.ownership' pin.slug %}"
+            hx-trigger="load[!window.ulSectionCollapsed('pin','ownership')], ul:unhide"
+            hx-swap="outerHTML"
+            id="pin-ownership-panel"
+            class="ownership-panel card card--secondary"
+            data-collapse-scope="pin" data-collapse-section="ownership">
+            <div class="card-header">
+                <i class="material-symbols-outlined">real_estate_agent</i>
+                <span>Ownership</span>
+            </div>
+            <div style="padding:1rem;color:#888;font-size:.85rem;">Loading...</div>
+        </div>
+
         {# Only rendered when the pin has associated markup maps - the view returns 204 #}
         {# otherwise, and the htmx:afterOnLoad handler below removes this placeholder. #}
         <div hx-get="{% url 'pin.markup_maps' pin.slug %}"

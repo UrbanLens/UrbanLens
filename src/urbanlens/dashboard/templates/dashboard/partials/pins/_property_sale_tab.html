@@ -1,0 +1,43 @@
+{# Pin detail page: Ownership card - Sale History tab body (swapped into #po-sales-body). #}
+{% if sales %}
+<div class="po-sale-list">
+    {% for sale in sales %}
+    <div class="po-sale-row" id="po-sale-{{ sale.id }}">
+        <div class="po-sale-main">
+            <span class="po-sale-date">{{ sale.sale_date|default:"Undated" }}</span>
+            {% if sale.sale_price %}<span class="po-sale-price">${{ sale.sale_price|floatformat:2 }}</span>{% endif %}
+            <button type="button" class="btn btn--icon-sm po-sale-delete" title="Delete sale record"
+                    hx-delete="{% url 'pin.sales.delete' pin.slug sale.id %}"
+                    hx-target="#po-sales-body"
+                    hx-swap="innerHTML"
+                    hx-confirm="Delete this sale record?">
+                <i class="material-symbols-outlined">close</i>
+            </button>
+        </div>
+        <div class="po-sale-parties">
+            <span class="po-sale-party">{% if sale.previous_owner %}{{ sale.previous_owner.name }}{% else %}Unknown{% endif %}</span>
+            <i class="material-symbols-outlined po-sale-arrow">arrow_forward</i>
+            <span class="po-sale-party">{% if sale.new_owner %}{{ sale.new_owner.name }}{% else %}Unknown{% endif %}</span>
+        </div>
+        {% if sale.notes %}<p class="po-sale-notes">{{ sale.notes|linebreaksbr }}</p>{% endif %}
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<p class="po-panel-empty">No sale history recorded yet.</p>
+{% endif %}
+
+<form class="po-add-form po-sale-add-form"
+      hx-post="{% url 'pin.sales' pin.slug %}"
+      hx-target="#po-sales-body"
+      hx-swap="innerHTML">
+    {% csrf_token %}
+    <input type="text" name="previous_owner" class="po-input" placeholder="Previous owner (optional)" maxlength="200">
+    <input type="text" name="new_owner" class="po-input" placeholder="New owner (optional)" maxlength="200">
+    <input type="number" name="sale_price" class="po-input po-price-input" placeholder="Sale price" min="0" step="0.01">
+    <input type="date" name="sale_date" class="po-input">
+    <input type="text" name="notes" class="po-input" placeholder="Notes (optional)">
+    <button type="submit" class="btn btn--icon-sm po-add-btn" title="Record sale">
+        <i class="material-symbols-outlined">add</i>
+    </button>
+</form>
