@@ -7,7 +7,7 @@ from __future__ import annotations
 from typing import Any
 
 from urbanlens.dashboard.models.wiki.model import Wiki
-from urbanlens.dashboard.services.undo.base import UndoHandler, register
+from urbanlens.dashboard.services.undo.base import UndoHandler, describe_batch, register
 
 _RESTORABLE_FIELDS = (
     "name",
@@ -83,9 +83,7 @@ class WikiUndoHandler(UndoHandler):
 
     @classmethod
     def describe(cls, instances: list[Wiki]) -> str:
-        if len(instances) == 1:
-            return f"Wiki: {instances[0].name}"
-        return f"{len(instances)} wiki pages"
+        return describe_batch("Wiki", "wiki pages", [w.name for w in instances])
 
     @classmethod
     def restore(cls, payload: list[dict[str, Any]]) -> list[Wiki]:

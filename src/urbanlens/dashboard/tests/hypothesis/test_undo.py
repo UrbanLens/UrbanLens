@@ -5,8 +5,6 @@ from __future__ import annotations
 import datetime
 
 from django.contrib.auth.models import User
-from django.core.cache import cache
-from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
 from model_bakery import baker
@@ -17,10 +15,11 @@ from urbanlens.dashboard.models.labels.meta import KIND_TAG
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinContact
+from urbanlens.dashboard.models.saved_filter.model import SavedFilter
 from urbanlens.dashboard.models.trips.model import Trip, TripMembership
-from urbanlens.dashboard.models.undo import UndoAction
+from urbanlens.dashboard.models.undo import UNDO_RETENTION, UndoAction
 from urbanlens.dashboard.models.wiki.model import Wiki
-from urbanlens.dashboard.services.undo.base import get_handler
+from urbanlens.dashboard.services.undo.base import describe_batch, get_handler
 from urbanlens.dashboard.services.undo.service import (
     UndoExpiredError,
     clear_undo_history,
@@ -29,7 +28,10 @@ from urbanlens.dashboard.services.undo.service import (
     stash_for_undo,
 )
 
-_LOCMEM_CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
+
+def _expire(undo_action: UndoAction) -> None:
+    """Push ``undo_action`` past its retention window, simulating elapsed time."""
+    UndoAction.objects.filter(pk=undo_action.pk).update(created=timezone.now() - UNDO_RETENTION - datetime.timedelta(days=1))
 
 
 def _make_wiki(**kwargs) -> Wiki:
@@ -48,7 +50,6 @@ def _make_checkin(profile, **kwargs) -> SafetyCheckin:
     return baker.make(SafetyCheckin, **defaults)
 
 
-@override_settings(CACHES=_LOCMEM_CACHES)
 class UndoServiceTests(TestCase):
     """Core stash/restore/clear/history behavior, independent of any one model."""
 
@@ -57,14 +58,14 @@ class UndoServiceTests(TestCase):
         self.profile = self.user.profile
         self.pin = baker.make(Pin, profile=self.profile, name="Old Mill")
 
-    def test_stash_creates_db_row_and_cache_entry(self) -> None:
+    def test_stash_creates_db_row_with_payload(self) -> None:
         undo_action = stash_for_undo("pin", [self.pin], self.profile)
         self.assertTrue(UndoAction.objects.filter(pk=undo_action.pk).exists())
-        self.assertIsNotNone(cache.get(f"dashboard:undo:{undo_action.cache_key}"))
+        self.assertTrue(undo_action.payload)
         self.assertEqual(undo_action.model_label, "pin")
         self.assertIn("Old Mill", undo_action.object_repr)
 
-    def test_restore_recreates_instance_and_consumes_entry(self) -> None:
+    def test_restore_recreates_instance_and_deletes_row(self) -> None:
         old_pk = self.pin.pk
         undo_action = stash_for_undo("pin", [self.pin], self.profile)
         self.pin.delete()
@@ -75,18 +76,17 @@ class UndoServiceTests(TestCase):
         self.assertNotEqual(restored[0].pk, old_pk)
         self.assertEqual(restored[0].name, "Old Mill")
         self.assertFalse(UndoAction.objects.filter(pk=undo_action.pk).exists())
-        self.assertIsNone(cache.get(f"dashboard:undo:{undo_action.cache_key}"))
 
-    def test_restore_missing_payload_raises_and_deletes_row(self) -> None:
+    def test_restore_expired_action_raises_and_deletes_row(self) -> None:
         undo_action = stash_for_undo("pin", [self.pin], self.profile)
         self.pin.delete()
-        cache.delete(f"dashboard:undo:{undo_action.cache_key}")
+        _expire(undo_action)
 
         with pytest.raises(UndoExpiredError):
             restore_undo_action(undo_action)
         self.assertFalse(UndoAction.objects.filter(pk=undo_action.pk).exists())
 
-    def test_clear_undo_history_removes_rows_and_cache(self) -> None:
+    def test_clear_undo_history_removes_rows(self) -> None:
         a1 = stash_for_undo("pin", [self.pin], self.profile)
         other_pin = baker.make(Pin, profile=self.profile)
         a2 = stash_for_undo("pin", [other_pin], self.profile)
@@ -95,8 +95,6 @@ class UndoServiceTests(TestCase):
 
         self.assertEqual(count, 2)
         self.assertFalse(UndoAction.objects.filter(pk__in=[a1.pk, a2.pk]).exists())
-        self.assertIsNone(cache.get(f"dashboard:undo:{a1.cache_key}"))
-        self.assertIsNone(cache.get(f"dashboard:undo:{a2.cache_key}"))
 
     def test_get_undo_history_scoped_to_profile_and_newest_first(self) -> None:
         other_user = baker.make(User)
@@ -114,7 +112,22 @@ class UndoServiceTests(TestCase):
             get_handler("not_a_real_model")
 
 
-@override_settings(CACHES=_LOCMEM_CACHES)
+class DescribeBatchTests(TestCase):
+    """describe_batch() names actual items instead of just a bare count for batches."""
+
+    def test_single_item_uses_singular_label(self) -> None:
+        self.assertEqual(describe_batch("Pin", "pins", ["Old Mill"]), "Pin: Old Mill")
+
+    def test_small_batch_lists_every_name(self) -> None:
+        result = describe_batch("Pin", "pins", ["Old Mill", "Grain Silo"])
+        self.assertEqual(result, "2 pins: Old Mill, Grain Silo")
+
+    def test_large_batch_truncates_with_more_suffix(self) -> None:
+        names = ["Old Mill", "Grain Silo", "Water Tower", "Rail Yard", "Power Plant"]
+        result = describe_batch("Pin", "pins", names)
+        self.assertEqual(result, "5 pins: Old Mill, Grain Silo, Water Tower (+2 more)")
+
+
 class PinUndoHandlerTests(TestCase):
     """Pin's own fields, labels, and personal detail-pin subtree round-trip."""
 
@@ -149,7 +162,6 @@ class PinUndoHandlerTests(TestCase):
         self.assertEqual(restored_child.parent_pin_id, restored_parent.pk)
 
 
-@override_settings(CACHES=_LOCMEM_CACHES)
 class WikiUndoHandlerTests(TestCase):
     """Wiki's own fields, labels, and child-wiki subtree round-trip."""
 
@@ -187,7 +199,6 @@ class WikiUndoHandlerTests(TestCase):
         self.assertEqual(restored_child.parent_wiki_id, parent.pk)
 
 
-@override_settings(CACHES=_LOCMEM_CACHES)
 class SafetyCheckinUndoHandlerTests(TestCase):
     """SafetyCheckin's own fields and emergency-contact snapshots round-trip."""
 
@@ -208,7 +219,6 @@ class SafetyCheckinUndoHandlerTests(TestCase):
         self.assertEqual(restored.contacts.first().name, "Alex")
 
 
-@override_settings(CACHES=_LOCMEM_CACHES)
 class TripUndoHandlerTests(TestCase):
     """Trip's own fields and membership/RSVP roster round-trip."""
 
@@ -230,7 +240,26 @@ class TripUndoHandlerTests(TestCase):
         self.assertEqual(membership.rsvp, "yes")
 
 
-@override_settings(CACHES=_LOCMEM_CACHES)
+class SavedFilterUndoHandlerTests(TestCase):
+    """SavedFilter's name/icon/criteria/order round-trip."""
+
+    def setUp(self) -> None:
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+
+    def test_restores_fields(self) -> None:
+        saved_filter = baker.make(SavedFilter, profile=self.profile, name="4-star tags", icon="star", criteria={"min_rating": 4}, order=2)
+
+        undo_action = stash_for_undo("saved_filter", [saved_filter], self.profile)
+        saved_filter.delete()
+        restored = restore_undo_action(undo_action)[0]
+
+        self.assertEqual(restored.name, "4-star tags")
+        self.assertEqual(restored.icon, "star")
+        self.assertEqual(restored.criteria, {"min_rating": 4})
+        self.assertEqual(restored.order, 2)
+
+
 class DeleteViewsStashUndoTests(TestCase):
     """The wired delete views stash an UndoAction before deleting."""
 
@@ -264,8 +293,12 @@ class DeleteViewsStashUndoTests(TestCase):
         self.client.delete(reverse("location.wiki.detail_pin.edit", args=[parent_location.slug, child.uuid]))
         self.assertTrue(UndoAction.objects.filter(profile=self.profile, model_label="wiki").exists())
 
+    def test_saved_filter_delete_view_stashes_undo(self) -> None:
+        saved_filter = baker.make(SavedFilter, profile=self.profile, name="Doomed Filter", criteria={"min_rating": 4})
+        self.client.post(reverse("saved_filters.delete", args=[saved_filter.uuid]))
+        self.assertTrue(UndoAction.objects.filter(profile=self.profile, model_label="saved_filter").exists())
 
-@override_settings(CACHES=_LOCMEM_CACHES)
+
 class UndoHistoryViewTests(TestCase):
     """GET /settings/undo-history/ lists a profile's active undo entries."""
 
@@ -292,7 +325,6 @@ class UndoHistoryViewTests(TestCase):
         self.assertNotContains(response, "Someone Elses Pin")
 
 
-@override_settings(CACHES=_LOCMEM_CACHES)
 class UndoRestoreViewTests(TestCase):
     """POST /undo/<uuid>/restore/ restores an entry, scoped to its owning profile."""
 
@@ -324,11 +356,11 @@ class UndoRestoreViewTests(TestCase):
         self.assertEqual(response.status_code, 404)
         self.assertFalse(Pin.objects.filter(name="Not Yours").exists())
 
-    def test_expired_payload_returns_error_toast_without_500(self) -> None:
+    def test_expired_action_returns_error_toast_without_500(self) -> None:
         pin = baker.make(Pin, profile=self.profile, name="Gone")
         undo_action = stash_for_undo("pin", [pin], self.profile)
         pin.delete()
-        cache.delete(f"dashboard:undo:{undo_action.cache_key}")
+        _expire(undo_action)
 
         response = self.client.post(reverse("undo.restore", args=[undo_action.uuid]))
 
@@ -336,7 +368,6 @@ class UndoRestoreViewTests(TestCase):
         self.assertIn("expired", response.headers.get("HX-Trigger", ""))
 
 
-@override_settings(CACHES=_LOCMEM_CACHES)
 class UndoClearViewTests(TestCase):
     """POST /settings/undo-history/clear/ wipes a profile's entire undo history."""
 

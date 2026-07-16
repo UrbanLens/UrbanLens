@@ -2824,13 +2824,17 @@
             });
             _totalPins = _pinStore.size;
             exitSelectMode();
-            _showUndoDeleteToast(data.count, data.undo_token);
+            _showUndoDeleteToast(data.count, data.descendant_count, data.undo_token);
         })
         .catch(function () { toastr.error('Failed to delete pins.'); confirmBtn.disabled = false; });
     }
 
-    function _showUndoDeleteToast(count, token) {
-        const msg = `${count} pin${count === 1 ? '' : 's'} deleted. `
+    function _showUndoDeleteToast(count, descendantCount, token) {
+        let label = `${count} pin${count === 1 ? '' : 's'}`;
+        if (descendantCount > 0) {
+            label += ` (+${descendantCount} sub pin${descendantCount === 1 ? '' : 's'})`;
+        }
+        const msg = `${label} deleted. `
             + `<button type="button" class="toast-undo-btn" onclick="_undoBulkDelete('${token}', this)">Undo</button>`;
         toastr.success(msg, '', { timeOut: 10000, extendedTimeOut: 4000, closeButton: true, tapToDismiss: false });
     }

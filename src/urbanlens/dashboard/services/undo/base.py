@@ -60,3 +60,24 @@ def get_handler(model_label: str) -> type[UndoHandler]:
         return _HANDLERS[model_label]
     except KeyError:
         raise ValueError(f"No undo handler registered for {model_label!r}") from None
+
+
+def describe_batch(singular_label: str, plural_label: str, names: list[str], max_shown: int = 3) -> str:
+    """Build a ``describe()`` string that names names instead of just a bare count.
+
+    Args:
+        singular_label: Label for a single instance, e.g. ``"Pin"``.
+        plural_label: Label for the plural count, e.g. ``"pins"``.
+        names: Display name of every instance in the batch, in order.
+        max_shown: Maximum number of names to list before collapsing the rest
+            into a "(+N more)" suffix.
+
+    Returns:
+        e.g. ``"Pin: Old Mill"``, or ``"5 pins: Old Mill, Grain Silo, Water Tower (+2 more)"``.
+    """
+    if len(names) == 1:
+        return f"{singular_label}: {names[0]}"
+    shown = ", ".join(names[:max_shown])
+    remaining = len(names) - max_shown
+    suffix = f" (+{remaining} more)" if remaining > 0 else ""
+    return f"{len(names)} {plural_label}: {shown}{suffix}"

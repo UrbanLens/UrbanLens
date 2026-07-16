@@ -1,21 +1,16 @@
-"""Cache-backed stash/restore for the generic undo-delete framework.
+"""Stash/restore for the generic undo-delete framework.
 
 Deleting a model instance cascades to its DB-level children before any of
 this gets a chance to run - see the per-model docstrings under
 ``services.undo.handlers`` for exactly what is and isn't restorable for each
-model. ``dashboard.models.undo.UndoAction`` is the DB-side index that lets a
-profile's undo history be listed and cleared reliably regardless of cache
-backend (Redis/Valkey offers no cheap way to enumerate keys by owner at
-scale, and the locmem fallback can't be enumerated at all).
+model. ``dashboard.models.undo.UndoAction`` holds the serialized payload
+directly (see that model's docstring for why this isn't cache-backed).
 """
 
 from __future__ import annotations
 
 import logging
 from typing import TYPE_CHECKING, Any
-import uuid
-
-from django.core.cache import cache
 
 from urbanlens.dashboard.models.undo import UNDO_RETENTION, UndoAction
 from urbanlens.dashboard.services.undo import handlers as _handlers
@@ -28,19 +23,13 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-UNDO_TTL_SECONDS = int(UNDO_RETENTION.total_seconds())
-
 
 class UndoExpiredError(Exception):
-    """Raised when the cached payload for an UndoAction is gone (evicted, or past its TTL)."""
-
-
-def _cache_key(token: str) -> str:
-    return f"dashboard:undo:{token}"
+    """Raised when an UndoAction is past its retention window."""
 
 
 def stash_for_undo(model_label: str, instances: list[Model], profile: Profile) -> UndoAction:
-    """Serialize ``instances`` into the cache and index them for a profile's undo history.
+    """Serialize ``instances`` and index them for a profile's undo history.
 
     Must be called before the instances are deleted.
 
@@ -53,14 +42,11 @@ def stash_for_undo(model_label: str, instances: list[Model], profile: Profile) -
         The created UndoAction row.
     """
     handler = get_handler(model_label)
-    payload = handler.serialize(instances)
-    token = uuid.uuid4().hex
-    cache.set(_cache_key(token), payload, timeout=UNDO_TTL_SECONDS)
     return UndoAction.objects.create(
         profile=profile,
         model_label=model_label,
         object_repr=handler.describe(instances),
-        cache_key=token,
+        payload=handler.serialize(instances),
     )
 
 
@@ -75,25 +61,21 @@ def restore_undo_action(undo_action: UndoAction) -> list[Any]:
         The recreated instances.
 
     Raises:
-        UndoExpiredError: If the cached payload is missing (evicted, or the
-            entry is past its retention window) - the stale row is deleted
-            before this is raised.
+        UndoExpiredError: If the entry is past its ``UNDO_RETENTION`` window -
+            the stale row is deleted before this is raised.
     """
-    key = _cache_key(undo_action.cache_key)
-    payload = cache.get(key)
-    if payload is None:
+    if undo_action.is_expired:
         undo_action.delete()
-        raise UndoExpiredError(f"Undo payload for UndoAction {undo_action.pk} is no longer available.")
+        raise UndoExpiredError(f"UndoAction {undo_action.pk} is past its {UNDO_RETENTION.days}-day retention window.")
 
     handler = get_handler(undo_action.model_label)
-    restored = handler.restore(payload)
-    cache.delete(key)
+    restored = handler.restore(undo_action.payload)
     undo_action.delete()
     return restored
 
 
 def clear_undo_history(profile: Profile) -> int:
-    """Delete every undo entry for ``profile``, including its cached payloads.
+    """Delete every undo entry for ``profile``.
 
     Args:
         profile: The profile whose undo history should be cleared.
@@ -101,11 +83,9 @@ def clear_undo_history(profile: Profile) -> int:
     Returns:
         Number of entries cleared.
     """
-    actions = list(UndoAction.objects.for_profile(profile))
-    for action in actions:
-        cache.delete(_cache_key(action.cache_key))
-    UndoAction.objects.filter(pk__in=[a.pk for a in actions]).delete()
-    return len(actions)
+    count = UndoAction.objects.for_profile(profile).count()
+    UndoAction.objects.for_profile(profile).delete()
+    return count
 
 
 def get_undo_history(profile: Profile) -> QuerySet[UndoAction]:

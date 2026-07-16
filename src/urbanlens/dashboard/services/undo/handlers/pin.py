@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from urbanlens.dashboard.models.pin.model import Pin
-from urbanlens.dashboard.services.undo.base import UndoHandler, register
+from urbanlens.dashboard.services.undo.base import UndoHandler, describe_batch, register
 
 # Fields restored verbatim on undo. Deliberately excludes uuid/slug/created/updated
 # (regenerated fresh by Pin.save()) and the location/profile/wiki/parent_pin FKs
@@ -70,9 +70,7 @@ class PinUndoHandler(UndoHandler):
 
     @classmethod
     def describe(cls, instances: list[Pin]) -> str:
-        if len(instances) == 1:
-            return f"Pin: {instances[0].effective_name}"
-        return f"{len(instances)} pins"
+        return describe_batch("Pin", "pins", [p.effective_name for p in instances])
 
     @classmethod
     def restore(cls, payload: list[dict[str, Any]]) -> list[Pin]:

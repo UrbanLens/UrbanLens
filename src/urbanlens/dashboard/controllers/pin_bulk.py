@@ -81,7 +81,8 @@ class PinBulkDeleteView(LoginRequiredMixin, View):
         for pin in subtree:
             pin.delete()
 
-        return JsonResponse({"ok": True, "undo_token": str(undo_action.uuid), "count": len(pins)})
+        descendant_count = len(subtree) - len(pins)
+        return JsonResponse({"ok": True, "undo_token": str(undo_action.uuid), "count": len(pins), "descendant_count": descendant_count, "total_count": len(subtree)})
 
 
 class PinBulkUndoView(LoginRequiredMixin, View):
