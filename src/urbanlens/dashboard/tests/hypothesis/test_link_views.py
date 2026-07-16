@@ -128,6 +128,20 @@ class PinDetailsPageDetailsCardTests(TestCase):
         links_row_pos = content.index('id="pin-links-row"')
         self.assertLess(links_row_pos, description_pos)
 
+    def test_add_link_header_button_opens_the_dialog(self) -> None:
+        """Regression guard: this used to inline-reveal the row's own add-form,
+        whose Cancel button only hid the form (not the row), leaving a stray
+        icon visible where the inputs had been - see _pin_link_add_dialog.html."""
+        response = self.client.get(reverse("pin.overview", args=[self.pin.slug]))
+        self.assertContains(response, "document.getElementById('pin-link-add-dialog').showModal()")
+
+    def test_row_add_toggle_also_opens_the_dialog_once_a_link_exists(self) -> None:
+        baker.make(PinLink, pin=self.pin, url="https://example.com/a")
+        response = self.client.get(reverse("pin.overview", args=[self.pin.slug]))
+        self.assertContains(response, "document.getElementById('pin-link-add-dialog').showModal()")
+        # No inline form left to accidentally leave visible after a broken Cancel.
+        self.assertNotContains(response, 'class="pin-link-add-form"')
+
 
 class LocationLinkViewTests(TestCase):
     def setUp(self) -> None:
@@ -166,3 +180,10 @@ class LocationLinkViewTests(TestCase):
         self.assertContains(response, "No links yet.")
         content = response.content.decode()
         self.assertNotRegex(content, r'id="wiki-links-row"[^>]*\bhidden\b')
+
+    def test_still_uses_its_own_inline_add_form_not_the_pin_pages_dialog(self) -> None:
+        """The wiki page's inline reveal-form UX is unaffected by the pin page's
+        add-link-dialog conversion - hide_when_empty is unset here."""
+        response = self.client.get(reverse("location.wiki.links", args=[self.location.slug]))
+        self.assertContains(response, 'class="pin-link-add-form"')
+        self.assertNotContains(response, "pin-link-add-dialog")

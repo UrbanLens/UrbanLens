@@ -81,7 +81,7 @@
             <span>Details</span>
             {% if not pin.links.all %}
             <button type="button" class="btn btn--icon-sm" title="Add a link"
-                    onclick="var row=document.getElementById('pin-links-row'); row.hidden=false; var form=row.querySelector('.pin-link-add-form'); if(form){form.hidden=false; var input=form.querySelector('input[name=url]'); if(input)input.focus();}">
+                    onclick="document.getElementById('pin-link-add-dialog').showModal()">
                 <i class="material-symbols-outlined">add_link</i>
             </button>
             {% endif %}

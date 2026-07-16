@@ -8,11 +8,15 @@ Usage: rendered via PinLinksView/LocationLinksView, which supply `links`,
 argument), and either `pin` or `wiki` for display purposes.
 
 hide_when_empty: when true and there are no links, the whole row (including
-the "No links yet." placeholder and its own inline add-toggle) stays hidden -
-the caller is expected to provide its own "Add a link" icon button elsewhere
-(e.g. in the section header) that reveals this row's add-form directly. See
+the "No links yet." placeholder) stays hidden - the caller is expected to
+provide its own "Add a link" icon button elsewhere (e.g. in the section
+header) that opens the shared #pin-link-add-dialog. In this mode the row's
+own inline add-toggle/form is omitted entirely - both "add the first link"
+and "add another" go through that one dialog, so there's no separate inline
+control whose Cancel button needs to hide the row back down again. See
 pin_overview_partial.html's Details card header for the pin page's version.
-Unset/false (the wiki page's usage) keeps the original always-visible row.
+Unset/false (the wiki page's usage) keeps the original always-visible row
+with its own inline add-toggle/form.
 {% endcomment %}
 <div class="detail-item detail-item--links full-width" id="{{ row_id }}"
      {% if hide_when_empty and not links %}hidden{% endif %}>
@@ -40,8 +44,13 @@ Unset/false (the wiki page's usage) keeps the original always-visible row.
         <span class="pin-links-empty">No links yet.</span>
         {% endif %}
         {% endfor %}
+        {% if hide_when_empty %}
         <button type="button" class="pin-link-add-toggle" title="Add a link"
-                {% if hide_when_empty and not links %}hidden{% endif %}
+                onclick="document.getElementById('pin-link-add-dialog').showModal()">
+            <i class="material-symbols-outlined">add_link</i>
+        </button>
+        {% else %}
+        <button type="button" class="pin-link-add-toggle" title="Add a link"
                 onclick="this.hidden=true; this.nextElementSibling.hidden=false; this.nextElementSibling.querySelector('input').focus();">
             <i class="material-symbols-outlined">add_link</i>
         </button>
@@ -54,5 +63,6 @@ Unset/false (the wiki page's usage) keeps the original always-visible row.
             <button type="submit" class="btn btn--primary btn--sm">Add</button>
             <button type="button" class="btn btn--ghost btn--sm" onclick="this.closest('form').hidden=true; this.closest('form').previousElementSibling.hidden=false;">Cancel</button>
         </form>
+        {% endif %}
     </span>
 </div>
