@@ -156,16 +156,9 @@
 
 .cf-add-trigger {
   align-self: flex-start;
-  color: var(--ul-grey-6);
   gap: .35rem;
   width: auto;
   padding: .3rem .6rem;
-
-  span { font-size: .8rem; }
-
-  &:hover {
-    color: var(--ul-color-accent);
-  }
 }
 
 // -- Value rows (pin detail card + profile annotation block) --------------------

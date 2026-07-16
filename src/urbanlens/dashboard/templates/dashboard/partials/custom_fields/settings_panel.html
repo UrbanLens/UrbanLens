@@ -57,7 +57,7 @@
         <p class="cf-group-empty">No custom fields for {{ group.label|lower }} yet.</p>
         {% endif %}
 
-        <button type="button" class="btn btn--icon-sm cf-add-trigger" id="cf-add-trigger-{{ group.entity_type }}"
+        <button type="button" class="btn btn--secondary cf-add-trigger" id="cf-add-trigger-{{ group.entity_type }}"
                 onclick="document.getElementById('cf-add-trigger-{{ group.entity_type }}').hidden = true; document.getElementById('cf-add-form-{{ group.entity_type }}').hidden = false; document.getElementById('cf-add-form-{{ group.entity_type }}').querySelector('.cf-name-input').focus();">
             <i class="material-symbols-outlined">add</i>
             <span>Add field</span>
