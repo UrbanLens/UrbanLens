@@ -88,6 +88,10 @@ class OutgoingRequestWidgetPrivacyTests(TestCase):
     """The sender's own "pending sent requests" widget must not reveal the
     target's identity, nor whether an invited email matched a registered
     account, until the request is accepted - see _friend_list_ctx's docstring.
+
+    The widget only renders on the "View all friends" page now (the compact
+    profile-page embed dropped it - see friend_list_partial.html), so these
+    requests set the same HX-Target header that page's own refresh uses.
     """
 
     def setUp(self) -> None:
@@ -101,7 +105,7 @@ class OutgoingRequestWidgetPrivacyTests(TestCase):
         target = baker.make(User, username="secretusername", email="target@example.com", is_active=True)
         self.client.post(reverse("friend.invite_email"), {"email": target.email})
 
-        response = self.client.get(self._friend_list_url())
+        response = self.client.get(self._friend_list_url(), HTTP_HX_TARGET="friends_page_list")
 
         self.assertNotIn(b"secretusername", response.content)
         self.assertNotIn(b"target@example.com", response.content)
@@ -115,7 +119,7 @@ class OutgoingRequestWidgetPrivacyTests(TestCase):
         target = baker.make(User, username="directtarget", email="direct@example.com", is_active=True)
         Friendship.objects.create(from_profile=self.inviter.profile, to_profile=target.profile, status=FriendshipStatus.REQUESTED)
 
-        response = self.client.get(self._friend_list_url())
+        response = self.client.get(self._friend_list_url(), HTTP_HX_TARGET="friends_page_list")
 
         self.assertNotIn(b"directtarget", response.content)
         self.assertIn(b"Pending request", response.content)
@@ -124,17 +128,27 @@ class OutgoingRequestWidgetPrivacyTests(TestCase):
     def test_registered_and_unregistered_pending_entries_render_identically(self, mock_send) -> None:
         target = baker.make(User, username="realuser2", email="target2@example.com", is_active=True)
         self.client.post(reverse("friend.invite_email"), {"email": target.email})
-        registered_response = self.client.get(self._friend_list_url()).content
+        registered_response = self.client.get(self._friend_list_url(), HTTP_HX_TARGET="friends_page_list").content
 
         other_inviter = baker.make(User, username="widgetinviter2", email="widgetinviter2@example.com")
         self.client.force_login(other_inviter)
         self.client.post(reverse("friend.invite_email"), {"email": "brandnew-unmatched@example.com"})
-        unregistered_response = self.client.get(self._friend_list_url(other_inviter)).content
+        unregistered_response = self.client.get(self._friend_list_url(other_inviter), HTTP_HX_TARGET="friends_page_list").content
 
         self.assertIn(b"1 pending sent request", registered_response)
         self.assertIn(b"1 pending sent request", unregistered_response)
         self.assertIn(b"Pending request", registered_response)
         self.assertIn(b"Pending request", unregistered_response)
+
+    def test_pending_widget_does_not_show_on_the_compact_profile_embed(self) -> None:
+        """The widget was removed from the main profile page's compact friend list -
+        it only remains on the dedicated "View all friends" page (see the class docstring)."""
+        other = baker.make(User, username="compacttarget", email="compacttarget@example.com")
+        Friendship.objects.create(from_profile=self.inviter.profile, to_profile=other.profile, status=FriendshipStatus.REQUESTED)
+
+        response = self.client.get(self._friend_list_url())
+
+        self.assertNotIn(b"pending sent request", response.content)
 
     def test_outgoing_pending_count_sums_both_request_types(self) -> None:
         from urbanlens.dashboard.controllers.friendship import _friend_list_ctx

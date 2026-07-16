@@ -55,8 +55,14 @@ class TripQuerySet(abstract.DashboardQuerySet):
         else:
             order = F(field).asc() if ascending else F(field).desc()
 
+        # Filter to a pk subquery rather than `.filter(profiles=profile)` directly:
+        # the latter joins through the same `memberships` relation the
+        # `member_count` annotation below also joins through, and Django reuses
+        # that join - so the annotation's COUNT would silently inherit this
+        # filter's `profile_id = viewer` clause and always come out as 1.
+        trip_ids = self.filter(profiles=profile).values_list("pk", flat=True)
         qs = (
-            self.filter(profiles=profile)
+            self.filter(pk__in=trip_ids)
             .select_related("creator__user")
             .annotate(
                 activity_count=Count("activities", distinct=True),
