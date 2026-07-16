@@ -246,6 +246,46 @@ class UpdateLocationNameResolutionTests(TestCase):
         self.assertEqual(alias.kind, "official")
         self.assertEqual(alias.source, "wikipedia")
 
+    def test_pin_at_the_location_also_receives_an_official_alias(self) -> None:
+        """Regression guard: name providers used to populate WikiAlias only,
+        never PinAlias, despite update_location_name_from_external_sources'
+        own docstring claiming otherwise for both."""
+        loc, _wiki = self._location_with_wiki(wiki_name="Curated Mill", lat="41.201000", lng="-73.201000")
+        pin: Pin = baker.make(Pin, profile=baker.make("dashboard.Profile"), location=loc)
+        with _patch_providers(_StaticProvider("wikipedia", ["Old Mill"])):
+            self.assertTrue(update_location_name_from_external_sources(loc))
+        alias = pin.aliases.get(name="Old Mill")
+        self.assertEqual(alias.kind, "official")
+        self.assertEqual(alias.source, "wikipedia")
+
+    def test_every_pin_at_a_shared_location_gets_the_alias(self) -> None:
+        loc, _wiki = self._location_with_wiki(wiki_name="Curated Mill", lat="41.202000", lng="-73.202000")
+        pin_a: Pin = baker.make(Pin, profile=baker.make("dashboard.Profile"), location=loc)
+        pin_b: Pin = baker.make(Pin, profile=baker.make("dashboard.Profile"), location=loc)
+        with _patch_providers(_StaticProvider("wikipedia", ["Old Mill"])):
+            update_location_name_from_external_sources(loc)
+        self.assertTrue(pin_a.aliases.filter(name="Old Mill").exists())
+        self.assertTrue(pin_b.aliases.filter(name="Old Mill").exists())
+
+    def test_no_pins_at_the_location_is_not_an_error(self) -> None:
+        loc, _wiki = self._location_with_wiki(wiki_name="Curated Mill", lat="41.203000", lng="-73.203000")
+        with _patch_providers(_StaticProvider("wikipedia", ["Old Mill"])):
+            self.assertTrue(update_location_name_from_external_sources(loc))
+
+    def test_existing_pin_alias_is_left_untouched(self) -> None:
+        """A user-created alias with the same name must not be overwritten - the
+        provider-sourced row is only created when no row already exists."""
+        from urbanlens.dashboard.models.aliases.model import AliasType, PinAlias
+
+        loc, _wiki = self._location_with_wiki(wiki_name="Curated Mill", lat="41.204000", lng="-73.204000")
+        pin: Pin = baker.make(Pin, profile=baker.make("dashboard.Profile"), location=loc)
+        PinAlias.objects.create(pin=pin, name="Old Mill", kind=AliasType.NICKNAME, source="user")
+        with _patch_providers(_StaticProvider("wikipedia", ["Old Mill"])):
+            update_location_name_from_external_sources(loc)
+        alias = pin.aliases.get(name="Old Mill")
+        self.assertEqual(alias.kind, "nickname")
+        self.assertEqual(alias.source, "user")
+
     def test_agreement_between_sources_beats_default_priority(self) -> None:
         loc, _wiki = self._location_with_wiki(wiki_name="Curated Mill", lat="41.210000", lng="-73.210000")
         with _patch_providers(

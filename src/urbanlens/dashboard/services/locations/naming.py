@@ -409,6 +409,41 @@ def _add_wiki_aliases(wiki, candidates: Sequence[NameCandidate]) -> bool:
     return changed
 
 
+def _add_pin_aliases(location: Location, candidates: Sequence[NameCandidate]) -> bool:
+    """Persist external name candidates as official PinAlias rows on every pin at this location.
+
+    Mirrors ``_add_wiki_aliases`` - see its docstring for the "record every
+    candidate, leave existing rows alone" reasoning. A Location can have
+    several Pins (one per user who's pinned it), so this attaches the same
+    candidate set to each of them independently.
+
+    Args:
+        location: The location whose pins should receive aliases; skipped
+            when unsaved (no pins can exist yet).
+        candidates: Cleaned candidates to persist.
+
+    Returns:
+        True when at least one alias row was created.
+    """
+    if location is None or not getattr(location, "pk", None):
+        return False
+    from urbanlens.dashboard.models.aliases.model import AliasType, PinAlias
+
+    changed = False
+    for pin in location.pins.all():
+        for candidate in candidates:
+            try:
+                _alias, created = PinAlias.objects.get_or_create(
+                    pin=pin,
+                    name=candidate.name,
+                    defaults={"kind": AliasType.OFFICIAL, "source": candidate.source},
+                )
+            except IntegrityError:
+                created = False
+            changed = changed or created
+    return changed
+
+
 def persist_official_aliases_for_location(location: Location) -> bool:
     """Backfill official aliases for a location's wiki from cached candidates.
 
@@ -438,14 +473,15 @@ def update_location_name_from_external_sources(
     save: bool = True,
     profile: Profile | None = None,
 ) -> bool:
-    """Refresh a Location's official_name (and its wiki's name/aliases) from external sources.
+    """Refresh a Location's official_name (and its wiki's/pins' names/aliases) from external sources.
 
     The place-identity name lives on ``Location.official_name``; the
     community-editable name and alias list live on the linked ``Wiki`` (updated
     only when one already exists, honouring lazy wiki creation). All surviving
-    candidates are persisted as official aliases *before* any name is written,
-    so the Pin/Wiki ``save()`` alias invariant finds correctly attributed rows
-    instead of creating user-attributed ones.
+    candidates are persisted as official aliases - on the wiki AND on every
+    pin at this location - *before* any name is written, so the Pin/Wiki
+    ``save()`` alias invariant finds correctly attributed rows instead of
+    creating user-attributed ones.
 
     Args:
         location: The location to refresh.
@@ -469,6 +505,7 @@ def update_location_name_from_external_sources(
         wiki = None
 
     aliases_changed = _add_wiki_aliases(wiki, candidates)
+    aliases_changed = _add_pin_aliases(location, candidates) or aliases_changed
 
     resolved = default_name_resolver(profile).resolve(candidates, location)
     changed_fields: set[str] = set()
