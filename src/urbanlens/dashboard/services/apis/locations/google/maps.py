@@ -10,8 +10,7 @@ import re
 from typing import TYPE_CHECKING, Any, ClassVar
 
 # Only used to catch exceptions
-from xml.etree.ElementTree import ParseError as XMLParseError  # nosec B405
-
+from defusedxml.ElementTree import ParseError as XMLParseError
 from django.core.cache import cache
 from django.db import DatabaseError
 from fastkml import kml
