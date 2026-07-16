@@ -238,6 +238,55 @@ class WebSearchViewTests(TestCase):
         self.assertIn("Official Test Location", mock_search_web.call_args.args[0])
         self.assertNotIn("User Edited Location", mock_search_web.call_args.args[0])
 
+    def test_empty_fresh_results_return_204_not_a_no_results_card(self) -> None:
+        """Regression guard: an empty search must hide the panel (204, the
+        site-wide data-ext-panel-204 convention) rather than rendering a
+        visible "No results found." card."""
+        from django.test import RequestFactory
+
+        from urbanlens.dashboard.controllers.pin import PinController
+
+        pin = self._make_pin()
+        rf = RequestFactory()
+        request = rf.get("/")
+        request.user = pin.profile.user
+
+        with (
+            patch("urbanlens.dashboard.controllers.pin.search_web") as mock_search_web,
+            patch.object(Pin.objects, "select_related") as mock_select_related,
+        ):
+            mock_search_web.return_value = []
+            mock_select_related.return_value.get.return_value = pin
+            view = PinController()
+            response = view.web_search(request, pin_slug=pin.slug)
+
+        self.assertEqual(response.status_code, 204)
+
+    def test_empty_cached_results_return_204(self) -> None:
+        from django.test import RequestFactory
+
+        from urbanlens.dashboard.controllers.pin import PinController
+        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+
+        pin = self._make_pin()
+        search_name = pin.get_unique_search_name(quote_name=True)
+        assert search_name is not None
+        LocationCache.set(pin.location, "web_search", {"results": []}, query_key=search_name)
+        rf = RequestFactory()
+        request = rf.get("/")
+        request.user = pin.profile.user
+
+        with (
+            patch("urbanlens.dashboard.controllers.pin.search_web") as mock_search_web,
+            patch.object(Pin.objects, "select_related") as mock_select_related,
+        ):
+            mock_select_related.return_value.get.return_value = pin
+            view = PinController()
+            response = view.web_search(request, pin_slug=pin.slug)
+
+        self.assertEqual(response.status_code, 204)
+        mock_search_web.assert_not_called()
+
     def test_search_skips_pins_without_official_name(self):
         from django.test import RequestFactory
 

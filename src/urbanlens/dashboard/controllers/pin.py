@@ -602,6 +602,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         if cached is not None:
             results = cached.data.get("results", [])
+            if not results:
+                return HttpResponse("", status=204)
             page_obj = get_page(request, results, _WEB_SEARCH_PAGE_SIZE)
             return render(
                 request,
@@ -654,6 +656,9 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         if location:
             LocationCache.set(location, "web_search", {"results": search_results}, query_key=search_name)
+
+        if not search_results:
+            return HttpResponse("", status=204)
 
         page_obj = get_page(request, search_results, _WEB_SEARCH_PAGE_SIZE)
         return render(
