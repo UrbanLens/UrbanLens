@@ -107,7 +107,7 @@ def _render_location_panel(request, location: Location, wiki: Wiki) -> HttpRespo
             "panel_id": "location-aliases-panel",
             "collapse_scope": "wiki",
             "wrap_body": True,
-            "show_header_add_button": False,
+            "show_header_add_button": True,
             "explainer_id": "location-aliases-explainer",
             "explainer_body": (
                 "Aliases are alternate names for this location - former names, local nicknames, or codenames. "

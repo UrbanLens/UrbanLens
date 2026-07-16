@@ -178,6 +178,16 @@ class LocationAliasUseViewTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertTrue(self.wiki.aliases.filter(name="Curated Mill").exists())
 
+    def test_add_alias_form_is_collapsed_behind_a_header_button(self) -> None:
+        """The wiki aliases panel used to show its add-alias input fields
+        unconditionally - inconsistent with the pin page's own aliases panel
+        (and every other add-flow on pin/wiki pages), which reveals its input
+        only after the header "+" button is clicked. Regression guard for
+        making the wiki panel match that same consistent pattern."""
+        response = self.client.get(reverse("location.wiki.aliases", args=[self.location.slug]))
+        self.assertContains(response, 'title="Add alias"')
+        self.assertContains(response, "alias-add-form--collapsed")
+
 
 class LocationAliasNicknameTests(TestCase):
     """Creating and toggling nickname-only wiki aliases."""

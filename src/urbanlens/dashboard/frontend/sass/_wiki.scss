@@ -76,7 +76,9 @@
         font-size: .83rem;
         max-width: 320px;
         line-height: 1.45;
-        z-index: 999;
+        // Above the map's own controls/toolbar (z-index 1000, see .map-buttons /
+        // _layout.scss) - matches the convention already established in _pin_lists.scss.
+        z-index: 1200;
         transition: top .3s ease, right .3s ease;
         box-shadow: 0px 5px 20px rgba(0,0,0,0.5);
 
