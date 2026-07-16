@@ -113,8 +113,11 @@
 (function(){
   const lat = {{ pin.effective_latitude|default:'null' }};
   const lng = {{ pin.effective_longitude|default:'null' }};
-  if (lat === null || lng === null) return;
-  const map = L.map('shared-pin-map', { attributionControl: false }).setView([lat, lng], 16);
+  const hasCoords = lat !== null && lng !== null;
+  // Continental-US fallback view when there's no location yet (a hidden/rejected
+  // share) so the map still initializes and window.map is still assigned below -
+  // otherwise the toolbar's screenshot tool falls back to its own hardcoded default.
+  const map = L.map('shared-pin-map', { attributionControl: false }).setView(hasCoords ? [lat, lng] : [39.8283, -98.5795], hasCoords ? 16 : 4);
   // Read by the shared top-right toolbar's screenshot tool (window._openMapToolbarScreenshot, themes/base.html).
   window.map = map;
   // Shared layers engine + panel - the exact same component as the main map.
@@ -127,7 +130,7 @@
       if (el) el.textContent = text;
     },
   });
-  L.marker([lat, lng]).addTo(map).bindPopup('{{ shared_name|escapejs }}').openPopup();
+  if (hasCoords) L.marker([lat, lng]).addTo(map).bindPopup('{{ shared_name|escapejs }}').openPopup();
 })();
 </script>
 {% endwith %}

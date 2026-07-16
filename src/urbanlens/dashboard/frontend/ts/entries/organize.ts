@@ -194,7 +194,7 @@ function initTabs(): void {
                     descValueId: "people-bulk-description-value",
                     descNochangeId: "people-bulk-description-nochange",
                 },
-                newForm: null,
+                newForm: { dialogId: "new-people-form", iconPickerId: "new-people", colorPickerId: "new-people-color-picker", colorValueId: "new-people-color-value" },
             }),
         ).init();
     }

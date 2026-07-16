@@ -635,15 +635,16 @@
         const dataEl = document.getElementById('pin-list-items-map-data');
         let points = [];
         try { points = dataEl ? JSON.parse(dataEl.textContent) : []; } catch (e) { points = []; }
-        if (!points.length) {
-            if (sectionEl) sectionEl.hidden = true;
-            return;
-        }
-        if (sectionEl) sectionEl.hidden = false;
 
         if (!_overviewMap) {
             _overviewMap = L.map(_overviewMapEl, { attributionControl: false });
+            // Continental-US fallback view so getCenter()/getZoom() (read by the
+            // screenshot tool below) never throw on a map that has no points yet -
+            // real points reset this via fitBounds/setView further down once loaded.
+            _overviewMap.setView([39.8283, -98.5795], 4);
             // Read by the shared top-right toolbar's screenshot tool (window._openMapToolbarScreenshot, themes/base.html).
+            // Assigned unconditionally (even for an empty list) so the toolbar's
+            // screenshot button never falls back to its hardcoded Manhattan default.
             window.map = _overviewMap;
             // Shared layers engine + panel - the exact same component as the main map.
             window.MapLayers.create(_overviewMap, {
@@ -655,6 +656,12 @@
             });
             _overviewMarkers = L.layerGroup().addTo(_overviewMap);
         }
+
+        if (!points.length) {
+            if (sectionEl) sectionEl.hidden = true;
+            return;
+        }
+        if (sectionEl) sectionEl.hidden = false;
         _overviewMarkers.clearLayers();
 
         const markers = points.map((pt) => {
