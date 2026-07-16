@@ -13,7 +13,10 @@ GitLab's shared-token scheme (X-Gitlab-Token) - whichever header is present is
 checked; requests with neither are rejected.
 
 Configuration is read from the environment (populate these in the checkout's
-.env - see .env-sample):
+.env - see .env-sample). If a variable isn't already set in the process
+environment, it's read directly from the repo's .env file as a fallback -
+useful when running this script by hand outside of whatever normally
+injects .env (systemd EnvironmentFile, docker compose, etc.):
     UL_DEPLOY_WEBHOOK_SECRET  Shared secret configured on the Git host's webhook. Required.
     UL_DEPLOY_WEBHOOK_BRANCH  Branch this host deploys on push, e.g. "staging". Required.
     UL_DEPLOY_WEBHOOK_HOST    Bind address. Default: 127.0.0.1
@@ -39,6 +42,32 @@ import sys
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEPLOY_SCRIPT = REPO_ROOT / "bin" / "deploy.sh"
+
+
+def _load_dotenv_fallback(dotenv_path: Path) -> None:
+    """Fill in missing os.environ entries from a .env file.
+
+    Only stdlib is available here (see module docstring), so this is a
+    minimal KEY=VALUE parser rather than python-dotenv. Real environment
+    variables always win - this only covers vars the process wasn't
+    launched with (e.g. running the script by hand outside of whatever
+    normally injects .env into the environment).
+    """
+    if not dotenv_path.is_file():
+        return
+    for raw_line in dotenv_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key = key.strip()
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+            value = value[1:-1]
+        os.environ.setdefault(key, value)
+
+
+_load_dotenv_fallback(REPO_ROOT / ".env")
 
 SECRET = os.environ.get("UL_DEPLOY_WEBHOOK_SECRET", "")
 BRANCH = os.environ.get("UL_DEPLOY_WEBHOOK_BRANCH", "")
