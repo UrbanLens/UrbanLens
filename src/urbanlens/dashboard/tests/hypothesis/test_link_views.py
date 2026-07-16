@@ -103,10 +103,9 @@ class PinDetailsPageDetailsCardTests(TestCase):
         # tests block outbound network access.
         self.pin.location.route = "Test St"
         self.pin.location.save(update_fields=["route"])
-        # deduplicated_identity_fields reads Location.place_name, which falls
-        # through to a live Google Places lookup when no GooglePlace is cached
-        # yet - setting this (fetch_if_missing=False under the hood) avoids
-        # that network call.
+        # deduplicated_identity_fields reads Location.place_name, which is
+        # cache-only (no live Google Places call from a plain property access)
+        # - set here just so has_place_name()/place_name have something to show.
         self.pin.location.cached_place_name = "Old Mill"
         self.client.force_login(self.user)
 

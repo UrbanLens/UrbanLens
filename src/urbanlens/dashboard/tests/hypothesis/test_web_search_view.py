@@ -103,8 +103,9 @@ class LocationHasPlaceNameTests(TestCase):
         from urbanlens.dashboard.models.location.model import Location
 
         loc = baker.prepare(Location, latitude="40.0", longitude="-74.0", google_place=None)
-        with patch.object(Location, "get_place_name", return_value=None):
+        with patch.object(Location, "get_place_name") as mock_get:
             self.assertFalse(loc.has_place_name())
+        mock_get.assert_not_called()
 
     def test_sentinel_string_is_not_meaningful(self):
         loc = self._location_with_cached_name("No Information Available")

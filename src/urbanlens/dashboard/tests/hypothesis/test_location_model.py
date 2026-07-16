@@ -106,15 +106,20 @@ class LocationHasPlaceNameTests(TestCase):
         loc: Location = baker.make(Location, latitude="40.0", longitude="-74.0", google_place=google_place)
         self.assertFalse(loc.has_place_name())
 
-    def test_mocked_fallback_no_information_returns_false(self) -> None:
+    def test_no_cached_name_returns_false(self) -> None:
+        """place_name is cache-only (see its docstring) - no GooglePlace row at
+        all means has_place_name() is False, not a live fallback lookup."""
         loc: Location = baker.make(Location, latitude="40.0", longitude="-74.0", google_place=None)
-        with patch.object(Location, "get_place_name", return_value="No Information Available"):
-            self.assertFalse(loc.has_place_name())
+        self.assertFalse(loc.has_place_name())
 
-    def test_mocked_fallback_real_name_returns_true(self) -> None:
+    def test_no_cached_name_never_calls_get_place_name(self) -> None:
+        """Regression guard: has_place_name()/place_name must never trigger a
+        live Google call from a plain property access - see
+        tasks.resolve_location_place_name for where that now happens instead."""
         loc: Location = baker.make(Location, latitude="40.0", longitude="-74.0", google_place=None)
-        with patch.object(Location, "get_place_name", return_value="Abandoned Power Plant"):
-            self.assertTrue(loc.has_place_name())
+        with patch.object(Location, "get_place_name", return_value="Abandoned Power Plant") as mock_get:
+            self.assertFalse(loc.has_place_name())
+            mock_get.assert_not_called()
 
 
 # -- slug generation -----------------------------------------------------------

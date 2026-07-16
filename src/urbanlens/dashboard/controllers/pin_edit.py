@@ -195,6 +195,17 @@ class PinOverviewView(LoginRequiredMixin, View):
         pin.backfill_wiki_link_slugs()
         if pin.location and not pin.location.route and pin.profile.external_apis_enabled:
             _ensure_location_address(pin.location)
+        # deduplicated_identity_fields (rendered below) reads Location.place_name,
+        # which is cache-only and never blocks this request on a live Google call
+        # (see its docstring) - warm the cache in the background the first time
+        # it's missing, so the next render of this Location (by any pin/user
+        # sharing its coordinates) finds it cached instead of staying permanently
+        # empty.
+        if pin.location and not pin.location.cached_place_name and pin.profile.external_apis_enabled:
+            from urbanlens.dashboard.services.celery import safely_enqueue_task
+            from urbanlens.dashboard.tasks import resolve_location_place_name
+
+            safely_enqueue_task(resolve_location_place_name, pin.location_id)
         return render(request, "dashboard/partials/pins/pin_overview_partial.html", _overview_context(pin))
 
 

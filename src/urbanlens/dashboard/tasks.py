@@ -270,6 +270,24 @@ def suggest_pin_category(self, pin_id: int) -> list[str]:
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def resolve_location_place_name(location_id: int) -> str | None:
+    """Fetch and cache a Location's Google place name outside the request/response cycle.
+
+    Location.place_name is deliberately cache-only (see its docstring) - this
+    is what actually populates that cache, dispatched from wherever a missing
+    place name is first noticed (e.g. PinController.view) so the next render
+    of this Location, by any pin/user sharing its coordinates, finds it warm.
+    """
+    from urbanlens.dashboard.models.location.model import Location
+
+    location = Location.objects.filter(pk=location_id).first()
+    if location is None:
+        logger.info("resolve_location_place_name: location %s no longer exists", location_id)
+        return None
+    return location.get_place_name()
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def archive_link_to_wayback(link_model: str, link_id: int) -> bool:
     """Best-effort archive a PinLink's or WikiLink's URL to the Wayback Machine.
 
