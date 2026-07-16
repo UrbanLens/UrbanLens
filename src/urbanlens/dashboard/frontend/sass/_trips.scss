@@ -976,7 +976,6 @@
 
     &--upcoming { background: $color-blue-500; &:hover { background: $color-blue-600; } }
     &--active { background: #2e9e5b; &:hover { background: #268049; } }
-    &--past { background: var(--ul-grey-6); &:hover { background: var(--ul-grey-7); } }
     &--planning { background: #a06ad1; &:hover { background: #8f52c7; } }
 }
 
