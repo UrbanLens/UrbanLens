@@ -47,7 +47,7 @@ from urbanlens.dashboard.models.profile.email import ProfileEmail
 from urbanlens.dashboard.models.profile.nickname import ProfileNickname
 from urbanlens.dashboard.models.profile.note import ProfileNote
 from urbanlens.dashboard.models.profile.trust import ProfileTrust
-from urbanlens.dashboard.models.property_owner import Owner, PropertySale
+from urbanlens.dashboard.models.property_owner import Owner, OwnerSource, OwnerVisibility, PropertySale
 from urbanlens.dashboard.models.reactions import Reaction
 from urbanlens.dashboard.models.reviews import Review
 from urbanlens.dashboard.models.routes import Route, RouteSource
