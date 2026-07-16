@@ -604,7 +604,16 @@ def record_geolocation_pin_visits(profile: Profile, *, latitude: float | Decimal
 
     timestamp = visited_at or timezone.now()
     point = Point(float(longitude), float(latitude), srid=4326)
-    pins = Pin.objects.filter(profile=profile).root_pins().select_related("location")
+    # Pre-filter with an indexed PostGIS distance query before running the
+    # per-pin boundary-containment loop below - without this, a profile with
+    # many pins (e.g. after a bulk import) forces an unbounded, unbatched
+    # boundary-resolution chain over every single root pin on every geolocation
+    # ping, which was blowing well past nginx's 60s upstream timeout in
+    # production. 5km is a deliberately generous upper bound on any real
+    # property boundary's size, so this can only ever exclude pins that
+    # couldn't possibly contain the point anyway - it doesn't change which
+    # pins end up matching, just how many are checked.
+    pins = Pin.objects.filter(profile=profile).near_point(point, radius_km=5).select_related("location")
     created_visits: list[PinVisit] = []
 
     already_visited_today = set(

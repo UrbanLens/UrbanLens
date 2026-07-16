@@ -5,6 +5,8 @@ from __future__ import annotations
 import datetime
 
 from django.contrib.gis.geos import MultiPolygon, Polygon
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 from model_bakery import baker
@@ -84,3 +86,28 @@ class RecordGeolocationPinVisitsTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["created"], 1)
         self.assertTrue(PinVisit.objects.filter(pin=self.pin, source=VisitSource.GEOLOCATION).exists())
+
+    def test_query_count_does_not_grow_with_distant_pins(self):
+        """Regression guard for a production nginx timeout: this used to run
+        the full per-pin boundary-resolution chain (several queries each)
+        against every one of a profile's root pins on every geolocation ping,
+        unbounded by distance - a profile with many pins scattered far from
+        the current point (e.g. after a bulk import) made this endpoint
+        blow past nginx's 60s upstream timeout. A PostGIS distance pre-filter
+        now excludes far-away pins before that loop runs, so the query count
+        must stay flat regardless of how many distant pins exist, rather than
+        growing per pin."""
+        with CaptureQueriesContext(connection) as baseline:
+            record_geolocation_pin_visits(self.profile, latitude=40.0002, longitude=-74.0002, visited_at=timezone.now())
+        baseline_query_count = len(baseline.captured_queries)
+
+        PinVisit.objects.all().delete()
+        other_location = baker.make("dashboard.Location", latitude="10.000000", longitude="10.000000")
+        for _ in range(25):
+            baker.make("dashboard.Pin", profile=self.profile, location=other_location)
+
+        with CaptureQueriesContext(connection) as with_distant_pins:
+            visits = record_geolocation_pin_visits(self.profile, latitude=40.0002, longitude=-74.0002, visited_at=timezone.now())
+
+        self.assertEqual(len(visits), 1)
+        self.assertEqual(len(with_distant_pins.captured_queries), baseline_query_count)
