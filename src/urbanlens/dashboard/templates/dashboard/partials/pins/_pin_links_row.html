@@ -13,10 +13,14 @@ argument), and either `pin` or `wiki` for display purposes.
 use_dialog: when true, no inline add-toggle/form is rendered here at all -
 the caller provides its own "Add a link" button elsewhere (a card header on
 the pin page) that opens the shared #pin-link-add-dialog. Unset/false (the
-wiki page's usage) keeps the original inline add-toggle/form.
+wiki page's usage) keeps the original inline add-toggle/form. use_dialog
+also suppresses the "Links" field-label below, since the pin page's usage
+already lives in its own standalone card with a "Links" card-header title -
+the wiki's inline usage still needs the label, since there it's one row
+among several detail-item fields with no title of its own.
 {% endcomment %}
 <div class="detail-item detail-item--links full-width" id="{{ row_id }}">
-    <span class="field-label">Links</span>
+    {% if not use_dialog %}<span class="field-label">Links</span>{% endif %}
     <span class="field-value pin-links-value">
         {% for link in links %}
         <span class="pin-link-chip">

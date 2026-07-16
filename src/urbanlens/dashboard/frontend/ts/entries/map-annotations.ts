@@ -544,6 +544,14 @@ function init(): void {
         _satRebuildDots(slides.length);
     }
     function _satRebuildDots(count: number): void {
+        // Prev/next only make sense with more than one slide - the server
+        // already omits them from the initial render when there's just one,
+        // but a broken image can drop the count further at runtime
+        // (_satRemoveSlide), so hide them here too if that happens.
+        const prev = document.querySelector<HTMLElement>("#sat-carousel .sat-prev");
+        const next = document.querySelector<HTMLElement>("#sat-carousel .sat-next");
+        if (prev) prev.hidden = count <= 1;
+        if (next) next.hidden = count <= 1;
         const el = document.getElementById("sat-dots");
         if (!el) return;
         el.innerHTML = "";
@@ -603,6 +611,14 @@ function init(): void {
         _svRebuildDots(slides.length);
     }
     function _svRebuildDots(count: number): void {
+        // Prev/next only make sense with more than one slide - the server
+        // already omits them from the initial render when there's just one,
+        // but a broken image can drop the count further at runtime
+        // (_svRemoveSlide), so hide them here too if that happens.
+        const prev = document.querySelector<HTMLElement>("#sv-carousel .sv-prev");
+        const next = document.querySelector<HTMLElement>("#sv-carousel .sv-next");
+        if (prev) prev.hidden = count <= 1;
+        if (next) next.hidden = count <= 1;
         const el = document.getElementById("sv-dots");
         if (!el) return;
         el.innerHTML = "";

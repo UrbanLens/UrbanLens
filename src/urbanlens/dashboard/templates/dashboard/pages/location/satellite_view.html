@@ -29,19 +29,23 @@
         </div>
 
         <div class="sat-controls">
+            {% if slides|length > 1 %}
             <button class="sat-btn sat-prev" onclick="_satPrev()" aria-label="Previous image"
                     title="Previous image">
                 <i class="material-symbols-outlined">chevron_left</i>
             </button>
+            {% endif %}
             <div class="sat-meta">
                 <span class="sat-source"></span>
                 <span class="sat-date"></span>
                 <span class="sat-detail"></span>
             </div>
+            {% if slides|length > 1 %}
             <button class="sat-btn sat-next" onclick="_satNext()" aria-label="Next image"
                     title="Next image">
                 <i class="material-symbols-outlined">chevron_right</i>
             </button>
+            {% endif %}
         </div>
 
         <div class="sat-dots" id="sat-dots"></div>

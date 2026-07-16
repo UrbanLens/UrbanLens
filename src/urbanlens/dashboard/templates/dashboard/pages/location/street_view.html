@@ -50,19 +50,23 @@
         </div>
 
         <div class="sv-controls">
+            {% if slides|length > 1 %}
             <button class="sv-btn sv-prev" onclick="_svPrev()" aria-label="Previous image"
                     title="Previous image">
                 <i class="material-symbols-outlined">chevron_left</i>
             </button>
+            {% endif %}
             <div class="sv-meta">
                 <span class="sv-source"></span>
                 <span class="sv-date"></span>
                 <span class="sv-heading"></span>
             </div>
+            {% if slides|length > 1 %}
             <button class="sv-btn sv-next" onclick="_svNext()" aria-label="Next image"
                     title="Next image">
                 <i class="material-symbols-outlined">chevron_right</i>
             </button>
+            {% endif %}
         </div>
 
         <div class="sv-dots" id="sv-dots"></div>

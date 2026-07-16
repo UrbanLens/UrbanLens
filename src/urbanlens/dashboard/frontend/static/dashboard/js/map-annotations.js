@@ -827,6 +827,12 @@ function init() {
     _satRebuildDots(slides.length);
   }
   function _satRebuildDots(count) {
+    const prev = document.querySelector("#sat-carousel .sat-prev");
+    const next = document.querySelector("#sat-carousel .sat-next");
+    if (prev)
+      prev.hidden = count <= 1;
+    if (next)
+      next.hidden = count <= 1;
     const el = document.getElementById("sat-dots");
     if (!el)
       return;
@@ -891,6 +897,12 @@ function init() {
     _svRebuildDots(slides.length);
   }
   function _svRebuildDots(count) {
+    const prev = document.querySelector("#sv-carousel .sv-prev");
+    const next = document.querySelector("#sv-carousel .sv-next");
+    if (prev)
+      prev.hidden = count <= 1;
+    if (next)
+      next.hidden = count <= 1;
     const el = document.getElementById("sv-dots");
     if (!el)
       return;

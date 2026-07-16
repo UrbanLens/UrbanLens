@@ -221,7 +221,7 @@
             color: $color-cyan-600;
         }
 
-        h2, h3, span {
+        h2, h3, span:not(.badge) {
             margin: 0;
             font-size: .95rem;
             font-weight: 600;
@@ -229,6 +229,22 @@
             color: var(--ul-grey-9);
             text-align: left;
         }
+
+        // The count badge sits snug next to the title instead of also
+        // stretching (flex:1 above) and splitting the header's width evenly
+        // with it, which pushed the badge out to the horizontal midpoint.
+        .badge {
+            flex: 0 0 auto;
+        }
+    }
+
+    // A dark-theme rule in _layout.scss ([data-theme="dark"] .card .card-header)
+    // outranks the light-mode gradient above by specificity, unconditionally
+    // darkening every card header including the wiki's - restore the wiki's
+    // intended blue tint in dark mode too (equal specificity, later in the
+    // compiled stylesheet, so it wins the cascade tie).
+    [data-theme="dark"] & .card-header {
+        background: linear-gradient(180deg, rgba(8, 145, 178, .18), rgba(255, 255, 255, 0));
     }
 
     .card__body {
