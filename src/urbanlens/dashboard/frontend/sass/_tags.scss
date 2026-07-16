@@ -1884,6 +1884,115 @@ dialog.tag-create-card.ul-dialog {
     gap: .5rem;
 }
 
+// BEM sub-elements for dashboard/partials/ui/_priority_list.html (settings-page
+// "Name source priority" and any other reorderable ranked-list use of that
+// partial) - unscoped so every page gets the same styling, not just whichever
+// page happened to add it first (this used to only exist nested under
+// .site-admin-form in _admin.scss, so it never rendered outside site-admin).
+.priority-list__item {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    padding: .5rem .65rem;
+    border: 1.5px solid var(--ul-surface-raised-border);
+    border-radius: 8px;
+    background: var(--ul-surface-raised);
+    cursor: grab;
+
+    &:active {
+        cursor: grabbing;
+    }
+
+    &--dragging {
+        opacity: .5;
+    }
+
+    &--unranked {
+        cursor: default;
+        opacity: .55;
+        border-style: dashed;
+
+        .priority-list__handle,
+        .priority-list__move {
+            visibility: hidden;
+        }
+    }
+
+    &--empty {
+        color: var(--ul-grey-6);
+        font-size: .85rem;
+        border: none;
+        padding: .25rem 0;
+        cursor: default;
+    }
+}
+
+.priority-list__handle {
+    color: var(--ul-grey-5);
+    font-size: 1.1rem;
+}
+
+.priority-list__rank {
+    font-size: .75rem;
+    font-weight: 700;
+    color: var(--ul-grey-6);
+    min-width: 1.25rem;
+    text-align: center;
+}
+
+.priority-list__label {
+    flex: 1;
+    font-size: .9rem;
+    font-weight: 500;
+    color: var(--ul-grey-8);
+    text-transform: none;
+    letter-spacing: normal;
+}
+
+.priority-list__move {
+    display: flex;
+    gap: .15rem;
+}
+
+.priority-list__btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.6rem;
+    height: 1.6rem;
+    border: none;
+    background: transparent;
+    border-radius: 6px;
+    color: var(--ul-grey-6);
+    cursor: pointer;
+
+    i {
+        font-size: 1rem;
+    }
+
+    &:hover {
+        background: var(--ul-hover-bg);
+        color: var(--ul-grey-8);
+    }
+}
+
+.priority-list__toggle {
+    display: flex;
+    align-items: center;
+    gap: .3rem;
+    font-size: .75rem;
+    font-weight: 500;
+    color: var(--ul-grey-6);
+    text-transform: none;
+    letter-spacing: normal;
+    white-space: nowrap;
+    cursor: pointer;
+
+    input {
+        cursor: pointer;
+    }
+}
+
 .priority-item {
     display: flex;
     align-items: center;

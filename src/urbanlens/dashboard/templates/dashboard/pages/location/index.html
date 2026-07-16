@@ -460,7 +460,7 @@
         {% endfor %}
 
         {% if panel_tabs %}
-        {% include "dashboard/partials/pins/_pin_plugin_tabs.html" with tabs=panel_tabs section_id="pin-plugin-tabs-section" body_id="pin-plugin-tab-body" heading="Regional Data" heading_icon="layers" collapse_section="plugin_tabs" collapse_label="Regional Data" %}
+        {% include "dashboard/partials/pins/_pin_plugin_tabs.html" with tabs=panel_tabs default_tab_key=default_panel_tab_key section_id="pin-plugin-tabs-section" body_id="pin-plugin-tab-body" heading="Regional Data" heading_icon="layers" collapse_section="plugin_tabs" collapse_label="Regional Data" %}
         {% endif %}
 
         <div id="yelp-section" class="card card--secondary" data-ext-panel-204

@@ -161,6 +161,11 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         # in a stable position regardless of the viewer's subscription.
         panel_tabs = condensed_panel_tabs + (nearby_research_tabs if user_has_feature(request.user, SiteFeature.NEARBY_RESEARCH) else [])
 
+        # If any tab already has fresh cached data, show it immediately instead of
+        # making the user click a tab first to discover that - the first tab (in
+        # display order) that's ready wins, matching the order the tabs are shown in.
+        default_panel_tab_key = next((tab["key"] for tab in panel_tabs if all_info_panels[tab["key"]].is_ready(pin)), None)
+
         # Whether the profile has ever added/kept an alias on ANY pin - not just this
         # one - so the aliases onboarding card stops nagging once the feature is
         # familiar, rather than re-introducing it on every new pin.
@@ -195,6 +200,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 "pin_cover_candidates": pin_cover_candidates,
                 "simple_info_panels": simple_info_panels,
                 "panel_tabs": panel_tabs,
+                "default_panel_tab_key": default_panel_tab_key,
                 "has_ever_used_aliases": has_ever_used_aliases,
                 "media_bulk_actions": [
                     {"action": "relevant", "icon": "thumb_up", "label": "Mark relevant"},

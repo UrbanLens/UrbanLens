@@ -228,3 +228,30 @@ class LocationAliasNicknameTests(TestCase):
         alias.refresh_from_db()
         self.assertFalse(alias.is_nickname)
         self.assertEqual(alias.kind, AliasType.ALTERNATE)
+
+
+class SharedAliasesExplainerDismissalTests(TestCase):
+    """The pin-details and wiki aliases panels share one explainer dismissal key.
+
+    Regression coverage: they used to render with different explainer_id
+    values ("pin-aliases-explainer" vs "location-aliases-explainer"), so
+    dismissing the "What are aliases and nicknames?" explainer on one page
+    had no effect on the other, even though it's the same explanation of the
+    same feature.
+    """
+
+    def setUp(self) -> None:
+        baker.make("auth.User")  # bootstrap site admin
+        self.user = baker.make("auth.User")
+        self.profile = Profile.objects.get(user=self.user)
+        self.location = baker.make(Location, latitude="41.400000", longitude="-73.400000")
+        self.wiki = baker.make("dashboard.Wiki", location=self.location, name="Curated Mill")
+        self.pin = baker.make(Pin, profile=self.profile, location=self.location, name="Curated Mill")
+        self.client.force_login(self.user)
+
+    def test_pin_and_wiki_panels_use_the_same_explainer_id(self) -> None:
+        pin_response = self.client.get(reverse("pin.aliases", args=[self.pin.slug]))
+        wiki_response = self.client.get(reverse("location.wiki.aliases", args=[self.location.slug]))
+
+        self.assertContains(pin_response, 'data-explainer-id="aliases-explainer"')
+        self.assertContains(wiki_response, 'data-explainer-id="aliases-explainer"')

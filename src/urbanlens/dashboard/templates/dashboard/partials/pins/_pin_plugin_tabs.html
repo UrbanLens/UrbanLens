@@ -11,9 +11,13 @@ separate cards, which is what this template originally supported and still
 could again if a second use ever needs it (hence still taking ids/heading as
 params rather than hardcoding them).
 
-Context (all required, pass explicitly via {% include ... with %}):
+Context (all required except default_tab_key, pass explicitly via {% include ... with %}):
   pin              - the Pin being viewed
   tabs             - list of {key, label, icon} dicts, in tab order
+  default_tab_key  - key of the tab to show pre-loaded on page load, i.e. the
+                     first tab (in display order) that already has fresh
+                     cached data - or None if no tab does, in which case the
+                     original click-to-load placeholder is shown as before.
   section_id       - unique DOM id for this tab strip's outer card
   body_id          - unique DOM id for the tab content region (hx-target)
   heading          - card header text
@@ -29,9 +33,11 @@ Context (all required, pass explicitly via {% include ... with %}):
     </div>
     <div class="pin-plugin-tabs-nav" role="tablist">
         {% for tab in tabs %}
-        <button type="button" class="pin-plugin-tab-btn" role="tab" aria-selected="false"
+        <button type="button" class="pin-plugin-tab-btn{% if tab.key == default_tab_key %} active{% endif %}" role="tab"
+                aria-selected="{% if tab.key == default_tab_key %}true{% else %}false{% endif %}"
                 hx-get="{% url 'pin.panel' pin.slug tab.key %}"
                 hx-target="#{{ body_id }}" hx-swap="innerHTML"
+                {% if tab.key == default_tab_key %}hx-trigger="load[!window.ulSectionCollapsed('pin','{{ collapse_section }}')], click"{% endif %}
                 onclick="document.querySelectorAll('#{{ section_id }} .pin-plugin-tab-btn').forEach(function (b) { b.classList.remove('active'); b.setAttribute('aria-selected', 'false'); }); this.classList.add('active'); this.setAttribute('aria-selected', 'true');">
             <i class="material-symbols-outlined">{{ tab.icon }}</i>
             <span>{{ tab.label }}</span>

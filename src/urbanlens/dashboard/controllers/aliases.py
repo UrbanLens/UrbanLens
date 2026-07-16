@@ -78,7 +78,7 @@ def _render_pin_panel(request, pin: Pin) -> HttpResponse:
             "collapse_scope": "pin",
             "wrap_body": False,
             "show_header_add_button": True,
-            "explainer_id": "pin-aliases-explainer",
+            "explainer_id": "aliases-explainer",
             "explainer_body": (
                 "Aliases are alternate names for this pin - former names, local nicknames, or codenames. "
                 "They're used when you search your own pins, and when we look things up externally (e.g. Google). "
@@ -108,7 +108,7 @@ def _render_location_panel(request, location: Location, wiki: Wiki) -> HttpRespo
             "collapse_scope": "wiki",
             "wrap_body": True,
             "show_header_add_button": True,
-            "explainer_id": "location-aliases-explainer",
+            "explainer_id": "aliases-explainer",
             "explainer_body": (
                 "Aliases are alternate names for this location - former names, local nicknames, or codenames. "
                 "They're used when the community searches for this place, and when we look things up externally (e.g. Google). "
