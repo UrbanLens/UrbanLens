@@ -472,13 +472,28 @@ def _notify_added_to_trip(inviter: Profile, invitee: Profile, trip: Trip) -> Non
     )
 
 
+def _addable_friends(trip: Trip, profile: Profile) -> list[Profile]:
+    """The creator's friends not already on this trip, for the add-member dialog's picker.
+
+    Empty for anyone but the creator - only they can add members (see
+    trip_members_panel.html's own gate on the dialog's trigger button).
+    """
+    if profile.id != trip.creator_id:
+        return []
+    from urbanlens.dashboard.services.connections import get_connections
+
+    existing_ids = set(trip.memberships.values_list("profile_id", flat=True))
+    existing_ids.add(trip.creator_id)
+    return [friend for friend in get_connections(profile) if friend.id not in existing_ids]
+
+
 def _render_members_panel(request: HttpRequest, trip: Trip, profile: Profile) -> HttpResponse:
     """Re-render the members panel partial."""
     members = trip.memberships.select_related("profile__user").order_by("profile__user__username")
     return render(
         request,
         "dashboard/partials/trips/trip_members_panel.html",
-        {"trip": trip, "members": members, "profile": profile},
+        {"trip": trip, "members": members, "profile": profile, "addable_friends": _addable_friends(trip, profile)},
     )
 
 

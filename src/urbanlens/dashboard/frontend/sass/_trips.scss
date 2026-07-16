@@ -1473,6 +1473,91 @@ a.trip-activity-name {
     }
 }
 
+// -- Add-member dialog's friend picker --------------------------------------
+
+.trip-add-friend-section {
+    padding: 1rem 1rem 0;
+
+    @include up($breakpoint-sm) {
+        padding: 1.25rem 1.5rem 0;
+    }
+}
+
+.trip-add-friend-heading {
+    margin: 0 0 .5rem;
+    font-size: .75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--ul-grey-6);
+}
+
+.trip-add-friend-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    max-height: 14rem;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: .15rem;
+}
+
+.trip-add-friend-btn {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    width: 100%;
+    padding: .4rem .5rem;
+    border: none;
+    background: none;
+    border-radius: $radius-sm;
+    cursor: pointer;
+    text-align: left;
+    font: inherit;
+    color: var(--ul-grey-8);
+
+    &:hover {
+        background: var(--ul-hover-bg);
+
+        .trip-add-friend-icon {
+            opacity: 1;
+        }
+    }
+}
+
+.trip-add-friend-name {
+    flex: 1;
+    font-size: .88rem;
+}
+
+.trip-add-friend-icon {
+    font-size: 1.1rem;
+    color: var(--ul-primary-color);
+    opacity: .6;
+}
+
+.trip-add-friend-divider {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    margin: 1rem 1rem 0;
+    color: var(--ul-grey-5);
+    font-size: .75rem;
+
+    @include up($breakpoint-sm) {
+        margin: 1.25rem 1.5rem 0;
+    }
+
+    &::before,
+    &::after {
+        content: '';
+        flex: 1;
+        height: 1px;
+        background: var(--ul-surface-raised-border);
+    }
+}
+
 .trip-dates-toggle-row {
     margin-top: -.35rem;
 }

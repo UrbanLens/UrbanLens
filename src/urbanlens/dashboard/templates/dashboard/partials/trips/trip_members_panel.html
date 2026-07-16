@@ -110,3 +110,57 @@
     <p class="trip-panel-empty">No members yet.</p>
     {% endif %}
 </div>
+
+{# -- Add member dialog - lives here (not detail.html) so it refreshes with #}
+{# this panel and never shows a friend who was just added as still addable. #}
+{% if profile == trip.creator %}
+<dialog id="add-member-dialog" class="trip-create-dialog ul-dialog">
+    {% include "dashboard/partials/ui/_dialog_header.html" with title="Add Member" %}
+    {% if addable_friends %}
+    <div class="trip-add-friend-section">
+        <p class="trip-add-friend-heading">From your friends</p>
+        <ul class="trip-add-friend-list">
+            {% for friend in addable_friends %}
+            <li>
+                <form hx-post="{% url 'trips.members' trip.slug %}"
+                      hx-target="#trip-members-panel" hx-swap="outerHTML"
+                      hx-on::after-request="if(event.detail.successful){this.closest('dialog').close()}">
+                    {% csrf_token %}
+                    <input type="hidden" name="username" value="{{ friend.user.username }}">
+                    <button type="submit" class="trip-add-friend-btn">
+                        <span class="trip-member-avatar">
+                            {% if friend.avatar %}
+                            <img src="{{ friend.avatar.url }}" alt="" class="trip-member-avatar-img">
+                            {% else %}
+                            <span class="trip-member-avatar-initial">{{ friend.user.username|first|upper }}</span>
+                            {% endif %}
+                        </span>
+                        <span class="trip-add-friend-name">{{ friend.user.get_full_name|default:friend.user.username }}</span>
+                        <i class="material-symbols-outlined trip-add-friend-icon">add</i>
+                    </button>
+                </form>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    <div class="trip-add-friend-divider"><span>or enter a username</span></div>
+    {% endif %}
+    <form hx-post="{% url 'trips.members' trip.slug %}"
+          hx-target="#trip-members-panel"
+          hx-swap="outerHTML"
+          hx-on::after-request="if(event.detail.successful){this.closest('dialog').close();this.reset()}"
+          class="trip-create-form">
+        {% csrf_token %}
+        <div class="form-row">
+            <label for="member-username">Username{% if not addable_friends %} <span class="required">*</span>{% endif %}</label>
+            <input type="text" name="username" id="member-username" required
+                   placeholder="Enter exact username">
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn--primary btn--lg btn--submit">Add Member</button>
+            <button type="button" class="btn btn--ghost"
+                    onclick="this.closest('dialog').close()">Cancel</button>
+        </div>
+    </form>
+</dialog>
+{% endif %}

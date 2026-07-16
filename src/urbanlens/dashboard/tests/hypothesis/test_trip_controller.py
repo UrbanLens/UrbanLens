@@ -27,6 +27,7 @@ from django.utils import timezone
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripActivityVote, TripMembership
 
@@ -344,6 +345,21 @@ class TripActivitiesViewTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertTrue(TripActivity.objects.filter(trip=self.trip, title="Visit Factory").exists())
 
+    def test_activity_attribution_shows_full_name_not_username(self):
+        """Regression guard: the "Added by" line used to show the raw
+        username even when the adder has a real name set."""
+        self.member_user.first_name = "Pat"
+        self.member_user.last_name = "Rivera"
+        self.member_user.save(update_fields=["first_name", "last_name"])
+        TripActivity.objects.create(trip=self.trip, title="Explore the mill", added_by=self.member)
+
+        client = Client()
+        client.force_login(self.creator_user)
+        resp = client.get(self._url())
+
+        self.assertContains(resp, "Pat Rivera")
+        self.assertNotContains(resp, self.member_user.username)
+
     def test_scheduled_date_only_produces_a_timezone_aware_datetime(self):
         """Regression guard: _parse_scheduled_at used to build a naive
         datetime.combine(date, midnight) with no tzinfo, tripping Django's
@@ -657,6 +673,68 @@ class TripMembersViewTests(TestCase):
             content_type="application/json",
         )
         self.assertEqual(resp.status_code, 400)
+
+
+class TripAddableFriendsPickerTests(TestCase):
+    """The add-member dialog's friend picker (trip_members_panel.html/_addable_friends).
+
+    Regression coverage: the dialog used to be a bare "type the exact
+    username" box with no way to browse the creator's friends - the picker
+    lives in trip_members_panel.html (not detail.html) specifically so it
+    stays in sync after an add/remove, rather than showing a stale list.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.creator_user = baker.make("auth.User")
+        self.creator = self.creator_user.profile
+        self.trip = _make_trip(self.creator)
+        self.client = Client()
+        self.client.force_login(self.creator_user)
+
+    def _befriend(self, username: str) -> Profile:
+        friend = baker.make("auth.User", username=username).profile
+        Friendship.objects.create(from_profile=self.creator, to_profile=friend, status=FriendshipStatus.ACCEPTED)
+        return friend
+
+    def test_creator_sees_friends_not_already_on_the_trip(self):
+        friend = self._befriend("addable-friend")
+
+        resp = self.client.get(reverse("trips.members", kwargs={"trip_slug": self.trip.slug}))
+
+        self.assertContains(resp, friend.user.username)
+        self.assertContains(resp, "trip-add-friend-btn")
+
+    def test_friend_already_on_trip_is_excluded(self):
+        friend = self._befriend("already-in")
+        TripMembership.objects.create(trip=self.trip, profile=friend)
+
+        resp = self.client.get(reverse("trips.members", kwargs={"trip_slug": self.trip.slug}))
+
+        self.assertNotContains(resp, "already-in")
+
+    def test_non_creator_sees_no_picker(self):
+        friend = self._befriend("visible-to-creator-only")
+        TripMembership.objects.create(trip=self.trip, profile=friend)
+        other_member = baker.make("auth.User", username="plain-member").profile
+        TripMembership.objects.create(trip=self.trip, profile=other_member)
+        self.client.force_login(other_member.user)
+
+        resp = self.client.get(reverse("trips.members", kwargs={"trip_slug": self.trip.slug}))
+
+        self.assertNotContains(resp, "trip-add-friend-btn")
+
+    def test_picking_a_friend_adds_them_via_the_same_endpoint(self):
+        friend = self._befriend("click-to-add")
+
+        resp = self.client.post(
+            reverse("trips.members", kwargs={"trip_slug": self.trip.slug}),
+            data=json.dumps({"username": friend.user.username}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(TripMembership.objects.filter(trip=self.trip, profile=friend).exists())
 
 
 class TripMemberRSVPViewTests(TestCase):

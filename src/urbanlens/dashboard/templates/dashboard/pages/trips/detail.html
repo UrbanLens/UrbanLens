@@ -443,28 +443,6 @@
 </dialog>
 {% endif %}
 
-{# -- Add member dialog ---------------------------------------------------- #}
-<dialog id="add-member-dialog" class="trip-create-dialog ul-dialog">
-    {% include "dashboard/partials/ui/_dialog_header.html" with title="Add Member" %}
-    <form hx-post="{% url 'trips.members' trip.slug %}"
-          hx-target="#trip-members-panel"
-          hx-swap="outerHTML"
-          hx-on::after-request="if(event.detail.successful){this.closest('dialog').close();this.reset()}"
-          class="trip-create-form">
-        {% csrf_token %}
-        <div class="form-row">
-            <label for="member-username">Username <span class="required">*</span></label>
-            <input type="text" name="username" id="member-username" required
-                   placeholder="Enter exact username">
-        </div>
-        <div class="form-actions">
-            <button type="submit" class="btn btn--primary btn--lg btn--submit">Add Member</button>
-            <button type="button" class="btn btn--ghost"
-                    onclick="this.closest('dialog').close()">Cancel</button>
-        </div>
-    </form>
-</dialog>
-
 {% endblock %}
 
 {% block scripts %}
