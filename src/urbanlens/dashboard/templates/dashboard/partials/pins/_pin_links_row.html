@@ -19,6 +19,12 @@ already lives in its own standalone card with a "Links" card-header title -
 the wiki's inline usage still needs the label, since there it's one row
 among several detail-item fields with no title of its own.
 {% endcomment %}
+{% if use_dialog %}
+{# Keeps the standalone Links card's header count in sync with this row - #}
+{# see pin_overview_partial.html's badge, and label_membership_panel.html's #}
+{# organization-count-badge for the same OOB-swap-a-header-badge pattern.  #}
+<span class="badge" id="pin-links-count-badge" hx-swap-oob="true"{% if not links %} hidden{% endif %}>{{ links|length }}</span>
+{% endif %}
 <div class="detail-item detail-item--links full-width" id="{{ row_id }}">
     {% if not use_dialog %}<span class="field-label">Links</span>{% endif %}
     <span class="field-value pin-links-value">

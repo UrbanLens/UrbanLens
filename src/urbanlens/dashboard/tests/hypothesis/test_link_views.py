@@ -145,6 +145,27 @@ class PinDetailsPageLinksCardTests(TestCase):
         response = self.client.get(reverse("pin.overview", args=[self.pin.slug]))
         self.assertNotContains(response, 'class="pin-link-add-form"')
 
+    def test_links_card_header_badge_hidden_when_empty(self) -> None:
+        response = self.client.get(reverse("pin.overview", args=[self.pin.slug]))
+        content = response.content.decode()
+        self.assertIn('id="pin-links-count-badge" hidden', content)
+
+    def test_links_card_header_badge_shows_count(self) -> None:
+        baker.make(PinLink, pin=self.pin, url="https://example.com/a")
+        baker.make(PinLink, pin=self.pin, url="https://example.com/b")
+        response = self.client.get(reverse("pin.overview", args=[self.pin.slug]))
+        content = response.content.decode()
+        self.assertIn('id="pin-links-count-badge">2</span>', content)
+
+    def test_links_card_header_badge_updates_via_oob_swap_on_add(self) -> None:
+        """Regression guard: the header badge lives in a different partial
+        (pin_overview_partial.html) than the row that actually swaps on add/
+        delete (_pin_links_row.html) - without an OOB fragment carrying the
+        new count, the badge would go stale until a full page reload."""
+        response = self.client.post(reverse("pin.links", args=[self.pin.slug]), {"url": "https://example.com/story"})
+        content = response.content.decode()
+        self.assertIn('id="pin-links-count-badge" hx-swap-oob="true">1</span>', content)
+
 
 class LocationLinkViewTests(TestCase):
     def setUp(self) -> None:

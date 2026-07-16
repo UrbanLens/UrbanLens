@@ -302,6 +302,7 @@
             <div class="card-header">
                 <i class="material-symbols-outlined">collections</i>
                 <h3>Media</h3>
+                <span class="badge" id="media-count-badge" hidden></span>
                 <button type="button" class="media-gallery-header-btn" id="media-select-btn" title="Select media"
                         onclick="window.mediaToggleSelectMode()">
                     <i class="material-symbols-outlined">checklist</i>
@@ -1358,6 +1359,11 @@
                 if (src && !isNotRelevant) counts[src] = (counts[src] || 0) + 1;
                 if (isNotRelevant) notRelevantCount += 1;
             });
+            var countBadge = document.getElementById('media-count-badge');
+            if (countBadge) {
+                countBadge.textContent = String(total);
+                countBadge.hidden = total === 0;
+            }
             var sources = Object.keys(counts);
             if (sources.length < 2 && !notRelevantCount) {
                 tabsEl.hidden = true;

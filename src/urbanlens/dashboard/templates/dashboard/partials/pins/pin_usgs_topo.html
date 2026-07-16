@@ -9,6 +9,7 @@
     <div class="card-header">
         <i class="material-symbols-outlined">terrain</i>
         <h3>USGS Historical Topo Maps</h3>
+        {% if maps %}<span class="badge">{{ maps|length }}</span>{% endif %}
     </div>
     <div class="usgs-topo-grid">
         {% for map in maps %}
