@@ -517,28 +517,32 @@
 }
 
 
-.settings-form--privacy {
-    .settings-field {
-        padding: 0.95rem 1rem;
-        max-width: 45rem;
-    }
+// Label-left/control-right on wide screens, for any settings field shaped
+// like Privacy's (a .settings-label direct child) - scoped structurally
+// rather than per-form, so every settings tab gets this consistently
+// (previously Privacy-only; every other tab always stacked the control
+// below its label even with room to spare) and any new field added later
+// gets it automatically as long as it follows the same markup shape.
+// Toggle-style fields (.settings-toggle-row, no .settings-label child) are
+// unaffected - their content doesn't fit this label/control split anyway.
+.settings-field:has(> .settings-label) {
+    padding: 0.95rem 1rem;
+    max-width: 45rem;
 
     @include up($breakpoint-md) {
-        .settings-field {
-            display: grid;
-            grid-template-columns: minmax(0, 1fr) minmax(14rem, 22rem);
-            grid-template-areas:
-                "label control"
-                "help control"
-                "error error";
-            align-items: center;
-            gap: 0.15rem 1.25rem;
-        }
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(14rem, 22rem);
+        grid-template-areas:
+            "label control"
+            "help control"
+            "error error";
+        align-items: center;
+        gap: 0.15rem 1.25rem;
 
-        .settings-label { grid-area: label; margin-bottom: 0; }
-        .settings-help { grid-area: help; margin-bottom: 0; line-height: 1.4; }
-        .settings-select { grid-area: control; justify-self: end; max-width: 100%; }
-        .settings-error { grid-area: error; }
+        > .settings-label { grid-area: label; margin-bottom: 0; }
+        > .settings-help { grid-area: help; margin-bottom: 0; line-height: 1.4; }
+        > .settings-select { grid-area: control; justify-self: end; max-width: 100%; }
+        > .settings-error { grid-area: error; }
     }
 }
 

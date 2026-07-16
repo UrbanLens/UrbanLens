@@ -643,7 +643,7 @@ def schedule_panel_fetch(source_key: str, pin: Pin) -> bool:
     if cache.add(source.flight_key(pin), 1, FLIGHT_TTL_SECONDS):
         from urbanlens.dashboard.tasks import fetch_panel_source
 
-        logger.info("schedule_panel_fetch: dispatching %s for pin %s to queue '%s'", source_key, pin.pk, source.queue)
+        logger.debug("schedule_panel_fetch: dispatching %s for pin %s to queue '%s'", source_key, pin.pk, source.queue)
         fetch_panel_source.apply_async(args=[source_key, pin.pk], queue=source.queue)
     return True
 
@@ -676,7 +676,7 @@ def run_panel_fetch(source_key: str, pin: Pin) -> None:
         return
 
     started = time.monotonic()
-    logger.info("Panel fetch %s for pin %s starting on queue '%s'", source_key, pin.pk, source.queue)
+    logger.debug("Panel fetch %s for pin %s starting on queue '%s'", source_key, pin.pk, source.queue)
     try:
         source.fetch(pin)
     except (RateLimitExceededError, ServiceDisabledError) as exc:
@@ -700,6 +700,6 @@ def run_panel_fetch(source_key: str, pin: Pin) -> None:
         logger.exception("Panel fetch %s for pin %s failed after %.1fs", source_key, pin.pk, time.monotonic() - started)
         cache.set(source.skip_key(pin), 1, FAILURE_SKIP_TTL_SECONDS)
     else:
-        logger.info("Panel fetch %s for pin %s finished in %.1fs", source_key, pin.pk, time.monotonic() - started)
+        logger.debug("Panel fetch %s for pin %s finished in %.1fs", source_key, pin.pk, time.monotonic() - started)
     finally:
         cache.delete(source.flight_key(pin))

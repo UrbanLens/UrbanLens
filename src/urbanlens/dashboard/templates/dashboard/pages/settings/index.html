@@ -57,7 +57,7 @@
         </div>
 
         <div class="settings-section-body">
-        <form method="post" class="settings-form settings-form--privacy" id="privacy-form">
+        <form method="post" class="settings-form" id="privacy-form">
             {% csrf_token %}
             <input type="hidden" name="section" value="privacy">
 
@@ -1271,7 +1271,7 @@
         </div>
 
         <div class="settings-section-body">
-            {% include "dashboard/partials/ui/_page_explainer.html" with explainer_id="custom-fields-explainer" kicker="Personal metadata" heading="Track anything about a pin, photo, person, or map that UrbanLens doesn't already have a field for." body="Add a text, number, date, or dropdown field, then fill it in per item. Custom fields are private to you - they never show up to anyone else, even on a pin or map you've shared." %}
+            {% include "dashboard/partials/ui/_page_explainer.html" with explainer_id="custom-fields-explainer" kicker="Personal metadata" heading="Make your own fields." body="Track anything about a pin, photo, person, or map that UrbanLens doesn't already have a field for. Custom fields are private to you - they never show up to anyone else, even on a pin or map you've shared." %}
 
             <div id="custom-fields-settings"
                  hx-get="{% url 'custom_fields.settings' %}"
