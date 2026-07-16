@@ -345,7 +345,7 @@ def _parse_scheduled_at(date_str: str | None, time_str: str | None) -> datetime.
             t = datetime.time(0, 0)
     else:
         t = datetime.time(0, 0)
-    return datetime.datetime.combine(d, t)
+    return timezone.make_aware(datetime.datetime.combine(d, t))
 
 
 def _resolve_activity_place(body: dict[str, Any], profile: Profile) -> tuple[Location | None, Any | None]:
@@ -1046,9 +1046,11 @@ class TripActivityCompleteView(LoginRequiredMixin, View):
         else:
             completed_date = today
 
-        activity.scheduled_at = datetime.datetime.combine(
-            completed_date,
-            activity.scheduled_at.time() if activity.scheduled_at else datetime.time(0, 0),
+        activity.scheduled_at = timezone.make_aware(
+            datetime.datetime.combine(
+                completed_date,
+                activity.scheduled_at.time() if activity.scheduled_at else datetime.time(0, 0),
+            ),
         )
         activity.status = TripActivity.STATUS_COMPLETED
         activity.save(update_fields=["status", "scheduled_at", "updated"])
@@ -1525,9 +1527,9 @@ class TripActivityMoveView(LoginRequiredMixin, View):
 
         if activity.scheduled_at:
             # Preserve existing time component; only update date
-            activity.scheduled_at = datetime.datetime.combine(new_date, activity.scheduled_at.time())
+            activity.scheduled_at = timezone.make_aware(datetime.datetime.combine(new_date, activity.scheduled_at.time()))
         else:
-            activity.scheduled_at = datetime.datetime.combine(new_date, datetime.time(0, 0))
+            activity.scheduled_at = timezone.make_aware(datetime.datetime.combine(new_date, datetime.time(0, 0)))
 
         activity.save(update_fields=["scheduled_at", "updated"])
 

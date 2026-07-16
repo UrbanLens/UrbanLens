@@ -23,6 +23,7 @@ from unittest.mock import patch
 from django.template.loader import render_to_string
 from django.test import Client
 from django.urls import reverse
+from django.utils import timezone
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
@@ -343,6 +344,25 @@ class TripActivitiesViewTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertTrue(TripActivity.objects.filter(trip=self.trip, title="Visit Factory").exists())
 
+    def test_scheduled_date_only_produces_a_timezone_aware_datetime(self):
+        """Regression guard: _parse_scheduled_at used to build a naive
+        datetime.combine(date, midnight) with no tzinfo, tripping Django's
+        "received a naive datetime while time zone support is active"
+        RuntimeWarning on every date-only activity (repeating in production
+        logs) and silently storing the wrong calendar day for any user not
+        in the server's own timezone."""
+        client = Client()
+        client.force_login(self.creator_user)
+        resp = client.post(
+            self._url(),
+            data=json.dumps({"title": "Explore Site", "scheduled_date": "2026-08-10"}),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        activity = TripActivity.objects.get(trip=self.trip, title="Explore Site")
+        self.assertIsNotNone(activity.scheduled_at)
+        self.assertTrue(timezone.is_aware(activity.scheduled_at))
+
     def test_post_with_geocoded_location_creates_location(self):
         from urbanlens.dashboard.models.location.model import Location
         client = Client()
@@ -509,6 +529,15 @@ class TripActivityCompleteViewTests(TestCase):
         self.client.post(self._url(), data={"completed_date": "not-a-date"})
         self.activity.refresh_from_db()
         self.assertEqual(self.activity.status, TripActivity.STATUS_COMPLETED)
+
+    def test_completed_date_produces_a_timezone_aware_scheduled_at(self):
+        """Regression guard for the same naive-datetime bug as
+        test_scheduled_date_only_produces_a_timezone_aware_datetime, but on
+        the "mark completed" path's own datetime.combine call."""
+        self.client.post(self._url(), data={"completed_date": "2025-06-01"})
+        self.activity.refresh_from_db()
+        self.assertIsNotNone(self.activity.scheduled_at)
+        self.assertTrue(timezone.is_aware(self.activity.scheduled_at))
 
     def test_no_date_defaults_to_today(self):
         self.client.post(self._url(), data={})
@@ -813,3 +842,54 @@ class TripActivityPositionViewTests(TestCase):
         body = json.loads(resp.content)
         self.assertAlmostEqual(body["lat"], 48.85)
         self.assertAlmostEqual(body["lng"], 2.35)
+
+
+class TripActivityMoveViewTests(TestCase):
+    """POST /trips/<slug>/activities/<id>/move/ - drag-to-reschedule."""
+
+    def setUp(self):
+        super().setUp()
+        self.user = baker.make("auth.User")
+        self.profile = self.user.profile
+        self.trip = _make_trip(self.profile)
+        self.activity = TripActivity.objects.create(
+            trip=self.trip,
+            added_by=self.profile,
+            title="Reschedule Me",
+        )
+        self.client = Client()
+        self.client.force_login(self.user)
+
+    def _url(self):
+        return reverse(
+            "trips.activity.move",
+            kwargs={"trip_slug": self.trip.slug, "activity_id": self.activity.id},
+        )
+
+    def test_rescheduling_produces_a_timezone_aware_datetime_with_no_prior_time(self):
+        """Regression guard for the same naive-datetime bug as the other
+        scheduled_at-construction tests, but on the drag-to-reschedule path's
+        "no existing scheduled_at" branch."""
+        resp = self.client.post(
+            self._url(),
+            data=json.dumps({"date": "2026-08-10"}),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.activity.refresh_from_db()
+        self.assertIsNotNone(self.activity.scheduled_at)
+        self.assertTrue(timezone.is_aware(self.activity.scheduled_at))
+
+    def test_rescheduling_preserves_existing_time_and_stays_aware(self):
+        self.activity.scheduled_at = timezone.make_aware(datetime.datetime(2026, 8, 1, 14, 30))
+        self.activity.save(update_fields=["scheduled_at"])
+
+        resp = self.client.post(
+            self._url(),
+            data=json.dumps({"date": "2026-08-10"}),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.activity.refresh_from_db()
+        self.assertTrue(timezone.is_aware(self.activity.scheduled_at))
+        self.assertEqual(self.activity.scheduled_at.date(), datetime.date(2026, 8, 10))
