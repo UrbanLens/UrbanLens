@@ -53,6 +53,15 @@ class CsrfEnforcedPinMediaEndpointTests(TestCase):
         self.profile.refresh_from_db()
         self.assertEqual(self.profile.media_gallery_sort, "recent")
 
+    def test_set_map_height_does_not_500_under_csrf_enforcement(self) -> None:
+        """set_map_height (see PinController) uses the same request.data pattern
+        as set_media_sort - regression guard against the same RawPostDataException
+        class of bug documented in this file's module docstring."""
+        response = self._post_json(reverse("pin.map_height"), {"height": 700})
+        self.assertEqual(response.status_code, 200)
+        self.profile.refresh_from_db()
+        self.assertEqual(self.profile.pin_detail_map_height, 700)
+
     def test_media_relevance_route_reaches_the_post_handler(self) -> None:
         location = baker.make(Location)
         pin = baker.make(Pin, profile=self.profile, location=location)

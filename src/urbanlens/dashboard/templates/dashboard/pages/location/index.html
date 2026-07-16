@@ -141,12 +141,16 @@
             <i class="material-symbols-outlined">place</i>
             <h3>Location</h3>
         </div>
-        <div class="map-wrapper">
+        <div class="map-wrapper" id="pin-detail-map-wrapper"
+             {% if profile.pin_detail_map_height %}style="height: {{ profile.pin_detail_map_height }}px"{% endif %}>
 
             {% include "dashboard/partials/layout/_map_annotations_panels.html" with layers="street,terrain,satellite,weather,borders,details,photos,nearby" %}
             {% include "dashboard/partials/ui/_bulk_toolbar.html" with namespace="detailpins" actions=detail_pin_bulk_actions %}
 
         </div>
+        <div class="map-resize-handle" id="pin-detail-map-resize-handle"
+             title="Drag to resize the map" role="separator" aria-orientation="horizontal"
+             aria-label="Resize map"></div>
     </div>{# end .location-map #}
 
     {# -- Satellite / street view / photos: each card grows to fill the space -- #}

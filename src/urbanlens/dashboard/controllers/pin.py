@@ -42,6 +42,13 @@ _ADAPTIVE_PAGE_BATCH_MULTIPLIER = 2
 _WEB_SEARCH_PAGE_SIZE = _WEB_SEARCH_CLIENT_PAGE_SIZE * _ADAPTIVE_PAGE_BATCH_MULTIPLIER
 _WEB_SEARCH_MIN_REFRESH_AGE = timedelta(days=1)
 
+# The pin detail page map's drag-to-resize handle - see set_map_height and
+# _pin-detail.scss. 320px matches the default height's existing min-height
+# floor (the request's "minimum height should be the current height we're
+# using"); 1200px is just a sane ceiling against an accidental huge drag.
+_MAP_HEIGHT_MIN_PX = 320
+_MAP_HEIGHT_MAX_PX = 1200
+
 # InfoPanelSource keys condensed into the "Regional Data" tab strip instead of
 # their own standalone card - niche, secondary-to-our-core-purpose data that's
 # only occasionally useful, so each tab's content is fetched only once the
@@ -547,6 +554,29 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         profile.media_gallery_sort = sort
         profile.save(update_fields=["media_gallery_sort", "updated"])
         return JsonResponse({"sort": sort})
+
+    def set_map_height(self, request: Request):
+        """Persist the requesting user's dragged pin detail page map height (px).
+
+        Applies to every pin detail page's map going forward, not just the one
+        being viewed when the drag happened - it's a display preference, not
+        per-pin data.
+        """
+        try:
+            data = request.data
+            height = data.get("height")
+        except ParseError:
+            return JsonResponse({"error": "Invalid request data."}, status=400)
+        try:
+            height = int(height)
+        except (TypeError, ValueError):
+            return JsonResponse({"error": "Invalid height value."}, status=400)
+        height = max(_MAP_HEIGHT_MIN_PX, min(_MAP_HEIGHT_MAX_PX, height))
+
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        profile.pin_detail_map_height = height
+        profile.save(update_fields=["pin_detail_map_height", "updated"])
+        return JsonResponse({"height": height})
 
     def web_search(self, request: HttpRequest, pin_slug):
         """

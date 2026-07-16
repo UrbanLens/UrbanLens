@@ -324,6 +324,11 @@ class Profile(abstract.PublicDashboardModel):
     # back to arrival order); "recent" ignores relevance marks entirely.
     media_gallery_sort = CharField(max_length=20, choices=[("relevant", "Relevant first"), ("recent", "Most recent")], default="relevant")
 
+    # User-dragged height (px) for the pin detail page's map, from the resize
+    # handle on its bottom border. None means "use the default responsive
+    # height" (see PinController.set_map_height / _pin-detail.scss).
+    pin_detail_map_height = IntegerField(null=True, blank=True)
+
     # Memories preferences. Each independently controls whether a category of
     # visit/location history is ever saved - including from explicit user actions
     # like GPX/Takeout imports, not just passive/background tracking.

@@ -228,6 +228,18 @@ urlpatterns = [
                     "pin/",
                     include(
                         [
+                            # Registered before the <slug:pin_slug>/ catch-all below -
+                            # "map-height" is a single path segment just like a real
+                            # slug, so Django would otherwise match it there first
+                            # (treating "map-height" as a pin slug) and 405 every POST,
+                            # exactly the same class of bug documented in
+                            # test_pin_media_endpoints.py's module docstring for
+                            # media/relevance/ vs the media/<str:source>/ catch-all.
+                            path(
+                                "map-height/",
+                                pin.PinController.as_view({"post": "set_map_height"}),
+                                name="pin.map_height",
+                            ),
                             path("<slug:pin_slug>/", pin.PinController.as_view({"get": "view"}), name="pin.details"),
                             path("<slug:pin_slug>/share/", pin_sharing.PinShareDialogView.as_view(), name="pin.share.dialog"),
                             path("<slug:pin_slug>/share/send/", pin_sharing.PinShareCreateView.as_view(), name="pin.share.send"),

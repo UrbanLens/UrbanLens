@@ -535,6 +535,43 @@ function init() {
     window.addEventListener("resize", onResize);
     window.addEventListener("orientationchange", () => setTimeout(() => map.invalidateSize(), 300));
   })();
+  (() => {
+    const wrapper = document.getElementById("pin-detail-map-wrapper");
+    const handle = document.getElementById("pin-detail-map-resize-handle");
+    if (!wrapper || !handle)
+      return;
+    const MIN_HEIGHT_PX = 320;
+    const MAX_HEIGHT_PX = 1200;
+    let startY = 0;
+    let startHeight = 0;
+    function onPointerMove(e) {
+      const delta = e.clientY - startY;
+      const newHeight = Math.max(MIN_HEIGHT_PX, Math.min(MAX_HEIGHT_PX, startHeight + delta));
+      wrapper.style.height = `${newHeight}px`;
+      map.invalidateSize();
+    }
+    function onPointerUp() {
+      handle.classList.remove("is-dragging");
+      document.removeEventListener("pointermove", onPointerMove);
+      document.removeEventListener("pointerup", onPointerUp);
+      const finalHeight = Math.round(wrapper.getBoundingClientRect().height);
+      fetch("/dashboard/map/pin/map-height/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
+        body: JSON.stringify({ height: finalHeight })
+      }).catch(() => {
+        toast.error("Failed to save map size.");
+      });
+    }
+    handle.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      startY = e.clientY;
+      startHeight = wrapper.getBoundingClientRect().height;
+      handle.classList.add("is-dragging");
+      document.addEventListener("pointermove", onPointerMove);
+      document.addEventListener("pointerup", onPointerUp);
+    });
+  })();
   const detailPinColors = { building: "#6b7280", entrance: "#16a34a", poi: "#d97706", danger: "#dc2626", other: "#7c3aed", location: "#2563eb" };
   const detailPinIcons = { building: "business", entrance: "door_front", poi: "star", danger: "warning", other: "info", location: "place" };
   const detailPinLayer = L.layerGroup();

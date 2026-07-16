@@ -207,6 +207,54 @@ function init(): void {
         window.addEventListener("orientationchange", () => setTimeout(() => map.invalidateSize(), 300));
     })();
 
+    // -- Map resize handle (pin detail page only - wiki page has no handle in ---
+    // its DOM, so this is a silent no-op there). Dragging the bottom border
+    // saves the new height (see PinController.set_map_height) so every pin
+    // detail page's map opens at that height going forward. Bounds must match
+    // the server's own clamp (_MAP_HEIGHT_MIN_PX/_MAP_HEIGHT_MAX_PX in
+    // controllers/pin.py) - the server re-clamps regardless, this is just to
+    // avoid a jarring snap once the save round-trips.
+    (() => {
+        const wrapper = document.getElementById("pin-detail-map-wrapper");
+        const handle = document.getElementById("pin-detail-map-resize-handle");
+        if (!wrapper || !handle) return;
+
+        const MIN_HEIGHT_PX = 320;
+        const MAX_HEIGHT_PX = 1200;
+        let startY = 0;
+        let startHeight = 0;
+
+        function onPointerMove(e: PointerEvent): void {
+            const delta = e.clientY - startY;
+            const newHeight = Math.max(MIN_HEIGHT_PX, Math.min(MAX_HEIGHT_PX, startHeight + delta));
+            wrapper!.style.height = `${newHeight}px`;
+            map.invalidateSize();
+        }
+
+        function onPointerUp(): void {
+            handle!.classList.remove("is-dragging");
+            document.removeEventListener("pointermove", onPointerMove);
+            document.removeEventListener("pointerup", onPointerUp);
+            const finalHeight = Math.round(wrapper!.getBoundingClientRect().height);
+            fetch("/dashboard/map/pin/map-height/", {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
+                body: JSON.stringify({ height: finalHeight }),
+            }).catch(() => {
+                toast.error("Failed to save map size.");
+            });
+        }
+
+        handle.addEventListener("pointerdown", (e: PointerEvent) => {
+            e.preventDefault();
+            startY = e.clientY;
+            startHeight = wrapper!.getBoundingClientRect().height;
+            handle!.classList.add("is-dragging");
+            document.addEventListener("pointermove", onPointerMove);
+            document.addEventListener("pointerup", onPointerUp);
+        });
+    })();
+
     // -- Detail pins layer ---------------------------------------------------
     const detailPinColors: Record<string, string> = { building: "#6b7280", entrance: "#16a34a", poi: "#d97706", danger: "#dc2626", other: "#7c3aed", location: "#2563eb" };
     const detailPinIcons: Record<string, string> = { building: "business", entrance: "door_front", poi: "star", danger: "warning", other: "info", location: "place" };

@@ -3943,9 +3943,12 @@ body.page-location-details .pin-detail-grid {
         .map-wrapper {
             position: relative;
             width: 100%;
-            // Mirrors #map's own height below so this wrapper has a definite
-            // size for @include map-query-container to safely contain against
-            // (`contain: size` collapses an "auto" height to 0 otherwise).
+            // The default responsive height, overridden per-user by an inline
+            // style (see set_map_height/PinController) once they've dragged
+            // the resize handle below - min-height stays the floor either way,
+            // and gives this wrapper a definite size for @include
+            // map-query-container to safely contain against (`contain: size`
+            // collapses an "auto" height to 0 otherwise).
             height: min(52vh, 540px);
             min-height: 320px;
             // Clips the off-canvas (translateX(-100%)) .detail-pin-list-panel so
@@ -3955,10 +3958,47 @@ body.page-location-details .pin-detail-grid {
             @include map-query-container;
         }
 
+        // 100% of .map-wrapper rather than duplicating its height value - keeps
+        // #map in sync automatically whether that height comes from the default
+        // CSS rule above or a resize-handle-dragged inline style, with nothing
+        // to keep manually synced between the two elements.
         #map {
-            height: min(52vh, 540px);
-            min-height: 320px;
+            height: 100%;
             width: 100%;
+        }
+
+        // A sibling of .map-wrapper (not a child) - .map-wrapper has its own
+        // overflow:hidden (to clip the off-canvas pin-list drawer, see above),
+        // which would clip a child handle positioned at/past its bottom edge.
+        .map-resize-handle {
+            height: 12px;
+            margin-top: -6px; // visually straddles the map's bottom border
+            cursor: ns-resize;
+            position: relative;
+            z-index: 500; // above Leaflet's own panes, below page chrome/dialogs
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            touch-action: none;
+
+            &::after {
+                content: '';
+                width: 40px;
+                height: 4px;
+                border-radius: $radius-full;
+                background: var(--ul-grey-4);
+                opacity: 0;
+                transition: opacity .15s, background .15s;
+            }
+
+            &:hover::after,
+            &.is-dragging::after {
+                opacity: 1;
+            }
+
+            &.is-dragging::after {
+                background: var(--primary-color);
+            }
         }
     }
 
