@@ -14,10 +14,12 @@ from urbanlens.dashboard.models.custom_fields import CustomField, CustomFieldEnt
 from urbanlens.dashboard.models.direct_messages import (
     DirectMessage,
     DirectMessageImagePermission,
+    DirectMessageLocationMention,
     DirectMessageShare,
     DirectMessageShareKind,
     DirectMessageTemporaryAccess,
     ImagePermissionStatus,
+    LocationMentionKind,
     MessageRetentionChoice,
 )
 from urbanlens.dashboard.models.e2ee import ConversationKey, MessagingKeyBundle
@@ -38,7 +40,7 @@ from urbanlens.dashboard.models.markup import MapLayerMode, MarkupMap, MarkupMap
 from urbanlens.dashboard.models.notifications import NotificationLog, NotificationPreference
 from urbanlens.dashboard.models.pin import Pin, PinNote
 from urbanlens.dashboard.models.pin_list import PinList, PinListItem
-from urbanlens.dashboard.models.pin_share import PinShare, PinShareOrigin, PinShareStatus
+from urbanlens.dashboard.models.pin_share import ExposureSource, LocationExposure, PinShare, PinShareOrigin, PinShareStatus
 from urbanlens.dashboard.models.pin_suggestions import PinSuggestion, PinSuggestionOrigin, PinSuggestionStatus
 from urbanlens.dashboard.models.profile import Profile
 from urbanlens.dashboard.models.profile.email import ProfileEmail

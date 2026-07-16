@@ -9,7 +9,7 @@
 {% endblock %}
 
 {% block content %}
-{% with shared_name=share.shared_name|default:pin.display_label %}
+{% with shared_name=share.shared_name|default:share.place_label %}
 <div class="pin-detail-grid">
   <div class="pin-details location-details pin-share-detail-card card">
     <div class="card-header"><i class="material-symbols-outlined">ios_share</i><span>Shared Pin</span></div>
@@ -111,8 +111,8 @@
 </div>
 <script>
 (function(){
-  const lat = {{ pin.effective_latitude|default:'null' }};
-  const lng = {{ pin.effective_longitude|default:'null' }};
+  const lat = {{ share.shared_location.latitude|default:'null' }};
+  const lng = {{ share.shared_location.longitude|default:'null' }};
   const hasCoords = lat !== null && lng !== null;
   // Continental-US fallback view when there's no location yet (a hidden/rejected
   // share) so the map still initializes and window.map is still assigned below -

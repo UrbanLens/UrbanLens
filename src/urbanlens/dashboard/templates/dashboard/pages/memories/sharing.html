@@ -41,10 +41,17 @@
                 {% for group in share_groups %}
                 <article class="memories-sharing-card card">
                     <div class="memories-sharing-card-header">
+                        {% if group.pin %}
                         <a class="memories-sharing-pin-link" href="{% url 'pin.details' group.pin.slug %}">
                             <i class="material-symbols-outlined">location_on</i>
                             {{ group.pin.effective_name }}
                         </a>
+                        {% else %}
+                        <span class="memories-sharing-pin-link">
+                            <i class="material-symbols-outlined">location_on</i>
+                            {{ group.place_label }}
+                        </span>
+                        {% endif %}
                         <span class="memories-sharing-chain"
                               data-tooltip="Counts every share of this pin, including friends resharing it with their friends.">
                             <i class="material-symbols-outlined">account_tree</i>
@@ -120,7 +127,7 @@
                     <div class="memories-sharing-card-header">
                         <span class="memories-sharing-pin-link">
                             <i class="material-symbols-outlined">location_on</i>
-                            {{ group.pin.effective_name }}
+                            {% if group.pin %}{{ group.pin.effective_name }}{% else %}{{ group.place_label }}{% endif %}
                         </span>
                     </div>
                     <ul class="memories-sharing-recipients">

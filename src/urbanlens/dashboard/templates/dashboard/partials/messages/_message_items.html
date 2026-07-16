@@ -105,6 +105,7 @@ via infinite scroll) so the two render identically and never drift. Context:
   {% if message.share %}
   {% include "dashboard/partials/messages/_message_share_card.html" with share=message.share viewer_id=viewer_id partner=partner %}
   {% endif %}
+  {% include "dashboard/partials/messages/_message_location_mentions.html" with message=message viewer_id=viewer_id partner=partner %}
   {% endif %}
   <span class="dm-bubble__time">
     {{ message.created|date:"g:i A" }}

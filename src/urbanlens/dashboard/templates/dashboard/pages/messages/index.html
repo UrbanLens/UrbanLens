@@ -706,7 +706,7 @@
     // showing the raw image for a moment before a correction arrives. All
     // three refresh the whole thread pane instead of hand-building a bubble.
     function needsServerRender(msg, own) {
-        return !!(msg.markup_map_uuid || msg.has_share || (msg.images && msg.images.length && !own));
+        return !!(msg.markup_map_uuid || msg.has_share || msg.has_location_mentions || (msg.images && msg.images.length && !own));
     }
 
     function refreshActiveThread() {

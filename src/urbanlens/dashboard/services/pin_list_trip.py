@@ -28,10 +28,11 @@ def copy_list_pins_to_trip(pin_list: PinList, trip: Trip, added_by: Profile) -> 
         Number of activities created.
     """
     from urbanlens.dashboard.models.trips.model import TripActivity
+    from urbanlens.dashboard.services.trip_share_tracking import record_trip_activity_shares
 
     base_order = trip.activities.count()
     items = list(pin_list.items.select_related("pin__location").order_by("order"))
-    TripActivity.objects.bulk_create(
+    activities = TripActivity.objects.bulk_create(
         [
             TripActivity(
                 trip=trip,
@@ -44,4 +45,9 @@ def copy_list_pins_to_trip(pin_list: PinList, trip: Trip, added_by: Profile) -> 
             for i, item in enumerate(items)
         ],
     )
+    # Each copied place is now revealed to every joined trip member - record
+    # the detected shares so reshare chains keep counting (no-op for a trip
+    # whose only member is `added_by`, the common "Create a trip" case).
+    for activity in activities:
+        record_trip_activity_shares(activity)
     return len(items)

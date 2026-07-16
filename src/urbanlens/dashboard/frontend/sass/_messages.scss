@@ -1801,6 +1801,48 @@
     }
 }
 
+// Detected coordinates/address footer under a bubble (recipient-only):
+// either an "Add to map" action or the recipient's own pin-name reference.
+.dm-location-mention {
+    margin-top: .3rem;
+    padding: .4rem .6rem;
+    border-radius: 10px;
+    background: rgba(0, 0, 0, .08);
+    font-size: .8rem;
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    flex-wrap: wrap;
+
+    .material-symbols-outlined {
+        font-size: 1rem;
+    }
+
+    &__place {
+        display: flex;
+        align-items: center;
+        gap: .3rem;
+        opacity: .85;
+        word-break: break-all;
+    }
+
+    &__pin-link {
+        display: flex;
+        align-items: center;
+        gap: .3rem;
+        color: inherit;
+        text-decoration: none;
+
+        &:hover {
+            text-decoration: underline;
+        }
+    }
+
+    &__add-btn {
+        margin-left: auto;
+    }
+}
+
 .dm-thread-empty {
     padding: 0 1.1rem 1rem;
     margin: 0;

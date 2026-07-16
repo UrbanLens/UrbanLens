@@ -923,7 +923,7 @@ class TripActivitiesView(LoginRequiredMixin, View):
         if max_activities > 0 and trip.activities.count() >= max_activities:
             return HttpResponse(f"This trip already has the maximum of {max_activities} activities.", status=400)
 
-        TripActivity.objects.create(
+        activity = TripActivity.objects.create(
             trip=trip,
             location=location,
             pin=pin,
@@ -937,6 +937,11 @@ class TripActivitiesView(LoginRequiredMixin, View):
             child_trip=child_trip,
             location_hidden=location_hidden,
         )
+        # Putting a place on the itinerary reveals it to every member - that
+        # counts in the sharer's reshare chain like any other pin share.
+        from urbanlens.dashboard.services.trip_share_tracking import record_trip_activity_shares
+
+        record_trip_activity_shares(activity)
 
         return _render_activities_panel(request, trip, profile)
 
@@ -1557,6 +1562,11 @@ class TripMembershipJoinView(LoginRequiredMixin, View):
 
         if trip.creator_id != profile.id:
             TripMembership.objects.filter(trip=trip, profile=profile).update(status=TripMembership.STATUS_JOINED)
+            # Joining reveals every place already on the itinerary - each one
+            # counts in its sharer's reshare chain like any other pin share.
+            from urbanlens.dashboard.services.trip_share_tracking import record_trip_shares_for_member
+
+            record_trip_shares_for_member(trip, profile)
 
         # Joining unlocks contribution across the whole page (activities,
         # comments, members) - simplest to reload rather than stitch together

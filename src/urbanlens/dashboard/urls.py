@@ -1200,6 +1200,7 @@ urlpatterns = [
                 path("<slug:profile_slug>/share/friend/", direct_message_shares.MessageShareFriendView.as_view(), name="messages.share.friend"),
                 path("<slug:profile_slug>/share/pin/<int:message_id>/respond/", direct_message_shares.MessageShareRespondPinView.as_view(), name="messages.share.pin.respond"),
                 path("<slug:profile_slug>/share/friend/<int:message_id>/respond/", direct_message_shares.MessageShareRespondFriendView.as_view(), name="messages.share.friend.respond"),
+                path("<slug:profile_slug>/mention/<int:mention_id>/add-pin/", direct_message_shares.MessageMentionAddPinView.as_view(), name="messages.mention.add_pin"),
             ],
         ),
     ),

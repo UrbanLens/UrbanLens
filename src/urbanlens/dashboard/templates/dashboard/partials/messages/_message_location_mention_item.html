@@ -1,0 +1,31 @@
+{% comment %}
+One detected-location footer row. Context: `mention`
+(DirectMessageLocationMention), `partner`. Only ever rendered to the message
+recipient (enforced by _message_location_mentions.html and
+MessageMentionAddPinView) - the pin name shown is the recipient's own
+private data.
+
+Swapped in place (outerHTML, keyed by id) when the recipient clicks
+"Add to map" - see MessageMentionAddPinView.
+{% endcomment %}
+<div class="dm-location-mention" id="dm-location-mention-{{ mention.id }}">
+  {% with recipient_pin=mention.recipient_pin %}
+  {% if recipient_pin %}
+  <a class="dm-location-mention__pin-link" href="{% url 'pin.details' recipient_pin.slug %}"
+     title="Only you can see this reference">
+    <i class="material-symbols-outlined">location_on</i>
+    On your map as &ldquo;{{ recipient_pin.effective_name }}&rdquo;
+  </a>
+  {% elif mention.can_add_to_map %}
+  <span class="dm-location-mention__place">
+    <i class="material-symbols-outlined">explore</i>
+    {{ mention.matched_text|default:"Shared location" }}
+  </span>
+  <button type="button" class="btn btn--primary btn--sm dm-location-mention__add-btn"
+          hx-post="{% url 'messages.mention.add_pin' partner.slug mention.id %}"
+          hx-target="#dm-location-mention-{{ mention.id }}" hx-swap="outerHTML">
+    <i class="material-symbols-outlined">add_location_alt</i> Add to map
+  </button>
+  {% endif %}
+  {% endwith %}
+</div>

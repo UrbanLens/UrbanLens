@@ -1252,6 +1252,30 @@ def prune_expired_undo_actions() -> int:
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def detect_dm_address_mentions(message_id: int) -> int:
+    """Detect street addresses in a direct message's text and record their shares.
+
+    The forward-geocoding half of DM location detection (see
+    ``services.dm_location_detection``) - coordinates are detected inline at
+    send time, but addresses need a geocoding API call, which never belongs
+    in the request path.
+
+    Args:
+        message_id: PK of the just-sent message to scan.
+
+    Returns:
+        Number of new location mentions recorded.
+    """
+    from urbanlens.dashboard.models.direct_messages.model import DirectMessage
+    from urbanlens.dashboard.services.dm_location_detection import detect_address_mentions
+
+    message = DirectMessage.objects.filter(pk=message_id).select_related("sender", "recipient").first()
+    if message is None:
+        return 0
+    return len(detect_address_mentions(message))
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def hard_delete_expired_direct_messages() -> int:
     """Permanently delete every direct message past its sender's disappearing-message window.
 

@@ -197,7 +197,7 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
 
     @classmethod
     def from_db(cls, db, field_names, values) -> Pin:
-        """Track the persisted name so ``save()`` can detect renames.
+        """Track the persisted name and location so ``save()`` can detect renames and moves.
 
         Args:
             db: Database alias the row was loaded from.
@@ -210,6 +210,8 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
         instance = super().from_db(db, field_names, values)
         if "name" in field_names:
             instance._loaded_name = instance.name  # noqa: SLF001
+        if "location" in field_names:
+            instance._loaded_location_id = instance.location_id  # noqa: SLF001
         return instance
 
     def save(self, *args, **kwargs) -> None:
@@ -221,11 +223,17 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
         every write path (HTMX controllers, REST serializer, Django admin),
         and also sanitizes ``name`` to a strict character set before it's
         persisted (see ``sanitize_name``).
+
+        Moving the pin to a different Location also propagates the owner's
+        share-chain exposures onto the new location here, so the "infection"
+        follows the pin no matter which write path moved it (see
+        ``services.share_provenance``).
         """
         update_fields = kwargs.get("update_fields")
         if update_fields is None or "name" in update_fields:
             self.name = sanitize_name(self.name)
         super().save(*args, **kwargs)
+        self._sync_exposures_after_save(update_fields)
         if update_fields is not None and "name" not in update_fields:
             return
         if self.name != getattr(self, "_loaded_name", None) and is_meaningful_name(self.name):
@@ -236,6 +244,26 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
             except DatabaseError:
                 logger.debug("Could not ensure alias for pin %s name %r", self.pk, self.name, exc_info=True)
         self._loaded_name = self.name
+
+    def _sync_exposures_after_save(self, update_fields) -> None:
+        """Propagate share-chain exposures when this save moved the pin.
+
+        Only fires when the persisted ``location`` actually changed in this
+        save (see ``from_db``'s ``_loaded_location_id`` capture) - creation
+        and non-location saves are no-ops.
+
+        Args:
+            update_fields: The ``update_fields`` this save was called with
+                (None for a full save).
+        """
+        if update_fields is not None and "location" not in update_fields and "location_id" not in update_fields:
+            return
+        old_location_id = getattr(self, "_loaded_location_id", None)
+        if old_location_id is not None and self.location_id != old_location_id:
+            from urbanlens.dashboard.services.share_provenance import propagate_exposures_for_pin_move
+
+            propagate_exposures_for_pin_move(self, old_location_id)
+        self._loaded_location_id = self.location_id
 
     # ------------------------------------------------------------------
     # Hierarchy

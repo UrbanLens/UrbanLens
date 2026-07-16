@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from django.core.cache import cache
-from django.db import transaction
+from django.db import DatabaseError, transaction
 from django.db.models import Q
 from django.utils import timezone
 
@@ -224,6 +224,11 @@ def serialize_direct_message(message: DirectMessage) -> dict[str, Any]:
         # trying to reconstruct that markup from JSON (same reason
         # `markup_map_uuid` doesn't ship the whole map).
         "has_share": getattr(message, "share", None) is not None,
+        # Same server-render contract as `has_share`: detected coordinate/
+        # address mentions render via `_message_location_mentions.html`, so
+        # the client re-fetches the thread partial instead of building the
+        # footer from JSON.
+        "has_location_mentions": message.location_mentions.exists(),
         "reply_to": reply_to,
     }
 
@@ -548,6 +553,23 @@ def create_direct_message(
         from urbanlens.dashboard.services.map_sharing import share_markup_map_with_profile
 
         share_markup_map_with_profile(sender, recipient, markup_map)
+
+    if body:
+        # Typed coordinates/addresses are shares of those places and count in
+        # the sender's reshare chain (see services.dm_location_detection).
+        # Coordinates are regex + DB only, so they run inline (the broadcast
+        # below then carries `has_location_mentions`); addresses need forward
+        # geocoding, so they go to a Celery task.
+        from urbanlens.dashboard.services.dm_location_detection import detect_coordinate_mentions, parse_addresses
+
+        try:
+            detect_coordinate_mentions(message)
+        except DatabaseError:
+            logger.exception("Coordinate detection failed for message %s", message.pk)
+        if parse_addresses(body):
+            from urbanlens.dashboard.tasks import detect_dm_address_mentions
+
+            transaction.on_commit(lambda: detect_dm_address_mentions.delay(message.pk))
 
     logger.info("Direct message %s: profile %s -> profile %s", message.pk, sender.pk, recipient.pk)
 
@@ -881,7 +903,7 @@ def thread_page(profile: Profile, partner: Profile, *, before_id: int | None = N
             "share__recommended_profile",
             "markup_map",
         )
-        .prefetch_related("images", "reactions__profile", "markup_map__items")
+        .prefetch_related("images", "reactions__profile", "markup_map__items", "location_mentions__location", "location_mentions__pin_share")
     )
     if before_id is not None:
         queryset = queryset.filter(pk__lt=before_id)

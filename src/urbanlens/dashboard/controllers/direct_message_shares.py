@@ -156,6 +156,52 @@ class MessageShareRespondPinView(LoginRequiredMixin, View):
         return _toast_response(request, "dashboard/partials/messages/_message_share_card.html", context, level="success" if action == "accept" else "info", message=status_message)
 
 
+class MessageMentionAddPinView(LoginRequiredMixin, View):
+    """POST /messages/<profile_slug>/mention/<mention_id>/add-pin/ - "Add to map" on a detected location.
+
+    Accepts the DM_DETECTED share behind a coordinates/address mention (see
+    ``services.dm_location_detection``), creating the recipient's pin at the
+    shared location, and swaps the mention footer to the "On your map as …"
+    reference in place. Recipient-only: the mention footer never renders for
+    the sender, and this endpoint 404s for anyone but the message recipient.
+    """
+
+    def post(self, request: HttpRequest, profile_slug: str, mention_id: int) -> HttpResponse:
+        """Create the pin from the mention's share and return the refreshed footer row.
+
+        Args:
+            request: The incoming request.
+            profile_slug: Slug of the conversation partner (the sender).
+            mention_id: PK of the location mention being added.
+
+        Returns:
+            The re-rendered `_message_location_mention_item.html` fragment
+            with a toast trigger.
+        """
+        from urbanlens.dashboard.controllers.pin_sharing import apply_pin_share_response
+        from urbanlens.dashboard.models.direct_messages.location_mention import DirectMessageLocationMention
+
+        profile = _get_profile(request)
+        partner = _get_partner(profile, profile_slug)
+        mention = get_object_or_404(
+            DirectMessageLocationMention.objects.select_related("message", "location", "pin_share"),
+            pk=mention_id,
+            message__recipient=profile,
+            message__sender=partner,
+        )
+        context = {"mention": mention, "partner": partner}
+        template = "dashboard/partials/messages/_message_location_mention_item.html"
+
+        if mention.recipient_pin() is not None:
+            return _toast_response(request, template, context, level="info", message="This place is already on your map.")
+        share = mention.pin_share
+        if share is None or share.status not in (PinShareStatus.PENDING, PinShareStatus.DETECTED):
+            return _toast_response(request, template, context, level="info", message="This location can't be added right now.")
+
+        _target_pin, status_message = apply_pin_share_response(share, "accept")
+        return _toast_response(request, template, context, level="success", message=status_message)
+
+
 class MessageShareRespondFriendView(LoginRequiredMixin, View):
     """POST /messages/<profile_slug>/share/friend/<message_id>/respond/ - act on an `@friend` recommendation in place."""
 

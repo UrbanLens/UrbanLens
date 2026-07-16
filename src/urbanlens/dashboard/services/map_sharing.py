@@ -54,21 +54,25 @@ def _record_detected_share(sender: Profile, recipient: Profile, pin: Pin, markup
         (pin, recipient) pair (an earlier explicit share, or an earlier
         send/detection pass).
     """
+    from urbanlens.dashboard.services.share_provenance import record_share_exposure, resolve_and_stamp_origin_share
+
     if PinShare.objects.filter(pin=pin, to_profile=recipient).exists():
         return None
-    return PinShare.objects.create(
+    share = PinShare.objects.create(
         pin=pin,
+        location=pin.location,
         from_profile=sender,
         to_profile=recipient,
-        # Reuses the same reshare-chain rule as the explicit share flows
-        # (controllers.pin_sharing, services.pin_sharing): prefer the share
-        # this pin was accepted from, falling back to the best-effort
-        # heuristic link for pins the owner created themselves.
-        parent_share_id=pin.source_share_id or pin.inferred_source_share_id,
+        # Same reshare-chain rule as the explicit share flows: the share this
+        # pin was accepted from, a prior exposure at its location, or the
+        # best-effort map heuristic (see services.share_provenance).
+        parent_share=resolve_and_stamp_origin_share(pin),
         origin=PinShareOrigin.MAP_DETECTED,
         status=PinShareStatus.DETECTED,
         detected_via_map=markup_map,
     )
+    record_share_exposure(share)
+    return share
 
 
 def share_markup_map_with_profile(sender: Profile, recipient: Profile, markup_map: MarkupMap) -> list[PinShare]:
@@ -166,7 +170,7 @@ def infer_source_share_for_pin(pin: Pin) -> PinShare | None:
     best: PinShare | None = None
     best_distance: float | None = None
     for candidate in candidates:
-        candidate_location = candidate.pin.location
+        candidate_location = candidate.shared_location
         if candidate_location is None:
             continue
         candidate_point = Point(float(candidate_location.longitude), float(candidate_location.latitude), srid=4326)

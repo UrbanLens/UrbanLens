@@ -56,9 +56,15 @@ _VISITS_BULK_ACTIONS = [
 
 
 class _ShareGroup(TypedDict):
-    """One pin's entry in the Sharing page's ``share_groups`` list."""
+    """One place's entry in the Sharing page's ``share_groups`` list.
 
-    pin: Pin
+    ``pin`` is None for location-only shares (e.g. coordinates detected in a
+    DM the sender never pinned) - ``place_label`` always carries a
+    displayable name either way.
+    """
+
+    pin: Pin | None
+    place_label: str
     shares: list[PinShare]
     chain_total: int
     reshare_count: int
@@ -81,7 +87,8 @@ class _IncomingShareGroup(TypedDict):
     ever sees their own inbound shares of a given pin.
     """
 
-    pin: Pin
+    pin: Pin | None
+    place_label: str
     shares: list[PinShare]
 
 
@@ -751,11 +758,15 @@ class MemoriesSharingView(LoginRequiredMixin, View):
         from urbanlens.dashboard.models.pin_share.model import PinShare
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        shares = PinShare.objects.filter(from_profile=profile).select_related("pin__location__wiki", "to_profile__user").order_by("-created")
+        shares = PinShare.objects.filter(from_profile=profile).select_related("pin__location__wiki", "location__wiki", "to_profile__user").order_by("-created")
 
-        shares_by_pin: dict[int, list[PinShare]] = {}
+        # Group by pin when there is one; location-only shares (e.g.
+        # coordinates typed into a DM the sender never pinned) group by the
+        # shared Location instead so they don't all collapse into one bucket.
+        shares_by_pin: dict[tuple[str, int | None], list[PinShare]] = {}
         for share in shares:
-            shares_by_pin.setdefault(share.pin_id, []).append(share)
+            key = ("pin", share.pin_id) if share.pin_id is not None else ("location", share.location_id)
+            shares_by_pin.setdefault(key, []).append(share)
 
         share_groups: list[_ShareGroup] = []
         for pin_shares in shares_by_pin.values():
@@ -764,6 +775,7 @@ class MemoriesSharingView(LoginRequiredMixin, View):
             share_groups.append(
                 {
                     "pin": pin_shares[0].pin,
+                    "place_label": pin_shares[0].place_label,
                     "shares": pin_shares,
                     "chain_total": chain_total,
                     # Shares made further down the chain by other users.
@@ -790,13 +802,14 @@ class MemoriesSharingView(LoginRequiredMixin, View):
                 },
             )
 
-        incoming_shares = PinShare.objects.filter(to_profile=profile).select_related("pin__location__wiki", "from_profile__user").order_by("-created")
+        incoming_shares = PinShare.objects.filter(to_profile=profile).select_related("pin__location__wiki", "location__wiki", "from_profile__user").order_by("-created")
 
-        incoming_shares_by_pin: dict[int, list[PinShare]] = {}
+        incoming_shares_by_pin: dict[tuple[str, int | None], list[PinShare]] = {}
         for share in incoming_shares:
-            incoming_shares_by_pin.setdefault(share.pin_id, []).append(share)
+            key = ("pin", share.pin_id) if share.pin_id is not None else ("location", share.location_id)
+            incoming_shares_by_pin.setdefault(key, []).append(share)
 
-        incoming_share_groups: list[_IncomingShareGroup] = [{"pin": pin_shares[0].pin, "shares": pin_shares} for pin_shares in incoming_shares_by_pin.values()]
+        incoming_share_groups: list[_IncomingShareGroup] = [{"pin": pin_shares[0].pin, "place_label": pin_shares[0].place_label, "shares": pin_shares} for pin_shares in incoming_shares_by_pin.values()]
 
         incoming_map_shares = MarkupMapShare.objects.filter(to_profile=profile).select_related("markup_map", "from_profile__user").order_by("-created")
 

@@ -15,16 +15,17 @@ from django.urls import reverse
 
 from urbanlens.dashboard.models.notifications.meta import Importance, NotificationType, Status
 from urbanlens.dashboard.models.notifications.model import NotificationLog
-from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_share import PinShare, PinShareStatus
 from urbanlens.dashboard.services.connections import are_connections
+from urbanlens.dashboard.services.share_provenance import find_profile_pin_near_location, record_share_exposure, resolve_and_stamp_origin_share
 
 if TYPE_CHECKING:
+    from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.profile.model import Profile
 
 
 def recipient_existing_pin(profile: Profile, source: Pin) -> Pin | None:
-    """Return the recipient's own top-level pin at the same Location as `source`, if any.
+    """Return the recipient's own top-level pin at (or near) `source`'s place, if any.
 
     Args:
         profile: The prospective recipient.
@@ -35,7 +36,7 @@ def recipient_existing_pin(profile: Profile, source: Pin) -> Pin | None:
     """
     if not source.location_id:
         return None
-    return Pin.objects.filter(profile=profile, parent_pin__isnull=True, location_id=source.location_id).first()
+    return find_profile_pin_near_location(profile.pk, source.location)
 
 
 def create_pin_share(sender: Profile, recipient: Profile, pin: Pin, *, message: str | None = None, shared_name: str | None = None) -> PinShare:
@@ -60,13 +61,15 @@ def create_pin_share(sender: Profile, recipient: Profile, pin: Pin, *, message: 
     already_pinned = recipient_existing_pin(recipient, pin) is not None
     share = PinShare.objects.create(
         pin=pin,
+        location=pin.location,
         from_profile=sender,
         to_profile=recipient,
-        parent_share_id=pin.source_share_id,
+        parent_share=resolve_and_stamp_origin_share(pin),
         status=PinShareStatus.ALREADY_PINNED if already_pinned else PinShareStatus.PENDING,
         message=message,
         shared_name=shared_name,
     )
+    record_share_exposure(share)
     base_message = f"{sender.username} shared {pin.display_label} with you."
     if already_pinned:
         base_message += " You already have this location pinned."

@@ -19,26 +19,26 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_share import PinShare, PinShareStatus
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.connections import are_connections, get_connections
-from urbanlens.dashboard.services.map_sharing import infer_source_share_for_pin, share_markup_map_with_profile
+from urbanlens.dashboard.services.map_sharing import share_markup_map_with_profile
+from urbanlens.dashboard.services.share_provenance import find_profile_pin_near_location, record_share_exposure, resolve_and_stamp_origin_share
 from urbanlens.dashboard.services.text_limits import MAX_PIN_SHARE_MESSAGE_LENGTH, text_length_error
 
 
 def _recipient_existing_pin(profile: Profile, source: Pin) -> Pin | None:
-    # A Pin's coordinates live on its Location, so "same place" == same Location.
+    # A Pin's coordinates live on its Location; "same place" == same Location
+    # or one within the exposure radius (see services.share_provenance).
     if not source.location_id:
         return None
-    return Pin.objects.filter(
-        profile=profile,
-        parent_pin__isnull=True,
-        location_id=source.location_id,
-    ).first()
+    return find_profile_pin_near_location(profile.pk, source.location)
 
 
 def _create_pin_from_share(share: PinShare, parent_pin: Pin | None = None) -> Pin:
     """Materialise a recipient-side Pin from an accepted share.
 
     Args:
-        share: The accepted share to copy the pin from.
+        share: The accepted share to copy the pin from. Location-only shares
+            (no sender pin, e.g. coordinates detected in a DM) produce a bare
+            pin at the shared location instead of a property copy.
         parent_pin: When the share is part of a "pin + sub pins" bundle, the
             recipient-side pin the new pin should nest under.
 
@@ -47,11 +47,20 @@ def _create_pin_from_share(share: PinShare, parent_pin: Pin | None = None) -> Pi
         (name, icon, labels, notes, scores, security indicators, photos).
     """
     source = share.pin
+    if source is None:
+        return Pin.objects.create(
+            profile=share.to_profile,
+            source_share=share,
+            parent_pin=parent_pin,
+            location=share.shared_location,
+            name=share.shared_name,
+            name_is_user_provided=bool(share.shared_name),
+        )
     new_pin = Pin.objects.create(
         profile=share.to_profile,
         source_share=share,
         parent_pin=parent_pin,
-        location=source.location,
+        location=share.shared_location or source.location,
         name=share.shared_name or source.name,
         name_is_user_provided=bool(share.shared_name) or source.name_is_user_provided,
         icon=source.icon,
@@ -166,30 +175,26 @@ class PinShareCreateView(LoginRequiredMixin, View):
         if map_uuid := request.POST.get("markup_map_uuid"):
             attached_map = MarkupMap.objects.filter(uuid=map_uuid, profile=sender).first()
 
-        # If this pin itself arrived via a share, record the lineage so reshare
-        # chains can be counted (see PinShare.chain_share_count). Pins the
-        # owner created themselves (no source_share) get a best-effort
-        # heuristic link to a prior map-detected share instead, so the chain
-        # doesn't silently break when someone learned about a place from a
-        # shared map and then pinned + shared it themselves.
-        if pin.source_share_id is None and pin.inferred_source_share_id is None:
-            inferred = infer_source_share_for_pin(pin)
-            if inferred is not None:
-                pin.inferred_source_share = inferred
-                pin.save(update_fields=["inferred_source_share", "updated"])
+        # If this place arrived via an earlier share - the pin was accepted
+        # from one, or its location carries an exposure - record the lineage
+        # so reshare chains can be counted (see PinShare.chain_share_count
+        # and services.share_provenance for the full resolution rule).
+        parent_share = resolve_and_stamp_origin_share(pin)
 
         already_pinned = _recipient_existing_pin(recipient, pin) is not None
         share = PinShare.objects.create(
             pin=pin,
+            location=pin.location,
             from_profile=sender,
             to_profile=recipient,
-            parent_share_id=pin.source_share_id or pin.inferred_source_share_id,
+            parent_share=parent_share,
             status=PinShareStatus.ALREADY_PINNED if already_pinned else PinShareStatus.PENDING,
             message=message,
             shared_name=shared_name,
             markup_map=attached_map,
         )
         share.images.set(selected_images)
+        record_share_exposure(share)
 
         if attached_map is not None:
             share_markup_map_with_profile(sender, recipient, attached_map)
@@ -206,14 +211,16 @@ class PinShareCreateView(LoginRequiredMixin, View):
             for child in pin.descendants().select_related("location"):
                 if child.pk in already_pending:
                     continue
-                PinShare.objects.create(
+                child_share = PinShare.objects.create(
                     pin=child,
+                    location=child.location,
                     from_profile=sender,
                     to_profile=recipient,
-                    parent_share_id=child.source_share_id,
+                    parent_share=resolve_and_stamp_origin_share(child),
                     bundled_with=share,
                     status=PinShareStatus.PENDING,
                 )
+                record_share_exposure(child_share)
                 bundled_count += 1
 
         base_message = f"{sender.username} shared {pin.display_label} with you."
@@ -251,7 +258,9 @@ def _accept_bundled_shares(root_share: PinShare, target_root: Pin) -> int:
     Returns:
         Number of child pins created.
     """
-    bundled = list(root_share.bundled_shares.filter(status=PinShareStatus.PENDING).select_related("pin", "pin__location"))
+    # Bundled child shares always carry a pin (see PinShareCreateView's
+    # bundle loop) - the pin__isnull filter just makes that invariant local.
+    bundled = list(root_share.bundled_shares.filter(status=PinShareStatus.PENDING, pin__isnull=False).select_related("pin", "pin__location"))
     if not bundled:
         return 0
     by_source_pin_id = {child_share.pin_id: child_share for child_share in bundled}
@@ -260,6 +269,8 @@ def _accept_bundled_shares(root_share: PinShare, target_root: Pin) -> int:
 
     def materialise(child_share: PinShare) -> Pin:
         source = child_share.pin
+        if source is None:  # pragma: no cover - excluded by the pin__isnull filter above
+            return target_root
         if source.pk in created:
             return created[source.pk]
         parent = target_root
@@ -316,7 +327,7 @@ def apply_pin_share_response(share: PinShare, action: str) -> tuple[Pin | None, 
     target_pin = None
     if action == "accept":
         with transaction.atomic():
-            target_pin = _recipient_existing_pin(share.to_profile, share.pin)
+            target_pin = find_profile_pin_near_location(share.to_profile_id, share.shared_location)
             if target_pin is None:
                 target_pin = _create_pin_from_share(share)
             bundled_count = _accept_bundled_shares(share, target_pin)
