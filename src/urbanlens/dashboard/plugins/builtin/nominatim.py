@@ -25,7 +25,13 @@ class NominatimPanelSource(LocationCachePanelSource):
     cache_source = "nominatim"
     section_id = "nominatim-section"
     icon = "map"
-    title = "OpenStreetMap"
+    # Distinguishes this panel from the separate "Photon (OpenStreetMap)"
+    # panel (plugins.builtin.photon) - both reverse-geocode the same
+    # underlying OpenStreetMap data through different, independent hosted
+    # services (Nominatim vs. Komoot's Photon), by design, for cross-checking
+    # - not a duplicate query against one provider. The bare "OpenStreetMap"
+    # title this used to have was ambiguous next to Photon's own title.
+    title = "OpenStreetMap (Nominatim)"
 
     def fetch(self, pin: Pin) -> None:
         """Reverse-geocode the pin's coordinates and cache the place metadata.

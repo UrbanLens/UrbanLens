@@ -801,6 +801,21 @@ function init() {
     }
   }
   window._toggleDetailPinListPanel = toggleDetailPinListPanel;
+  const SAT_LAST_SOURCE_KEY = "ul_sat_last_source";
+  function _satRememberSource(source) {
+    if (!source)
+      return;
+    try {
+      localStorage.setItem(SAT_LAST_SOURCE_KEY, source);
+    } catch {}
+  }
+  function _satLastSource() {
+    try {
+      return localStorage.getItem(SAT_LAST_SOURCE_KEY);
+    } catch {
+      return null;
+    }
+  }
   let _satIdx = 0;
   function _satSlides() {
     const c = document.getElementById("sat-carousel");
@@ -824,6 +839,7 @@ function init() {
       date.textContent = active.dataset.date || "";
     if (detail)
       detail.textContent = active.dataset.detail || "";
+    _satRememberSource(active.dataset.source || "");
     _satRebuildDots(slides.length);
   }
   function _satRebuildDots(count) {
@@ -869,6 +885,14 @@ function init() {
   };
   window._satNext = function() {
     _satShow(_satIdx + 1);
+  };
+  window._satShowRemembered = function() {
+    const slides = _satSlides();
+    if (!slides.length)
+      return;
+    const lastSource = _satLastSource();
+    const idx = lastSource ? slides.findIndex((s) => s.dataset.source === lastSource) : -1;
+    _satShow(idx >= 0 ? idx : 0);
   };
   window._satShow = _satShow;
   let _svIdx = 0;

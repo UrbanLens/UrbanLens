@@ -53,14 +53,19 @@
 
     <script>
     (function () {
-        // Control functions (_satShow/_satRemoveSlide/_satPrev/_satNext) live in
-        // map-annotations.ts, loaded once at page load - NOT here, since HTMX
-        // inserts this fragment's DOM (including <img onerror>) before it executes
-        // any <script> found within the same fragment, which previously let a
-        // fast-failing image call _satRemoveSlide before it had been defined yet.
-        // This trailing call is safe: it only needs the DOM above to already be
-        // present, not any image to have finished loading.
-        if (window._satShow) window._satShow(0);
+        // Control functions (_satShow/_satRemoveSlide/_satPrev/_satNext/
+        // _satShowRemembered) live in map-annotations.ts, loaded once at page
+        // load - NOT here, since HTMX inserts this fragment's DOM (including
+        // <img onerror>) before it executes any <script> found within the
+        // same fragment, which previously let a fast-failing image call
+        // _satRemoveSlide before it had been defined yet. This trailing call
+        // is safe: it only needs the DOM above to already be present, not any
+        // image to have finished loading. _satShowRemembered opens on
+        // whichever provider's slide the user last flipped to on any pin, if
+        // it's available among this pin's slides; otherwise it falls back to
+        // slide 0 (the default order) itself.
+        if (window._satShowRemembered) window._satShowRemembered();
+        else if (window._satShow) window._satShow(0);
     }());
     </script>
 

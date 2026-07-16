@@ -523,6 +523,29 @@ function init(): void {
     // defining the handler has run, throwing "X is not defined". Defining these
     // globals here (this module loads and runs on page load, well before any panel
     // fragment can be swapped in) guarantees they exist before any swap can happen.
+    // Remembers which provider's slide the user last flipped to (by its
+    // display-name `source`, e.g. "Esri World Imagery"), so the next pin
+    // detail page's satellite carousel opens on that same provider instead
+    // of always starting over at the default order - see _satShowRemembered.
+    const SAT_LAST_SOURCE_KEY = "ul_sat_last_source";
+
+    function _satRememberSource(source: string): void {
+        if (!source) return;
+        try {
+            localStorage.setItem(SAT_LAST_SOURCE_KEY, source);
+        } catch {
+            /* private browsing / storage disabled - just don't remember it */
+        }
+    }
+
+    function _satLastSource(): string | null {
+        try {
+            return localStorage.getItem(SAT_LAST_SOURCE_KEY);
+        } catch {
+            return null;
+        }
+    }
+
     let _satIdx = 0;
     function _satSlides(): HTMLElement[] {
         const c = document.getElementById("sat-carousel");
@@ -541,6 +564,7 @@ function init(): void {
         if (source) source.textContent = active.dataset.source || "";
         if (date) date.textContent = active.dataset.date || "";
         if (detail) detail.textContent = active.dataset.detail || "";
+        _satRememberSource(active.dataset.source || "");
         _satRebuildDots(slides.length);
     }
     function _satRebuildDots(count: number): void {
@@ -587,6 +611,13 @@ function init(): void {
     };
     window._satNext = function () {
         _satShow(_satIdx + 1);
+    };
+    window._satShowRemembered = function (): void {
+        const slides = _satSlides();
+        if (!slides.length) return;
+        const lastSource = _satLastSource();
+        const idx = lastSource ? slides.findIndex((s) => s.dataset.source === lastSource) : -1;
+        _satShow(idx >= 0 ? idx : 0);
     };
     window._satShow = _satShow;
 
@@ -1929,6 +1960,7 @@ declare global {
         _satPrev: () => void;
         _satNext: () => void;
         _satShow: (idx: number) => void;
+        _satShowRemembered: () => void;
         _svRemoveSlide: (img: HTMLImageElement) => void;
         _svPrev: () => void;
         _svNext: () => void;

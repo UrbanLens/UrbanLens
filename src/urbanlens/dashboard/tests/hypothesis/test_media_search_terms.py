@@ -15,6 +15,7 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.services.apis.assets.base import MediaItem, MediaProvider
+from urbanlens.dashboard.services.apis.assets.internet_archive import InternetArchiveGateway
 from urbanlens.dashboard.services.apis.assets.loc import LOCJsonGateway
 from urbanlens.dashboard.services.external_data import MediaPanelSource
 
@@ -108,3 +109,22 @@ class LOCJsonGatewayRelevanceFlagsTests(TestCase):
         """Only LOC opts in - other providers' relevance ranking may handle a
         street address in the query fine (e.g. a phrase-matching search)."""
         self.assertFalse(_BareGateway.reject_address_derived_names)
+
+
+class InternetArchiveGatewayRelevanceFlagsTests(TestCase):
+    """Regression guard: Internet Archive has the same word-independent-OR
+    relevance ranking symptom as LOC (a generic street-type word like "Road"
+    coincidentally matches unrelated nationwide items), fixed the same way."""
+
+    def test_include_address_is_disabled(self) -> None:
+        self.assertFalse(InternetArchiveGateway.include_address)
+
+    def test_address_is_actually_omitted_from_the_query(self) -> None:
+        """The exact reported scenario: name "Summit Road" pulled in unrelated
+        nationwide results once the street address was included unquoted."""
+        loc = _location(street_number="1000", route="I-75 Nb Expy", locality="Cincinnati", administrative_area_level_1="OH", official_name="Summit Road")
+        pin = _pin(loc)
+        terms = MediaPanelSource.search_terms(pin, InternetArchiveGateway())
+        self.assertNotEqual(terms, [])
+        self.assertIn("Summit Road", terms[0])
+        self.assertNotIn("I-75", terms[0])

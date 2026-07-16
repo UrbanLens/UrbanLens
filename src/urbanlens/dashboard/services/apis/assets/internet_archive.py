@@ -50,6 +50,19 @@ class InternetArchiveGateway(MediaProvider):
     service_key: ClassVar[str] = "internet_archive"
     display_name: ClassVar[str] = "Internet Archive"
     paid_service: ClassVar[bool] = False
+    # advancedsearch.php's relevance ranking treats space-separated words as
+    # independent OR terms rather than requiring a phrase match, so a street
+    # address - especially a generic street-type word ("Road", "Street") or a
+    # bare house number - coincidentally matches unrelated items nationwide
+    # (e.g. a location named/addressed "Summit Road" pulled in results about
+    # US politics and National Archives records with no connection to the
+    # actual place). Searching on name + city/state only is both more
+    # selective and a better fit for how Internet Archive's collections are
+    # catalogued (historical photos/documents rarely carry modern
+    # street-address-level metadata anyway) - same fix, same reasoning,
+    # already proven for the Library of Congress gateway's identical symptom
+    # (see LOCJsonGateway.include_address).
+    include_address: ClassVar[bool] = False
 
     def search(self, query: str, *, rows: int = 20) -> list[dict[str, Any]]:
         """Full-text/metadata search across every item Internet Archive hosts.
