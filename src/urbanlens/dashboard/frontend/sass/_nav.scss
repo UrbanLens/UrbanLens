@@ -363,7 +363,7 @@ nav {
 // (Github link, and on the map page the live attribution text) sits at the
 // end, on every page - not just the map page.
 .page-footer {
-    background-color: var(--nav-bg);
+    background-color: rgb(5, 12, 22); // slightly muted nav-bg
     color: var(--ul-grey-4);
     position: sticky;
     bottom: 0;

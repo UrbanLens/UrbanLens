@@ -155,3 +155,39 @@
 .pin-suggestions-pagination {
     justify-content: center;
 }
+
+// -- Create-pin dialog ---------------------------------------------------------
+
+.pin-suggestion-create-dialog {
+    @include dialog-base(420px);
+}
+
+.pin-suggestion-label-picker {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .4rem;
+}
+
+.pin-suggestion-label-option {
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+    padding: .3rem .65rem;
+    border-radius: $radius-full;
+    border: 1px solid var(--ul-surface-raised-border);
+    cursor: pointer;
+    font-size: .8rem;
+    font-weight: normal;
+    text-transform: none;
+    letter-spacing: normal;
+    color: var(--ul-grey-8);
+
+    &:hover {
+        background: var(--ul-hover-bg);
+    }
+
+    &:has(input[type="checkbox"]:checked) {
+        background: rgba(59, 130, 246, .12);
+        border-color: $color-blue-500;
+    }
+}

@@ -837,6 +837,7 @@
     margin-bottom: .9rem;
     padding-bottom: .8rem;
     border-bottom: 1px solid var(--ul-surface-border);
+    background: rgba(0,0,150,0.01);
 }
 
 .cal-month-label {
@@ -920,11 +921,11 @@
     }
 
     &--today {
-        background: rgba($color-blue-500, .07);
-        border-color: rgba($color-blue-500, .35);
+        background: rgba($color-blue-500, .04);
+        border-color: rgba($color-blue-500, .10);
 
         .cal-day-num {
-            background: $color-blue-500;
+            background: rgba($color-blue-500, 0.3);
             color: #fff;
             box-shadow: 0 1px 4px rgba($color-blue-500, .45);
         }
