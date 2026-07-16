@@ -53,6 +53,53 @@ class PinOrganizeDialogTests(TestCase):
         self.assertNotContains(response, "tad-top-tabs")
         del wiki
 
+    def test_lists_tab_add_button_uses_the_list_slug_not_a_nonexistent_uuid(self) -> None:
+        """Regression guard: this dialog's per-list "add" button called
+        addPinsToList(pin_list.uuid) - PinList has no uuid field, so Django
+        silently rendered an empty string, calling addPinsToList('') and
+        making every add-to-list attempt from the pin details page 404
+        (the map page's own add-to-list dialog already used .slug correctly)."""
+        pin_list = baker.make("dashboard.PinList", profile=self.profile, name="My Favorites")
+
+        response = self.client.get(reverse("label.pin", kwargs={"label_kind": "tag", "pin_slug": self.pin.slug}))
+
+        self.assertContains(response, f"addPinsToList('{pin_list.slug}')")
+        self.assertNotContains(response, "addPinsToList('')")
+
+    def test_lists_tab_excludes_people_labels(self) -> None:
+        """This dialog's own Labels tab already correctly excludes People
+        labels (via location_labels()) - locking that in. The actual bug
+        reported alongside this was a *different*, unfiltered Label.objects
+        query in the CSV/GPX import wizard's label list (see
+        test_import_wizard_label_list_excludes_people_labels below)."""
+        from urbanlens.dashboard.models.labels.meta import KIND_TAG, KIND_USER
+        from urbanlens.dashboard.models.labels.model import Label
+
+        person = baker.make(Label, kind=KIND_USER, profile=self.profile, name="Alex Person")
+        tag = baker.make(Label, kind=KIND_TAG, profile=self.profile, name="Regular Tag")
+
+        response = self.client.get(reverse("label.pin", kwargs={"label_kind": "tag", "pin_slug": self.pin.slug}))
+
+        self.assertNotContains(response, "Alex Person")
+        self.assertContains(response, "Regular Tag")
+        del person, tag
+
+    def test_import_wizard_label_list_excludes_people_labels(self) -> None:
+        """Regression guard: the CSV/GPX import wizard's per-row label
+        dropdown was built from an unfiltered Label.objects.visible_to(...)
+        query, so People labels (which can't be applied to pins) leaked into
+        it even though every other pin-label picker already excludes them."""
+        from urbanlens.dashboard.models.labels.meta import KIND_TAG, KIND_USER
+        from urbanlens.dashboard.models.labels.model import Label
+
+        baker.make(Label, kind=KIND_USER, profile=self.profile, name="Alex Person")
+        baker.make(Label, kind=KIND_TAG, profile=self.profile, name="Regular Tag")
+
+        labels = list(Label.objects.visible_to(self.profile).location_labels().ordered())
+
+        self.assertIn("Regular Tag", [b.name for b in labels])
+        self.assertNotIn("Alex Person", [b.name for b in labels])
+
 
 class CustomFieldsAddFormVisibilityTests(TestCase):
     """The pin detail page's Custom Fields "+" form should start hidden."""

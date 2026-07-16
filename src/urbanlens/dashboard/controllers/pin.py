@@ -844,10 +844,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         Returns:
             The rendered import wizard dialog template.
         """
-        from urbanlens.dashboard.models.labels.model import Label
-
         profile = Profile.objects.get(user=request.user)
-        tags = Label.objects.visible_to(profile).ordered()
         variant = "memories" if request.GET.get("variant") == "memories" else "pins"
         import_title = "Import Routes & History" if variant == "memories" else "Import Pins"
         return render(
@@ -855,7 +852,6 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             "dashboard/pages/location/import/csv.html",
             {
                 "form": UploadDataFile(),
-                "tags": tags,
                 "profile": profile,
                 "import_variant": variant,
                 "import_title": import_title,
@@ -1020,7 +1016,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 status=400,
             )
 
-        labels = Label.objects.visible_to(profile).ordered()
+        labels = Label.objects.visible_to(profile).location_labels().ordered()
 
         return JsonResponse(
             {
