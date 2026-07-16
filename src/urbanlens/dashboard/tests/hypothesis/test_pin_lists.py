@@ -215,6 +215,86 @@ class SmartListLabelChangeResyncTests(TestCase):
         self.assertTrue(PinListItem.objects.filter(pin_list=self.pin_list, pin=pin).exists())
 
 
+class EditingSourceSavedFilterResyncsDerivedListsTests(TestCase):
+    """Editing a SavedFilter must refresh and resync any PinList still pointing at it -
+    otherwise a smart list silently drifts out of sync with a filter it was built from
+    the moment the user tweaks that filter from the Filters tab instead of the list page."""
+
+    def setUp(self) -> None:
+        self.user = baker.make(User)
+        self.client.force_login(self.user)
+        self.profile = self.user.profile
+        self.alpha_pin = _make_pin(self.profile, name="Alpha Ruin")
+        self.beta_pin = _make_pin(self.profile, name="Beta Ruin")
+        self.saved_filter = SavedFilter.objects.create(profile=self.profile, name="My Filter", criteria={"name": "Ruin"})
+        self.pin_list = baker.make(PinList, profile=self.profile, name="Derived List")
+        self.client.post(
+            reverse("lists.edit", kwargs={"list_slug": self.pin_list.slug}),
+            data=json.dumps({"saved_filter_uuid": str(self.saved_filter.uuid)}),
+            content_type="application/json",
+        )
+        self.pin_list.refresh_from_db()
+
+    def test_selecting_a_saved_filter_records_it_as_the_source(self) -> None:
+        self.assertEqual(self.pin_list.source_saved_filter_id, self.saved_filter.pk)
+
+    def test_widening_the_source_filters_criteria_pulls_in_newly_matching_pins(self) -> None:
+        self.client.post(
+            reverse("saved_filters.edit", kwargs={"filter_uuid": self.saved_filter.uuid}),
+            {"filter_name": "My Filter", "name": "Alpha"},
+        )
+        self.pin_list.refresh_from_db()
+        self.assertNotIn(self.beta_pin.pk, set(self.pin_list.items.values_list("pin_id", flat=True)))
+
+        self.client.post(
+            reverse("saved_filters.edit", kwargs={"filter_uuid": self.saved_filter.uuid}),
+            {"filter_name": "My Filter", "name": "Ruin"},
+        )
+
+        self.pin_list.refresh_from_db()
+        self.assertEqual(self.pin_list.smart_filter.get("name"), "Ruin")
+        member_pin_ids = set(self.pin_list.items.values_list("pin_id", flat=True))
+        self.assertIn(self.alpha_pin.pk, member_pin_ids)
+        self.assertIn(self.beta_pin.pk, member_pin_ids)
+
+    def test_narrowing_the_source_filter_drops_pins_that_no_longer_match(self) -> None:
+        self.assertIn(self.beta_pin.pk, set(self.pin_list.items.values_list("pin_id", flat=True)))
+
+        self.client.post(
+            reverse("saved_filters.edit", kwargs={"filter_uuid": self.saved_filter.uuid}),
+            {"filter_name": "My Filter", "name": "Alpha"},
+        )
+
+        self.pin_list.refresh_from_db()
+        self.assertNotIn(self.beta_pin.pk, set(self.pin_list.items.values_list("pin_id", flat=True)))
+        self.assertIn(self.alpha_pin.pk, set(self.pin_list.items.values_list("pin_id", flat=True)))
+
+    def test_clearing_the_lists_own_filter_stops_further_propagation(self) -> None:
+        self.client.post(
+            reverse("lists.edit", kwargs={"list_slug": self.pin_list.slug}),
+            data=json.dumps({"saved_filter_uuid": ""}),
+            content_type="application/json",
+        )
+        self.pin_list.refresh_from_db()
+        self.assertIsNone(self.pin_list.source_saved_filter_id)
+
+        self.client.post(
+            reverse("saved_filters.edit", kwargs={"filter_uuid": self.saved_filter.uuid}),
+            {"filter_name": "My Filter", "name": "Alpha"},
+        )
+        self.pin_list.refresh_from_db()
+        self.assertIsNone(self.pin_list.smart_filter)
+
+    def test_a_list_manually_editing_its_own_smart_filter_is_unaffected_by_other_lists(self) -> None:
+        other_list = baker.make(PinList, profile=self.profile, name="Independent List", is_smart=True, smart_filter={"name": "Gamma"})
+        self.client.post(
+            reverse("saved_filters.edit", kwargs={"filter_uuid": self.saved_filter.uuid}),
+            {"filter_name": "My Filter", "name": "Alpha"},
+        )
+        other_list.refresh_from_db()
+        self.assertEqual(other_list.smart_filter, {"name": "Gamma"})
+
+
 class SavedFilterSuggestNameViewTests(TestCase):
     """The create/edit dialog's name auto-suggestion endpoint."""
 

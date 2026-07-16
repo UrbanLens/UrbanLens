@@ -44,6 +44,19 @@ class PinList(abstract.PublicDashboardModel):
     # Same JSON shape as SavedFilter.criteria - see dashboard.services.filter_criteria.
     smart_filter = JSONField(null=True, blank=True)
     smart_boundary = MultiPolygonField(geography=True, srid=4326, null=True, blank=True)
+    # Tracks which SavedFilter smart_filter was last copied from, so editing
+    # that SavedFilter can resync this list's membership too - see
+    # PinListEditView (sets/clears this alongside smart_filter) and
+    # SavedFilterEditView (resyncs every list still pointing at it).
+    # SET_NULL rather than CASCADE: deleting the source SavedFilter shouldn't
+    # blow away a list's last-synced snapshot, only stop it from tracking further edits.
+    source_saved_filter = ForeignKey(
+        "dashboard.SavedFilter",
+        on_delete=SET_NULL,
+        null=True,
+        blank=True,
+        related_name="derived_pin_lists",
+    )
 
     markup_map = ForeignKey(
         "dashboard.MarkupMap",

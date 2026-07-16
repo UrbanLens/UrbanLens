@@ -18,6 +18,7 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.saved_filter.model import SavedFilter
 from urbanlens.dashboard.services.filter_criteria import deserialize_criteria, serialize_form_criteria
 from urbanlens.dashboard.services.geo import dissolve_polygons
+from urbanlens.dashboard.services.pin_list_membership import resync_smart_list
 from urbanlens.dashboard.services.saved_filter_cache import get_or_compute_matching_uuids
 from urbanlens.dashboard.services.undo.service import stash_for_undo
 
@@ -119,11 +120,12 @@ class SavedFilterEditView(LoginRequiredMixin, View):
     ``SavedFilterCreateView``, but updates the existing instance in place.
     Returns JSON ``{"ok": true}`` on success.
 
-    Note: editing a filter here does NOT propagate to any ``PinList`` whose
-    ``smart_filter`` was previously set from it - that's always a one-time
-    copy (see ``PinListEditView``), not a live reference, so lists keep
-    whatever criteria they last synced. This is pre-existing behavior, not
-    something introduced by adding an edit view.
+    Any ``PinList`` still pointing at this filter (``PinList.source_saved_filter``,
+    set by ``PinListEditView`` whenever a list is pointed at a SavedFilter) gets
+    its ``smart_filter`` snapshot refreshed and membership resynced too -
+    otherwise a list would silently drift out of sync the moment its source
+    filter's criteria changed, since ``smart_filter`` is normally a one-time
+    copy, not a live reference.
     """
 
     def get(self, request, filter_uuid=None):
@@ -183,6 +185,12 @@ class SavedFilterEditView(LoginRequiredMixin, View):
         saved_filter.icon = (request.POST.get("icon") or "bookmark").strip()
         saved_filter.criteria = criteria
         saved_filter.save(update_fields=["name", "icon", "criteria", "updated"])
+
+        for pin_list in saved_filter.derived_pin_lists.all():
+            pin_list.smart_filter = criteria
+            pin_list.save(update_fields=["smart_filter", "updated"])
+            resync_smart_list(pin_list)
+
         return JsonResponse({"ok": True, "uuid": str(saved_filter.uuid)})
 
 

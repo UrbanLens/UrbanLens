@@ -37,7 +37,7 @@
 <p class="po-panel-empty">No sale history recorded yet.</p>
 {% endif %}
 
-<form class="po-add-form po-sale-add-form"
+<form class="po-add-form po-sale-add-form" hidden
       hx-post="{% url url_add obj_slug %}"
       hx-target="closest .po-tab-body"
       hx-swap="innerHTML">

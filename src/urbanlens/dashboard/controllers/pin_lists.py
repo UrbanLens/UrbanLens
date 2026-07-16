@@ -271,6 +271,13 @@ class PinListEditView(LoginRequiredMixin, View):
     membership immediately, so matching pins appear as soon as a rule is
     picked - independent of ``is_smart``, which only controls whether *future*
     pin/label edits keep re-triggering that sync.
+
+    Setting ``saved_filter_uuid`` also records which ``SavedFilter`` the copy
+    came from (``PinList.source_saved_filter``), so later edits to that
+    SavedFilter (``SavedFilterEditView``) can find and resync this list too -
+    without that link, ``smart_filter`` would silently drift out of sync with
+    its source the moment the user tweaks the filter from the Filters tab
+    instead of from this list.
     """
 
     def post(self, request: HttpRequest, list_slug: str) -> HttpResponse:
@@ -308,8 +315,10 @@ class PinListEditView(LoginRequiredMixin, View):
             if saved_filter_uuid:
                 saved_filter = get_object_or_404(SavedFilter, uuid=saved_filter_uuid, profile=profile)
                 pin_list.smart_filter = saved_filter.criteria
+                pin_list.source_saved_filter = saved_filter
             else:
                 pin_list.smart_filter = None
+                pin_list.source_saved_filter = None
             rules_changed = True
 
         if "smart_boundary" in body:

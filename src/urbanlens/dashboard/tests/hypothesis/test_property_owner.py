@@ -125,6 +125,14 @@ class PinOwnershipPanelViewTests(OwnershipPanelViewTestsBase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(PinOwner.objects.filter(pk=owner.pk).exists())
 
+    def test_add_owner_form_is_hidden_until_the_header_button_is_clicked(self) -> None:
+        """Regression guard: the owner-add form used to render un-hidden by
+        default; it must stay collapsed to plain text/summary content until
+        the section header's Add button reveals it."""
+        response = self.client.get(reverse("pin.ownership", args=[self.pin.slug]))
+        content = response.content.decode()
+        self.assertIn('<form class="po-add-form" hidden', content)
+
 
 class WikiOwnershipPanelViewTests(OwnershipPanelViewTestsBase):
     """GET/POST on the wiki's shared Ownership card."""
@@ -234,6 +242,19 @@ class PinPropertySaleTabViewTests(OwnershipPanelViewTestsBase):
         sale = baker.make(PinPropertySale, pin=self.other_pin)
         response = self.client.delete(reverse("pin.sales.delete", args=[self.pin.slug, sale.id]))
         self.assertEqual(response.status_code, 404)
+
+    def test_add_sale_form_is_hidden_until_the_header_button_is_clicked(self) -> None:
+        """Regression guard: unlike the owner-add form, the sale-add form used
+        to render with no `hidden` attribute at all - a page of empty inputs
+        was shown before the user ever clicked "Add"."""
+        response = self.client.get(reverse("pin.sales", args=[self.pin.slug]))
+        content = response.content.decode()
+        self.assertIn('class="po-add-form po-sale-add-form" hidden', content)
+
+    def test_add_sale_form_stays_hidden_after_recording_a_sale(self) -> None:
+        response = self.client.post(reverse("pin.sales", args=[self.pin.slug]), {"sale_price": "1000"})
+        content = response.content.decode()
+        self.assertIn('class="po-add-form po-sale-add-form" hidden', content)
 
 
 class WikiPropertySaleTabViewTests(OwnershipPanelViewTestsBase):
