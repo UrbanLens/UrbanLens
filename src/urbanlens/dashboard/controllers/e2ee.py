@@ -182,7 +182,7 @@ class E2EEEnrollView(LoginRequiredMixin, View):
             except IntegrityError:
                 return JsonResponse({"error": "A key bundle already exists for this account."}, status=409)
             if rotate_auth:
-                AccountKdf.objects.update_or_create(user=user, defaults={"auth_salt": auth_salt})
+                AccountKdf.objects.set_auth_salt(user, auth_salt)
                 user.set_password(auth_key)
                 user.save(update_fields=["password"])
                 update_session_auth_hash(request, user)

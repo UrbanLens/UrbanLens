@@ -233,7 +233,7 @@ def _store_signup_auth_salt(user: User, auth_salt: str) -> None:
     from urbanlens.dashboard.services.e2ee import MAX_SALT_LENGTH, valid_blob
 
     if valid_blob(auth_salt, MAX_SALT_LENGTH):
-        AccountKdf.objects.update_or_create(user=user, defaults={"auth_salt": auth_salt})
+        AccountKdf.objects.set_auth_salt(user, auth_salt)
 
 
 # -- Email verification views ----------------------------------------------
@@ -379,7 +379,7 @@ class E2EEPasswordResetConfirmView(auth_views.PasswordResetConfirmView):
 
         context = super().get_context_data(**kwargs)
         user = getattr(self, "user", None)
-        context["e2ee_mode"] = "derived" if user is not None and AccountKdf.objects.filter(user=user).exists() else "legacy"
+        context["e2ee_mode"] = "derived" if user is not None and AccountKdf.objects.for_user(user).exists() else "legacy"
         return context
 
     def form_valid(self, form) -> HttpResponse:
@@ -399,9 +399,9 @@ class E2EEPasswordResetConfirmView(auth_views.PasswordResetConfirmView):
         user = form.user
         auth_salt = self.request.POST.get("e2ee_auth_salt", "")
         if valid_blob(auth_salt, MAX_SALT_LENGTH):
-            AccountKdf.objects.update_or_create(user=user, defaults={"auth_salt": auth_salt})
+            AccountKdf.objects.set_auth_salt(user, auth_salt)
         else:
-            AccountKdf.objects.filter(user=user).delete()
+            AccountKdf.objects.for_user(user).delete()
         MessagingKeyBundle.objects.filter(profile__user=user).exclude(password_wrapped_secret="").update(password_wrap_stale=True)  # nosec B106 - "" is a field-emptiness filter, not a credential
         return response
 

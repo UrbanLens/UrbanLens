@@ -82,12 +82,12 @@ def _to_transports(values: list[str]) -> list[AuthenticatorTransport] | None:
 
 def has_passkeys(user: User) -> bool:
     """True when ``user`` has enrolled at least one passkey (2FA is opt-in per user)."""
-    return WebAuthnCredential.objects.filter(user=user).exists()
+    return WebAuthnCredential.objects.for_user(user).exists()
 
 
 def list_credentials(user: User):
     """Return this user's registered passkeys, newest first."""
-    return WebAuthnCredential.objects.filter(user=user)
+    return WebAuthnCredential.objects.for_user(user)
 
 
 def build_registration_options(request: HttpRequest, user: User) -> str:
@@ -103,7 +103,7 @@ def build_registration_options(request: HttpRequest, user: User) -> str:
     Raises:
         WebAuthnError: If the account has already reached the per-user credential cap.
     """
-    existing = list(WebAuthnCredential.objects.filter(user=user))
+    existing = list(WebAuthnCredential.objects.for_user(user))
     if len(existing) >= MAX_CREDENTIALS_PER_USER:
         raise WebAuthnError(f"You can register at most {MAX_CREDENTIALS_PER_USER} passkeys. Remove one first.")
 
@@ -184,7 +184,7 @@ def build_authentication_options(request: HttpRequest, user: User) -> str:
     Raises:
         WebAuthnError: If the account has no registered passkeys.
     """
-    credentials = list(WebAuthnCredential.objects.filter(user=user))
+    credentials = list(WebAuthnCredential.objects.for_user(user))
     if not credentials:
         raise WebAuthnError("This account has no passkeys registered.")
 

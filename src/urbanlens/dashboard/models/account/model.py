@@ -11,7 +11,13 @@ from django.db import models
 from django.utils import timezone
 
 from urbanlens.dashboard.models.abstract import DashboardModel
-from urbanlens.dashboard.models.account.queryset import EmailVerificationManager
+from urbanlens.dashboard.models.account.queryset import (
+    AccountKdfManager,
+    BackupCodeManager,
+    EmailVerificationManager,
+    TOTPDeviceManager,
+    WebAuthnCredentialManager,
+)
 from urbanlens.dashboard.models.fields import EncryptedTextField
 
 
@@ -37,6 +43,8 @@ class AccountKdf(DashboardModel):
 
     if TYPE_CHECKING:
         user_id: int
+
+    objects = AccountKdfManager()
 
     class Meta(DashboardModel.Meta):
         db_table = "dashboard_account_kdf"
@@ -81,6 +89,8 @@ class WebAuthnCredential(DashboardModel):
         id: int
         user_id: int
 
+    objects = WebAuthnCredentialManager()
+
     class Meta(DashboardModel.Meta):
         db_table = "dashboard_webauthn_credential"
         ordering = ["-created"]
@@ -112,6 +122,8 @@ class TOTPDevice(DashboardModel):
     if TYPE_CHECKING:
         user_id: int
 
+    objects = TOTPDeviceManager()
+
     class Meta(DashboardModel.Meta):
         db_table = "dashboard_totp_device"
 
@@ -137,6 +149,8 @@ class BackupCode(DashboardModel):
     if TYPE_CHECKING:
         id: int
         user_id: int
+
+    objects = BackupCodeManager()
 
     class Meta(DashboardModel.Meta):
         db_table = "dashboard_backup_code"

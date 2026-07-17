@@ -45,7 +45,7 @@ SESSION_WEBAUTHN_PENDING_REDIRECT = "webauthn_pending_redirect"
 
 def has_totp(user: User) -> bool:
     """True when the account has a confirmed authenticator-app device."""
-    return TOTPDevice.objects.filter(user=user).exists()
+    return TOTPDevice.objects.for_user(user).exists()
 
 
 def has_second_factor(user: User) -> bool:
@@ -95,7 +95,7 @@ def maybe_clear_backup_codes(user: User) -> None:
     nothing left to back up are just dead, potentially-leaked secrets.
     """
     if not has_second_factor(user):
-        BackupCode.objects.filter(user=user).delete()
+        BackupCode.objects.for_user(user).delete()
 
 
 # -- TOTP (authenticator app) -------------------------------------------------
@@ -147,7 +147,7 @@ def enroll_totp(user: User, secret: str) -> TOTPDevice:
 
 def disable_totp(user: User) -> None:
     """Remove this account's TOTP device, then drop backup codes if that was the last factor."""
-    TOTPDevice.objects.filter(user=user).delete()
+    TOTPDevice.objects.for_user(user).delete()
     maybe_clear_backup_codes(user)
 
 
@@ -165,7 +165,7 @@ def verify_totp_code(user: User, code: str) -> bool:
         True if the code is valid and freshly-used; False otherwise (including
         when the account has no TOTP device).
     """
-    device = TOTPDevice.objects.filter(user=user).first()
+    device = TOTPDevice.objects.for_user(user).first()
     if device is None or not code:
         return False
 
@@ -209,7 +209,7 @@ def generate_backup_codes(user: User) -> list[str]:
     Returns:
         The new codes, formatted for display (e.g. "AB3XZ-9KLMN").
     """
-    BackupCode.objects.filter(user=user).delete()
+    BackupCode.objects.for_user(user).delete()
     codes = ["".join(secrets.choice(BACKUP_CODE_ALPHABET) for _ in range(BACKUP_CODE_LENGTH)) for _ in range(BACKUP_CODE_COUNT)]
     BackupCode.objects.bulk_create(BackupCode(user=user, code_hash=make_password(raw)) for raw in codes)
     return [_format_backup_code(raw) for raw in codes]
@@ -217,7 +217,7 @@ def generate_backup_codes(user: User) -> list[str]:
 
 def remaining_backup_code_count(user: User) -> int:
     """Count of this account's not-yet-used backup codes."""
-    return BackupCode.objects.filter(user=user, used_at__isnull=True).count()
+    return BackupCode.objects.unused_for(user).count()
 
 
 def verify_and_consume_backup_code(user: User, code: str) -> bool:
@@ -233,7 +233,7 @@ def verify_and_consume_backup_code(user: User, code: str) -> bool:
     normalized = _normalize_backup_code(code)
     if not normalized:
         return False
-    for candidate in BackupCode.objects.filter(user=user, used_at__isnull=True):
+    for candidate in BackupCode.objects.unused_for(user):
         if check_password(normalized, candidate.code_hash):
             BackupCode.objects.filter(pk=candidate.pk).update(used_at=timezone.now())
             return True

@@ -135,7 +135,7 @@ def login_params_for_identifier(identifier: str) -> dict[str, str]:
     """
     user = resolve_login_user(identifier)
     if user is not None:
-        kdf = AccountKdf.objects.filter(user=user).first()
+        kdf = AccountKdf.objects.for_user(user).first()
         if kdf is not None:
             return {"mode": AUTH_MODE_DERIVED, "auth_salt": kdf.auth_salt}
         return {"mode": AUTH_MODE_LEGACY, "auth_salt": ""}
