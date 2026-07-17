@@ -96,7 +96,15 @@
         }
 
         img {
-            max-height: 29rem;
+            // Scales with the hero's own viewport-height-driven sizing (see
+            // .about-hero's `height: 60vh`) instead of a flat cap, so the
+            // image actually grows to fill the extra room a large screen
+            // gives it rather than staying pinned at the same size forever.
+            // The lower bound matches the previous flat value (unchanged on
+            // short/small viewports); the upper bound keeps it from growing
+            // unbounded on very tall displays.
+            max-height: clamp(29rem, 50vh, 44rem);
+            max-width: 100%;
         }
     }
 
