@@ -12,6 +12,8 @@ from urbanlens.dashboard.models import abstract
 if TYPE_CHECKING:
     from django.contrib.auth.models import User
 
+    from urbanlens.dashboard.models.friendship.invitation import FriendInvitation
+
 
 class SubscriptionRoleQuerySet(abstract.DashboardQuerySet):
     """Custom queryset for SubscriptionRole models."""
@@ -83,3 +85,23 @@ class UserSubscriptionQuerySet(abstract.DashboardQuerySet):
 
 class UserSubscriptionManager(abstract.DashboardManager.from_queryset(UserSubscriptionQuerySet)):
     """Custom query manager for UserSubscription models."""
+
+
+class PendingSubscriptionGrantQuerySet(abstract.DashboardQuerySet):
+    """Custom queryset for PendingSubscriptionGrant models."""
+
+    def for_invitation(self, invitation: FriendInvitation) -> PendingSubscriptionGrantQuerySet:
+        """Grants attached to one invitation, ready to redeem once it's accepted.
+
+        Args:
+            invitation: The invitation whose pending grants to return.
+
+        Returns:
+            Matching grants, with ``role``/``granted_by`` preloaded since every
+            caller immediately reads both while applying the grant.
+        """
+        return self.filter(invitation=invitation).select_related("role", "granted_by")
+
+
+class PendingSubscriptionGrantManager(abstract.DashboardManager.from_queryset(PendingSubscriptionGrantQuerySet)):
+    """Custom query manager for PendingSubscriptionGrant models."""

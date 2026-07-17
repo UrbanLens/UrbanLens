@@ -10,7 +10,7 @@ from django.db.models import CASCADE, CharField, DateTimeField, ForeignKey, Inte
 from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract
-from urbanlens.dashboard.models.subscriptions.queryset import SubscriptionRoleManager, UserSubscriptionManager
+from urbanlens.dashboard.models.subscriptions.queryset import PendingSubscriptionGrantManager, SubscriptionRoleManager, UserSubscriptionManager
 
 if TYPE_CHECKING:
     from django.contrib.auth.base_user import AbstractBaseUser
@@ -180,6 +180,8 @@ class PendingSubscriptionGrant(abstract.DashboardModel):
         invitation_id: int
         role_id: int
         granted_by_id: int
+
+    objects = PendingSubscriptionGrantManager()
 
     class Meta(abstract.DashboardModel.Meta):
         ordering = ["-created"]

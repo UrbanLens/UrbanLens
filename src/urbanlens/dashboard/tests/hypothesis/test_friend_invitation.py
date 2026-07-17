@@ -13,6 +13,7 @@ from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
 from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.notifications.meta import NotificationType
 from urbanlens.dashboard.models.notifications.model import NotificationLog
+from urbanlens.dashboard.models.subscriptions.model import PendingSubscriptionGrant, SubscriptionRole, UserSubscription
 
 
 class PendingFriendInvitationTests(TestCase):
@@ -96,3 +97,48 @@ class PendingFriendInvitationTests(TestCase):
         )
         invitation.refresh_from_db()
         self.assertIsNotNone(invitation.accepted_at)
+
+
+class PendingSubscriptionGrantRedemptionTests(TestCase):
+    """Accepting an invite that carries a subscription grant applies it.
+
+    Previously untested despite the grant/redeem code (controllers/account.py's
+    _apply_pending_invitation, via PendingSubscriptionGrant.objects.for_invitation())
+    having existed for a while.
+    """
+
+    def test_accepting_the_invite_grants_the_subscription(self) -> None:
+        inviter = baker.make(User).profile
+        admin = baker.make(User)
+        invitee = baker.make(User, email="invitee@example.com", is_active=False)
+        role = baker.make(SubscriptionRole)
+        invitation = FriendInvitation.objects.create(inviter=inviter, email=invitee.email)
+        PendingSubscriptionGrant.objects.create(invitation=invitation, role=role, granted_by=admin, duration_months="3")
+
+        _process_pending_invitations(invitee)
+
+        subscription = UserSubscription.objects.filter(user=invitee, role=role, revoked_at__isnull=True).first()
+        self.assertIsNotNone(subscription)
+        self.assertEqual(subscription.granted_by, admin)
+
+    def test_indefinite_grant_has_no_expiry(self) -> None:
+        inviter = baker.make(User).profile
+        admin = baker.make(User)
+        invitee = baker.make(User, email="invitee@example.com", is_active=False)
+        role = baker.make(SubscriptionRole)
+        invitation = FriendInvitation.objects.create(inviter=inviter, email=invitee.email)
+        PendingSubscriptionGrant.objects.create(invitation=invitation, role=role, granted_by=admin, duration_months="")
+
+        _process_pending_invitations(invitee)
+
+        subscription = UserSubscription.objects.get(user=invitee, role=role)
+        self.assertIsNone(subscription.expires_at)
+
+    def test_no_grant_means_no_subscription(self) -> None:
+        inviter = baker.make(User).profile
+        invitee = baker.make(User, email="invitee@example.com", is_active=False)
+        FriendInvitation.objects.create(inviter=inviter, email=invitee.email)
+
+        _process_pending_invitations(invitee)
+
+        self.assertFalse(UserSubscription.objects.filter(user=invitee).exists())

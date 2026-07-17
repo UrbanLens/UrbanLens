@@ -16,7 +16,8 @@ from django.utils import timezone
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.models.subscriptions.model import SubscriptionRole, UserSubscription
+from urbanlens.dashboard.models.friendship.invitation import FriendInvitation
+from urbanlens.dashboard.models.subscriptions.model import PendingSubscriptionGrant, SubscriptionRole, UserSubscription
 
 
 class SubscriptionRoleGetBySlugTests(TestCase):
@@ -107,3 +108,25 @@ class UserSubscriptionGrantedByAdminTests(TestCase):
         baker.make(UserSubscription, user=user, role=role_b, granted_by=admin, revoked_at=timezone.now())
         baker.make(UserSubscription, user=user, role=role_c, granted_by=other_admin, revoked_at=None)
         self.assertEqual(list(UserSubscription.objects.granted_by_admin(admin)), [mine])
+
+
+class PendingSubscriptionGrantForInvitationTests(TestCase):
+    def setUp(self) -> None:
+        self.inviter = baker.make(User).profile
+        self.admin = baker.make(User)
+        self.role = baker.make(SubscriptionRole)
+
+    def test_returns_grants_for_the_given_invitation(self) -> None:
+        invitation = FriendInvitation.objects.create(inviter=self.inviter, email="invitee@example.com")
+        grant = PendingSubscriptionGrant.objects.create(invitation=invitation, role=self.role, granted_by=self.admin)
+        self.assertEqual(list(PendingSubscriptionGrant.objects.for_invitation(invitation)), [grant])
+
+    def test_excludes_grants_on_other_invitations(self) -> None:
+        invitation = FriendInvitation.objects.create(inviter=self.inviter, email="invitee@example.com")
+        other_invitation = FriendInvitation.objects.create(inviter=self.inviter, email="someone-else@example.com")
+        PendingSubscriptionGrant.objects.create(invitation=other_invitation, role=self.role, granted_by=self.admin)
+        self.assertEqual(list(PendingSubscriptionGrant.objects.for_invitation(invitation)), [])
+
+    def test_empty_for_an_invitation_with_no_grants(self) -> None:
+        invitation = FriendInvitation.objects.create(inviter=self.inviter, email="invitee@example.com")
+        self.assertEqual(list(PendingSubscriptionGrant.objects.for_invitation(invitation)), [])
