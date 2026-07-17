@@ -420,3 +420,44 @@ class PinListQuerySetTests(TestCase):
         result = list(PinList.objects.active_smart_lists(self.profile))
 
         self.assertEqual(result, [smart_list])
+
+
+class PinListItemQuerySetTests(TestCase):
+    """PinListItemQuerySet.for_list()/membership() - previously four call
+    sites across controllers/pin_lists.py and services/pin_list_membership.py
+    each re-wrote `.filter(pin_list=pin_list, ...)` directly."""
+
+    def setUp(self) -> None:
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+        self.pin_list = baker.make(PinList, profile=self.profile, name="Mine")
+        self.other_list = baker.make(PinList, profile=self.profile, name="Other")
+
+    def test_for_list_returns_only_that_lists_items(self) -> None:
+        pin = _make_pin(self.profile)
+        item = PinListItem.objects.create(pin_list=self.pin_list, pin=pin)
+        other_pin = _make_pin(self.profile)
+        PinListItem.objects.create(pin_list=self.other_list, pin=other_pin)
+
+        result = list(PinListItem.objects.for_list(self.pin_list))
+
+        self.assertEqual(result, [item])
+
+    def test_for_list_empty_for_a_list_with_no_items(self) -> None:
+        self.assertEqual(list(PinListItem.objects.for_list(self.pin_list)), [])
+
+    def test_membership_returns_the_matching_item(self) -> None:
+        pin = _make_pin(self.profile)
+        item = PinListItem.objects.create(pin_list=self.pin_list, pin=pin)
+
+        self.assertEqual(PinListItem.objects.membership(self.pin_list, pin), item)
+
+    def test_membership_none_when_the_pin_is_not_on_the_list(self) -> None:
+        pin = _make_pin(self.profile)
+        self.assertIsNone(PinListItem.objects.membership(self.pin_list, pin))
+
+    def test_membership_none_when_the_pin_is_only_on_a_different_list(self) -> None:
+        pin = _make_pin(self.profile)
+        PinListItem.objects.create(pin_list=self.other_list, pin=pin)
+
+        self.assertIsNone(PinListItem.objects.membership(self.pin_list, pin))

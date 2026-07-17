@@ -44,3 +44,34 @@ class PinListQuerySet(abstract.PublicDashboardQuerySet):
 
 class PinListManager(abstract.PublicDashboardManager.from_queryset(PinListQuerySet)):
     """Custom query manager for PinList models."""
+
+
+class PinListItemQuerySet(abstract.DashboardQuerySet):
+    """Custom queryset for PinListItem models."""
+
+    def for_list(self, pin_list) -> PinListItemQuerySet:
+        """Every item on one list.
+
+        Args:
+            pin_list: The list (accepts a PinList instance or a raw pk).
+
+        Returns:
+            Matching items, unordered (callers apply further filtering/ordering).
+        """
+        return self.filter(pin_list=pin_list)
+
+    def membership(self, pin_list, pin):
+        """This pin's membership row on this list, if any.
+
+        Args:
+            pin_list: The list to check.
+            pin: The pin to check.
+
+        Returns:
+            The matching PinListItem, or None.
+        """
+        return self.for_list(pin_list).filter(pin=pin).first()
+
+
+class PinListItemManager(abstract.DashboardManager.from_queryset(PinListItemQuerySet)):
+    """Custom query manager for PinListItem models."""

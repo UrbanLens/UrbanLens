@@ -456,7 +456,7 @@ class PinListRemoveItemView(LoginRequiredMixin, View):
     def post(self, request: HttpRequest, list_slug: str, item_id: int) -> HttpResponse:
         profile, _ = Profile.objects.get_or_create(user=request.user)
         pin_list = _get_pin_list_or_404(list_slug, profile)
-        PinListItem.objects.filter(pin_list=pin_list, pk=item_id).delete()
+        PinListItem.objects.for_list(pin_list).filter(pk=item_id).delete()
         return _render_items_panel(request, pin_list)
 
 
@@ -472,7 +472,7 @@ class PinListReorderView(LoginRequiredMixin, View):
         body = _parse_body(request)
 
         item_ids = [int(entry["id"]) for entry in body.get("items", []) if str(entry.get("id", "")).isdigit()]
-        items_by_id = {item.pk: item for item in PinListItem.objects.filter(pin_list=pin_list, pk__in=item_ids)}
+        items_by_id = {item.pk: item for item in PinListItem.objects.for_list(pin_list).filter(pk__in=item_ids)}
 
         updated = []
         for order, item_id in enumerate(item_ids):

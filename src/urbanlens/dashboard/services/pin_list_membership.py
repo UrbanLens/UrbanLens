@@ -39,7 +39,7 @@ def sync_pin_against_smart_lists(pin: Pin) -> None:
     smart_lists = PinList.objects.active_smart_lists(pin.profile_id)
     for pin_list in smart_lists:
         matches = _pin_matches_smart_list(pin, pin_list)
-        existing = PinListItem.objects.filter(pin_list=pin_list, pin=pin).first()
+        existing = PinListItem.objects.membership(pin_list, pin)
         if matches and existing is None:
             PinListItem.objects.create(
                 pin_list=pin_list,
@@ -73,7 +73,7 @@ def resync_smart_list(pin_list: PinList) -> None:
     current = {item.pin_id: item for item in pin_list.items.all()}
     to_remove = [pk for pk, item in current.items() if pk not in candidate_ids and item.added_via != PinListItem.ADDED_MANUAL]
     if to_remove:
-        PinListItem.objects.filter(pin_list=pin_list, pin_id__in=to_remove).delete()
+        PinListItem.objects.for_list(pin_list).filter(pin_id__in=to_remove).delete()
 
     base_order = pin_list.items.count()
     to_add = candidate_ids - current.keys()

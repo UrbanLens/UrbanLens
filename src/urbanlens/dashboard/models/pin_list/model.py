@@ -19,7 +19,7 @@ from django.db.models import CASCADE, SET_NULL, BooleanField, CharField, Foreign
 from django.db.models.constraints import UniqueConstraint
 
 from urbanlens.dashboard.models import abstract
-from urbanlens.dashboard.models.pin_list.queryset import PinListManager
+from urbanlens.dashboard.models.pin_list.queryset import PinListItemManager, PinListManager
 from urbanlens.dashboard.services.text_limits import MAX_PIN_LIST_DESCRIPTION_LENGTH
 
 if TYPE_CHECKING:
@@ -119,6 +119,8 @@ class PinListItem(abstract.DashboardModel):
     if TYPE_CHECKING:
         pin_list_id: int
         pin_id: int
+
+    objects = PinListItemManager()
 
     def __str__(self) -> str:
         return f"{self.pin_list_id}:{self.pin_id}"
