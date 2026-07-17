@@ -62,6 +62,21 @@ class LocationHit:
             only to report back which ``PinSuggestion`` a submitted cluster
             resolved to (see ``IngestSummary.suggestion_ids_by_key``). Never
             persisted.
+        weight: How many source photos this one hit stands in for - matching
+            and clustering only need one representative point per distinct
+            location (see ``controllers.tools._parse_cluster``, which used to
+            expand a local-scan cluster's ``count`` into that many identical
+            synthetic hits; a scan with a few hundred clusters averaging
+            hundreds of photos each could balloon into hundreds of thousands
+            of hits, and every one of them got checked against every one of
+            the profile's pin boundaries in ``_match_hits_to_pins`` - easily
+            slow enough to trip a proxy's read timeout on submit). Summed
+            instead of counting list length wherever a suggestion's
+            ``hit_count`` is derived.
+        extra_dates: Additional distinct ISO dates this hit's ``weight``
+            covers, beyond ``taken_at`` itself - lets one representative hit
+            still carry a whole cluster's full date spread into
+            ``visit_dates`` (see ``_dates_from_hits``).
     """
 
     latitude: float
@@ -70,6 +85,8 @@ class LocationHit:
     label: str | None = None
     asset_id: str | None = None
     source_key: str | None = None
+    weight: int = 1
+    extra_dates: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,7 +104,14 @@ class IngestSummary:
 
 def _dates_from_hits(hits: list[LocationHit]) -> list[str]:
     """Return the distinct, sorted, capped ISO dates among a list of hits."""
-    return sorted({hit.taken_at.date().isoformat() for hit in hits})[:MAX_STORED_VISIT_DATES]
+    dates = {hit.taken_at.date().isoformat() for hit in hits}
+    dates.update(*(hit.extra_dates for hit in hits))
+    return sorted(dates)[:MAX_STORED_VISIT_DATES]
+
+
+def _weight_of(hits: list[LocationHit]) -> int:
+    """Return the total photo-equivalent count a list of hits stands in for."""
+    return sum(hit.weight for hit in hits)
 
 
 def _merge_dates(existing: list[str], new: list[str]) -> list[str]:
@@ -96,9 +120,19 @@ def _merge_dates(existing: list[str], new: list[str]) -> list[str]:
 
 
 def _centroid(hits: list[LocationHit]) -> tuple[float, float]:
-    """Return the mean (latitude, longitude) of a list of hits."""
-    count = len(hits)
-    return sum(hit.latitude for hit in hits) / count, sum(hit.longitude for hit in hits) / count
+    """Return the weight-weighted mean (latitude, longitude) of a list of hits.
+
+    Weighting matters once a single hit can stand in for many identically-
+    located photos (see ``LocationHit.weight``) - a cluster of 500 photos
+    merging with one of 2 should still pull the centroid mostly toward the
+    500-photo cluster, exactly as it would if every one of those 500 photos
+    were still its own separate hit.
+    """
+    total_weight = sum(hit.weight for hit in hits)
+    return (
+        sum(hit.latitude * hit.weight for hit in hits) / total_weight,
+        sum(hit.longitude * hit.weight for hit in hits) / total_weight,
+    )
 
 
 def _label_from_hits(hits: list[LocationHit]) -> str:
@@ -218,7 +252,7 @@ def _upsert_matched_suggestion(profile: Profile, pin: Pin, hits: list[LocationHi
     existing = PinSuggestion.objects.filter(profile=profile, pin=pin, status=PinSuggestionStatus.PENDING).first()
     if existing is not None:
         existing.visit_dates = _merge_dates(existing.visit_dates, dates)
-        existing.hit_count += len(hits)
+        existing.hit_count += _weight_of(hits)
         existing.sample_assets = _merge_sample_assets(existing.sample_assets, hits)
         existing.save(update_fields=["visit_dates", "hit_count", "sample_assets", "updated"])
         return existing
@@ -229,7 +263,7 @@ def _upsert_matched_suggestion(profile: Profile, pin: Pin, hits: list[LocationHi
         longitude=pin.effective_longitude,
         origin=origin,
         visit_dates=dates,
-        hit_count=len(hits),
+        hit_count=_weight_of(hits),
         sample_assets=_merge_sample_assets([], hits),
     )
 
@@ -241,7 +275,7 @@ def _upsert_new_pin_suggestion(profile: Profile, cluster: list[LocationHit], ori
     existing = _find_nearby_pending_new_pin_suggestion(profile, latitude, longitude)
     if existing is not None:
         existing.visit_dates = _merge_dates(existing.visit_dates, dates)
-        existing.hit_count += len(cluster)
+        existing.hit_count += _weight_of(cluster)
         existing.sample_assets = _merge_sample_assets(existing.sample_assets, cluster)
         if not existing.suggested_name:
             existing.suggested_name = _label_from_hits(cluster)
@@ -254,7 +288,7 @@ def _upsert_new_pin_suggestion(profile: Profile, cluster: list[LocationHit], ori
         longitude=longitude,
         origin=origin,
         visit_dates=dates,
-        hit_count=len(cluster),
+        hit_count=_weight_of(cluster),
         suggested_name=_label_from_hits(cluster),
         sample_assets=_merge_sample_assets([], cluster),
     )
@@ -299,7 +333,7 @@ def ingest_location_hits(profile: Profile, hits: Iterable[LocationHit], origin: 
     return IngestSummary(
         matched_suggestions=len(matched),
         new_pin_suggestions=len(clusters),
-        hits_processed=len(hit_list),
+        hits_processed=_weight_of(hit_list),
         suggestion_ids_by_key=suggestion_ids_by_key,
     )
 

@@ -111,6 +111,66 @@ class IngestLocationHitsTests(TestCase):
         self.assertEqual(suggestion.hit_count, 2)
 
 
+class LocationHitWeightTests(TestCase):
+    """LocationHit.weight/extra_dates let one hit stand in for many identically-
+    located photos (see controllers.tools._parse_cluster) without inflating the
+    number of hits matching/clustering actually has to process - hit_count and
+    visit_dates must come out identical either way."""
+
+    def setUp(self) -> None:
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+        self.location = baker.make_recipe("dashboard.location", latitude=_PIN_LAT, longitude=_PIN_LON)
+        self.pin = baker.make_recipe("dashboard.pin", profile=self.profile, location=self.location)
+
+    def test_a_single_weighted_hit_produces_the_same_hit_count_as_many_unweighted_ones(self) -> None:
+        weighted_summary = ingest_location_hits(
+            self.profile,
+            [LocationHit(latitude=40.0001, longitude=-74.0, taken_at=_dt("2024-01-01"), weight=500)],
+            origin=PinSuggestionOrigin.LOCAL_SCAN,
+        )
+        self.assertEqual(weighted_summary.hits_processed, 500)
+        suggestion = PinSuggestion.objects.get()
+        self.assertEqual(suggestion.hit_count, 500)
+
+    def test_extra_dates_are_merged_into_visit_dates_from_one_hit(self) -> None:
+        hit = LocationHit(
+            latitude=41.0,
+            longitude=-76.0,
+            taken_at=_dt("2024-03-01"),
+            weight=3,
+            extra_dates=("2024-03-01", "2024-03-02", "2024-03-03"),
+        )
+        ingest_location_hits(self.profile, [hit], origin=PinSuggestionOrigin.LOCAL_SCAN)
+        suggestion = PinSuggestion.objects.get()
+        self.assertEqual(sorted(suggestion.visit_dates), ["2024-03-01", "2024-03-02", "2024-03-03"])
+        self.assertEqual(suggestion.hit_count, 3)
+
+    def test_weight_accumulates_across_merged_upsert_calls(self) -> None:
+        ingest_location_hits(self.profile, [LocationHit(latitude=40.0001, longitude=-74.0, taken_at=_dt("2024-01-01"), weight=200)], origin=PinSuggestionOrigin.LOCAL_SCAN)
+        ingest_location_hits(self.profile, [LocationHit(latitude=40.0001, longitude=-74.0, taken_at=_dt("2024-01-02"), weight=50)], origin=PinSuggestionOrigin.LOCAL_SCAN)
+        suggestion = PinSuggestion.objects.get()
+        self.assertEqual(suggestion.hit_count, 250)
+
+    def test_new_pin_centroid_is_weighted_toward_the_heavier_cluster(self) -> None:
+        """Two representative points ~33m apart (within the 50m cluster radius, so
+        they merge into one suggestion), one standing in for far more photos than
+        the other - the resulting suggestion's coordinates must land much closer to
+        the heavier one than to the naive (unweighted) midpoint."""
+        heavy_lat, light_lat = 41.0, 41.0003
+        heavy = LocationHit(latitude=heavy_lat, longitude=-76.0, taken_at=_dt("2024-04-01"), weight=999)
+        light = LocationHit(latitude=light_lat, longitude=-76.0, taken_at=_dt("2024-04-02"), weight=1)
+        ingest_location_hits(self.profile, [heavy, light], origin=PinSuggestionOrigin.LOCAL_SCAN)
+        suggestion = PinSuggestion.objects.get()
+        suggestion_lat = float(suggestion.latitude)
+        unweighted_midpoint = (heavy_lat + light_lat) / 2
+        self.assertLess(abs(suggestion_lat - heavy_lat), abs(suggestion_lat - unweighted_midpoint))
+
+
+def _dt(day: str) -> datetime.datetime:
+    return datetime.datetime.combine(datetime.date.fromisoformat(day), datetime.time(12, 0), tzinfo=datetime.UTC)
+
+
 class IngestLocationHitsTrackingDisabledTests(TestCase):
     """ingest_location_hits is a no-op when the profile has visit-history tracking off."""
 
@@ -545,6 +605,19 @@ class PhotoLocationScanUploadViewTests(TestCase):
         self.assertEqual(suggestion.origin, PinSuggestionOrigin.LOCAL_SCAN)
         self.assertEqual(suggestion.hit_count, 3)
         self.assertEqual(sorted(suggestion.visit_dates), ["2024-05-01", "2024-05-02"])
+
+    def test_a_large_per_cluster_count_stays_a_single_underlying_hit(self) -> None:
+        """A cluster's `count` used to expand into that many separate synthetic
+        hits, each independently checked against every one of the profile's pin
+        boundaries - up to 500 clusters x 2000 photos each could balloon into a
+        million-plus hits processed synchronously in one request, easily enough
+        to trip a reverse proxy's read timeout. `count` must still land correctly
+        on the suggestion's hit_count without that blow-up."""
+        response = self._post({"clusters": [{"latitude": 41.0, "longitude": -76.0, "dates": ["2024-05-01"], "count": 2000}]})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["hits_processed"], 2000)
+        suggestion = PinSuggestion.objects.get()
+        self.assertEqual(suggestion.hit_count, 2000)
 
     def test_invalid_json_body_is_400(self) -> None:
         response = self.client.post(reverse("tools.photo_scan.upload"), data="not json", content_type="application/json")

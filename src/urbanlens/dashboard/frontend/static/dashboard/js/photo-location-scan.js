@@ -1784,6 +1784,7 @@ class PhotoLocationScanApp {
   objectUrls = [];
   abortController = null;
   scanning = false;
+  renderScheduled = false;
   constructor(root) {
     this.root = root;
     this.startBtn = this.el("photo-scan-start-btn");
@@ -1842,45 +1843,30 @@ class PhotoLocationScanApp {
   }
   async scanDirectoryHandle(dirHandle) {
     this.abortController = new AbortController;
-    this.setScanning(true);
-    this.setProgress("Finding photos and videos...", 0, 0);
-    const candidates = [];
-    try {
-      for await (const file of walkDirectoryHandle(dirHandle, this.abortController.signal)) {
-        if (this.abortController.signal.aborted)
-          break;
-        candidates.push(file);
-        this.setProgress(`Found ${candidates.length} file(s) so far...`, 0, 0);
-      }
-    } catch {
-      toast.error("Could not fully read that folder. Showing what was found so far.");
-    }
-    if (this.abortController.signal.aborted) {
-      this.finishScan();
-      return;
-    }
-    await this.runScan(candidates.length, async function* () {
-      for (const file of candidates)
-        yield file;
-    }());
+    await this.runScan(null, walkDirectoryHandle(dirHandle, this.abortController.signal));
   }
   async runScan(total, files) {
     if (!this.abortController)
       this.abortController = new AbortController;
     this.setScanning(true);
     let scanned = 0;
-    for await (const file of files) {
-      if (this.abortController.signal.aborted)
-        break;
-      scanned += 1;
-      this.setProgress(`Scanning ${file.name}...`, scanned, total);
-      const hit = await extractHit(file);
-      if (hit) {
-        this.allHits.push(hit);
-        this.clusters = addHitToClusters(this.clusters, hit);
-        this.renderResults();
+    try {
+      for await (const file of files) {
+        if (this.abortController.signal.aborted)
+          break;
+        scanned += 1;
+        this.setProgress(total != null ? `Scanning ${file.name}...` : `Scanning... (${scanned} file(s) checked so far)`, scanned, total ?? 0);
+        const hit = await extractHit(file);
+        if (hit) {
+          this.allHits.push(hit);
+          this.clusters = addHitToClusters(this.clusters, hit);
+          this.scheduleRender();
+        }
       }
+    } catch {
+      toast.error("Could not fully read that folder. Showing what was found so far.");
     }
+    this.renderResults();
     this.finishScan();
   }
   stop() {
@@ -1911,6 +1897,15 @@ class PhotoLocationScanApp {
   }
   updateEmptyMessage() {
     this.emptyMsg.hidden = !this.scanning || this.clusters.length > 0;
+  }
+  scheduleRender() {
+    if (this.renderScheduled)
+      return;
+    this.renderScheduled = true;
+    requestAnimationFrame(() => {
+      this.renderScheduled = false;
+      this.renderResults();
+    });
   }
   renderResults() {
     const cachedPins = readCachedPinLocations(this.profileUuid).map((p2) => ({ lat: p2.latitude, lng: p2.longitude }));

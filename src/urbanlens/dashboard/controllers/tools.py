@@ -414,17 +414,26 @@ class BackupStartView(LoginRequiredMixin, PermissionRequiredMixin, View):
 def _parse_cluster(cluster: Any) -> list[LocationHit]:
     """Parse and validate one cluster row from the local-scan upload payload.
 
-    Each cluster becomes ``count`` synthetic hits (one per date, cycling
-    through ``dates`` when count exceeds the number of distinct dates) so it
-    flows through ``ingest_location_hits`` exactly like individually-scanned
-    hits would, with an accurate hit count and date list.
+    Each cluster becomes exactly *one* synthetic hit, carrying the cluster's
+    full ``count`` as its ``weight`` and every one of its ``dates`` (see
+    ``LocationHit.weight``/``extra_dates``) - matching/clustering only ever
+    need one representative point per distinct location, since every hit a
+    single cluster used to expand into shared the exact same coordinates.
+    This used to create ``count`` separate synthetic hits (one per date,
+    cycling through ``dates``) so the shape matched individually-scanned
+    hits exactly; with up to 500 clusters allowed per request and up to 2000
+    photos per cluster, that could balloon into hundreds of thousands of
+    hits, each checked against every one of the profile's pin boundaries in
+    ``_match_hits_to_pins`` - easily enough synchronous work to trip a
+    reverse proxy's read timeout (504) on submit for a large scan.
 
     Args:
         cluster: One raw JSON object from the ``clusters`` array.
 
     Returns:
-        Synthetic LocationHits for this cluster, or an empty list if the row
-        is malformed (missing/invalid coordinates or no valid dates).
+        A single-item list with the synthetic LocationHit for this cluster,
+        or an empty list if the row is malformed (missing/invalid
+        coordinates or no valid dates).
     """
     if not isinstance(cluster, dict):
         return []
@@ -462,12 +471,19 @@ def _parse_cluster(cluster: Any) -> list[LocationHit]:
     cluster_id = cluster.get("id")
     source_key = cluster_id if isinstance(cluster_id, str) and cluster_id else None
 
-    hits: list[LocationHit] = []
-    for index in range(count):
-        day = datetime.date.fromisoformat(valid_dates[index % len(valid_dates)])
-        taken_at = datetime.datetime.combine(day, datetime.time(12, 0), tzinfo=datetime.UTC)
-        hits.append(LocationHit(latitude=latitude, longitude=longitude, taken_at=taken_at, label=label, source_key=source_key))
-    return hits
+    first_day = datetime.date.fromisoformat(valid_dates[0])
+    taken_at = datetime.datetime.combine(first_day, datetime.time(12, 0), tzinfo=datetime.UTC)
+    return [
+        LocationHit(
+            latitude=latitude,
+            longitude=longitude,
+            taken_at=taken_at,
+            label=label,
+            source_key=source_key,
+            weight=count,
+            extra_dates=tuple(valid_dates),
+        )
+    ]
 
 
 class PhotoLocationScanUploadView(LoginRequiredMixin, View):

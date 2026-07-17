@@ -117,6 +117,15 @@ class PhotoLocationScanApp {
     private objectUrls: string[] = [];
     private abortController: AbortController | null = null;
     private scanning = false;
+    /**
+     * True while a throttled render is already queued via requestAnimationFrame
+     * (see scheduleRender()) - a full re-render rebuilds every cluster's
+     * thumbnails from scratch (revoking and recreating an object URL per
+     * photo), so calling it once per GPS hit found rather than once per
+     * frame turned a long scan with many results into an O(hits x clusters)
+     * churn of DOM nodes and blob URLs, heavy enough to crash the tab.
+     */
+    private renderScheduled = false;
 
     constructor(root: HTMLElement) {
         this.root = root;
@@ -178,44 +187,43 @@ class PhotoLocationScanApp {
 
     private async scanDirectoryHandle(dirHandle: FileSystemDirectoryHandle): Promise<void> {
         this.abortController = new AbortController();
-        this.setScanning(true);
-        this.setProgress("Finding photos and videos...", 0, 0);
+        // Scanning starts on the very first file the walk yields instead of
+        // waiting for the whole tree to be enumerated first - a folder with a
+        // lot of photos or nested subfolders used to sit on "Finding photos
+        // and videos..." for as long as the full recursive walk took, with no
+        // results appearing until every last file had been listed.
+        await this.runScan(null, walkDirectoryHandle(dirHandle, this.abortController.signal));
+    }
 
-        const candidates: File[] = [];
+    /**
+     * Scan a stream of candidate files, extracting GPS hits as they arrive.
+     *
+     * @param total - Known file count up front (the `<input webkitdirectory>`
+     *   fallback path already has the full FileList), or `null` when the
+     *   count isn't known ahead of time (the File System Access walk streams
+     *   files one at a time) - the progress bar shows a running count instead
+     *   of a percentage in that case.
+     */
+    private async runScan(total: number | null, files: AsyncGenerator<File>): Promise<void> {
+        if (!this.abortController) this.abortController = new AbortController();
+        this.setScanning(true);
+        let scanned = 0;
         try {
-            for await (const file of walkDirectoryHandle(dirHandle, this.abortController.signal)) {
+            for await (const file of files) {
                 if (this.abortController.signal.aborted) break;
-                candidates.push(file);
-                this.setProgress(`Found ${candidates.length} file(s) so far...`, 0, 0);
+                scanned += 1;
+                this.setProgress(total != null ? `Scanning ${file.name}...` : `Scanning... (${scanned} file(s) checked so far)`, scanned, total ?? 0);
+                const hit = await extractHit(file);
+                if (hit) {
+                    this.allHits.push(hit);
+                    this.clusters = addHitToClusters(this.clusters, hit);
+                    this.scheduleRender();
+                }
             }
         } catch {
             toast.error("Could not fully read that folder. Showing what was found so far.");
         }
-
-        if (this.abortController.signal.aborted) {
-            this.finishScan();
-            return;
-        }
-        await this.runScan(candidates.length, (async function* () {
-            for (const file of candidates) yield file;
-        })());
-    }
-
-    private async runScan(total: number, files: AsyncGenerator<File>): Promise<void> {
-        if (!this.abortController) this.abortController = new AbortController();
-        this.setScanning(true);
-        let scanned = 0;
-        for await (const file of files) {
-            if (this.abortController.signal.aborted) break;
-            scanned += 1;
-            this.setProgress(`Scanning ${file.name}...`, scanned, total);
-            const hit = await extractHit(file);
-            if (hit) {
-                this.allHits.push(hit);
-                this.clusters = addHitToClusters(this.clusters, hit);
-                this.renderResults();
-            }
-        }
+        this.renderResults(); // flush any pending throttled render so the final result set is always shown
         this.finishScan();
     }
 
@@ -250,6 +258,16 @@ class PhotoLocationScanApp {
 
     private updateEmptyMessage(): void {
         this.emptyMsg.hidden = !this.scanning || this.clusters.length > 0;
+    }
+
+    /** Coalesce renderResults() calls to at most once per animation frame - see renderScheduled. */
+    private scheduleRender(): void {
+        if (this.renderScheduled) return;
+        this.renderScheduled = true;
+        requestAnimationFrame(() => {
+            this.renderScheduled = false;
+            this.renderResults();
+        });
     }
 
     private renderResults(): void {
