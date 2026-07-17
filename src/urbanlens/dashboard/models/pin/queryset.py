@@ -99,6 +99,19 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
     def by_name(self, name):
         return self.filter(name__icontains=name)
 
+    def with_placeholder_names(self) -> Self:
+        """Pins carrying a stored, non-user-provided name (candidates for the name-upgrade sweep).
+
+        Narrows to the SQL-cheap part of the check (a name is stored at all,
+        and the user didn't type it); callers must still test each name with
+        ``is_meaningful_name`` themselves, since "meaningful" isn't expressible
+        as a query filter.
+
+        Returns:
+            Filtered queryset, with ``location`` (and its wiki) preselected.
+        """
+        return self.filter(name_is_user_provided=False).exclude(name__isnull=True).exclude(name="").select_related("location__wiki")
+
     def by_profile(self, profile):
         return self.filter(profile=profile)
 

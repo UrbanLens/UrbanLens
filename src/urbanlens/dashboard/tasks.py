@@ -1390,3 +1390,54 @@ def send_direct_message_email_if_unread(message_id: int) -> None:
     if is_email_debounced(message.sender_id, message.recipient_id):
         return
     send_message_email_now(message)
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def upgrade_placeholder_pin_names(batch_size: int = 1000) -> int:
+    """Clear a pin's stored placeholder name once its location has a meaningful one to fall back to.
+
+    ``Pin.name`` is meant to be None ("show the location's canonical name")
+    unless a user actually typed something - but some pins from earlier,
+    less careful ingestion pipelines have a literal placeholder string
+    (coordinates, "Dropped Pin", "Unnamed Location", ...) stored directly on
+    ``name`` with ``name_is_user_provided=False``. Those pins are stuck
+    showing that placeholder forever: ``Pin.effective_name`` only falls back
+    to the location's name when ``Pin.name`` is falsy, and nothing else ever
+    revisits an already-set name. This sweep finds exactly that case and
+    clears ``name`` back to None wherever the location now resolves to a
+    meaningful name (e.g. because background enrichment / a later pin at the
+    same coordinates has since resolved ``Location.official_name`` or a wiki
+    name) - once cleared, ``effective_name`` picks up the better name
+    immediately and stays current automatically as the location's name
+    improves further, with no further sweeps needed for that pin.
+
+    TODO: This exists only to backfill legacy data from earlier ingestion
+    versions that didn't leave ``Pin.name`` as None for an unnamed pin. Once
+    ingestion is guaranteed to never store a placeholder name this way, this
+    task (and the gap it patches) should be removed - new pins never need it.
+
+    Args:
+        batch_size: Maximum number of pins to upgrade in one run, so a single
+            invocation can't run unboundedly long; any remainder is picked up
+            by the next scheduled run.
+
+    Returns:
+        Number of pins whose name was cleared.
+    """
+    from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.services.locations.naming import is_meaningful_name
+
+    upgraded = 0
+    for pin in Pin.objects.with_placeholder_names().iterator(chunk_size=200):
+        if is_meaningful_name(pin.name):
+            continue
+        if not is_meaningful_name(pin.location.display_name):
+            continue
+        pin.name = None
+        pin.save(update_fields=["name", "updated"])
+        upgraded += 1
+        if upgraded >= batch_size:
+            break
+    if upgraded:
+        logger.info("upgrade_placeholder_pin_names: cleared %s placeholder pin name(s)", upgraded)
+    return upgraded

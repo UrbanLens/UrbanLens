@@ -351,7 +351,10 @@ class LocationExternalNameRefreshTests(TestCase):
         )
         loc.refresh_from_db()
         wiki.refresh_from_db()
-        self.assertEqual(loc.official_name, "Grand Hall")
-        self.assertEqual(wiki.name, "Grand Hall")
+        # Neither source agrees with another, so SiteSettings.default_name_source_priority
+        # ("nominatim,wikipedia,nps,google_places") breaks the tie - wikipedia outranks
+        # google_places in that default order, so its candidate wins.
+        self.assertEqual(loc.official_name, "Grand Hall Museum")
+        self.assertEqual(wiki.name, "Grand Hall Museum")
         # The promoted name is itself an alias (the list includes the current name).
         self.assertCountEqual(list(wiki.aliases.values_list("name", flat=True)), ["Grand Hall", "Grand Hall Museum"])

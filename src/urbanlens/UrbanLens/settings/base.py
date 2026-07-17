@@ -269,6 +269,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "urbanlens.dashboard.tasks.hard_delete_expired_direct_messages",
         "schedule": 60 * 60,
     },
+    "upgrade-placeholder-pin-names": {
+        "task": "urbanlens.dashboard.tasks.upgrade_placeholder_pin_names",
+        "schedule": 60 * 60,
+    },
 }
 
 
