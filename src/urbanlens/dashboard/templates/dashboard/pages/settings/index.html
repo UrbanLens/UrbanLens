@@ -1575,14 +1575,9 @@
     });
 
     resetBtn.addEventListener('click', function () {
-        if (window.prompt('This permanently makes your existing encrypted messages unreadable to you. Type RESET to confirm.') !== 'RESET') return;
-        var password = hasPassword ? window.prompt('Confirm your account password:') : undefined;
-        if (hasPassword && !password) return;
-        UrbanLensE2EE.resetKeys(password || undefined).then(function (display) {
+        UrbanLensE2EE.showResetDialog(hasPassword).then(function (display) {
             if (display) {
                 UrbanLensE2EE.showRecoveryDialog(display).then(function () { window.location.reload(); });
-            } else if (window.toastr) {
-                toastr.error('Could not reset your encryption keys.');
             }
         });
     });

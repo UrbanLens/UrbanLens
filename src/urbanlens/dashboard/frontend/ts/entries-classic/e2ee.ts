@@ -23,6 +23,7 @@ import {
     regenerateRecoveryKey,
     resetKeys,
     showRecoveryDialog,
+    showResetDialog,
     showUnlockDialog,
     unlockWithPassword,
     unlockWithRecovery,
@@ -54,6 +55,7 @@ const api = {
     decryptFromGroup,
     decryptDom,
     showRecoveryDialog,
+    showResetDialog,
 };
 
 window.UrbanLensE2EE = api;

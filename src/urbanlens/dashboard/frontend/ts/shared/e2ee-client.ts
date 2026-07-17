@@ -767,6 +767,109 @@ export async function resetKeys(password?: string): Promise<string | null> {
     return recovery.display;
 }
 
+//: Accepted spellings of the reset confirmation word - case-insensitive,
+//: surrounding whitespace stripped, matching how every other confirmation
+//: input on the site behaves (nothing else on the site demands exact-case).
+const RESET_CONFIRMATION_WORD = "reset";
+
+/**
+ * Show one dialog collecting both the typed confirmation and (when the
+ * account has a password) the account password, then perform the reset.
+ *
+ * Replaces two separate native `window.prompt()` calls: those showed the
+ * password in plaintext with no way to mask it, silently did nothing on a
+ * mistyped confirmation (no feedback at all), and gave no indication that
+ * the reset - a real network round trip - was in progress.
+ *
+ * @param hasPassword - Whether to also collect and require the account
+ *   password (omit the field entirely for OAuth accounts with none).
+ * @returns The new recovery key display string, or null when the user
+ *   cancelled or the reset failed.
+ */
+export function showResetDialog(hasPassword: boolean): Promise<string | null> {
+    return new Promise((resolve) => {
+        const overlay = document.createElement("div");
+        overlay.className = "e2ee-recovery-overlay";
+        const passwordField = hasPassword
+            ? `<label class="e2ee-unlock-label">Account password
+                   <input type="password" class="e2ee-reset-password" autocomplete="current-password" placeholder="Your password">
+               </label>`
+            : "";
+        overlay.innerHTML = `
+            <div class="e2ee-recovery-dialog" role="dialog" aria-modal="true" aria-labelledby="e2ee-reset-title">
+                <h2 id="e2ee-reset-title">Reset encryption keys</h2>
+                <p>This permanently makes your existing encrypted messages unreadable to you. Type RESET to confirm.</p>
+                <label class="e2ee-unlock-label">Confirmation
+                    <input type="text" class="e2ee-reset-confirm" autocomplete="off" spellcheck="false" placeholder="RESET">
+                </label>
+                ${passwordField}
+                <p class="e2ee-unlock-error" hidden></p>
+                <p class="e2ee-reset-progress" hidden><i class="material-symbols-outlined e2ee-reset-spinner" aria-hidden="true">progress_activity</i> Resetting your encryption keys…</p>
+                <div class="e2ee-recovery-actions">
+                    <button type="button" class="e2ee-reset-submit">Reset</button>
+                    <button type="button" class="e2ee-reset-cancel">Cancel</button>
+                </div>
+            </div>`;
+        const errorEl = overlay.querySelector(".e2ee-unlock-error") as HTMLElement;
+        const progressEl = overlay.querySelector(".e2ee-reset-progress") as HTMLElement;
+        const confirmInput = overlay.querySelector<HTMLInputElement>(".e2ee-reset-confirm");
+        const passwordInput = overlay.querySelector<HTMLInputElement>(".e2ee-reset-password");
+        const submitBtn = overlay.querySelector<HTMLButtonElement>(".e2ee-reset-submit");
+        const cancelBtn = overlay.querySelector<HTMLButtonElement>(".e2ee-reset-cancel");
+        const close = (recoveryDisplay: string | null) => {
+            overlay.remove();
+            resolve(recoveryDisplay);
+        };
+        const setBusy = (busy: boolean) => {
+            progressEl.hidden = !busy;
+            if (submitBtn) submitBtn.disabled = busy;
+            if (cancelBtn) cancelBtn.disabled = busy;
+            if (confirmInput) confirmInput.disabled = busy;
+            if (passwordInput) passwordInput.disabled = busy;
+        };
+        const attempt = async () => {
+            errorEl.hidden = true;
+            const confirmation = (confirmInput?.value ?? "").trim().toLowerCase();
+            if (confirmation !== RESET_CONFIRMATION_WORD) {
+                errorEl.textContent = 'Type "RESET" to confirm - this step can\'t be skipped.';
+                errorEl.hidden = false;
+                return;
+            }
+            const password = passwordInput?.value ?? "";
+            if (hasPassword && !password) {
+                errorEl.textContent = "Enter your account password to continue.";
+                errorEl.hidden = false;
+                return;
+            }
+            setBusy(true);
+            try {
+                const recoveryDisplay = await resetKeys(password || undefined);
+                if (recoveryDisplay === null) {
+                    setBusy(false);
+                    errorEl.textContent = "Could not reset your encryption keys. Please try again.";
+                    errorEl.hidden = false;
+                    return;
+                }
+                close(recoveryDisplay);
+            } catch {
+                setBusy(false);
+                errorEl.textContent = "Could not reset your encryption keys. Please try again.";
+                errorEl.hidden = false;
+            }
+        };
+        submitBtn?.addEventListener("click", () => void attempt());
+        cancelBtn?.addEventListener("click", () => close(null));
+        overlay.addEventListener("keydown", (event) => {
+            if ((event as KeyboardEvent).key === "Enter") {
+                event.preventDefault();
+                void attempt();
+            }
+        });
+        document.body.appendChild(overlay);
+        confirmInput?.focus();
+    });
+}
+
 async function requireIdentity(): Promise<CachedIdentity | null> {
     const selfSlug = cfg().selfSlug;
     if (!selfSlug) {

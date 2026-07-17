@@ -249,3 +249,36 @@
     border: none !important;
     color: var(--text-muted, #6b7280) !important;
 }
+
+// -- Reset-keys dialog (merged confirm + password, with a progress state) ----
+
+.e2ee-reset-progress {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    color: var(--text-muted, #6b7280);
+    font-size: .85rem;
+    margin: 0 0 .75rem;
+}
+
+.e2ee-reset-spinner {
+    font-size: 1rem;
+    animation: e2ee-reset-spin 1s linear infinite;
+}
+
+@keyframes e2ee-reset-spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.e2ee-reset-cancel {
+    background: transparent !important;
+    border: none !important;
+    color: var(--text-muted, #6b7280) !important;
+}
+
+.e2ee-reset-submit:disabled,
+.e2ee-reset-cancel:disabled {
+    opacity: .6;
+    cursor: not-allowed;
+}
