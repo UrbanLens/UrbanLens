@@ -317,6 +317,16 @@ div.section {
             outline: none;
         }
 
+        // Toggle-style tools (e.g. the main map's "Select pins") add this class
+        // while active - a stronger, persistent version of the hover state so
+        // the tool doesn't look identical to every other idle toolbar icon.
+        &.active {
+            opacity: 1;
+            color: $color-blue-800;
+            background-color: rgba($color-blue-500, .18);
+            border-color: rgba($color-blue-500, .55);
+        }
+
         &:active,
         &.active {
             opacity: 1;

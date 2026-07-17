@@ -1159,7 +1159,7 @@ def refresh_pin_web_search(self, pin_id: int) -> int:
     from urbanlens.dashboard.services.search import format_search_date, search_web
 
     pin = Pin.objects.filter(pk=pin_id).select_related("location").first()
-    query = pin.get_unique_search_name(quote_name=True) if pin and pin.location else None
+    query = pin.get_unique_search_name(quote_name=True, quote_locality=True) if pin and pin.location else None
     if not query:
         return 0
     update_task_progress(self, current=0, total=1, message="Refreshing web search...")

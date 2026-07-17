@@ -6,6 +6,7 @@ The domain extraction helper is tested directly with Hypothesis.
 """
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 from urllib.parse import urlparse
 
@@ -17,6 +18,9 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.subscriptions import SiteFeature, SubscriptionRole, grant_subscription
 from urbanlens.dashboard.services.locations.naming import is_meaningful_name
+
+if TYPE_CHECKING:
+    from django.contrib.auth.models import User
 
 _hyp = hyp_settings(max_examples=60, deadline=None)
 
@@ -137,6 +141,67 @@ class LocationHasPlaceNameTests(TestCase):
     def test_any_real_name_is_meaningful(self, name: str):
         loc = self._location_with_cached_name(name)
         self.assertTrue(loc.has_place_name())
+
+
+class UniqueSearchNameQuoteLocalityTests(TestCase):
+    """Pin.get_unique_search_name's quote_locality option: wraps "city state" as
+    one exact-phrase term instead of two loose keywords, so a generic street
+    address doesn't match the same address in an unrelated city - see the
+    web_search view, which is the one caller that opts into this."""
+
+    def _make_pin(self, *, city: str | None = "Cincinnati", state: str | None = "Ohio", county: str | None = None) -> Pin:
+        from urbanlens.dashboard.models.location.model import Location
+        from urbanlens.dashboard.models.profile.model import Profile
+
+        loc = baker.make(Location, official_name="118 W 9th St", latitude=39.1, longitude=-84.5, city=city, state=state, county=county)
+        user: User = baker.make("auth.User")
+        profile = Profile.objects.get(user=user)
+        return baker.make(Pin, location=loc, profile=profile)
+
+    def test_city_and_state_are_quoted_together(self) -> None:
+        pin = self._make_pin(city="Cincinnati", state="Ohio")
+        result = pin.get_unique_search_name(quote_name=True, quote_locality=True)
+        assert result is not None
+        self.assertIn('"Cincinnati Ohio"', result)
+
+    def test_without_quote_locality_city_and_state_are_loose_keywords(self) -> None:
+        pin = self._make_pin(city="Cincinnati", state="Ohio")
+        result = pin.get_unique_search_name(quote_name=True, quote_locality=False)
+        assert result is not None
+        self.assertNotIn('"Cincinnati Ohio"', result)
+        self.assertIn("Cincinnati", result)
+        self.assertIn("Ohio", result)
+
+    def test_county_used_when_no_city(self) -> None:
+        pin = self._make_pin(city=None, state="Ohio", county="Hamilton County")
+        result = pin.get_unique_search_name(quote_name=True, quote_locality=True)
+        assert result is not None
+        self.assertIn('"Hamilton County Ohio"', result)
+
+    def test_state_only_is_still_quoted(self) -> None:
+        pin = self._make_pin(city=None, state="Ohio", county=None)
+        result = pin.get_unique_search_name(quote_name=True, quote_locality=True)
+        assert result is not None
+        self.assertIn('"Ohio"', result)
+
+    def test_no_locality_data_omits_the_locality_term_entirely(self) -> None:
+        pin = self._make_pin(city=None, state=None, county=None)
+        result = pin.get_unique_search_name(quote_name=True, quote_locality=True)
+        assert result is not None
+        self.assertNotIn('""', result)
+
+    def test_address_is_quoted_as_an_exact_phrase_when_quote_name_is_set(self) -> None:
+        from urbanlens.dashboard.models.location.model import Location
+        from urbanlens.dashboard.models.profile.model import Profile
+
+        loc = baker.make(Location, official_name="Old Mill Factory", latitude=39.1, longitude=-84.5, city="Cincinnati", state="Ohio", street_number="118", route="W 9th St")
+        user: User = baker.make("auth.User")
+        profile = Profile.objects.get(user=user)
+        pin = baker.make(Pin, location=loc, profile=profile)
+
+        result = pin.get_unique_search_name(quote_name=True)
+        assert result is not None
+        self.assertIn('"118 W 9th St"', result)
 
 
 class SearchSubscriptionFeatureTests(TestCase):
@@ -301,7 +366,7 @@ class WebSearchViewTests(TestCase):
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
 
         pin = self._make_pin()
-        search_name = pin.get_unique_search_name(quote_name=True)
+        search_name = pin.get_unique_search_name(quote_name=True, quote_locality=True)
         assert search_name is not None
         LocationCache.set(pin.location, "web_search", {"results": []}, query_key=search_name)
         rf = RequestFactory()
@@ -424,7 +489,7 @@ class WebSearchViewTests(TestCase):
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
 
         pin = self._make_pin()
-        LocationCache.set(pin.location, "web_search", {"results": []}, query_key=pin.get_unique_search_name(quote_name=True))
+        LocationCache.set(pin.location, "web_search", {"results": []}, query_key=pin.get_unique_search_name(quote_name=True, quote_locality=True))
 
         rf = RequestFactory()
         request = rf.post("/")
@@ -447,7 +512,7 @@ class WebSearchViewTests(TestCase):
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
 
         pin = self._make_pin()
-        entry = LocationCache.set(pin.location, "web_search", {"results": []}, query_key=pin.get_unique_search_name(quote_name=True))
+        entry = LocationCache.set(pin.location, "web_search", {"results": []}, query_key=pin.get_unique_search_name(quote_name=True, quote_locality=True))
         LocationCache.objects.filter(pk=entry.pk).update(updated=timezone.now() - timedelta(days=1, minutes=1))
 
         rf = RequestFactory()

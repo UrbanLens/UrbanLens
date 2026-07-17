@@ -615,7 +615,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         if not pin.meaningful_official_name:
             return HttpResponse("", status=204)
 
-        search_name = pin.get_unique_search_name(quote_name=True)
+        search_name = pin.get_unique_search_name(quote_name=True, quote_locality=True)
         if not search_name:
             return HttpResponse("", status=204)
 

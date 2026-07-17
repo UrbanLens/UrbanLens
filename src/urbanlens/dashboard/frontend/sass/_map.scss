@@ -142,9 +142,13 @@
     }
 }
 
-// Multi-select tool: selected-marker ring + select-mode cursor.
+// Multi-select tool: selected-marker ring + select-mode cursor + a persistent
+// inset outline around the whole map, so the mode reads as active even before
+// the user hovers or selects anything (the crosshair cursor and the bottom
+// bulk-select-toolbar are both easy to miss on first glance).
 #map.select-mode {
     cursor: crosshair;
+    box-shadow: inset 0 0 0 3px rgba($color-blue-500, .55);
 }
 
 // Selected markers get an unmissable halo ring + check badge, on both custom

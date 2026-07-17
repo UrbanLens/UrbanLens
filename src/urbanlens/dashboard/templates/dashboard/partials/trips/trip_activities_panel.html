@@ -109,6 +109,11 @@
                             {% else %}Completed{% endif %}
                         </span>
                     </div>
+                    {% if not item.has_coords and not item.effective_location_hidden %}
+                    <span class="trip-weather-na" title="No location set - this activity won't show a weather forecast">
+                        <i class="material-symbols-outlined">location_off</i> Needs location
+                    </span>
+                    {% endif %}
                     {% if act.scheduled_at %}
                     <span class="trip-activity-time">
                         <i class="material-symbols-outlined">schedule</i>

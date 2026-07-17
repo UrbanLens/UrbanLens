@@ -132,7 +132,9 @@
         <div class="pin-overview-title-row">
             <h1 class="pin-title location-title">{{ pin.effective_name }}</h1>
         </div>
-        <div class="pin-details location-details card" style="padding:1rem;color:#888;font-size:.85rem;">Loading...</div>
+        <div class="pin-details location-details card">
+            <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
+        </div>
     </div>
 
     {# -- Map (full width) ----------------------------------------------- #}
@@ -211,7 +213,7 @@
                 <i class="material-symbols-outlined">history</i>
                 <span>Visit History</span>
             </div>
-            <div style="padding:1rem;color:#888;font-size:.85rem;">Loading...</div>
+            <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
         </div>
 
         <div class="organization-card card card--secondary"
@@ -232,7 +234,7 @@
                 hx-trigger="load[!window.ulSectionCollapsed('pin','categories')], ul:unhide"
                 hx-swap="outerHTML"
                 class="tag-panel tag-panel--embedded">
-                <div style="padding:1rem;color:#888;font-size:.85rem;">Loading...</div>
+                <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
             </div>
         </div>
 
@@ -246,7 +248,7 @@
                 <i class="material-symbols-outlined">label_important</i>
                 <span>Aliases</span>
             </div>
-            <div style="padding:1rem;color:#888;font-size:.85rem;">Loading...</div>
+            <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
         </div>
 
         <div hx-get="{% url 'pin.custom_fields' pin.slug %}"
@@ -259,7 +261,7 @@
                 <i class="material-symbols-outlined">tune</i>
                 <span>Custom Fields</span>
             </div>
-            <div style="padding:1rem;color:#888;font-size:.85rem;">Loading...</div>
+            <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
         </div>
 
         <div hx-get="{% url 'pin.ownership' pin.slug %}"
@@ -272,7 +274,7 @@
                 <i class="material-symbols-outlined">real_estate_agent</i>
                 <span>Ownership</span>
             </div>
-            <div style="padding:1rem;color:#888;font-size:.85rem;">Loading...</div>
+            <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
         </div>
 
         {# Only rendered when the pin has associated markup maps - the view returns 204 #}
@@ -288,7 +290,7 @@
                 <i class="material-symbols-outlined">map</i>
                 <span>Markup Maps</span>
             </div>
-            <div style="padding:1rem;color:#888;font-size:.85rem;">Loading...</div>
+            <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
         </div>
     </div>{# end .pin-lists-row #}
 

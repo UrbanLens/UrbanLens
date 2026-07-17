@@ -480,7 +480,7 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
         kept.sort(key=lambda pair: display_order[pair[0]])
         return kept
 
-    def get_unique_search_name(self, *, include_country: bool = True, quote_name: bool = False, include_address: bool = True) -> str | None:
+    def get_unique_search_name(self, *, include_country: bool = True, quote_name: bool = False, include_address: bool = True, quote_locality: bool = False) -> str | None:
         """Name to use when searching for this location in external APIs.
 
         Address components fall back to the linked Location's geocoded address
@@ -494,6 +494,15 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
                 engines (e.g. Wikimedia Commons) return nothing for a full
                 street address but do match on name + city/state -- callers
                 needing a narrower fallback query should pass False here.
+            quote_locality: Whether to wrap "city state" as one quoted phrase
+                instead of two loose keywords. A generic street address (e.g.
+                "118 W 9th St") matches equally-generic addresses in unrelated
+                cities on most engines unless the geographic qualifier is
+                itself a strong, exact-phrase signal rather than two
+                independent terms an engine's relevance ranking can silently
+                deprioritize - see the general web-search panel, which sets
+                this (other callers - Wikipedia, LoopNet, NPS, GDELT, etc. -
+                have their own tuned per-service defaults and are left as-is).
         """
         name = self.meaningful_official_name or self.meaningful_name
         if not name:
@@ -507,14 +516,17 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
 
         parts = [f'"{name}"' if quote_name else name]
         if include_address and address_basic and address_basic != name:
-            parts.append(address_basic)
+            parts.append(f'"{address_basic}"' if quote_name else address_basic)
 
-        if city:
-            parts.append(city)
-        elif county:
-            parts.append(county)
+        locality_terms: list[str] = []
+        locality_head = city or county
+        if locality_head:
+            locality_terms.append(locality_head)
         if state:
-            parts.append(state)
+            locality_terms.append(state)
+        if locality_terms:
+            locality = " ".join(locality_terms)
+            parts.append(f'"{locality}"' if quote_locality else locality)
         if include_country and country:
             parts.append(country)
         return " ".join(parts)

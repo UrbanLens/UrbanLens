@@ -160,3 +160,34 @@ class PendingPanelPlaceholderMarkerTests(TestCase):
         second = self.client.get(reverse("pin.satellite_view", args=[self.pin.slug]), {"attempt": "1"})
         self.assertEqual(second.status_code, 200)
         self.assertIn("data-ext-panel-204", second.content.decode())
+
+
+class ConsistentLoadingPlaceholderTests(TestCase):
+    """Every initial "Loading..." placeholder on the pin detail page uses the same
+    small per-panel .view-loading spinner - a user reported the one at the very
+    top of the page (under the title, before #pin-overview's first hx-load swap)
+    as a jarring full-width gray bar, distinct from every other panel's spinner
+    because it used ad-hoc inline styles instead of the shared class. Several
+    other sections further down the page (Visit History, Categories, Aliases,
+    Custom Fields, Ownership, Markup Maps) had the identical anti-pattern."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+        self.client.force_login(self.user)
+        self.pin: Pin = baker.make_recipe("dashboard.pin", profile=self.profile)
+
+    def _content(self) -> str:
+        response = self.client.get(reverse("pin.details", args=[self.pin.slug]))
+        self.assertEqual(response.status_code, 200)
+        return response.content.decode()
+
+    def test_no_ad_hoc_inline_styled_loading_placeholder_remains(self) -> None:
+        content = self._content()
+        self.assertNotIn('style="padding:1rem;color:#888;font-size:.85rem;"', content)
+
+    def test_top_of_page_overview_placeholder_uses_the_shared_spinner(self) -> None:
+        content = self._content()
+        idx = content.index('id="pin-overview"')
+        self.assertIn("view-loading", content[idx : idx + 600])

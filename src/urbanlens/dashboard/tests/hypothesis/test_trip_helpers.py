@@ -12,10 +12,13 @@ Covers:
 from __future__ import annotations
 
 import datetime
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
-from hypothesis import given, settings as hyp_settings
-from hypothesis import strategies as st
+from django.test import Client
+from django.urls import reverse
+from django.utils import timezone
+from hypothesis import given, settings as hyp_settings, strategies as st
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
@@ -28,7 +31,11 @@ from urbanlens.dashboard.controllers.trip import (
     _is_organizer,
     _parse_scheduled_at,
 )
+from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
+
+if TYPE_CHECKING:
+    from django.contrib.auth.models import User
 
 _hyp = hyp_settings(max_examples=40, deadline=None)
 
@@ -419,3 +426,152 @@ class BuildActivityForecastsTests(TestCase):
         _build_activity_forecasts(acts, gw)
         # Gateway should only be called once for the same coord pair
         self.assertEqual(gw.get_raw_forecast.call_count, 1)
+
+
+# ---------------------------------------------------------------------------
+# TripWeatherView - drops activities with nothing useful to show instead of
+# rendering an empty "No location data"/"Outside 5-day forecast" row
+# ---------------------------------------------------------------------------
+
+class TripWeatherViewFiltersEmptyForecastsTests(TestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.user: User = baker.make("auth.User")
+        self.profile = Profile.objects.get(user=self.user)
+        self.profile.external_apis_enabled = True
+        self.profile.save(update_fields=["external_apis_enabled"])
+        self.client_ = Client()
+        self.client_.force_login(self.user)
+        self.trip = Trip.objects.create(name="Test Trip", creator=self.profile)
+        TripMembership.objects.get_or_create(trip=self.trip, profile=self.profile, defaults={"rsvp": "yes"})
+
+    def _url(self) -> str:
+        return reverse("trips.weather", args=[self.trip.slug])
+
+    def _tomorrow(self) -> datetime.datetime:
+        return timezone.now() + datetime.timedelta(days=1)
+
+    def test_activity_with_no_location_is_dropped_and_panel_hides(self) -> None:
+        baker.make(
+            TripActivity,
+            trip=self.trip,
+            title="Campground",
+            scheduled_at=self._tomorrow(),
+            lat_override=None,
+            lng_override=None,
+            pin=None,
+            location=None,
+        )
+
+        with patch("urbanlens.UrbanLens.settings.app.settings.openweathermap_api_key", "fake-key"):
+            resp = self.client_.get(self._url())
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.context["grouped"], [])
+        content = resp.content.decode()
+        self.assertNotIn("No location data", content)
+        self.assertNotIn("Outside 5-day forecast", content)
+
+    def test_activity_with_a_matched_forecast_slot_is_kept(self) -> None:
+        target = self._tomorrow()
+        baker.make(
+            TripActivity,
+            trip=self.trip,
+            title="Museum",
+            scheduled_at=target,
+            lat_override=51.5,
+            lng_override=-0.12,
+            pin=None,
+            location=None,
+        )
+        slot = {
+            "date": target.replace(tzinfo=None),
+            "main": {"temp": 20, "feels_like": 18, "humidity": 50},
+            "weather": [{"icon": "01d", "description": "Clear"}],
+            "wind": {"speed": 5},
+        }
+        gw = MagicMock()
+        gw.get_raw_forecast.return_value = [slot]
+
+        with (
+            patch("urbanlens.UrbanLens.settings.app.settings.openweathermap_api_key", "fake-key"),
+            patch("urbanlens.dashboard.services.apis.weather.gateway.OpenWeatherMapGateway", return_value=gw),
+        ):
+            resp = self.client_.get(self._url())
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.context["grouped"])
+        self.assertIn("Clear", resp.content.decode())
+
+    def test_mixed_activities_only_the_matched_one_survives(self) -> None:
+        target = self._tomorrow()
+        baker.make(
+            TripActivity,
+            trip=self.trip,
+            title="Campground",
+            scheduled_at=target,
+            lat_override=None,
+            lng_override=None,
+            pin=None,
+            location=None,
+        )
+        baker.make(
+            TripActivity,
+            trip=self.trip,
+            title="Museum",
+            scheduled_at=target,
+            lat_override=51.5,
+            lng_override=-0.12,
+            pin=None,
+            location=None,
+        )
+        slot = {
+            "date": target.replace(tzinfo=None),
+            "main": {"temp": 20, "feels_like": 18, "humidity": 50},
+            "weather": [{"icon": "01d", "description": "Clear"}],
+            "wind": {"speed": 5},
+        }
+        gw = MagicMock()
+        gw.get_raw_forecast.return_value = [slot]
+
+        with (
+            patch("urbanlens.UrbanLens.settings.app.settings.openweathermap_api_key", "fake-key"),
+            patch("urbanlens.dashboard.services.apis.weather.gateway.OpenWeatherMapGateway", return_value=gw),
+        ):
+            resp = self.client_.get(self._url())
+
+        grouped = resp.context["grouped"]
+        self.assertEqual(len(grouped), 1)
+        _day, entries = grouped[0]
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]["location_name"], "Museum")
+
+
+# ---------------------------------------------------------------------------
+# activities_with_index's has_coords - drives the Activities panel's
+# "Needs location" badge
+# ---------------------------------------------------------------------------
+
+class ActivitiesPanelHasCoordsTests(TestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.user: User = baker.make("auth.User")
+        self.profile = Profile.objects.get(user=self.user)
+        self.client_ = Client()
+        self.client_.force_login(self.user)
+        self.trip = Trip.objects.create(name="Test Trip", creator=self.profile)
+        TripMembership.objects.get_or_create(trip=self.trip, profile=self.profile, defaults={"rsvp": "yes"})
+
+    def test_activity_with_no_coords_shows_needs_location_badge(self) -> None:
+        baker.make(TripActivity, trip=self.trip, title="Campground", lat_override=None, lng_override=None, pin=None, location=None)
+
+        resp = self.client_.get(reverse("trips.activities", args=[self.trip.slug]))
+
+        self.assertIn("Needs location", resp.content.decode())
+
+    def test_activity_with_coords_does_not_show_needs_location_badge(self) -> None:
+        baker.make(TripActivity, trip=self.trip, title="Museum", lat_override=51.5, lng_override=-0.12, pin=None, location=None)
+
+        resp = self.client_.get(reverse("trips.activities", args=[self.trip.slug]))
+
+        self.assertNotIn("Needs location", resp.content.decode())

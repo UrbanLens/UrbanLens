@@ -553,6 +553,7 @@ def _activities_panel_html(request: HttpRequest, trip: Trip, profile: Profile, *
             "can_manage": viewer_has_joined and (act.added_by_id == profile.id or viewer_is_organizer),
             "effective_location_hidden": act.location_hidden or (act.id in viewer_hidden),
             "pin_slug": act.pin.slug if (act.pin_id and act.pin.profile_id == profile.id) else None,
+            "has_coords": _activity_coords(act) is not None,
         }
         for act in activities
     ]
@@ -1890,6 +1891,13 @@ class TripWeatherView(LoginRequiredMixin, View):
                 try:
                     gateway = OpenWeatherMapGateway()
                     activity_forecasts = _build_activity_forecasts(activities, gateway)
+                    # Drop activities with nothing useful to show (no location data,
+                    # or too far outside the 5-day forecast window) instead of
+                    # rendering an empty "No location data"/"Outside 5-day forecast"
+                    # row for them - a day (or the whole panel) with nothing left
+                    # after this simply doesn't appear, rather than showing only
+                    # empty placeholders.
+                    activity_forecasts = [af for af in activity_forecasts if af["slot"] is not None]
 
                     day_map: dict = defaultdict(list)
                     for af in activity_forecasts:
