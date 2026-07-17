@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime
+from uuid import uuid4
 
 from django.db import IntegrityError, transaction
 from django.utils import timezone
@@ -10,7 +11,7 @@ from model_bakery import baker
 import pytest
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinStatus
+from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinContact, SafetyCheckinStatus
 from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion
 from urbanlens.dashboard.services.safety import cancel_checkin, check_in, create_checkin, escalate_checkin, get_active_checkin, mark_found_safe
 
@@ -190,6 +191,31 @@ class SafetyCheckinQuerySetTests(TestCase):
         self.assertNotIn(checked_in.pk, results)
         self.assertNotIn(found_safe.pk, results)
         self.assertNotIn(cancelled.pk, results)
+
+
+class SafetyCheckinContactByTokenTests(TestCase):
+    """SafetyCheckinContact.objects.by_token() - previously six call sites
+    across controllers/markup.py and controllers/safety.py each re-wrote
+    `get_object_or_404(SafetyCheckinContact[.objects...], token=token)` directly."""
+
+    def setUp(self):
+        self.profile = baker.make("auth.User").profile
+        self.checkin = _checkin(self.profile)
+
+    def test_returns_the_matching_contact(self):
+        contact = baker.make("dashboard.SafetyCheckinContact", checkin=self.checkin, email="contact@example.com", contact_profile=None)
+        self.assertEqual(SafetyCheckinContact.objects.by_token(contact.token).first(), contact)
+
+    def test_empty_for_an_unknown_token(self):
+        self.assertFalse(SafetyCheckinContact.objects.by_token(uuid4()).exists())
+
+    def test_chains_with_select_related(self):
+        """Every real call site chains select_related(...) before by_token() -
+        confirm that composition still resolves to exactly the right row."""
+        contact = baker.make("dashboard.SafetyCheckinContact", checkin=self.checkin, email="contact@example.com", contact_profile=None)
+        result = SafetyCheckinContact.objects.select_related("checkin", "checkin__profile").by_token(contact.token).first()
+        self.assertEqual(result, contact)
+        self.assertEqual(result.checkin_id, self.checkin.pk)
 
 
 class OneActiveCheckinAtATimeTests(TestCase):

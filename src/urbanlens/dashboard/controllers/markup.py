@@ -229,7 +229,7 @@ class SafetyContactMarkupJsonView(View):
         Returns:
             JsonResponse with ``markup_items`` list, or 404 if the token is invalid.
         """
-        contact = get_object_or_404(SafetyCheckinContact.objects.select_related("checkin__markup_map"), token=token)
+        contact = get_object_or_404(SafetyCheckinContact.objects.select_related("checkin__markup_map").by_token(token))
         markup_map = contact.checkin.markup_map
         if markup_map is None:
             return JsonResponse({"markup_items": []})

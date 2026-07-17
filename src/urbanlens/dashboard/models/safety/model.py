@@ -28,7 +28,7 @@ from django.db.models import (
 from django.db.models.fields import CharField, DateTimeField
 
 from urbanlens.dashboard.models import abstract
-from urbanlens.dashboard.models.safety.queryset import SafetyCheckinManager
+from urbanlens.dashboard.models.safety.queryset import SafetyCheckinContactManager, SafetyCheckinManager
 
 logger = logging.getLogger(__name__)
 
@@ -372,6 +372,8 @@ class SafetyCheckinContact(abstract.DashboardModel):
     if TYPE_CHECKING:
         checkin_id: int
         contact_profile_id: int | None
+
+    objects = SafetyCheckinContactManager()
 
     @property
     def display_name(self) -> str:

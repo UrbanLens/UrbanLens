@@ -1104,7 +1104,7 @@ class SafetyContactPortalView(View):
         Returns:
             Rendered page, or 404 if the token is invalid.
         """
-        contact = get_object_or_404(SafetyCheckinContact.objects.select_related("checkin", "checkin__profile"), token=token)
+        contact = get_object_or_404(SafetyCheckinContact.objects.select_related("checkin", "checkin__profile").by_token(token))
         checkin = contact.checkin
         return render(
             request,
@@ -1135,7 +1135,7 @@ class SafetyContactMarkSafeView(View):
         Returns:
             Redirect back to the contact portal.
         """
-        contact = get_object_or_404(SafetyCheckinContact, token=token)
+        contact = get_object_or_404(SafetyCheckinContact.objects.by_token(token))
         mark_found_safe(contact)
         return redirect("safety.contact.portal", token=token)
 
@@ -1165,7 +1165,7 @@ class SafetyContactOptOutView(View):
         """
         if SafetyContactOptOutScope.invalid(scope):
             raise Http404
-        contact = get_object_or_404(SafetyCheckinContact.objects.select_related("checkin", "checkin__profile"), token=token)
+        contact = get_object_or_404(SafetyCheckinContact.objects.select_related("checkin", "checkin__profile").by_token(token))
         return render(
             request,
             "dashboard/pages/safety/contact_optout_confirm.html",
@@ -1190,7 +1190,7 @@ class SafetyContactOptOutView(View):
         """
         if SafetyContactOptOutScope.invalid(scope):
             raise Http404
-        contact = get_object_or_404(SafetyCheckinContact, token=token)
+        contact = get_object_or_404(SafetyCheckinContact.objects.by_token(token))
         record_contact_opt_out(contact, SafetyContactOptOutScope(scope))
         messages.success(request, "You won't receive further notifications about this trip.")
         return redirect("safety.contact.portal", token=token)
@@ -1253,7 +1253,7 @@ class SafetyCheckinMessageView(View):
                 any contact.
         """
         if token is not None:
-            contact = get_object_or_404(SafetyCheckinContact.objects.select_related("checkin"), token=token)
+            contact = get_object_or_404(SafetyCheckinContact.objects.select_related("checkin").by_token(token))
             return contact.checkin, contact
         if not request.user.is_authenticated:
             from django.http import Http404

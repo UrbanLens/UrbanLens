@@ -143,3 +143,29 @@ class SafetyCheckinQuerySet(abstract.PublicDashboardQuerySet):
 
 class SafetyCheckinManager(abstract.PublicDashboardManager.from_queryset(SafetyCheckinQuerySet)):
     """Manager for SafetyCheckin."""
+
+
+class SafetyCheckinContactQuerySet(abstract.DashboardQuerySet):
+    """QuerySet for SafetyCheckinContact records."""
+
+    def by_token(self, token: str) -> Self:
+        """Resolve a contact by their magic-link token.
+
+        A contact identified only by email has no account to log into, so
+        the public contact portal (and the check-in/markup-map views it
+        links to) all resolve the requesting contact this same way - see
+        the model's own docstring for why ``token`` is the credential here.
+
+        Args:
+            token: The magic-link token from the URL.
+
+        Returns:
+            Queryset filtered to at most one matching row - callers typically
+            wrap this in ``get_object_or_404`` (optionally after chaining
+            their own ``select_related(...)`` first).
+        """
+        return self.filter(token=token)
+
+
+class SafetyCheckinContactManager(abstract.DashboardManager.from_queryset(SafetyCheckinContactQuerySet)):
+    """Manager for SafetyCheckinContact."""
