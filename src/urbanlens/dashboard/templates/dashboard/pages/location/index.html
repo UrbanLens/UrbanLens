@@ -9,6 +9,8 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" crossorigin="" />
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"
     integrity="sha384-JP5UPxIO2Tm2o79Fb0tGYMa44jkWar53aBoCbd8ah0+LcCDoohTIYr+zIXyfGIJN" crossorigin="anonymous"></script>
+<script src="{% static 'js/page-tabs.js' %}" defer></script>
+<script src="{% static 'js/article-editor.js' %}" defer></script>
 {% endblock %}
 
 {% block content %}
@@ -112,6 +114,25 @@
 </div>
 <script src="{% static 'js/cover-hero.js' %}"></script>
 {% endif %}
+{# -- Page tabs: Overview / Article / Comments / Edit History -------------- #}
+<nav class="page-tabs" data-page-tabs aria-label="Pin sections">
+    <button type="button" class="page-tab is-active" data-tab="overview">
+        <i class="material-symbols-outlined">dashboard</i><span>Overview</span>
+    </button>
+    <button type="button" class="page-tab" data-tab="article"
+            title="Your private article about this place - only you can see it">
+        <i class="material-symbols-outlined">article</i><span>Article</span>
+    </button>
+    <button type="button" class="page-tab" data-tab="comments">
+        <i class="material-symbols-outlined">chat</i><span>Comments</span>
+        {% if pin_comment_count %}<span class="page-tab-badge">{{ pin_comment_count }}</span>{% endif %}
+    </button>
+    <button type="button" class="page-tab" data-tab="history">
+        <i class="material-symbols-outlined">history</i><span>Edit History</span>
+    </button>
+</nav>
+
+<section class="page-tab-panel" data-tab-panel="overview">
 <div class="pin-detail-grid">
     <div id="pin-detail-onboarding" class="page-onboarding" aria-live="polite"></div>
 
@@ -517,19 +538,54 @@
         </div>
     </div>{# end .pin-aux-grid #}
 
-    {# -- Comments: always present ----------------------------------------- #}
-    <div id="comment-panel" class="card card--secondary"
-     hx-get="{% url 'pin.comments' pin.slug %}"
-     hx-trigger="load[!window.ulSectionCollapsed('pin','comments')], ul:unhide"
-     hx-swap="outerHTML"
-     data-collapse-scope="pin" data-collapse-section="comments">
+</div>{# end .pin-detail-grid #}
+</section>{# end overview tab #}
+
+{# -- Article tab: the user's private, Wikipedia-style article ------------- #}
+<section class="page-tab-panel" data-tab-panel="article" hidden>
+    <div class="card article-card">
+        <div class="card__body">
+            <div id="article-panel"
+                 hx-get="{% url 'pin.article' pin.slug %}"
+                 hx-trigger="load"
+                 hx-swap="outerHTML">
+                <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading article...</div>
+            </div>
+        </div>
+    </div>
+</section>
+
+{# -- Comments tab ---------------------------------------------------------- #}
+<section class="page-tab-panel" data-tab-panel="comments" hidden>
+    <div id="comment-panel" class="card"
+         hx-get="{% url 'pin.comments' pin.slug %}"
+         hx-trigger="load"
+         hx-swap="outerHTML">
         <div class="card-header">
             <i class="material-symbols-outlined">chat</i>
             <span>Comments</span>
         </div>
         <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
     </div>
-</div>{# end .pin-detail-grid #}
+</section>
+
+{# -- Edit history tab: article revision history --------------------------- #}
+<section class="page-tab-panel" data-tab-panel="history" hidden>
+    <div class="card article-history-card">
+        <div class="card-header">
+            <i class="material-symbols-outlined">history_edu</i>
+            <h3>Article Revisions</h3>
+        </div>
+        <div class="card__body">
+            <div id="article-history-panel"
+                 hx-get="{% url 'pin.article.history' pin.slug %}"
+                 hx-trigger="load"
+                 hx-swap="outerHTML">
+                <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
+            </div>
+        </div>
+    </div>
+</section>
 
 {% if has_child_pins or parent_pin %}
 {# -- Floating actions menu (bottom-right, follows scroll) ----------------- #}

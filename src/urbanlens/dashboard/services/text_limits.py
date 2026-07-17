@@ -11,6 +11,8 @@ so the limit is enforced consistently regardless of which write path is used.
 
 from __future__ import annotations
 
+MAX_ARTICLE_LENGTH = 200_000
+MAX_ARTICLE_EDIT_SUMMARY_LENGTH = 255
 MAX_PIN_DESCRIPTION_LENGTH = 50_000
 MAX_WIKI_DESCRIPTION_LENGTH = 50_000
 MAX_PIN_LIST_DESCRIPTION_LENGTH = 50_000

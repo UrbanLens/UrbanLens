@@ -166,6 +166,7 @@ class LocationWikiView(LoginRequiredMixin, View):
                 "show_wiki_cover_photo": show_wiki_cover_photo,
                 "wiki_cover_candidates": wiki_cover_candidates,
                 "can_delete_wiki": wiki.can_be_deleted_by(profile),
+                "wiki_comment_count": wiki.comments.count(),
                 "pin_count_display": pin_count_display,
                 "first_pinned": first_pinned,
                 "wiki_stats": [_wiki_stat_context(wiki, field, profile) for field in WikiStatField.values],

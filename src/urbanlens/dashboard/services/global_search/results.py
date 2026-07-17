@@ -31,6 +31,7 @@ RESULT_TYPES: dict[str, ResultTypeMeta] = {
         ResultTypeMeta("pins", "Pins", "push_pin"),
         ResultTypeMeta("photos", "Photos", "photo_library"),
         ResultTypeMeta("wikis", "Community wikis", "public"),
+        ResultTypeMeta("articles", "Articles", "article"),
         ResultTypeMeta("trips", "Trips", "luggage"),
         ResultTypeMeta("visits", "Visits", "hiking"),
         ResultTypeMeta("messages", "Direct messages", "forum"),

@@ -457,6 +457,51 @@ class WikiSearchProvider(SearchProvider):
         return results
 
 
+class ArticleSearchProvider(SearchProvider):
+    """Long-form articles: the user's private pin articles plus community wiki articles they can read."""
+
+    slug = "articles"
+    fuzzy_field = ""
+
+    def search(self, profile: Profile, parsed: ParsedQuery, limit: int) -> list[SearchResult]:
+        from urbanlens.dashboard.models.article import Article
+
+        access = Q(pin__profile=profile)
+        if profile.community_enabled:
+            access |= Q(wiki__location__pins__profile=profile) | Q(wiki__created_by=profile)
+        queryset = Article.objects.filter(access).exclude(content="").select_related("pin__location__wiki", "wiki__location", "last_edited_by__user")
+        if parsed.place:
+            queryset = queryset.filter(place_filter("pin__location", parsed.place) | place_filter("wiki__location", parsed.place))
+        queryset = queryset.filter(date_range_filter("updated", parsed))
+        queryset = self.apply_text(queryset, parsed, ["content", "pin__name", "pin__aliases__name", "wiki__name", "wiki__aliases__name"]).distinct()
+
+        results = []
+        for article in queryset[:limit]:
+            if article.pin is not None:
+                pin = article.pin
+                url = reverse("pin.details", kwargs={"pin_slug": pin.slug or str(pin.uuid)}) + "#tab-article"
+                title = f"Article: {pin.effective_name or 'Unnamed pin'}"
+                subtitle = "Private pin article"
+            elif article.wiki is not None and article.wiki.location is not None and article.wiki.location.slug:
+                url = reverse("location.wiki", kwargs={"location_slug": article.wiki.location.slug}) + "#tab-article"
+                title = f"Article: {article.wiki.name or 'Unnamed wiki'}"
+                subtitle = "Community wiki article"
+            else:
+                continue
+            results.append(
+                SearchResult(
+                    type=self.slug,
+                    title=title,
+                    url=url,
+                    subtitle=subtitle,
+                    snippet=excerpt(article.content, parsed.terms),
+                    date=article.updated,
+                    score=self.score_of(article),
+                ),
+            )
+        return results
+
+
 class TripSearchProvider(SearchProvider):
     """Trips the user created or is a member of, including activities and comments."""
 
@@ -735,6 +780,7 @@ def default_providers() -> list[SearchProvider]:
         PinSearchProvider(),
         PhotoSearchProvider(),
         WikiSearchProvider(),
+        ArticleSearchProvider(),
         TripSearchProvider(),
         VisitSearchProvider(),
         DirectMessageSearchProvider(),

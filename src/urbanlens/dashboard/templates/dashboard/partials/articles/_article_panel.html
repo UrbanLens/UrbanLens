@@ -1,0 +1,81 @@
+{# Read mode of a pin/wiki article. Swapped into the Article tab. #}
+<div id="article-panel" class="article-panel"
+     hx-get="{{ scope.urls.view }}"
+     hx-trigger="articleChanged from:body"
+     hx-swap="outerHTML">
+
+    {% if article and article.content %}
+    <div class="article-meta-bar">
+        <div class="article-meta-info">
+            {% if scope.is_private %}
+            <span class="article-privacy-chip article-privacy-chip--private" data-tooltip="Only you can see this article.">
+                <i class="material-symbols-outlined">lock</i> Private
+            </span>
+            {% else %}
+            <span class="article-privacy-chip" data-tooltip="Visible to everyone who has this location pinned. Anyone with access can edit it.">
+                <i class="material-symbols-outlined">public</i> Community
+            </span>
+            {% endif %}
+            <span class="article-meta-item">{{ article.word_count }} word{{ article.word_count|pluralize }}</span>
+            {% if article.last_edited_by %}
+            <span class="article-meta-item">Last edited by <strong>{{ article.last_edited_by.username }}</strong> on {{ article.updated|date:"M d, Y" }}</span>
+            {% else %}
+            <span class="article-meta-item">Last edited {{ article.updated|date:"M d, Y" }}</span>
+            {% endif %}
+            {% if revision_count %}
+            <button type="button" class="article-meta-link"
+                    onclick="window.ulActivatePageTab && window.ulActivatePageTab('history')">
+                {{ revision_count }} revision{{ revision_count|pluralize }}
+            </button>
+            {% endif %}
+        </div>
+        <button type="button" class="btn btn--secondary article-edit-btn"
+                hx-get="{{ scope.urls.edit }}"
+                hx-target="#article-panel"
+                hx-swap="outerHTML">
+            <i class="material-symbols-outlined">edit</i> Edit
+        </button>
+    </div>
+
+    <div class="article-layout{% if toc|length >= 3 %} article-layout--with-toc{% endif %}">
+        {% if toc|length >= 3 %}
+        <nav class="article-toc" aria-label="Article contents">
+            <div class="article-toc-title"><i class="material-symbols-outlined">toc</i> Contents</div>
+            <ol class="article-toc-list">
+                {% for entry in toc %}
+                <li class="article-toc-item article-toc-item--l{{ entry.level }}">
+                    <a href="#{{ entry.anchor }}">{{ entry.title }}</a>
+                </li>
+                {% endfor %}
+            </ol>
+        </nav>
+        {% endif %}
+        <div class="article-body">
+            {{ article.content_html|safe }}
+        </div>
+    </div>
+    {% else %}
+    <div class="article-empty">
+        <i class="material-symbols-outlined article-empty-icon">article</i>
+        <h3>
+            {% if scope.is_private %}You haven't written an article for this pin yet{% else %}This place doesn't have an article yet{% endif %}
+        </h3>
+        <p class="article-empty-hint">
+            {% if scope.is_private %}
+            Keep long-form research, history, and trip write-ups here - formatted like a Wikipedia article, with sections,
+            links, and references. It stays completely private to you.
+            {% else %}
+            Be the first to document this place for the community: its history, condition, access notes, and sources.
+            Everyone who has this location pinned can read and improve the article.
+            {% endif %}
+        </p>
+        <button type="button" class="btn btn--primary"
+                hx-get="{{ scope.urls.edit }}"
+                hx-target="#article-panel"
+                hx-swap="outerHTML">
+            <i class="material-symbols-outlined">edit_note</i>
+            {% if scope.is_private %}Write your article{% else %}Start the article{% endif %}
+        </button>
+    </div>
+    {% endif %}
+</div>

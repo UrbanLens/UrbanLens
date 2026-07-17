@@ -10,6 +10,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"
     integrity="sha384-JP5UPxIO2Tm2o79Fb0tGYMa44jkWar53aBoCbd8ah0+LcCDoohTIYr+zIXyfGIJN" crossorigin="anonymous"></script>
 <script src="{% static 'js/cover-hero.js' %}"></script>
+<script src="{% static 'js/page-tabs.js' %}" defer></script>
+<script src="{% static 'js/article-editor.js' %}" defer></script>
 {% endblock %}
 
 {% block hero %}
@@ -84,6 +86,24 @@
     </div>
     {% endif %}
 
+    {# -- Page tabs: Overview / Article / Comments / Edit History ----------- #}
+    <nav class="page-tabs" data-page-tabs aria-label="Wiki sections">
+        <button type="button" class="page-tab is-active" data-tab="overview">
+            <i class="material-symbols-outlined">dashboard</i><span>Overview</span>
+        </button>
+        <button type="button" class="page-tab" data-tab="article">
+            <i class="material-symbols-outlined">article</i><span>Article</span>
+        </button>
+        <button type="button" class="page-tab" data-tab="comments">
+            <i class="material-symbols-outlined">chat</i><span>Comments</span>
+            {% if wiki_comment_count %}<span class="page-tab-badge">{{ wiki_comment_count }}</span>{% endif %}
+        </button>
+        <button type="button" class="page-tab" data-tab="history">
+            <i class="material-symbols-outlined">history</i><span>Edit History</span>
+        </button>
+    </nav>
+
+    <section class="page-tab-panel" data-tab-panel="overview">
     {# -- Body grid --------------------------------------------------------- #}
     <div class="wiki-body">
 
@@ -185,40 +205,74 @@
                 <div class="card__body view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
             </div>
 
-            {# -- Comments ------------------------------------------------------ #}
-            <div id="comment-panel"
-                 hx-get="{% url 'location.wiki.comments' location.slug %}"
-                 hx-trigger="load[!window.ulSectionCollapsed('wiki','comments')], ul:unhide"
-                 hx-swap="outerHTML"
-                 class="card wiki-card"
-                 data-collapse-scope="wiki" data-collapse-section="comments">
-                <div class="card-header">
-                    <i class="material-symbols-outlined">chat</i>
-                    <h2>Discussion</h2>
-                </div>
-                <div class="card__body wiki-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
-            </div>
+        </div>{# end wiki-body-secondary #}
 
-            {# -- Edit history -------------------------------------------------- #}
-            <div class="card wiki-card wiki-tabs-card" data-collapse-scope="wiki" data-collapse-section="history">
+    </div>{# end wiki-body #}
+    </section>{# end overview tab #}
+
+    {# -- Article tab: the community's Wikipedia-style article --------------- #}
+    <section class="page-tab-panel" data-tab-panel="article" hidden>
+        <div class="card wiki-card article-card">
+            <div class="card__body">
+                <div id="article-panel"
+                     hx-get="{% url 'location.wiki.article' location.slug %}"
+                     hx-trigger="load"
+                     hx-swap="outerHTML">
+                    <div class="wiki-loading"><i class="material-icons spin">autorenew</i> Loading article...</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    {# -- Comments tab -------------------------------------------------------- #}
+    <section class="page-tab-panel" data-tab-panel="comments" hidden>
+        <div id="comment-panel"
+             hx-get="{% url 'location.wiki.comments' location.slug %}"
+             hx-trigger="load"
+             hx-swap="outerHTML"
+             class="card wiki-card">
+            <div class="card-header">
+                <i class="material-symbols-outlined">chat</i>
+                <h2>Discussion</h2>
+            </div>
+            <div class="card__body wiki-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
+        </div>
+    </section>
+
+    {# -- Edit history tab: field edits + article revisions ------------------- #}
+    <section class="page-tab-panel" data-tab-panel="history" hidden>
+        <div class="wiki-history-grid">
+            <div class="card wiki-card wiki-tabs-card">
                 <div class="card-header">
-                    <i class="material-symbols-outlined">history</i>
-                    <h2>Edit History</h2>
+                    <i class="material-symbols-outlined">edit_note</i>
+                    <h2>Page &amp; Field Edits</h2>
                 </div>
                 <div id="wiki-tab-content"
                      class="card__body wiki-tab-content"
                      hx-get="{% url 'location.wiki.history' location.slug %}"
-                     hx-trigger="load[!window.ulSectionCollapsed('wiki','history')], ul:unhide"
+                     hx-trigger="load"
                      hx-swap="innerHTML">
                     <div class="wiki-loading">
                         <i class="material-icons spin">autorenew</i> Loading...
                     </div>
                 </div>
             </div>
-
-        </div>{# end wiki-body-secondary #}
-
-    </div>{# end wiki-body #}
+            <div class="card wiki-card article-history-card">
+                <div class="card-header">
+                    <i class="material-symbols-outlined">history_edu</i>
+                    <h2>Article Revisions</h2>
+                </div>
+                <div class="card__body">
+                    <div id="article-history-panel"
+                         hx-get="{% url 'location.wiki.article.history' location.slug %}"
+                         hx-trigger="load"
+                         hx-swap="outerHTML">
+                        <div class="wiki-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
 
     {# -- Suggest-edits dialog ----------------------------------------------- #}
     <dialog id="wiki-edit-dialog" class="wiki-edit-dialog ul-dialog">

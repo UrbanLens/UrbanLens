@@ -35,6 +35,8 @@ TYPE_KEYWORDS: dict[str, str] = {
     "locations": "pins",
     "wiki": "wikis",
     "wikis": "wikis",
+    "article": "articles",
+    "articles": "articles",
     "trip": "trips",
     "trips": "trips",
     "visit": "visits",

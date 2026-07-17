@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User
 from django.core.cache import cache
+from django.core.exceptions import ValidationError
 from django.http import HttpRequest, HttpResponse, JsonResponse, StreamingHttpResponse
 from django.shortcuts import render
 from django.utils import timezone
@@ -98,7 +99,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         except Pin.DoesNotExist:
             try:
                 pin = Pin.objects.select_related("location", "parent_pin", "parent_pin__location").get(uuid=kwargs["pin_slug"], profile__user=request.user)
-            except (Pin.DoesNotExist, ValueError):
+            except (Pin.DoesNotExist, ValueError, ValidationError):
+                # ValidationError: pin_slug isn't a valid UUID string at all.
                 return render(
                     request,
                     "dashboard/pages/errors/pin_not_found.html",
@@ -202,6 +204,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 "panel_tabs": panel_tabs,
                 "default_panel_tab_key": default_panel_tab_key,
                 "has_ever_used_aliases": has_ever_used_aliases,
+                "pin_comment_count": pin.comments.count(),
                 "media_bulk_actions": [
                     {"action": "relevant", "icon": "thumb_up", "label": "Mark relevant"},
                     {"action": "not_relevant", "icon": "thumb_down", "label": "Mark not relevant"},

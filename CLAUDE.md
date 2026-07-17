@@ -45,7 +45,31 @@ docker-compose up --build
 ```
 Full stack: Django app on port 21800, Nginx on 21080, PostgreSQL/PostGIS.
 
-Do not attempt to run docker. Instead, if docker needs to be run, ask the user to run docker manually. Claude's environment is not setup to run docker properly. 
+Local Windows dev cannot run Docker directly - use the remote dev server below instead.
+
+### Remote dev server (Docker/Docker Compose)
+
+Claude has SSH access to a dedicated Ubuntu dev VM (hostname `chiron`) that can run Docker and
+docker-compose, since the local Windows environment cannot. Details:
+
+- **Host**: `10.2.0.244`, **user**: `claude`, **key**: `docs/prompts/id_ed25519`
+  ```powershell
+  ssh -i docs/prompts/id_ed25519 -o IdentitiesOnly=yes claude@10.2.0.244 "<command>"
+  ```
+- The project is checked out on the server at `/projects/UrbanLens`, symlinked into the `claude`
+  user's home as `~/UrbanLens`. It's owned by a different local user (`snow`), so git will refuse
+  to operate on it until you run (once per session/container, harmless to repeat):
+  ```bash
+  git config --global --add safe.directory /projects/UrbanLens
+  ```
+- **The remote checkout is a separate filesystem from this local working directory.** Local edits
+  are not visible there automatically. Workflow to test a change on the dev server:
+  1. Commit and push the branch from local (or otherwise get the commits to the remote's git
+     remote).
+  2. `ssh` in and `git pull` (or fetch/checkout the right branch/commit) inside `~/UrbanLens`.
+  3. Run `docker compose up --build -d` (or `down`/restart individual services) there to pick up
+     the change.
+- Once running, the stack is reachable at **https://dev.urbanlens.org**.
 
 ### Linting & Type Checking
 

@@ -1,0 +1,8 @@
+{# Server-rendered live preview of in-progress editor content. #}
+<div class="article-body article-preview-body">
+    {% if rendered_html %}
+    {{ rendered_html|safe }}
+    {% else %}
+    <p class="article-preview-empty">Nothing to preview yet - start writing on the left.</p>
+    {% endif %}
+</div>

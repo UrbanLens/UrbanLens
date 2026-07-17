@@ -8,6 +8,7 @@ import urllib.parse
 import urllib.request
 
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.core.exceptions import ValidationError
 from django.db import DatabaseError
 from django.db.models import Count, Prefetch
 from django.db.models.functions import Coalesce, Lower
@@ -754,7 +755,8 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         except Pin.DoesNotExist:
             try:
                 pin = Pin.objects.filter(profile=profile).select_related("location").get(uuid=pin_slug)
-            except (Pin.DoesNotExist, ValueError):
+            except (Pin.DoesNotExist, ValueError, ValidationError):
+                # ValidationError: pin_slug isn't a valid UUID string at all.
                 return JsonResponse({"error": "not found"}, status=404)
         map_data = self.get_map_data(request, Pin.objects.filter(pk=pin.pk).select_related("location"))
         if not map_data:
@@ -781,7 +783,8 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 pin = Pin.objects.get(profile=request.user.profile, slug=pin_slug)
             except Pin.DoesNotExist:
                 pin = Pin.objects.get(profile=request.user.profile, uuid=pin_slug)
-        except (Pin.DoesNotExist, ValueError):
+        except (Pin.DoesNotExist, ValueError, ValidationError):
+            # ValidationError: pin_slug isn't a valid UUID string at all.
             return JsonResponse({"error": "not found"}, status=404)
 
         name = request.POST.get("name")
