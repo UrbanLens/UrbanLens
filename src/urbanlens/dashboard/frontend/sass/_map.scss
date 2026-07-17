@@ -2645,8 +2645,8 @@ div.container .addr-search-bar {
 
 /* -- Pin popup ------------------------------------------------------ */
 .leaflet-popup-content-wrapper {
-    background: rgba(18, 22, 34, 0.97);
-    backdrop-filter: blur(12px);
+    background: rgba(18, 22, 34, 0.90);
+    backdrop-filter: blur(3px);
     -webkit-backdrop-filter: blur(12px);
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 10px;
@@ -2658,6 +2658,11 @@ div.container .addr-search-bar {
 
 .leaflet-popup-content {
     margin: 0;
+}
+
+.leaflet-popup {
+    // Push the popup a little further away from the pin.
+    margin-bottom: 32px;
 }
 
 .leaflet-popup-tip {

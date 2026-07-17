@@ -833,7 +833,6 @@
 .settings-option-row {
     display: flex;
     gap: 1rem;
-    flex-wrap: wrap;
     margin-top: 0.5rem;
 }
 
@@ -862,7 +861,6 @@
     span {
         font-size: 0.85rem;
         font-weight: 600;
-        color: var(--ul-grey-6);
         transition: color 0.15s;
     }
 
@@ -875,12 +873,9 @@
         border-color: var(--primary-color);
         background: rgba($primary-color, 0.06);
 
+        span,
         i {
-            color: var(--primary-color);
-        }
-
-        span {
-            color: var(--primary-color);
+            color: #fff;
         }
     }
 

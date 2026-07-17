@@ -66,11 +66,6 @@
         &:has(input:checked) {
             background: rgba($primary-color, 0.40);
             border-color: var(--primary-color);
-            color: var(--ul-grey-8);
-
-            i {
-                color: var(--ul-grey-8);
-            }
         }
     }
 
