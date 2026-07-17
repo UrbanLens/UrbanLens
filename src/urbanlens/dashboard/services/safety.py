@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING
 
 from django.conf import settings
 from django.core.mail import EmailMultiAlternatives
-from django.db.models import Q
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
@@ -160,7 +159,7 @@ def save_contact_defaults(profile: Profile, contacts: Iterable[ContactInput]) ->
         profile: Profile whose defaults are being replaced.
         contacts: Iterable of (contact_profile, email, label) tuples.
     """
-    EmergencyContactDefault.objects.filter(owner=profile).delete()
+    EmergencyContactDefault.objects.for_owner(profile).delete()
     for order, (contact_profile, email, label) in enumerate(contacts):
         resolved_profile, resolved_email = _resolve_contact(contact_profile, email)
         EmergencyContactDefault.objects.create(
@@ -181,7 +180,7 @@ def default_contacts_as_input(profile: Profile) -> list[ContactInput]:
     Returns:
         List of (contact_profile, email, label) tuples.
     """
-    return [(default.contact_profile, default.email, default.label) for default in EmergencyContactDefault.objects.filter(owner=profile)]
+    return [(default.contact_profile, default.email, default.label) for default in EmergencyContactDefault.objects.for_owner(profile)]
 
 
 def get_active_checkin(profile: Profile) -> SafetyCheckin | None:
@@ -257,11 +256,7 @@ def is_contact_opted_out(
     Returns:
         True if a matching ``SafetyContactOptOut`` row blocks notifying this identity.
     """
-    identity = Q(contact_profile=contact_profile) if contact_profile else Q(email__iexact=email)
-    scope = Q(scope=SafetyContactOptOutScope.GLOBAL) | Q(scope=SafetyContactOptOutScope.OWNER, owner=owner)
-    if checkin is not None:
-        scope |= Q(scope=SafetyContactOptOutScope.CHECKIN, checkin=checkin)
-    return SafetyContactOptOut.objects.filter(identity & scope).exists()
+    return SafetyContactOptOut.objects.blocks_notification(contact_profile, email, owner=owner, checkin=checkin)
 
 
 def validate_notifiable_contacts(

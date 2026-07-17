@@ -28,7 +28,12 @@ from django.db.models import (
 from django.db.models.fields import CharField, DateTimeField
 
 from urbanlens.dashboard.models import abstract
-from urbanlens.dashboard.models.safety.queryset import SafetyCheckinContactManager, SafetyCheckinManager
+from urbanlens.dashboard.models.safety.queryset import (
+    EmergencyContactDefaultManager,
+    SafetyCheckinContactManager,
+    SafetyCheckinManager,
+    SafetyContactOptOutManager,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -92,6 +97,8 @@ class EmergencyContactDefault(abstract.DashboardModel):
     if TYPE_CHECKING:
         owner_id: int
         contact_profile_id: int | None
+
+    objects = EmergencyContactDefaultManager()
 
     @property
     def display_name(self) -> str:
@@ -438,6 +445,8 @@ class SafetyContactOptOut(abstract.DashboardModel):
         contact_profile_id: int | None
         owner_id: int | None
         checkin_id: int | None
+
+    objects = SafetyContactOptOutManager()
 
     def __str__(self) -> str:
         """Return a human-readable description of this opt-out.
