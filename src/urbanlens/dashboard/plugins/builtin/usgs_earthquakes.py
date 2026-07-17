@@ -51,7 +51,7 @@ class UsgsEarthquakePanelSource(CoordinateGatedInfoPanelSource):
                 },
             )
 
-        return {"chips": [f"{len(events)} in the last 10 years"], "meta": meta}
+        return {"chips": [f"{len(events)} in the last 10 years"], "meta": meta, "nested": True}
 
     def debug_count(self, data: dict) -> int:
         """Number of seismic events found."""

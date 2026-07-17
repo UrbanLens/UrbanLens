@@ -57,7 +57,7 @@ class CensusTigerwebPanelSource(CoordinateGatedInfoPanelSource):
         if tribal_land and tribal_land.get("name"):
             facts.append({"icon": "warning", "text": f"Within {tribal_land['name']} - tribal land, access rules may differ"})
 
-        return {"facts": facts, "meta": meta}
+        return {"facts": facts, "meta": meta, "nested": True}
 
 
 class CensusTigerwebPlugin(UrbanLensPlugin):

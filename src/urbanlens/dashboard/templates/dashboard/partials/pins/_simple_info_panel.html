@@ -22,7 +22,7 @@ Context:
         content pages about the place (news articles, facility reports) offer
         it, never provider homepages.
 {% endcomment %}
-<div id="{{ section_id }}" class="simple-info-panel"
+<div id="{{ section_id }}" class="simple-info-panel {% if nested %}nested{% else %}card{% endif %}"
      data-collapse-scope="pin" data-collapse-section="{{ section_id }}">
     {% if debug %}
     <span class="debug-marker" hidden

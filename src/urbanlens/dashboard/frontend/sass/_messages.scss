@@ -16,7 +16,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(135deg, $primary-color, $primary-color-dark);
+    background: $color-purple-500;
 
     &--lg {
         width: 42px;
@@ -232,7 +232,7 @@
 .dm-layout {
     position: relative;
     display: grid;
-    grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
+    grid-template-columns: minmax(29rem, 33rem) minmax(0, 1fr);
     gap: 0;
     height: calc(100vh - 12rem);
     min-height: 420px;
@@ -931,9 +931,9 @@
     align-items: center;
     gap: .3rem;
     margin: .3rem 0;
-    padding: .3rem .75rem;
+    padding: .75rem 1rem;
     border-radius: $radius-full;
-    background: var(--ul-surface-raised);
+    background: rgba(0, 0, 0, 0.3);
     color: var(--ul-grey-6);
     font-size: .72rem;
     font-weight: 600;
@@ -953,19 +953,21 @@
 }
 
 .dm-bubble {
+    --lock-margin: 1rem;
     position: relative;
     max-width: min(75%, 34rem);
     // Symmetric, roomier padding gives the relaxed "text message" feel; the
     // action button and timestamp now live *outside* the bubble (revealed on
     // hover/tap), so no extra right inset is reserved for them.
-    padding: .5rem .9rem;
+    padding: 0.75rem 1.2rem;
     border-radius: 18px;
     font-size: .92rem;
     line-height: 1.45;
     display: flex;
     flex-direction: column;
     word-break: break-word;
-    transition: margin-bottom .12s ease;
+    transition: margin-bottom .12s ease;        
+
 
     // A message that directly continues the previous bubble (same sender,
     // same day, sent within MESSAGE_GROUP_GAP_SECONDS) sits closer to it and
@@ -1100,9 +1102,10 @@
 
     &--them {
         align-self: flex-start;
-        background: var(--ul-surface-raised);
+        background: rgba(0, 39, 33, 0.8);
         color: var(--ul-grey-8);
         border-bottom-left-radius: 5px;
+        left: var(--lock-margin);
 
         &.dm-bubble--grouped {
             border-top-left-radius: 6px;
@@ -1122,13 +1125,18 @@
             right: auto;
             left: .35rem;
         }
+
+        i {
+            left: -1.25rem;
+        }
     }
 
     &--own {
         align-self: flex-end;
-        background: linear-gradient(135deg, $primary-color, $primary-color-dark);
         color: #fff;
         border-bottom-right-radius: 5px;
+        right: var(--lock-margin);
+        background: rgba(6, 32, 73, 0.8);
 
         &.dm-bubble--grouped {
             border-top-right-radius: 6px;
@@ -1147,6 +1155,10 @@
         .dm-bubble__time {
             left: auto;
             right: .35rem;
+        }
+        
+        i {
+            right: -1.25rem;
         }
     }
 
@@ -1900,7 +1912,7 @@
     text-align: center;
 }
 
-.dm-composer {
+div.container .dm-composer {
     position: relative;
     display: flex;
     flex-direction: column;
@@ -1927,7 +1939,7 @@
         padding: .5rem .8rem;
         border: 1px solid var(--ul-surface-raised-border);
         border-radius: 18px;
-        background: var(--ul-surface-raised);
+        background: rgba(0, 0, 0, 0.3);
         color: inherit;
         font-family: inherit;
         font-size: .92rem;
@@ -1954,6 +1966,7 @@
         display: flex;
         align-items: center;
         gap: .1rem;
+        margin-top: 0.1rem;
     }
 
     &__attach {

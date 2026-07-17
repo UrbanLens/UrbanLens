@@ -274,6 +274,7 @@ class EpaEchoNearbyPanelSource(CoordinateGatedInfoPanelSource):
             "chips": [f"{len(meta)} nearby"],
             "meta": meta,
             "footer_link": {"url": "https://echo.epa.gov/", "label": "View on EPA ECHO"},
+            "nested": True,
         }
 
     def debug_count(self, data: dict) -> int:
