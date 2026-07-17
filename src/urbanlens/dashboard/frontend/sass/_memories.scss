@@ -1104,6 +1104,33 @@ $memories-type-colors: (
     font-size: .95rem;
     font-weight: 700;
     color: var(--ul-grey-8);
+
+    &--editable {
+        cursor: pointer;
+        border-radius: 4px;
+        padding: .1rem .3rem;
+        margin: 0 0 0 -.3rem;
+        transition: background .15s;
+
+        &:hover,
+        &:focus-visible {
+            background: var(--ul-grey-0a);
+            outline: none;
+        }
+    }
+}
+
+.memories-map-card-title-input {
+    width: 100%;
+    font: inherit;
+    font-weight: 700;
+    color: var(--ul-grey-8);
+    background: var(--ul-control-bg);
+    border: 1px solid var(--ul-color-accent);
+    border-radius: 4px;
+    padding: .1rem .3rem;
+    margin: 0 0 0 -.3rem;
+    outline: none;
 }
 
 .memories-map-card-meta {
