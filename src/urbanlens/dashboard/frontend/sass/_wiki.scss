@@ -41,7 +41,7 @@
         border-radius: 10px;
         padding: .65rem 1rem;
         font-size: .83rem;
-        max-width: 320px;
+        max-width: 32rem;
         line-height: 1.45;
         // Above the map's own controls/toolbar (z-index 1000, see .map-buttons /
         // _layout.scss) - matches the convention already established in _pin_lists.scss.
@@ -541,7 +541,7 @@
         border-radius: 4px;
         padding: .1rem .35rem;
         font-size: .82rem;
-        max-width: 200px;
+        max-width: 20rem;
         @include truncate;
     }
 
@@ -556,7 +556,7 @@
         border-radius: 4px;
         padding: .1rem .35rem;
         font-size: .82rem;
-        max-width: 200px;
+        max-width: 20rem;
         @include truncate;
     }
 

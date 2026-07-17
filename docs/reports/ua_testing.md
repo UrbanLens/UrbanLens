@@ -64,9 +64,6 @@ The top navigation item is labeled **Trips**, but the section hero heading reads
 ### Major — Sub-tab also named "Trips" creates confusing hierarchy
 The top-level nav item is "Trips," which leads to a page called "Plan" with sub-tabs: Overview, **Trips**, Calendar. Having a sub-tab with the same name as the parent nav item is disorienting.
 
-### Major — World map shown with "No locations to display" on trip detail
-When a trip has activities but no geographic coordinates attached to them, the map on the trip detail page zooms to the whole world and shows a tooltip: "No locations to display." This looks broken. The map should either be hidden until locations are added, or replaced with a prompt ("Add a location to your activities to see them on the map").
-
 ### Major — Onboarding itinerary tooltip appears even when activities already exist
 The "ITINERARY — Activities are proposed or confirmed stops" tooltip fires on the Neopex trip detail page, which already has one activity. The tooltip should not appear if the user has already added activities.
 

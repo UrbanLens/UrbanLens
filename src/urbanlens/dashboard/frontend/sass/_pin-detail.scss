@@ -598,7 +598,7 @@
     // constrain the width here to keep the preview compact.)
     .visit-map-preview {
         margin: .15rem 0 0;
-        max-width: 340px;
+        max-width: 34rem;
     }
 
     // Transparent full-cover button so a click anywhere on the small map opens
@@ -1142,6 +1142,26 @@
 
     .sv-embed {
         width: 100%;
+    }
+
+    // Escape hatch when the interactive embed's own (client-side) API key/
+    // referrer restriction rejects the request - Google renders its own raw
+    // rejection message inside that cross-origin iframe, which our JS has no
+    // way to detect, so this stays available rather than us trying to guess.
+    .sv-embed-fallback-btn {
+        @include btn-ghost;
+        width: 100%;
+        border-radius: 0;
+        border-width: 0;
+        border-top: 1px solid var(--ul-border);
+        padding: .4rem .6rem;
+        font-size: .75rem;
+        color: var(--ul-grey-5);
+
+        &:hover {
+            background: var(--ul-hover-bg);
+            color: var(--ul-grey-7);
+        }
     }
 }
 
@@ -2383,7 +2403,7 @@ body.page-location-details {
 // -- Create-community-wiki dialog (seed-field/alias/photo picker) -----------
 
 .pin-wiki-create-dialog {
-    max-width: 560px;
+    max-width: 56rem;
 
     .ul-dialog-body {
         padding: 1.25rem 1.4rem 1.4rem;
@@ -2658,7 +2678,7 @@ body.page-location-details {
 // -- Share-pin dialog (message + name picker + photo picker) ----------------
 
 .pin-share-dialog {
-    max-width: 560px;
+    max-width: 56rem;
 
     .ul-dialog-body {
         padding: 1.1rem 1.3rem 1.3rem;
@@ -3268,7 +3288,7 @@ body.page-location-details {
     align-items: center;
     gap: .25rem;
     min-width: 0;
-    max-width: 240px;
+    max-width: 24rem;
     @include truncate;
 
     .material-symbols-outlined,
@@ -4041,7 +4061,7 @@ body.page-location-details .pin-detail-grid {
             // one column's worth of space (few items on the page) - without
             // this, a single leftover item on a wide row would stretch edge
             // to edge instead of just looking comfortably larger.
-            max-width: 240px;
+            max-width: 24rem;
             margin-inline: auto;
             width: 100%;
 

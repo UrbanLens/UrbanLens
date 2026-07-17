@@ -69,7 +69,7 @@
     }
 
     &__inner {
-        max-width: 640px;
+        max-width: 64rem;
         margin: 0 auto;
         display: flex;
         flex-direction: column;
@@ -78,13 +78,13 @@
     }
 
     &--wide &__inner {
-        max-width: 760px;
+        max-width: 76rem;
     }
 
     // Profile | Edit hero body: avatar beside identity, matching the old
     // standalone .profile-hero card's layout (see _profile.scss).
     &--profile &__inner {
-        max-width: 900px;
+        max-width: 90rem;
         width: 100%;
         flex-direction: row;
         align-items: center;

@@ -12,7 +12,7 @@
     // Shared inner width
     .about-section-inner,
     .about-cta-inner {
-        max-width: 1100px;
+        max-width: 120rem;
         margin: 0 auto;
         padding: 0 1.5rem;
     }
@@ -65,7 +65,7 @@
         font-size: 1.05rem;
         color: $color-indigo-200;
         line-height: 1.7;
-        max-width: 500px;
+        max-width: 50rem;
         margin: 0 auto 2rem;
 
         @include up($breakpoint-sm) {

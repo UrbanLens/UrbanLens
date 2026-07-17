@@ -344,7 +344,7 @@ $memories-type-colors: (
 }
 
 .memories-empty-state {
-    max-width: 560px;
+    max-width: 56rem;
     margin: 5rem auto;
     padding: 3rem 2rem;
     text-align: center;
@@ -359,7 +359,7 @@ $memories-type-colors: (
     p {
         margin: 0 auto 1.5rem;
         color: var(--ul-grey-6);
-        max-width: 420px;
+        max-width: 42rem;
     }
 }
 
@@ -413,7 +413,7 @@ $memories-type-colors: (
 
 .photos-upload-progress {
     width: 100%;
-    max-width: 320px;
+    max-width: 32rem;
     height: 5px;
     margin-top: .6rem;
     background: var(--ul-surface-raised-border);
@@ -478,7 +478,7 @@ $memories-type-colors: (
 
 .photo-card {
     flex: 0 0 82%;
-    max-width: 340px;
+    max-width: 34rem;
     scroll-snap-align: start;
     display: flex;
     flex-direction: column;
@@ -989,7 +989,7 @@ $memories-type-colors: (
 .visits-empty-state {
     position: relative;
     overflow: hidden;
-    max-width: 720px;
+    max-width: 72rem;
     margin: 2rem auto 0;
     padding: 3rem 2rem;
     text-align: center;
@@ -1009,7 +1009,7 @@ $memories-type-colors: (
     }
 
     p {
-        max-width: 520px;
+        max-width: 52rem;
         margin: 0 auto;
         color: var(--ul-grey-6);
         font-size: .98rem;

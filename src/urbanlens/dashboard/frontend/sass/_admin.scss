@@ -381,7 +381,7 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
 .api-limits-search {
     position: relative;
     flex: 1 1 220px;
-    max-width: 320px;
+    max-width: 32rem;
 
     .material-symbols-outlined {
         position: absolute;
@@ -767,7 +767,7 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
         display: flex;
         flex-direction: column;
         gap: .4rem;
-        max-width: 480px;
+        max-width: 48rem;
     }
 }
 
@@ -1419,7 +1419,7 @@ $users-list-cols: minmax(180px, 1.3fr) minmax(170px, 1.15fr) minmax(110px, .75fr
 
     &__storage-bar {
         width: 100%;
-        max-width: 140px;
+        max-width: 14rem;
         margin-bottom: .3rem;
     }
 

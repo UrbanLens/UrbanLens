@@ -170,7 +170,7 @@
 }
 
 .comment-image {
-    max-width: 200px;
+    max-width: 20rem;
     max-height: 160px;
     border-radius: 6px;
     margin-top: .4rem;
@@ -635,7 +635,7 @@
 
 .cmcc-title-input {
     flex: 1;
-    max-width: 460px;
+    max-width: 46rem;
     padding: .35rem .6rem;
     border: 1px solid var(--ul-surface-raised-border);
     border-radius: 6px;
@@ -653,7 +653,7 @@
     left: auto;
     width: auto;
     flex: 1;
-    max-width: 460px;
+    max-width: 46rem;
 }
 
 .comment-map-composer-map {
@@ -826,7 +826,7 @@
 .comment-image-preview {
     font-size: .75rem;
     color: var(--ul-grey-6);
-    max-width: 140px;
+    max-width: 14rem;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

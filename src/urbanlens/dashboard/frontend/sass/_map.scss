@@ -273,7 +273,7 @@ img.leaflet-marker-icon.is-selected {
     z-index: 1000;
     opacity: 0.95;
     min-width: 175px;
-    max-width: 240px;
+    max-width: 24rem;
     position: absolute;
     top: 0;
     right: 0;
@@ -1402,7 +1402,7 @@ img.leaflet-marker-icon.is-selected {
 }
 
 .places-popup-details {
-    max-width: 280px;
+    max-width: 28rem;
 }
 
 .places-popup-detail {
@@ -3995,7 +3995,7 @@ div.container .addr-search-bar {
         align-items: flex-end;
         gap: 4px;
         padding: 6px;
-        max-width: 220px;
+        max-width: 22rem;
     }
 
     @include up($breakpoint-sm) {
@@ -4317,7 +4317,7 @@ div.container .addr-search-bar {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    max-width: 80px;
+    max-width: 8rem;
 }
 
 .fp-label-list-hint {

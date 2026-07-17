@@ -46,7 +46,7 @@
     font-size: .88rem;
 
     @include up($breakpoint-sm) {
-        max-width: 260px;
+        max-width: 26rem;
     }
 }
 
@@ -375,7 +375,7 @@
 
 .pin-list-smart-row select {
     width: 100%;
-    max-width: 320px;
+    max-width: 32rem;
     border: 1px solid var(--ul-surface-raised-border);
     background: var(--ul-surface-raised);
     color: var(--ul-grey-8);
@@ -595,7 +595,7 @@
 
 // -- Saved filter create/edit dialog -----------------------------------------
 .saved-filter-form-dialog {
-    max-width: 640px;
+    max-width: 64rem;
     width: 92vw;
 }
 

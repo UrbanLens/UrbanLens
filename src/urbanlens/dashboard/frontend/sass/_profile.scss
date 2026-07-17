@@ -500,7 +500,7 @@
 .settings-select {
     display: block !important; // <select> defaults to inline-block; see _reset.scss
     width: 100%;
-    max-width: 360px;
+    max-width: 36rem;
     padding: 8px 12px;
     border: 1px solid var(--ul-surface-raised-border);
     border-radius: $radius-sm;
@@ -698,7 +698,7 @@
 
     input[type="range"] {
         flex: 1;
-        max-width: 260px;
+        max-width: 26rem;
         accent-color: var(--primary-color);
         cursor: pointer;
     }
@@ -764,7 +764,7 @@
 
 .cop-alpha-slider {
     flex: 1;
-    max-width: 240px;
+    max-width: 24rem;
     height: 10px;
     border-radius: 5px;
     cursor: pointer;
@@ -828,7 +828,7 @@
 
 .settings-input {
     width: 100%;
-    max-width: 360px;
+    max-width: 36rem;
     padding: 8px 12px;
     border: 1px solid var(--ul-surface-raised-border);
     border-radius: $radius-sm;
@@ -1386,7 +1386,7 @@ body div.container .edit-profile-page input[type=text].edit-username-input {
     .profile-stat {
         flex: 1;
         min-width: 100px;
-        max-width: 160px;
+        max-width: 16rem;
     }
 }
 
@@ -1527,7 +1527,7 @@ body div.container .edit-profile-page input[type=text].edit-username-input {
     display: flex;
     flex-wrap: wrap;
     gap: .3rem;
-    max-width: 260px;
+    max-width: 26rem;
     max-height: 200px;
     overflow-y: auto;
 }
@@ -1923,7 +1923,7 @@ body div.container .profile-annotation-notes {
     top: auto;
     left: auto;
     transform: none;
-    max-width: 440px;
+    max-width: 44rem;
     width: calc(100% - 2rem);
 }
 
