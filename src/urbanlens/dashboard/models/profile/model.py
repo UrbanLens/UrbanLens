@@ -212,7 +212,7 @@ class Profile(abstract.PublicDashboardModel):
     theme_mode = CharField(
         max_length=10,
         choices=ThemeChoice.choices,
-        default=ThemeChoice.SYSTEM,
+        default=ThemeChoice.DARK,
     )
     guidance_level = CharField(
         max_length=10,

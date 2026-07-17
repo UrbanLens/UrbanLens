@@ -746,8 +746,18 @@ export async function decryptDom(root: ParentNode, partnerSlug?: string): Promis
             node.textContent = truncateAt > 0 && plaintext.length > truncateAt ? `${plaintext.slice(0, truncateAt - 1)}…` : plaintext;
             node.classList.add("e2ee-decrypted");
         } else {
-            node.textContent = "🔒 Unable to decrypt on this device";
+            node.textContent = "Unable to decrypt on this device";
             node.classList.add("e2ee-failed");
+            // Reacting requires knowing what the message said - the emoji
+            // picker stayed available on a bubble whose body we can't even
+            // show, which read as offering to respond to content the user
+            // never saw. Only the main bubble body (not reply-quote
+            // snippets or conversation-list previews, which share this same
+            // decrypt loop but have no reaction button of their own) needs this.
+            if (node.classList.contains("dm-bubble__body")) {
+                const addReactionBtn = node.closest(".dm-bubble")?.querySelector<HTMLElement>(".dm-reaction-add-btn");
+                if (addReactionBtn) addReactionBtn.hidden = true;
+            }
         }
     }
 }

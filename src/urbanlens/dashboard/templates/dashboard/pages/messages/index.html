@@ -644,7 +644,7 @@
         if (msg.ciphertext) {
             var encBody = document.createElement('span');
             encBody.className = 'dm-bubble__body e2ee-pending';
-            encBody.textContent = '🔒 Decrypting…';
+            encBody.textContent = 'Decrypting…';
             encBody.dataset.e2eeCt = msg.ciphertext;
             encBody.dataset.e2eeNonce = msg.nonce;
             encBody.dataset.e2eeKv = msg.key_version;

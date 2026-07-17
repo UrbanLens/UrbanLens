@@ -55,11 +55,11 @@ class ThemeChoiceEnumTests(TestCase):
 
 
 class ProfileThemeModeDefaultTests(TestCase):
-    """New profiles must default to the 'system' theme."""
+    """New profiles must default to the 'dark' theme."""
 
-    def test_new_profile_defaults_to_system(self) -> None:
+    def test_new_profile_defaults_to_dark(self) -> None:
         profile = _profile()
-        self.assertEqual(profile.theme_mode, ThemeChoice.SYSTEM)
+        self.assertEqual(profile.theme_mode, ThemeChoice.DARK)
 
     def test_theme_mode_field_exists_on_profile(self) -> None:
         profile = _profile()

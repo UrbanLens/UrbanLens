@@ -867,6 +867,18 @@ dialog.tag-create-card.ul-dialog {
     border-radius: 0;
 }
 
+// Rendered into a bare slot div that should hold nothing but the (invisible
+// until opened) add-label dialog - e.g. the photo gallery's label icon (see
+// _photo_gallery.html's #photo-label-panel-slot). Without this, .tag-panel's
+// own surface background/border left a visibly empty box sitting in the
+// gallery's layout with no content inside it.
+.tag-panel--dialog-only {
+    background: none;
+    border: none;
+    border-radius: 0;
+    overflow: visible;
+}
+
 .tag-panel-header {
     display: flex;
     align-items: center;

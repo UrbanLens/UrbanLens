@@ -148,6 +148,38 @@ class LabelImageMembershipViewTests(TestCase):
         self.assertEqual(response.status_code, 404)
         self.assertNotIn(tag.id, set(self.image.labels.values_list("id", flat=True)))
 
+    def test_get_response_omits_the_visible_card_and_header(self) -> None:
+        """Regression guard: this response swaps into #photo-label-panel-slot, a
+        bare div meant to hold nothing but the (invisible until opened) dialog -
+        it used to render the full persistent "Labels" card (header + chip
+        list), leaving a visibly empty box sitting in the photo gallery's
+        layout."""
+        response = self.client.get(reverse("label.image", kwargs={"image_uuid": self.image.uuid}))
+        content = response.content.decode()
+        self.assertNotIn("card-header", content)
+        self.assertNotIn(">Labels</h3>", content)
+        self.assertIn("tag-panel--dialog-only", content)
+        self.assertIn("<dialog", content)
+
+    def test_get_response_omits_the_applied_labels_chip_list(self) -> None:
+        self.image.labels.add(self.label)
+        response = self.client.get(reverse("label.image", kwargs={"image_uuid": self.image.uuid}))
+        content = response.content.decode()
+        self.assertNotIn("tag-chip", content)
+
+    def test_post_response_also_omits_the_visible_card(self) -> None:
+        response = self.client.post(
+            reverse("label.image", kwargs={"image_uuid": self.image.uuid}),
+            data={"label_id": self.label.id, "action": "add"},
+        )
+        content = response.content.decode()
+        self.assertNotIn("card-header", content)
+        self.assertIn("tag-panel--dialog-only", content)
+
+    def test_dialog_still_lists_the_addable_label(self) -> None:
+        response = self.client.get(reverse("label.image", kwargs={"image_uuid": self.image.uuid}))
+        self.assertIn(self.label.name, response.content.decode())
+
 
 class MediaLabelMultiMergeTests(TestCase):
     """Multi-merge correctly transfers image associations for media labels."""

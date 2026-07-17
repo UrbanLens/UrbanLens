@@ -425,6 +425,10 @@
     padding: .6rem 1rem;
     background: var(--ul-surface-border);
 
+    &[hidden] {
+        display: none;
+    }
+
     &__icon {
         flex-shrink: 0;
         font-size: 1.05rem;
@@ -703,6 +707,10 @@
     padding: .5rem 1rem;
     background: var(--ul-surface-border);
     flex-shrink: 0;
+
+    &[hidden] {
+        display: none;
+    }
 
     &__icon {
         flex-shrink: 0;
@@ -1067,6 +1075,20 @@
         }
     }
 
+    // Invisible hover-bridge spanning the gap between the bubble's own edge
+    // and the menu button floating just outside it (see __menu-btn above) -
+    // without this, moving the cursor from the bubble's text toward the
+    // button crosses a dead zone with no hover target, losing :hover on the
+    // bubble (and so the button's opacity/pointer-events) before the cursor
+    // ever arrives - the button could be seen but never actually clicked.
+    &::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 1.85rem;
+    }
+
     &--them {
         align-self: flex-start;
         background: var(--ul-surface-raised);
@@ -1075,6 +1097,11 @@
 
         &.dm-bubble--grouped {
             border-top-left-radius: 6px;
+        }
+
+        &::before {
+            left: auto;
+            right: -1.85rem;
         }
 
         .dm-bubble__menu-btn {
@@ -1096,6 +1123,11 @@
 
         &.dm-bubble--grouped {
             border-top-right-radius: 6px;
+        }
+
+        &::before {
+            right: auto;
+            left: -1.85rem;
         }
 
         .dm-bubble__menu-btn {
@@ -1857,7 +1889,6 @@
     flex-direction: column;
     gap: .35rem;
     padding: .6rem 1rem .7rem;
-    border-top: 1px solid var(--ul-surface-border);
     flex-shrink: 0;
 
     &__input-row {

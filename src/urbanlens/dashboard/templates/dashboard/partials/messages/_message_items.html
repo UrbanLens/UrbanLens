@@ -33,7 +33,7 @@ via infinite scroll) so the two render identically and never drift. Context:
     <span class="dm-quote-box__snippet"{% if message.reply_to.is_encrypted %} data-e2ee-ct="{{ message.reply_to.ciphertext }}" data-e2ee-nonce="{{ message.reply_to.nonce }}" data-e2ee-kv="{{ message.reply_to.key_version }}" data-e2ee-truncate="80"{% endif %}>{{ message.reply_to|message_preview:viewer_id }}</span>
   </div>
   {% endif %}
-  {% if message.is_encrypted %}<span class="dm-bubble__body e2ee-pending" data-e2ee-ct="{{ message.ciphertext }}" data-e2ee-nonce="{{ message.nonce }}" data-e2ee-kv="{{ message.key_version }}">🔒 Decrypting…</span><i class="material-symbols-outlined dm-lock-icon" title="End-to-end encrypted">lock</i>{% elif message.body %}<span class="dm-bubble__body">{{ message.body }}</span>{% endif %}
+  {% if message.is_encrypted %}<span class="dm-bubble__body e2ee-pending" data-e2ee-ct="{{ message.ciphertext }}" data-e2ee-nonce="{{ message.nonce }}" data-e2ee-kv="{{ message.key_version }}">Decrypting…</span><i class="material-symbols-outlined dm-lock-icon" title="End-to-end encrypted">lock</i>{% elif message.body %}<span class="dm-bubble__body">{{ message.body }}</span>{% endif %}
   {% with images=message.images.all %}
   {% if images %}
     {% if message.sender_id == viewer_id or message.images_revealed or image_permission_status == "allowed" %}

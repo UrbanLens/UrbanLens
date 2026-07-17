@@ -1089,8 +1089,18 @@ def _membership_panel_ctx(
     empty_text: str | None = None,
     embedded: bool = False,
     labels_override: QuerySet[Label] | None = None,
+    dialog_only: bool = False,
 ) -> dict:
-    """Build template context for label_membership_panel.html."""
+    """Build template context for label_membership_panel.html.
+
+    Args:
+        dialog_only: Skip the header and applied-labels chip list entirely,
+            rendering just the add-label dialog inside the (invisible)
+            ``panel_id`` wrapper - for call sites that only ever want the
+            dialog (e.g. the photo gallery's label icon swaps into a bare
+            slot div meant to hold nothing but the dialog) rather than a
+            persistent visible panel.
+    """
     ctx: dict = {
         "all_labels": labels_override if labels_override is not None else _all_labels(profile),
         "member_ids": member_ids,
@@ -1102,6 +1112,7 @@ def _membership_panel_ctx(
         "obj_uuid": obj_uuid,
         "collapse_scope": collapse_scope,
         "embedded": embedded,
+        "dialog_only": dialog_only,
     }
     if empty_text:
         ctx["empty_text"] = empty_text
@@ -1246,6 +1257,7 @@ class LabelImageMembershipView(LoginRequiredMixin, View):
                 collapse_scope="image",
                 empty_text="No media labels. Click + to add one.",
                 labels_override=Label.objects.visible_to(profile).media().ordered(),
+                dialog_only=True,
             ),
         )
 
@@ -1273,5 +1285,6 @@ class LabelImageMembershipView(LoginRequiredMixin, View):
                 collapse_scope="image",
                 empty_text="No media labels. Click + to add one.",
                 labels_override=Label.objects.visible_to(profile).media().ordered(),
+                dialog_only=True,
             ),
         )

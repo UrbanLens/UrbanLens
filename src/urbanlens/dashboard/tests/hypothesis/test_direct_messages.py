@@ -388,6 +388,18 @@ class DirectMessageEndpointTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "1")
 
+    def test_encrypted_message_placeholder_has_no_redundant_lock_emoji(self) -> None:
+        """Regression guard: the server-rendered "Decrypting…" placeholder used
+        to start with a 🔒 emoji, duplicating the separate dedicated lock icon
+        (.dm-lock-icon, "End-to-end encrypted") already rendered right next to
+        it - two lock glyphs for one encrypted message."""
+        DirectMessage.objects.create(sender=self.partner, recipient=self.me, ciphertext="abc123", nonce="def456", key_version=1)
+        response = self.client.get(reverse("messages.conversation", kwargs={"profile_slug": self.partner.slug}))
+        content = response.content.decode()
+        self.assertIn("Decrypting…", content)
+        self.assertNotIn("🔒 Decrypting", content)
+        self.assertIn("dm-lock-icon", content)
+
     def test_dropdown_lists_conversation(self) -> None:
         # A DM conversation alone grants no profile-view standing, so make the
         # partner's profile visible - otherwise the row shows "Former contact".

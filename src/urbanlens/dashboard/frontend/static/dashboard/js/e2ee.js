@@ -22279,8 +22279,13 @@ https://github.com/browserify/crypto-browserify`);
         node.textContent = truncateAt > 0 && plaintext.length > truncateAt ? `${plaintext.slice(0, truncateAt - 1)}…` : plaintext;
         node.classList.add("e2ee-decrypted");
       } else {
-        node.textContent = "\uD83D\uDD12 Unable to decrypt on this device";
+        node.textContent = "Unable to decrypt on this device";
         node.classList.add("e2ee-failed");
+        if (node.classList.contains("dm-bubble__body")) {
+          const addReactionBtn = node.closest(".dm-bubble")?.querySelector(".dm-reaction-add-btn");
+          if (addReactionBtn)
+            addReactionBtn.hidden = true;
+        }
       }
     }
   }
