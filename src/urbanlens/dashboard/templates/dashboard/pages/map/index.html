@@ -64,7 +64,8 @@
               hx-post="{% url 'map.search' %}"
               hx-trigger="change, input delay:600ms from:[name=name], input delay:600ms from:[name^='cf_']"
               hx-target="#map-body"
-              hx-swap="outerHTML">
+              hx-swap="outerHTML"
+              hx-sync="this:replace">
             {% csrf_token %}
             {# Kept in sync by toggleToolbarSavedFilter() - the bottom-right toolbar's active #}
             {# filter set rides along with every existing #filter-form submission (map.search, #}
@@ -3539,6 +3540,8 @@
         const excludeRegions = document.getElementById('fp-exclude-regions');
         if (includeRegions) includeRegions.value = '';
         if (excludeRegions) excludeRegions.value = '';
+        // Clear any "applied" indicator left by applySavedFilter()
+        document.querySelectorAll('.fp-saved-filter-apply--active').forEach((el) => el.classList.remove('fp-saved-filter-apply--active'));
         _exitFilterMode();
         _updateFilterLabel();
     }
@@ -3652,6 +3655,13 @@
 
         // Labels: union saved include-ids into the current included set; never
         // touch excludes, and never auto-add a saved filter's exclusions.
+        // Structured label_groups (from the map's own formula bar) takes
+        // precedence; a filter saved from the Filters tab's simple
+        // include/exclude picker instead stores flat tags/exclude_tags (it has
+        // no formula-bar UI to produce label_groups), so that shape needs its
+        // own union-into-included handling here too - otherwise a filter whose
+        // only criterion is "include label X" (a very common case from that
+        // dialog) merged nothing at all and looked like a dead click.
         if (Array.isArray(criteria.label_groups)) {
             for (const group of criteria.label_groups) {
                 if (group.op === 'not') continue;
@@ -3661,6 +3671,14 @@
                 }
             }
             _formulaGroups = null; // merged state may mix groups; fall back to simple chip mode
+            _serializeLabelGroups();
+            _rebuildLabelSelected();
+        } else if (Array.isArray(criteria.tags) && criteria.tags.length) {
+            for (const id of criteria.tags) {
+                const key = String(id);
+                if (_labelState.get(key) !== 'excl') _labelState.set(key, 'incl');
+            }
+            _formulaGroups = null;
             _serializeLabelGroups();
             _rebuildLabelSelected();
         }
@@ -3689,6 +3707,11 @@
             const hidden = document.getElementById(key === 'include_regions' ? 'fp-include-regions' : 'fp-exclude-regions');
             if (hidden && !(hidden.value || '').trim()) hidden.value = JSON.stringify(criteria[key]);
         }
+
+        // Mark the chip as applied - the merge above can't be cleanly un-applied
+        // (values are written straight into shared form fields), so this stays
+        // on until resetFilters() clears the whole panel rather than toggling.
+        chipEl.classList.add('fp-saved-filter-apply--active');
 
         // Trigger the sidebar's normal submission path.
         htmx.trigger(form, 'change');

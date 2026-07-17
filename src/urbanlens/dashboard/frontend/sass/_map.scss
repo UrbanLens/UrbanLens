@@ -2092,6 +2092,20 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     background: rgba(255, 255, 255, 0.09);
 }
 
+// Set by applySavedFilter() once a chip's criteria has been merged into the
+// filter form - the merge itself can't be cleanly un-applied (values just
+// get written into shared form fields), so this stays on until resetFilters()
+// clears the whole panel, rather than trying to toggle per-chip.
+.fp-saved-filter-apply--active {
+    border-color: rgba(90, 150, 255, 0.7);
+    background: rgba(90, 150, 255, 0.16);
+    color: #fff;
+
+    i {
+        color: rgba(90, 150, 255, 0.9);
+    }
+}
+
 .fp-saved-filter-delete {
     background: none;
     border: 1px solid rgba(255, 255, 255, 0.11);
