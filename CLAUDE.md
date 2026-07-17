@@ -77,40 +77,44 @@ This script runs pre-commit twice (first pass silent) so formatting fixes are ap
 ## Project Structure
 
 ```
-src/urbanlens/
-├-- manage.py
-├-- UrbanLens/
-│   ├-- settings/                # Django settings (local.py, app.py, __init__.py)
-│   ├-- urls.py                  # Root URL configuration
-│   ├-- wsgi.py / asgi.py        # WSGI/ASGI applications
-│   └-- environments/            # Environment-specific configuration
-├-- dashboard/                   # Main app (maps, pins, profiles, reviews, trips)
-│   ├-- controllers/             # ViewSet/View classes
-│   ├-- models/                  # Data models (organized by entity)
-│   │   ├-- abstract/            # Base classes (Model, QuerySet, Manager, ViewSet, Serializer)
-│   │   ├-- pin/                 # Pin model, serializers, querysets, viewsets
-│   │   ├-- profile/             # User profile model
-│   │   ├-- reviews/             # Review model
-│   │   ├-- friendship/          # Friendship relationships
-│   │   ├-- images/              # Image attachments
-│   │   ├-- categories/          # Pin categories
-│   │   ├-- location/            # Location data
-│   │   ├-- labels/              # Labels (tags, categories, statuses, people labels)
-│   │   ├-- trips/               # Trip planning
-│   │   └-- cache/               # Geocoding cache
-│   ├-- services/                # Business logic (AI, search, weather, geocoding, APIs)
-│   ├-- frontend/
-│   │   ├-- sass/                # SCSS source
-│   │   ├-- ts/                  # TypeScript/React source
-│   │   └-- static/              # Compiled output
-│   ├-- templates/dashboard/     # Django templates
-│   ├-- forms/                   # Django forms
-│   ├-- migrations/              # Database migrations
-│   └-- urls.py                  # Dashboard URL routes
-├-- core/
-│   ├-- tests/                   # Custom test runner and base test case
-│   └-- controllers/             # DB backups, init scripts
-└-- bin/                         # Startup and utility scripts
+src/
+|-- urbanlens/
+|   ├-- manage.py
+|   ├-- UrbanLens/
+|   │   ├-- settings/                # Django settings (local.py, app.py, __init__.py)
+|   │   ├-- urls.py                  # Root URL configuration
+|   │   ├-- wsgi.py / asgi.py        # WSGI/ASGI applications
+|   │   └-- environments/            # Environment-specific configuration
+|   ├-- dashboard/                   # Main app (maps, pins, profiles, reviews, trips)
+|   │   ├-- controllers/             # ViewSet/View classes
+|   │   ├-- models/                  # Data models (organized by entity)
+|   │   │   ├-- abstract/            # Base classes (Model, QuerySet, Manager, ViewSet, Serializer)
+|   │   │   ├-- pin/                 # Pin model, serializers, querysets, viewsets
+|   │   │   ├-- profile/             # User profile model
+|   │   │   ├-- reviews/             # Review model
+|   │   │   ├-- friendship/          # Friendship relationships
+|   │   │   ├-- images/              # Image attachments
+|   │   │   ├-- categories/          # Pin categories
+|   │   │   ├-- location/            # Location data
+|   │   │   ├-- labels/              # Labels (tags, categories, statuses, people labels)
+|   │   │   ├-- trips/               # Trip planning
+|   │   │   └-- cache/               # Geocoding cache
+|   │   ├-- services/                # Business logic (AI, search, weather, geocoding, APIs)
+|   │   ├-- frontend/
+|   │   │   ├-- sass/                # SCSS source
+|   │   │   ├-- ts/                  # TypeScript/React source
+|   │   │   └-- static/              # Compiled output
+|   │   ├-- templates/dashboard/     # Django templates
+|   │   ├-- forms/                   # Django forms
+|   │   ├-- migrations/              # Database migrations
+|   │   └-- urls.py                  # Dashboard URL routes
+|   ├-- core/
+|   │   ├-- tests/                   # Custom test runner and base test case
+|   │   └-- controllers/             # DB backups, init scripts
+|-- bin/                             # Startup and utility scripts
+docs/
+|-- prompts/                         # Historical work notes from LLM agents
+|-- reports/                         # Data collected for specific tasks
 ```
 
 ### Key Configuration Files
@@ -139,17 +143,16 @@ These two models are often confused. Keep their responsibilities strictly separa
 
 **`Location`** - shared, globally recognised data for multiple users about a physical place.
 - Canonical name, description, address components, coordinates, Google Maps CID
-- Not user-specific - many users may pin the same Location
+- Not user-specific - many users may have pins referencing the same Location
 - The authoritative source for address, place metadata, and geo coordinates
 - Links to `Pin` and `Wiki` to provide geolocation details to them.
 
 **`Pin`** - a specific user's personal record for a location.
 - `location` FK pointing at the shared Location
 - User-specific fields: custom name override, personal notes (`description`), icon, priority, last-visited date, status, and marker coordinates
-- `name` is nullable - `None` means "display the location's canonical name" (use `pin.effective_name`)
-- Address and place metadata are accessed via read-only proxy properties that delegate to `self.location`; never store address data directly on Pin
+- Address and place metadata are accessed via read-only proxy properties that delegate to `self.location`; never store address data directly on Pin. If the pin moves, assign it to a new location rather than mutating the location it was assigned to.
 
-**`Wiki`** - Community wiki for a location that many users can see and edit.
+**`Wiki`** - Community wiki for a location that many users can see and edit. The only users who can see a wiki are users who have a pin within the bounding box of the wiki's location. This is by design; users must discover the location before they can see the wiki.
 
 ### OOP and Inheritance
 
@@ -250,3 +253,8 @@ These are planned features - treat any missing implementation as a gap to fill, 
 ## Testing
 
 When the user points out incorrect behavior and bugs, and you plan to replicate the behavior, you should do that by creating a unit tests via TDD. That unit test will then be useful after fixing the problem to ensure the behavior does not return.
+
+## Additional Notes
+Keep in mind that the application is in a beta state, and if you notice quirks, bugs, or poorly implemented code, it should not be assumed that this is by design. Investigate and fix problems that you identify. If you can't fix or investigate a problem in the current scope of your work, immediately note the problem in a file docs/PROBLEMS.md to investigate and address later.
+
+Previous work other agents have performed is noted in docs/prompts/completed.md, and upcoming work that will be assigned to other agents is located in docs/prompts/todo.md. A todo list for human contributors that has not been as fully fleshed out, and may lack contextual information, is located in the project root at TODO.md.
