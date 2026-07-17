@@ -1,0 +1,56 @@
+{% comment %}
+Inline card for a pin shared into a group chat. Context: `message`
+(GroupMessage), `viewer_share` (the viewer's own GroupMessageShare, or None
+when the sender wasn't connected to them - or when the viewer is the sender),
+`viewer_id`, `group`.
+
+Accept/reject swaps this same card in place (keyed by
+`dm-group-share-card-<message id>`), mirroring `_message_share_card.html`.
+{% endcomment %}
+<div class="dm-share-card" id="dm-group-share-card-{{ message.id }}">
+  {% if viewer_share and viewer_share.pin_share %}
+  <div class="dm-share-card__row">
+    <i class="material-symbols-outlined">location_on</i>
+    <span class="dm-share-card__label">{{ viewer_share.pin_share.pin.display_label }}</span>
+  </div>
+  {% if viewer_share.pin_share.status == "pending" %}
+  <div class="dm-share-card__actions">
+    <button type="button" class="btn btn--primary btn--sm"
+            hx-post="{% url 'messages.group.share.pin.respond' group.uuid message.id %}" hx-vals='{"action": "accept"}'
+            hx-target="#dm-group-share-card-{{ message.id }}" hx-swap="outerHTML">Accept</button>
+    <button type="button" class="btn btn--ghost btn--sm"
+            hx-post="{% url 'messages.group.share.pin.respond' group.uuid message.id %}" hx-vals='{"action": "reject"}'
+            hx-target="#dm-group-share-card-{{ message.id }}" hx-swap="outerHTML">Reject</button>
+  </div>
+  {% elif viewer_share.pin_share.status == "already_pinned" %}
+  <p class="dm-share-card__status">You already have this pinned.</p>
+  {% elif viewer_share.pin_share.status == "accepted" %}
+  {% with resulting_pin=viewer_share.pin_share.resulting_pin %}
+  {% if resulting_pin %}
+  <a href="{% url 'pin.details' resulting_pin.slug %}" class="dm-share-card__status dm-share-card__status--link">
+    <i class="material-symbols-outlined">check_circle</i> Added to your map.
+  </a>
+  {% else %}
+  <p class="dm-share-card__status"><i class="material-symbols-outlined">check_circle</i> Added to your map.</p>
+  {% endif %}
+  {% endwith %}
+  {% elif viewer_share.pin_share.status == "rejected" %}
+  <p class="dm-share-card__status">Declined.</p>
+  {% endif %}
+  {% else %}
+  {% with any_share=message.shares.all|first %}
+  {% if any_share and any_share.pin_share %}
+  <div class="dm-share-card__row">
+    <i class="material-symbols-outlined">location_on</i>
+    <span class="dm-share-card__label">{{ any_share.pin_share.pin.display_label }}</span>
+  </div>
+  <p class="dm-share-card__status">Pin shared with the group.</p>
+  {% else %}
+  <div class="dm-share-card__row">
+    <i class="material-symbols-outlined">location_on</i>
+    <span class="dm-share-card__label">Pin shared</span>
+  </div>
+  {% endif %}
+  {% endwith %}
+  {% endif %}
+</div>

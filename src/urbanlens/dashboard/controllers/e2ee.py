@@ -388,6 +388,219 @@ class E2EERewrapView(LoginRequiredMixin, View):
         return JsonResponse({"ok": True})
 
 
+class E2EEGroupKeyView(LoginRequiredMixin, View):
+    """GET/POST the wrapped group-key versions for one group chat.
+
+    GET returns only the caller's own envelopes (one per version they were a
+    member for), plus what a client needs to rotate: the latest version
+    number, whether that version still covers the group's current membership,
+    and - when every member is enrolled - each member's public key.
+
+    POST stores the next version: the creating client generates the random
+    key and seals it once per active member; the server verifies the envelope
+    set covers the active membership exactly and stores blobs it cannot open.
+    """
+
+    def _resolve(self, request: HttpRequest, group_uuid) -> tuple[Profile, Any, Any] | None:
+        """Resolve the caller's profile, the group, and their active membership.
+
+        Args:
+            request: The authenticated request.
+            group_uuid: UUID of the group chat.
+
+        Returns:
+            ``(profile, group, membership)`` or None when the caller isn't an
+            active member (indistinguishable from a nonexistent group).
+        """
+        from urbanlens.dashboard.models.group_chats.model import GroupChat
+
+        profile = _get_profile(request)
+        group = GroupChat.objects.filter(uuid=group_uuid).first()
+        if group is None:
+            return None
+        membership = group.membership_for(profile)
+        if membership is None:
+            return None
+        return profile, group, membership
+
+    def get(self, request: HttpRequest, group_uuid) -> HttpResponse:
+        """Return the caller's envelopes and the group's rotation state.
+
+        Args:
+            request: The authenticated request.
+            group_uuid: UUID of the group chat.
+
+        Returns:
+            JSON ``{keys, latest, needs_rotation, members}`` - ``members`` is
+            a ``[{slug, public_key}]`` list when every active member is
+            enrolled (so the caller can rotate), else null; 404 for
+            non-members and unknown groups.
+        """
+        from urbanlens.dashboard.models.e2ee import GroupKey, GroupKeyEnvelope, MessagingKeyBundle
+
+        resolved = self._resolve(request, group_uuid)
+        if resolved is None:
+            return JsonResponse({"error": "Not found."}, status=404)
+        profile, group, _membership = resolved
+
+        key_rows = list(GroupKey.objects.filter(group=group).order_by("version"))
+        own_envelopes = {envelope.key_id: envelope.wrapped_key for envelope in GroupKeyEnvelope.objects.filter(key__group=group, profile=profile)}
+        keys = [{"version": row.version, "wrapped_key": own_envelopes[row.pk]} for row in key_rows if row.pk in own_envelopes]
+        latest = key_rows[-1].version if key_rows else 0
+
+        member_profiles = [membership.profile for membership in group.active_memberships().select_related("profile", "profile__user")]
+        bundles = {bundle.profile_id: bundle for bundle in MessagingKeyBundle.objects.filter(profile__in=member_profiles)}
+        all_enrolled = all(member.pk in bundles for member in member_profiles)
+
+        needs_rotation = latest == 0
+        if not needs_rotation:
+            latest_member_ids = set(GroupKeyEnvelope.objects.filter(key=key_rows[-1]).values_list("profile_id", flat=True))
+            needs_rotation = latest_member_ids != {member.pk for member in member_profiles}
+
+        members = None
+        if all_enrolled:
+            members = [{"slug": member.ensure_slug(), "public_key": bundles[member.pk].public_key} for member in member_profiles]
+        return JsonResponse({"keys": keys, "latest": latest, "needs_rotation": needs_rotation, "members": members})
+
+    def post(self, request: HttpRequest, group_uuid) -> HttpResponse:
+        """Store the next group-key version.
+
+        Args:
+            request: JSON body with ``version`` and ``wrapped`` (a mapping of
+                member profile slug to that member's sealed blob; must cover
+                the active membership exactly).
+            group_uuid: UUID of the group chat.
+
+        Returns:
+            201 with the caller's envelope on success; 200 with the existing
+            winner's envelope when racing; 400/404/409 on invalid input.
+        """
+        from urbanlens.dashboard.models.e2ee import GroupKey, GroupKeyEnvelope, MessagingKeyBundle
+
+        resolved = self._resolve(request, group_uuid)
+        if resolved is None:
+            return JsonResponse({"error": "Not found."}, status=404)
+        profile, group, _membership = resolved
+        data = _json_body(request)
+        if data is None:
+            return HttpResponseBadRequest("Malformed JSON body")
+
+        wrapped = data.get("wrapped")
+        if not isinstance(wrapped, dict) or not wrapped:
+            return HttpResponseBadRequest("Invalid wrapped envelopes")
+
+        members_by_slug = {membership.profile.ensure_slug(): membership.profile for membership in group.active_memberships().select_related("profile", "profile__user")}
+        if set(wrapped) != set(members_by_slug):
+            return JsonResponse({"error": "Envelopes must cover the group's current members exactly."}, status=409)
+        for blob in wrapped.values():
+            if not valid_blob(blob, MAX_WRAPPED_CONVERSATION_KEY_LENGTH):
+                return HttpResponseBadRequest("Invalid wrapped envelopes")
+        enrolled_count = MessagingKeyBundle.objects.filter(profile__in=members_by_slug.values()).count()
+        if enrolled_count != len(members_by_slug):
+            return JsonResponse({"error": "Every member must be enrolled before the group can encrypt."}, status=409)
+
+        latest = GroupKey.objects.filter(group=group).order_by("-version").first()
+        expected_version = (latest.version if latest else 0) + 1
+        try:
+            requested_version = int(data.get("version", 0))
+        except (TypeError, ValueError):
+            return HttpResponseBadRequest("Invalid version")
+        if requested_version != expected_version:
+            return JsonResponse({"error": f"Expected version {expected_version}.", "expected": expected_version}, status=409)
+
+        try:
+            with transaction.atomic():
+                key_row = GroupKey.objects.create(group=group, version=requested_version, created_by=profile)
+                GroupKeyEnvelope.objects.bulk_create(
+                    [GroupKeyEnvelope(key=key_row, profile=member, wrapped_key=wrapped[slug]) for slug, member in members_by_slug.items()],
+                )
+        except IntegrityError:
+            # Lost the race - the concurrent creator's key is canonical.
+            winner = get_object_or_404(GroupKey, group=group, version=requested_version)
+            envelope = GroupKeyEnvelope.objects.filter(key=winner, profile=profile).first()
+            if envelope is None:
+                return JsonResponse({"error": "No envelope for this member."}, status=409)
+            return JsonResponse({"version": winner.version, "wrapped_key": envelope.wrapped_key}, status=200)
+        return JsonResponse({"version": key_row.version, "wrapped_key": wrapped[profile.ensure_slug()]}, status=201)
+
+
+class E2EEChangePasswordView(LoginRequiredMixin, View):
+    """POST: change (or, for OAuth accounts, set) the login password.
+
+    Always moves the account to derived auth: the client derives the new
+    credential (``new_auth_key``) and a fresh salt in the browser, so the raw
+    new password never reaches the server. Accounts that already have a
+    password must prove possession of the current one (``current_secret`` -
+    the raw password for legacy accounts, the derived authKey for derived
+    accounts; either way it's what ``check_password`` matches). OAuth-only
+    accounts with no usable password set one without a current secret.
+
+    When the device holds the decrypted private key, the client re-wraps it
+    under the new password and sends ``password_wrapped_secret``/
+    ``password_wrap_salt`` along; otherwise any existing password-wrapped
+    copy is flagged stale (the old password is gone).
+    """
+
+    def post(self, request: HttpRequest) -> HttpResponse:
+        """Rotate the account's password and reconcile its E2EE state.
+
+        Args:
+            request: JSON body with ``current_secret`` (required when the
+                account has a usable password), ``new_auth_key``,
+                ``new_auth_salt``, and optional ``password_wrapped_secret``
+                + ``password_wrap_salt``.
+
+        Returns:
+            JSON ``{ok: true, had_password}``; 400 on malformed input; 403 on
+            a wrong current secret.
+        """
+        profile = _get_profile(request)
+        user = profile.user
+        data = _json_body(request)
+        if data is None:
+            return HttpResponseBadRequest("Malformed JSON body")
+
+        new_auth_key = data.get("new_auth_key", "")
+        new_auth_salt = data.get("new_auth_salt", "")
+        password_wrapped = data.get("password_wrapped_secret", "")
+        password_wrap_salt = data.get("password_wrap_salt", "")
+        if not valid_blob(new_auth_key, MAX_SALT_LENGTH + 64) or not valid_blob(new_auth_salt, MAX_SALT_LENGTH):
+            return HttpResponseBadRequest("Invalid new credential")
+        if not valid_blob(password_wrapped, MAX_WRAPPED_SECRET_LENGTH, required=False):
+            return HttpResponseBadRequest("Invalid password_wrapped_secret")
+        if not valid_blob(password_wrap_salt, MAX_SALT_LENGTH, required=False):
+            return HttpResponseBadRequest("Invalid password_wrap_salt")
+        if bool(password_wrapped) != bool(password_wrap_salt):
+            return HttpResponseBadRequest("password_wrapped_secret and password_wrap_salt must be provided together")
+
+        had_password = user.has_usable_password()
+        if had_password:
+            current_secret = data.get("current_secret", "")
+            if not isinstance(current_secret, str) or not user.check_password(current_secret):
+                return JsonResponse({"error": "Your current password is incorrect."}, status=403)
+
+        bundle = MessagingKeyBundle.objects.filter(profile=profile).first()
+        with transaction.atomic():
+            AccountKdf.objects.set_auth_salt(user, new_auth_salt)
+            user.set_password(new_auth_key)
+            user.save(update_fields=["password"])
+            update_session_auth_hash(request, user)
+            if bundle is not None:
+                if password_wrapped:
+                    bundle.password_wrapped_secret = password_wrapped
+                    bundle.password_wrap_salt = password_wrap_salt
+                    bundle.password_wrap_stale = False
+                    bundle.save(update_fields=["password_wrapped_secret", "password_wrap_salt", "password_wrap_stale", "updated"])
+                elif bundle.password_wrapped_secret:
+                    # The old wrap can't be opened with the new password and
+                    # this device couldn't produce a fresh one (key locked).
+                    bundle.password_wrap_stale = True
+                    bundle.save(update_fields=["password_wrap_stale", "updated"])
+
+        logger.info("Password %s for user %s (derived auth)", "changed" if had_password else "set", user.pk)
+        return JsonResponse({"ok": True, "had_password": had_password})
+
+
 class E2EEResetView(LoginRequiredMixin, View):
     """POST: replace the caller's keypair entirely (destructive, last resort).
 

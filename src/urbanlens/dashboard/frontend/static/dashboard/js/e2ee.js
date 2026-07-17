@@ -21832,9 +21832,23 @@ https://github.com/browserify/crypto-browserify`);
       return null;
     }
   }
+  function groupKeyKey(selfSlug, groupUuid, version) {
+    return `group:${selfSlug}:${groupUuid}:${version}`;
+  }
+  async function putGroupKey(selfSlug, groupUuid, version, key) {
+    await put(groupKeyKey(selfSlug, groupUuid, version), key);
+  }
+  async function getGroupKey(selfSlug, groupUuid, version) {
+    try {
+      return await get(groupKeyKey(selfSlug, groupUuid, version));
+    } catch {
+      return null;
+    }
+  }
   async function clearProfileKeys(selfSlug) {
     await removeByPrefix(identityKey(selfSlug));
     await removeByPrefix(`conv:${selfSlug}:`);
+    await removeByPrefix(`group:${selfSlug}:`);
   }
 
   // src/urbanlens/dashboard/frontend/ts/shared/e2ee-client.ts
@@ -22123,6 +22137,144 @@ https://github.com/browserify/crypto-browserify`);
     await putIdentity(bundle.profile_slug, { privateKey, publicKey: bundle.public_key, version: bundle.version });
     return true;
   }
+  async function getUnlockOptions() {
+    const response = await fetch(cfg().urls.keys, { credentials: "same-origin" });
+    if (!response.ok) {
+      return { enrolled: false, password: false };
+    }
+    const bundle = await response.json();
+    return { enrolled: true, password: Boolean(bundle.password_wrapped_secret) && !bundle.password_wrap_stale };
+  }
+  async function unlockWithPassword(password) {
+    await cryptoReady();
+    const response = await fetch(cfg().urls.keys, { credentials: "same-origin" });
+    if (!response.ok) {
+      return false;
+    }
+    const bundle = await response.json();
+    if (!bundle.password_wrapped_secret || !bundle.password_wrap_salt) {
+      return false;
+    }
+    const wrapKey = deriveKey(password, bundle.password_wrap_salt, bundle.kdf_opslimit, bundle.kdf_memlimit);
+    const privateKey = unwrapSecretKey(bundle.password_wrapped_secret, wrapKey);
+    if (privateKey === null) {
+      return false;
+    }
+    await putIdentity(bundle.profile_slug, { privateKey, publicKey: bundle.public_key, version: bundle.version });
+    return true;
+  }
+  function showUnlockDialog() {
+    return new Promise((resolve) => {
+      getUnlockOptions().then((options) => {
+        const overlay = document.createElement("div");
+        overlay.className = "e2ee-recovery-overlay";
+        const passwordField = options.password ? `<label class="e2ee-unlock-label">Account password
+                       <input type="password" class="e2ee-unlock-password" autocomplete="current-password" placeholder="Your password">
+                   </label>
+                   <div class="e2ee-unlock-divider">or</div>` : "";
+        overlay.innerHTML = `
+                <div class="e2ee-recovery-dialog" role="dialog" aria-modal="true" aria-labelledby="e2ee-unlock-title">
+                    <h2 id="e2ee-unlock-title">Unlock your messages</h2>
+                    <p>This device doesn't hold your encryption key yet. ${options.password ? "Enter your account password or your recovery key." : "Enter your recovery key."}</p>
+                    ${passwordField}
+                    <label class="e2ee-unlock-label">Recovery key
+                        <input type="text" class="e2ee-unlock-recovery" autocomplete="off" spellcheck="false" placeholder="XXXX-XXXX-XXXX-…">
+                    </label>
+                    <p class="e2ee-unlock-error" hidden></p>
+                    <div class="e2ee-recovery-actions">
+                        <button type="button" class="e2ee-unlock-submit">Unlock</button>
+                        <button type="button" class="e2ee-unlock-cancel">Cancel</button>
+                    </div>
+                </div>`;
+        const errorEl = overlay.querySelector(".e2ee-unlock-error");
+        const passwordInput = overlay.querySelector(".e2ee-unlock-password");
+        const recoveryInput = overlay.querySelector(".e2ee-unlock-recovery");
+        const close = (unlocked) => {
+          overlay.remove();
+          resolve(unlocked);
+        };
+        const attempt = async () => {
+          errorEl.hidden = true;
+          const password = passwordInput?.value ?? "";
+          const recovery = recoveryInput?.value.trim() ?? "";
+          if (password) {
+            if (await unlockWithPassword(password)) {
+              close(true);
+              return;
+            }
+            errorEl.textContent = "That password didn't unlock this device. Check it, or use your recovery key.";
+            errorEl.hidden = false;
+            return;
+          }
+          if (recovery) {
+            if (await unlockWithRecovery(recovery)) {
+              close(true);
+              return;
+            }
+            errorEl.textContent = "That recovery key did not match.";
+            errorEl.hidden = false;
+            return;
+          }
+          errorEl.textContent = options.password ? "Enter your password or your recovery key." : "Enter your recovery key.";
+          errorEl.hidden = false;
+        };
+        overlay.querySelector(".e2ee-unlock-submit")?.addEventListener("click", () => void attempt());
+        overlay.querySelector(".e2ee-unlock-cancel")?.addEventListener("click", () => close(false));
+        overlay.addEventListener("keydown", (event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            attempt();
+          }
+        });
+        document.body.appendChild(overlay);
+        (passwordInput ?? recoveryInput)?.focus();
+      });
+    });
+  }
+  async function changePassword(currentPassword, newPassword, identifier) {
+    const url = cfg().urls.changePassword;
+    if (!url) {
+      return { ok: false, error: "Password changes aren't available on this page." };
+    }
+    if (newPassword.length < MIN_PASSWORD_LENGTH || /^\d+$/.test(newPassword)) {
+      return { ok: false, error: `Use at least ${MIN_PASSWORD_LENGTH} characters, not all numbers.` };
+    }
+    await cryptoReady();
+    let currentSecret = currentPassword;
+    if (currentPassword) {
+      const paramsResponse = await fetch(`${cfg().urls.loginParams}?identifier=${encodeURIComponent(identifier)}`, { credentials: "same-origin" });
+      if (!paramsResponse.ok) {
+        return { ok: false, error: "Could not verify your current password. Please try again." };
+      }
+      const params = await paramsResponse.json();
+      if (params.mode === "derived") {
+        currentSecret = bytesToB64(deriveKey(currentPassword, params.auth_salt));
+      }
+    }
+    const newAuthSalt = randomSalt();
+    const body = {
+      current_secret: currentSecret,
+      new_auth_key: bytesToB64(deriveKey(newPassword, newAuthSalt)),
+      new_auth_salt: newAuthSalt
+    };
+    const selfSlug = cfg().selfSlug;
+    if (selfSlug) {
+      const identity = await getIdentity(selfSlug);
+      if (identity !== null) {
+        const wrapSalt = randomSalt();
+        body.password_wrapped_secret = wrapSecretKey(identity.privateKey, deriveKey(newPassword, wrapSalt));
+        body.password_wrap_salt = wrapSalt;
+      }
+    }
+    const response = await postJson(url, body);
+    if (response.ok) {
+      return { ok: true };
+    }
+    if (response.status === 403) {
+      return { ok: false, error: "Your current password is incorrect." };
+    }
+    return { ok: false, error: "Could not change your password. Please try again." };
+  }
   async function regenerateRecoveryKey() {
     await cryptoReady();
     const identity = await requireIdentity();
@@ -22231,6 +22383,102 @@ https://github.com/browserify/crypto-browserify`);
     }
     return null;
   }
+  function groupKeyUrl(groupUuid) {
+    const base = cfg().urls.groupKeyBase;
+    if (!base) {
+      throw new Error("groupKeyBase URL not configured on this page");
+    }
+    return `${base}${groupUuid}/`;
+  }
+  async function ensureGroupKey(groupUuid) {
+    await cryptoReady();
+    const identity = await requireIdentity();
+    const selfSlug = cfg().selfSlug;
+    if (identity === null || !selfSlug) {
+      return null;
+    }
+    const response = await fetch(groupKeyUrl(groupUuid), { credentials: "same-origin" });
+    if (!response.ok) {
+      return null;
+    }
+    const payload = await response.json();
+    if (!payload.needs_rotation && payload.latest > 0) {
+      const key = await unsealAndCacheGroupVersion(identity, selfSlug, groupUuid, payload, payload.latest);
+      if (key !== null) {
+        return { version: payload.latest, key };
+      }
+    }
+    return createGroupKeyVersion(identity, selfSlug, groupUuid, payload);
+  }
+  async function unsealAndCacheGroupVersion(identity, selfSlug, groupUuid, payload, version) {
+    const cached = await getGroupKey(selfSlug, groupUuid, version);
+    if (cached !== null) {
+      return cached;
+    }
+    const entry = payload.keys.find((item) => item.version === version);
+    if (!entry) {
+      return null;
+    }
+    const key = unseal(entry.wrapped_key, identity.publicKey, identity.privateKey);
+    if (key !== null) {
+      await putGroupKey(selfSlug, groupUuid, version, key);
+    }
+    return key;
+  }
+  async function createGroupKeyVersion(identity, selfSlug, groupUuid, payload) {
+    if (payload.members === null) {
+      return null;
+    }
+    const key = generateConversationKey();
+    const wrapped = {};
+    for (const member of payload.members) {
+      wrapped[member.slug] = sealToPublicKey(key, member.public_key);
+    }
+    const version = payload.latest + 1;
+    const response = await postJson(groupKeyUrl(groupUuid), { version, wrapped });
+    if (response.status === 201) {
+      await putGroupKey(selfSlug, groupUuid, version, key);
+      return { version, key };
+    }
+    if (response.status === 200) {
+      const winner = await response.json();
+      const winnerKey = unseal(winner.wrapped_key, identity.publicKey, identity.privateKey);
+      if (winnerKey !== null) {
+        await putGroupKey(selfSlug, groupUuid, winner.version, winnerKey);
+        return { version: winner.version, key: winnerKey };
+      }
+    }
+    return null;
+  }
+  async function encryptForGroup(groupUuid, text) {
+    const group = await ensureGroupKey(groupUuid);
+    if (group === null) {
+      return null;
+    }
+    const encrypted = encryptMessage(text, group.key);
+    return { ciphertext: encrypted.ciphertext, nonce: encrypted.nonce, key_version: group.version };
+  }
+  async function decryptFromGroup(groupUuid, ciphertext, nonce, version) {
+    await cryptoReady();
+    const identity = await requireIdentity();
+    const selfSlug = cfg().selfSlug;
+    if (identity === null || !selfSlug) {
+      return null;
+    }
+    let key = await getGroupKey(selfSlug, groupUuid, version);
+    if (key === null) {
+      const response = await fetch(groupKeyUrl(groupUuid), { credentials: "same-origin" });
+      if (!response.ok) {
+        return null;
+      }
+      const payload = await response.json();
+      key = await unsealAndCacheGroupVersion(identity, selfSlug, groupUuid, payload, version);
+    }
+    if (key === null) {
+      return null;
+    }
+    return decryptMessage(ciphertext, nonce, key);
+  }
   async function encryptForPartner(partnerSlug, text) {
     const conversation = await ensureConversationKey(partnerSlug);
     if (conversation === null) {
@@ -22266,14 +22514,16 @@ https://github.com/browserify/crypto-browserify`);
       const ciphertext = node.dataset.e2eeCt ?? "";
       const nonce = node.dataset.e2eeNonce ?? "";
       const version = Number.parseInt(node.dataset.e2eeKv ?? "0", 10);
+      const group = node.dataset.e2eeGroup || "";
       const partner = node.dataset.e2eePartner || partnerSlug;
       delete node.dataset.e2eeCt;
       delete node.dataset.e2eeNonce;
       delete node.dataset.e2eeKv;
-      if (!ciphertext || !nonce || !version || !partner) {
+      delete node.dataset.e2eeGroup;
+      if (!ciphertext || !nonce || !version || !partner && !group) {
         continue;
       }
-      const plaintext = await decryptFromPartner(partner, ciphertext, nonce, version);
+      const plaintext = group ? await decryptFromGroup(group, ciphertext, nonce, version) : await decryptFromPartner(partner, ciphertext, nonce, version);
       if (plaintext !== null) {
         const truncateAt = Number.parseInt(node.dataset.e2eeTruncate ?? "0", 10);
         node.textContent = truncateAt > 0 && plaintext.length > truncateAt ? `${plaintext.slice(0, truncateAt - 1)}…` : plaintext;
@@ -22343,12 +22593,19 @@ Keep this somewhere safe - it can unlock your encrypted message history on any d
     enroll,
     enrollOauthIfNeeded,
     getUnlockState,
+    getUnlockOptions,
     unlockWithRecovery,
+    unlockWithPassword,
+    showUnlockDialog,
+    changePassword,
     regenerateRecoveryKey,
     resetKeys,
     ensureConversationKey,
     encryptForPartner,
     decryptFromPartner,
+    ensureGroupKey,
+    encryptForGroup,
+    decryptFromGroup,
     decryptDom,
     showRecoveryDialog
   };

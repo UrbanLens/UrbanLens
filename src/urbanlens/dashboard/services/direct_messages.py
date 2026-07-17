@@ -826,14 +826,34 @@ def conversations_for(profile: Profile) -> list[dict[str, Any]]:
             continue
         conversations.append(
             {
+                "kind": "dm",
                 "partner": partner,
                 "last_message": last_message,
                 "unread_count": row["unread_count"],
                 "is_muted": partner.pk in muted_sender_ids,
+                "last_activity": last_message.created,
                 **display_identity_for(profile, partner),
             },
         )
     return conversations
+
+
+def all_conversations_for(profile: Profile) -> list[dict[str, Any]]:
+    """Return the profile's one-to-one and group conversations merged, newest first.
+
+    Args:
+        profile: The profile whose inbox to build.
+
+    Returns:
+        Dicts from :func:`conversations_for` (``kind="dm"``) and
+        :func:`~urbanlens.dashboard.services.group_chats.group_conversations_for`
+        (``kind="group"``), sorted by last activity.
+    """
+    from urbanlens.dashboard.services.group_chats import group_conversations_for
+
+    merged = conversations_for(profile) + group_conversations_for(profile)
+    merged.sort(key=lambda conv: conv["last_activity"], reverse=True)
+    return merged
 
 
 #: Consecutive messages from the same sender closer together than this are
@@ -972,9 +992,11 @@ def has_used_direct_messages(profile: Profile) -> bool:
         profile: The profile to check.
 
     Returns:
-        True when at least one message involves the profile.
+        True when at least one message or group chat involves the profile.
     """
-    return DirectMessage.objects.involving(profile).exists()
+    from urbanlens.dashboard.models.group_chats.model import GroupChatMembership
+
+    return DirectMessage.objects.involving(profile).exists() or GroupChatMembership.objects.active().filter(profile=profile).exists()
 
 
 #: Default result cap for the Messages page's own search (as opposed to

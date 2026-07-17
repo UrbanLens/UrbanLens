@@ -177,7 +177,10 @@ class DirectMessageConsumer(AsyncWebsocketConsumer):
 
         if data.get("type") == "open":
             recipient_slug = str(data.get("recipient") or "").strip()
-            if recipient_slug:
+            group_uuid = str(data.get("group") or "").strip()
+            if group_uuid:
+                await self._mark_group_thread_open(group_uuid)
+            elif recipient_slug:
                 await self._mark_thread_open(recipient_slug)
             return
 
@@ -186,6 +189,22 @@ class DirectMessageConsumer(AsyncWebsocketConsumer):
         nonce = str(data.get("nonce") or "").strip()
         key_version = data.get("key_version")
         key_version = int(key_version) if isinstance(key_version, int) else 0
+
+        group_uuid = str(data.get("group") or "").strip()
+        if group_uuid:
+            # A group-chat frame: same validation/broadcast pipeline, but the
+            # message fans out to every active member (see services.group_chats).
+            if not (body or ciphertext):
+                return
+            try:
+                await self._create_group_message(group_uuid, body, ciphertext, nonce, key_version)
+            except (ValueError, PermissionError) as exc:
+                await self.send(text_data=json.dumps({"type": "error", "detail": str(exc)}))
+            except Exception:
+                logger.exception("Group message failed to save from profile %s", self.profile_id)
+                await self.send(text_data=json.dumps({"type": "error", "detail": "Your message couldn't be sent. Please try again."}))
+            return
+
         recipient_slug = str(data.get("recipient") or "").strip()
         image_ids = [int(v) for v in data.get("image_ids") or [] if isinstance(v, int)]
         markup_map_uuid = str(data.get("markup_map_uuid") or "").strip() or None
@@ -218,6 +237,46 @@ class DirectMessageConsumer(AsyncWebsocketConsumer):
                 (``{"type": "reaction", "message_id": ..., "reactions": [...]}``).
         """
         await self.send(text_data=json.dumps(event["message"]))
+
+    @database_sync_to_async
+    def _mark_group_thread_open(self, group_uuid):
+        """Record that this connection currently has a group thread open.
+
+        Args:
+            group_uuid: UUID string of the group chat being viewed.
+        """
+        from urbanlens.dashboard.models.group_chats.model import GroupChat
+        from urbanlens.dashboard.services.group_chats import mark_group_thread_open
+
+        group = GroupChat.objects.filter(uuid=group_uuid).first()
+        if group is None:
+            return
+        mark_group_thread_open(self.profile_id, group.pk)
+
+    @database_sync_to_async
+    def _create_group_message(self, group_uuid, body, ciphertext, nonce, key_version):
+        """Resolve the group and create the message through the shared service.
+
+        Args:
+            group_uuid: UUID string of the target group chat.
+            body: Plaintext message text (blank for encrypted messages).
+            ciphertext: End-to-end encrypted body (base64), or blank.
+            nonce: Base64 nonce for ``ciphertext``.
+            key_version: GroupKey version that encrypted this message.
+
+        Raises:
+            ValueError: Bad content or no such group.
+            PermissionError: The sender isn't an active member.
+        """
+        from urbanlens.dashboard.models.group_chats.model import GroupChat
+        from urbanlens.dashboard.models.profile.model import Profile
+        from urbanlens.dashboard.services.group_chats import create_group_message
+
+        sender = Profile.objects.select_related("user").get(pk=self.profile_id)
+        group = GroupChat.objects.filter(uuid=group_uuid).first()
+        if group is None:
+            raise ValueError("That group could not be found.")
+        create_group_message(sender, group, body, ciphertext=ciphertext, nonce=nonce, key_version=key_version)
 
     @database_sync_to_async
     def _mark_thread_open(self, recipient_slug):

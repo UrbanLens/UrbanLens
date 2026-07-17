@@ -113,8 +113,27 @@ export async function getConversationKey(selfSlug: string, partnerSlug: string, 
     }
 }
 
+function groupKeyKey(selfSlug: string, groupUuid: string, version: number): string {
+    return `group:${selfSlug}:${groupUuid}:${version}`;
+}
+
+/** Cache one unsealed group key version. */
+export async function putGroupKey(selfSlug: string, groupUuid: string, version: number, key: Uint8Array): Promise<void> {
+    await put(groupKeyKey(selfSlug, groupUuid, version), key);
+}
+
+/** Load one cached group key version, or null. */
+export async function getGroupKey(selfSlug: string, groupUuid: string, version: number): Promise<Uint8Array | null> {
+    try {
+        return await get<Uint8Array>(groupKeyKey(selfSlug, groupUuid, version));
+    } catch {
+        return null;
+    }
+}
+
 /** Wipe every cached key for a profile (logout-everywhere / key reset). */
 export async function clearProfileKeys(selfSlug: string): Promise<void> {
     await removeByPrefix(identityKey(selfSlug));
     await removeByPrefix(`conv:${selfSlug}:`);
+    await removeByPrefix(`group:${selfSlug}:`);
 }

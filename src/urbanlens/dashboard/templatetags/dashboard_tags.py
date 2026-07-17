@@ -73,6 +73,18 @@ def tombstone_text(message: Any, viewer_id: int) -> str | None:
 
 
 @register.filter
+def group_share_for(message: Any, viewer_id: int) -> Any:
+    """Return the viewer's own GroupMessageShare on a group message, or None.
+
+    Usage: {{ message|group_share_for:viewer_id }}
+
+    Relies on the caller having prefetched ``shares`` on the message queryset
+    to avoid N+1 queries across a thread.
+    """
+    return message.share_for(viewer_id)
+
+
+@register.filter
 def message_preview(message: Any, viewer_id: int) -> str:
     """Short preview text for a DirectMessage, honoring its tombstone state for `viewer_id`.
 

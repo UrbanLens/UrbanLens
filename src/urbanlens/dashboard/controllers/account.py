@@ -11,6 +11,7 @@ from uuid import UUID
 from django import forms
 from django.contrib.auth import REDIRECT_FIELD_NAME, login as auth_login, views as auth_views
 from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User
 from django.contrib.auth.views import LoginView
 from django.core.cache import cache
@@ -618,6 +619,47 @@ class LoginTwoFactorCancelView(View):
         return redirect("login")
 
 
+#: Session flag set when the user declines the set-password prompt; cleared
+#: naturally when the session ends, so the prompt returns on their next login.
+SESSION_PASSWORD_PROMPT_SKIPPED = "password_prompt_skipped"  # noqa: S105  # nosec B105 - session key name, not a credential
+
+
+class SetPasswordPromptView(LoginRequiredMixin, View):
+    """GET /accounts/set-password/ - prompt a passwordless (OAuth) account to set one.
+
+    Reached from ``PostLoginRedirectView`` right after any login of an account
+    with no usable password - which covers both brand-new social signups and
+    existing social accounts on their next login. The form itself submits via
+    JS to ``E2EEChangePasswordView`` (the password never reaches the server in
+    readable form); "Not now" skips for the rest of this session.
+    """
+
+    def get(self, request: HttpRequest) -> HttpResponse:
+        from urbanlens.dashboard.models.profile.model import Profile
+
+        # LoginRequiredMixin guarantees an authenticated request; going through
+        # the profile keeps the User type concrete for the checks below.
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        user = profile.user
+        if user.has_usable_password():
+            return redirect("post_login")
+        provider = user.social_auth.values_list("provider", flat=True).first() if hasattr(user, "social_auth") else None
+        provider_hint = {"google-oauth2": "Google", "discord": "Discord"}.get(provider or "", "a social account")
+        return render(
+            request,
+            "registration/set_password.html",
+            {"self_slug": profile.ensure_slug(), "provider_hint": provider_hint},
+        )
+
+
+class SetPasswordSkipView(View):
+    """GET /accounts/set-password/skip/ - decline the prompt for this session."""
+
+    def get(self, request: HttpRequest) -> HttpResponse:
+        request.session[SESSION_PASSWORD_PROMPT_SKIPPED] = True
+        return redirect("post_login")
+
+
 class PostLoginRedirectView(View):
     """Resolve the destination after password or OAuth login."""
 
@@ -635,6 +677,12 @@ class PostLoginRedirectView(View):
 
         if should_redirect_to_site_admin(request.user):
             return redirect("setup")
+
+        # Social-auth accounts have no usable password. Prompt them to set one
+        # (once per session) - it becomes a login credential and the password
+        # unlock path for their end-to-end encrypted messages on new devices.
+        if not request.user.has_usable_password() and not request.session.get(SESSION_PASSWORD_PROMPT_SKIPPED):
+            return redirect("account.set_password")
 
         from urbanlens.dashboard.models.profile.model import Profile
 

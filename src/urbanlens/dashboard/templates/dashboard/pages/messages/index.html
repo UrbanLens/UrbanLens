@@ -44,6 +44,11 @@
                         <i class="material-symbols-outlined">edit_square</i>
                         New message
                     </button>
+                    <button type="button" class="btn btn--sm btn--secondary dm-compose-btn" id="dm-group-create-btn"
+                            aria-expanded="false" aria-controls="dm-group-create"
+                            title="Start a group chat" aria-label="Start a group chat">
+                        <i class="material-symbols-outlined">group_add</i>
+                    </button>
                     <button type="button" class="dm-sidebar-collapse-btn" id="dm-sidebar-collapse-btn"
                             title="Hide conversations" aria-label="Hide conversations">
                         <i class="material-symbols-outlined">chevron_left</i>
@@ -62,6 +67,25 @@
                 <div id="dm-recipient-results" class="dm-recipient-results"></div>
             </div>
 
+            <div class="dm-compose dm-group-create" id="dm-group-create" hidden>
+                <label class="dm-compose__label" for="dm-group-name-input">Group name</label>
+                <input type="text" id="dm-group-name-input" class="dm-compose__input"
+                       placeholder="Name your group..." maxlength="100" autocomplete="off">
+                <label class="dm-compose__label" for="dm-group-member-input">Add people</label>
+                <input type="search" id="dm-group-member-input" class="dm-compose__input"
+                       name="q" placeholder="Search people..." autocomplete="off"
+                       hx-get="{% url 'messages.group.member_search' %}"
+                       hx-trigger="input changed delay:300ms, search"
+                       hx-target="#dm-group-member-results"
+                       hx-swap="innerHTML">
+                <div id="dm-group-member-results" class="dm-recipient-results"></div>
+                <div id="dm-group-create-picked" class="dm-group-picked-chips"></div>
+                <button type="button" class="btn btn--sm btn--primary dm-group-create__submit"
+                        id="dm-group-create-submit" disabled>
+                    <i class="material-symbols-outlined">group_add</i> Create group
+                </button>
+            </div>
+
             <div class="dm-messages-search" id="dm-messages-search" hidden>
                 <i class="material-symbols-outlined dm-messages-search__icon" aria-hidden="true">search</i>
                 <input type="search" id="dm-messages-search-input" class="dm-messages-search__input"
@@ -77,7 +101,7 @@
                  hx-get="{% url 'messages.list' %}"
                  hx-trigger="dmListRefresh from:body"
                  hx-swap="innerHTML"
-                 hx-vals='js:{active: window.dmActiveSlug()}'>
+                 hx-vals='js:{active: window.dmActiveSlug(), active_group: window.dmActiveGroup()}'>
                 {% include "dashboard/partials/messages/_conversation_list.html" %}
             </div>
         </aside>
@@ -137,6 +161,10 @@
     // the real slug/id at call time.
     var DM_REACT_URL_TEMPLATE = "{% url 'messages.react' 'e2ee-slug-token' 0 %}";
     var DM_SHARE_URL_TEMPLATE = "{% url 'messages.share.pin' 'e2ee-slug-token' %}";
+    var GROUP_UUID_TOKEN = '11111111-1111-1111-1111-111111111111';
+    var GROUP_SHARE_PIN_URL_TEMPLATE = "{% url 'messages.group.share.pin' '11111111-1111-1111-1111-111111111111' %}";
+    var GROUP_MEMBERS_URL_TEMPLATE = "{% url 'messages.group.members' '11111111-1111-1111-1111-111111111111' %}";
+    var GROUP_CREATE_URL = "{% url 'messages.group.create' %}";
     function reactUrlFor(partner, messageId) {
         return DM_REACT_URL_TEMPLATE
             .replace('e2ee-slug-token', encodeURIComponent(partner))
@@ -161,6 +189,7 @@
                 reset: "{% url 'e2ee.reset' %}",
                 partnerKeyBase: "{% url 'e2ee.keys' %}",
                 conversationKeyBase: "{% url 'e2ee.conversation_key' 'e2ee-slug-token' %}".replace("e2ee-slug-token/", ""),
+                groupKeyBase: "{% url 'e2ee.group_key' '11111111-1111-1111-1111-111111111111' %}".replace("11111111-1111-1111-1111-111111111111/", ""),
                 login: "{% url 'login' %}",
                 faqUrl: "{% url 'faq' %}#faq-e2ee",
             },
@@ -173,6 +202,12 @@
         return !!(thread && thread.dataset.partnerEncrypts === '1');
     }
 
+    // True when the open group thread can encrypt (every member enrolled).
+    function groupEncrypts() {
+        var thread = activeThread();
+        return !!(thread && thread.dataset.groupEncrypts === '1');
+    }
+
     // Decrypt every pending encrypted element in the open thread, and reflect
     // this device's lock state in the banner + composer.
     function refreshEncryption() {
@@ -181,7 +216,7 @@
         if (!thread) return;
         var partner = thread.dataset.partnerSlug;
         E2EE.decryptDom(thread, partner).catch(function (err) { console.error('E2EE decrypt pass failed', err); });
-        if (partnerEncrypts()) {
+        if (partnerEncrypts() || groupEncrypts()) {
             E2EE.getUnlockState().then(function (state) {
                 var locked = state === 'locked';
                 var banner = document.getElementById('dm-locked-banner');
@@ -197,13 +232,16 @@
         }
     }
 
-    // Encrypt an outgoing body when the partner is enrolled; otherwise fall back
-    // to plaintext. Returns the frame fields to merge into the send payload.
+    // Encrypt an outgoing body when the conversation can encrypt; otherwise
+    // fall back to plaintext. Returns the frame fields to merge into the send
+    // payload. Handles both 1:1 (partner key) and group (group key) threads.
     function buildOutgoingPayload(partner, body) {
-        if (!E2EE || !body || !partnerEncrypts()) {
+        var group = window.dmActiveGroup();
+        if (!E2EE || !body || (group ? !groupEncrypts() : !partnerEncrypts())) {
             return Promise.resolve({ body: body });
         }
-        return E2EE.encryptForPartner(partner, body).then(function (enc) {
+        var encrypting = group ? E2EE.encryptForGroup(group, body) : E2EE.encryptForPartner(partner, body);
+        return encrypting.then(function (enc) {
             if (!enc) return { body: body };
             return { body: '', ciphertext: enc.ciphertext, nonce: enc.nonce, key_version: enc.key_version };
         }).catch(function (err) {
@@ -215,7 +253,11 @@
     function activeThread() { return document.getElementById('dm-thread'); }
     window.dmActiveSlug = function () {
         var thread = activeThread();
-        return thread ? thread.dataset.partnerSlug : '';
+        return thread ? (thread.dataset.partnerSlug || '') : '';
+    };
+    window.dmActiveGroup = function () {
+        var thread = activeThread();
+        return thread ? (thread.dataset.groupUuid || '') : '';
     };
 
     function toast(level, message) {
@@ -614,12 +656,20 @@
         var empty = document.getElementById('dm-thread-empty');
         if (empty) empty.hidden = true;
 
+        var inGroup = msg.type === 'group_message';
         var grouped = isGroupedWithPrevious(list, own, msg.created);
         var li = document.createElement('li');
         li.className = 'dm-bubble ' + (own ? 'dm-bubble--own' : 'dm-bubble--them') + (grouped ? ' dm-bubble--grouped' : '');
         li.id = 'dm-msg-' + msg.id;
         li.dataset.messageId = msg.id;
         li.dataset.createdAt = msg.created || '';
+
+        if (inGroup && !own) {
+            var senderName = document.createElement('span');
+            senderName.className = 'dm-bubble__sender';
+            senderName.textContent = msg.sender_name || '';
+            li.appendChild(senderName);
+        }
 
         if (msg.reply_to) {
             var quote = document.createElement('div');
@@ -648,6 +698,7 @@
             encBody.dataset.e2eeCt = msg.ciphertext;
             encBody.dataset.e2eeNonce = msg.nonce;
             encBody.dataset.e2eeKv = msg.key_version;
+            if (inGroup) encBody.dataset.e2eeGroup = msg.group_uuid;
             li.appendChild(encBody);
             var lockIcon = document.createElement('i');
             lockIcon.className = 'material-symbols-outlined dm-lock-icon';
@@ -685,13 +736,16 @@
         time.textContent = isNaN(created.getTime()) ? '' : created.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
         li.appendChild(time);
 
-        var reactions = document.createElement('div');
-        reactions.className = 'dm-reactions';
-        reactions.id = 'dm-reactions-' + msg.id;
-        li.appendChild(reactions);
-        updateReactionBar(msg.id, []);
+        if (!inGroup) {
+            // Reactions are a 1:1 feature for now - group bubbles skip the bar.
+            var reactions = document.createElement('div');
+            reactions.className = 'dm-reactions';
+            reactions.id = 'dm-reactions-' + msg.id;
+            li.appendChild(reactions);
+        }
 
         list.appendChild(li);
+        if (!inGroup) updateReactionBar(msg.id, []);
         if (msg.ciphertext && E2EE) {
             E2EE.decryptDom(li, window.dmActiveSlug()).catch(function (err) { console.error('E2EE decrypt failed', err); });
         }
@@ -725,8 +779,14 @@
     // services.direct_messages.is_thread_open). Resent periodically so a
     // long-open conversation doesn't age past the server-side TTL.
     function sendOpenThread() {
+        if (!ws || ws.readyState !== WebSocket.OPEN) return;
+        var group = window.dmActiveGroup();
+        if (group) {
+            ws.send(JSON.stringify({ type: 'open', group: group }));
+            return;
+        }
         var partner = window.dmActiveSlug();
-        if (partner && ws && ws.readyState === WebSocket.OPEN) {
+        if (partner) {
             ws.send(JSON.stringify({ type: 'open', recipient: partner }));
         }
     }
@@ -833,6 +893,34 @@
                 if (msg.sender_slug === window.dmActiveSlug()) showTypingIndicator();
                 return;
             }
+            if (msg.type === 'group_message') {
+                if (msg.group_uuid === window.dmActiveGroup()) {
+                    // A share needs the server-rendered card - refresh the pane.
+                    if (msg.has_share) refreshActiveThread();
+                    else appendBubble(msg, msg.sender_slug === mySlug);
+                    if (msg.sender_slug !== mySlug) markThreadRead();
+                }
+                refreshList();
+                return;
+            }
+            if (msg.type === 'group_updated') {
+                // Membership/name changes: refresh the sidebar, and the open
+                // pane too when it's this group (it may have been renamed, or
+                // we may have been removed - the re-fetch 404s gracefully).
+                refreshList();
+                if (msg.group_uuid === window.dmActiveGroup()) refreshActiveThread();
+                return;
+            }
+            if (msg.type === 'group_message_deleted') {
+                if (msg.group_uuid === window.dmActiveGroup()) {
+                    var groupBubble = document.querySelector('.dm-bubble[data-message-id="' + msg.message_id + '"]');
+                    if (groupBubble && !groupBubble.classList.contains('dm-bubble--own')) {
+                        groupBubble.classList.add('dm-bubble--tombstone');
+                        groupBubble.innerHTML = '<span class="dm-bubble__tombstone"><i class="material-symbols-outlined">block</i> Message deleted</span>';
+                    }
+                }
+                return;
+            }
             if (msg.type !== 'message') return;
 
             var active = window.dmActiveSlug();
@@ -871,6 +959,7 @@
         var replyToId = replyToField && replyToField.value ? parseInt(replyToField.value, 10) : null;
         if (!body && !imageIds.length && !mapUuid && !stagedShare) return;
         var partner = window.dmActiveSlug();
+        var groupUuid = window.dmActiveGroup();
 
         // A staged @pin/@trip/@friend share needs server-side business logic
         // the WebSocket consumer doesn't have (creating the PinShare/trip
@@ -878,7 +967,8 @@
         // POST endpoint, carrying the composer's own text as the message body
         // and any staged map along with it. Not encrypted in v1, same as maps/photos.
         if (stagedShare) {
-            sendStagedShare(form, partner, stagedShare, body, mapUuid);
+            if (groupUuid) sendStagedGroupShare(form, groupUuid, stagedShare, body);
+            else sendStagedShare(form, partner, stagedShare, body, mapUuid);
             return;
         }
 
@@ -886,16 +976,21 @@
         // body text is only encrypted; attachments stay server-visible in v1.
         buildOutgoingPayload(partner, body).then(function (content) {
             if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({
-                    recipient: partner,
+                var frame = {
                     body: content.body || '',
                     ciphertext: content.ciphertext || '',
                     nonce: content.nonce || '',
                     key_version: content.key_version || 0,
-                    image_ids: imageIds,
-                    markup_map_uuid: mapUuid,
-                    reply_to: replyToId,
-                }));
+                };
+                if (groupUuid) {
+                    frame.group = groupUuid;
+                } else {
+                    frame.recipient = partner;
+                    frame.image_ids = imageIds;
+                    frame.markup_map_uuid = mapUuid;
+                    frame.reply_to = replyToId;
+                }
+                ws.send(JSON.stringify(frame));
                 resetComposerInput(input);
                 input.focus();
                 resetAttachments();
@@ -971,6 +1066,193 @@
             .catch(function (err) { toast('error', err.message || 'Could not send that share.'); })
             .finally(function () { if (sendBtn) sendBtn.disabled = false; });
     }
+
+    function sendStagedGroupShare(form, groupUuid, share, body) {
+        var input = document.getElementById('dm-composer-input');
+        var sendBtn = form.querySelector('.dm-composer__send');
+        var formData = new FormData();
+        formData.append('csrfmiddlewaretoken', getCsrfToken());
+        formData.append(share.fieldName, share.value);
+        formData.append('body', body);
+        if (sendBtn) sendBtn.disabled = true;
+        fetch(GROUP_SHARE_PIN_URL_TEMPLATE.replace(GROUP_UUID_TOKEN, groupUuid), { method: 'POST', body: formData, credentials: 'same-origin' })
+            .then(function (resp) {
+                if (resp.ok) {
+                    return resp.text().then(function (html) {
+                        var pane = document.getElementById('dm-thread-pane');
+                        pane.innerHTML = html;
+                        htmx.process(pane);
+                        resetComposerInput(input);
+                        resetAttachments();
+                        scrollMessages();
+                        refreshList();
+                        refreshEncryption();
+                    });
+                }
+                return resp.text().then(function (text) { throw new Error(text || 'Could not send that share.'); });
+            })
+            .catch(function (err) { toast('error', err.message || 'Could not send that share.'); })
+            .finally(function () { if (sendBtn) sendBtn.disabled = false; });
+    }
+
+    // -- Group chat UI: header menu actions, member pickers, creation -------------
+
+    // Fetch a dialog partial into the shared host, wire its HTMX attributes,
+    // and open it. Used by the group members dialog and group share dialog.
+    function openGroupDialog(url) {
+        fetch(url, { credentials: 'same-origin' })
+            .then(function (r) { return r.text(); })
+            .then(function (html) {
+                var host = document.getElementById('dm-share-dialog-host');
+                if (!host) return;
+                host.innerHTML = html;
+                htmx.process(host);
+                var dlg = host.querySelector('dialog');
+                if (dlg) dlg.showModal();
+            })
+            .catch(function () { toast('error', 'Could not load that dialog. Please try again.'); });
+    }
+
+    document.addEventListener('click', function (e) {
+        var groupUuid = window.dmActiveGroup();
+        if (e.target.closest('#dm-group-members-btn')) {
+            document.querySelectorAll('.dm-bubble-menu').forEach(function (m) { m.hidden = true; });
+            if (groupUuid) openGroupDialog(GROUP_MEMBERS_URL_TEMPLATE.replace(GROUP_UUID_TOKEN, groupUuid));
+            return;
+        }
+        if (e.target.closest('#dm-group-share-pin-btn')) {
+            if (groupUuid) openGroupDialog(GROUP_SHARE_PIN_URL_TEMPLATE.replace(GROUP_UUID_TOKEN, groupUuid));
+            return;
+        }
+        if (e.target.closest('#dm-group-rename-btn')) {
+            document.querySelectorAll('.dm-bubble-menu').forEach(function (m) { m.hidden = true; });
+            var renameForm = document.getElementById('dm-group-rename-form');
+            if (renameForm) {
+                renameForm.hidden = false;
+                var renameInput = document.getElementById('dm-group-rename-input');
+                if (renameInput) { renameInput.focus(); renameInput.select(); }
+            }
+            return;
+        }
+        if (e.target.closest('#dm-group-rename-cancel')) {
+            var openRenameForm = document.getElementById('dm-group-rename-form');
+            if (openRenameForm) openRenameForm.hidden = true;
+            return;
+        }
+    });
+
+    // Member pickers (new-group panel + members dialog's add form): clicking a
+    // search result adds a removable chip carrying the slug; the create/add
+    // submit buttons enable once at least one chip is present.
+    function pickedTargetsFor(pickBtn) {
+        if (pickBtn.closest('#dm-group-add-members-form')) {
+            return { chips: document.getElementById('dm-group-add-member-picked'), submit: document.getElementById('dm-group-add-members-submit'), form: document.getElementById('dm-group-add-members-form') };
+        }
+        return { chips: document.getElementById('dm-group-create-picked'), submit: document.getElementById('dm-group-create-submit'), form: null };
+    }
+
+    function refreshPickedState(targets) {
+        if (targets.submit && targets.chips) targets.submit.disabled = targets.chips.children.length === 0;
+    }
+
+    document.addEventListener('click', function (e) {
+        var pickBtn = e.target.closest('.dm-group-member-pick');
+        if (!pickBtn) return;
+        e.preventDefault();
+        var targets = pickedTargetsFor(pickBtn);
+        if (!targets.chips) return;
+        var slug = pickBtn.dataset.slug;
+        if (!slug || targets.chips.querySelector('[data-slug="' + slug + '"]')) return;
+
+        var chip = document.createElement('span');
+        chip.className = 'dm-group-picked-chip';
+        chip.dataset.slug = slug;
+        var nameSpan = document.createElement('span');
+        nameSpan.textContent = pickBtn.dataset.name || slug;
+        chip.appendChild(nameSpan);
+        if (targets.form) {
+            var hidden = document.createElement('input');
+            hidden.type = 'hidden';
+            hidden.name = 'member_slugs';
+            hidden.value = slug;
+            chip.appendChild(hidden);
+        }
+        var removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.setAttribute('aria-label', 'Remove');
+        removeBtn.textContent = '×';
+        removeBtn.addEventListener('click', function () {
+            chip.remove();
+            refreshPickedState(targets);
+        });
+        chip.appendChild(removeBtn);
+        targets.chips.appendChild(chip);
+        refreshPickedState(targets);
+    });
+
+    // -- New group panel ----------------------------------------------------------
+    var groupCreateBtn = document.getElementById('dm-group-create-btn');
+    var groupCreatePanel = document.getElementById('dm-group-create');
+    if (groupCreateBtn && groupCreatePanel) {
+        groupCreateBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            var open = !groupCreatePanel.hidden;
+            groupCreatePanel.hidden = open;
+            groupCreateBtn.setAttribute('aria-expanded', String(!open));
+            if (!open) document.getElementById('dm-group-name-input').focus();
+        });
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') {
+                groupCreatePanel.hidden = true;
+                groupCreateBtn.setAttribute('aria-expanded', 'false');
+            }
+        });
+    }
+
+    document.addEventListener('click', function (e) {
+        if (!e.target.closest('#dm-group-create-submit')) return;
+        var nameInput = document.getElementById('dm-group-name-input');
+        var picked = document.getElementById('dm-group-create-picked');
+        var submitBtn = document.getElementById('dm-group-create-submit');
+        if (!nameInput || !picked) return;
+        var name = nameInput.value.trim();
+        if (!name) {
+            nameInput.focus();
+            toast('warning', 'Give your group a name first.');
+            return;
+        }
+        var cookieMatch = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
+        var csrf = window.csrftoken || getCsrfToken() || (cookieMatch ? decodeURIComponent(cookieMatch[1]) : '');
+        var formData = new FormData();
+        formData.append('csrfmiddlewaretoken', csrf);
+        formData.append('name', name);
+        Array.prototype.forEach.call(picked.children, function (chip) {
+            formData.append('member_slugs', chip.dataset.slug);
+        });
+        if (submitBtn) submitBtn.disabled = true;
+        fetch(GROUP_CREATE_URL, { method: 'POST', body: formData, credentials: 'same-origin', headers: { 'X-CSRFToken': csrf } })
+            .then(function (resp) {
+                if (resp.status === 201) return resp.json();
+                return resp.text().then(function (text) { throw new Error(text || 'Could not create the group.'); });
+            })
+            .then(function (data) {
+                nameInput.value = '';
+                picked.innerHTML = '';
+                var results = document.getElementById('dm-group-member-results');
+                if (results) results.innerHTML = '';
+                var memberInput = document.getElementById('dm-group-member-input');
+                if (memberInput) memberInput.value = '';
+                if (groupCreatePanel) groupCreatePanel.hidden = true;
+                refreshList();
+                htmx.ajax('GET', data.url, { target: '#dm-thread-pane', swap: 'innerHTML' }).then(function () {
+                    history.pushState({}, '', data.url);
+                });
+            })
+            .catch(function (err) { toast('error', err.message || 'Could not create the group.'); })
+            .finally(function () {
+                if (submitBtn) refreshPickedState({ submit: submitBtn, chips: picked });
+            });
+    });
 
     // -- Attach photo ------------------------------------------------------------
     document.addEventListener('click', function (e) {
@@ -1539,11 +1821,16 @@
         if (!E2EE) return;
         document.querySelectorAll('#dm-conversation-list [data-e2ee-preview]').forEach(function (node) {
             var partner = node.dataset.partner;
+            var group = node.dataset.group;
             var ct = node.dataset.ct, nonce = node.dataset.nonce, kv = parseInt(node.dataset.kv || '0', 10);
-            if (!partner || !ct || !nonce || !kv) return;
-            var prefix = node.textContent.indexOf('You: ') === 0 ? 'You: ' : '';
+            if ((!partner && !group) || !ct || !nonce || !kv) return;
+            // Keep whatever sender prefix precedes the lock placeholder
+            // ("You: " for 1:1 rows, "<name>: " for group rows).
+            var lockIndex = node.textContent.indexOf('🔒');
+            var prefix = lockIndex > 0 ? node.textContent.slice(0, lockIndex) : '';
             node.removeAttribute('data-e2ee-preview');
-            E2EE.decryptFromPartner(partner, ct, nonce, kv).then(function (plaintext) {
+            var decrypting = group ? E2EE.decryptFromGroup(group, ct, nonce, kv) : E2EE.decryptFromPartner(partner, ct, nonce, kv);
+            decrypting.then(function (plaintext) {
                 if (plaintext !== null) {
                     node.textContent = prefix + (plaintext.length > 70 ? plaintext.slice(0, 69) + '…' : plaintext);
                 }
@@ -1576,17 +1863,16 @@
         URL.revokeObjectURL(link.href);
     });
 
-    // Unlock button on the locked banner: prompt for the recovery key.
+    // Unlock button on the locked banner: dialog offering the account
+    // password (when a password-wrapped key copy exists) or the recovery key.
     document.addEventListener('click', function (e) {
         if (!e.target.closest('#dm-locked-unlock-btn') || !E2EE) return;
-        var key = window.prompt('Enter your recovery key to unlock this device:');
-        if (!key) return;
-        E2EE.unlockWithRecovery(key).then(function (ok) {
+        E2EE.showUnlockDialog().then(function (ok) {
             if (ok) {
                 refreshEncryption();
+                refreshActiveThread();
+                decryptSidebarPreviews();
                 toast('success', 'This device is unlocked.');
-            } else {
-                toast('error', 'That recovery key did not match.');
             }
         });
     });

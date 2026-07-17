@@ -200,3 +200,46 @@
     color: var(--text-muted, #9ca3af);
     margin: .35rem 0 0;
 }
+
+// -- Unlock dialog (password and/or recovery key) ----------------------------
+
+.e2ee-unlock-label {
+    display: block;
+    margin-bottom: .9rem;
+    font-size: .8rem;
+    font-weight: 700;
+    color: var(--text-muted, #6b7280);
+
+    input {
+        display: block;
+        width: 100%;
+        margin-top: .35rem;
+        padding: .6rem .75rem;
+        border: 1px solid var(--ul-border, #d1d5db);
+        border-radius: 9px;
+        background: var(--ul-surface, #fff);
+        color: var(--text, #1f2937);
+        font-size: .95rem;
+    }
+}
+
+.e2ee-unlock-divider {
+    margin: .35rem 0 .9rem;
+    text-align: center;
+    font-size: .75rem;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    color: var(--text-muted, #9ca3af);
+}
+
+.e2ee-unlock-error {
+    color: #b91c1c;
+    font-size: .85rem;
+    margin: 0 0 .75rem;
+}
+
+.e2ee-unlock-cancel {
+    background: transparent !important;
+    border: none !important;
+    color: var(--text-muted, #6b7280) !important;
+}

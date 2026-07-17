@@ -664,6 +664,56 @@
     {# Security tab                                                            #}
     {# ======================================================================= #}
     <div class="settings-tab-panel" data-tab-panel="security" id="tab-panel-security">
+
+    {# -- Password (change, or first-time set for social sign-in accounts) ---- #}
+    <section class="settings-section ul-section" id="password-settings-section">
+        <div class="settings-section-header">
+            <i class="material-symbols-outlined">password</i>
+            <div>
+                <h2 class="settings-section-title">Password</h2>
+                <p class="settings-section-desc">
+                    {% if e2ee_has_password %}
+                    Change your account password. Your password also protects your encrypted messages, so changing it here keeps them unlockable on every device.
+                    {% else %}
+                    You signed up with Google or Discord, so your account has no password yet. Setting one lets you log in directly and unlock your encrypted messages with it on new devices - no recovery key needed.
+                    {% endif %}
+                </p>
+            </div>
+        </div>
+
+        <div class="settings-section-body">
+            <form class="settings-form" id="password-change-form"
+                  data-has-password="{% if e2ee_has_password %}1{% else %}0{% endif %}"
+                  data-username="{{ request.user.username }}">
+                {% if e2ee_has_password %}
+                <div class="settings-field">
+                    <label class="settings-label" for="password-current">Current password</label>
+                    <input type="password" id="password-current" name="current_password"
+                           autocomplete="current-password" required class="settings-input">
+                    <p class="settings-help">
+                        <a href="{% url 'password_reset' %}">Forgot your password?</a>
+                    </p>
+                </div>
+                {% endif %}
+                <div class="settings-field">
+                    <label class="settings-label" for="password-new">New password</label>
+                    <input type="password" id="password-new" name="new_password"
+                           autocomplete="new-password" required minlength="8" class="settings-input">
+                </div>
+                <div class="settings-field">
+                    <label class="settings-label" for="password-confirm">Confirm new password</label>
+                    <input type="password" id="password-confirm" name="confirm_password"
+                           autocomplete="new-password" required minlength="8" class="settings-input">
+                </div>
+                <div class="settings-actions">
+                    <button type="submit" class="settings-save-btn" id="password-change-submit">
+                        {% if e2ee_has_password %}Change password{% else %}Set password{% endif %}
+                    </button>
+                </div>
+            </form>
+        </div>
+    </section>
+
     {# -- Security (passkeys, authenticator app, backup codes) ---------------- #}
     <section class="settings-section ul-section" id="security-settings-section">
         <div class="settings-section-header">
@@ -1440,10 +1490,49 @@
             reset: "{% url 'e2ee.reset' %}",
             partnerKeyBase: "{% url 'e2ee.keys' %}",
             conversationKeyBase: "{% url 'e2ee.conversation_key' 'e2ee-slug-token' %}".replace("e2ee-slug-token/", ""),
+            changePassword: "{% url 'e2ee.change_password' %}",
             login: "{% url 'login' %}",
             faqUrl: "{% url 'faq' %}#faq-e2ee",
         },
     });
+
+    // -- Change / set password (Security tab) -------------------------------
+    var passwordForm = document.getElementById('password-change-form');
+    if (passwordForm) {
+        passwordForm.addEventListener('submit', function (e) {
+            e.preventDefault();
+            var hasCurrent = passwordForm.dataset.hasPassword === '1';
+            var currentInput = document.getElementById('password-current');
+            var newInput = document.getElementById('password-new');
+            var confirmInput = document.getElementById('password-confirm');
+            var submitBtn = document.getElementById('password-change-submit');
+            var current = currentInput ? currentInput.value : '';
+            if (hasCurrent && !current) {
+                if (window.toastr) toastr.error('Type your current password first.');
+                return;
+            }
+            if (newInput.value !== confirmInput.value) {
+                if (window.toastr) toastr.error("Those passwords don't match.");
+                return;
+            }
+            submitBtn.disabled = true;
+            UrbanLensE2EE.changePassword(current, newInput.value, passwordForm.dataset.username).then(function (result) {
+                if (result.ok) {
+                    if (window.toastr) toastr.success(hasCurrent ? 'Your password has been changed.' : 'Your password has been set. You can now log in with it.');
+                    if (currentInput) currentInput.value = '';
+                    newInput.value = '';
+                    confirmInput.value = '';
+                    if (!hasCurrent) window.location.reload();
+                } else if (window.toastr) {
+                    toastr.error(result.error || 'Could not change your password.');
+                }
+            }).catch(function () {
+                if (window.toastr) toastr.error('Could not change your password. Please try again.');
+            }).finally(function () {
+                submitBtn.disabled = false;
+            });
+        });
+    }
 
     var status = document.getElementById('e2ee-status');
     var viewBtn = document.getElementById('e2ee-view-recovery');
@@ -1463,7 +1552,7 @@
             viewBtn.hidden = false;
             resetBtn.hidden = false;
         } else {
-            setStatus("This device can't read your encrypted messages yet. Unlock it with your recovery key.");
+            setStatus("This device can't read your encrypted messages yet. Unlock it with your password or recovery key.");
             unlockBtn.hidden = false;
             resetBtn.hidden = false;
         }
@@ -1480,14 +1569,8 @@
     });
 
     unlockBtn.addEventListener('click', function () {
-        var key = window.prompt('Enter your recovery key:');
-        if (!key) return;
-        UrbanLensE2EE.unlockWithRecovery(key).then(function (ok) {
-            if (ok) {
-                window.location.reload();
-            } else if (window.toastr) {
-                toastr.error('That recovery key did not match.');
-            }
+        UrbanLensE2EE.showUnlockDialog().then(function (ok) {
+            if (ok) window.location.reload();
         });
     });
 

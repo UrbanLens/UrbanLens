@@ -1,0 +1,638 @@
+"""Business logic for group chats.
+
+Mirrors ``services.direct_messages``: validation and persistence live here,
+both the WebSocket consumer (``DirectMessageConsumer``) and the no-JS HTTP
+fallback call the same ``create_group_message``, and live delivery is
+strictly best-effort. Live events are fanned out to each member's existing
+per-profile direct-message channel group (``direct_message_group_name``), so
+group chats need no new socket routes - every open tab of every member
+already listens there.
+
+Permission model (see ``models.group_chats``): any active member may rename
+the group or leave; only the creator may add or remove members. Whether a
+profile may be *added* is governed by the same
+``services.direct_messages.can_direct_message`` privacy check used for
+one-to-one messages, evaluated for the creator doing the adding.
+"""
+
+from __future__ import annotations
+
+import logging
+from typing import TYPE_CHECKING, Any
+
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
+from django.core.cache import cache
+from django.db import transaction
+from django.utils import timezone
+
+from urbanlens.dashboard.models.group_chats.model import MAX_GROUP_NAME_LENGTH, GroupChat, GroupChatMembership, GroupMessage, GroupMessageShare
+from urbanlens.dashboard.services.direct_messages import can_direct_message, direct_message_group_name
+from urbanlens.dashboard.services.text_limits import MAX_DIRECT_MESSAGE_LENGTH
+
+if TYPE_CHECKING:
+    from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.models.profile.model import Profile
+
+logger = logging.getLogger(__name__)
+
+#: Maximum number of members (including the creator) a group chat may have.
+MAX_GROUP_MEMBERS = 50
+
+#: Messages loaded per page of a group thread (matches the 1:1 THREAD_PAGE_SIZE).
+GROUP_THREAD_PAGE_SIZE = 50
+
+
+# ---------------------------------------------------------------------------
+# "Thread open" tracking (shares the cache slot with 1:1 threads - a client
+# has at most one conversation open at a time, so the same key holds either a
+# partner id (int) or a "group:<id>" marker without collision).
+# ---------------------------------------------------------------------------
+
+_OPEN_THREAD_TTL_SECONDS = 90
+
+
+def _open_thread_cache_key(profile_id: int) -> str:
+    return f"dm_open_thread_{profile_id}"
+
+
+def mark_group_thread_open(profile_id: int, group_id: int) -> None:
+    """Record that `profile_id`'s client currently has this group thread open.
+
+    Args:
+        profile_id: PK of the profile viewing the thread.
+        group_id: PK of the open group chat.
+    """
+    cache.set(_open_thread_cache_key(profile_id), f"group:{group_id}", timeout=_OPEN_THREAD_TTL_SECONDS)
+
+
+def is_group_thread_open(profile_id: int, group_id: int) -> bool:
+    """Return True if `profile_id` currently has this group thread open.
+
+    Args:
+        profile_id: PK of the profile who would be viewing the thread.
+        group_id: PK of the group chat.
+
+    Returns:
+        True if that group thread is the one currently open for that profile.
+    """
+    return cache.get(_open_thread_cache_key(profile_id)) == f"group:{group_id}"
+
+
+# ---------------------------------------------------------------------------
+# Group lifecycle
+# ---------------------------------------------------------------------------
+
+
+def create_group_chat(creator: Profile, name: str, members: list[Profile]) -> GroupChat:
+    """Create a group chat with `creator` plus `members`.
+
+    The group always starts empty: even when it's spun up from an existing
+    one-to-one conversation, none of that history carries over - which is the
+    guarantee that people added to a conversation can never read messages
+    from before the group existed.
+
+    Args:
+        creator: The profile creating (and thereafter managing) the group.
+        name: The group's display name.
+        members: The initial members besides the creator. Each must pass the
+            creator's ``can_direct_message`` privacy check.
+
+    Returns:
+        The newly created GroupChat.
+
+    Raises:
+        ValueError: Blank/too-long name, no members, too many members, or
+            duplicate members.
+        PermissionError: When any member's privacy settings reject the creator.
+    """
+    name = name.strip()
+    if not name:
+        raise ValueError("A group name is required.")
+    if len(name) > MAX_GROUP_NAME_LENGTH:
+        raise ValueError(f"Group names are limited to {MAX_GROUP_NAME_LENGTH} characters.")
+
+    unique_members = {member.pk: member for member in members if member.pk != creator.pk}
+    if not unique_members:
+        raise ValueError("Add at least one other person to start a group.")
+    if len(unique_members) + 1 > MAX_GROUP_MEMBERS:
+        raise ValueError(f"Groups are limited to {MAX_GROUP_MEMBERS} members.")
+    for member in unique_members.values():
+        if not can_direct_message(creator, member):
+            raise PermissionError(f"{member.username} isn't accepting messages from you.")
+
+    with transaction.atomic():
+        group = GroupChat.objects.create(name=name, creator=creator)
+        GroupChatMembership.objects.create(group=group, profile=creator)
+        for member in unique_members.values():
+            GroupChatMembership.objects.create(group=group, profile=member)
+
+    for member in unique_members.values():
+        _notify_group_event(group, member, f"{creator.username} added you to the group “{group.name}”.")
+    _broadcast_group_event(group, {"type": "group_updated", "group_uuid": str(group.uuid)})
+    logger.info("Group chat %s created by profile %s with %d members", group.pk, creator.pk, len(unique_members) + 1)
+    return group
+
+
+def rename_group_chat(group: GroupChat, actor: Profile, name: str) -> GroupChat:
+    """Rename `group` - any active member may do this.
+
+    Args:
+        group: The group to rename.
+        actor: The acting profile.
+        name: The new display name.
+
+    Returns:
+        The updated group.
+
+    Raises:
+        ValueError: Blank or over-long name.
+        PermissionError: When `actor` isn't an active member.
+    """
+    name = name.strip()
+    if not name:
+        raise ValueError("A group name is required.")
+    if len(name) > MAX_GROUP_NAME_LENGTH:
+        raise ValueError(f"Group names are limited to {MAX_GROUP_NAME_LENGTH} characters.")
+    if group.membership_for(actor) is None:
+        raise PermissionError("You aren't a member of this group.")
+
+    group.name = name
+    group.save(update_fields=["name", "updated"])
+    _broadcast_group_event(group, {"type": "group_updated", "group_uuid": str(group.uuid), "name": group.name})
+    return group
+
+
+def add_group_members(group: GroupChat, actor: Profile, members: list[Profile]) -> list[GroupChatMembership]:
+    """Add `members` to `group` - only the creator may do this.
+
+    Each addition starts a brand-new membership stint, so the new member sees
+    nothing sent before this moment (see ``GroupMessageQuerySet.visible_window``).
+    Encrypted groups additionally rotate their key on the next send, so old
+    ciphertext is never even decryptable by the newcomer.
+
+    Args:
+        group: The group being extended.
+        actor: The acting profile (must be the group's creator).
+        members: Profiles to add. Already-active members are skipped.
+
+    Returns:
+        The newly created membership rows.
+
+    Raises:
+        ValueError: When adding would exceed ``MAX_GROUP_MEMBERS``.
+        PermissionError: When `actor` isn't the creator, or a member's privacy
+            settings reject them.
+    """
+    if not group.is_manager(actor):
+        raise PermissionError("Only the group's creator can add members.")
+
+    active_ids = set(group.active_memberships().values_list("profile_id", flat=True))
+    to_add = {member.pk: member for member in members if member.pk not in active_ids}
+    if not to_add:
+        return []
+    if len(active_ids) + len(to_add) > MAX_GROUP_MEMBERS:
+        raise ValueError(f"Groups are limited to {MAX_GROUP_MEMBERS} members.")
+    for member in to_add.values():
+        if not can_direct_message(actor, member):
+            raise PermissionError(f"{member.username} isn't accepting messages from you.")
+
+    created = [GroupChatMembership.objects.create(group=group, profile=member) for member in to_add.values()]
+    for member in to_add.values():
+        _notify_group_event(group, member, f"{actor.username} added you to the group “{group.name}”.")
+    _broadcast_group_event(group, {"type": "group_updated", "group_uuid": str(group.uuid)})
+    logger.info("Profile %s added %d members to group %s", actor.pk, len(created), group.pk)
+    return created
+
+
+def remove_group_member(group: GroupChat, actor: Profile, target: Profile) -> None:
+    """End `target`'s membership in `group`.
+
+    Anyone may remove themselves (leave); only the creator may remove someone
+    else. The membership row is kept (with ``left_at``/``removed_by`` set) so
+    the visibility window of what they already saw stays on record; they lose
+    all access to the group from here on.
+
+    Args:
+        group: The group.
+        actor: The acting profile.
+        target: The member being removed.
+
+    Raises:
+        PermissionError: When `actor` is neither `target` nor the creator.
+        ValueError: When `target` has no active membership.
+    """
+    membership = group.membership_for(target)
+    if membership is None:
+        raise ValueError("They aren't a member of this group.")
+    if actor.pk != target.pk and not group.is_manager(actor):
+        raise PermissionError("Only the group's creator can remove other members.")
+
+    membership.end(removed_by=actor if actor.pk != target.pk else None)
+    if actor.pk != target.pk:
+        _notify_group_event(group, target, f"You were removed from the group “{group.name}”.")
+    # The removed member's client also gets the event (their sidebar entry
+    # should disappear), so broadcast before recomputing the member set is
+    # not required - _broadcast_group_event reads current active members, and
+    # the removed member is pinged separately.
+    _broadcast_group_event(group, {"type": "group_updated", "group_uuid": str(group.uuid)}, extra_profile_ids=[target.pk])
+    logger.info("Profile %s ended membership of profile %s in group %s", actor.pk, target.pk, group.pk)
+
+
+# ---------------------------------------------------------------------------
+# Messages
+# ---------------------------------------------------------------------------
+
+
+def serialize_group_message(message: GroupMessage) -> dict[str, Any]:
+    """Serialize a group message into the JSON payload pushed over the WebSocket.
+
+    Args:
+        message: The message to serialize.
+
+    Returns:
+        A JSON-serializable dict; ``group_uuid`` lets the frontend route the
+        payload to the right open conversation.
+    """
+    return {
+        "type": "group_message",
+        "id": message.pk,
+        "group_uuid": str(message.group.uuid),
+        "group_name": message.group.name,
+        "body": message.body,
+        "ciphertext": message.ciphertext,
+        "nonce": message.nonce,
+        "key_version": message.key_version,
+        "created": message.created.isoformat(),
+        "sender_slug": message.sender.slug or "",
+        "sender_name": message.sender.username,
+        # Shares need the full server-rendered card - the client re-fetches
+        # the thread partial when this is set (same contract as 1:1 has_share).
+        "has_share": message.shares.exists(),
+    }
+
+
+def _broadcast_group_event(group: GroupChat, payload: dict[str, Any], *, extra_profile_ids: list[int] | None = None) -> None:
+    """Push `payload` to every active member's live sessions after commit.
+
+    Best-effort: a channel-layer failure is logged, never raised.
+
+    Args:
+        group: The group whose members should receive the event.
+        payload: JSON-serializable dict to deliver.
+        extra_profile_ids: Additional profile PKs to deliver to (e.g. a
+            just-removed member whose sidebar must update).
+    """
+    profile_ids = set(group.active_memberships().values_list("profile_id", flat=True))
+    profile_ids.update(extra_profile_ids or [])
+    groups = {direct_message_group_name(profile_id) for profile_id in profile_ids}
+
+    def _send() -> None:
+        layer = get_channel_layer()
+        if layer is None:
+            return
+        for channel_group in groups:
+            try:
+                async_to_sync(layer.group_send)(channel_group, {"type": "dm.message", "message": payload})
+            except Exception:
+                logger.warning("Live push of group event to %s failed", channel_group, exc_info=True)
+
+    transaction.on_commit(_send)
+
+
+def _notify_group_event(group: GroupChat, recipient: Profile, text: str) -> None:
+    """Raise an on-site notification about a group membership event.
+
+    Args:
+        group: The group the event concerns.
+        recipient: The profile to notify.
+        text: The notification body.
+    """
+    from django.urls import reverse
+
+    from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, Importance, NotificationType, Status
+    from urbanlens.dashboard.models.notifications.model import NotificationLog
+
+    try:
+        pref = recipient.notification_preferences.message
+    except AttributeError:
+        pref = DeliveryPreference.SITE
+    if pref == DeliveryPreference.NONE:
+        return
+    NotificationLog.objects.create(
+        profile=recipient,
+        status=Status.UNREAD,
+        importance=Importance.MEDIUM,
+        notification_type=NotificationType.MESSAGE,
+        title=group.name,
+        message=text,
+        url=reverse("messages.group", kwargs={"group_uuid": group.uuid}),
+    )
+
+
+def _notify_group_message(message: GroupMessage) -> None:
+    """Raise on-site notifications for a new group message.
+
+    One notification per member per "conversation went unread" (mirrors the
+    1:1 behavior): a member with other unread messages in this group isn't
+    re-notified for every message in a burst. Muted memberships and members
+    currently looking at the thread are skipped.
+
+    Args:
+        message: The freshly created message.
+    """
+    from django.urls import reverse
+
+    from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, Importance, NotificationType, Status
+    from urbanlens.dashboard.models.notifications.model import NotificationLog
+
+    if message.is_encrypted:
+        preview = "🔒 Encrypted message"
+    elif message.body:
+        preview = message.body if len(message.body) <= 120 else message.body[:120].rstrip() + "…"
+    else:
+        preview = "New message"
+
+    group = message.group
+    url = reverse("messages.group", kwargs={"group_uuid": group.uuid})
+    memberships = group.active_memberships().exclude(profile_id=message.sender_id).select_related("profile", "profile__user")
+    for membership in memberships:
+        if membership.muted or is_group_thread_open(membership.profile_id, group.pk):
+            continue
+        already_unread = GroupMessage.objects.unread_for(membership).exclude(pk=message.pk).exists()
+        if already_unread:
+            continue
+        try:
+            pref = membership.profile.notification_preferences.message
+        except AttributeError:
+            pref = DeliveryPreference.SITE
+        if pref == DeliveryPreference.NONE:
+            continue
+        NotificationLog.objects.create(
+            profile=membership.profile,
+            source_profile=message.sender,
+            status=Status.UNREAD,
+            importance=Importance.MEDIUM,
+            notification_type=NotificationType.MESSAGE,
+            title=f"New message in {group.name}",
+            message=f"{message.sender.username}: {preview}",
+            url=url,
+        )
+
+
+def create_group_message(
+    sender: Profile,
+    group: GroupChat,
+    body: str,
+    *,
+    ciphertext: str = "",
+    nonce: str = "",
+    key_version: int = 0,
+    defer_broadcast: bool = False,
+) -> GroupMessage:
+    """Validate, persist, broadcast, and notify for one new group message.
+
+    Args:
+        sender: The sending profile (must be an active member).
+        group: The group being messaged.
+        body: Plaintext message text. Must be blank when ``ciphertext`` is given.
+        ciphertext: End-to-end encrypted body (base64), produced client-side
+            under the group key. Mutually exclusive with ``body``.
+        nonce: Base64 nonce for ``ciphertext`` (required with it).
+        key_version: ``GroupKey.version`` that encrypted this message.
+        defer_broadcast: When True, skip the live push - the caller attaches
+            shares first and then calls ``broadcast_group_message``.
+
+    Returns:
+        The newly created GroupMessage.
+
+    Raises:
+        ValueError: Empty/too-long/malformed content.
+        PermissionError: When `sender` isn't an active member.
+    """
+    from urbanlens.dashboard.services.e2ee import MAX_CIPHERTEXT_LENGTH, MAX_NONCE_LENGTH, valid_blob
+
+    membership = group.membership_for(sender)
+    if membership is None:
+        raise PermissionError("You aren't a member of this group.")
+
+    body = body.strip()
+    if len(body) > MAX_DIRECT_MESSAGE_LENGTH:
+        raise ValueError(f"Message is too long (max {MAX_DIRECT_MESSAGE_LENGTH:,} characters).")
+    if ciphertext:
+        if body:
+            raise ValueError("A message is either plaintext or encrypted, never both.")
+        if not valid_blob(ciphertext, MAX_CIPHERTEXT_LENGTH) or not valid_blob(nonce, MAX_NONCE_LENGTH) or key_version < 1:
+            raise ValueError("Malformed encrypted message.")
+    elif nonce or key_version:
+        raise ValueError("Malformed encrypted message.")
+    if not body and not ciphertext:
+        raise ValueError("Message cannot be empty.")
+
+    message = GroupMessage.objects.create(
+        group=group,
+        sender=sender,
+        body=body,
+        ciphertext=ciphertext,
+        nonce=nonce,
+        key_version=key_version,
+    )
+    # Sending is reading: the sender's own read mark advances with their message.
+    GroupMessage.objects.mark_read(membership)
+
+    _notify_group_message(message)
+    if not defer_broadcast:
+        broadcast_group_message(message)
+    logger.info("Group message %s: profile %s -> group %s", message.pk, sender.pk, group.pk)
+    return message
+
+
+def broadcast_group_message(message: GroupMessage) -> None:
+    """Push `message` to every active member's live sessions now.
+
+    Args:
+        message: The message to broadcast.
+    """
+    _broadcast_group_event(message.group, serialize_group_message(message))
+
+
+def delete_group_message(message: GroupMessage, actor: Profile) -> GroupMessage:
+    """Delete `message` for everyone - only the sender may do this.
+
+    Args:
+        message: The message to delete.
+        actor: The profile requesting the delete.
+
+    Returns:
+        The updated message.
+
+    Raises:
+        PermissionError: If `actor` isn't the message's sender.
+    """
+    if actor.pk != message.sender_id:
+        raise PermissionError("Only the sender can delete this message.")
+    if message.deleted_at is None:
+        message.deleted_at = timezone.now()
+        message.save(update_fields=["deleted_at", "updated"])
+        for share in message.shares.select_related("pin_share"):
+            if share.pin_share is not None:
+                _revoke_pin_share(share.pin_share)
+        _broadcast_group_event(
+            message.group,
+            {"type": "group_message_deleted", "group_uuid": str(message.group.uuid), "message_id": message.pk},
+        )
+    return message
+
+
+def _revoke_pin_share(pin_share) -> None:
+    """Reject a still-pending PinShare when its group message is deleted.
+
+    Args:
+        pin_share: The PinShare attached to the deleted message.
+    """
+    from urbanlens.dashboard.models.pin_share.meta import PinShareStatus
+
+    if pin_share.status == PinShareStatus.PENDING:
+        pin_share.status = PinShareStatus.REJECTED
+        pin_share.save(update_fields=["status"])
+
+
+def share_pin_in_group_message(sender: Profile, group: GroupChat, pin: Pin, body: str) -> GroupMessage:
+    """Share `pin` into `group` - one full PinShare per member, plus the chat message.
+
+    Every active member (other than the sender) gets their own ``PinShare``
+    through :func:`~urbanlens.dashboard.services.pin_sharing.create_pin_share`
+    - notification, provenance stamping, and exposure recording included - so
+    a group share counts exactly like sharing with each member individually.
+    Members the sender isn't connected to are skipped (the friends-only rule
+    is per recipient); they still see the message and card, just without an
+    accept action.
+
+    Args:
+        sender: The sharing profile (must own the pin and be an active member).
+        group: The group receiving the share.
+        pin: The pin being shared.
+        body: Message text accompanying the share (may be blank; a default
+            "shared a pin" text is used so the message isn't empty).
+
+    Returns:
+        The newly created GroupMessage.
+
+    Raises:
+        PermissionError: When `sender` isn't an active member.
+        ValueError: Propagated from `create_group_message` for bad input.
+    """
+    from urbanlens.dashboard.services.pin_sharing import create_pin_share
+
+    message = create_group_message(sender, group, body or f"Shared {pin.display_label}", defer_broadcast=True)
+    for membership in group.active_memberships().exclude(profile_id=sender.pk).select_related("profile", "profile__user"):
+        try:
+            pin_share = create_pin_share(sender, membership.profile, pin)
+        except PermissionError:
+            # Not connected to this member - the friends-only sharing rule
+            # applies per recipient; they see the card without an action.
+            continue
+        GroupMessageShare.objects.create(message=message, recipient=membership.profile, pin_share=pin_share)
+    broadcast_group_message(message)
+    return message
+
+
+# ---------------------------------------------------------------------------
+# Reading / listing
+# ---------------------------------------------------------------------------
+
+
+def group_thread_page(membership: GroupChatMembership, *, before_id: int | None = None, limit: int = GROUP_THREAD_PAGE_SIZE) -> tuple[list[GroupMessage], bool]:
+    """Return one page of a group thread, mirroring ``direct_messages.thread_page``.
+
+    Args:
+        membership: The viewer's active membership (scopes visibility).
+        before_id: When given, only messages with a smaller pk are considered;
+            None loads the most recent page.
+        limit: Maximum number of messages to return.
+
+    Returns:
+        ``(messages, has_more_older)``: messages oldest-first;
+        ``has_more_older`` is True when older visible messages remain.
+    """
+    queryset = (
+        GroupMessage.objects.visible_window(membership)
+        .select_related("sender", "sender__user")
+        .prefetch_related("shares__pin_share__pin", "shares__pin_share__pin__location")
+    )
+    if before_id is not None:
+        queryset = queryset.filter(pk__lt=before_id)
+    page = list(queryset.order_by("-id")[: limit + 1])
+    has_more_older = len(page) > limit
+    page = page[:limit]
+    page.reverse()
+    return page, has_more_older
+
+
+def group_conversations_for(profile: Profile) -> list[dict[str, Any]]:
+    """Return the profile's group conversations, most recently active first.
+
+    Args:
+        profile: The profile whose group inbox to build.
+
+    Returns:
+        A list of dicts with ``kind="group"``, ``group`` (GroupChat),
+        ``last_message`` (GroupMessage or None), ``unread_count`` (int),
+        ``member_count`` (int), ``is_muted`` (bool), and ``last_activity``
+        (datetime used for cross-kind sorting).
+    """
+    memberships = GroupChatMembership.objects.active().filter(profile=profile).select_related("group")
+    conversations: list[dict[str, Any]] = []
+    for membership in memberships:
+        group = membership.group
+        last_message = GroupMessage.objects.visible_window(membership).select_related("sender", "sender__user").order_by("-id").first()
+        conversations.append(
+            {
+                "kind": "group",
+                "group": group,
+                "last_message": last_message,
+                "unread_count": GroupMessage.objects.unread_for(membership).count(),
+                "member_count": group.active_memberships().count(),
+                "is_muted": membership.muted,
+                "last_activity": last_message.created if last_message is not None else membership.created,
+            },
+        )
+    conversations.sort(key=lambda conv: conv["last_activity"], reverse=True)
+    return conversations
+
+
+def unread_group_conversation_count(profile: Profile) -> int:
+    """Count the profile's groups with at least one unread message.
+
+    Args:
+        profile: The member profile.
+
+    Returns:
+        The number of groups needing attention (feeds the navbar label,
+        alongside the 1:1 ``unread_conversation_count``).
+    """
+    count = 0
+    for membership in GroupChatMembership.objects.active().filter(profile=profile):
+        if GroupMessage.objects.unread_for(membership).exists():
+            count += 1
+    return count
+
+
+def group_e2ee_ready(group: GroupChat) -> bool:
+    """Return True when every active member has published a key bundle.
+
+    Group messages are encrypted iff *all* current members are enrolled -
+    otherwise the group falls back to plaintext (matching the 1:1
+    opportunistic-encryption rule).
+
+    Args:
+        group: The group to check.
+
+    Returns:
+        True when the group can encrypt.
+    """
+    from urbanlens.dashboard.models.e2ee import MessagingKeyBundle
+
+    member_ids = list(group.active_memberships().values_list("profile_id", flat=True))
+    enrolled = MessagingKeyBundle.objects.filter(profile_id__in=member_ids).count()
+    return enrolled == len(member_ids) and len(member_ids) > 0

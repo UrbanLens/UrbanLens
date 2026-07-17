@@ -1,0 +1,112 @@
+{% comment %}
+One group chat thread: header, message bubbles, composer. Context comes from
+controllers.group_chats._group_thread_context. Swapped into #dm-thread-pane by
+HTMX; the page's WebSocket JS reads the data attributes off #dm-thread (the
+same element id the 1:1 thread uses, so all delegated handlers keep working)
+to route live messages and fall back to the plain POST endpoint.
+{% endcomment %}
+{% load dashboard_tags %}
+<div class="dm-thread dm-thread--group" id="dm-thread"
+     data-group-uuid="{{ group.uuid }}"
+     data-group-name="{{ group.name }}"
+     data-send-url="{% url 'messages.group.send' group.uuid %}"
+     data-read-url="{% url 'messages.group.read' group.uuid %}"
+     data-view-url="{% url 'messages.group' group.uuid %}"
+     data-group-encrypts="{% if group_e2ee_ready %}1{% else %}0{% endif %}">
+
+  <div class="dm-thread__header">
+    <a class="dm-thread__back" href="{% url 'messages.view' %}" aria-label="Back to conversations">
+      <i class="material-symbols-outlined">arrow_back</i>
+    </a>
+    <span class="msg-avatar msg-avatar--lg msg-avatar--group" aria-hidden="true">
+      <i class="material-symbols-outlined">groups</i>
+    </span>
+    <div class="dm-thread__who">
+      <button type="button" class="dm-thread__name" id="dm-partner-menu-btn">{{ group.name }}</button>
+      <span class="dm-thread__status" id="dm-group-member-count">{{ member_count }} member{{ member_count|pluralize }}{% if group_e2ee_ready %} &middot; <i class="material-symbols-outlined dm-thread__status-lock" aria-hidden="true">lock</i> encrypted{% endif %}</span>
+      <span class="dm-thread__status" id="dm-conn-status" hidden>Reconnecting...</span>
+
+      <div class="dm-bubble-menu dm-thread-partner-menu" id="dm-partner-menu" hidden>
+        <button type="button" class="dm-bubble-menu__item" id="dm-group-rename-btn">
+          <i class="material-symbols-outlined">edit</i> Rename group
+        </button>
+        <button type="button" class="dm-bubble-menu__item" id="dm-group-members-btn">
+          <i class="material-symbols-outlined">group</i> Members
+        </button>
+        <button type="button" class="dm-bubble-menu__item"
+                hx-post="{% url 'messages.group.mute' group.uuid %}"
+                hx-target="#dm-thread-pane" hx-swap="innerHTML">
+          {% if is_muted %}
+          <i class="material-symbols-outlined">volume_up</i> Unmute notifications
+          {% else %}
+          <i class="material-symbols-outlined">volume_off</i> Mute notifications
+          {% endif %}
+        </button>
+        <button type="button" class="dm-bubble-menu__item dm-bubble-menu__item--danger"
+                hx-post="{% url 'messages.group.leave' group.uuid %}"
+                hx-confirm="Leave “{{ group.name }}”? You will no longer see this conversation.">
+          <i class="material-symbols-outlined">logout</i> Leave group
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <form class="dm-group-rename" id="dm-group-rename-form" hidden
+        hx-post="{% url 'messages.group.rename' group.uuid %}"
+        hx-target="#dm-thread-pane" hx-swap="innerHTML">
+    {% csrf_token %}
+    <input type="text" name="name" id="dm-group-rename-input" class="dm-group-rename__input"
+           value="{{ group.name }}" maxlength="{{ max_group_name_length }}" required>
+    <button type="submit" class="btn btn--primary btn--sm">Save</button>
+    <button type="button" class="btn btn--ghost btn--sm" id="dm-group-rename-cancel">Cancel</button>
+  </form>
+
+  <div class="dm-locked-banner" id="dm-locked-banner" hidden>
+    <i class="material-symbols-outlined" aria-hidden="true">lock</i>
+    <span>This device can't read your encrypted messages yet.</span>
+    <button type="button" id="dm-locked-unlock-btn">Unlock</button>
+  </div>
+
+  <ul class="dm-messages" id="dm-messages" role="list">
+    {% if has_more_older %}
+    <li class="dm-load-older" id="dm-load-older-sentinel"
+        hx-get="{% url 'messages.group.older' group.uuid %}?before={{ oldest_message_id }}"
+        hx-trigger="revealed" hx-target="this" hx-swap="outerHTML">
+      <span class="dm-load-older__spinner">
+        <i class="material-symbols-outlined">progress_activity</i> Loading earlier messages…
+      </span>
+    </li>
+    {% endif %}
+    {% include "dashboard/partials/messages/_group_message_items.html" %}
+  </ul>
+
+  <p class="dm-thread-empty" id="dm-thread-empty" {% if thread_messages %}hidden{% endif %}>
+    This is the beginning of “{{ group.name }}”. Only messages sent from now on are visible to the current members.
+  </p>
+
+  <div class="dm-composer-attachments" id="dm-composer-attachments">
+    <span class="dm-composer-attachment-chip dm-composer-attachment-chip--share" id="dm-share-chip" hidden>
+      <i class="material-symbols-outlined" id="dm-share-chip-icon">location_on</i>
+      <span id="dm-share-chip-label"></span>
+      <button type="button" id="dm-share-chip-remove" aria-label="Remove attachment">&times;</button>
+    </span>
+  </div>
+  <form class="dm-composer" id="dm-composer" action="{% url 'messages.group.send' group.uuid %}" method="post">
+    {% csrf_token %}
+    <div class="dm-composer__input-row">
+      <textarea name="body" id="dm-composer-input" autocomplete="off" rows="1"
+                placeholder="Message {{ group.name }}..." maxlength="{{ max_message_length }}"></textarea>
+      <button type="submit" class="btn btn--primary dm-composer__send" aria-label="Send message">
+        <i class="material-symbols-outlined">send</i>
+      </button>
+    </div>
+    <div class="dm-composer__toolbar">
+      <button type="button" class="btn btn--ghost dm-composer__attach" id="dm-group-share-pin-btn" title="Share a pin with the group">
+        <i class="material-symbols-outlined">location_on</i>
+      </button>
+      <button type="button" class="btn btn--ghost dm-composer__attach" id="dm-emoji-btn" title="Insert an emoji">
+        <i class="material-symbols-outlined">mood</i>
+      </button>
+    </div>
+  </form>
+</div>

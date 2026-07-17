@@ -22,10 +22,10 @@ from urbanlens.dashboard.models.direct_messages.model import DirectMessage
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.direct_messages import (
     REACTION_PICKER_EMOJIS,
+    all_conversations_for,
     build_thread_timeline,
     can_direct_message,
     clear_email_debounce,
-    conversations_for,
     create_direct_message,
     delete_message_for_everyone,
     delete_message_for_self,
@@ -226,7 +226,7 @@ class MessagesPageView(LoginRequiredMixin, View):
             request,
             "dashboard/pages/messages/index.html",
             {
-                "conversations": conversations_for(profile),
+                "conversations": all_conversations_for(profile),
                 "active_partner": None,
                 "active_slug": "",
                 "profile": profile,
@@ -269,7 +269,7 @@ class ConversationView(LoginRequiredMixin, View):
 
         context = {
             **_thread_context(profile, partner),
-            "conversations": conversations_for(profile),
+            "conversations": all_conversations_for(profile),
             "active_partner": partner,
             "active_slug": partner.slug or "",
             "profile": profile,
@@ -690,8 +690,9 @@ class ConversationListView(LoginRequiredMixin, View):
             request,
             "dashboard/partials/messages/_conversation_list.html",
             {
-                "conversations": conversations_for(profile),
+                "conversations": all_conversations_for(profile),
                 "active_slug": request.GET.get("active", ""),
+                "active_group_uuid": request.GET.get("active_group", ""),
             },
         )
 
@@ -717,7 +718,7 @@ class MessagesDropdownView(LoginRequiredMixin, View):
             from "no messages yet" (no DM history at all).
         """
         profile = _get_profile(request)
-        conversations = conversations_for(profile)
+        conversations = all_conversations_for(profile)
         unread = [conv for conv in conversations if conv["unread_count"]][:DROPDOWN_CONVERSATION_LIMIT]
         return render(
             request,
@@ -740,8 +741,10 @@ class MessagesUnreadCountView(LoginRequiredMixin, View):
             least one unread message (not the total unread message count -
             one label per conversation needing attention).
         """
+        from urbanlens.dashboard.services.group_chats import unread_group_conversation_count
+
         profile = _get_profile(request)
-        count = DirectMessage.objects.unread_conversation_count(profile)
+        count = DirectMessage.objects.unread_conversation_count(profile) + unread_group_conversation_count(profile)
         return render(request, "dashboard/partials/messages/_label.html", {"unread_count": count})
 
 

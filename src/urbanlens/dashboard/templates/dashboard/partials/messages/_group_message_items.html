@@ -1,0 +1,44 @@
+{% comment %}
+Message bubbles and day separators for one page of a group thread. Included by
+both `_group_thread.html` (the most recent page) and
+`_group_thread_messages_page.html` (older pages fetched via infinite scroll).
+Context: `thread_messages`, `group`, `viewer_id`, `my_slug`.
+{% endcomment %}
+{% load dashboard_tags %}
+{% for message in thread_messages %}
+{% ifchanged message.created|date:"Y-m-d" %}
+<li class="dm-day-sep" aria-hidden="true"><span>{{ message.created|date:"M j, Y" }} &middot; {{ message.created|date:"g:i A" }}</span></li>
+{% endifchanged %}
+{% with tombstone=message|tombstone_text:viewer_id %}
+<li class="dm-bubble {% if message.sender_id == viewer_id %}dm-bubble--own{% else %}dm-bubble--them{% endif %}{% if tombstone %} dm-bubble--tombstone{% endif %}"
+    id="dm-msg-{{ message.id }}" data-message-id="{{ message.id }}" data-created-at="{{ message.created|date:'c' }}" data-sender-slug="{{ message.sender.slug }}">
+  {% if message.sender_id == viewer_id and not tombstone and not message.deleted_at %}
+  <button type="button" class="dm-bubble__menu-btn" data-message-id="{{ message.id }}" aria-label="Message actions">
+    <i class="material-symbols-outlined">more_vert</i>
+  </button>
+  {% endif %}
+  {% if message.sender_id != viewer_id %}
+  <span class="dm-bubble__sender">{{ message.sender.username }}</span>
+  {% endif %}
+  {% if tombstone %}
+  <span class="dm-bubble__tombstone"><i class="material-symbols-outlined">block</i> {{ tombstone }}</span>
+  {% else %}
+  {% if message.is_encrypted %}<span class="dm-bubble__body e2ee-pending" data-e2ee-ct="{{ message.ciphertext }}" data-e2ee-nonce="{{ message.nonce }}" data-e2ee-kv="{{ message.key_version }}" data-e2ee-group="{{ group.uuid }}">Decrypting…</span><i class="material-symbols-outlined dm-lock-icon" title="End-to-end encrypted">lock</i>{% elif message.body %}<span class="dm-bubble__body">{{ message.body }}</span>{% endif %}
+  {% if message.shares.all %}
+  {% include "dashboard/partials/messages/_group_share_card.html" with message=message viewer_share=message|group_share_for:viewer_id viewer_id=viewer_id group=group %}
+  {% endif %}
+  {% endif %}
+  <span class="dm-bubble__time">{{ message.created|date:"g:i A" }}</span>
+  {% if message.sender_id == viewer_id and not tombstone and not message.deleted_at %}
+  <div class="dm-bubble-menu" id="dm-bubble-menu-{{ message.id }}" hidden>
+    <button type="button" class="dm-bubble-menu__item dm-bubble-menu__item--danger"
+            hx-post="{% url 'messages.group.delete' group.uuid message.id %}"
+            hx-target="#dm-thread-pane" hx-swap="innerHTML"
+            hx-confirm="Delete this message? Everyone in the group will see that it was deleted.">
+      <i class="material-symbols-outlined">delete</i> Delete
+    </button>
+  </div>
+  {% endif %}
+</li>
+{% endwith %}
+{% endfor %}

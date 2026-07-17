@@ -23,6 +23,8 @@ from urbanlens.dashboard.controllers.account import (
     LoginTwoFactorView,
     PostLoginRedirectView,
     ResendVerificationView,
+    SetPasswordPromptView,
+    SetPasswordSkipView,
     SignupView,
     VerifyEmailSentView,
     VerifyEmailView,
@@ -61,6 +63,8 @@ urlpatterns = [
     path("accounts/login/2fa/code/", LoginTwoFactorCodeView.as_view(), name="login.2fa.code"),
     path("accounts/login/2fa/cancel/", LoginTwoFactorCancelView.as_view(), name="login.2fa.cancel"),
     path("accounts/post-login/", PostLoginRedirectView.as_view(), name="post_login"),
+    path("accounts/set-password/", SetPasswordPromptView.as_view(), name="account.set_password"),
+    path("accounts/set-password/skip/", SetPasswordSkipView.as_view(), name="account.set_password.skip"),
     path("accounts/logout/", auth_views.LogoutView.as_view(), name="logout"),
     path(
         "accounts/password_reset/",

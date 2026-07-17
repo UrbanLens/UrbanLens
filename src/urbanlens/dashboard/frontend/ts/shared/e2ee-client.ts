@@ -26,7 +26,7 @@ import {
     wrapSecretKey,
 } from "./e2ee-crypto";
 import type { CachedIdentity } from "./e2ee-store";
-import { clearProfileKeys, getConversationKey, getIdentity, putConversationKey, putIdentity } from "./e2ee-store";
+import { clearProfileKeys, getConversationKey, getGroupKey, getIdentity, putConversationKey, putGroupKey, putIdentity } from "./e2ee-store";
 
 /** Endpoint URLs, provided by templates via {% url %} (see init()). */
 export interface E2EEUrls {
@@ -39,6 +39,12 @@ export interface E2EEUrls {
     partnerKeyBase: string;
     /** Base of the conversation-key endpoint; the client appends "<slug>/". */
     conversationKeyBase: string;
+    /** Base of the group-key endpoint; the client appends "<group uuid>/".
+     * Optional so pages without group chats just omit it. */
+    groupKeyBase?: string;
+    /** POST target for password change/set. Optional; only the settings and
+     * set-password pages wire it. */
+    changePassword?: string;
     /** The login form's POST target, for the fetch-based login flow. */
     login: string;
     /** FAQ entry explaining encryption/recovery keys in plain language, shown
@@ -509,6 +515,205 @@ export async function unlockWithRecovery(display: string): Promise<boolean> {
 }
 
 /**
+ * Report which unlock paths this account's bundle offers on a cold device.
+ *
+ * @returns Whether a password-wrapped copy exists (and is not stale), and
+ *   whether the account is enrolled at all.
+ */
+export async function getUnlockOptions(): Promise<{ enrolled: boolean; password: boolean }> {
+    const response = await fetch(cfg().urls.keys, { credentials: "same-origin" });
+    if (!response.ok) {
+        return { enrolled: false, password: false };
+    }
+    const bundle = (await response.json()) as KeyBundlePayload;
+    return { enrolled: true, password: Boolean(bundle.password_wrapped_secret) && !bundle.password_wrap_stale };
+}
+
+/**
+ * Unlock this device with the account password.
+ *
+ * Derives the wrap key from the password + the bundle's wrap salt and opens
+ * the password-wrapped private-key copy. Only possible when such a copy
+ * exists (password accounts, and OAuth accounts that have set a password
+ * while a device held the key).
+ *
+ * @param password - The raw account password (never transmitted).
+ * @returns True on success (identity cached; device unlocked).
+ */
+export async function unlockWithPassword(password: string): Promise<boolean> {
+    await cryptoReady();
+    const response = await fetch(cfg().urls.keys, { credentials: "same-origin" });
+    if (!response.ok) {
+        return false;
+    }
+    const bundle = (await response.json()) as KeyBundlePayload;
+    if (!bundle.password_wrapped_secret || !bundle.password_wrap_salt) {
+        return false;
+    }
+    const wrapKey = deriveKey(password, bundle.password_wrap_salt, bundle.kdf_opslimit, bundle.kdf_memlimit);
+    const privateKey = unwrapSecretKey(bundle.password_wrapped_secret, wrapKey);
+    if (privateKey === null) {
+        return false;
+    }
+    await putIdentity(bundle.profile_slug, { privateKey, publicKey: bundle.public_key, version: bundle.version });
+    return true;
+}
+
+/**
+ * Show a dialog offering every available unlock path (password and/or
+ * recovery key) and attempt the unlock the user chooses.
+ *
+ * @returns True once the device is unlocked; false when the user cancelled.
+ */
+export function showUnlockDialog(): Promise<boolean> {
+    return new Promise((resolve) => {
+        void getUnlockOptions().then((options) => {
+            const overlay = document.createElement("div");
+            overlay.className = "e2ee-recovery-overlay";
+            const passwordField = options.password
+                ? `<label class="e2ee-unlock-label">Account password
+                       <input type="password" class="e2ee-unlock-password" autocomplete="current-password" placeholder="Your password">
+                   </label>
+                   <div class="e2ee-unlock-divider">or</div>`
+                : "";
+            overlay.innerHTML = `
+                <div class="e2ee-recovery-dialog" role="dialog" aria-modal="true" aria-labelledby="e2ee-unlock-title">
+                    <h2 id="e2ee-unlock-title">Unlock your messages</h2>
+                    <p>This device doesn't hold your encryption key yet. ${options.password ? "Enter your account password or your recovery key." : "Enter your recovery key."}</p>
+                    ${passwordField}
+                    <label class="e2ee-unlock-label">Recovery key
+                        <input type="text" class="e2ee-unlock-recovery" autocomplete="off" spellcheck="false" placeholder="XXXX-XXXX-XXXX-…">
+                    </label>
+                    <p class="e2ee-unlock-error" hidden></p>
+                    <div class="e2ee-recovery-actions">
+                        <button type="button" class="e2ee-unlock-submit">Unlock</button>
+                        <button type="button" class="e2ee-unlock-cancel">Cancel</button>
+                    </div>
+                </div>`;
+            const errorEl = overlay.querySelector(".e2ee-unlock-error") as HTMLElement;
+            const passwordInput = overlay.querySelector<HTMLInputElement>(".e2ee-unlock-password");
+            const recoveryInput = overlay.querySelector<HTMLInputElement>(".e2ee-unlock-recovery");
+            const close = (unlocked: boolean) => {
+                overlay.remove();
+                resolve(unlocked);
+            };
+            const attempt = async () => {
+                errorEl.hidden = true;
+                const password = passwordInput?.value ?? "";
+                const recovery = recoveryInput?.value.trim() ?? "";
+                if (password) {
+                    if (await unlockWithPassword(password)) {
+                        close(true);
+                        return;
+                    }
+                    errorEl.textContent = "That password didn't unlock this device. Check it, or use your recovery key.";
+                    errorEl.hidden = false;
+                    return;
+                }
+                if (recovery) {
+                    if (await unlockWithRecovery(recovery)) {
+                        close(true);
+                        return;
+                    }
+                    errorEl.textContent = "That recovery key did not match.";
+                    errorEl.hidden = false;
+                    return;
+                }
+                errorEl.textContent = options.password ? "Enter your password or your recovery key." : "Enter your recovery key.";
+                errorEl.hidden = false;
+            };
+            overlay.querySelector(".e2ee-unlock-submit")?.addEventListener("click", () => void attempt());
+            overlay.querySelector(".e2ee-unlock-cancel")?.addEventListener("click", () => close(false));
+            overlay.addEventListener("keydown", (event) => {
+                if ((event as KeyboardEvent).key === "Enter") {
+                    event.preventDefault();
+                    void attempt();
+                }
+            });
+            document.body.appendChild(overlay);
+            (passwordInput ?? recoveryInput)?.focus();
+        });
+    });
+}
+
+// ---------------------------------------------------------------------------
+// Password change / set (settings page and the SSO set-password prompt)
+// ---------------------------------------------------------------------------
+
+export interface ChangePasswordResult {
+    ok: boolean;
+    error?: string;
+}
+
+/**
+ * Change (or, for OAuth accounts, set) the login password.
+ *
+ * Everything password-shaped stays in the browser: the current password is
+ * converted to whatever credential the server actually stores (the raw
+ * password for legacy accounts, the Argon2id-derived authKey for derived
+ * accounts), and the new password becomes a freshly salted derived
+ * credential. When this device holds the decrypted private key, it is
+ * re-wrapped under the new password so password-unlock keeps working on
+ * other devices.
+ *
+ * @param currentPassword - The current password ("" for OAuth accounts
+ *   setting their first password).
+ * @param newPassword - The new password.
+ * @param identifier - The account's username (used to look up the current
+ *   auth mode/salt via the anonymous login-params endpoint).
+ * @returns ``{ok}`` or ``{ok: false, error}`` with a user-facing message.
+ */
+export async function changePassword(currentPassword: string, newPassword: string, identifier: string): Promise<ChangePasswordResult> {
+    const url = cfg().urls.changePassword;
+    if (!url) {
+        return { ok: false, error: "Password changes aren't available on this page." };
+    }
+    if (newPassword.length < MIN_PASSWORD_LENGTH || /^\d+$/.test(newPassword)) {
+        return { ok: false, error: `Use at least ${MIN_PASSWORD_LENGTH} characters, not all numbers.` };
+    }
+    await cryptoReady();
+
+    let currentSecret = currentPassword;
+    if (currentPassword) {
+        const paramsResponse = await fetch(`${cfg().urls.loginParams}?identifier=${encodeURIComponent(identifier)}`, { credentials: "same-origin" });
+        if (!paramsResponse.ok) {
+            return { ok: false, error: "Could not verify your current password. Please try again." };
+        }
+        const params = (await paramsResponse.json()) as LoginParams;
+        if (params.mode === "derived") {
+            currentSecret = bytesToB64(deriveKey(currentPassword, params.auth_salt));
+        }
+    }
+
+    const newAuthSalt = randomSalt();
+    const body: Record<string, unknown> = {
+        current_secret: currentSecret,
+        new_auth_key: bytesToB64(deriveKey(newPassword, newAuthSalt)),
+        new_auth_salt: newAuthSalt,
+    };
+
+    // Re-wrap the private key under the new password when we hold it.
+    const selfSlug = cfg().selfSlug;
+    if (selfSlug) {
+        const identity = await getIdentity(selfSlug);
+        if (identity !== null) {
+            const wrapSalt = randomSalt();
+            body.password_wrapped_secret = wrapSecretKey(identity.privateKey, deriveKey(newPassword, wrapSalt));
+            body.password_wrap_salt = wrapSalt;
+        }
+    }
+
+    const response = await postJson(url, body);
+    if (response.ok) {
+        return { ok: true };
+    }
+    if (response.status === 403) {
+        return { ok: false, error: "Your current password is incorrect." };
+    }
+    return { ok: false, error: "Could not change your password. Please try again." };
+}
+
+/**
  * Generate and store a replacement recovery key (device must be unlocked).
  *
  * @returns The new recovery key display string, or null when locked.
@@ -662,6 +867,166 @@ async function createConversationKeyVersion(
     return null;
 }
 
+// ---------------------------------------------------------------------------
+// Group keys & message crypto (group chats)
+// ---------------------------------------------------------------------------
+
+interface GroupKeysPayload {
+    keys: { version: number; wrapped_key: string }[];
+    latest: number;
+    needs_rotation: boolean;
+    members: { slug: string; public_key: string }[] | null;
+}
+
+function groupKeyUrl(groupUuid: string): string {
+    const base = cfg().urls.groupKeyBase;
+    if (!base) {
+        throw new Error("groupKeyBase URL not configured on this page");
+    }
+    return `${base}${groupUuid}/`;
+}
+
+/**
+ * Fetch, unseal, and cache the usable group key for one group chat, rotating
+ * to a new version whenever the latest one no longer covers the group's
+ * current membership (member added/removed) or none exists yet.
+ *
+ * Rotation is what enforces membership boundaries cryptographically: a new
+ * member only ever receives envelopes for versions minted after they joined,
+ * and a removed member is excluded from every later version.
+ *
+ * @param groupUuid - The group chat's UUID.
+ * @returns The latest usable key and its version, or null when the group
+ *   cannot encrypt (a member unenrolled, or this device locked).
+ */
+export async function ensureGroupKey(groupUuid: string): Promise<{ version: number; key: Uint8Array } | null> {
+    await cryptoReady();
+    const identity = await requireIdentity();
+    const selfSlug = cfg().selfSlug;
+    if (identity === null || !selfSlug) {
+        return null;
+    }
+    const response = await fetch(groupKeyUrl(groupUuid), { credentials: "same-origin" });
+    if (!response.ok) {
+        return null;
+    }
+    const payload = (await response.json()) as GroupKeysPayload;
+
+    if (!payload.needs_rotation && payload.latest > 0) {
+        const key = await unsealAndCacheGroupVersion(identity, selfSlug, groupUuid, payload, payload.latest);
+        if (key !== null) {
+            return { version: payload.latest, key };
+        }
+        // Our envelope is sealed to a keypair we no longer hold (post-reset):
+        // roll the group forward with a fresh version.
+    }
+    return createGroupKeyVersion(identity, selfSlug, groupUuid, payload);
+}
+
+async function unsealAndCacheGroupVersion(
+    identity: CachedIdentity,
+    selfSlug: string,
+    groupUuid: string,
+    payload: GroupKeysPayload,
+    version: number,
+): Promise<Uint8Array | null> {
+    const cached = await getGroupKey(selfSlug, groupUuid, version);
+    if (cached !== null) {
+        return cached;
+    }
+    const entry = payload.keys.find((item) => item.version === version);
+    if (!entry) {
+        return null;
+    }
+    const key = unseal(entry.wrapped_key, identity.publicKey, identity.privateKey);
+    if (key !== null) {
+        await putGroupKey(selfSlug, groupUuid, version, key);
+    }
+    return key;
+}
+
+async function createGroupKeyVersion(
+    identity: CachedIdentity,
+    selfSlug: string,
+    groupUuid: string,
+    payload: GroupKeysPayload,
+): Promise<{ version: number; key: Uint8Array } | null> {
+    if (payload.members === null) {
+        // At least one member isn't enrolled - the group stays plaintext.
+        return null;
+    }
+    const key = generateConversationKey();
+    const wrapped: Record<string, string> = {};
+    for (const member of payload.members) {
+        wrapped[member.slug] = sealToPublicKey(key, member.public_key);
+    }
+    const version = payload.latest + 1;
+    const response = await postJson(groupKeyUrl(groupUuid), { version, wrapped });
+    if (response.status === 201) {
+        await putGroupKey(selfSlug, groupUuid, version, key);
+        return { version, key };
+    }
+    if (response.status === 200) {
+        // Lost a create race - unseal the winner's copy instead.
+        const winner = (await response.json()) as { version: number; wrapped_key: string };
+        const winnerKey = unseal(winner.wrapped_key, identity.publicKey, identity.privateKey);
+        if (winnerKey !== null) {
+            await putGroupKey(selfSlug, groupUuid, winner.version, winnerKey);
+            return { version: winner.version, key: winnerKey };
+        }
+    }
+    return null;
+}
+
+/**
+ * Encrypt one outgoing message body for a group chat.
+ *
+ * @param groupUuid - The group chat's UUID.
+ * @param text - The plaintext body.
+ * @returns The encrypted fields, or null when the group must fall back to
+ *   plaintext (a member unenrolled / this device locked).
+ */
+export async function encryptForGroup(groupUuid: string, text: string): Promise<OutgoingEncryption | null> {
+    const group = await ensureGroupKey(groupUuid);
+    if (group === null) {
+        return null;
+    }
+    const encrypted = encryptMessage(text, group.key);
+    return { ciphertext: encrypted.ciphertext, nonce: encrypted.nonce, key_version: group.version };
+}
+
+/**
+ * Decrypt one received/stored group message body.
+ *
+ * @param groupUuid - The group chat's UUID.
+ * @param ciphertext - Base64 ciphertext from the server.
+ * @param nonce - Base64 nonce stored with the message.
+ * @param version - The group-key version that encrypted it.
+ * @returns The plaintext, or null when this device can't decrypt it (locked,
+ *   or the message predates the viewer's membership so they hold no envelope).
+ */
+export async function decryptFromGroup(groupUuid: string, ciphertext: string, nonce: string, version: number): Promise<string | null> {
+    await cryptoReady();
+    const identity = await requireIdentity();
+    const selfSlug = cfg().selfSlug;
+    if (identity === null || !selfSlug) {
+        return null;
+    }
+    let key = await getGroupKey(selfSlug, groupUuid, version);
+    if (key === null) {
+        const response = await fetch(groupKeyUrl(groupUuid), { credentials: "same-origin" });
+        if (!response.ok) {
+            return null;
+        }
+        const payload = (await response.json()) as GroupKeysPayload;
+        key = await unsealAndCacheGroupVersion(identity, selfSlug, groupUuid, payload, version);
+    }
+    if (key === null) {
+        return null;
+    }
+    return decryptMessage(ciphertext, nonce, key);
+}
+
 /** An encrypted payload ready to attach to an outgoing message. */
 export interface OutgoingEncryption {
     ciphertext: string;
@@ -721,8 +1086,9 @@ export async function decryptFromPartner(partnerSlug: string, ciphertext: string
  * Decrypt every pending [data-e2ee-ct] element under a root, in place.
  *
  * Elements carry data-e2ee-ct / data-e2ee-nonce / data-e2ee-kv and either
- * data-e2ee-partner or inherit the partnerSlug argument. Decrypted text
- * replaces the element's textContent; failures show a lock placeholder.
+ * data-e2ee-group (group-chat messages), data-e2ee-partner, or inherit the
+ * partnerSlug argument. Decrypted text replaces the element's textContent;
+ * failures show a lock placeholder.
  *
  * @param root - The DOM subtree to scan.
  * @param partnerSlug - Default partner slug for elements without their own.
@@ -733,14 +1099,16 @@ export async function decryptDom(root: ParentNode, partnerSlug?: string): Promis
         const ciphertext = node.dataset.e2eeCt ?? "";
         const nonce = node.dataset.e2eeNonce ?? "";
         const version = Number.parseInt(node.dataset.e2eeKv ?? "0", 10);
+        const group = node.dataset.e2eeGroup || "";
         const partner = node.dataset.e2eePartner || partnerSlug;
         delete node.dataset.e2eeCt;
         delete node.dataset.e2eeNonce;
         delete node.dataset.e2eeKv;
-        if (!ciphertext || !nonce || !version || !partner) {
+        delete node.dataset.e2eeGroup;
+        if (!ciphertext || !nonce || !version || (!partner && !group)) {
             continue;
         }
-        const plaintext = await decryptFromPartner(partner, ciphertext, nonce, version);
+        const plaintext = group ? await decryptFromGroup(group, ciphertext, nonce, version) : await decryptFromPartner(partner as string, ciphertext, nonce, version);
         if (plaintext !== null) {
             const truncateAt = Number.parseInt(node.dataset.e2eeTruncate ?? "0", 10);
             node.textContent = truncateAt > 0 && plaintext.length > truncateAt ? `${plaintext.slice(0, truncateAt - 1)}…` : plaintext;

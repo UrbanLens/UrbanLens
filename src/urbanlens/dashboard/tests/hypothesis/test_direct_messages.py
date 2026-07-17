@@ -86,6 +86,7 @@ class DirectMessageVisibilityDefaultTests(TestCase):
             "viewer_photo_filter": VisibilityChoice.ANYONE,
             "trip_pin_location_visibility": VisibilityChoice.ANYONE,
             "contact_visibility": VisibilityChoice.ANYONE,
+            "common_pins_visibility": VisibilityChoice.ANYONE,
             "direct_message_visibility": VisibilityChoice.FRIENDS,
         }
         form = PrivacySettingsForm(data=data, instance=profile)
