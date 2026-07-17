@@ -554,6 +554,17 @@
         > .settings-help { grid-area: help; margin-bottom: 0; line-height: 1.4; }
         > .settings-select { grid-area: control; justify-self: end; max-width: 100%; }
         > .settings-error { grid-area: error; }
+
+        // A field with a second .settings-help child (e.g. a dynamic estimate/detail
+        // paragraph below the main description, like #storage-estimate or
+        // #guidance-help-detail) would otherwise also claim grid-area: help and
+        // overlap the first one, since grid-area assigns by selector match, not
+        // occurrence order. Only the first gets the named cell; anything after it
+        // falls back to normal auto-placement in its own row underneath the field.
+        > .settings-help ~ .settings-help {
+            grid-area: auto;
+            margin-top: .35rem;
+        }
     }
 }
 

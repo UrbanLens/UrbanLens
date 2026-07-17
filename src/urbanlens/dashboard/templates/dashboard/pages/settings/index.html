@@ -1590,7 +1590,10 @@
     if (!list || !window.UrbanLensPermissions) return;
 
     var STATUS_TEXT = {
-        granted: 'Enabled.',
+        // Browsers don't let a website revoke a permission it was granted -
+        // once granted, disabling it is only possible from the browser's own
+        // site settings (there is no "disable" button to offer here).
+        granted: "Enabled. To disable, use your browser's site settings.",
         denied: "Blocked - change this in your browser's site settings to re-enable.",
         prompt: 'Not enabled yet.',
         unsupported: "Not supported by this browser.",
