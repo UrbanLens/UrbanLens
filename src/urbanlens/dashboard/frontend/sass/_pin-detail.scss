@@ -3743,6 +3743,102 @@ body.page-location-details {
     background: var(--ul-grey-0);
 }
 
+// -- Link chip row (_pin_links_row.html) - shared between the pin details
+// page's own "Links" card and the wiki page's "About" card, so this is
+// intentionally unscoped rather than nested under body.page-location-details
+// like the rest of this file - it used to live there, which meant the wiki
+// page's links rendered with none of this styling at all.
+.pin-links-value {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .4rem;
+}
+
+.pin-links-empty {
+    font-size: .85rem;
+    color: var(--ul-grey-5, #9ca3af);
+    font-style: italic;
+}
+
+.pin-link-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+    padding: .2rem .55rem;
+    border-radius: 20px;
+    background: color-mix(in srgb, $primary-color 12%, transparent);
+    border: 1px solid color-mix(in srgb, $primary-color 35%, transparent);
+    font-size: .82rem;
+
+    a {
+        color: var(--primary-color);
+        font-weight: 500;
+        text-decoration: none;
+
+        &:hover { text-decoration: underline; }
+    }
+
+    .pin-link-chip-wayback {
+        display: inline-flex;
+        color: $text-muted;
+
+        .material-symbols-outlined { font-size: .95rem; }
+
+        &:hover { color: var(--primary-color); }
+    }
+}
+
+.pin-link-chip-remove {
+    display: inline-flex;
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    color: $text-muted;
+    line-height: 1;
+    margin-left: .1rem;
+    transition: color .1s;
+
+    .material-symbols-outlined { font-size: .95rem; }
+
+    &:hover { color: $color-red-500; }
+}
+
+.pin-link-add-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.7rem;
+    height: 1.7rem;
+    border-radius: 50%;
+    border: 1px dashed var(--ul-surface-border);
+    background: none;
+    color: $text-muted;
+    cursor: pointer;
+
+    .material-symbols-outlined { font-size: 1.05rem; }
+
+    &:hover { color: var(--primary-color); border-color: var(--primary-color); }
+}
+
+.pin-link-add-form {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    flex-wrap: wrap;
+
+    input {
+        padding: .3rem .5rem;
+        border-radius: 6px;
+        border: 1px solid var(--ul-surface-border);
+        font-size: .82rem;
+    }
+
+    input[name="name"] { width: 9rem; }
+    input[name="url"] { width: 14rem; }
+}
+
 body.page-location-details .pin-detail-grid {
     .location-title {
         text-align: center;
@@ -3843,97 +3939,6 @@ body.page-location-details .pin-detail-grid {
                 }
             }
         }
-    }
-
-    .pin-links-value {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: .4rem;
-    }
-
-    .pin-links-empty {
-        font-size: .85rem;
-        color: var(--ul-grey-5, #9ca3af);
-        font-style: italic;
-    }
-
-    .pin-link-chip {
-        display: inline-flex;
-        align-items: center;
-        gap: .25rem;
-        padding: .2rem .55rem;
-        border-radius: 20px;
-        background: color-mix(in srgb, $primary-color 12%, transparent);
-        border: 1px solid color-mix(in srgb, $primary-color 35%, transparent);
-        font-size: .82rem;
-
-        a {
-            color: var(--primary-color);
-            font-weight: 500;
-            text-decoration: none;
-
-            &:hover { text-decoration: underline; }
-        }
-
-        .pin-link-chip-wayback {
-            display: inline-flex;
-            color: $text-muted;
-
-            .material-symbols-outlined { font-size: .95rem; }
-
-            &:hover { color: var(--primary-color); }
-        }
-    }
-
-    .pin-link-chip-remove {
-        display: inline-flex;
-        background: none;
-        border: none;
-        padding: 0;
-        cursor: pointer;
-        color: $text-muted;
-        line-height: 1;
-        margin-left: .1rem;
-        transition: color .1s;
-
-        .material-symbols-outlined { font-size: .95rem; }
-
-        &:hover { color: $color-red-500; }
-    }
-
-    .pin-link-add-toggle {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 1.7rem;
-        height: 1.7rem;
-        border-radius: 50%;
-        border: 1px dashed var(--ul-surface-border);
-        background: none;
-        color: $text-muted;
-        cursor: pointer;
-
-        .material-symbols-outlined { font-size: 1.05rem; }
-
-        &:hover { color: var(--primary-color); border-color: var(--primary-color); }
-    }
-
-    .pin-link-add-form {
-        display: inline-flex;
-        align-items: center;
-        gap: .35rem;
-        flex-wrap: wrap;
-
-        input {
-            padding: .3rem .5rem;
-            border-radius: 6px;
-            border: 1px solid var(--ul-surface-border);
-            font-size: .82rem;
-        }
-
-        input[name="name"] { width: 9rem; }
-        input[name="url"] { width: 14rem; }
     }
 
     .location-map {

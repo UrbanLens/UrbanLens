@@ -10,6 +10,7 @@ from __future__ import annotations
 import types
 
 from django.template.loader import render_to_string
+from django.utils.html import escape
 
 from urbanlens.core.tests.testcase import TestCase
 
@@ -36,7 +37,9 @@ class WikiLocationConflictNoticeTests(TestCase):
         html = self._render([other])
         self.assertNotIn(f'href="/dashboard/location/{other.slug}/wiki/"', html)
         self.assertIn('<span class="wiki-lcn-link">', html)
-        self.assertIn(other.display_name, html)
+        # display_name contains quote characters (a DMS coordinate string),
+        # which get HTML-escaped on render - compare against the escaped form.
+        self.assertIn(escape(other.display_name), html)
 
     def test_switch_button_still_present_when_viewer_has_a_pin(self) -> None:
         other = _fake_location()

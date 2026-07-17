@@ -6,6 +6,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.core.cache import cache
 from django.http import HttpResponse
 from django.shortcuts import render
 from django.views import View
@@ -19,13 +20,60 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-#: Example queries shown in the empty dialog to teach the natural-language syntax.
-SEARCH_HINTS = (
-    "photos from last summer",
-    "pins in Cincinnati",
+#: Candidate example queries for the empty dialog's "Try searching for" section, in
+#: priority order - richer natural-language examples first (they show off more of
+#: what search understands), broad single-type fallbacks last (near-guaranteed to
+#: have results for any user with that kind of data at all). Never shown as-is -
+#: see _verified_hints, which only surfaces ones that actually return a result for
+#: the requesting profile, per the resolved backlog item requiring suggestions that
+#: won't dead-end the user.
+SEARCH_HINT_CANDIDATES = (
+    "pins near me",
+    "photos from this year",
     "trips this year",
-    "messages about meetup",
+    "pins",
+    "photos",
+    "wikis",
+    "messages",
+    "maps",
+    "trips",
 )
+#: How many verified hints to show at once - matches the dialog's original fixed layout.
+MAX_SEARCH_HINTS = 4
+#: Short-lived: just avoids re-running several searches on every dialog open:
+#: new pins/photos/etc show up in hints within this window either way.
+SEARCH_HINTS_CACHE_SECONDS = 60 * 15
+
+
+def _verified_hints(profile: Profile) -> list[str]:
+    """Return up to MAX_SEARCH_HINTS candidate queries that actually return a result for this profile.
+
+    Args:
+        profile: The requesting user's profile.
+
+    Returns:
+        Candidates from SEARCH_HINT_CANDIDATES, in priority order, that each
+        returned at least one search result - never a query guaranteed to
+        dead-end the user in an empty state.
+    """
+    cache_key = f"search_hints:{profile.pk}"
+    cached: list[str] | None = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    engine = GlobalSearchEngine()
+    verified: list[str] = []
+    for candidate in SEARCH_HINT_CANDIDATES:
+        if len(verified) >= MAX_SEARCH_HINTS:
+            break
+        try:
+            if engine.search(profile, candidate).total > 0:
+                verified.append(candidate)
+        except Exception:
+            logger.exception("Failed to verify search hint %r", candidate)
+
+    cache.set(cache_key, verified, SEARCH_HINTS_CACHE_SECONDS)
+    return verified
 
 
 def _get_profile(request: HttpRequest) -> Profile:
@@ -56,7 +104,6 @@ class GlobalSearchPanelView(LoginRequiredMixin, View):
                 {
                     "query": "",
                     "recent_searches": SearchHistory.objects.recent_for(profile),
-                    "search_hints": SEARCH_HINTS,
                 },
             )
 
@@ -69,6 +116,31 @@ class GlobalSearchPanelView(LoginRequiredMixin, View):
                 "response": response,
                 "filter_chips": response.parsed.describe_filters(),
             },
+        )
+
+
+class GlobalSearchHintsView(LoginRequiredMixin, View):
+    """Verified "Try searching for" example queries, loaded separately from the
+    main panel so running several candidate searches never delays the dialog
+    opening - see _panel.html's hx-get on this view.
+
+    GET /search/hints/ → the hint-buttons fragment.
+    """
+
+    def get(self, request: HttpRequest) -> HttpResponse:
+        """Render only the example queries confirmed to return a result.
+
+        Args:
+            request: GET, no params.
+
+        Returns:
+            The ``_search_hints.html`` fragment.
+        """
+        profile = _get_profile(request)
+        return render(
+            request,
+            "dashboard/partials/search/_search_hints.html",
+            {"search_hints": _verified_hints(profile)},
         )
 
 
@@ -122,6 +194,5 @@ class GlobalSearchHistoryDeleteView(LoginRequiredMixin, View):
             {
                 "query": "",
                 "recent_searches": SearchHistory.objects.recent_for(profile),
-                "search_hints": SEARCH_HINTS,
             },
         )

@@ -37,10 +37,10 @@
             <i class="material-symbols-outlined">tips_and_updates</i>
             <span>Try searching for</span>
         </div>
-        <div class="gs-hints">
-            {% for hint in search_hints %}
-            <button type="button" class="gs-hint" data-query="{{ hint }}">{{ hint }}</button>
-            {% endfor %}
+        {# Loaded separately - each candidate is a real search run against this #}
+        {# profile's data, so it isn't run inline blocking the dialog's open.  #}
+        <div class="gs-hints" id="gs-hints" hx-get="{% url 'search.hints' %}" hx-trigger="load" hx-swap="innerHTML">
+            <span class="gs-hints-loading"><i class="material-icons spin">autorenew</i></span>
         </div>
         <p class="gs-footnote">Search covers your pins, photos, visits, wikis, trips, messages, maps, and more. Encrypted messages can't be searched.</p>
     </div>

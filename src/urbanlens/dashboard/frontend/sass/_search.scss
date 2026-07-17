@@ -401,6 +401,19 @@ body.gs-no-scroll {
     }
 }
 
+// Shown briefly while gs-hints's own hx-get verifies which candidates
+// actually return results (see search.hints) - each hint button is a real
+// search, so it loads in after the rest of the dialog rather than blocking it.
+.gs-hints-loading {
+    display: inline-flex;
+    color: var(--ul-grey-5);
+    font-size: 1.1rem;
+
+    .material-icons {
+        font-size: 1.1rem;
+    }
+}
+
 .gs-footnote {
     margin: .5rem .6rem 0;
     font-size: .72rem;

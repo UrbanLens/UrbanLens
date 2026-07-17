@@ -1,0 +1,20 @@
+{% comment %}
+Hero body for the wiki page (pages/location/wiki.html) - so this page uses
+the same shared gradient hero every other page uses instead of its own
+one-off banner. Expects `wiki` and `location` in context.
+
+The wiki-notice/suggest-edits/delete/back-to-pin actions are NOT here - they
+render as their own row directly below the hero (see wiki.html's
+.wiki-banner-actions), since _page_hero.html's centered, fixed-height layout
+has no room for a second column of buttons.
+{% endcomment %}
+<p class="ul-page-hero__eyebrow wiki-eyebrow">
+    <i class="material-symbols-outlined">public</i> Community Wiki
+</p>
+<h1 class="ul-page-hero__title wiki-title">{{ wiki.name }}</h1>
+{% if location.address %}
+<p class="ul-page-hero__subtitle wiki-address">
+    <i class="material-symbols-outlined">place</i>
+    {{ location.address }}{% if location.city %}, {{ location.city }}{% endif %}{% if location.state %}, {{ location.state }}{% endif %}
+</p>
+{% endif %}

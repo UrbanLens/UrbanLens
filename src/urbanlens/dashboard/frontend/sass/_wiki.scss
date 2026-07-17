@@ -8,60 +8,27 @@
     //width: 90em;
     //padding: 1.5rem 1rem 3rem;
 
-    // -- Banner ------------------------------------------------------------
-    .wiki-banner {
-        display: flex;
-        align-items: flex-start;
-        justify-content: space-between;
-        gap: 1.5rem;
-        background: linear-gradient(135deg, $color-blue-700 0%, $color-cyan-700 100%);
-        border-radius: 18px;
-        padding: clamp(1.15rem, 3vw, 2rem);
-        box-shadow: 0 18px 45px rgba(8, 47, 73, .18);
-        color: var(--ul-grey-9);
-        margin-bottom: 1.5rem;
-        flex-wrap: wrap;
-    }
-
-    .wiki-badge {
+    // -- Hero (badge/title/address render via the shared _page_hero.html
+    // component now - see partials/wiki/_wiki_detail_hero_body.html; these
+    // rules only add what the generic hero classes don't already provide) --
+    .wiki-eyebrow {
         display: inline-flex;
         align-items: center;
         gap: .35rem;
-        background: rgba(255, 255, 255, .18);
-        border: 1px solid rgba(255, 255, 255, .35);
-        border-radius: 999px;
-        padding: .25rem .75rem;
-        font-size: .78rem;
-        font-weight: 600;
-        letter-spacing: .04em;
-        text-transform: uppercase;
-        margin-bottom: .5rem;
-        .material-symbols-outlined,
-        .material-icons {
-            font-size: .9rem;
-        }
-    }
-
-    .wiki-title {
-        font-size: 1.75rem;
-        font-weight: 700;
-        margin: 0 0 .4rem;
-        line-height: 1.2;
     }
 
     .wiki-address {
         display: flex;
         align-items: center;
+        justify-content: center;
         gap: .3rem;
-        font-size: .88rem;
-        opacity: .85;
-        margin: 0;
         .material-symbols-outlined,
         .material-icons {
             font-size: 1rem;
         }
     }
 
+    // -- Notice + actions row (sits directly below the hero) ---------------
     .wiki-notice {
         position: absolute;
         top: 2rem;
@@ -107,13 +74,8 @@
         display: flex;
         align-items: center;
         gap: .6rem;
-        margin-top: 4rem;
+        margin: 0 0 1.5rem;
         flex-wrap: wrap;
-    }
-
-    .wiki-back-link {
-        border-color: transparent;
-        color: var(--ul-grey-9);
     }
 
     .wiki-meta {
@@ -130,6 +92,31 @@
             color: var(--ul-grey-8);
             margin: 0 0 .6rem;
             line-height: 1.55;
+        }
+
+        // Links row (_pin_links_row.html, shared with the pin details page) -
+        // its .field-label/.field-value/.detail-item styling normally only
+        // exists scoped to the pin page's own flex-wrap grid layout, which
+        // this card doesn't have, so the row rendered with no styling at all
+        // (no label weight, no chip spacing) - give it its own plain-row
+        // treatment that fits .wiki-meta-body's column layout instead.
+        .detail-item {
+            display: flex;
+            flex-direction: column;
+            gap: .3rem;
+        }
+
+        .field-label {
+            font-size: .78rem;
+            font-weight: 600;
+            color: var(--ul-grey-5);
+            text-transform: uppercase;
+            letter-spacing: .04em;
+        }
+
+        .field-value {
+            font-size: .9rem;
+            color: var(--ul-grey-8);
         }
 
         .wiki-meta-dates {

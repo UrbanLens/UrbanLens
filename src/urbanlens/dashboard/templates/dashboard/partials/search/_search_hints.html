@@ -1,0 +1,10 @@
+{% comment %}
+"Try searching for" hint buttons - loaded separately from _panel.html (see its
+hx-get on search.hints) so verifying each candidate against real search
+results never delays the dialog opening. Renders nothing at all when none of
+the candidates return a result for this profile, rather than a suggestion
+that would dead-end them.
+{% endcomment %}
+{% for hint in search_hints %}
+<button type="button" class="gs-hint" data-query="{{ hint }}">{{ hint }}</button>
+{% endfor %}
