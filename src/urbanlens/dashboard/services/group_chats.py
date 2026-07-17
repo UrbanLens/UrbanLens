@@ -24,6 +24,7 @@ from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from django.core.cache import cache
 from django.db import transaction
+from django.db.models import Count, Q
 from django.utils import timezone
 
 from urbanlens.dashboard.models.group_chats.model import MAX_GROUP_NAME_LENGTH, GroupChat, GroupChatMembership, GroupMessage, GroupMessageShare
@@ -580,19 +581,50 @@ def group_conversations_for(profile: Profile) -> list[dict[str, Any]]:
         ``last_message`` (GroupMessage or None), ``unread_count`` (int),
         ``member_count`` (int), ``is_muted`` (bool), and ``last_activity``
         (datetime used for cross-kind sorting).
+
+    Runs a fixed number of queries regardless of how many groups the profile
+    is in, rather than three queries per group (last message, unread count,
+    member count) - this backs the messages sidebar, which refreshes after
+    nearly every send/receive, so a per-group query loop here compounds fast.
+    Each membership's own visibility window (its own ``created``/
+    ``last_read_at`` cutoffs) can't be expressed as one shared filter, but
+    the per-group breakdowns can still come from two grouped queries instead
+    of one query each.
     """
-    memberships = GroupChatMembership.objects.active().filter(profile=profile).select_related("group")
+    memberships = list(GroupChatMembership.objects.active().filter(profile=profile).select_related("group"))
+    if not memberships:
+        return []
+    group_ids = [membership.group_id for membership in memberships]
+
+    member_counts = dict(
+        GroupChatMembership.objects.active().filter(group_id__in=group_ids).values_list("group_id").annotate(count=Count("id")).order_by(),
+    )
+
+    visible = Q(pk__in=[])
+    unread = Q(pk__in=[])
+    for membership in memberships:
+        visible |= Q(group_id=membership.group_id, created__gte=membership.created)
+        unread_clause = Q(group_id=membership.group_id, created__gte=membership.created) & ~Q(sender_id=membership.profile_id)
+        if membership.last_read_at is not None:
+            unread_clause &= Q(created__gt=membership.last_read_at)
+        unread |= unread_clause
+
+    last_message_by_group: dict[int, GroupMessage] = {}
+    for message in GroupMessage.objects.filter(visible).select_related("sender", "sender__user").order_by("group_id", "-id"):
+        last_message_by_group.setdefault(message.group_id, message)
+    unread_counts = dict(GroupMessage.objects.filter(unread).values_list("group_id").annotate(count=Count("id")).order_by())
+
     conversations: list[dict[str, Any]] = []
     for membership in memberships:
         group = membership.group
-        last_message = GroupMessage.objects.visible_window(membership).select_related("sender", "sender__user").order_by("-id").first()
+        last_message = last_message_by_group.get(membership.group_id)
         conversations.append(
             {
                 "kind": "group",
                 "group": group,
                 "last_message": last_message,
-                "unread_count": GroupMessage.objects.unread_for(membership).count(),
-                "member_count": group.active_memberships().count(),
+                "unread_count": unread_counts.get(membership.group_id, 0),
+                "member_count": member_counts.get(membership.group_id, 0),
                 "is_muted": membership.muted,
                 "last_activity": last_message.created if last_message is not None else membership.created,
             },
@@ -610,12 +642,28 @@ def unread_group_conversation_count(profile: Profile) -> int:
     Returns:
         The number of groups needing attention (feeds the navbar label,
         alongside the 1:1 ``unread_conversation_count``).
+
+    Runs exactly two queries regardless of how many groups the profile is
+    in - this backs a site-wide 60-second poll (every open page, every
+    logged-in user), so a per-membership query loop here is not just slow
+    for one request but a real aggregate load multiplier across the whole
+    site. Each membership's own visibility window (its own ``created``/
+    ``last_read_at`` cutoffs - see ``GroupMessageQuerySet.unread_for``)
+    can't be expressed as one shared filter, but can still be OR'd together
+    into a single query, matching the same technique
+    ``GroupMessageQuerySet.search_visible_to`` already uses for the analogous
+    "any of my memberships" problem.
     """
-    count = 0
-    for membership in GroupChatMembership.objects.active().filter(profile=profile):
-        if GroupMessage.objects.unread_for(membership).exists():
-            count += 1
-    return count
+    memberships = list(GroupChatMembership.objects.active().filter(profile=profile))
+    if not memberships:
+        return 0
+    visibility = Q(pk__in=[])
+    for membership in memberships:
+        clause = Q(group_id=membership.group_id, created__gte=membership.created) & ~Q(sender_id=membership.profile_id)
+        if membership.last_read_at is not None:
+            clause &= Q(created__gt=membership.last_read_at)
+        visibility |= clause
+    return GroupMessage.objects.filter(visibility).values("group_id").distinct().count()
 
 
 def group_e2ee_ready(group: GroupChat) -> bool:

@@ -319,6 +319,65 @@ class ConversationMergeTests(TestCase):
         self.assertEqual(len(rows), 1)
         self.assertIsNone(rows[0]["last_message"])
 
+    def test_multiple_groups_report_correct_per_group_breakdowns(self) -> None:
+        """Regression test for the N+1 fix: batched queries must still attribute
+        each group's own last message/unread count/member count correctly,
+        not mix them up across groups."""
+        third = _profile()
+        _befriend(self.me, third)
+        group_a = create_group_chat(self.me, "Alpha", [self.friend])
+        group_b = create_group_chat(self.me, "Beta", [self.friend, third])
+        create_group_message(self.me, group_a, "a1")
+        create_group_message(self.me, group_a, "a2")
+        create_group_message(self.me, group_b, "b1")
+
+        rows = {row["group"].pk: row for row in group_conversations_for(self.friend)}
+        self.assertEqual(set(rows), {group_a.pk, group_b.pk})
+        self.assertEqual(rows[group_a.pk]["last_message"].body, "a2")
+        self.assertEqual(rows[group_a.pk]["unread_count"], 2)
+        self.assertEqual(rows[group_a.pk]["member_count"], 2)
+        self.assertEqual(rows[group_b.pk]["last_message"].body, "b1")
+        self.assertEqual(rows[group_b.pk]["unread_count"], 1)
+        self.assertEqual(rows[group_b.pk]["member_count"], 3)
+
+    def test_group_conversations_for_query_count_is_independent_of_group_count(self) -> None:
+        """The N+1 regression this batch fixed: query count must not grow
+        with the number of groups the profile belongs to."""
+        create_group_chat(self.me, "One", [self.friend])
+        with self.assertNumQueries(4):
+            group_conversations_for(self.friend)
+
+        for i in range(4):
+            other = _profile()
+            _befriend(self.me, other)
+            create_group_chat(self.me, f"Extra {i}", [self.friend, other])
+        with self.assertNumQueries(4):
+            group_conversations_for(self.friend)
+
+    def test_unread_group_conversation_count_across_multiple_groups(self) -> None:
+        group_a = create_group_chat(self.me, "Alpha", [self.friend])
+        group_b = create_group_chat(self.me, "Beta", [self.friend])
+        self.assertEqual(unread_group_conversation_count(self.friend), 0)
+        create_group_message(self.me, group_a, "hi")
+        self.assertEqual(unread_group_conversation_count(self.friend), 1)
+        create_group_message(self.me, group_b, "hey")
+        self.assertEqual(unread_group_conversation_count(self.friend), 2)
+        # A group where the profile's own message is the latest doesn't count.
+        create_group_message(self.friend, group_a, "reply")
+        self.assertEqual(unread_group_conversation_count(self.friend), 1)
+
+    def test_unread_group_conversation_count_query_count_is_independent_of_group_count(self) -> None:
+        create_group_chat(self.me, "One", [self.friend])
+        with self.assertNumQueries(2):
+            unread_group_conversation_count(self.friend)
+
+        for i in range(4):
+            other = _profile()
+            _befriend(self.me, other)
+            create_group_chat(self.me, f"Extra {i}", [self.friend, other])
+        with self.assertNumQueries(2):
+            unread_group_conversation_count(self.friend)
+
 
 class GroupEndpointTests(TestCase):
     """The group HTTP endpoints enforce membership and drive the thread."""
