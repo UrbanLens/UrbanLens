@@ -23,7 +23,7 @@
     gap: $space-lg;
     align-items: center;
     padding: $space-lg;
-    background: linear-gradient(135deg, var(--ul-color-accent-bg), var(--ul-color-success-bg));
+    background: linear-gradient(135deg, rgba(31, 111, 235, 0.2), rgba(23, 185, 120, 0.15));
 
     @include up($breakpoint-sm) {
         grid-template-columns: minmax(0, 1.25fr) minmax(240px, .75fr);

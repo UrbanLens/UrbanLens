@@ -388,11 +388,11 @@
     }
 
     .notif-item--unread {
-        background: linear-gradient(90deg, rgba($color-indigo-600, .14) 0%, transparent 100%);
+        background: linear-gradient(135deg, rgba(31, 111, 235, 0.2), rgba(23, 185, 120, 0.15));
         border-left-color: $color-indigo-600;
 
         &:hover {
-            background: linear-gradient(90deg, rgba($color-indigo-600, .2) 0%, transparent 100%);
+            background: linear-gradient(135deg, rgba(31, 111, 235, 0.3), rgba(23, 185, 120, 0.20));
         }
 
         .notif-item__icon-wrap {

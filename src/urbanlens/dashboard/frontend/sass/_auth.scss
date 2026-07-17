@@ -12,7 +12,7 @@ body.page-auth {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(145deg, $color-indigo-900 0%, $color-indigo-900 40%, $color-indigo-700 70%, $color-indigo-500 100%);
+    background: linear-gradient(135deg, rgba(31, 111, 235, 0.2), rgba(23, 185, 120, 0.15));
     padding: 2rem 1rem;
 }
 
@@ -29,7 +29,7 @@ body.page-auth {
 .auth-card-header {
     text-align: center;
     padding: 2.25rem 2rem 1rem;
-    background: linear-gradient(160deg, $color-indigo-50 0%, var(--ul-surface-raised), 100%);
+    background: linear-gradient(135deg, rgba(31, 111, 235, 0.2), rgba(23, 185, 120, 0.15));
     border-bottom: 1px solid var(--ul-surface-raised-border);
 }
 

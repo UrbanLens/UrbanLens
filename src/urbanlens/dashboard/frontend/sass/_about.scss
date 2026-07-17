@@ -27,7 +27,7 @@
         min-height: 29rem;
         padding: 3rem 1.5rem 2.5rem;
         text-align: center;
-        background: linear-gradient(145deg, $color-indigo-900 0%, $color-indigo-900 30%, $color-indigo-700 50%, $color-blue-500 100%);
+        background: linear-gradient(135deg, rgba(31, 111, 235, 0.2), rgba(23, 185, 120, 0.15));
         
         color: var(--ul-grey-4);
 
@@ -295,7 +295,7 @@
         width: 120px;
         height: 120px;
         border-radius: 24px;
-        background: linear-gradient(135deg, rgba($primary-color, .12), rgba($primary-color, .22));
+        background: linear-gradient(135deg, rgba(31, 111, 235, 0.2), rgba(23, 185, 120, 0.15));
         border: 1px solid rgba($primary-color, .2);
         display: flex;
         align-items: center;
@@ -390,7 +390,7 @@
 
     // -- CTA -------------------------------------------------------------------
     .about-cta-section {
-        background: linear-gradient(135deg, $color-indigo-900 0%, $color-indigo-700 100%);
+        background: linear-gradient(135deg, rgba(31, 111, 235, 0.2), rgba(23, 185, 120, 0.15));
         padding: 5rem 1.5rem;
         text-align: center;
         color: var(--ul-grey-4);

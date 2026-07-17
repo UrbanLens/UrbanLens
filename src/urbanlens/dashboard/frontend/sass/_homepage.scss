@@ -11,7 +11,7 @@ body.page-index {
         justify-content: center;
         text-align: center;
         padding: 4rem 1.5rem;
-        background: linear-gradient(160deg, $color-indigo-900 0%, $color-indigo-900 45%, $color-indigo-700 75%, $color-blue-500 100%);
+        background: linear-gradient(135deg, rgba(31, 111, 235, 0.2), rgba(23, 185, 120, 0.15));
         color: var(--ul-grey-5);
     }
 
@@ -241,7 +241,7 @@ body.page-index {
     .home-cta-section {
         padding: 3rem 1.5rem;
         text-align: center;
-        background: linear-gradient(135deg, $color-indigo-900, $color-indigo-700);
+        background: linear-gradient(135deg, rgba(31, 111, 235, 0.2), rgba(23, 185, 120, 0.15));
         color: var(--ul-grey-5);
     }
 
