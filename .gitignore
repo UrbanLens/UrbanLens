@@ -49,4 +49,4 @@ src/urbanlens/frontend/static/icons/unused/
 .claude/*.json
 sample_data/*.jpg
 src/urbanlens/media/
-docs/prompts/*.md
+docs/prompts/
