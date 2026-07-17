@@ -20,6 +20,7 @@
 // one-off (Thanks & Credits only), and --profile's is user-generated (bio,
 // name) so it's bounded with a line-clamp instead - see _profile.scss.
 .ul-page-hero {
+    position: relative; // positioning context for a page's own corner-docked overlays (e.g. wiki's actions/notice)
     display: flex;
     align-items: center;
     justify-content: center;

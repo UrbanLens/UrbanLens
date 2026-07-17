@@ -20,36 +20,8 @@
 <div class="wiki-page page-content">
     <div id="wiki-onboarding" class="page-onboarding page-onboarding--wiki" aria-live="polite"></div>
 
-    {# -- Notice (absolutely positioned - floats near the top-right regardless #}
-    {# of where it sits in the DOM, see .wiki-notice) --------------------- #}
-    <div class="wiki-notice">
-        <i class="material-symbols-outlined">public</i>
-        <span>Community wiki - everything here is <strong>visible to all users</strong> who have this location pinned.</span>
-    </div>
-
-    {# -- Actions row (suggest edits / delete / back to my pin) ------------ #}
-    <div class="wiki-banner-actions">
-        <button type="button" class="wiki-edit-btn btn btn--primary"
-                onclick="document.getElementById('wiki-edit-dialog').showModal()">
-            <i class="material-symbols-outlined">edit_note</i>
-            Suggest edits
-        </button>
-        {% if can_delete_wiki %}
-        <button type="button" class="wiki-delete-btn btn btn--danger"
-                hx-delete="{% url 'location.wiki.delete' location.slug %}"
-                hx-confirm="Delete this community wiki? No one else has viewed it yet, so this can't be undone by anyone but you. This cannot be undone."
-                hx-target="body"
-                title="No one else has viewed this wiki yet, so you can still delete it.">
-            <i class="material-symbols-outlined">delete</i>
-            Delete wiki
-        </button>
-        {% endif %}
-        {% if user_pin %}
-        <a href="{% url 'pin.details' user_pin.slug %}" class="wiki-back-link btn btn--secondary">
-            <i class="material-symbols-outlined">arrow_back</i> Back to my pin
-        </a>
-        {% endif %}
-    </div>
+    {# -- Notice + suggest-edits/delete/back-to-pin actions now render inside #}
+    {# the hero itself (see _wiki_detail_hero_body.html) to save vertical space. #}
 
     {% if show_wiki_cover_photo %}
     {# -- Cover photo hero banner --------------------------------------------- #}

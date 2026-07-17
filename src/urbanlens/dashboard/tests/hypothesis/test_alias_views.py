@@ -297,3 +297,32 @@ class SharedAliasesExplainerDismissalTests(TestCase):
 
         self.assertContains(pin_response, 'data-explainer-id="aliases-explainer"')
         self.assertContains(wiki_response, 'data-explainer-id="aliases-explainer"')
+
+
+class AliasPanelHeaderTitleAlignmentTests(TestCase):
+    """The "Aliases" card-header title sat visibly out of place compared to
+    every other section on the wiki/pin page. Root cause: the explainer
+    anchor icon was rendered as its own sibling *before* the title <span>,
+    instead of nested inside it like every other page's title does (see
+    _page_explainer_anchor.html's own docstring example) - .card-header's CSS
+    grid explicitly excludes `.ul-explainer-anchor` from the title's grid
+    area (`> span:not(...):not(.ul-explainer-anchor)`), so the anchor got
+    auto-placed into a stray grid cell instead, throwing the header's layout
+    off. Moving the include inside the <span> fixes it without touching the
+    shared header CSS at all.
+    """
+
+    def setUp(self) -> None:
+        baker.make("auth.User")  # bootstrap site admin
+        self.user = baker.make("auth.User")
+        self.profile = Profile.objects.get(user=self.user)
+        self.pin = baker.make(Pin, profile=self.profile, name="Title Alignment Pin")
+        self.client.force_login(self.user)
+
+    def test_explainer_anchor_is_nested_inside_the_title_span(self) -> None:
+        content = self.client.get(reverse("pin.aliases", args=[self.pin.slug])).content.decode()
+        title_start = content.index("<span>Aliases")
+        title_end = content.index("</span>", title_start)
+        anchor_start = content.index('id="aliases-explainer-anchor"')
+        self.assertLess(title_start, anchor_start)
+        self.assertLess(anchor_start, title_end)

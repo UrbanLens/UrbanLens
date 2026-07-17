@@ -1,12 +1,15 @@
 {% comment %}
 Hero body for the wiki page (pages/location/wiki.html) - so this page uses
 the same shared gradient hero every other page uses instead of its own
-one-off banner. Expects `wiki` and `location` in context.
+one-off banner. Expects `wiki`, `location`, `can_delete_wiki`, and `user_pin`
+in context.
 
-The wiki-notice/suggest-edits/delete/back-to-pin actions are NOT here - they
-render as their own row directly below the hero (see wiki.html's
-.wiki-banner-actions), since _page_hero.html's centered, fixed-height layout
-has no room for a second column of buttons.
+The suggest-edits/delete/back-to-pin actions and the community-wiki notice
+render here (absolutely positioned over the hero's top corners - see
+.wiki-hero-actions/.wiki-notice in _wiki.scss) rather than in their own row
+below the hero, to avoid spending extra page height on them. On narrow
+screens they drop out of the corners and stack in normal flow instead, since
+the hero's fixed height has no room to fit everything at once that small.
 {% endcomment %}
 <p class="ul-page-hero__eyebrow wiki-eyebrow">
     <i class="material-symbols-outlined">public</i> Community Wiki
@@ -18,3 +21,31 @@ has no room for a second column of buttons.
     {{ location.address }}{% if location.city %}, {{ location.city }}{% endif %}{% if location.state %}, {{ location.state }}{% endif %}
 </p>
 {% endif %}
+
+<div class="wiki-hero-actions">
+    <button type="button" class="wiki-edit-btn btn btn--primary btn--sm"
+            onclick="document.getElementById('wiki-edit-dialog').showModal()">
+        <i class="material-symbols-outlined">edit_note</i>
+        Suggest edits
+    </button>
+    {% if can_delete_wiki %}
+    <button type="button" class="wiki-delete-btn btn btn--danger btn--sm"
+            hx-delete="{% url 'location.wiki.delete' location.slug %}"
+            hx-confirm="Delete this community wiki? No one else has viewed it yet, so this can't be undone by anyone but you. This cannot be undone."
+            hx-target="body"
+            title="No one else has viewed this wiki yet, so you can still delete it.">
+        <i class="material-symbols-outlined">delete</i>
+        Delete wiki
+    </button>
+    {% endif %}
+    {% if user_pin %}
+    <a href="{% url 'pin.details' user_pin.slug %}" class="wiki-back-link btn btn--secondary btn--sm">
+        <i class="material-symbols-outlined">arrow_back</i> Back to my pin
+    </a>
+    {% endif %}
+</div>
+
+<div class="wiki-notice">
+    <i class="material-symbols-outlined">public</i>
+    <span>Community wiki - everything here is <strong>visible to all users</strong> who have this location pinned.</span>
+</div>

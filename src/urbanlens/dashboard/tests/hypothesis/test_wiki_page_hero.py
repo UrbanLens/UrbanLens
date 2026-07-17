@@ -49,10 +49,25 @@ class WikiPageHeroTests(TestCase):
         self.assertIn('class="ul-page-hero__subtitle wiki-address"', content)
         self.assertIn("123 Main St", content)
 
-    def test_notice_and_action_buttons_still_render_below_the_hero(self) -> None:
+    def test_notice_and_action_buttons_render_inside_the_hero(self) -> None:
+        """The suggest-edits/delete/back-to-pin actions and the community-wiki
+        notice used to render as their own row directly below the hero,
+        spending extra page height on them - both now render inside the hero
+        itself (see _wiki_detail_hero_body.html) instead."""
         content = self._get().content.decode()
-        self.assertIn("wiki-notice", content)
-        self.assertIn("Suggest edits", content)
+        hero_start = content.index('id="wiki-hero"')
+        content_block_start = content.index('id="wiki-onboarding"')
+        actions_idx = content.index("Suggest edits")
+        notice_idx = content.index("wiki-notice")
+        self.assertGreater(actions_idx, hero_start)
+        self.assertLess(actions_idx, content_block_start)
+        self.assertGreater(notice_idx, hero_start)
+        self.assertLess(notice_idx, content_block_start)
+
+    def test_back_to_pin_link_renders_inside_the_hero_when_user_has_a_pin(self) -> None:
+        content = self._get().content.decode()
+        self.assertIn("wiki-back-link", content)
+        self.assertIn("Back to my pin", content)
 
     def test_hero_omits_address_subtitle_when_location_has_none(self) -> None:
         self.location.street_number = ""
