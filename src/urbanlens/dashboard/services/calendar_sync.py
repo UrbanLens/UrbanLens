@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any
 
 from django.utils import timezone
 
-from urbanlens.dashboard.models.calendar_sync.model import CalendarSyncDirection, TripCalendarLink, get_calendar_account
+from urbanlens.dashboard.models.calendar_sync.model import CalendarSyncDirection, GoogleCalendarAccount, TripCalendarLink
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
 from urbanlens.dashboard.services.apis.calendar.google import (
     ACTIVITY_ID_EVENT_PROPERTY,
@@ -26,7 +26,6 @@ from urbanlens.dashboard.services.apis.calendar.google import (
 from urbanlens.dashboard.services.gateway import GatewayRequestError
 
 if TYPE_CHECKING:
-    from urbanlens.dashboard.models.calendar_sync.model import GoogleCalendarAccount
     from urbanlens.dashboard.models.profile.model import Profile
 
 logger = logging.getLogger(__name__)
@@ -347,7 +346,7 @@ def build_import_preview(account: GoogleCalendarAccount, event_ids: list[str]) -
         }
         previews.append(entry)
 
-        if TripCalendarLink.objects.filter(profile=profile, google_event_id=event_id).exists():
+        if TripCalendarLink.objects.already_linked(profile, event_id):
             entry["skip_reason"] = "Already linked to a trip."
             continue
         try:
@@ -550,7 +549,7 @@ def import_events_as_trips(account: GoogleCalendarAccount, selections: list[str 
         if not event_id:
             continue
 
-        if TripCalendarLink.objects.filter(profile=profile, google_event_id=event_id).exists():
+        if TripCalendarLink.objects.already_linked(profile, event_id):
             skipped.append("An event was skipped because it is already linked to a trip.")
             continue
 
@@ -664,7 +663,7 @@ def _sync_activity_events(
         GatewayRequestError: When a calendar write fails.
     """
     profile = account.profile
-    activity_links = {link.activity_id: link for link in TripCalendarLink.objects.filter(trip=trip, profile=profile, activity__isnull=False)}
+    activity_links = TripCalendarLink.objects.activity_links_by_activity_id(trip, profile)
 
     exported = 0
     scheduled_ids: set[int] = set()
@@ -708,7 +707,7 @@ def export_trip_to_calendar(account: GoogleCalendarAccount, trip: Trip, *, trip_
     body = trip_to_event_body(trip, trip_url=trip_url)
     profile = account.profile
 
-    trip_link = TripCalendarLink.objects.filter(trip=trip, profile=profile, activity__isnull=True).first()
+    trip_link = TripCalendarLink.objects.trip_level_link(trip, profile)
     trip_link = _upsert_event_link(gateway, account, body, trip_link, trip=trip)
     activity_count = _sync_activity_events(gateway, account, trip, trip_url=trip_url)
     return trip_link, activity_count
@@ -759,7 +758,7 @@ def push_auto_synced_trip_changes(trip: Trip) -> int:
     links = TripCalendarLink.objects.filter(trip=trip, activity__isnull=True, auto_sync=True).select_related("profile")
     synced = 0
     for link in links:
-        account = get_calendar_account(link.profile)
+        account = GoogleCalendarAccount.objects.get_for_profile(link.profile)
         if account is None:
             continue
         try:

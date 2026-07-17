@@ -22,7 +22,7 @@ from django.utils import timezone
 from django.views import View
 
 from urbanlens.dashboard.controllers.trip import _trip_or_403, _trips_for_list
-from urbanlens.dashboard.models.calendar_sync.model import GoogleCalendarAccount, TripCalendarLink, get_calendar_account
+from urbanlens.dashboard.models.calendar_sync.model import GoogleCalendarAccount, TripCalendarLink
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.apis.calendar.google import (
     CalendarNotConfiguredError,
@@ -77,10 +77,10 @@ def calendar_context(profile: Profile, trip=None) -> dict:
         Dict with ``calendar_account`` and (when a trip is given)
         ``calendar_link`` keys.
     """
-    account = get_calendar_account(profile)
+    account = GoogleCalendarAccount.objects.get_for_profile(profile)
     context: dict = {"calendar_account": account}
     if trip is not None:
-        context["calendar_link"] = TripCalendarLink.objects.filter(trip=trip, profile=profile, activity__isnull=True).first() if account else None
+        context["calendar_link"] = TripCalendarLink.objects.trip_level_link(trip, profile) if account else None
     return context
 
 
@@ -162,7 +162,7 @@ class GoogleCalendarDisconnectView(LoginRequiredMixin, View):
 
     def post(self, request):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        account = get_calendar_account(profile)
+        account = GoogleCalendarAccount.objects.get_for_profile(profile)
         if account is not None:
             revoke_token(account.refresh_token or account.access_token)
             account.delete()
@@ -180,7 +180,7 @@ class GoogleCalendarSettingsSectionView(LoginRequiredMixin, View):
 
     def get(self, request):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        return render(request, _SETTINGS_PARTIAL, {"calendar_account": get_calendar_account(profile)})
+        return render(request, _SETTINGS_PARTIAL, {"calendar_account": GoogleCalendarAccount.objects.get_for_profile(profile)})
 
 
 class GoogleCalendarSettingsDisconnectView(LoginRequiredMixin, View):
@@ -194,7 +194,7 @@ class GoogleCalendarSettingsDisconnectView(LoginRequiredMixin, View):
 
     def post(self, request):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        account = get_calendar_account(profile)
+        account = GoogleCalendarAccount.objects.get_for_profile(profile)
         if account is not None:
             revoke_token(account.refresh_token or account.access_token)
             account.delete()
@@ -212,7 +212,7 @@ class CalendarImportView(LoginRequiredMixin, View):
 
     def get(self, request):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        account = get_calendar_account(profile)
+        account = GoogleCalendarAccount.objects.get_for_profile(profile)
         if account is None:
             return render(request, "dashboard/partials/trips/_calendar_import_dialog.html", {"error": "Connect your Google Calendar first.", "profile": profile})
 
@@ -236,7 +236,7 @@ class CalendarImportView(LoginRequiredMixin, View):
 
     def post(self, request):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        account = get_calendar_account(profile)
+        account = GoogleCalendarAccount.objects.get_for_profile(profile)
         if account is None:
             # Plain-text 4xx bodies surface via the global htmx:responseError toast.
             return HttpResponse("Connect your Google Calendar first.", status=400)
@@ -286,7 +286,7 @@ class CalendarImportPreviewView(LoginRequiredMixin, View):
 
     def post(self, request):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        account = get_calendar_account(profile)
+        account = GoogleCalendarAccount.objects.get_for_profile(profile)
         if account is None:
             return HttpResponse("Connect your Google Calendar first.", status=400)
 
@@ -346,7 +346,7 @@ class TripCalendarExportView(LoginRequiredMixin, View):
             return result
         trip = result
 
-        account = get_calendar_account(profile)
+        account = GoogleCalendarAccount.objects.get_for_profile(profile)
         if account is None:
             return self._render_button(request, trip, profile, toast=("warning", "Connect your Google Calendar first."), status=200)
 
@@ -360,7 +360,7 @@ class TripCalendarExportView(LoginRequiredMixin, View):
 
         auto_sync = request.POST.get("auto_sync") == "1"
         if link.auto_sync != auto_sync:
-            TripCalendarLink.objects.filter(pk=link.pk).update(auto_sync=auto_sync)
+            TripCalendarLink.objects.set_auto_sync(link.pk, auto_sync)
 
         if activity_count:
             message = f"Trip and {activity_count} activit{'ies' if activity_count != 1 else 'y'} added to your Google Calendar."
@@ -375,7 +375,7 @@ class TripCalendarExportView(LoginRequiredMixin, View):
             return result
         trip = result
 
-        account = get_calendar_account(profile)
+        account = GoogleCalendarAccount.objects.get_for_profile(profile)
         if account is None:
             return self._render_button(request, trip, profile, toast=("warning", "Connect your Google Calendar first."))
 
@@ -403,12 +403,12 @@ class TripCalendarAutoSyncView(LoginRequiredMixin, View):
             return result
         trip = result
 
-        link = TripCalendarLink.objects.filter(trip=trip, profile=profile, activity__isnull=True).first()
+        link = TripCalendarLink.objects.trip_level_link(trip, profile)
         if link is None:
             return HttpResponse("Add this trip to your Google Calendar first.", status=400)
 
         auto_sync = request.POST.get("auto_sync") == "1"
-        TripCalendarLink.objects.filter(pk=link.pk).update(auto_sync=auto_sync)
+        TripCalendarLink.objects.set_auto_sync(link.pk, auto_sync)
 
         context = {"trip": trip, "profile": profile, **calendar_context(profile, trip)}
         return render(request, "dashboard/partials/trips/_trip_calendar_button.html", context)

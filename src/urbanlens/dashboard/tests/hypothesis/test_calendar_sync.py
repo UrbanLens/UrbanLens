@@ -24,7 +24,7 @@ from hypothesis import given, strategies as st
 import pytest
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.models.calendar_sync.model import CalendarSyncDirection, GoogleCalendarAccount, TripCalendarLink, get_calendar_account
+from urbanlens.dashboard.models.calendar_sync.model import CalendarSyncDirection, GoogleCalendarAccount, TripCalendarLink
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
 from urbanlens.dashboard.services.apis.calendar.google import ACTIVITY_ID_EVENT_PROPERTY, TRIP_UUID_EVENT_PROPERTY, CalendarEventNotFoundError
@@ -840,7 +840,7 @@ class PushAutoSyncedTripChangesTests(_CalendarSyncDBTestCase):
 
 
 class GetCalendarAccountTests(_CalendarSyncDBTestCase):
-    """get_calendar_account heals accounts left with undecryptable tokens.
+    """GoogleCalendarAccountManager.get_for_profile() heals accounts left with undecryptable tokens.
 
     Regression test for a production 500: rotating field_encryption_key
     without migrating old rows makes EncryptedTextField.from_db_value raise
@@ -857,11 +857,11 @@ class GetCalendarAccountTests(_CalendarSyncDBTestCase):
             )
 
     def test_returns_account_when_decryptable(self):
-        self.assertEqual(get_calendar_account(self.profile), self.account)
+        self.assertEqual(GoogleCalendarAccount.objects.get_for_profile(self.profile), self.account)
 
     def test_undecryptable_account_is_healed_to_none(self):
         self._corrupt_stored_access_token()
-        self.assertIsNone(get_calendar_account(self.profile))
+        self.assertIsNone(GoogleCalendarAccount.objects.get_for_profile(self.profile))
         self.assertFalse(GoogleCalendarAccount.objects.filter(profile=self.profile).exists())
 
     def test_raw_query_still_raises_invalid_token(self):
