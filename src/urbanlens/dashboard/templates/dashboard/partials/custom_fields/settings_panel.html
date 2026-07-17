@@ -16,7 +16,7 @@
                 <div class="cf-field-display" id="cf-field-display-{{ field.id }}">
                     <i class="material-symbols-outlined cf-type-icon" title="{{ field.get_field_type_display }}">{{ field.type_icon }}</i>
                     <span class="cf-field-name">{{ field.name }}</span>
-                    <span class="cf-type-chip">{{ field.get_field_type_display }}{% if field.style %} · {{ field.get_style_display }}{% endif %}</span>
+                    <span class="cf-type-chip">{{ field.get_field_type_display }}{% if field.style %} · {{ field.get_style_display }}{% endif %}{% if field.reference_kind %} · {{ field.reference_kind_label }}{% endif %}</span>
                     <span class="cf-field-actions">
                         <button type="button" class="btn btn--icon-sm" title="Edit field"
                                 onclick="document.getElementById('cf-field-display-{{ field.id }}').hidden = true; document.getElementById('cf-field-edit-{{ field.id }}').hidden = false;">

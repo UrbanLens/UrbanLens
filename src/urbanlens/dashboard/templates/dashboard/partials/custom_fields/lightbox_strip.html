@@ -9,7 +9,7 @@
             {{ row.field.name }}
         </label>
         {% url url_name target_arg as post_url %}
-        {% include "dashboard/partials/custom_fields/_value_input.html" with field=row.field value=row.value post_url=post_url hx_target="closest .cf-lightbox-strip" include_field_id=True %}
+        {% include "dashboard/partials/custom_fields/_value_input.html" with field=row.field value=row.value ref_choices=row.ref_choices post_url=post_url hx_target="closest .cf-lightbox-strip" include_field_id=True %}
     </div>
     {% endfor %}
 </div>

@@ -20,7 +20,7 @@
                 {{ row.field.name }}
             </label>
             {% url 'pin.custom_fields.value' pin.slug row.field.id as post_url %}
-            {% include "dashboard/partials/custom_fields/_value_input.html" with field=row.field value=row.value post_url=post_url hx_target="#pin-custom-fields-panel" %}
+            {% include "dashboard/partials/custom_fields/_value_input.html" with field=row.field value=row.value ref_choices=row.ref_choices post_url=post_url hx_target="#pin-custom-fields-panel" %}
         </div>
         {% endfor %}
     </div>

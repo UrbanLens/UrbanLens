@@ -11,6 +11,12 @@
     {% endfor %}
 </select>
 <select name="style" class="cf-input cf-style-select" title="Style" data-current="{{ field.style|default:'' }}" hidden></select>
+<select name="ref_type" class="cf-input cf-ref-kind-select" title="What this field references" hidden>
+    <option value="" disabled {% if not field.reference_kind %}selected{% endif %}>References...</option>
+    {% for value, label in reference_kinds %}
+    <option value="{{ value }}" {% if field.reference_kind == value %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+</select>
 <textarea name="options" class="cf-input cf-options-input" rows="3" hidden
           placeholder="One option per line" title="Options (one per line)">{{ field.options_text|default:'' }}</textarea>
 <span class="cf-slider-bounds" hidden>

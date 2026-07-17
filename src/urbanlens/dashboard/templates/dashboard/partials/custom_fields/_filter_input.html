@@ -48,6 +48,13 @@
         <option value="checked" {% if cfval.checked %}selected{% endif %}>Checked</option>
         <option value="unchecked" {% if cfval.checked == False %}selected{% endif %}>Unchecked</option>
     </select>
+    {% elif field.field_type == 'reference' %}
+    <select name="cf_{{ field.id }}" class="fp-cf-input fp-cf-input--select" aria-label="{{ field.name }}">
+        <option value="">Any</option>
+        {% for pk, label in field.reference_choices %}
+        <option value="{{ pk }}" {% if cfval.ref_id == pk %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+    </select>
     {% else %}
     <input type="text" name="cf_{{ field.id }}" class="fp-cf-input fp-cf-input--text" placeholder="Contains..." autocomplete="off" aria-label="{{ field.name }}" value="{{ cfval.contains|default:'' }}">
     {% endif %}

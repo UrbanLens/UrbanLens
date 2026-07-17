@@ -14,6 +14,7 @@
         var styleSel = form.querySelector('.cf-style-select');
         var optionsInput = form.querySelector('.cf-options-input');
         var sliderBounds = form.querySelector('.cf-slider-bounds');
+        var refKindSel = form.querySelector('.cf-ref-kind-select');
         if (!typeSel || !styleSel) { return; }
 
         function rebuildStyles() {
@@ -38,6 +39,11 @@
             }
             if (sliderBounds) {
                 sliderBounds.hidden = !(typeSel.value === 'number' && styleSel.value === 'slider');
+            }
+            if (refKindSel) {
+                var isRef = typeSel.value === 'reference';
+                refKindSel.hidden = !isRef;
+                refKindSel.required = isRef;
             }
         }
 

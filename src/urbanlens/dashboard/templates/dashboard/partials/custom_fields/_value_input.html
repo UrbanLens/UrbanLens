@@ -52,6 +52,22 @@
             hx-vals='{"value": ""{% if include_field_id %}, "field_id": "{{ field.id }}"{% endif %}}'>x</button>
     {% endif %}
 </span>
+{% elif field.field_type == 'reference' %}
+<span class="cf-value-ref">
+    <select class="cf-input cf-value-input cf-value-input--reference" name="value" aria-label="{{ field.name }}"
+            hx-post="{{ post_url }}" hx-trigger="change" hx-target="{{ hx_target }}" hx-swap="{{ hx_swap|default:'outerHTML' }}"
+            {% if include_field_id %}hx-vals='{"field_id": "{{ field.id }}"}'{% endif %}>
+        <option value=""></option>
+        {% for pk, label in ref_choices|default:field.reference_choices %}
+        <option value="{{ pk }}" {% if value.reference_pk == pk %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+    </select>
+    {% if value.reference_url %}
+    <a class="cf-url-open" href="{{ value.reference_url }}" title="Open {{ value.display_value }}">
+        <i class="material-symbols-outlined">open_in_new</i>
+    </a>
+    {% endif %}
+</span>
 {% elif field.field_type == 'url' %}
 <span class="cf-value-url">
     <input class="cf-input cf-value-input cf-value-input--url" type="url" name="value"

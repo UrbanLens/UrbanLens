@@ -34,6 +34,7 @@ from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.markup.model import MarkupMap
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.services.custom_field_references import REFERENCE_KINDS
 
 if TYPE_CHECKING:
     from django.http import HttpRequest
@@ -78,7 +79,14 @@ def rows_for_target(profile: Profile, entity_type: str, target: Any) -> list[dic
     """
     fields = list(CustomField.objects.for_entity(profile, entity_type))
     values_by_field_id = {v.field_id: v for v in CustomFieldValue.objects.filter(field__in=fields).for_target(target).select_related("field")}
-    return [{"field": f, "value": values_by_field_id.get(f.pk)} for f in fields]
+    rows: list[dict[str, Any]] = []
+    for field in fields:
+        value = values_by_field_id.get(field.pk)
+        row: dict[str, Any] = {"field": field, "value": value}
+        if field.field_type == CustomFieldType.REFERENCE:
+            row["ref_choices"] = field.reference_choices(include_pk=value.reference_pk if value else None)
+        rows.append(row)
+    return rows
 
 
 def save_value(field: CustomField, target: Any, raw: str) -> tuple[CustomFieldValue | None, str | None]:
@@ -174,6 +182,11 @@ def _parse_definition(request: HttpRequest) -> tuple[dict[str, Any], str | None]
         if error:
             return {}, error
         config["choices"] = options
+    if field_type == CustomFieldType.REFERENCE:
+        ref_type = (request.POST.get("ref_type") or "").strip()
+        if not any(ref_type == kind for kind, _ in REFERENCE_KINDS):
+            return {}, "Choose what this reference field points at."
+        config["ref_type"] = ref_type
     if style == "slider":
         bounds: dict[str, float] = {}
         for key in ("slider_min", "slider_max"):
@@ -241,7 +254,7 @@ class CustomFieldSettingsPanelView(LoginRequiredMixin, View):
         response = render(
             request,
             "dashboard/partials/custom_fields/settings_panel.html",
-            {"groups": groups, "field_types": CustomFieldType.choices, "styles_by_type": STYLES_BY_TYPE},
+            {"groups": groups, "field_types": CustomFieldType.choices, "styles_by_type": STYLES_BY_TYPE, "reference_kinds": REFERENCE_KINDS},
         )
         if error:
             return _show_toast(response, error, level="error")
@@ -267,6 +280,8 @@ class CustomFieldUpdateView(LoginRequiredMixin, View):
         name = definition.get("name", "")
         if error is None and definition["field_type"] != field.field_type and field.values.exists():
             error = "This field already has values - clear them before changing its type."
+        if error is None and field.field_type == CustomFieldType.REFERENCE and definition["field_type"] == CustomFieldType.REFERENCE and definition["config"].get("ref_type") != field.reference_kind and field.values.exists():
+            error = "This field already has values - clear them before changing what it references."
         if error is None and name.lower() != field.name.lower() and CustomField.objects.filter(profile=profile, entity_type=field.entity_type, name__iexact=name).exclude(pk=field.pk).exists():
             error = f"You already have a “{name}” field there."
         if error is None:
@@ -275,7 +290,7 @@ class CustomFieldUpdateView(LoginRequiredMixin, View):
             field.style = definition["style"]
             # Keep any config keys the form doesn't manage, but replace the managed ones.
             config = dict(field.config or {})
-            for key in ("choices", "min", "max"):
+            for key in ("choices", "min", "max", "ref_type"):
                 config.pop(key, None)
             config.update(definition["config"])
             field.config = config
@@ -311,6 +326,7 @@ def _render_pin_panel(request: HttpRequest, profile: Profile, pin: Pin, error: s
             "rows": rows_for_target(profile, CustomFieldEntity.PIN, pin),
             "field_types": CustomFieldType.choices,
             "styles_by_type": STYLES_BY_TYPE,
+            "reference_kinds": REFERENCE_KINDS,
         },
     )
     if error:

@@ -106,6 +106,8 @@ class SearchForm(forms.Form):
                 self.fields[f"cf_{cf.pk}"] = forms.ChoiceField(required=False, choices=[("", "Any"), *[(choice, choice) for choice in cf.select_choices]])
             elif cf.field_type == CustomFieldType.CHECKBOX:
                 self.fields[f"cf_{cf.pk}"] = forms.ChoiceField(required=False, choices=[("", "Any"), ("checked", "Checked"), ("unchecked", "Unchecked")])
+            elif cf.field_type == CustomFieldType.REFERENCE:
+                self.fields[f"cf_{cf.pk}"] = forms.ChoiceField(required=False, choices=[("", "Any"), *[(str(pk), label) for pk, label in cf.reference_choices()]])
             else:  # text and url fields filter as free-text "contains"
                 self.fields[f"cf_{cf.pk}"] = forms.CharField(required=False)
 
@@ -122,6 +124,7 @@ class SearchForm(forms.Form):
                 {"field": cf, "after_time": time|None, "before_time": ...}  # time
                 {"field": cf, "equals": str}                        # select
                 {"field": cf, "checked": bool}                      # checkbox
+                {"field": cf, "ref_id": int}                        # reference
         """
         criteria: list[dict] = []
         for cf in self.custom_fields:
@@ -148,6 +151,10 @@ class SearchForm(forms.Form):
                 state = (self.cleaned_data.get(f"cf_{cf.pk}") or "").strip()
                 if state in ("checked", "unchecked"):
                     criteria.append({"field": cf, "checked": state == "checked"})
+            elif cf.field_type == CustomFieldType.REFERENCE:
+                chosen = (self.cleaned_data.get(f"cf_{cf.pk}") or "").strip()
+                if chosen:
+                    criteria.append({"field": cf, "ref_id": int(chosen)})
             else:
                 text = (self.cleaned_data.get(f"cf_{cf.pk}") or "").strip()
                 if text:

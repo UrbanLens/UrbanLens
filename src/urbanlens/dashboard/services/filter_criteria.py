@@ -102,6 +102,8 @@ def _serialize_custom_field_criterion(criterion: dict[str, Any]) -> dict[str, An
         entry["equals"] = criterion["equals"]
     if "checked" in criterion:
         entry["checked"] = bool(criterion["checked"])
+    if "ref_id" in criterion:
+        entry["ref_id"] = int(criterion["ref_id"])
     if "min" in criterion or "max" in criterion:
         minimum = criterion.get("min")
         maximum = criterion.get("max")
@@ -171,6 +173,8 @@ def _deserialize_custom_field_bounds(criterion: dict[str, Any]) -> dict[str, Any
         return {"equals": criterion["equals"]}
     if "checked" in criterion:
         return {"checked": bool(criterion["checked"])}
+    if "ref_id" in criterion:
+        return {"ref_id": int(criterion["ref_id"])}
     if "min" in criterion or "max" in criterion:
         from decimal import Decimal
 

@@ -3669,6 +3669,9 @@
             } else if ('checked' in cf) {
                 const select = form.querySelector(`[name="cf_${cf.field_id}"]`);
                 if (select && !(select.value || '').trim()) select.value = cf.checked ? 'checked' : 'unchecked';
+            } else if ('ref_id' in cf) {
+                const select = form.querySelector(`[name="cf_${cf.field_id}"]`);
+                if (select && !(select.value || '').trim() && cf.ref_id != null) select.value = String(cf.ref_id);
             } else if ('after_time' in cf || 'before_time' in cf) {
                 const afterInput = form.querySelector(`[name="cf_${cf.field_id}_after"]`);
                 const beforeInput = form.querySelector(`[name="cf_${cf.field_id}_before"]`);

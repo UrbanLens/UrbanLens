@@ -113,7 +113,7 @@
                     {{ row.field.name }}
                 </label>
                 {% url 'profile.custom_field_value' subject.slug row.field.id as post_url %}
-                {% include "dashboard/partials/custom_fields/_value_input.html" with field=row.field value=row.value post_url=post_url hx_target="#profile-annotation-inner" %}
+                {% include "dashboard/partials/custom_fields/_value_input.html" with field=row.field value=row.value ref_choices=row.ref_choices post_url=post_url hx_target="#profile-annotation-inner" %}
             </div>
             {% endfor %}
         </div>

@@ -339,6 +339,12 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
                 lookups["custom_field_values__value_time__gte"] = after_time
             if (before_time := criterion.get("before_time")) is not None:
                 lookups["custom_field_values__value_time__lte"] = before_time
+            if (ref_id := criterion.get("ref_id")) is not None:
+                from urbanlens.dashboard.models.custom_fields.model import CustomFieldValue
+
+                ref_attr = CustomFieldValue.REF_FIELD_BY_KIND.get(getattr(field, "reference_kind", ""))
+                if ref_attr:
+                    lookups[f"custom_field_values__{ref_attr}_id"] = ref_id
             if len(lookups) > 1:
                 qs = qs.filter(**lookups)
         return qs

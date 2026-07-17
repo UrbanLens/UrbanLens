@@ -680,3 +680,131 @@ class NewTypeCriteriaRoundTripTests(CustomFieldTestsBase):
         self.assertIs(by_field[checkbox_field.pk]["checked"], False)
         self.assertEqual(by_field[time_field.pk]["after_time"], time(6, 0))
         self.assertIsNone(by_field[time_field.pk]["before_time"])
+
+
+class ReferenceFieldTests(CustomFieldTestsBase):
+    """Reference-type fields: access scoping, value endpoints, filters, and export."""
+
+    def _reference_field(self, ref_type: str, name: str = "Related") -> CustomField:
+        return CustomField.objects.create(
+            profile=self.profile, entity_type=CustomFieldEntity.PIN, name=name, field_type=CustomFieldType.REFERENCE, config={"ref_type": ref_type},
+        )
+
+    def _post_value(self, field: CustomField, raw) -> None:
+        self.client.post(reverse("pin.custom_fields.value", args=[self.pin.slug, field.id]), {"value": raw})
+
+    def test_pin_reference_saves_and_displays(self) -> None:
+        field = self._reference_field("pin")
+        other_pin = baker.make(Pin, profile=self.profile, name="Boiler House", name_is_user_provided=True)
+        self._post_value(field, other_pin.pk)
+        value = CustomFieldValue.objects.get(field=field, pin=self.pin)
+        self.assertEqual(value.ref_pin_id, other_pin.pk)
+        self.assertEqual(value.display_value, "Boiler House")
+        self.assertIn(other_pin.slug, value.reference_url)
+
+    def test_cannot_reference_another_users_pin(self) -> None:
+        field = self._reference_field("pin")
+        foreign_pin = baker.make(Pin, profile=baker.make("auth.User").profile, name="Not Yours", name_is_user_provided=True)
+        self._post_value(field, foreign_pin.pk)
+        self.assertFalse(CustomFieldValue.objects.filter(field=field, pin=self.pin).exists())
+
+    def test_cannot_reference_another_users_photo_or_map_or_list(self) -> None:
+        other_profile = baker.make("auth.User").profile
+        cases = [
+            ("photo", baker.make(Image, profile=other_profile)),
+            ("markup_map", baker.make(MarkupMap, profile=other_profile)),
+            ("list", baker.make("dashboard.PinList", profile=other_profile, name="Their list")),
+        ]
+        for ref_type, foreign_target in cases:
+            field = self._reference_field(ref_type, name=f"Ref {ref_type}")
+            self._post_value(field, foreign_target.pk)
+            self.assertFalse(CustomFieldValue.objects.filter(field=field, pin=self.pin).exists(), ref_type)
+
+    def test_wiki_reference_requires_pinned_location(self) -> None:
+        from urbanlens.dashboard.models.wiki.model import Wiki
+
+        pinned_wiki = baker.make(Wiki, location=self.pin.location, name="Pinned Place")
+        unpinned_wiki = baker.make(Wiki, location=baker.make("dashboard.Location", latitude="40.1", longitude="-75.1"), name="Elsewhere")
+        field = self._reference_field("wiki")
+        self._post_value(field, unpinned_wiki.pk)
+        self.assertFalse(CustomFieldValue.objects.filter(field=field, pin=self.pin).exists())
+        self._post_value(field, pinned_wiki.pk)
+        self.assertEqual(CustomFieldValue.objects.get(field=field, pin=self.pin).ref_wiki_id, pinned_wiki.pk)
+
+    def test_deleting_referenced_object_deletes_value(self) -> None:
+        field = self._reference_field("markup_map")
+        markup_map = baker.make(MarkupMap, profile=self.profile, title="Route A")
+        self._post_value(field, markup_map.pk)
+        self.assertTrue(CustomFieldValue.objects.filter(field=field, pin=self.pin).exists())
+        markup_map.delete()
+        self.assertFalse(CustomFieldValue.objects.filter(field=field, pin=self.pin).exists())
+
+    def test_create_reference_field_requires_kind(self) -> None:
+        self.client.post(
+            reverse("custom_fields.settings"),
+            {"entity_type": "pin", "name": "Related", "field_type": "reference"},
+        )
+        self.assertFalse(CustomField.objects.filter(profile=self.profile, name="Related").exists())
+        self.client.post(
+            reverse("custom_fields.settings"),
+            {"entity_type": "pin", "name": "Related", "field_type": "reference", "ref_type": "trip"},
+        )
+        self.assertEqual(CustomField.objects.get(profile=self.profile, name="Related").reference_kind, "trip")
+
+    def test_kind_change_blocked_when_values_exist(self) -> None:
+        field = self._reference_field("pin")
+        other_pin = baker.make(Pin, profile=self.profile, name="Boiler House", name_is_user_provided=True)
+        self._post_value(field, other_pin.pk)
+        self.client.post(
+            reverse("custom_fields.update", args=[field.id]),
+            {"name": "Related", "field_type": "reference", "ref_type": "trip"},
+        )
+        field.refresh_from_db()
+        self.assertEqual(field.reference_kind, "pin")
+
+    def test_reference_filter_matches_pins(self) -> None:
+        field = self._reference_field("trip")
+        trip = baker.make("dashboard.Trip", name="Autumn Run")
+        baker.make("dashboard.TripMembership", trip=trip, profile=self.profile)
+        self._post_value(field, trip.pk)
+
+        form = SearchForm({f"cf_{field.pk}": str(trip.pk)}, profile=self.profile)
+        self.assertTrue(form.is_valid(), form.errors)
+        criteria = dict(form.cleaned_data)
+        criteria["custom_fields"] = form.parse_custom_field_criteria()
+        names = {p.name for p in Pin.objects.filter(profile=self.profile).filter_by_criteria(criteria)}
+        self.assertEqual(names, {"Old Mill"})
+
+    def test_reference_criteria_round_trip(self) -> None:
+        from urbanlens.dashboard.services.filter_criteria import deserialize_criteria, serialize_form_criteria
+
+        field = self._reference_field("pin")
+        other_pin = baker.make(Pin, profile=self.profile, name="Boiler House", name_is_user_provided=True)
+        stored = serialize_form_criteria({}, None, [{"field": field, "ref_id": other_pin.pk}])
+        self.assertEqual(json.loads(json.dumps(stored)), stored)
+        restored = deserialize_criteria(stored, self.profile)["custom_fields"]
+        self.assertEqual(restored[0]["ref_id"], other_pin.pk)
+
+    def test_reference_choices_scoped_and_labeled(self) -> None:
+        field = self._reference_field("pin")
+        mine = baker.make(Pin, profile=self.profile, name="Boiler House", name_is_user_provided=True)
+        theirs = baker.make(Pin, profile=baker.make("auth.User").profile, name="Foreign", name_is_user_provided=True)
+        choices = dict(field.reference_choices())
+        self.assertIn(mine.pk, choices)
+        self.assertEqual(choices[mine.pk], "Boiler House")
+        self.assertNotIn(theirs.pk, choices)
+
+    def test_export_reference_value(self) -> None:
+        field = self._reference_field("pin")
+        other_pin = baker.make(Pin, profile=self.profile, name="Boiler House", name_is_user_provided=True)
+        self._post_value(field, other_pin.pk)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            _export_custom_fields(self.profile, temp_dir)
+            with open(os.path.join(temp_dir, "custom_fields.json"), encoding="utf-8") as fh:
+                rows = json.load(fh)
+
+        row = next(r for r in rows if r["name"] == "Related")
+        self.assertEqual(row["config"], {"ref_type": "pin"})
+        exported = row["values"][0]["value"]
+        self.assertEqual(exported, {"kind": "pin", "uuid": str(other_pin.uuid), "label": "Boiler House"})

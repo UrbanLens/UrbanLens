@@ -48,7 +48,8 @@
   &[hidden] { display: none; }
 }
 
-.cf-style-select {
+.cf-style-select,
+.cf-ref-kind-select {
   flex: 0 0 auto;
   width: 9.5rem;
   cursor: pointer;
@@ -270,7 +271,8 @@
   text-align: right;
 }
 
-.cf-value-url {
+.cf-value-url,
+.cf-value-ref {
   display: flex;
   align-items: center;
   gap: .35rem;

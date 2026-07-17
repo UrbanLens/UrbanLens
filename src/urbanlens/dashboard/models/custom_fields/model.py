@@ -73,6 +73,7 @@ class CustomFieldType(TextChoices):
     SELECT = "select", "Select"
     CHECKBOX = "checkbox", "Checkbox"
     URL = "url", "Link"
+    REFERENCE = "reference", "Reference"
 
 
 class CustomFieldStyle(TextChoices):
@@ -125,6 +126,7 @@ FIELD_TYPE_ICONS: dict[str, str] = {
     CustomFieldType.SELECT: "list",
     CustomFieldType.CHECKBOX: "check_box",
     CustomFieldType.URL: "link",
+    CustomFieldType.REFERENCE: "attach_file",
 }
 
 #: Material Symbols icon representing each entity type in the UI.
@@ -234,6 +236,46 @@ class CustomField(abstract.FrontendDashboardModel):
         return "\n".join(self.select_choices)
 
     @property
+    def reference_kind(self) -> str:
+        """The configured target kind for a reference field ("" for other types).
+
+        Returns:
+            A ``services.custom_field_references.REFERENCE_KINDS`` value, or ""
+            when this isn't a reference field or the config is missing/invalid.
+        """
+        if self.field_type != CustomFieldType.REFERENCE:
+            return ""
+        from urbanlens.dashboard.services.custom_field_references import REFERENCE_KINDS
+
+        raw = (self.config or {}).get("ref_type") or ""
+        return raw if any(raw == kind for kind, _ in REFERENCE_KINDS) else ""
+
+    @property
+    def reference_kind_label(self) -> str:
+        """Display label for the configured reference kind ("" when not set)."""
+        from urbanlens.dashboard.services.custom_field_references import REFERENCE_KINDS
+
+        return dict(REFERENCE_KINDS).get(self.reference_kind, "")
+
+    def reference_choices(self, *, include_pk: int | None = None) -> list[tuple[int, str]]:
+        """(pk, label) picker choices for this reference field's target kind.
+
+        Args:
+            include_pk: A pk to force into the list even when past the cap
+                (used to keep the currently stored value selectable).
+
+        Returns:
+            Access-scoped choices for this field's owner, or [] for
+            non-reference fields.
+        """
+        kind = self.reference_kind
+        if not kind:
+            return []
+        from urbanlens.dashboard.services.custom_field_references import reference_choices
+
+        return reference_choices(kind, self.profile, include_pk=include_pk)
+
+    @property
     def slider_min(self) -> Decimal:
         """The slider's lower bound (config override or the default)."""
         return self._config_bound("min", SLIDER_DEFAULT_MIN)
@@ -252,6 +294,20 @@ class CustomField(abstract.FrontendDashboardModel):
             return Decimal(str(raw))
         except InvalidOperation:
             return Decimal(default)
+
+
+#: The reference FK columns on CustomFieldValue, used to build the constraint.
+_REF_COLUMNS: tuple[str, ...] = ("ref_pin", "ref_wiki", "ref_markup_map", "ref_trip", "ref_image", "ref_pin_list", "ref_profile")
+
+
+def _at_most_one_of(columns: tuple[str, ...]) -> Q:
+    """A check-constraint condition allowing all-null or exactly one non-null."""
+    condition = Q(**{f"{column}__isnull": True for column in columns})
+    for column in columns:
+        exactly_this = {f"{column}__isnull": False}
+        exactly_this.update({f"{other}__isnull": True for other in columns if other != column})
+        condition = condition | Q(**exactly_this)
+    return condition
 
 
 class CustomFieldValue(abstract.DashboardModel):
@@ -308,6 +364,18 @@ class CustomFieldValue(abstract.DashboardModel):
     value_time = TimeField(null=True, blank=True)
     value_boolean = BooleanField(null=True, blank=True)
 
+    # -- Reference value FKs (at most one set, matching field.config ref_type) --
+    # Deleting the referenced object deletes the value row: a reference to a
+    # gone object carries no information, unlike SET_NULL which would leave an
+    # invalid "value with nothing in it" row behind.
+    ref_pin = ForeignKey("dashboard.Pin", on_delete=CASCADE, null=True, blank=True, related_name="custom_field_references")
+    ref_wiki = ForeignKey("dashboard.Wiki", on_delete=CASCADE, null=True, blank=True, related_name="custom_field_references")
+    ref_markup_map = ForeignKey("dashboard.MarkupMap", on_delete=CASCADE, null=True, blank=True, related_name="custom_field_references")
+    ref_trip = ForeignKey("dashboard.Trip", on_delete=CASCADE, null=True, blank=True, related_name="custom_field_references")
+    ref_image = ForeignKey("dashboard.Image", on_delete=CASCADE, null=True, blank=True, related_name="custom_field_references")
+    ref_pin_list = ForeignKey("dashboard.PinList", on_delete=CASCADE, null=True, blank=True, related_name="custom_field_references")
+    ref_profile = ForeignKey("dashboard.Profile", on_delete=CASCADE, null=True, blank=True, related_name="custom_field_references")
+
     objects: CustomFieldValueManager = CustomFieldValueManager()
 
     #: Maps entity type -> the FK attribute holding that entity's target.
@@ -316,6 +384,17 @@ class CustomFieldValue(abstract.DashboardModel):
         CustomFieldEntity.PHOTO: "image",
         CustomFieldEntity.PROFILE: "target_profile",
         CustomFieldEntity.MARKUP_MAP: "markup_map",
+    }
+
+    #: Maps a reference field's configured kind -> the ref FK attribute above.
+    REF_FIELD_BY_KIND: dict[str, str] = {
+        "pin": "ref_pin",
+        "wiki": "ref_wiki",
+        "markup_map": "ref_markup_map",
+        "trip": "ref_trip",
+        "photo": "ref_image",
+        "list": "ref_pin_list",
+        "profile": "ref_profile",
     }
 
     if TYPE_CHECKING:
@@ -346,6 +425,7 @@ class CustomFieldValue(abstract.DashboardModel):
                     | Q(pin__isnull=True, image__isnull=True, target_profile__isnull=True, markup_map__isnull=False)
                 ),
             ),
+            CheckConstraint(name="db_cfv_at_most_one_ref", condition=_at_most_one_of(_REF_COLUMNS)),
         ]
 
     def __str__(self) -> str:
@@ -365,11 +445,12 @@ class CustomFieldValue(abstract.DashboardModel):
         return None
 
     @property
-    def value(self) -> str | Decimal | date | time | bool | None:
+    def value(self) -> Any:
         """The typed value, read from the column matching ``field.field_type``.
 
         Returns:
-            The stored value as its natural Python type, or None/"" when unset.
+            The stored value as its natural Python type (the referenced model
+            instance for reference fields), or None/"" when unset.
         """
         field_type = self.field.field_type
         if field_type == CustomFieldType.NUMBER:
@@ -380,11 +461,36 @@ class CustomFieldValue(abstract.DashboardModel):
             return self.value_time
         if field_type == CustomFieldType.CHECKBOX:
             return self.value_boolean
+        if field_type == CustomFieldType.REFERENCE:
+            return self.reference_target
         return self.value_text
+
+    @property
+    def reference_target(self) -> Any | None:
+        """The object a reference value points at (None for other types/unset)."""
+        attr = self.REF_FIELD_BY_KIND.get(self.field.reference_kind)
+        return getattr(self, attr) if attr else None
+
+    @property
+    def reference_pk(self) -> int | None:
+        """The referenced object's pk, for select-option comparison in templates."""
+        attr = self.REF_FIELD_BY_KIND.get(self.field.reference_kind)
+        return getattr(self, f"{attr}_id") if attr else None
+
+    @property
+    def reference_url(self) -> str | None:
+        """Detail-page URL for the referenced object, or None when it has none."""
+        from urbanlens.dashboard.services.custom_field_references import reference_url
+
+        return reference_url(self.field.reference_kind, self.reference_target)
 
     @property
     def display_value(self) -> str:
         """The value formatted for display (numbers without trailing zeros)."""
+        if self.field.field_type == CustomFieldType.REFERENCE:
+            from urbanlens.dashboard.services.custom_field_references import reference_label
+
+            return reference_label(self.field.reference_kind, self.reference_target)
         raw = self.value
         if raw is None or raw == "":
             return ""
@@ -428,6 +534,8 @@ class CustomFieldValue(abstract.DashboardModel):
         self.value_date = None
         self.value_time = None
         self.value_boolean = None
+        for ref_attr in self.REF_FIELD_BY_KIND.values():
+            setattr(self, ref_attr, None)
 
         if field_type == CustomFieldType.NUMBER:
             try:
@@ -464,11 +572,27 @@ class CustomFieldValue(abstract.DashboardModel):
             except ValidationError as e:
                 raise ValueError(f"{raw!r} is not a valid link.") from e
             self.value_text = candidate
+        elif field_type == CustomFieldType.REFERENCE:
+            from urbanlens.dashboard.services.custom_field_references import resolve_reference
+
+            kind = self.field.reference_kind
+            ref_field = self.REF_FIELD_BY_KIND.get(kind)
+            if ref_field is None:
+                raise ValueError("This reference field has no target kind configured.")
+            target = resolve_reference(kind, raw, self.field.profile)
+            if target is None:
+                raise ValueError("That item wasn't found (or you can't reference it).")
+            setattr(self, ref_field, target)
         else:
             self.value_text = raw
 
     def export_value(self) -> Any:
         """The value in a JSON-serializable form for data exports."""
+        if self.field.field_type == CustomFieldType.REFERENCE:
+            target = self.reference_target
+            if target is None:
+                return None
+            return {"kind": self.field.reference_kind, "uuid": str(target.uuid), "label": self.display_value}
         raw = self.value
         if isinstance(raw, bool):
             return raw
