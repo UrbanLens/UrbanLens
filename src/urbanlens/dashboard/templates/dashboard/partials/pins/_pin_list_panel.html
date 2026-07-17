@@ -33,7 +33,7 @@ resend the filter-form fields on every page click, so filters stay applied.
         {% for pin in pins %}
         <li class="pin-list-item">
             <button type="button" class="pin-list-item__entry"
-                    onclick="_flyToPinFromList('{{ pin.slug|escapejs }}', {{ pin.effective_latitude|default:'null' }}, {{ pin.effective_longitude|default:'null' }})">
+                    onclick="_flyToPinFromList('{{ pin.uuid|escapejs }}', {{ pin.effective_latitude|default:'null' }}, {{ pin.effective_longitude|default:'null' }})">
                 {% if pin.effective_icon %}
                     {% if pin.effective_icon|is_material_icon %}
                     <i class="material-icons pin-list-icon" {% if pin.effective_color %}style="color:{{ pin.effective_color }}"{% endif %}>{{ pin.effective_icon }}</i>

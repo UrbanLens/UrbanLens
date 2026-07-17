@@ -3426,16 +3426,15 @@
             .catch(() => {});
     }
 
-    function _flyToPinFromList(slug, lat, lng) {
+    function _flyToPinFromList(uuid, lat, lng) {
         if (lat == null || lng == null) return;
         _programmaticMove = true;
         map.setView([lat, lng], Math.max(map.getZoom(), 16));
-        for (const [uuid, pin] of _pinStore) {
-            if (pin.slug === slug) {
-                setTimeout(() => { const m = _markerMap.get(uuid); if (m) m.openPopup(); }, 350);
-                break;
-            }
-        }
+        // _anyMarker checks both the root (_markerMap) and child/sub-pin
+        // (_childMarkerMap) registries - a plain _markerMap lookup silently
+        // found nothing (and so never opened the popup) for any sidebar
+        // entry that was actually a child pin.
+        setTimeout(() => { const m = _anyMarker(uuid); if (m) m.openPopup(); }, 350);
         if (window.matchMedia('(max-width: 768px)').matches) _togglePinListPanel();
     }
 
