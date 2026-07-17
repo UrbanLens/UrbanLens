@@ -176,6 +176,59 @@ def _fetch_epa_echo_data(pin: Pin) -> dict[str, Any]:
     return {"facilities": facilities, "exact_site": exact_site}
 
 
+def _propagate_exact_site_to_nearby_locations(location: Location, exact_site: dict[str, Any]) -> None:
+    """Apply a newly-confirmed exact-site EPA match to any other pinned Location within
+    the exact-match radius whose own ``epa_echo`` cache has no match yet.
+
+    Without this, a Location that happened to strike out on its own exact-site
+    check (most often because ECHO's tight rate limit cut its DFR-lookup loop
+    short before it reached the right candidate - see ``_fetch_epa_echo_data``'s
+    docstring) stays cached with an empty result for up to
+    ``SiteSettings.external_data_cache_days``, even after a neighboring pin
+    - sometimes fetched moments later - definitively proves the same facility
+    sits right there too. Since the facility's own confirmed coordinates are
+    already in hand, this costs zero extra EPA API calls: it's a plain
+    proximity query against already-pinned Locations, writing the same
+    ``exact_site`` payload directly into their cache rows.
+
+    Never overwrites a Location that already has its own confirmed
+    ``exact_site`` - only fills in rows that are missing or empty, so a
+    genuinely different real match is never clobbered.
+
+    Args:
+        location: The Location the match was just confirmed for (excluded
+            from the neighbor search - it already has the match).
+        exact_site: The confirmed exact-site payload, including its own
+            ``latitude``/``longitude``.
+    """
+    from django.contrib.gis.geos import Point
+    from django.contrib.gis.measure import D
+
+    from urbanlens.dashboard.models.cache.location_cache import LocationCache
+    from urbanlens.dashboard.models.location.model import Location as LocationModel
+
+    site_lat = exact_site.get("latitude")
+    site_lng = exact_site.get("longitude")
+    if site_lat is None or site_lng is None:
+        return
+
+    point = Point(site_lng, site_lat, srid=4326)
+    nearby_locations = (
+        LocationModel.objects.filter(point__distance_lte=(point, D(mi=_EXACT_MATCH_RADIUS_MILES)))
+        .exclude(pk=location.pk)
+        .filter(pins__isnull=False)
+        .distinct()
+    )
+
+    for neighbor in nearby_locations:
+        cache_row = LocationCache.objects.filter(location=neighbor, source=_CACHE_SOURCE).first()
+        existing_data = cache_row.data if cache_row else {}
+        if (existing_data or {}).get("exact_site"):
+            continue
+        new_data = {**existing_data, "facilities": existing_data.get("facilities") or [], "exact_site": exact_site}
+        LocationCache.set(neighbor, _CACHE_SOURCE, new_data, query_key=(cache_row.query_key if cache_row else ""))
+
+
 class EpaEchoNearbyPanelSource(CoordinateGatedInfoPanelSource):
     """List of EPA-regulated facilities near the pin's location (subscription-gated "Nearby Research" tab)."""
 
@@ -191,7 +244,12 @@ class EpaEchoNearbyPanelSource(CoordinateGatedInfoPanelSource):
 
         lat = float(pin.effective_latitude or 0)
         lng = float(pin.effective_longitude or 0)
-        LocationCache.set(pin.location, self.cache_source, _fetch_epa_echo_data(pin), query_key=f"{lat:.5f},{lng:.5f}")
+        data = _fetch_epa_echo_data(pin)
+        LocationCache.set(pin.location, self.cache_source, data, query_key=f"{lat:.5f},{lng:.5f}")
+
+        exact_site = data.get("exact_site")
+        if exact_site:
+            _propagate_exact_site_to_nearby_locations(pin.location, exact_site)
 
     def render_context(self, pin: Pin, data: dict) -> dict | None:
         """Build the nearby-facility list, excluding the exact-site match (it has its own unconditional card)."""
@@ -246,9 +304,11 @@ class EpaEchoDetailPanelSource(CoordinateGatedInfoPanelSource):
         LocationCache.set(pin.location, self.cache_source, data, query_key=f"{lat:.5f},{lng:.5f}")
 
         exact_site = data.get("exact_site")
-        registry_id = exact_site.get("registry_id") if exact_site else None
-        if registry_id:
-            self._add_echo_report_link(pin, pin.location, registry_id)
+        if exact_site:
+            _propagate_exact_site_to_nearby_locations(pin.location, exact_site)
+            registry_id = exact_site.get("registry_id")
+            if registry_id:
+                self._add_echo_report_link(pin, pin.location, registry_id)
 
     @staticmethod
     def _add_echo_report_link(pin: Pin, location: Location, registry_id: str) -> None:

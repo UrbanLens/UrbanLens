@@ -27,6 +27,7 @@ from urbanlens.dashboard.plugins.builtin.epa_echo import (
     EpaFacilityNameProvider,
     _fetch_epa_echo_data,
     _miles_between,
+    _propagate_exact_site_to_nearby_locations,
 )
 
 if TYPE_CHECKING:
@@ -480,3 +481,141 @@ class FetchEpaEchoDataExactMatchTests(TestCase):
             result = _fetch_epa_echo_data(self.pin)
         self.assertEqual(result["facilities"], facilities)
         self.assertIsNone(result["exact_site"])
+
+
+class PropagateExactSiteToNearbyLocationsTests(TestCase):
+    """_propagate_exact_site_to_nearby_locations: once an exact-site EPA match is
+    confirmed for one Location, nearby pinned Locations whose own epa_echo cache
+    has no match yet should immediately pick up the same match, instead of
+    waiting on their own next fetch cycle (which could be stale for
+    `SiteSettings.external_data_cache_days` and might hit the same rate-limit
+    timing that produced no match the first time)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.owner = baker.make(User).profile
+        self.location: Location = baker.make("dashboard.Location", latitude=40.0, longitude=-74.0)
+        self.exact_site = {"name": "Old Mill Factory", "address": "1 Main St", "registry_id": "R1", "latitude": 40.0, "longitude": -74.0, "programs": []}
+
+    def _pinned_location(self, latitude: float, longitude: float) -> Location:
+        from urbanlens.dashboard.models.pin.model import Pin
+
+        location: Location = baker.make("dashboard.Location", latitude=latitude, longitude=longitude)
+        baker.make(Pin, profile=self.owner, location=location)
+        return location
+
+    def _cached_data(self, location: Location) -> dict | None:
+        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+
+        row = LocationCache.objects.filter(location=location, source="epa_echo").first()
+        return row.data if row else None
+
+    def test_creates_a_cache_row_for_a_nearby_pinned_location_with_no_row_yet(self) -> None:
+        neighbor = self._pinned_location(40.0005, -74.0)  # ~0.03mi away
+
+        _propagate_exact_site_to_nearby_locations(self.location, self.exact_site)
+
+        self.assertEqual(self._cached_data(neighbor), {"facilities": [], "exact_site": self.exact_site})
+
+    def test_fills_in_a_nearby_locations_empty_exact_site(self) -> None:
+        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+
+        neighbor = self._pinned_location(40.0005, -74.0)
+        LocationCache.set(neighbor, "epa_echo", {"facilities": [], "exact_site": None}, query_key="40.00050,-74.00000")
+
+        _propagate_exact_site_to_nearby_locations(self.location, self.exact_site)
+
+        data = self._cached_data(neighbor)
+        assert data is not None
+        self.assertEqual(data["exact_site"], self.exact_site)
+
+    def test_preserves_the_neighbors_existing_facilities_list(self) -> None:
+        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+
+        neighbor = self._pinned_location(40.0005, -74.0)
+        nearby_list = [{"name": "Some Other Facility", "registry_id": "R9"}]
+        LocationCache.set(neighbor, "epa_echo", {"facilities": nearby_list, "exact_site": None}, query_key="")
+
+        _propagate_exact_site_to_nearby_locations(self.location, self.exact_site)
+
+        data = self._cached_data(neighbor)
+        assert data is not None
+        self.assertEqual(data["facilities"], nearby_list)
+        self.assertEqual(data["exact_site"], self.exact_site)
+
+    def test_does_not_overwrite_a_neighbor_with_its_own_confirmed_exact_site(self) -> None:
+        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+
+        neighbor = self._pinned_location(40.0005, -74.0)
+        own_match = {"name": "Different Facility", "registry_id": "R2"}
+        LocationCache.set(neighbor, "epa_echo", {"facilities": [], "exact_site": own_match}, query_key="")
+
+        _propagate_exact_site_to_nearby_locations(self.location, self.exact_site)
+
+        data = self._cached_data(neighbor)
+        assert data is not None
+        self.assertEqual(data["exact_site"], own_match)
+
+    def test_ignores_a_pinned_location_outside_the_exact_match_radius(self) -> None:
+        far_neighbor = self._pinned_location(40.01, -74.0)  # ~0.69mi away
+
+        _propagate_exact_site_to_nearby_locations(self.location, self.exact_site)
+
+        self.assertIsNone(self._cached_data(far_neighbor))
+
+    def test_ignores_a_nearby_location_with_no_pins(self) -> None:
+        unpinned: Location = baker.make("dashboard.Location", latitude=40.0005, longitude=-74.0)
+
+        _propagate_exact_site_to_nearby_locations(self.location, self.exact_site)
+
+        self.assertIsNone(self._cached_data(unpinned))
+
+    def test_missing_exact_site_coordinates_is_a_noop(self) -> None:
+        neighbor = self._pinned_location(40.0005, -74.0)
+        exact_site_no_coords = {"name": "Old Mill Factory", "registry_id": "R1"}
+
+        _propagate_exact_site_to_nearby_locations(self.location, exact_site_no_coords)
+
+        self.assertIsNone(self._cached_data(neighbor))
+
+    def test_the_originating_location_itself_is_excluded(self) -> None:
+        """The neighbor query must not try to re-propagate onto the same Location
+        the match was just confirmed for."""
+        from urbanlens.dashboard.models.pin.model import Pin
+
+        baker.make(Pin, profile=self.owner, location=self.location)
+
+        _propagate_exact_site_to_nearby_locations(self.location, self.exact_site)
+
+        # No cache row was created for self.location by this call - fetch() (not
+        # propagation) is what caches the originating Location's own match.
+        self.assertIsNone(self._cached_data(self.location))
+
+
+class DetailPanelFetchPropagatesExactSiteTests(TestCase):
+    """End-to-end: EpaEchoDetailPanelSource.fetch() must propagate a newly-found
+    exact-site match to nearby pinned Locations, not just cache it for itself."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.source = EpaEchoDetailPanelSource()
+        self.owner = baker.make(User).profile
+        self.location: Location = baker.make("dashboard.Location", latitude=40.0, longitude=-74.0)
+        self.pin: Pin = baker.make_recipe("dashboard.pin", profile=self.owner, location=self.location)
+
+    def test_fetch_propagates_to_a_nearby_pinned_location(self) -> None:
+        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+        from urbanlens.dashboard.models.pin.model import Pin as PinModel
+
+        neighbor: Location = baker.make("dashboard.Location", latitude=40.0005, longitude=-74.0)
+        baker.make(PinModel, profile=self.owner, location=neighbor)
+        exact_site = {"name": "Old Mill Factory", "address": "1 Main St", "registry_id": "R1", "latitude": 40.0, "longitude": -74.0, "programs": []}
+
+        with mock.patch(
+            "urbanlens.dashboard.plugins.builtin.epa_echo._fetch_epa_echo_data",
+            return_value={"facilities": [], "exact_site": exact_site},
+        ):
+            self.source.fetch(self.pin)
+
+        neighbor_row = LocationCache.objects.get(location=neighbor, source="epa_echo")
+        self.assertEqual(neighbor_row.data["exact_site"], exact_site)
