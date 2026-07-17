@@ -1001,7 +1001,7 @@ def import_google_photos(self, pin_id: int, profile_id: int, session_id: str, me
     from django.core.cache import cache
     from django.core.files.base import ContentFile
 
-    from urbanlens.dashboard.models.google_photos.model import get_photos_account
+    from urbanlens.dashboard.models.google_photos.model import GooglePhotosAccount
     from urbanlens.dashboard.models.images.model import Image
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.profile.model import Profile
@@ -1015,7 +1015,7 @@ def import_google_photos(self, pin_id: int, profile_id: int, session_id: str, me
     counts = {"imported": 0, "skipped": 0, "failed": 0}
     pin = Pin.objects.select_related("location", "profile").filter(pk=pin_id).first()
     profile = Profile.objects.filter(pk=profile_id).first()
-    account = get_photos_account(profile) if profile is not None else None
+    account = GooglePhotosAccount.objects.get_for_profile(profile) if profile is not None else None
     if pin is None or profile is None or account is None:
         update_task_progress(self, current=0, total=1, message="Import failed: pin, profile, or Google Photos connection no longer exists.")
         return counts

@@ -233,11 +233,11 @@ class ImportGooglePhotosTaskTests(TestCase):
         self.assertEqual(counts, {"imported": 0, "skipped": 0, "failed": 0})
 
 
-# -- get_photos_account: self-heal on undecryptable tokens ---------------------
+# -- GooglePhotosAccountManager.get_for_profile: self-heal on undecryptable tokens --
 
 
 class GetPhotosAccountTests(TestCase):
-    """get_photos_account heals accounts left with undecryptable tokens.
+    """GooglePhotosAccountManager.get_for_profile() heals accounts left with undecryptable tokens.
 
     Regression test for a production 500: rotating field_encryption_key
     without migrating old rows makes EncryptedTextField.from_db_value raise
@@ -261,15 +261,11 @@ class GetPhotosAccountTests(TestCase):
             )
 
     def test_returns_account_when_decryptable(self) -> None:
-        from urbanlens.dashboard.models.google_photos.model import get_photos_account
-
-        self.assertEqual(get_photos_account(self.profile), self.account)
+        self.assertEqual(GooglePhotosAccount.objects.get_for_profile(self.profile), self.account)
 
     def test_undecryptable_account_is_healed_to_none(self) -> None:
-        from urbanlens.dashboard.models.google_photos.model import get_photos_account
-
         self._corrupt_stored_access_token()
-        self.assertIsNone(get_photos_account(self.profile))
+        self.assertIsNone(GooglePhotosAccount.objects.get_for_profile(self.profile))
         self.assertFalse(GooglePhotosAccount.objects.filter(profile=self.profile).exists())
 
     def test_settings_view_does_not_500_on_undecryptable_account(self) -> None:

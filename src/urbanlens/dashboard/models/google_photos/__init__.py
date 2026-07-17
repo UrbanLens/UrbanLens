@@ -1,6 +1,5 @@
-from urbanlens.dashboard.models.google_photos.model import GooglePhotosAccount, get_photos_account
+from urbanlens.dashboard.models.google_photos.model import GooglePhotosAccount
 
 __all__ = [
     "GooglePhotosAccount",
-    "get_photos_account",
 ]
