@@ -35,7 +35,7 @@
                         <div class="memories-journal-body">
                             <div class="memories-journal-meta">
                                 <span class="memories-journal-title">{{ entry.title }}</span>
-                                <span class="memories-journal-subtitle">{{ entry.subtitle }}</span>
+                                {% if entry.subtitle %}<span class="memories-journal-subtitle">{{ entry.subtitle }}</span>{% endif %}
                                 <time class="memories-journal-time" datetime="{{ entry.occurred_at|date:'c' }}">{{ entry.occurred_at|date:"g:i A" }}</time>
                             </div>
                             {% if entry.kind == "review" %}

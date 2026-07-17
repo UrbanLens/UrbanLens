@@ -4161,6 +4161,7 @@ function initOrganizePriority() {
 // src/urbanlens/dashboard/frontend/ts/shared/onboarding-tour.ts
 function initOnboardingTour(config) {
   const sessionKey = `${config.prefix}_later`;
+  let activeCard = null;
   function dismissed(id) {
     try {
       return localStorage.getItem(`${config.prefix}_${id}_dismissed`) === "1";
@@ -4185,9 +4186,14 @@ function initOnboardingTour(config) {
       return false;
     }
   }
+  function isCardTargetVisible(card) {
+    const el = document.querySelector(card.target);
+    return !!el && el.offsetParent !== null;
+  }
   function clear() {
     document.querySelector(config.hostSelector)?.replaceChildren();
     document.querySelectorAll(".onboarding-focus").forEach((el) => el.classList.remove("onboarding-focus"));
+    activeCard = null;
   }
   function registerAutoDismiss(card) {
     if (dismissed(card.id) || !card.watchSelector)
@@ -4201,6 +4207,7 @@ function initOnboardingTour(config) {
     if (!host)
       return;
     clear();
+    activeCard = card;
     document.querySelector(card.target)?.classList.add("onboarding-focus");
     const el = document.createElement("section");
     el.className = "page-onboarding-card";
@@ -4223,22 +4230,20 @@ function initOnboardingTour(config) {
   function tryShow() {
     if (laterSet())
       return;
-    const card = config.cards.find((c) => c.ready() && !dismissed(c.id));
+    if (activeCard && (!activeCard.ready() || !isCardTargetVisible(activeCard)))
+      clear();
+    if (document.querySelector(".page-onboarding-card"))
+      return;
+    const card = config.cards.find((c) => c.ready() && isCardTargetVisible(c) && !dismissed(c.id));
     if (card)
       show(card);
   }
   config.cards.forEach(registerAutoDismiss);
   setTimeout(tryShow, config.initialDelayMs ?? 900);
   if (config.retryEvent) {
-    document.addEventListener(config.retryEvent, () => {
-      if (!document.querySelector(".page-onboarding-card"))
-        setTimeout(tryShow, 250);
-    });
+    document.addEventListener(config.retryEvent, () => setTimeout(tryShow, 250));
   } else {
-    document.body.addEventListener("htmx:afterSettle", () => {
-      if (!document.querySelector(".page-onboarding-card"))
-        setTimeout(tryShow, 250);
-    });
+    document.body.addEventListener("htmx:afterSettle", () => setTimeout(tryShow, 250));
   }
 }
 

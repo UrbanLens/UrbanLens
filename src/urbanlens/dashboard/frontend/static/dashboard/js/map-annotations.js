@@ -940,6 +940,18 @@ function init() {
       el.appendChild(dot);
     }
   }
+  window._svShowStaticFallback = function(btn) {
+    const slide = btn.closest(".sv-slide");
+    if (!slide)
+      return;
+    const iframe = slide.querySelector(".sv-embed");
+    const staticImg = slide.querySelector(".sv-img--fallback");
+    if (iframe)
+      iframe.hidden = true;
+    if (staticImg)
+      staticImg.hidden = false;
+    btn.hidden = true;
+  };
   window._svRemoveSlide = function(img) {
     const slide = img.closest(".sv-slide");
     if (!slide)

@@ -74,7 +74,9 @@ def _review_entries(profile: Profile) -> Iterator[JournalEntry]:
             occurred_at=review.created,
             icon="star",
             title=pin.effective_name,
-            subtitle="Rating",
+            # No subtitle - the star row itself already makes it obvious this
+            # entry is a rating, and the label was redundant next to it.
+            subtitle="",
             body="",
             url=reverse("pin.details", kwargs={"pin_slug": pin.slug}),
             rating=review.rating,

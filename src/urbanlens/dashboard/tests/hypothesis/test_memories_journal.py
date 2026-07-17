@@ -72,6 +72,16 @@ class GetJournalEntriesTests(TestCase):
         self.assertEqual(entries[0].rating, 4)
         self.assertEqual(entries[0].title, "Old Factory")
 
+    def test_review_has_no_redundant_rating_subtitle(self) -> None:
+        """Regression guard: the star row itself already conveys "this is a
+        rating" - a "Rating" text label next to it was pure redundancy."""
+        pin = _make_pin(self.profile, name="Old Factory")
+        baker.make("dashboard.Review", profile=self.profile, pin=pin, rating=4)
+
+        entries = get_journal_entries(self.profile)
+
+        self.assertEqual(entries[0].subtitle, "")
+
     def test_pin_comment_links_to_pin_detail(self) -> None:
         pin = _make_pin(self.profile, name="Old Factory")
         baker.make("dashboard.Comment", profile=self.profile, pin=pin, parent=None, text="Watch the third floor.")
@@ -161,3 +171,11 @@ class MemoriesJournalViewTests(TestCase):
         self.assertEqual(len(response.context["journal_entries"]), 2)
         self.assertContains(response, "Old Factory")
         self.assertContains(response, "Rusty catwalks everywhere.")
+
+    def test_rating_entry_does_not_render_a_redundant_rating_label(self) -> None:
+        pin = _make_pin(self.profile, name="Old Factory")
+        baker.make("dashboard.Review", profile=self.profile, pin=pin, rating=4)
+
+        response = self.client.get(reverse("memories.journal"))
+
+        self.assertNotContains(response, '<span class="memories-journal-subtitle">Rating</span>')

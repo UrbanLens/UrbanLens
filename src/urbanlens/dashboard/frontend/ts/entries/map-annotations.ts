@@ -662,6 +662,15 @@ function init(): void {
             el.appendChild(dot);
         }
     }
+    window._svShowStaticFallback = function (btn: HTMLButtonElement): void {
+        const slide = btn.closest<HTMLElement>(".sv-slide");
+        if (!slide) return;
+        const iframe = slide.querySelector<HTMLIFrameElement>(".sv-embed");
+        const staticImg = slide.querySelector<HTMLImageElement>(".sv-img--fallback");
+        if (iframe) iframe.hidden = true;
+        if (staticImg) staticImg.hidden = false;
+        btn.hidden = true;
+    };
     window._svRemoveSlide = function (img: HTMLImageElement): void {
         const slide = img.closest<HTMLElement>(".sv-slide");
         if (!slide) return;
@@ -1962,6 +1971,7 @@ declare global {
         _satShow: (idx: number) => void;
         _satShowRemembered: () => void;
         _svRemoveSlide: (img: HTMLImageElement) => void;
+        _svShowStaticFallback: (btn: HTMLButtonElement) => void;
         _svPrev: () => void;
         _svNext: () => void;
         _svShow: (idx: number) => void;
