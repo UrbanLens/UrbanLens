@@ -98,32 +98,7 @@
         <div class="saved-filter-custom-fields">
             {% for field in form.custom_fields %}
             {% with cfval=custom_field_values|dict_get:field.pk %}
-            <div class="fp-custom-field" title="{{ field.get_field_type_display }} field">
-                <span class="fp-custom-field-label">
-                    <i class="material-symbols-outlined">{{ field.type_icon }}</i>
-                    {{ field.name }}
-                </span>
-                {% if field.field_type == 'number' %}
-                <div class="fp-custom-field-range">
-                    <input type="number" step="any" name="cf_{{ field.id }}_min" class="fp-cf-input" placeholder="Min" aria-label="{{ field.name }} minimum" value="{{ cfval.min|default:'' }}">
-                    <span class="fp-cf-range-sep">–</span>
-                    <input type="number" step="any" name="cf_{{ field.id }}_max" class="fp-cf-input" placeholder="Max" aria-label="{{ field.name }} maximum" value="{{ cfval.max|default:'' }}">
-                </div>
-                {% elif field.field_type == 'date' %}
-                <div class="fp-date-block">
-                    <div class="fp-date-row">
-                        <span class="fp-date-label">After</span>
-                        <input type="date" name="cf_{{ field.id }}_after" class="fp-date-input" aria-label="{{ field.name }} after" value="{{ cfval.after|date:'Y-m-d'|default:'' }}">
-                    </div>
-                    <div class="fp-date-row">
-                        <span class="fp-date-label">Before</span>
-                        <input type="date" name="cf_{{ field.id }}_before" class="fp-date-input" aria-label="{{ field.name }} before" value="{{ cfval.before|date:'Y-m-d'|default:'' }}">
-                    </div>
-                </div>
-                {% else %}
-                <input type="text" name="cf_{{ field.id }}" class="fp-cf-input fp-cf-input--text" placeholder="Contains..." autocomplete="off" aria-label="{{ field.name }}" value="{{ cfval.contains|default:'' }}">
-                {% endif %}
-            </div>
+            {% include "dashboard/partials/custom_fields/_filter_input.html" with field=field cfval=cfval %}
             {% endwith %}
             {% endfor %}
         </div>

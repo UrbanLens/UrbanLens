@@ -42,9 +42,42 @@
 .cf-field-edit {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: .4rem;
 
   &[hidden] { display: none; }
+}
+
+.cf-style-select {
+  flex: 0 0 auto;
+  width: 9.5rem;
+  cursor: pointer;
+
+  &[hidden] { display: none; }
+}
+
+.cf-options-input {
+  flex: 1 1 100%;
+  resize: vertical;
+  min-height: 3.5rem;
+
+  &[hidden] { display: none; }
+}
+
+.cf-slider-bounds {
+  display: flex;
+  align-items: center;
+  gap: .35rem;
+
+  &[hidden] { display: none; }
+}
+
+.cf-bound-input {
+  width: 4.5rem;
+}
+
+.cf-bound-sep {
+  color: var(--ul-grey-5);
 }
 
 .cf-add-btn {
@@ -196,6 +229,65 @@
 .cf-value-input {
   flex: 1 1 auto;
   min-width: 0;
+}
+
+.cf-value-input--long {
+  resize: vertical;
+  min-height: 2.4rem;
+}
+
+.cf-value-checkbox {
+  width: 1.05rem;
+  height: 1.05rem;
+  accent-color: var(--ul-color-accent);
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.cf-value-stars {
+  flex: 1 1 auto;
+}
+
+.cf-value-slider {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.cf-slider-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  accent-color: var(--ul-color-accent);
+  cursor: pointer;
+}
+
+.cf-slider-output {
+  color: var(--ul-grey-6);
+  font-size: .8rem;
+  min-width: 2rem;
+  text-align: right;
+}
+
+.cf-value-url {
+  display: flex;
+  align-items: center;
+  gap: .35rem;
+  flex: 1 1 auto;
+  min-width: 0;
+
+  .cf-value-input { flex: 1 1 auto; }
+}
+
+.cf-url-open {
+  color: var(--ul-grey-5);
+  display: inline-flex;
+  align-items: center;
+
+  .material-symbols-outlined { font-size: 1rem; }
+
+  &:hover { color: var(--ul-color-accent); }
 }
 
 .cf-panel-empty {

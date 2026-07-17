@@ -8,17 +8,8 @@
             <i class="material-symbols-outlined cf-type-icon">{{ row.field.type_icon }}</i>
             {{ row.field.name }}
         </label>
-        <input class="cf-input cf-value-input cf-value-input--{{ row.field.field_type }}"
-               type="{{ row.field.input_type }}"
-               {% if row.field.field_type == 'number' %}step="any"{% endif %}
-               name="value"
-               value="{{ row.value.input_value|default:'' }}"
-               aria-label="{{ row.field.name }}"
-               hx-post="{% url url_name target_arg %}"
-               hx-vals='{"field_id": "{{ row.field.id }}"}'
-               hx-trigger="change"
-               hx-target="closest .cf-lightbox-strip"
-               hx-swap="outerHTML">
+        {% url url_name target_arg as post_url %}
+        {% include "dashboard/partials/custom_fields/_value_input.html" with field=row.field value=row.value post_url=post_url hx_target="closest .cf-lightbox-strip" include_field_id=True %}
     </div>
     {% endfor %}
 </div>

@@ -1,0 +1,50 @@
+{# Wires every .cf-def-form on the page: reveals the style select once a type is chosen #}
+{# (offering only that type's styles), the options editor for select fields, and the #}
+{# bound inputs for the slider style. Included at the end of each panel partial so it #}
+{# re-runs after every HTMX swap. Context: styles_by_type (from the panel views). #}
+{{ styles_by_type|json_script:"cf-styles-data" }}
+<script>
+(function () {
+    var dataEl = document.getElementById('cf-styles-data');
+    var STYLES = dataEl ? JSON.parse(dataEl.textContent) : {};
+    document.querySelectorAll('form.cf-def-form').forEach(function (form) {
+        if (form.dataset.cfWired) { return; }
+        form.dataset.cfWired = '1';
+        var typeSel = form.querySelector('.cf-type-select');
+        var styleSel = form.querySelector('.cf-style-select');
+        var optionsInput = form.querySelector('.cf-options-input');
+        var sliderBounds = form.querySelector('.cf-slider-bounds');
+        if (!typeSel || !styleSel) { return; }
+
+        function rebuildStyles() {
+            var list = STYLES[typeSel.value] || [];
+            var current = styleSel.value || styleSel.dataset.current || '';
+            styleSel.innerHTML = '';
+            list.forEach(function (pair) {
+                var opt = document.createElement('option');
+                opt.value = pair[0];
+                opt.textContent = pair[1];
+                if (pair[0] === current) { opt.selected = true; }
+                styleSel.appendChild(opt);
+            });
+            styleSel.hidden = list.length === 0;
+        }
+
+        function sync() {
+            var isSelect = typeSel.value === 'select';
+            if (optionsInput) {
+                optionsInput.hidden = !isSelect;
+                optionsInput.required = isSelect;
+            }
+            if (sliderBounds) {
+                sliderBounds.hidden = !(typeSel.value === 'number' && styleSel.value === 'slider');
+            }
+        }
+
+        typeSel.addEventListener('change', function () { rebuildStyles(); sync(); });
+        styleSel.addEventListener('change', sync);
+        rebuildStyles();
+        sync();
+    });
+}());
+</script>

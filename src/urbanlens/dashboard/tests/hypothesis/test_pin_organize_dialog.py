@@ -114,14 +114,14 @@ class CustomFieldsAddFormVisibilityTests(TestCase):
 
     def test_add_form_hidden_when_pin_has_no_custom_fields(self) -> None:
         response = self.client.get(reverse("pin.custom_fields", args=[self.pin.slug]))
-        self.assertContains(response, 'class="cf-add-form" hidden')
+        self.assertContains(response, 'class="cf-add-form cf-def-form" hidden')
 
     def test_add_form_still_hidden_when_pin_already_has_custom_fields(self) -> None:
         """The add form must start hidden regardless of whether any rows are shown above it."""
         baker.make("dashboard.CustomField", profile=self.profile, entity_type="pin", name="Gate Code")
         response = self.client.get(reverse("pin.custom_fields", args=[self.pin.slug]))
         self.assertContains(response, "Gate Code")
-        self.assertContains(response, 'class="cf-add-form" hidden')
+        self.assertContains(response, 'class="cf-add-form cf-def-form" hidden')
 
 
 class PinWikiLinkVisibilityTests(TestCase):

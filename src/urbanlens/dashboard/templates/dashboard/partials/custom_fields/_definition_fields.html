@@ -1,0 +1,20 @@
+{# Type / style / options / slider-bound controls shared by every custom-field add and edit form. #}
+{# The owning form must carry class "cf-def-form"; _definition_form_script.html wires the #}
+{# show/hide logic (style options appear only once a type is chosen, and only styles valid #}
+{# for that type are offered). #}
+{# Context: field_types, optional field (prefills the edit form), require_type (add forms #}
+{# start with no type selected so the style choice reveals itself after the type is picked). #}
+<select name="field_type" class="cf-input cf-type-select" title="Field type" {% if require_type %}required{% endif %}>
+    {% if require_type and not field %}<option value="" disabled selected>Type...</option>{% endif %}
+    {% for value, label in field_types %}
+    <option value="{{ value }}" {% if field.field_type == value %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+</select>
+<select name="style" class="cf-input cf-style-select" title="Style" data-current="{{ field.style|default:'' }}" hidden></select>
+<textarea name="options" class="cf-input cf-options-input" rows="3" hidden
+          placeholder="One option per line" title="Options (one per line)">{{ field.options_text|default:'' }}</textarea>
+<span class="cf-slider-bounds" hidden>
+    <input type="number" step="any" name="slider_min" class="cf-input cf-bound-input" placeholder="Min" title="Slider minimum" aria-label="Slider minimum" value="{{ field.config.min|default:'' }}">
+    <span class="cf-bound-sep">–</span>
+    <input type="number" step="any" name="slider_max" class="cf-input cf-bound-input" placeholder="Max" title="Slider maximum" aria-label="Slider maximum" value="{{ field.config.max|default:'' }}">
+</span>

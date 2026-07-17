@@ -12,7 +12,7 @@ is the inverse, rehydrating a stored dict back into the shape
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, time
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -98,6 +98,10 @@ def _serialize_custom_field_criterion(criterion: dict[str, Any]) -> dict[str, An
     entry: dict[str, Any] = {"field_id": criterion["field"].pk}
     if "contains" in criterion:
         entry["contains"] = criterion["contains"]
+    if "equals" in criterion:
+        entry["equals"] = criterion["equals"]
+    if "checked" in criterion:
+        entry["checked"] = bool(criterion["checked"])
     if "min" in criterion or "max" in criterion:
         minimum = criterion.get("min")
         maximum = criterion.get("max")
@@ -108,6 +112,11 @@ def _serialize_custom_field_criterion(criterion: dict[str, Any]) -> dict[str, An
         before = criterion.get("before")
         entry["after"] = after.isoformat() if after else None
         entry["before"] = before.isoformat() if before else None
+    if "after_time" in criterion or "before_time" in criterion:
+        after_time = criterion.get("after_time")
+        before_time = criterion.get("before_time")
+        entry["after_time"] = after_time.isoformat() if after_time else None
+        entry["before_time"] = before_time.isoformat() if before_time else None
     return entry
 
 
@@ -158,12 +167,21 @@ def deserialize_criteria(stored: dict[str, Any], profile: Profile) -> dict[str, 
 def _deserialize_custom_field_bounds(criterion: dict[str, Any]) -> dict[str, Any]:
     if "contains" in criterion:
         return {"contains": criterion["contains"]}
+    if "equals" in criterion:
+        return {"equals": criterion["equals"]}
+    if "checked" in criterion:
+        return {"checked": bool(criterion["checked"])}
     if "min" in criterion or "max" in criterion:
         from decimal import Decimal
 
         return {
             "min": Decimal(criterion["min"]) if criterion.get("min") is not None else None,
             "max": Decimal(criterion["max"]) if criterion.get("max") is not None else None,
+        }
+    if "after_time" in criterion or "before_time" in criterion:
+        return {
+            "after_time": time.fromisoformat(criterion["after_time"]) if criterion.get("after_time") else None,
+            "before_time": time.fromisoformat(criterion["before_time"]) if criterion.get("before_time") else None,
         }
     if "after" in criterion or "before" in criterion:
         return {

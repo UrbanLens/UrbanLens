@@ -99,7 +99,14 @@ class SearchForm(forms.Form):
             elif cf.field_type == CustomFieldType.DATE:
                 self.fields[f"cf_{cf.pk}_after"] = forms.DateField(required=False, input_formats=["%Y-%m-%d"])
                 self.fields[f"cf_{cf.pk}_before"] = forms.DateField(required=False, input_formats=["%Y-%m-%d"])
-            else:
+            elif cf.field_type == CustomFieldType.TIME:
+                self.fields[f"cf_{cf.pk}_after"] = forms.TimeField(required=False)
+                self.fields[f"cf_{cf.pk}_before"] = forms.TimeField(required=False)
+            elif cf.field_type == CustomFieldType.SELECT:
+                self.fields[f"cf_{cf.pk}"] = forms.ChoiceField(required=False, choices=[("", "Any"), *[(choice, choice) for choice in cf.select_choices]])
+            elif cf.field_type == CustomFieldType.CHECKBOX:
+                self.fields[f"cf_{cf.pk}"] = forms.ChoiceField(required=False, choices=[("", "Any"), ("checked", "Checked"), ("unchecked", "Unchecked")])
+            else:  # text and url fields filter as free-text "contains"
                 self.fields[f"cf_{cf.pk}"] = forms.CharField(required=False)
 
     def parse_custom_field_criteria(self) -> list[dict] | None:
@@ -109,9 +116,12 @@ class SearchForm(forms.Form):
             List of criteria dicts (each carrying its ``field`` plus the active
             bounds/text), or None when no custom-field filter is set. Shapes::
 
-                {"field": cf, "contains": str}                      # text
+                {"field": cf, "contains": str}                      # text / url
                 {"field": cf, "min": Decimal|None, "max": ...}      # number
                 {"field": cf, "after": date|None, "before": ...}    # date
+                {"field": cf, "after_time": time|None, "before_time": ...}  # time
+                {"field": cf, "equals": str}                        # select
+                {"field": cf, "checked": bool}                      # checkbox
         """
         criteria: list[dict] = []
         for cf in self.custom_fields:
@@ -125,6 +135,19 @@ class SearchForm(forms.Form):
                 before = self.cleaned_data.get(f"cf_{cf.pk}_before")
                 if after is not None or before is not None:
                     criteria.append({"field": cf, "after": after, "before": before})
+            elif cf.field_type == CustomFieldType.TIME:
+                after = self.cleaned_data.get(f"cf_{cf.pk}_after")
+                before = self.cleaned_data.get(f"cf_{cf.pk}_before")
+                if after is not None or before is not None:
+                    criteria.append({"field": cf, "after_time": after, "before_time": before})
+            elif cf.field_type == CustomFieldType.SELECT:
+                chosen = (self.cleaned_data.get(f"cf_{cf.pk}") or "").strip()
+                if chosen:
+                    criteria.append({"field": cf, "equals": chosen})
+            elif cf.field_type == CustomFieldType.CHECKBOX:
+                state = (self.cleaned_data.get(f"cf_{cf.pk}") or "").strip()
+                if state in ("checked", "unchecked"):
+                    criteria.append({"field": cf, "checked": state == "checked"})
             else:
                 text = (self.cleaned_data.get(f"cf_{cf.pk}") or "").strip()
                 if text:

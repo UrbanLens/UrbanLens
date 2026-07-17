@@ -31,19 +31,17 @@
     </p>
     {% endif %}
 
-    <form class="cf-add-form" hidden
+    <form class="cf-add-form cf-def-form" hidden
           hx-post="{% url 'pin.custom_fields' pin.slug %}"
           hx-target="#pin-custom-fields-panel"
           hx-swap="outerHTML">
         {% csrf_token %}
         <input type="text" name="name" class="cf-input cf-name-input" placeholder="New field name..." maxlength="100" required>
-        <select name="field_type" class="cf-input cf-type-select" title="Field type">
-            {% for value, label in field_types %}
-            <option value="{{ value }}">{{ label }}</option>
-            {% endfor %}
-        </select>
+        {% include "dashboard/partials/custom_fields/_definition_fields.html" with require_type=True %}
         <button type="submit" class="btn btn--icon-sm cf-add-btn" title="Add field">
             <i class="material-symbols-outlined">add</i>
         </button>
     </form>
+
+    {% include "dashboard/partials/custom_fields/_definition_form_script.html" %}
 </div>

@@ -304,8 +304,9 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
         Args:
             custom_field_criteria: List of dicts from
                 ``SearchForm.parse_custom_field_criteria()``: each has ``field``
-                plus ``contains`` (text), ``min``/``max`` (number), or
-                ``after``/``before`` (date).
+                plus ``contains`` (text/url), ``min``/``max`` (number),
+                ``after``/``before`` (date), ``after_time``/``before_time``
+                (time), ``equals`` (select), or ``checked`` (checkbox).
 
         Returns:
             Filtered QuerySet.
@@ -315,9 +316,17 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
             field = criterion.get("field")
             if field is None:
                 continue
+            if criterion.get("checked") is False:
+                # "Unchecked" means not affirmatively checked: no stored value counts too.
+                qs = qs.exclude(custom_field_values__field=field, custom_field_values__value_boolean=True)
+                continue
             lookups: dict = {"custom_field_values__field": field}
             if contains := criterion.get("contains"):
                 lookups["custom_field_values__value_text__icontains"] = contains
+            if equals := criterion.get("equals"):
+                lookups["custom_field_values__value_text"] = equals
+            if criterion.get("checked") is True:
+                lookups["custom_field_values__value_boolean"] = True
             if (minimum := criterion.get("min")) is not None:
                 lookups["custom_field_values__value_number__gte"] = minimum
             if (maximum := criterion.get("max")) is not None:
@@ -326,6 +335,10 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
                 lookups["custom_field_values__value_date__gte"] = after
             if (before := criterion.get("before")) is not None:
                 lookups["custom_field_values__value_date__lte"] = before
+            if (after_time := criterion.get("after_time")) is not None:
+                lookups["custom_field_values__value_time__gte"] = after_time
+            if (before_time := criterion.get("before_time")) is not None:
+                lookups["custom_field_values__value_time__lte"] = before_time
             if len(lookups) > 1:
                 qs = qs.filter(**lookups)
         return qs

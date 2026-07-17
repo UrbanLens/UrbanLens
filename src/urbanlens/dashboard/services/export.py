@@ -347,6 +347,8 @@ def _export_custom_fields(profile: Any, temp_dir: str, *, base_url: str = "") ->
                 "entity_type": field.entity_type,
                 "name": field.name,
                 "field_type": field.field_type,
+                "style": field.style,
+                "config": field.config or {},
                 "created": str(field.created),
                 "values": values,
             },

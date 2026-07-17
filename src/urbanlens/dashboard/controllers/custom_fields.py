@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 from typing import TYPE_CHECKING, Any
 
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -23,6 +24,7 @@ from django.views import View
 
 from urbanlens.dashboard.models.custom_fields.model import (
     ENTITY_ICONS,
+    STYLES_BY_TYPE,
     CustomField,
     CustomFieldEntity,
     CustomFieldType,
@@ -113,17 +115,83 @@ def save_value(field: CustomField, target: Any, raw: str) -> tuple[CustomFieldVa
     return value, None
 
 
-def _parse_definition(request: HttpRequest) -> tuple[str, str, str | None]:
-    """Extract and validate (name, field_type, error) from a create/update POST."""
+#: Hard cap on select options, to keep dropdowns (and the config JSON) sane.
+_MAX_SELECT_OPTIONS = 100
+
+
+def _parse_options(raw: str) -> tuple[list[str], str | None]:
+    """Parse a select field's options from newline/comma-separated text.
+
+    Args:
+        raw: The raw ``options`` POST value.
+
+    Returns:
+        Tuple of (deduplicated option list, error message or None).
+    """
+    pieces = [piece.strip() for chunk in raw.splitlines() for piece in chunk.split(",")]
+    options: list[str] = []
+    for piece in pieces:
+        if not piece or piece in options:
+            continue
+        if len(piece) > 100:
+            return [], "Options must be 100 characters or less."
+        options.append(piece)
+    if not options:
+        return [], "Select fields need at least one option."
+    if len(options) > _MAX_SELECT_OPTIONS:
+        return [], f"Too many options ({_MAX_SELECT_OPTIONS} max)."
+    return options, None
+
+
+def _parse_definition(request: HttpRequest) -> tuple[dict[str, Any], str | None]:
+    """Extract and validate a field definition from a create/update POST.
+
+    Reads ``name``, ``field_type``, ``style``, ``options`` (select fields), and
+    ``slider_min``/``slider_max`` (slider style), validating each against the
+    chosen type.
+
+    Returns:
+        Tuple of (definition dict with ``name``/``field_type``/``style``/``config``
+        keys, error message or None). The dict is empty when there's an error.
+    """
     name = (request.POST.get("name") or "").strip()
-    field_type = (request.POST.get("field_type") or CustomFieldType.TEXT).strip()
+    field_type = (request.POST.get("field_type") or "").strip() or CustomFieldType.TEXT
+    style = (request.POST.get("style") or "").strip()
     if not name:
-        return "", "", "Name is required."
+        return {}, "Name is required."
     if len(name) > 100:
-        return "", "", "Name is too long (100 characters max)."
+        return {}, "Name is too long (100 characters max)."
     if field_type not in CustomFieldType.values:
-        return "", "", "Invalid field type."
-    return name, field_type, None
+        return {}, "Invalid field type."
+
+    allowed_styles = [value for value, _ in STYLES_BY_TYPE.get(field_type, [])]
+    if style and style not in allowed_styles:
+        return {}, "That style doesn't apply to this field type."
+
+    config: dict[str, Any] = {}
+    if field_type == CustomFieldType.SELECT:
+        options, error = _parse_options(request.POST.get("options") or "")
+        if error:
+            return {}, error
+        config["choices"] = options
+    if style == "slider":
+        bounds: dict[str, float] = {}
+        for key in ("slider_min", "slider_max"):
+            raw_bound = (request.POST.get(key) or "").strip()
+            if not raw_bound:
+                continue
+            try:
+                parsed_bound = float(raw_bound)
+            except ValueError:
+                return {}, "Slider bounds must be numbers."
+            if not math.isfinite(parsed_bound):
+                return {}, "Slider bounds must be numbers."
+            bounds[key.removeprefix("slider_")] = parsed_bound
+        if "min" in bounds and "max" in bounds and bounds["min"] >= bounds["max"]:
+            return {}, "The slider minimum must be less than its maximum."
+        config.update(bounds)
+
+    return {"name": name, "field_type": field_type, "style": style, "config": config}, None
 
 
 def create_field(profile: Profile, entity_type: str, request: HttpRequest) -> str | None:
@@ -132,22 +200,23 @@ def create_field(profile: Profile, entity_type: str, request: HttpRequest) -> st
     Args:
         profile: The owning profile.
         entity_type: A :class:`CustomFieldEntity` value.
-        request: POST carrying ``name`` and ``field_type``.
+        request: POST carrying ``name``, ``field_type``, and optionally
+            ``style``/``options``/``slider_min``/``slider_max``.
 
     Returns:
         None on success, or a user-facing error message.
     """
     if entity_type not in CustomFieldEntity.values:
         return "Invalid entity type."
-    name, field_type, error = _parse_definition(request)
+    definition, error = _parse_definition(request)
     if error:
         return error
-    if CustomField.objects.filter(profile=profile, entity_type=entity_type, name__iexact=name).exists():
-        return f"You already have a “{name}” field there."
+    if CustomField.objects.filter(profile=profile, entity_type=entity_type, name__iexact=definition["name"]).exists():
+        return f"You already have a “{definition['name']}” field there."
     try:
-        CustomField.objects.create(profile=profile, entity_type=entity_type, name=name, field_type=field_type)
+        CustomField.objects.create(profile=profile, entity_type=entity_type, **definition)
     except IntegrityError:
-        return f"You already have a “{name}” field there."
+        return f"You already have a “{definition['name']}” field there."
     return None
 
 
@@ -172,7 +241,7 @@ class CustomFieldSettingsPanelView(LoginRequiredMixin, View):
         response = render(
             request,
             "dashboard/partials/custom_fields/settings_panel.html",
-            {"groups": groups, "field_types": CustomFieldType.choices},
+            {"groups": groups, "field_types": CustomFieldType.choices, "styles_by_type": STYLES_BY_TYPE},
         )
         if error:
             return _show_toast(response, error, level="error")
@@ -194,16 +263,24 @@ class CustomFieldUpdateView(LoginRequiredMixin, View):
     def post(self, request: HttpRequest, field_id: int) -> HttpResponse:
         profile = _profile_for(request)
         field = get_object_or_404(CustomField, id=field_id, profile=profile)
-        name, field_type, error = _parse_definition(request)
-        if error is None and field_type != field.field_type and field.values.exists():
+        definition, error = _parse_definition(request)
+        name = definition.get("name", "")
+        if error is None and definition["field_type"] != field.field_type and field.values.exists():
             error = "This field already has values - clear them before changing its type."
         if error is None and name.lower() != field.name.lower() and CustomField.objects.filter(profile=profile, entity_type=field.entity_type, name__iexact=name).exclude(pk=field.pk).exists():
             error = f"You already have a “{name}” field there."
         if error is None:
             field.name = name
-            field.field_type = field_type
+            field.field_type = definition["field_type"]
+            field.style = definition["style"]
+            # Keep any config keys the form doesn't manage, but replace the managed ones.
+            config = dict(field.config or {})
+            for key in ("choices", "min", "max"):
+                config.pop(key, None)
+            config.update(definition["config"])
+            field.config = config
             try:
-                field.save(update_fields=["name", "field_type", "updated"])
+                field.save(update_fields=["name", "field_type", "style", "config", "updated"])
             except IntegrityError:
                 error = f"You already have a “{name}” field there."
         return CustomFieldSettingsPanelView()._render_panel(request, profile, error=error)  # noqa: SLF001
@@ -233,6 +310,7 @@ def _render_pin_panel(request: HttpRequest, profile: Profile, pin: Pin, error: s
             "pin": pin,
             "rows": rows_for_target(profile, CustomFieldEntity.PIN, pin),
             "field_types": CustomFieldType.choices,
+            "styles_by_type": STYLES_BY_TYPE,
         },
     )
     if error:

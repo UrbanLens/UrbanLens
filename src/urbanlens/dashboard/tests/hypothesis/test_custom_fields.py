@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, time
 from decimal import Decimal
 import json
 import os
@@ -14,7 +14,7 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.forms.search import SearchForm
-from urbanlens.dashboard.models.custom_fields.model import CustomField, CustomFieldEntity, CustomFieldType, CustomFieldValue
+from urbanlens.dashboard.models.custom_fields.model import CustomField, CustomFieldEntity, CustomFieldStyle, CustomFieldType, CustomFieldValue
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.markup.model import MarkupMap
 from urbanlens.dashboard.models.pin.model import Pin
@@ -378,3 +378,305 @@ class CustomFieldExportTests(CustomFieldTestsBase):
             _export_custom_fields(self.profile, temp_dir)
             with open(os.path.join(temp_dir, "custom_fields.json"), encoding="utf-8") as fh:
                 self.assertEqual(json.load(fh), [])
+
+    def test_export_includes_style_config_and_new_value_types(self) -> None:
+        select_field = CustomField.objects.create(
+            profile=self.profile, entity_type=CustomFieldEntity.PIN, name="Access", field_type=CustomFieldType.SELECT, config={"choices": ["Open", "Locked"]},
+        )
+        CustomFieldValue.objects.create(field=select_field, pin=self.pin, value_text="Open")
+        checkbox_field = self._field(name="Has power", field_type=CustomFieldType.CHECKBOX)
+        CustomFieldValue.objects.create(field=checkbox_field, pin=self.pin, value_boolean=True)
+        time_field = self._field(name="Best hour", field_type=CustomFieldType.TIME)
+        CustomFieldValue.objects.create(field=time_field, pin=self.pin, value_time=time(6, 30))
+        stars_field = CustomField.objects.create(
+            profile=self.profile, entity_type=CustomFieldEntity.PIN, name="Photogenic", field_type=CustomFieldType.NUMBER, style=CustomFieldStyle.STARS,
+        )
+        CustomFieldValue.objects.create(field=stars_field, pin=self.pin, value_number=Decimal("4"))
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            _export_custom_fields(self.profile, temp_dir)
+            with open(os.path.join(temp_dir, "custom_fields.json"), encoding="utf-8") as fh:
+                rows = json.load(fh)
+
+        by_name = {row["name"]: row for row in rows}
+        self.assertEqual(by_name["Access"]["config"], {"choices": ["Open", "Locked"]})
+        self.assertEqual(by_name["Access"]["values"][0]["value"], "Open")
+        self.assertEqual(by_name["Photogenic"]["style"], "stars")
+        self.assertIs(by_name["Has power"]["values"][0]["value"], True)
+        self.assertEqual(by_name["Best hour"]["values"][0]["value"], "06:30:00")
+
+
+class NewTypeValueParsingTests(TestCase):
+    """set_value/display_value behavior for the time/select/checkbox/url types."""
+
+    def _value(self, field_type: str, config: dict | None = None) -> CustomFieldValue:
+        return CustomFieldValue(field=CustomField(field_type=field_type, config=config or {}))
+
+    @given(st.times().map(lambda t: t.replace(second=0, microsecond=0)))
+    @hypothesis_settings(max_examples=25, deadline=None)
+    def test_time_round_trip(self, moment: time) -> None:
+        value = self._value(CustomFieldType.TIME)
+        value.set_value(moment.isoformat("minutes"))
+        self.assertEqual(value.value_time, moment)
+        self.assertEqual(value.display_value, moment.isoformat("minutes"))
+
+    def test_invalid_time_raises(self) -> None:
+        value = self._value(CustomFieldType.TIME)
+        with self.assertRaises(ValueError):
+            value.set_value("25:99")
+
+    def test_checkbox_parses_truthy_and_falsy_words(self) -> None:
+        value = self._value(CustomFieldType.CHECKBOX)
+        for raw in ("true", "1", "on", "YES"):
+            value.set_value(raw)
+            self.assertIs(value.value_boolean, True, raw)
+        for raw in ("false", "0", "off", "No"):
+            value.set_value(raw)
+            self.assertIs(value.value_boolean, False, raw)
+        self.assertEqual(value.display_value, "No")
+
+    def test_checkbox_rejects_garbage(self) -> None:
+        value = self._value(CustomFieldType.CHECKBOX)
+        with self.assertRaises(ValueError):
+            value.set_value("maybe")
+
+    def test_select_accepts_only_configured_choices(self) -> None:
+        value = self._value(CustomFieldType.SELECT, config={"choices": ["Open", "Locked"]})
+        value.set_value("Locked")
+        self.assertEqual(value.value_text, "Locked")
+        with self.assertRaises(ValueError):
+            value.set_value("Ajar")
+
+    def test_url_validates_and_prefixes_scheme(self) -> None:
+        value = self._value(CustomFieldType.URL)
+        value.set_value("example.com/history")
+        self.assertEqual(value.value_text, "https://example.com/history")
+        value.set_value("http://example.org")
+        self.assertEqual(value.value_text, "http://example.org")
+        with self.assertRaises(ValueError):
+            value.set_value("not a url at all")
+        with self.assertRaises(ValueError):
+            value.set_value("javascript://alert(1)")
+
+    def test_set_value_clears_other_typed_columns(self) -> None:
+        value = self._value(CustomFieldType.CHECKBOX)
+        value.value_text = "stale"
+        value.value_number = Decimal("7")
+        value.set_value("true")
+        self.assertEqual(value.value_text, "")
+        self.assertIsNone(value.value_number)
+        self.assertIs(value.value_boolean, True)
+
+
+class CustomFieldStyleTests(TestCase):
+    """effective_style resolution and select/slider config helpers."""
+
+    def test_effective_style_defaults_per_type(self) -> None:
+        self.assertEqual(CustomField(field_type=CustomFieldType.TEXT).effective_style, CustomFieldStyle.SHORT_TEXT)
+        self.assertEqual(CustomField(field_type=CustomFieldType.NUMBER).effective_style, CustomFieldStyle.NUMBER_INPUT)
+        self.assertEqual(CustomField(field_type=CustomFieldType.DATE).effective_style, "")
+
+    def test_effective_style_honors_valid_choice(self) -> None:
+        field = CustomField(field_type=CustomFieldType.NUMBER, style=CustomFieldStyle.STARS)
+        self.assertEqual(field.effective_style, CustomFieldStyle.STARS)
+
+    def test_effective_style_ignores_style_from_another_type(self) -> None:
+        field = CustomField(field_type=CustomFieldType.TEXT, style=CustomFieldStyle.SLIDER)
+        self.assertEqual(field.effective_style, CustomFieldStyle.SHORT_TEXT)
+
+    def test_select_choices_tolerate_bad_config(self) -> None:
+        self.assertEqual(CustomField(field_type=CustomFieldType.SELECT, config={"choices": "oops"}).select_choices, [])
+        self.assertEqual(CustomField(field_type=CustomFieldType.SELECT, config=None).select_choices, [])
+        self.assertEqual(CustomField(field_type=CustomFieldType.TEXT, config={"choices": ["x"]}).select_choices, [])
+
+    def test_slider_bounds_default_and_override(self) -> None:
+        field = CustomField(field_type=CustomFieldType.NUMBER, style=CustomFieldStyle.SLIDER)
+        self.assertEqual(field.slider_min, Decimal(0))
+        self.assertEqual(field.slider_max, Decimal(100))
+        field.config = {"min": 1, "max": 10}
+        self.assertEqual(field.slider_min, Decimal(1))
+        self.assertEqual(field.slider_max, Decimal(10))
+
+
+class CustomFieldDefinitionStyleViewTests(CustomFieldTestsBase):
+    """Creating/updating fields with styles, options, and slider bounds."""
+
+    def test_create_select_field_with_options(self) -> None:
+        self.client.post(
+            reverse("custom_fields.settings"),
+            {"entity_type": "pin", "name": "Access", "field_type": "select", "options": "Open\nLocked, Guarded\nOpen"},
+        )
+        field = CustomField.objects.get(profile=self.profile, name="Access")
+        self.assertEqual(field.select_choices, ["Open", "Locked", "Guarded"])
+
+    def test_select_field_requires_options(self) -> None:
+        self.client.post(
+            reverse("custom_fields.settings"),
+            {"entity_type": "pin", "name": "Access", "field_type": "select", "options": "   "},
+        )
+        self.assertFalse(CustomField.objects.filter(profile=self.profile, name="Access").exists())
+
+    def test_style_must_match_type(self) -> None:
+        self.client.post(
+            reverse("custom_fields.settings"),
+            {"entity_type": "pin", "name": "Notes", "field_type": "text", "style": "stars"},
+        )
+        self.assertFalse(CustomField.objects.filter(profile=self.profile, name="Notes").exists())
+
+    def test_create_slider_field_with_bounds(self) -> None:
+        self.client.post(
+            reverse("custom_fields.settings"),
+            {"entity_type": "pin", "name": "Decay", "field_type": "number", "style": "slider", "slider_min": "1", "slider_max": "10"},
+        )
+        field = CustomField.objects.get(profile=self.profile, name="Decay")
+        self.assertEqual(field.style, CustomFieldStyle.SLIDER)
+        self.assertEqual(field.slider_min, Decimal(1))
+        self.assertEqual(field.slider_max, Decimal(10))
+
+    def test_slider_bounds_must_be_ordered(self) -> None:
+        self.client.post(
+            reverse("custom_fields.settings"),
+            {"entity_type": "pin", "name": "Decay", "field_type": "number", "style": "slider", "slider_min": "10", "slider_max": "1"},
+        )
+        self.assertFalse(CustomField.objects.filter(profile=self.profile, name="Decay").exists())
+
+    def test_update_changes_style_and_options(self) -> None:
+        field = CustomField.objects.create(
+            profile=self.profile, entity_type=CustomFieldEntity.PIN, name="Access", field_type=CustomFieldType.SELECT, config={"choices": ["Open"]},
+        )
+        self.client.post(
+            reverse("custom_fields.update", args=[field.id]),
+            {"name": "Access", "field_type": "select", "options": "Open\nLocked"},
+        )
+        field.refresh_from_db()
+        self.assertEqual(field.select_choices, ["Open", "Locked"])
+
+    def test_update_to_stars_style(self) -> None:
+        field = self._field(name="Photogenic", field_type=CustomFieldType.NUMBER)
+        self.client.post(
+            reverse("custom_fields.update", args=[field.id]),
+            {"name": "Photogenic", "field_type": "number", "style": "stars"},
+        )
+        field.refresh_from_db()
+        self.assertEqual(field.style, CustomFieldStyle.STARS)
+
+
+class NewTypeValueEndpointTests(CustomFieldTestsBase):
+    """Saving select/checkbox/time/url values on a pin."""
+
+    def _post(self, field: CustomField, raw: str):
+        return self.client.post(reverse("pin.custom_fields.value", args=[self.pin.slug, field.id]), {"value": raw})
+
+    def test_select_value_saves_and_rejects_unknown(self) -> None:
+        field = CustomField.objects.create(
+            profile=self.profile, entity_type=CustomFieldEntity.PIN, name="Access", field_type=CustomFieldType.SELECT, config={"choices": ["Open", "Locked"]},
+        )
+        self._post(field, "Open")
+        self.assertEqual(CustomFieldValue.objects.get(field=field, pin=self.pin).value_text, "Open")
+        self._post(field, "Ajar")
+        self.assertEqual(CustomFieldValue.objects.get(field=field, pin=self.pin).value_text, "Open")
+
+    def test_checkbox_checks_and_unchecks(self) -> None:
+        field = self._field(name="Has power", field_type=CustomFieldType.CHECKBOX)
+        self._post(field, "true")
+        self.assertIs(CustomFieldValue.objects.get(field=field, pin=self.pin).value_boolean, True)
+        # An unchecked checkbox posts no value at all, which clears the row.
+        self._post(field, "")
+        self.assertFalse(CustomFieldValue.objects.filter(field=field, pin=self.pin).exists())
+
+    def test_time_value_saves(self) -> None:
+        field = self._field(name="Best hour", field_type=CustomFieldType.TIME)
+        self._post(field, "06:30")
+        self.assertEqual(CustomFieldValue.objects.get(field=field, pin=self.pin).value_time, time(6, 30))
+
+    def test_url_value_saves_with_prefix(self) -> None:
+        field = self._field(name="History link", field_type=CustomFieldType.URL)
+        self._post(field, "example.com/mill")
+        self.assertEqual(CustomFieldValue.objects.get(field=field, pin=self.pin).value_text, "https://example.com/mill")
+
+
+class NewTypeMapFilterTests(CustomFieldTestsBase):
+    """SearchForm dynamic fields and queryset filtering for the new types."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.select_field = CustomField.objects.create(
+            profile=self.profile, entity_type=CustomFieldEntity.PIN, name="Access", field_type=CustomFieldType.SELECT, config={"choices": ["Open", "Locked"]},
+        )
+        self.checkbox_field = self._field(name="Has power", field_type=CustomFieldType.CHECKBOX)
+        self.time_field = self._field(name="Best hour", field_type=CustomFieldType.TIME)
+        self.url_field = self._field(name="History link", field_type=CustomFieldType.URL)
+
+        self.open_pin = baker.make(Pin, profile=self.profile, name="Open Asylum", name_is_user_provided=True)
+        CustomFieldValue.objects.create(field=self.select_field, pin=self.open_pin, value_text="Open")
+        CustomFieldValue.objects.create(field=self.checkbox_field, pin=self.open_pin, value_boolean=True)
+        CustomFieldValue.objects.create(field=self.time_field, pin=self.open_pin, value_time=time(6, 0))
+        CustomFieldValue.objects.create(field=self.url_field, pin=self.open_pin, value_text="https://example.com/asylum")
+
+        self.locked_pin = baker.make(Pin, profile=self.profile, name="Locked Mill", name_is_user_provided=True)
+        CustomFieldValue.objects.create(field=self.select_field, pin=self.locked_pin, value_text="Locked")
+        CustomFieldValue.objects.create(field=self.time_field, pin=self.locked_pin, value_time=time(22, 15))
+
+    def _filtered(self, form_data: dict) -> set[str]:
+        form = SearchForm(form_data, profile=self.profile)
+        self.assertTrue(form.is_valid(), form.errors)
+        criteria = dict(form.cleaned_data)
+        if (custom := form.parse_custom_field_criteria()) is not None:
+            criteria["custom_fields"] = custom
+        return {p.name for p in Pin.objects.filter(profile=self.profile).filter_by_criteria(criteria)}
+
+    def test_form_adds_expected_field_kinds(self) -> None:
+        form = SearchForm({}, profile=self.profile)
+        self.assertIn(f"cf_{self.select_field.pk}", form.fields)
+        self.assertIn(f"cf_{self.checkbox_field.pk}", form.fields)
+        self.assertIn(f"cf_{self.time_field.pk}_after", form.fields)
+        self.assertIn(f"cf_{self.time_field.pk}_before", form.fields)
+        self.assertIn(f"cf_{self.url_field.pk}", form.fields)
+
+    def test_select_equals_filter(self) -> None:
+        self.assertEqual(self._filtered({f"cf_{self.select_field.pk}": "Open"}), {"Open Asylum"})
+        self.assertEqual(self._filtered({f"cf_{self.select_field.pk}": "Locked"}), {"Locked Mill"})
+
+    def test_checkbox_checked_filter(self) -> None:
+        self.assertEqual(self._filtered({f"cf_{self.checkbox_field.pk}": "checked"}), {"Open Asylum"})
+
+    def test_checkbox_unchecked_includes_pins_without_a_value(self) -> None:
+        names = self._filtered({f"cf_{self.checkbox_field.pk}": "unchecked"})
+        self.assertNotIn("Open Asylum", names)
+        self.assertIn("Locked Mill", names)
+        self.assertIn("Old Mill", names)
+
+    def test_time_range_filter(self) -> None:
+        self.assertEqual(self._filtered({f"cf_{self.time_field.pk}_after": "12:00"}), {"Locked Mill"})
+        self.assertEqual(self._filtered({f"cf_{self.time_field.pk}_before": "12:00"}), {"Open Asylum"})
+
+    def test_url_contains_filter(self) -> None:
+        self.assertEqual(self._filtered({f"cf_{self.url_field.pk}": "asylum"}), {"Open Asylum"})
+
+
+class NewTypeCriteriaRoundTripTests(CustomFieldTestsBase):
+    """serialize_form_criteria / deserialize_criteria for the new criterion shapes."""
+
+    def test_round_trip_preserves_new_shapes(self) -> None:
+        from urbanlens.dashboard.services.filter_criteria import deserialize_criteria, serialize_form_criteria
+
+        select_field = CustomField.objects.create(
+            profile=self.profile, entity_type=CustomFieldEntity.PIN, name="Access", field_type=CustomFieldType.SELECT, config={"choices": ["Open", "Locked"]},
+        )
+        checkbox_field = self._field(name="Has power", field_type=CustomFieldType.CHECKBOX)
+        time_field = self._field(name="Best hour", field_type=CustomFieldType.TIME)
+
+        criteria = [
+            {"field": select_field, "equals": "Open"},
+            {"field": checkbox_field, "checked": False},
+            {"field": time_field, "after_time": time(6, 0), "before_time": None},
+        ]
+        stored = serialize_form_criteria({}, None, criteria)
+        self.assertEqual(json.loads(json.dumps(stored)), stored)
+
+        restored = deserialize_criteria(stored, self.profile)["custom_fields"]
+        by_field = {c["field"].pk: c for c in restored}
+        self.assertEqual(by_field[select_field.pk]["equals"], "Open")
+        self.assertIs(by_field[checkbox_field.pk]["checked"], False)
+        self.assertEqual(by_field[time_field.pk]["after_time"], time(6, 0))
+        self.assertIsNone(by_field[time_field.pk]["before_time"])
