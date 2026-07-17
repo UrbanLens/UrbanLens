@@ -1392,6 +1392,29 @@ def send_direct_message_email_if_unread(message_id: int) -> None:
     send_message_email_now(message)
 
 
+@shared_task
+def run_link_extraction(extraction_id: int) -> None:
+    """Execute one queued AI link-extraction run (fetch, AI call, apply, notify).
+
+    No Celery autoretry: the run itself records every failure mode on the
+    LinkExtraction row (and notifies the user either way), and each attempt
+    consumes a fetch plus AI tokens - retrying automatically would silently
+    multiply cost for a user-triggered, user-visible action they can simply
+    click again.
+
+    Args:
+        extraction_id: PK of the pending LinkExtraction row.
+    """
+    from urbanlens.dashboard.models.link_extraction.model import LinkExtraction
+    from urbanlens.dashboard.services.ai.link_extraction import run_extraction
+
+    extraction = LinkExtraction.objects.filter(pk=extraction_id).select_related("pin", "pin__location", "profile").first()
+    if extraction is None:
+        logger.info("run_link_extraction: extraction %s no longer exists", extraction_id)
+        return
+    run_extraction(extraction)
+
+
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def upgrade_placeholder_pin_names(batch_size: int = 1000) -> int:
     """Clear a pin's stored placeholder name once its location has a meaningful one to fall back to.

@@ -36,6 +36,7 @@ from urbanlens.dashboard.models.images import Image, ImageKeyword, ImageSource, 
 from urbanlens.dashboard.models.immich import ImmichAccount
 from urbanlens.dashboard.models.labels import COLOR_CHOICES, ICON_CHOICES, Label, LabelCustomization, LabelSerializer
 from urbanlens.dashboard.models.labels.profile_assignment import ProfileLabelAssignment
+from urbanlens.dashboard.models.link_extraction import LinkExtraction, LinkExtractionStatus
 from urbanlens.dashboard.models.links import PinLink, WikiLink
 from urbanlens.dashboard.models.location import Location
 from urbanlens.dashboard.models.markup import MapLayerMode, MarkupMap, MarkupMapShare, MarkupType, PinMarkup

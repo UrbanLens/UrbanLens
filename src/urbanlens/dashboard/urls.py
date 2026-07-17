@@ -12,6 +12,7 @@ from rest_framework import routers
 
 from urbanlens.dashboard.controllers import (
     account_deletion,
+    ai_extraction,
     aliases,
     article,
     boundary,
@@ -448,6 +449,11 @@ urlpatterns = [
                                 name="pin.link.delete",
                             ),
                             path(
+                                "<slug:pin_slug>/ai/extract/",
+                                ai_extraction.PinLinkExtractionView.as_view(),
+                                name="pin.ai_extract",
+                            ),
+                            path(
                                 "<slug:pin_slug>/custom-fields/",
                                 custom_fields.PinCustomFieldsPanelView.as_view(),
                                 name="pin.custom_fields",
@@ -745,6 +751,9 @@ urlpatterns = [
             ],
         ),
     ),
+    # Deliberately unlinked from site navigation - reached via the completion
+    # notification (see services.ai.link_extraction._notify_extraction_complete).
+    path("ai/extractions/", ai_extraction.AIExtractionReviewView.as_view(), name="ai.extractions"),
     path("settings/", settings.SettingsView.as_view(), name="settings.view"),
     path("settings/custom-fields/", custom_fields.CustomFieldSettingsPanelView.as_view(), name="custom_fields.settings"),
     path("settings/custom-fields/<int:field_id>/", custom_fields.CustomFieldUpdateView.as_view(), name="custom_fields.update"),

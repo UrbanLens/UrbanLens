@@ -375,7 +375,11 @@ class ContactSettingsFormTests(TestCase):
         self.assertFalse(form.is_valid())
         self.assertIn("email", form.errors)
 
-    @given(local=st.from_regex(r"[a-zA-Z0-9_%+][a-zA-Z0-9_%+.-]{0,18}[a-zA-Z0-9_%+-]", fullmatch=True),
+    # The middle character class allows dots, but consecutive dots in an
+    # unquoted local part are invalid (RFC 5321) and Django's EmailValidator
+    # correctly rejects them - filter those out so the strategy only produces
+    # genuinely well-formed addresses (hypothesis found "0..0" here once).
+    @given(local=st.from_regex(r"[a-zA-Z0-9_%+][a-zA-Z0-9_%+.-]{0,18}[a-zA-Z0-9_%+-]", fullmatch=True).filter(lambda s: ".." not in s),
            domain=st.from_regex(r"[a-zA-Z0-9]([a-zA-Z0-9-]{0,18}[a-zA-Z0-9])?\.[a-zA-Z]{2,6}", fullmatch=True))
     @settings(max_examples=50, deadline=None)
     def test_well_formed_emails_are_valid(self, local, domain) -> None:

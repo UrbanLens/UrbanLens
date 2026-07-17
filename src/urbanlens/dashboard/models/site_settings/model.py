@@ -146,6 +146,17 @@ class SiteSettings(abstract.FrontendDashboardModel):
         verbose_name="Document import max length (characters)",
         validators=[MinValueValidator(500), MaxValueValidator(200_000)],
     )
+    ai_link_extraction_enabled = BooleanField(
+        default=True,
+        help_text="Allow users with the AI feature to have external links on their pins read by AI to fill in supported pin fields.",
+        verbose_name="Link extraction",
+    )
+    ai_link_extraction_daily_limit = IntegerField(
+        default=20,
+        help_text="Maximum AI link-extraction runs each user may start per day, bounding per-user token spend.",
+        verbose_name="Link extraction daily limit (per user)",
+        validators=[MinValueValidator(0), MaxValueValidator(1000)],
+    )
 
     # --- Storage quotas & upload processing ---
 

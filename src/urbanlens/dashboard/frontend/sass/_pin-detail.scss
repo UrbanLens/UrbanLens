@@ -3826,6 +3826,22 @@ body.page-location-details {
 
         &:hover { color: var(--primary-color); }
     }
+
+    // "Read with AI" sparkle - only rendered for accounts with the AI feature
+    // (see _ai_extract_button.html).
+    .ai-extract-btn {
+        display: inline-flex;
+        align-items: center;
+        background: none;
+        border: none;
+        padding: 0;
+        cursor: pointer;
+        color: $text-muted;
+
+        .material-symbols-outlined { font-size: .95rem; }
+
+        &:hover { color: var(--primary-color); }
+    }
 }
 
 .pin-link-chip-remove {
