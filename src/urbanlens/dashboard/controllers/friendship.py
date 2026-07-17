@@ -594,7 +594,7 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
             from urbanlens.dashboard.models.subscriptions import SubscriptionRole
 
             SubscriptionRole.ensure_defaults()
-            subscription_role = SubscriptionRole.objects.filter(slug=subscription_role_slug).first()
+            subscription_role = SubscriptionRole.objects.get_by_slug(subscription_role_slug)
 
         existing_user = find_user_by_email(email)
         if existing_user:

@@ -10,6 +10,7 @@ from django.db.models import CASCADE, CharField, DateTimeField, ForeignKey, Inte
 from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.subscriptions.queryset import SubscriptionRoleManager, UserSubscriptionManager
 
 if TYPE_CHECKING:
     from django.contrib.auth.base_user import AbstractBaseUser
@@ -73,6 +74,8 @@ class SubscriptionRole(abstract.DashboardModel):
         help_text="Max user-triggered emails per 30 days for this role. Blank uses the site default; 0 means unlimited.",
     )
 
+    objects = SubscriptionRoleManager()
+
     class Meta(abstract.DashboardModel.Meta):
         ordering = ["name"]
 
@@ -134,6 +137,8 @@ class UserSubscription(abstract.DashboardModel):
         user_id: int
         role_id: int
         granted_by_id: int
+
+    objects = UserSubscriptionManager()
 
     class Meta(abstract.DashboardModel.Meta):
         ordering = ["-created"]
@@ -203,15 +208,7 @@ def user_has_feature(user: AbstractBaseUser | AnonymousUser, feature: SiteFeatur
 
     if SiteSettings.get_current().grants(feature):
         return True
-    now = timezone.now()
-    subscriptions = (
-        UserSubscription.objects.filter(
-            user=user,
-            revoked_at__isnull=True,
-        )
-        .filter(Q(expires_at__isnull=True) | Q(expires_at__gt=now))
-        .select_related("role")
-    )
+    subscriptions = UserSubscription.objects.active_for(user).select_related("role")
     return any(subscription.role.grants(feature) for subscription in subscriptions)
 
 
@@ -226,21 +223,13 @@ def active_subscription_roles(user: AbstractBaseUser | AnonymousUser) -> list[Su
     """
     if not isinstance(user, User) or not user.is_authenticated:
         return []
-    now = timezone.now()
-    subscriptions = (
-        UserSubscription.objects.filter(
-            user=user,
-            revoked_at__isnull=True,
-        )
-        .filter(Q(expires_at__isnull=True) | Q(expires_at__gt=now))
-        .select_related("role")
-    )
+    subscriptions = UserSubscription.objects.active_for(user).select_related("role")
     return [subscription.role for subscription in subscriptions]
 
 
 def grant_subscription(user: User, role: SubscriptionRole, granted_by: User, months: int | None) -> UserSubscription:
     """Create or update an active grant for a user and role."""
-    subscription = UserSubscription.objects.filter(user=user, role=role, revoked_at__isnull=True).first()
+    subscription = UserSubscription.objects.not_revoked().filter(user=user, role=role).first()
     if subscription is None:
         subscription = UserSubscription(user=user, role=role, granted_by=granted_by)
     subscription.set_duration_months(months)

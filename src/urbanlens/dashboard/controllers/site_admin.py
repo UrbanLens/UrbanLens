@@ -561,7 +561,7 @@ class SiteAdminSubscriptionsView(LoginRequiredMixin, PermissionRequiredMixin, Vi
         from urbanlens.dashboard.models.subscriptions import SiteFeature, SubscriptionRole, UserSubscription
 
         SubscriptionRole.ensure_defaults()
-        grants = UserSubscription.objects.filter(granted_by=request.user, revoked_at__isnull=True).select_related("user", "role")
+        grants = UserSubscription.objects.granted_by_admin(request.user).select_related("user", "role")
         return render(
             request,
             "dashboard/pages/site_admin_subscriptions.html",
@@ -588,7 +588,7 @@ class SiteAdminSubscriptionsView(LoginRequiredMixin, PermissionRequiredMixin, Vi
         """
         from urbanlens.dashboard.models.subscriptions import UserSubscription
 
-        grants = UserSubscription.objects.filter(granted_by=request.user, revoked_at__isnull=True).select_related("user", "role")
+        grants = UserSubscription.objects.granted_by_admin(request.user).select_related("user", "role")
         response = render(request, "dashboard/partials/site_admin/_subscription_grants_list.html", {"grants": grants})
         if toast:
             response["HX-Trigger"] = json.dumps({"showToast": {"level": toast[0], "message": toast[1]}})
@@ -620,7 +620,7 @@ class SiteAdminSubscriptionsView(LoginRequiredMixin, PermissionRequiredMixin, Vi
             return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?saved=updated")
 
         if action == "role_quota":
-            role = SubscriptionRole.objects.filter(slug=request.POST.get("role_slug", "")).first()
+            role = SubscriptionRole.objects.get_by_slug(request.POST.get("role_slug", ""))
             if role is None:
                 if is_htmx:
                     response = HttpResponse(status=404)
@@ -647,7 +647,7 @@ class SiteAdminSubscriptionsView(LoginRequiredMixin, PermissionRequiredMixin, Vi
             return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"saved": "storage quota saved"}))
 
         if action == "role_email_limits":
-            role = SubscriptionRole.objects.filter(slug=request.POST.get("role_slug", "")).first()
+            role = SubscriptionRole.objects.get_by_slug(request.POST.get("role_slug", ""))
             if role is None:
                 if is_htmx:
                     response = HttpResponse(status=404)
@@ -676,7 +676,7 @@ class SiteAdminSubscriptionsView(LoginRequiredMixin, PermissionRequiredMixin, Vi
             return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"saved": "email limits saved"}))
 
         if action == "role_features":
-            role = SubscriptionRole.objects.filter(slug=request.POST.get("role_slug", "")).first()
+            role = SubscriptionRole.objects.get_by_slug(request.POST.get("role_slug", ""))
             if role is None:
                 if is_htmx:
                     response = HttpResponse(status=404)
@@ -706,7 +706,7 @@ class SiteAdminSubscriptionsView(LoginRequiredMixin, PermissionRequiredMixin, Vi
             return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"saved": "default features saved"}))
 
         identifier = request.POST.get("user_identifier", "").strip()
-        role = SubscriptionRole.objects.filter(slug=request.POST.get("role_slug", "")).first()
+        role = SubscriptionRole.objects.get_by_slug(request.POST.get("role_slug", ""))
         user = User.objects.filter(Q(username__iexact=identifier) | Q(email__iexact=identifier), is_active=True).first()
         if not identifier or not role or not user:
             if is_htmx:
@@ -1186,7 +1186,7 @@ class SiteAdminHomeView(LoginRequiredMixin, PermissionRequiredMixin, View):
         with contextlib.suppress(Exception):
             from urbanlens.dashboard.models.subscriptions import UserSubscription
 
-            total_subscriptions = UserSubscription.objects.filter(revoked_at__isnull=True).count()
+            total_subscriptions = UserSubscription.objects.not_revoked().count()
 
         site_settings = SiteSettings.get_current()
 
@@ -1300,7 +1300,7 @@ class SiteAdminStatsKpiPartialView(_AdminPermissionMixin, View):
         with contextlib.suppress(Exception):
             from urbanlens.dashboard.models.subscriptions import UserSubscription
 
-            total_subscriptions = UserSubscription.objects.filter(revoked_at__isnull=True).count()
+            total_subscriptions = UserSubscription.objects.not_revoked().count()
 
         total_site_admins = User.objects.filter(groups__name=SITE_ADMIN_GROUP_NAME).distinct().count()
 
