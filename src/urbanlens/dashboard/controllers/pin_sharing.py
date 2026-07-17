@@ -74,6 +74,7 @@ def _create_pin_from_share(share: PinShare, parent_pin: Pin | None = None) -> Pi
         detail_bg_opacity=source.detail_bg_opacity,
         detail_border_color=source.detail_border_color,
         detail_border_opacity=source.detail_border_opacity,
+        date_built=source.date_built,
         date_abandoned=source.date_abandoned,
         date_last_active=source.date_last_active,
         fences=source.fences,

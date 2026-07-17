@@ -29,6 +29,7 @@
                             {{ listing.title }}
                             <i class="material-icons loopnet-ext-icon">open_in_new</i>
                         </a>
+                        {% include "dashboard/partials/pins/_ai_extract_button.html" with url=listing.url %}
                         {% else %}
                         {{ listing.title }}
                         {% endif %}
@@ -52,6 +53,7 @@
                         View listing
                         <i class="material-symbols-outlined">open_in_new</i>
                     </a>
+                    {% include "dashboard/partials/pins/_ai_extract_button.html" with url=listing.url %}
                     {% endif %}
 
                     {% if listing.property_details %}

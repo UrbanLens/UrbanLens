@@ -364,7 +364,9 @@ class EpaEchoDetailPanelSource(CoordinateGatedInfoPanelSource):
 
         registry_id = exact_site.get("registry_id")
         footer_link = (
-            {"url": f"https://echo.epa.gov/detailed-facility-report?fid={registry_id}", "label": "View full EPA compliance report"}
+            # ai_extract: the facility report is a real content page about this
+            # exact site, so it offers the AI field-extraction button.
+            {"url": f"https://echo.epa.gov/detailed-facility-report?fid={registry_id}", "label": "View full EPA compliance report", "ai_extract": True}
             if registry_id
             else {"url": "https://echo.epa.gov/", "label": "View on EPA ECHO"}
         )

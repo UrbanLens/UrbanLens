@@ -388,6 +388,7 @@ def _export_pins(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
                 "latitude": str(pin.effective_latitude) if pin.effective_latitude is not None else None,
                 "longitude": str(pin.effective_longitude) if pin.effective_longitude is not None else None,
                 "last_visited": str(pin.last_visited) if pin.last_visited else None,
+                "date_built": str(pin.date_built) if pin.date_built else None,
                 "date_abandoned": str(pin.date_abandoned) if pin.date_abandoned else None,
                 "date_last_active": str(pin.date_last_active) if pin.date_last_active else None,
                 "detail_bg_color": pin.detail_bg_color or "",

@@ -275,6 +275,7 @@ class PinEditView(LoginRequiredMixin, View):
             except ValueError:
                 return None
 
+        date_built = _parse_date(body.get("date_built", "")) if "date_built" in body else pin.date_built
         date_abandoned = _parse_date(body.get("date_abandoned", "")) if "date_abandoned" in body else pin.date_abandoned
         date_last_active = _parse_date(body.get("date_last_active", "")) if "date_last_active" in body else pin.date_last_active
 
@@ -296,6 +297,7 @@ class PinEditView(LoginRequiredMixin, View):
             pin.last_visited = last_visited
         for sf, val in security_values.items():
             setattr(pin, sf, val)
+        pin.date_built = date_built
         pin.date_abandoned = date_abandoned
         pin.date_last_active = date_last_active
         pin.save(
@@ -316,6 +318,7 @@ class PinEditView(LoginRequiredMixin, View):
                 "vps",
                 "plywood",
                 "locked",
+                "date_built",
                 "date_abandoned",
                 "date_last_active",
                 "updated",

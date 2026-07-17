@@ -39,8 +39,10 @@ class GdeltPanelSource(InfoPanelSource):
         if not articles:
             return None
 
+        # ai_extract: news articles are real content pages about the place, so
+        # they offer the AI field-extraction button (see _simple_info_panel.html).
         meta = [
-            {"label": article.get("date") or "Undated", "value": article.get("title") or article.get("domain") or "", "href": article.get("url") or ""}
+            {"label": article.get("date") or "Undated", "value": article.get("title") or article.get("domain") or "", "href": article.get("url") or "", "ai_extract": True}
             for article in articles[:8]
         ]
 

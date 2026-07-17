@@ -16,6 +16,11 @@ Context:
     meta: optional list of {label, value, href (optional)} shown as a
         definition-list grid; href renders the value as an external link.
     footer_link: optional {url, label} - "View on X ->" link at the bottom.
+    pin, can_ai_extract: injected by the panel_info dispatcher. A link entry
+        (meta item or footer_link) that also sets ai_extract=True gets an AI
+        extraction button beside it - opt-in per link, so only links to real
+        content pages about the place (news articles, facility reports) offer
+        it, never provider homepages.
 {% endcomment %}
 <div id="{{ section_id }}" class="simple-info-panel"
      data-collapse-scope="pin" data-collapse-section="{{ section_id }}">
@@ -73,7 +78,10 @@ Context:
             <div class="simple-info-meta-item">
                 <dt>{{ entry.label }}</dt>
                 {% if entry.href %}
-                <dd><a href="{{ entry.href }}" target="_blank" rel="noopener noreferrer">{{ entry.value }}</a></dd>
+                <dd>
+                    <a href="{{ entry.href }}" target="_blank" rel="noopener noreferrer">{{ entry.value }}</a>
+                    {% if entry.ai_extract %}{% include "dashboard/partials/pins/_ai_extract_button.html" with url=entry.href %}{% endif %}
+                </dd>
                 {% else %}
                 <dd>{{ entry.value }}</dd>
                 {% endif %}
@@ -87,6 +95,7 @@ Context:
             {{ footer_link.label }}
             <i class="material-symbols-outlined">arrow_forward</i>
         </a>
+        {% if footer_link.ai_extract %}{% include "dashboard/partials/pins/_ai_extract_button.html" with url=footer_link.url %}{% endif %}
         {% endif %}
     </div>
 </div>

@@ -27,6 +27,7 @@ _RESTORABLE_FIELDS = (
     "detail_bg_opacity",
     "detail_border_color",
     "detail_border_opacity",
+    "date_built",
     "date_abandoned",
     "date_last_active",
     "fences",

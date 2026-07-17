@@ -105,6 +105,7 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
     detail_border_color = CharField(max_length=20, null=True, blank=True)
     detail_border_opacity = IntegerField(default=100)
 
+    date_built = DateField(null=True, blank=True)
     date_abandoned = DateField(null=True, blank=True)
     date_last_active = DateField(null=True, blank=True)
 

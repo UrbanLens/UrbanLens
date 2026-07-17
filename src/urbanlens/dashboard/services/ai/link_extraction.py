@@ -165,6 +165,14 @@ class ExtractableField:
     apply: Callable[[Pin, Any, dict[str, Any]], tuple[bool, str]]
 
 
+def _apply_date_built(pin: Pin, value: date, context: dict[str, Any]) -> tuple[bool, str]:
+    if pin.date_built is not None:
+        return False, f"Skipped - already set to {pin.date_built.isoformat()}."
+    pin.date_built = value
+    pin.save(update_fields=["date_built", "updated"])
+    return True, "Set on the pin."
+
+
 def _apply_date_abandoned(pin: Pin, value: date, context: dict[str, Any]) -> tuple[bool, str]:
     if pin.date_abandoned is not None:
         return False, f"Skipped - already set to {pin.date_abandoned.isoformat()}."
@@ -275,6 +283,13 @@ def _apply_aliases(pin: Pin, value: list[str], context: dict[str, Any]) -> tuple
 #: The allowlist. Order matters: cross-field entries (owner_company, sale_price)
 #: rely on the entry before them having populated the run context.
 EXTRACTABLE_FIELDS: tuple[ExtractableField, ...] = (
+    ExtractableField(
+        key="date_built",
+        label="Date built",
+        prompt_hint="the date (or year) the place was originally built or constructed, as YYYY or YYYY-MM-DD",
+        parse=_parse_date,
+        apply=_apply_date_built,
+    ),
     ExtractableField(
         key="date_abandoned",
         label="Date abandoned",

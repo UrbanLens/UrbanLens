@@ -103,6 +103,59 @@ class PanelInfoDispatchTests(TestCase):
         self.assertContains(response, "10km N of Nowhere")
 
 
+class PanelAiExtractButtonTests(TestCase):
+    """AI extract buttons inside generic panels: opt-in per link, gated on the AI feature."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        # The first user created in a test DB is auto-promoted to site admin,
+        # which carries every subscription feature - burn that promotion on a
+        # bystander so self.user's feature set is actually gate-controlled.
+        baker.make(User)
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+        self.client.force_login(self.user)
+        self.pin: Pin = baker.make_recipe("dashboard.pin", profile=self.profile)
+        LocationCache.set(
+            self.pin.location,
+            "gdelt",
+            {"articles": [{"date": "2024-01-01", "title": "Mill fire investigated", "url": "https://news.example.com/mill-fire"}]},
+            query_key="",
+        )
+
+    def _grant_ai(self) -> None:
+        from urbanlens.dashboard.models.site_settings import SiteSettings
+        from urbanlens.dashboard.models.subscriptions.model import SiteFeature
+
+        settings_obj = SiteSettings.get_current()
+        SiteSettings.objects.filter(pk=settings_obj.pk).update(default_features=SiteFeature.AI)
+
+    def test_no_button_without_the_ai_feature(self) -> None:
+        response = self.client.get(reverse("pin.panel", args=[self.pin.slug, "gdelt"]))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "ai-extract-btn")
+
+    def test_flagged_links_get_the_button_with_the_feature(self) -> None:
+        self._grant_ai()
+        response = self.client.get(reverse("pin.panel", args=[self.pin.slug, "gdelt"]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "ai-extract-btn")
+        self.assertContains(response, "https://news.example.com/mill-fire")
+
+    def test_unflagged_links_never_get_the_button(self) -> None:
+        """photon's footer_link doesn't opt in, so no button renders even with the feature."""
+        self._grant_ai()
+        LocationCache.set(
+            self.pin.location,
+            "photon",
+            {"name": "Test Building", "osm_url": "https://www.openstreetmap.org/node/1"},
+            query_key="",
+        )
+        response = self.client.get(reverse("pin.panel", args=[self.pin.slug, "photon"]))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "ai-extract-btn")
+
+
 class SimpleInfoPanelsRegistryTests(TestCase):
     """panel_sources() correctly classifies the migrated InfoPanelSource plugins."""
 

@@ -710,6 +710,11 @@
 
         <div class="form-row form-row--two-col">
             <div>
+                <label for="pe-date-built">Date Built</label>
+                <input type="date" name="date_built" id="pe-date-built"
+                       value="{{ pin.date_built|date:'Y-m-d'|default:'' }}">
+            </div>
+            <div>
                 <label for="pe-date-abandoned">Date Abandoned</label>
                 <input type="date" name="date_abandoned" id="pe-date-abandoned"
                        value="{{ pin.date_abandoned|date:'Y-m-d'|default:'' }}">

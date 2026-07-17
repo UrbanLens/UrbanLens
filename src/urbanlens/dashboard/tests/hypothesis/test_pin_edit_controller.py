@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import date
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
@@ -132,6 +133,48 @@ class PinEditNameAliasTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(list(self.pin.aliases.values_list("name", flat=True)), ["Old Factory"])
+
+
+class PinEditDateFieldsTests(TestCase):
+    """date_built (and its siblings) round-trip through the edit endpoint."""
+
+    def setUp(self) -> None:
+        self.factory = RequestFactory()
+        self.profile = baker.make(User).profile
+        self.user = self.profile.user
+        self.pin = baker.make(Pin, profile=self.profile, name="Old Factory", name_is_user_provided=True)
+
+    def _post(self, body: dict) -> object:
+        req = self.factory.post(
+            f"/map/pin/{self.pin.slug}/edit/",
+            data=json.dumps(body),
+            content_type="application/json",
+        )
+        req.user = self.user
+        with (
+            patch("urbanlens.dashboard.controllers.pin_edit._ensure_location_address"),
+            patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None),
+        ):
+            return PinEditView.as_view()(req, pin_slug=self.pin.slug)
+
+    def test_date_built_saves_and_clears(self) -> None:
+        response = self._post({"date_built": "1912-05-01"})
+        self.assertEqual(response.status_code, 200)
+        self.pin.refresh_from_db()
+        self.assertEqual(self.pin.date_built, date(1912, 5, 1))
+
+        response = self._post({"date_built": ""})
+        self.assertEqual(response.status_code, 200)
+        self.pin.refresh_from_db()
+        self.assertIsNone(self.pin.date_built)
+
+    def test_partial_update_without_date_built_preserves_it(self) -> None:
+        self.pin.date_built = date(1900, 1, 1)
+        self.pin.save(update_fields=["date_built"])
+        response = self._post({"priority": 3})
+        self.assertEqual(response.status_code, 200)
+        self.pin.refresh_from_db()
+        self.assertEqual(self.pin.date_built, date(1900, 1, 1))
 
 
 class PinOverviewGeocodingFailureTests(TestCase):

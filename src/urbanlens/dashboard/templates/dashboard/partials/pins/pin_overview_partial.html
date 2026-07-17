@@ -123,6 +123,12 @@
                     <span class="field-value">{{ pin.effective_latitude|floatformat:5 }}, {{ pin.effective_longitude|floatformat:5 }}</span>
                 </div>
                 {% endif %}
+                {% if pin.date_built %}
+                <div class="detail-item detail-item--built">
+                    <span class="field-label">Built</span>
+                    <span class="field-value">{{ pin.date_built|date:"M j, Y" }}</span>
+                </div>
+                {% endif %}
                 {% if pin.date_abandoned %}
                 <div class="detail-item detail-item--abandoned">
                     <span class="field-label">Abandoned</span>

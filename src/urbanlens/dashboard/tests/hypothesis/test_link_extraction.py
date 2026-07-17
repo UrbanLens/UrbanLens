@@ -107,6 +107,7 @@ class ApplyExtractedFieldsTests(TestCase):
 
     def test_full_payload_applies_every_field(self) -> None:
         payload = {
+            "date_built": "1912",
             "date_abandoned": "1998-04-01",
             "owner_name": "Jordan Doe",
             "owner_company": "Doe Holdings LLC",
@@ -117,6 +118,7 @@ class ApplyExtractedFieldsTests(TestCase):
         results = apply_extracted_fields(self.pin, payload)
 
         self.pin.refresh_from_db()
+        self.assertEqual(self.pin.date_built, date(1912, 1, 1))
         self.assertEqual(self.pin.date_abandoned, date(1998, 4, 1))
         owner = PinOwner.objects.get(pin=self.pin)
         self.assertEqual(owner.name, "Jordan Doe")
@@ -151,6 +153,15 @@ class ApplyExtractedFieldsTests(TestCase):
         results = apply_extracted_fields(self.pin, {"date_abandoned": "1999-01-01"})
         self.pin.refresh_from_db()
         self.assertEqual(self.pin.date_abandoned, date(1980, 1, 1))
+        self.assertFalse(results[0]["applied"])
+        self.assertIn("already set", results[0]["note"])
+
+    def test_existing_date_built_is_never_overwritten(self) -> None:
+        self.pin.date_built = date(1905, 6, 1)
+        self.pin.save(update_fields=["date_built"])
+        results = apply_extracted_fields(self.pin, {"date_built": "1950-01-01"})
+        self.pin.refresh_from_db()
+        self.assertEqual(self.pin.date_built, date(1905, 6, 1))
         self.assertFalse(results[0]["applied"])
         self.assertIn("already set", results[0]["note"])
 

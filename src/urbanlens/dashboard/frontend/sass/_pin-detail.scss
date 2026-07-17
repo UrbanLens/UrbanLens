@@ -3827,21 +3827,24 @@ body.page-location-details {
         &:hover { color: var(--primary-color); }
     }
 
-    // "Read with AI" sparkle - only rendered for accounts with the AI feature
-    // (see _ai_extract_button.html).
-    .ai-extract-btn {
-        display: inline-flex;
-        align-items: center;
-        background: none;
-        border: none;
-        padding: 0;
-        cursor: pointer;
-        color: $text-muted;
+}
 
-        .material-symbols-outlined { font-size: .95rem; }
+// "Read with AI" sparkle - only rendered for accounts with the AI feature
+// (see _ai_extract_button.html). Top-level: appears beside external links in
+// the Links card and inside Wikipedia/LoopNet/web-search/plugin info panels.
+.ai-extract-btn {
+    display: inline-flex;
+    align-items: center;
+    vertical-align: middle;
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    color: $text-muted;
 
-        &:hover { color: var(--primary-color); }
-    }
+    .material-symbols-outlined { font-size: .95rem; }
+
+    &:hover { color: var(--primary-color); }
 }
 
 .pin-link-chip-remove {
@@ -4615,9 +4618,13 @@ body.page-location-details .pin-detail-grid {
             align-items: flex-start;
         }
 
-        .search-result-bookmark-btn {
+        .search-result-actions {
             flex-shrink: 0;
             align-self: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: .25rem;
         }
 
         .search-result-thumb-wrap {
