@@ -419,3 +419,92 @@ class LocationExposureQuerySetTests(_ProvenanceTestCase):
 
         self.assertFalse(created)
         self.assertEqual(LocationExposure.objects.filter(profile=self.profiles["kim"], location=self.location, share=share).count(), 1)
+
+
+class PinShareQuerySetTests(_ProvenanceTestCase):
+    """Direct coverage of PinShareQuerySet's new methods - previously the same
+    dup-share existence check was independently re-written (pin-keyed and
+    location-keyed variants) across services/trip_share_tracking.py,
+    services/map_sharing.py, and services/dm_location_detection.py."""
+
+    def test_already_shared_with_true_for_a_pin_keyed_match(self) -> None:
+        self._share(self.sarah_pin, "sarah", "john")
+
+        result = PinShare.objects.already_shared_with(self.profiles["john"], pin=self.sarah_pin)
+
+        self.assertTrue(result.exists())
+
+    def test_already_shared_with_false_for_a_different_recipient(self) -> None:
+        self._share(self.sarah_pin, "sarah", "john")
+
+        result = PinShare.objects.already_shared_with(self.profiles["kim"], pin=self.sarah_pin)
+
+        self.assertFalse(result.exists())
+
+    def test_already_shared_with_true_for_a_location_keyed_match(self) -> None:
+        PinShare.objects.create(
+            location=self.location,
+            from_profile=self.profiles["sarah"],
+            to_profile=self.profiles["john"],
+            status=PinShareStatus.PENDING,
+        )
+
+        result = PinShare.objects.already_shared_with(self.profiles["john"], location=self.location)
+
+        self.assertTrue(result.exists())
+
+    def test_reusable_for_returns_the_earliest_pending_or_detected_share(self) -> None:
+        older = PinShare.objects.create(
+            location=self.location,
+            from_profile=self.profiles["sarah"],
+            to_profile=self.profiles["john"],
+            status=PinShareStatus.PENDING,
+        )
+        PinShare.objects.create(
+            location=self.location,
+            from_profile=self.profiles["sarah"],
+            to_profile=self.profiles["john"],
+            status=PinShareStatus.PENDING,
+        )
+
+        found = PinShare.objects.reusable_for(self.profiles["john"], self.location).first()
+
+        self.assertEqual(found, older)
+
+    def test_reusable_for_excludes_accepted_shares(self) -> None:
+        PinShare.objects.create(
+            location=self.location,
+            from_profile=self.profiles["sarah"],
+            to_profile=self.profiles["john"],
+            status=PinShareStatus.ACCEPTED,
+        )
+
+        found = PinShare.objects.reusable_for(self.profiles["john"], self.location).first()
+
+        self.assertIsNone(found)
+
+    def test_pending_pin_ids_for_finds_a_pending_share_among_candidates(self) -> None:
+        other_pin = Pin.objects.create(profile=self.profiles["sarah"], location=self.far_location)
+        PinShare.objects.create(pin=other_pin, location=other_pin.location, from_profile=self.profiles["sarah"], to_profile=self.profiles["john"], status=PinShareStatus.PENDING)
+
+        ids = set(PinShare.objects.pending_pin_ids_for(self.profiles["john"], [self.sarah_pin, other_pin]))
+
+        self.assertEqual(ids, {other_pin.pk})
+
+    def test_sent_by_returns_only_that_profiles_outgoing_shares(self) -> None:
+        outgoing = self._share(self.sarah_pin, "sarah", "john")
+        john_pin = Pin.objects.create(profile=self.profiles["john"], location=self.far_location)
+        self._share(john_pin, "john", "kim")
+
+        result = list(PinShare.objects.sent_by(self.profiles["sarah"]))
+
+        self.assertEqual(result, [outgoing])
+
+    def test_received_by_returns_only_that_profiles_incoming_shares(self) -> None:
+        incoming = self._share(self.sarah_pin, "sarah", "john")
+        john_pin = Pin.objects.create(profile=self.profiles["john"], location=self.far_location)
+        self._share(john_pin, "john", "kim")
+
+        result = list(PinShare.objects.received_by(self.profiles["john"]))
+
+        self.assertEqual(result, [incoming])

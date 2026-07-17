@@ -760,7 +760,7 @@ class MemoriesSharingView(LoginRequiredMixin, View):
         from urbanlens.dashboard.models.pin_share.model import PinShare
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        shares = PinShare.objects.filter(from_profile=profile).select_related("pin__location__wiki", "location__wiki", "to_profile__user").order_by("-created")
+        shares = PinShare.objects.sent_by(profile).select_related("pin__location__wiki", "location__wiki", "to_profile__user").order_by("-created")
 
         # Group by pin when there is one; location-only shares (e.g.
         # coordinates typed into a DM the sender never pinned) group by the
@@ -804,7 +804,7 @@ class MemoriesSharingView(LoginRequiredMixin, View):
                 },
             )
 
-        incoming_shares = PinShare.objects.filter(to_profile=profile).select_related("pin__location__wiki", "location__wiki", "from_profile__user").order_by("-created")
+        incoming_shares = PinShare.objects.received_by(profile).select_related("pin__location__wiki", "location__wiki", "from_profile__user").order_by("-created")
 
         incoming_shares_by_pin: dict[tuple[str, int | None], list[PinShare]] = {}
         for share in incoming_shares:

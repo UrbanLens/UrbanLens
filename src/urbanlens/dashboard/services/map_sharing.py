@@ -56,7 +56,7 @@ def _record_detected_share(sender: Profile, recipient: Profile, pin: Pin, markup
     """
     from urbanlens.dashboard.services.share_provenance import record_share_exposure, resolve_and_stamp_origin_share
 
-    if PinShare.objects.filter(pin=pin, to_profile=recipient).exists():
+    if PinShare.objects.already_shared_with(recipient, pin=pin).exists():
         return None
     share = PinShare.objects.create(
         pin=pin,
@@ -160,11 +160,7 @@ def infer_source_share_for_pin(pin: Pin) -> PinShare | None:
         return None
 
     cutoff = timezone.now() - timedelta(days=INFERRED_SOURCE_SHARE_WINDOW_DAYS)
-    candidates = PinShare.objects.filter(
-        to_profile=pin.profile_id,
-        origin=PinShareOrigin.MAP_DETECTED,
-        created__gte=cutoff,
-    ).select_related("pin__location")
+    candidates = PinShare.objects.map_detected_candidates(pin.profile_id, since=cutoff)
 
     target = Point(float(pin.location.longitude), float(pin.location.latitude), srid=4326)
     best: PinShare | None = None

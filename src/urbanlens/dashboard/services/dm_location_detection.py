@@ -222,7 +222,7 @@ def _record_mention(message: DirectMessage, location: Location, kind: str, match
         return mention  # Already pinned - reference-only, never a share.
 
     share = None
-    already_shared = PinShare.objects.filter(to_profile_id=recipient_id, location=location).exists() or profile_is_exposed_to(recipient_id, location)
+    already_shared = PinShare.objects.already_shared_with(recipient_id, location=location).exists() or profile_is_exposed_to(recipient_id, location)
     if not already_shared:
         # The sender's own pin at the place (when they have one) makes the
         # share richer and ties it into their pin's lineage.
@@ -247,11 +247,7 @@ def _record_mention(message: DirectMessage, location: Location, kind: str, match
         # The place was already shared with them before; this message still
         # gets the "Add to map" affordance via the earlier acceptable share
         # (pending, or a map/trip-detected one that never materialized a pin).
-        share = (
-            PinShare.objects.filter(to_profile_id=recipient_id, location=location, status__in=[PinShareStatus.PENDING, PinShareStatus.DETECTED])
-            .order_by("created")
-            .first()
-        )
+        share = PinShare.objects.reusable_for(recipient_id, location).first()
 
     if share is not None:
         mention.pin_share = share

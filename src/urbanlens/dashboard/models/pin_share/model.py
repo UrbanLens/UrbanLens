@@ -10,6 +10,7 @@ from django.db.models import Index, ManyToManyField, Q, UniqueConstraint
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.pin_share.meta import PinShareOrigin, PinShareStatus
+from urbanlens.dashboard.models.pin_share.queryset import PinShareManager
 from urbanlens.dashboard.services.text_limits import MAX_PIN_SHARE_MESSAGE_LENGTH
 
 if TYPE_CHECKING:
@@ -131,6 +132,8 @@ class PinShare(abstract.DashboardModel):
     # reference to the sharer's own Image rows; accepting the share copies
     # these onto the recipient's new pin (see _create_pin_from_share).
     images = ManyToManyField("dashboard.Image", blank=True, related_name="pin_shares")
+
+    objects = PinShareManager()
 
     if TYPE_CHECKING:
         pin_id: int | None

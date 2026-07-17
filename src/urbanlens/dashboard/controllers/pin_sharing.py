@@ -205,9 +205,7 @@ class PinShareCreateView(LoginRequiredMixin, View):
         # the one-pending-share-per-pin-and-recipient constraint holds.
         bundled_count = 0
         if request.POST.get("include_children"):
-            already_pending = set(
-                PinShare.objects.filter(to_profile=recipient, status=PinShareStatus.PENDING, pin__in=pin.descendants()).values_list("pin_id", flat=True),
-            )
+            already_pending = set(PinShare.objects.pending_pin_ids_for(recipient, pin.descendants()))
             for child in pin.descendants().select_related("location"):
                 if child.pk in already_pending:
                     continue

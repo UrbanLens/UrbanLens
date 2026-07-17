@@ -85,9 +85,9 @@ def _record_detected_trip_share(sharer: Profile, recipient: Profile, pin: Pin | 
         return None
     if profile_is_exposed_to(recipient.pk, location):
         return None
-    if pin is not None and PinShare.objects.filter(pin=pin, to_profile=recipient).exists():
+    if pin is not None and PinShare.objects.already_shared_with(recipient, pin=pin).exists():
         return None
-    if pin is None and PinShare.objects.filter(location=location, to_profile=recipient).exists():
+    if pin is None and PinShare.objects.already_shared_with(recipient, location=location).exists():
         return None
 
     parent = resolve_and_stamp_origin_share(pin) if pin is not None else resolve_origin_share(sharer.pk, location=location)
