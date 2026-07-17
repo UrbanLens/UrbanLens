@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from django.db import models
 
 from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.reactions.queryset import ReactionManager
 
 
 class Reaction(abstract.DashboardModel):
@@ -51,6 +52,8 @@ class Reaction(abstract.DashboardModel):
         comment_id: int | None
         trip_comment_id: int | None
         direct_message_id: int | None
+
+    objects = ReactionManager()
 
     class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_reactions"

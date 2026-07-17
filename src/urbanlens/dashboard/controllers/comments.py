@@ -267,7 +267,7 @@ class CommentReactionView(LoginRequiredMixin, View):
         emoji = request.POST.get("emoji", "")
         if emoji not in _ALLOWED_EMOJIS:
             return HttpResponse("Invalid emoji.", status=400)
-        reaction = Reaction.objects.filter(profile=profile, emoji=emoji, comment=comment).first()
+        reaction = Reaction.objects.existing(profile, emoji, comment=comment)
         if reaction:
             reaction.delete()
         else:
@@ -290,7 +290,7 @@ class TripCommentReactionView(LoginRequiredMixin, View):
         emoji = request.POST.get("emoji", "")
         if emoji not in _ALLOWED_EMOJIS:
             return HttpResponse("Invalid emoji.", status=400)
-        reaction = Reaction.objects.filter(profile=profile, emoji=emoji, trip_comment=comment).first()
+        reaction = Reaction.objects.existing(profile, emoji, trip_comment=comment)
         if reaction:
             reaction.delete()
         else:

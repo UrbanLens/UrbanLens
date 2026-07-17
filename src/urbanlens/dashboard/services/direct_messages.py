@@ -751,7 +751,7 @@ def toggle_reaction(profile: Profile, message: DirectMessage, emoji: str) -> str
     if profile.pk not in (message.sender_id, message.recipient_id):
         raise PermissionError("You aren't part of this conversation.")
 
-    existing = Reaction.objects.filter(profile=profile, direct_message=message, emoji=emoji).first()
+    existing = Reaction.objects.existing(profile, emoji, direct_message=message)
     if existing:
         existing.delete()
         action = "removed"
