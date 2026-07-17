@@ -717,8 +717,8 @@ class Profile(abstract.PublicDashboardModel):
         """
         from urbanlens.dashboard.models.trips.model import TripMembership
 
-        my_trips = set(TripMembership.objects.filter(profile=subject).values_list("trip_id", flat=True))
-        their_trips = set(TripMembership.objects.filter(profile=other).values_list("trip_id", flat=True))
+        my_trips = set(TripMembership.objects.trip_ids_for(subject))
+        their_trips = set(TripMembership.objects.trip_ids_for(other))
         return bool(my_trips & their_trips)
 
     @staticmethod

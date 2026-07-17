@@ -212,8 +212,8 @@ class ViewProfileView(LoginRequiredMixin, View):
         # Trips in common
         from urbanlens.dashboard.models.trips.model import TripMembership
 
-        my_trip_ids = set(TripMembership.objects.filter(profile=my_profile).values_list("trip_id", flat=True))
-        their_trip_ids = set(TripMembership.objects.filter(profile=profile).values_list("trip_id", flat=True))
+        my_trip_ids = set(TripMembership.objects.trip_ids_for(my_profile))
+        their_trip_ids = set(TripMembership.objects.trip_ids_for(profile))
         common_trip_ids = my_trip_ids & their_trip_ids
         if common_trip_ids:
             from urbanlens.dashboard.models.trips.model import Trip

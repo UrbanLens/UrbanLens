@@ -115,7 +115,7 @@ def _joined_member_profiles(trip: Trip) -> list[Profile]:
     profiles: dict[int, Profile] = {}
     if trip.creator_id is not None and trip.creator is not None:
         profiles[trip.creator_id] = trip.creator
-    for membership in TripMembership.objects.filter(trip=trip, status=TripMembership.STATUS_JOINED).select_related("profile"):
+    for membership in TripMembership.objects.joined(trip).select_related("profile"):
         profiles[membership.profile_id] = membership.profile
     return list(profiles.values())
 

@@ -97,7 +97,7 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet):
     def _get_trip_ids(self, profile: Profile) -> set[int]:
         from urbanlens.dashboard.models.trips.model import TripMembership
 
-        return set(TripMembership.objects.filter(profile=profile).values_list("trip_id", flat=True))
+        return set(TripMembership.objects.trip_ids_for(profile))
 
     def _relationship_allows(
         self,
@@ -166,7 +166,7 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet):
     def _get_trip_ids_by_id(self, profile_id: int) -> set[int]:
         from urbanlens.dashboard.models.trips.model import TripMembership
 
-        return set(TripMembership.objects.filter(profile_id=profile_id).values_list("trip_id", flat=True))
+        return set(TripMembership.objects.trip_ids_for(profile_id))
 
     def with_coords(self) -> Self:
         """Filter to images that have GPS coordinates (suitable for the map layer)."""

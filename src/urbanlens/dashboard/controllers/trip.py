@@ -223,7 +223,7 @@ def _trip_or_403(request: HttpRequest, trip_slug: str, profile: Profile) -> Trip
     trip = Trip.objects.filter(slug=trip_slug).first()
     if trip is None:
         return render(request, "dashboard/pages/trips/not_found.html", status=404)
-    if trip.creator == profile or TripMembership.objects.filter(trip=trip, profile=profile).exists():
+    if trip.creator == profile or TripMembership.objects.for_trip_and_profile(trip, profile).exists():
         return trip
     return render(request, "dashboard/pages/trips/not_found.html", status=403)
 
@@ -300,7 +300,7 @@ def _create_visit_entries_for_completed_activity(trip: Trip, activity: TripActiv
         add_visited_status(pin)
 
     if activity.scheduled_at is not None:
-        other_yes = list(TripMembership.objects.filter(trip=trip, rsvp=TripMembership.RSVP_YES).exclude(profile=completer).select_related("profile"))
+        other_yes = list(TripMembership.objects.rsvp_yes(trip).exclude(profile=completer).select_related("profile"))
         for membership in other_yes:
             create_visit_suggestion(
                 suggested_to=membership.profile,
@@ -405,7 +405,7 @@ def _is_organizer(profile: Profile, trip: Trip) -> bool:
     """Return True if profile is the trip creator or a designated organizer."""
     if trip.creator_id == profile.id:
         return True
-    return TripMembership.objects.filter(trip=trip, profile=profile, is_organizer=True).exists()
+    return TripMembership.objects.for_trip_and_profile(trip, profile).filter(is_organizer=True).exists()
 
 
 def _viewer_has_joined(profile: Profile, trip: Trip) -> bool:
@@ -417,7 +417,7 @@ def _viewer_has_joined(profile: Profile, trip: Trip) -> bool:
     """
     if trip.creator_id == profile.id:
         return True
-    return TripMembership.objects.filter(trip=trip, profile=profile, status=TripMembership.STATUS_JOINED).exists()
+    return TripMembership.objects.for_trip_and_profile(trip, profile).filter(status=TripMembership.STATUS_JOINED).exists()
 
 
 def _can_perform(profile: Profile, trip: Trip, level: str) -> bool:
@@ -436,7 +436,7 @@ def _can_perform(profile: Profile, trip: Trip, level: str) -> bool:
     if level == Trip.PERM_EVERYONE:
         return True
     if level == Trip.PERM_ORGANIZERS:
-        return TripMembership.objects.filter(trip=trip, profile=profile, is_organizer=True).exists()
+        return TripMembership.objects.for_trip_and_profile(trip, profile).filter(is_organizer=True).exists()
     return False
 
 
@@ -613,7 +613,7 @@ def _render_activities_panel(request: HttpRequest, trip: Trip, profile: Profile)
       same as its own initial ``hx-trigger="load"``.
     """
     activities_html = _activities_panel_html(request, trip, profile)
-    viewer_membership = None if trip.creator_id == profile.id else TripMembership.objects.filter(trip=trip, profile=profile).first()
+    viewer_membership = None if trip.creator_id == profile.id else TripMembership.objects.for_trip_and_profile(trip, profile).first()
     header_html = render_to_string(
         request=request,
         template_name="dashboard/partials/trips/trip_header_partial.html",
@@ -801,8 +801,8 @@ class TripDetailView(LoginRequiredMixin, View):
         if isinstance(result, HttpResponse):
             return result
         trip = result
-        viewer_membership = None if trip.creator_id == profile.id else TripMembership.objects.filter(trip=trip, profile=profile).first()
-        TripMembership.objects.filter(trip=trip, profile=profile).update(last_viewed_at=timezone.now())
+        viewer_membership = None if trip.creator_id == profile.id else TripMembership.objects.for_trip_and_profile(trip, profile).first()
+        TripMembership.objects.for_trip_and_profile(trip, profile).update(last_viewed_at=timezone.now())
         return render(
             request,
             "dashboard/pages/trips/detail.html",
@@ -1354,7 +1354,7 @@ class TripMemberRemoveView(LoginRequiredMixin, View):
             return HttpResponse("The trip creator cannot be removed.", status=400)
         if profile not in {target, trip.creator}:
             return HttpResponse("Only the trip creator can remove other members.", status=403)
-        TripMembership.objects.filter(trip=trip, profile=target).delete()
+        TripMembership.objects.for_trip_and_profile(trip, target).delete()
 
         return _render_members_panel(request, trip, profile)
 
@@ -1579,7 +1579,7 @@ class TripMembershipJoinView(LoginRequiredMixin, View):
         trip = result
 
         if trip.creator_id != profile.id:
-            TripMembership.objects.filter(trip=trip, profile=profile).update(status=TripMembership.STATUS_JOINED)
+            TripMembership.objects.for_trip_and_profile(trip, profile).update(status=TripMembership.STATUS_JOINED)
             # Joining reveals every place already on the itinerary - each one
             # counts in its sharer's reshare chain like any other pin share.
             from urbanlens.dashboard.services.trip_share_tracking import record_trip_shares_for_member
@@ -1644,7 +1644,7 @@ class TripLeaveView(LoginRequiredMixin, View):
         if trip.creator == profile:
             return HttpResponse("The trip creator cannot leave - delete the trip instead.", status=400)
 
-        TripMembership.objects.filter(trip=trip, profile=profile).delete()
+        TripMembership.objects.for_trip_and_profile(trip, profile).delete()
 
         from django.urls import reverse as _reverse
 

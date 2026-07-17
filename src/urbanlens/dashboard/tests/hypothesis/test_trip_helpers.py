@@ -575,3 +575,72 @@ class ActivitiesPanelHasCoordsTests(TestCase):
         resp = self.client_.get(reverse("trips.activities", args=[self.trip.slug]))
 
         self.assertNotIn("Needs location", resp.content.decode())
+
+
+# ---------------------------------------------------------------------------
+# TripMembershipQuerySet - custom queryset/manager (previously the bare
+# default manager, inconsistent with the rest of the codebase's convention)
+# ---------------------------------------------------------------------------
+
+class TripMembershipQuerySetTests(TestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.creator_user: User = baker.make("auth.User")
+        self.creator = Profile.objects.get(user=self.creator_user)
+        self.trip = Trip.objects.create(name="Test Trip", creator=self.creator)
+        self.member_user: User = baker.make("auth.User")
+        self.member = Profile.objects.get(user=self.member_user)
+
+    def test_for_trip_and_profile_matches_the_unique_pair(self) -> None:
+        membership = TripMembership.objects.create(trip=self.trip, profile=self.member, rsvp="yes")
+
+        found = TripMembership.objects.for_trip_and_profile(self.trip, self.member).first()
+
+        self.assertEqual(found, membership)
+
+    def test_for_trip_and_profile_excludes_other_profiles(self) -> None:
+        TripMembership.objects.create(trip=self.trip, profile=self.member, rsvp="yes")
+        other_user: User = baker.make("auth.User")
+        other = Profile.objects.get(user=other_user)
+
+        found = TripMembership.objects.for_trip_and_profile(self.trip, other).first()
+
+        self.assertIsNone(found)
+
+    def test_trip_ids_for_returns_every_trip_the_profile_belongs_to(self) -> None:
+        other_trip = Trip.objects.create(name="Other Trip", creator=self.creator)
+        TripMembership.objects.create(trip=self.trip, profile=self.member, rsvp="yes")
+        TripMembership.objects.create(trip=other_trip, profile=self.member, rsvp="yes")
+
+        ids = set(TripMembership.objects.trip_ids_for(self.member))
+
+        self.assertEqual(ids, {self.trip.pk, other_trip.pk})
+
+    def test_trip_ids_for_excludes_other_profiles_trips(self) -> None:
+        TripMembership.objects.create(trip=self.trip, profile=self.member, rsvp="yes")
+        other_user: User = baker.make("auth.User")
+        other = Profile.objects.get(user=other_user)
+
+        ids = set(TripMembership.objects.trip_ids_for(other))
+
+        self.assertEqual(ids, set())
+
+    def test_joined_includes_only_joined_status_members(self) -> None:
+        joined = TripMembership.objects.create(trip=self.trip, profile=self.member, status=TripMembership.STATUS_JOINED)
+        invited_user: User = baker.make("auth.User")
+        invited_profile = Profile.objects.get(user=invited_user)
+        TripMembership.objects.create(trip=self.trip, profile=invited_profile, status=TripMembership.STATUS_INVITED)
+
+        result = list(TripMembership.objects.joined(self.trip))
+
+        self.assertEqual(result, [joined])
+
+    def test_rsvp_yes_includes_only_yes_responses(self) -> None:
+        yes_member = TripMembership.objects.create(trip=self.trip, profile=self.member, rsvp=TripMembership.RSVP_YES)
+        maybe_user: User = baker.make("auth.User")
+        maybe_profile = Profile.objects.get(user=maybe_user)
+        TripMembership.objects.create(trip=self.trip, profile=maybe_profile, rsvp=TripMembership.RSVP_MAYBE)
+
+        result = list(TripMembership.objects.rsvp_yes(self.trip))
+
+        self.assertEqual(result, [yes_member])

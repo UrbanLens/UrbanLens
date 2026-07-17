@@ -22,7 +22,7 @@ from django.db.models.fields import BooleanField, CharField, DateField, DateTime
 from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract
-from urbanlens.dashboard.models.trips.queryset import TripManager
+from urbanlens.dashboard.models.trips.queryset import TripManager, TripMembershipManager
 from urbanlens.dashboard.services.text_limits import (
     MAX_COMMENT_TEXT_LENGTH,
     MAX_TRIP_ACTIVITY_NOTES_LENGTH,
@@ -331,6 +331,8 @@ class TripMembership(abstract.DashboardModel):
         on_delete=CASCADE,
         related_name="trip_memberships",
     )
+
+    objects = TripMembershipManager()
 
     if TYPE_CHECKING:
         trip_id: int

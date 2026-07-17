@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from django.db.models import Count, F, Max, Prefetch, Q
 from django.utils import timezone
@@ -13,6 +13,8 @@ from urbanlens.dashboard.models import abstract
 
 if TYPE_CHECKING:
     import datetime
+
+    from django.db.models import QuerySet
 
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.models.trips.model import Trip
@@ -188,3 +190,60 @@ class TripQuerySet(abstract.DashboardQuerySet):
 
 class TripManager(abstract.DashboardManager.from_queryset(TripQuerySet)):
     """Custom query manager for Trip models."""
+
+
+class TripMembershipQuerySet(abstract.DashboardQuerySet):
+    """Custom queryset for TripMembership models."""
+
+    def for_trip_and_profile(self, trip: Trip, profile: Profile) -> TripMembershipQuerySet:
+        """The membership row for a specific trip+profile pair (the unique_together key).
+
+        Args:
+            trip: The trip.
+            profile: The member's profile.
+
+        Returns:
+            A queryset matching at most one row (unique_together on trip+profile).
+        """
+        return self.filter(trip=trip, profile=profile)
+
+    def trip_ids_for(self, profile: Profile) -> QuerySet[Any, Any]:
+        """IDs of every trip this profile has a membership row for.
+
+        Args:
+            profile: The profile (or a raw profile id) to look up.
+
+        Returns:
+            A flat ``values_list`` queryset of trip ids.
+        """
+        return self.filter(profile=profile).values_list("trip_id", flat=True)
+
+    def joined(self, trip: Trip) -> TripMembershipQuerySet:
+        """Members who have actually joined (not just invited) a trip.
+
+        Args:
+            trip: The trip.
+
+        Returns:
+            Matching membership rows.
+        """
+        from urbanlens.dashboard.models.trips.model import TripMembership
+
+        return self.filter(trip=trip, status=TripMembership.STATUS_JOINED)
+
+    def rsvp_yes(self, trip: Trip) -> TripMembershipQuerySet:
+        """Members who RSVP'd yes to a trip.
+
+        Args:
+            trip: The trip.
+
+        Returns:
+            Matching membership rows.
+        """
+        from urbanlens.dashboard.models.trips.model import TripMembership
+
+        return self.filter(trip=trip, rsvp=TripMembership.RSVP_YES)
+
+
+class TripMembershipManager(abstract.DashboardManager.from_queryset(TripMembershipQuerySet)):
+    """Custom query manager for TripMembership models."""
