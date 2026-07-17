@@ -444,7 +444,9 @@ def create_group_message(
     _notify_group_message(message)
     if not defer_broadcast:
         broadcast_group_message(message)
-    logger.info("Group message %s: profile %s -> group %s", message.pk, sender.pk, group.pk)
+    # DEBUG, not INFO: fires on every group message sent, same reasoning as
+    # the 1:1 direct-message send log in services.direct_messages.
+    logger.debug("Group message %s: profile %s -> group %s", message.pk, sender.pk, group.pk)
     return message
 
 

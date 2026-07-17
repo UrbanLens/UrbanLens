@@ -571,7 +571,10 @@ def create_direct_message(
 
             transaction.on_commit(lambda: detect_dm_address_mentions.delay(message.pk))
 
-    logger.info("Direct message %s: profile %s -> profile %s", message.pk, sender.pk, recipient.pk)
+    # DEBUG, not INFO: this fires on every single message sent site-wide, so at
+    # INFO it drowns out genuinely noteworthy log lines in production. Still
+    # available on demand by turning DEBUG on, unlike removing it outright.
+    logger.debug("Direct message %s: profile %s -> profile %s", message.pk, sender.pk, recipient.pk)
 
     if is_thread_open(recipient.pk, sender.pk):
         # Recipient is already looking at this conversation - mark it read
