@@ -531,3 +531,83 @@ class ConversationPaginationTests(TestCase):
         self.client.logout()
         response = self.client.get(reverse("messages.older", kwargs={"profile_slug": self.partner.slug}), {"before": "1"})
         self.assertEqual(response.status_code, 302)
+
+
+class ThreadRenderingRegressionTests(TestCase):
+    """Regression coverage for a reported "no longer see X" batch of complaints:
+    per-message controls, timestamps, and date-separator headers between days.
+
+    Investigated first: the hover-reveal CSS for .dm-bubble__menu-btn/.dm-bubble__time
+    (opacity: 0 until hover/focus/tap) predates every change in this session by over a
+    week, and the group-chat commit touched neither _message_items.html nor this CSS -
+    so there was no code regression to find for the "controls"/"timestamps" complaints;
+    that's long-standing, deliberate chat-app-style design, not a bug. This class instead
+    locks in the one thing that actually deserved direct verification: the date-separator
+    <ifchanged> logic on the server, which had zero prior test coverage - plus confirms,
+    directly against the rendered markup, that every control/timestamp element these
+    complaints named is genuinely present (not literally missing), so nothing to disable/
+    hover is disabled by nothing being there at all.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.me = _profile()
+        self.partner = _profile()
+        _set_dm_visibility(self.partner, VisibilityChoice.ANYONE)
+        self.me.ensure_slug()
+        self.partner.ensure_slug()
+        self.client.force_login(self.me.user)
+
+    def _render(self) -> str:
+        # HTMX-partial request: just _thread.html's own markup, not the full
+        # page (which also embeds these same class names as JS selector
+        # strings in its <script> block - counting those too would inflate
+        # every assertion below and hide a real markup regression).
+        response = self.client.get(
+            reverse("messages.conversation", kwargs={"profile_slug": self.partner.slug}),
+            HTTP_HX_REQUEST="true",
+        )
+        self.assertEqual(response.status_code, 200)
+        return response.content.decode()
+
+    def test_date_separator_appears_once_per_distinct_day(self) -> None:
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        base = timezone.now() - timedelta(days=2)
+        DirectMessage.objects.create(sender=self.partner, recipient=self.me, body="day one - a")
+        DirectMessage.objects.filter(body="day one - a").update(created=base)
+        DirectMessage.objects.create(sender=self.me, recipient=self.partner, body="day one - b")
+        DirectMessage.objects.filter(body="day one - b").update(created=base + timedelta(hours=1))
+        DirectMessage.objects.create(sender=self.partner, recipient=self.me, body="day two - a")
+        DirectMessage.objects.filter(body="day two - a").update(created=base + timedelta(days=1))
+
+        content = self._render()
+        self.assertEqual(content.count("dm-day-sep"), 2)
+
+    def test_no_separator_between_same_day_messages(self) -> None:
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        base = timezone.now().replace(hour=9, minute=0, second=0, microsecond=0)
+        for i in range(3):
+            DirectMessage.objects.create(sender=self.partner, recipient=self.me, body=f"same day {i}")
+            DirectMessage.objects.filter(body=f"same day {i}").update(created=base + timedelta(minutes=i))
+
+        content = self._render()
+        self.assertEqual(content.count("dm-day-sep"), 1)
+
+    def test_every_message_renders_its_own_menu_button_and_timestamp(self) -> None:
+        """The controls/timestamps aren't literally absent - they're always in the
+        DOM, just CSS-hidden until hover/tap (verified separately in _messages.scss:
+        opacity: 0 with a :hover/:focus-within/--peek reveal). A regression that
+        actually removed them from the markup would be a much more severe bug than
+        "hidden until hover" - this guards against that happening by accident."""
+        DirectMessage.objects.create(sender=self.partner, recipient=self.me, body="one")
+        DirectMessage.objects.create(sender=self.me, recipient=self.partner, body="two")
+
+        content = self._render()
+        self.assertEqual(content.count("dm-bubble__menu-btn"), 2)
+        self.assertEqual(content.count("dm-bubble__time"), 2)
