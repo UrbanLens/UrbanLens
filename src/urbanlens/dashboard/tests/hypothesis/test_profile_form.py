@@ -7,11 +7,9 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime, timedelta
 
-from hypothesis import given, settings
-from hypothesis import strategies as st
-from model_bakery import baker
-
 from django import forms as django_forms
+from hypothesis import given, settings, strategies as st
+from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.forms.profile_form import (
@@ -22,7 +20,6 @@ from urbanlens.dashboard.forms.profile_form import (
 )
 from urbanlens.dashboard.forms.settings_form import MarkupDefaultsForm, PrivacySettingsForm
 from urbanlens.dashboard.models.profile.model import VisibilityChoice
-
 
 _hyp = settings(max_examples=100, deadline=None)
 _hyp_db = settings(max_examples=30, deadline=None)
@@ -241,6 +238,7 @@ class PrivacySettingsFormTests(TestCase):
             "trip_pin_location_visibility": VisibilityChoice.ANYONE,
             "contact_visibility": VisibilityChoice.FRIENDS,
             "direct_message_visibility": VisibilityChoice.ANYONE,
+            "common_pins_visibility": VisibilityChoice.FRIENDS,
             **overrides,
         }
 

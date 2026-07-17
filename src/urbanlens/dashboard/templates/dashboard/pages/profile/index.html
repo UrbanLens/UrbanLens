@@ -18,7 +18,7 @@
 <div class="profile-page page-content">
 
     {# -- About (bio) - the hero used to show a clamped duplicate above this, removed #}
-    {% if profile.bio %}
+    {% if profile.bio or profile.user == request.user %}
     <div class="profile-section ul-section">
         <h3 class="profile-section-title{% if profile.user == request.user %} ul-privacy-hint-row{% endif %}">
             About
@@ -26,7 +26,12 @@
             {% include "dashboard/partials/ui/_privacy_hint.html" with label="Name, avatar & bio" value=profile.get_profile_visibility_display field="profile_visibility" raw_value=profile.profile_visibility owner=profile %}
             {% endif %}
         </h3>
+        {% if profile.user == request.user %}
+        <p class="profile-bio-full profile-bio-full--editable" tabindex="0" role="button"
+           data-raw-bio="{{ profile.bio|default:'' }}" title="Click to edit your bio">{{ profile.bio|default:"Add a bio..." }}</p>
+        {% else %}
         <p class="profile-bio-full">{{ profile.bio }}</p>
+        {% endif %}
     </div>
     {% endif %}
 
@@ -530,5 +535,74 @@ function panToggleEdit(noteId) {
         textarea.style.height = textarea.scrollHeight + 'px';
     }
 }
+
+(function () {
+    // -- Click-to-edit-in-place bio (own profile only) - reuses the same
+    // autosave endpoint the full Edit Profile page's fields already use.
+    var bioEl = document.querySelector('.profile-bio-full--editable');
+    if (!bioEl) return;
+
+    var csrftoken = '{{ csrf_token }}';
+    var updateUrl = '{% url "profile.field.update" %}';
+    var placeholder = 'Add a bio...';
+
+    function startEdit() {
+        if (bioEl.querySelector('textarea')) return;
+        var rawBio = bioEl.dataset.rawBio || '';
+        var textarea = document.createElement('textarea');
+        textarea.className = 'profile-bio-input';
+        textarea.value = rawBio;
+        textarea.placeholder = placeholder;
+        textarea.maxLength = 50000;
+        textarea.rows = 3;
+
+        var displayText = bioEl.textContent;
+        bioEl.textContent = '';
+        bioEl.appendChild(textarea);
+        textarea.style.height = 'auto';
+        textarea.style.height = textarea.scrollHeight + 'px';
+        textarea.focus();
+
+        var done = false;
+        function finish(save) {
+            if (done) return;
+            done = true;
+            if (save && textarea.value.trim() !== rawBio.trim()) {
+                var newBio = textarea.value.trim();
+                var body = new URLSearchParams();
+                body.set('field', 'bio');
+                body.set('value', newBio);
+                fetch(updateUrl, {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': csrftoken },
+                    body: body,
+                })
+                    .then(function (r) { if (!r.ok) throw new Error(); })
+                    .then(function () {
+                        bioEl.dataset.rawBio = newBio;
+                        bioEl.textContent = newBio || placeholder;
+                        if (typeof toastr !== 'undefined') toastr.success('Bio updated.');
+                    })
+                    .catch(function () {
+                        bioEl.textContent = displayText;
+                        if (typeof toastr !== 'undefined') toastr.error('Failed to update bio.');
+                    });
+            } else {
+                bioEl.textContent = displayText;
+            }
+        }
+
+        textarea.addEventListener('blur', function () { finish(true); });
+        textarea.addEventListener('keydown', function (e) {
+            e.stopPropagation();
+            if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+        });
+    }
+
+    bioEl.addEventListener('click', startEdit);
+    bioEl.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); startEdit(); }
+    });
+}());
 </script>
 {% endblock %}

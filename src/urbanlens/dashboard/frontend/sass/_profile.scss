@@ -190,6 +190,35 @@
     line-height: 1.6;
     margin: 0;
     white-space: pre-wrap;
+
+    &--editable {
+        cursor: pointer;
+        border-radius: 6px;
+        padding: .2rem .4rem;
+        margin: 0 0 0 -.4rem;
+        transition: background .15s;
+
+        &:hover,
+        &:focus-visible {
+            background: var(--ul-grey-0a);
+            outline: none;
+        }
+    }
+}
+
+.profile-bio-input {
+    display: block;
+    width: 100%;
+    font: inherit;
+    line-height: inherit;
+    color: inherit;
+    background: var(--ul-control-bg);
+    border: 1px solid var(--ul-color-accent);
+    border-radius: 6px;
+    padding: .2rem .4rem;
+    margin: 0 0 0 -.4rem;
+    outline: none;
+    resize: vertical;
 }
 
 .profile-meta-row {
