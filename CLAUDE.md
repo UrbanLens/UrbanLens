@@ -48,6 +48,7 @@ Full stack: Django app on port 21800, Nginx on 21080, PostgreSQL/PostGIS.
 Local Windows dev cannot run Docker directly - use the remote dev server below instead.
 
 ### Remote dev server (Docker/Docker Compose)
+NOTE: This is temporarily disabled as of 2026-07-17. This message will be deleted when it is re-enabled. Don't ssh to the dev server for right now.
 
 Claude has SSH access to a dedicated Ubuntu dev VM (hostname `chiron`) that can run Docker and
 docker-compose, since the local Windows environment cannot. Details:
