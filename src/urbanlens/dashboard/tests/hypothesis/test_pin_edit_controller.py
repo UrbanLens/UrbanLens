@@ -169,3 +169,42 @@ class PinOverviewGeocodingFailureTests(TestCase):
             response = PinOverviewView.as_view()(req, pin_slug=self.pin.slug)
 
         self.assertEqual(response.status_code, 200)
+
+
+class PinOverviewEditableTitleTests(TestCase):
+    """The pin title renders as a click-to-edit-in-place element, wired to pin.quick_edit."""
+
+    def setUp(self) -> None:
+        self.factory = RequestFactory()
+        self.profile = baker.make(User).profile
+        self.user = self.profile.user
+        self.pin = baker.make(Pin, profile=self.profile, name="Old Factory")
+
+    def _get(self):
+        req = self.factory.get(f"/map/pin/{self.pin.slug}/overview/")
+        req.user = self.user
+        with (
+            patch("urbanlens.dashboard.controllers.pin_edit._ensure_location_address"),
+            patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None),
+            # pin.location.cached_place_name is falsy for a fresh baker Location (no
+            # GooglePlace stub relation), so PinOverviewView.get() tries to enqueue a
+            # real Celery task here - mock it so the test never touches a broker.
+            patch("urbanlens.dashboard.services.celery.safely_enqueue_task"),
+        ):
+            return PinOverviewView.as_view()(req, pin_slug=self.pin.slug)
+
+    def test_title_is_marked_editable(self) -> None:
+        content = self._get().content.decode()
+        self.assertIn("pin-title--editable", content)
+
+    def test_title_carries_the_raw_name_for_the_edit_input(self) -> None:
+        content = self._get().content.decode()
+        self.assertIn('data-raw-name="Old Factory"', content)
+
+    def test_title_carries_the_location_fallback_name(self) -> None:
+        content = self._get().content.decode()
+        self.assertIn(f'data-location-name="{self.pin.location.display_name}"', content)
+
+    def test_title_wiring_posts_to_quick_edit(self) -> None:
+        content = self._get().content.decode()
+        self.assertIn(f"/dashboard/map/quick-edit/{self.pin.slug}/", content)

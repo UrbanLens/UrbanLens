@@ -2,7 +2,9 @@
 
     {# -- Title + community wiki box ----------------------------------------- #}
     <div class="pin-overview-title-row">
-        <h1 class="pin-title location-title">{{ pin.effective_name }}</h1>
+        <h1 class="pin-title location-title pin-title--editable" tabindex="0" role="button"
+            data-raw-name="{{ pin.name|default:'' }}" data-location-name="{{ pin.location.display_name|default:'' }}"
+            title="Click to rename">{{ pin.effective_name }}</h1>
 
         {% if user.profile.community_enabled %}
             {% if pin.location and pin.location.slug %}
@@ -177,3 +179,75 @@
         </div>
     </div>
 </div>
+
+<script>
+(function () {
+    var titleEl = document.querySelector('#pin-overview .pin-title--editable');
+    if (!titleEl) return;
+
+    var csrftoken = '{{ csrf_token }}';
+    var quickEditUrl = '{% url "pin.quick_edit" pin.slug %}';
+
+    function startEdit() {
+        if (titleEl.querySelector('input')) return;
+        var rawName = titleEl.dataset.rawName || '';
+        var locationName = titleEl.dataset.locationName || '';
+        var input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'pin-title-input';
+        input.maxLength = 255;
+        input.value = rawName;
+        input.placeholder = locationName || 'Pin name';
+
+        var displayText = titleEl.textContent;
+        titleEl.textContent = '';
+        titleEl.appendChild(input);
+        input.focus();
+        input.select();
+
+        var done = false;
+        function finish(save) {
+            if (done) return;
+            done = true;
+            if (save && input.value.trim() !== rawName.trim()) {
+                var newName = input.value.trim();
+                var body = new URLSearchParams();
+                body.set('name', newName);
+                fetch(quickEditUrl, {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': csrftoken },
+                    body: body,
+                })
+                    .then(function (r) { if (!r.ok) throw new Error(); })
+                    .then(function () {
+                        titleEl.dataset.rawName = newName;
+                        titleEl.textContent = newName || locationName;
+                        if (typeof toastr !== 'undefined') toastr.success('Pin renamed.');
+                    })
+                    .catch(function () {
+                        titleEl.textContent = displayText;
+                        if (typeof toastr !== 'undefined') toastr.error('Failed to rename pin.');
+                    });
+            } else {
+                titleEl.textContent = displayText;
+            }
+        }
+
+        input.addEventListener('blur', function () { finish(true); });
+        input.addEventListener('keydown', function (e) {
+            // Stop this from bubbling to titleEl's own keydown listener below -
+            // Enter/Space here (including a space typed into the new title)
+            // would otherwise re-trigger startEdit() the instant this input is
+            // removed from the DOM by finish().
+            e.stopPropagation();
+            if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+            else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+        });
+    }
+
+    titleEl.addEventListener('click', startEdit);
+    titleEl.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); startEdit(); }
+    });
+}());
+</script>
