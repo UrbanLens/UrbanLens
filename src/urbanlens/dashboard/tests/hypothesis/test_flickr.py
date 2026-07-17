@@ -303,3 +303,59 @@ class ImportFlickrPhotosTaskTests(TestCase):
         with mock.patch("urbanlens.dashboard.tasks.update_task_progress"):
             counts = tasks.import_flickr_photos(self.pin.pk, self.profile.pk, ["42"])
         self.assertEqual(counts, {"imported": 0, "skipped": 0, "failed": 0})
+
+
+class GetFlickrAccountTests(TestCase):
+    """FlickrAccountManager.get_for_profile() heals accounts left with undecryptable tokens.
+
+    Unlike the equivalent Immich/GoogleCalendar/GooglePhotos lookups, nothing
+    here ever caught InvalidToken before this - every page or task touching a
+    Flickr connection after a field_encryption_key rotation would 500 outright
+    instead of treating it as "never connected" and offering reconnection.
+    """
+
+    def setUp(self) -> None:
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+        self.account = FlickrAccount.objects.create(profile=self.profile, oauth_token="t", oauth_token_secret="s", flickr_user_id="1@N00")
+
+    def _corrupt_stored_oauth_token(self) -> None:
+        """Write a ciphertext-shaped value directly to the DB that Fernet cannot decrypt."""
+        from django.db import connection
+
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "UPDATE dashboard_flickr_accounts SET oauth_token = %s WHERE id = %s",
+                ["not-a-valid-fernet-token", self.account.id],
+            )
+
+    def test_returns_account_when_decryptable(self) -> None:
+        self.assertEqual(FlickrAccount.objects.get_for_profile(self.profile), self.account)
+
+    def test_undecryptable_account_is_healed_to_none(self) -> None:
+        self._corrupt_stored_oauth_token()
+        self.assertIsNone(FlickrAccount.objects.get_for_profile(self.profile))
+        self.assertFalse(FlickrAccount.objects.filter(profile=self.profile).exists())
+
+    def test_settings_page_does_not_500_with_undecryptable_account(self) -> None:
+        self._corrupt_stored_oauth_token()
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("settings.flickr"))
+        self.assertEqual(response.status_code, 200)
+
+
+class FlickrAccountDeleteForProfileTests(TestCase):
+    def test_removes_the_profiles_account(self) -> None:
+        user = baker.make(User)
+        profile = user.profile
+        FlickrAccount.objects.create(profile=profile, oauth_token="t", oauth_token_secret="s", flickr_user_id="1@N00")
+
+        FlickrAccount.objects.delete_for_profile(profile)
+
+        self.assertFalse(FlickrAccount.objects.filter(profile=profile).exists())
+
+    def test_noop_when_the_profile_has_no_account(self) -> None:
+        user = baker.make(User)
+        profile = user.profile
+        FlickrAccount.objects.delete_for_profile(profile)  # must not raise
+        self.assertFalse(FlickrAccount.objects.filter(profile=profile).exists())

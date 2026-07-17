@@ -95,7 +95,7 @@ class FlickrSettingsView(LoginRequiredMixin, View):
 
     def get(self, request: HttpRequest) -> HttpResponse:
         profile = _request_profile(request)
-        account = FlickrAccount.objects.filter(profile=profile).first()
+        account = FlickrAccount.objects.get_for_profile(profile)
         return render(request, _SETTINGS_PARTIAL, {"account": account})
 
 
@@ -152,7 +152,7 @@ class FlickrDisconnectView(LoginRequiredMixin, View):
 
     def post(self, request: HttpRequest) -> HttpResponse:
         profile = _request_profile(request)
-        FlickrAccount.objects.filter(profile=profile).delete()
+        FlickrAccount.objects.delete_for_profile(profile)
         response = render(request, _SETTINGS_PARTIAL, {"account": None})
         return _with_toast(response, "Flickr disconnected.")
 
@@ -170,7 +170,7 @@ class PinFlickrSearchView(LoginRequiredMixin, View):
     def get(self, request: HttpRequest, pin_slug: str) -> HttpResponse:
         pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         profile = _request_profile(request)
-        account = FlickrAccount.objects.filter(profile=profile).first()
+        account = FlickrAccount.objects.get_for_profile(profile)
         mode = request.GET.get("mode", PhotoImportMode.NEARBY)
         if mode not in PhotoImportMode.values:
             mode = PhotoImportMode.NEARBY
