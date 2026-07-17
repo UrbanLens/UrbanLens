@@ -242,7 +242,39 @@ class EpaEchoDetailPanelSource(CoordinateGatedInfoPanelSource):
 
         lat = float(pin.effective_latitude or 0)
         lng = float(pin.effective_longitude or 0)
-        LocationCache.set(pin.location, self.cache_source, _fetch_epa_echo_data(pin), query_key=f"{lat:.5f},{lng:.5f}")
+        data = _fetch_epa_echo_data(pin)
+        LocationCache.set(pin.location, self.cache_source, data, query_key=f"{lat:.5f},{lng:.5f}")
+
+        exact_site = data.get("exact_site")
+        registry_id = exact_site.get("registry_id") if exact_site else None
+        if registry_id:
+            self._add_echo_report_link(pin, pin.location, registry_id)
+
+    @staticmethod
+    def _add_echo_report_link(pin: Pin, location: Location, registry_id: str) -> None:
+        """Add the EPA ECHO compliance report URL to the pin's (and wiki's) links, if not already there.
+
+        Mirrors NominatimPanelSource._add_osm_link's pattern for auto-adding a
+        confirmed-relevant external report link once a facility is matched to
+        this exact pin - see render_context's footer_link for the same URL
+        shown inline on the detail card itself.
+
+        Args:
+            pin: The pin whose links should include this URL.
+            location: The pin's location, for reaching its wiki (if any).
+            registry_id: The EPA FRS Registry ID of the matched facility.
+        """
+        from django.core.exceptions import ObjectDoesNotExist
+
+        from urbanlens.dashboard.models.links.model import PinLink, WikiLink
+
+        url = f"https://echo.epa.gov/detailed-facility-report?fid={registry_id}"
+        PinLink.objects.get_or_create(pin=pin, url=url, defaults={"name": "EPA Compliance Report"})
+        try:
+            wiki = location.wiki
+        except ObjectDoesNotExist:
+            return
+        WikiLink.objects.get_or_create(wiki=wiki, url=url, defaults={"name": "EPA Compliance Report"})
 
     def render_context(self, pin: Pin, data: dict) -> dict | None:
         """Build the exact-site detail card; None (204, hidden) when no facility matched this pin's coordinates."""

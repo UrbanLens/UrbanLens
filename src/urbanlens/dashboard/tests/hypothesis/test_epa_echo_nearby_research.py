@@ -127,6 +127,57 @@ class EpaEchoDetailPanelSourceTests(TestCase):
         self.assertEqual(ctx["footer_link"]["url"], "https://echo.epa.gov/")
 
 
+class EpaEchoDetailPanelSourceFetchLinkTests(TestCase):
+    """fetch() must add the matched facility's EPA compliance report to the pin's
+    (and wiki's) links - the same URL already shown inline via render_context's
+    footer_link, but persisted as a real PinLink/WikiLink so it survives on the
+    pin's own Links list, mirroring NominatimPanelSource._add_osm_link."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.source = EpaEchoDetailPanelSource()
+        self.location: Location = baker.make("dashboard.Location", latitude=40.0, longitude=-74.0)
+        self.pin: Pin = baker.make_recipe("dashboard.pin", profile=baker.make(User).profile, location=self.location)
+
+    def _fetch_with(self, exact_site):
+        from urbanlens.dashboard.models.links.model import PinLink
+
+        with mock.patch(
+            "urbanlens.dashboard.plugins.builtin.epa_echo._fetch_epa_echo_data",
+            return_value={"facilities": [], "exact_site": exact_site},
+        ):
+            self.source.fetch(self.pin)
+        return PinLink.objects.filter(pin=self.pin)
+
+    def test_exact_site_match_adds_a_pin_link(self) -> None:
+        links = self._fetch_with({"name": "Old Mill Factory", "address": "1 Main St", "registry_id": "R123", "programs": []})
+        self.assertTrue(links.filter(url="https://echo.epa.gov/detailed-facility-report?fid=R123").exists())
+
+    def test_no_exact_site_adds_no_link(self) -> None:
+        links = self._fetch_with(None)
+        self.assertFalse(links.exists())
+
+    def test_missing_registry_id_adds_no_link(self) -> None:
+        links = self._fetch_with({"name": "Old Mill Factory", "address": "1 Main St", "registry_id": "", "programs": []})
+        self.assertFalse(links.exists())
+
+    def test_link_is_also_added_to_the_locations_wiki_when_one_exists(self) -> None:
+        from urbanlens.dashboard.models.links.model import WikiLink
+        from urbanlens.dashboard.models.wiki.model import Wiki
+
+        wiki: Wiki = baker.make("dashboard.Wiki", location=self.location)
+        self._fetch_with({"name": "Old Mill Factory", "address": "1 Main St", "registry_id": "R123", "programs": []})
+        self.assertTrue(WikiLink.objects.filter(wiki=wiki, url="https://echo.epa.gov/detailed-facility-report?fid=R123").exists())
+
+    def test_fetching_twice_does_not_duplicate_the_link(self) -> None:
+        from urbanlens.dashboard.models.links.model import PinLink
+
+        exact_site = {"name": "Old Mill Factory", "address": "1 Main St", "registry_id": "R123", "programs": []}
+        self._fetch_with(exact_site)
+        self._fetch_with(exact_site)
+        self.assertEqual(PinLink.objects.filter(pin=self.pin, url="https://echo.epa.gov/detailed-facility-report?fid=R123").count(), 1)
+
+
 class EpaEchoNearbyPanelSourceTests(TestCase):
     """render_context() for the nearby-facility list, excluding the exact-site match."""
 

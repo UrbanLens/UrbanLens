@@ -20,6 +20,7 @@ isn't unit-testable here (no browser), matching this page's existing JS-only fix
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+from unittest import mock
 
 from django.contrib.auth.models import User
 from django.urls import reverse
@@ -112,3 +113,50 @@ class ExtPanel204MarkerTests(TestCase):
         content = self._content()
         self.assertIn("hasAttribute('data-ext-panel-204')", content)
         self.assertNotIn("_extSections", content)
+
+
+class PendingPanelPlaceholderMarkerTests(TestCase):
+    """The self-polling "still fetching" placeholder (panel_pending.html) must carry
+    the same data-ext-panel-204 marker as the panel it stands in for.
+
+    It didn't: the marker was applied to the section's initial (first-load)
+    render only, not to panel_pending.html's own outer div - so once a panel's
+    background fetch hadn't landed yet and the page swapped in this
+    self-polling placeholder via outerHTML, the marker was gone from that
+    point on. If the poll budget then ran out (MAX_POLL_ATTEMPTS) and the
+    server's final response was a 204, the page's 204-removal handler no
+    longer recognized the element (isExtPanel204 checks the attribute, which
+    no longer existed) and the "Loading..." placeholder never got removed -
+    only a full page reload (which reconstructs the section fresh, with the
+    marker) fixed it. This is the "stuck in a loading state" bug report.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+        self.client.force_login(self.user)
+        self.pin: Pin = baker.make_recipe("dashboard.pin", profile=self.profile)
+        # schedule_panel_fetch's apply_async would otherwise try to reach a
+        # real Celery broker/result-backend - not available in this test
+        # environment (matches the established pattern in
+        # test_external_apis_toggle.py).
+        patcher = mock.patch("urbanlens.dashboard.tasks.fetch_panel_source")
+        self.addCleanup(patcher.stop)
+        patcher.start()
+
+    def test_pending_placeholder_carries_the_marker(self) -> None:
+        # A freshly-created pin's panel cache is cold, so this hits the
+        # not-ready branch and returns panel_pending.html's fragment directly.
+        response = self.client.get(reverse("pin.satellite_view", args=[self.pin.slug]))
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        self.assertIn("data-ext-panel-204", content)
+        self.assertIn('id="satellite-view-section"', content)
+
+    def test_pending_placeholder_keeps_the_marker_on_a_second_poll(self) -> None:
+        first = self.client.get(reverse("pin.satellite_view", args=[self.pin.slug]))
+        self.assertIn("data-ext-panel-204", first.content.decode())
+        second = self.client.get(reverse("pin.satellite_view", args=[self.pin.slug]), {"attempt": "1"})
+        self.assertEqual(second.status_code, 200)
+        self.assertIn("data-ext-panel-204", second.content.decode())
