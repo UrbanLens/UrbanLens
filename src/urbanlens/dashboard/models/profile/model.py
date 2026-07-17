@@ -63,6 +63,7 @@ _COMMUNITY_GATED_VISIBILITY_FIELDS = (
     "online_status_visibility",
     "read_receipt_visibility",
     "typing_indicator_visibility",
+    "common_pins_visibility",
 )
 
 
@@ -196,6 +197,12 @@ class Profile(abstract.PublicDashboardModel):
         choices=VisibilityChoice.choices,
         default=VisibilityChoice.FRIENDS,
         help_text="Who can see when you're typing a direct message reply.",
+    )
+    common_pins_visibility = CharField(
+        max_length=20,
+        choices=VisibilityChoice.choices,
+        default=VisibilityChoice.FRIENDS,
+        help_text="Who can see the specific pins you have in common with them. Requires both of you to allow it.",
     )
     direct_message_delete_after = CharField(
         max_length=20,
@@ -865,6 +872,29 @@ class Profile(abstract.PublicDashboardModel):
         from urbanlens.dashboard.models.direct_messages.temporary_access import DirectMessageTemporaryAccess
 
         return DirectMessageTemporaryAccess.grants_access(self.pk, viewer.pk)
+
+    def can_view_common_pins_with(self, viewer: Profile | None) -> bool:
+        """Return True if viewer may see the specific pins this profile has in common with them.
+
+        Deliberately mutual, unlike every other per-field visibility setting on
+        this model: revealing which locations a pair of users have both pinned
+        exposes information about *both* of them, not just this profile, so
+        both ``self.common_pins_visibility`` and ``viewer.common_pins_visibility``
+        must independently permit the other - one profile's setting can never
+        be overridden by the other's.
+
+        Args:
+            viewer: The profile requesting access, or None for anonymous visitors.
+
+        Returns:
+            True when both profiles' ``common_pins_visibility`` settings permit
+            the other.
+        """
+        if viewer is None or self.pk == viewer.pk:
+            return False
+        if not self.visibility_permits(self.common_pins_visibility, self, viewer):
+            return False
+        return viewer.visibility_permits(viewer.common_pins_visibility, viewer, self)
 
     def __str__(self):
         return self.username

@@ -1,0 +1,77 @@
+{% extends 'dashboard/themes/base.html' %}
+{% load map_components %}
+
+{% block header %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+{% endblock %}
+
+{% block page_title %}Places in Common with {{ other_profile.username }} - {{ site_title|default:"UrbanLens" }}{% endblock %}
+
+{% block hero %}
+{% include "dashboard/partials/ui/_page_hero.html" with icon="join_inner" title="Places in Common" subtitle=common_pins_subtitle back_url=other_profile_url back_label=other_profile.username modifier="top" %}
+{% endblock %}
+
+{% block content %}
+<div class="common-pins-page page-content">
+
+    <section class="common-pins-map-section" id="common-pins-map-section" {% if not common_pins %}hidden{% endif %}>
+        <div id="common-pins-map" class="common-pins-map"></div>
+        {% map_toolbar "screenshot" panel_id="common-pins-map-buttons" %}
+        {% map_layers_panel "street,terrain,satellite,borders" panel_id="common-pins-map-layers" %}
+    </section>
+
+    <script type="application/json" id="common-pins-map-data">{{ common_pins_json|safe }}</script>
+
+    <section class="common-pins-list-section">
+        {% if common_pins %}
+        <ul class="common-pins-list">
+            {% for pin in common_pins %}
+            <li class="common-pins-list-item">
+                <a href="{% url 'pin.details' pin.slug %}" class="common-pins-list-link">
+                    <span class="common-pins-list-name">{{ pin.effective_name }}</span>
+                    {% if pin.effective_official_name %}<span class="common-pins-list-address">{{ pin.effective_official_name }}</span>{% endif %}
+                </a>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="common-pins-empty">Nothing in common yet.</p>
+        {% endif %}
+    </section>
+</div>
+
+{% block scripts %}
+<script>
+(function () {
+    'use strict';
+    var mapEl = document.getElementById('common-pins-map');
+    if (!mapEl) return;
+
+    var dataEl = document.getElementById('common-pins-map-data');
+    var points = [];
+    try { points = dataEl ? JSON.parse(dataEl.textContent) : []; } catch (e) { points = []; }
+    if (!points.length) return;
+
+    var map = L.map(mapEl, { attributionControl: false }).setView([39.8283, -98.5795], 4);
+    window.map = map;
+    window.MapLayers.create(map, {
+        root: document.getElementById('common-pins-map-layers'),
+        onAttribution: function (text) {
+            var el = document.getElementById('page-footer-attribution-text');
+            if (el) el.textContent = text;
+        },
+    });
+    var markers = points.map(function (pt) {
+        var marker = L.marker([pt.latitude, pt.longitude]);
+        marker.bindPopup('<div class="pin-popup"><div class="popup-title">' + pt.name.replace(/[<>&]/g, function (c) { return { '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]; }) + '</div><div class="popup-actions"><a href="' + pt.url + '" class="view-full-pin">View Details</a></div></div>');
+        return marker.addTo(map);
+    });
+    if (markers.length > 1) map.fitBounds(L.featureGroup(markers).getBounds().pad(0.15));
+    else map.setView([points[0].latitude, points[0].longitude], 14);
+    setTimeout(function () { map.invalidateSize(); }, 0);
+})();
+</script>
+{% endblock %}
+{% endblock %}

@@ -35,10 +35,17 @@
     <div class="profile-stats-row">
         {# Viewing another user - show only mutual/shared stats #}
         {% if common_pin_count %}
+        {% if can_view_common_pins %}
+        <a href="{% url 'profile.common_pins' profile.slug %}" class="profile-stat profile-stat--highlight profile-stat--link ul-section" title="See which locations you've both pinned">
+            <span class="stat-value">{{ common_pin_count }}</span>
+            <span class="stat-label">Places in Common</span>
+        </a>
+        {% else %}
         <div class="profile-stat profile-stat--highlight ul-section" title="Locations you've both pinned">
             <span class="stat-value">{{ common_pin_count }}</span>
             <span class="stat-label">Places in Common</span>
         </div>
+        {% endif %}
         {% endif %}
         {% if trips_in_common %}
         <div class="profile-stat profile-stat--highlight ul-section" title="Trips you're both on">

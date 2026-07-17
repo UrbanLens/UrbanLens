@@ -104,6 +104,12 @@ class PrivacySettingsForm(forms.ModelForm):
         label="Direct Messages",
         help_text="Who can send you direct messages. Anyone you message first can always reply.",
     )
+    common_pins_visibility = forms.ChoiceField(
+        choices=VisibilityChoice.choices,
+        widget=forms.Select(attrs={"class": "settings-select browser-default"}),
+        label="Pins in Common",
+        help_text="Who can see the specific pins you have in common with them. Requires both of you to allow it.",
+    )
 
     class Meta:
         model = Profile
@@ -116,6 +122,7 @@ class PrivacySettingsForm(forms.ModelForm):
             "trip_pin_location_visibility",
             "contact_visibility",
             "direct_message_visibility",
+            "common_pins_visibility",
         ]
 
     def __init__(self, *args, **kwargs):

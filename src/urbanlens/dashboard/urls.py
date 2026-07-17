@@ -701,6 +701,7 @@ urlpatterns = [
                 path("preview/exit/", userprofile.ProfilePreviewStopView.as_view(), name="profile.preview.exit"),
                 path("preview/<slug:mode>/", userprofile.ProfilePreviewStartView.as_view(), name="profile.preview"),
                 path("<slug:profile_slug>/", userprofile.ViewProfileView.as_view(), name="profile.view_user"),
+                path("<slug:profile_slug>/common-pins/", userprofile.CommonPinsView.as_view(), name="profile.common_pins"),
                 path("<slug:profile_slug>/note/", userprofile.ProfileNoteView.as_view(), name="profile.note"),
                 path(
                     "<slug:profile_slug>/note/<int:note_id>/delete/",

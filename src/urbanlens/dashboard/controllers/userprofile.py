@@ -175,15 +175,9 @@ class ViewProfileView(LoginRequiredMixin, View):
         except Profile.DoesNotExist:
             return
 
-        # Location IDs pinned by this profile
-        their_loc_ids = set(
-            Pin.objects.filter(profile=profile, location__isnull=False).values_list("location_id", flat=True),
-        )
-        # Location IDs pinned by the current user
-        my_loc_ids = set(
-            Pin.objects.filter(profile=my_profile, location__isnull=False).values_list("location_id", flat=True),
-        )
-        common_ids = their_loc_ids & my_loc_ids
+        from urbanlens.dashboard.services.common_pins import common_pin_location_ids
+
+        common_ids = common_pin_location_ids([my_profile, profile])
 
         # Visited by both - has the protected "Visited" status label, or has a last_visited date
         # TODO: Whatever is happening here is probably wrong.
@@ -197,6 +191,7 @@ class ViewProfileView(LoginRequiredMixin, View):
         shared_visited_ids = their_visited_ids & my_visited_ids
 
         context["common_pin_count"] = len(common_ids)
+        context["can_view_common_pins"] = bool(common_ids) and profile.can_view_common_pins_with(my_profile)
         context["shared_visited"] = Location.objects.filter(id__in=shared_visited_ids).select_related("wiki").order_by("wiki__name", "official_name") if shared_visited_ids else Location.objects.none()
 
         # Friendship relationship
@@ -259,6 +254,44 @@ class ViewProfileView(LoginRequiredMixin, View):
         from urbanlens.dashboard.services.direct_messages import can_direct_message
 
         context["can_message"] = can_direct_message(my_profile, profile) or DirectMessage.objects.between(my_profile, profile).exists()
+
+
+class CommonPinsView(LoginRequiredMixin, View):
+    """List + map of the pins the viewer has in common with another profile.
+
+    Gated on ``Profile.can_view_common_pins_with`` - mutual, so a 404 covers
+    both "the other profile opted out" and "you haven't opted in yourself",
+    matching how ``ViewProfileView`` already 404s on a failed privacy check
+    rather than rendering an empty/error page that would confirm the profile
+    exists.
+    """
+
+    def get(self, request: HttpRequest, profile_slug: UUID) -> HttpResponse:
+        if not isinstance(request.user, User):
+            return redirect("login")
+        other = get_object_or_404(Profile, slug=profile_slug)
+        viewer = Profile.objects.filter(user=request.user).first()
+        if viewer is None or viewer.pk == other.pk or not other.can_view_common_pins_with(viewer):
+            raise Http404
+
+        from django.urls import reverse
+
+        from urbanlens.dashboard.services.common_pins import common_pin_location_ids
+
+        common_ids = common_pin_location_ids([viewer, other])
+        # Only ever read the viewer's own Pin rows for display - the other
+        # profile's private pin data (custom name, notes, icon) must never
+        # leak through this page, per the feature's own privacy requirement.
+        my_pins = Pin.objects.filter(profile=viewer, location_id__in=common_ids).select_related("location", "location__wiki").order_by("name")
+
+        context = {
+            "other_profile": other,
+            "other_profile_url": reverse("profile.view_user", args=[other.slug]),
+            "common_pins_subtitle": f"Pins you and {other.username} have both saved.",
+            "common_pins": my_pins,
+            "common_pins_json": json.dumps([pin.to_detail_json() for pin in my_pins]),
+        }
+        return render(request, "dashboard/pages/profile/common_pins.html", context)
 
 
 class ProfilePreviewStartView(LoginRequiredMixin, View):

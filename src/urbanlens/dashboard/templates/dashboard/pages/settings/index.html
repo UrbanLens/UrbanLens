@@ -149,6 +149,17 @@
                 {% endif %}
             </div>
 
+            <div class="settings-field">
+                <label class="settings-label" for="{{ privacy_form.common_pins_visibility.id_for_label }}">
+                    {{ privacy_form.common_pins_visibility.label }}
+                </label>
+                <p class="settings-help">{{ privacy_form.common_pins_visibility.help_text }}</p>
+                {{ privacy_form.common_pins_visibility }}
+                {% if privacy_form.common_pins_visibility.errors %}
+                <p class="settings-error">{{ privacy_form.common_pins_visibility.errors|join:", " }}</p>
+                {% endif %}
+            </div>
+
             <div class="settings-actions">
                 <button type="submit" class="settings-save-btn">Save</button>
             </div>

@@ -3089,3 +3089,61 @@ a.profile-stat--link {
     font-size: .78rem;
     line-height: 1.2;
 }
+
+// -- "Places in Common" page (mutual privacy-gated, linked from the stat above) ---
+
+.common-pins-map-section {
+    position: relative;
+    margin-bottom: 1.5rem;
+
+    &[hidden] { display: none; }
+}
+
+.common-pins-map {
+    height: 280px;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid var(--ul-surface-border);
+
+    @include up($breakpoint-sm) {
+        height: 360px;
+    }
+}
+
+.common-pins-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+}
+
+.common-pins-list-item {
+    @include surface($radius: $radius-md);
+    padding: 0;
+}
+
+.common-pins-list-link {
+    display: flex;
+    flex-direction: column;
+    padding: .85rem 1.1rem;
+    text-decoration: none;
+    color: inherit;
+}
+
+.common-pins-list-name {
+    font-weight: 600;
+    color: var(--ul-grey-9);
+}
+
+.common-pins-list-address {
+    font-size: .82rem;
+    color: var(--ul-grey-6);
+    margin-top: .15rem;
+}
+
+.common-pins-empty {
+    color: var(--ul-grey-6);
+    padding: 1rem 0;
+}
