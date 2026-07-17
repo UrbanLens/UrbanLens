@@ -16,7 +16,7 @@
                 <div class="cf-field-display" id="cf-field-display-{{ field.id }}">
                     <i class="material-symbols-outlined cf-type-icon" title="{{ field.get_field_type_display }}">{{ field.type_icon }}</i>
                     <span class="cf-field-name">{{ field.name }}</span>
-                    <span class="cf-type-chip">{{ field.get_field_type_display }}{% if field.style %} · {{ field.get_style_display }}{% endif %}{% if field.reference_kind %} · {{ field.reference_kind_label }}{% endif %}</span>
+                    <span class="cf-type-chip">{{ field.get_field_type_display }}{% if field.style %} · {{ field.get_style_display }}{% endif %}{% if field.reference_kind %} · {{ field.reference_kind_label }}{% endif %}{% if field.display != "default" %} · {{ field.get_display_display }}{% endif %}</span>
                     <span class="cf-field-actions">
                         <button type="button" class="btn btn--icon-sm" title="Edit field"
                                 onclick="document.getElementById('cf-field-display-{{ field.id }}').hidden = true; document.getElementById('cf-field-edit-{{ field.id }}').hidden = false;">
@@ -37,7 +37,7 @@
                       hx-swap="innerHTML">
                     {% csrf_token %}
                     <input type="text" name="name" class="cf-input cf-name-input" value="{{ field.name }}" maxlength="100" required>
-                    {% include "dashboard/partials/custom_fields/_definition_fields.html" with field=field %}
+                    {% include "dashboard/partials/custom_fields/_definition_fields.html" with field=field show_display=group.supports_display %}
                     <button type="submit" class="btn btn--icon-sm" title="Save">
                         <i class="material-symbols-outlined">check</i>
                     </button>
@@ -66,7 +66,7 @@
             {% csrf_token %}
             <input type="hidden" name="entity_type" value="{{ group.entity_type }}">
             <input type="text" name="name" class="cf-input cf-name-input" placeholder="New field name..." maxlength="100" required>
-            {% include "dashboard/partials/custom_fields/_definition_fields.html" with require_type=True %}
+            {% include "dashboard/partials/custom_fields/_definition_fields.html" with require_type=True show_display=group.supports_display %}
             <button type="submit" class="btn btn--icon-sm cf-add-btn" title="Add field">
                 <i class="material-symbols-outlined">check</i>
             </button>

@@ -16,6 +16,7 @@ from __future__ import annotations
 from datetime import date, datetime, time
 from decimal import Decimal, InvalidOperation
 import logging
+import math
 from typing import TYPE_CHECKING, Any
 
 from django.core.exceptions import ValidationError
@@ -76,6 +77,18 @@ class CustomFieldType(TextChoices):
     REFERENCE = "reference", "Reference"
 
 
+class CustomFieldDisplay(TextChoices):
+    """Where a field appears on the pin detail page.
+
+    Only meaningful for pin fields today - other entity types render in
+    compact strips with no section layout to place a field into.
+    """
+
+    DEFAULT = "default", "In the Custom Fields card"
+    SECTION = "section", "Its own section"
+    FIXED = "fixed", "Fixed on screen (draggable)"
+
+
 class CustomFieldStyle(TextChoices):
     """Presentation styles for a custom field's value input.
 
@@ -117,6 +130,11 @@ SLIDER_DEFAULT_MAX = 100
 #: Star ratings are a fixed 1-5 scale, matching the site's other star widgets.
 STARS_MAX = 5
 
+#: Bounds (viewport percentages) for a fixed-display field's dragged position,
+#: leaving room for the element itself so it can't be parked fully off-screen.
+FIXED_POS_MAX_LEFT = 92
+FIXED_POS_MAX_TOP = 88
+
 #: Material Symbols icon representing each field type in the UI.
 FIELD_TYPE_ICONS: dict[str, str] = {
     CustomFieldType.TEXT: "notes",
@@ -155,8 +173,12 @@ class CustomField(abstract.FrontendDashboardModel):
         style: Presentation style for the value input (:class:`CustomFieldStyle`);
             blank means the type's default. Only meaningful for types listed in
             :data:`STYLES_BY_TYPE`.
+        display: Where the field appears on the pin detail page
+            (:class:`CustomFieldDisplay`). Only meaningful for pin fields.
         config: Type/style-specific configuration: ``{"choices": [...]}`` for
-            select fields, optional ``{"min": ..., "max": ...}`` for sliders.
+            select fields, optional ``{"min": ..., "max": ...}`` for sliders,
+            ``{"fixed_pos": {"left": ..., "top": ...}}`` (viewport percentages)
+            for the dragged position of a fixed-display field.
         order: Manual sort order within an entity group (lower first).
     """
 
@@ -169,6 +191,7 @@ class CustomField(abstract.FrontendDashboardModel):
     name = CharField(max_length=100)
     field_type = CharField(max_length=10, choices=CustomFieldType.choices, default=CustomFieldType.TEXT)
     style = CharField(max_length=10, choices=CustomFieldStyle.choices, blank=True, default="")
+    display = CharField(max_length=10, choices=CustomFieldDisplay.choices, default=CustomFieldDisplay.DEFAULT)
     config = JSONField(default=dict, blank=True)
     order = PositiveSmallIntegerField(default=0)
 
@@ -274,6 +297,29 @@ class CustomField(abstract.FrontendDashboardModel):
         from urbanlens.dashboard.services.custom_field_references import reference_choices
 
         return reference_choices(kind, self.profile, include_pk=include_pk)
+
+    @property
+    def fixed_position(self) -> dict[str, float] | None:
+        """The saved drag position of a fixed-display field, clamped to bounds.
+
+        Returns:
+            ``{"left": ..., "top": ...}`` viewport percentages, or None when the
+            field has never been dragged (callers pick a default placement).
+        """
+        raw = (self.config or {}).get("fixed_pos")
+        if not isinstance(raw, dict):
+            return None
+        try:
+            left = float(raw.get("left"))  # type: ignore[arg-type]
+            top = float(raw.get("top"))  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            return None
+        if not (math.isfinite(left) and math.isfinite(top)):
+            return None
+        return {
+            "left": min(max(left, 0.0), float(FIXED_POS_MAX_LEFT)),
+            "top": min(max(top, 0.0), float(FIXED_POS_MAX_TOP)),
+        }
 
     @property
     def slider_min(self) -> Decimal:

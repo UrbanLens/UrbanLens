@@ -14,7 +14,7 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.forms.search import SearchForm
-from urbanlens.dashboard.models.custom_fields.model import CustomField, CustomFieldEntity, CustomFieldStyle, CustomFieldType, CustomFieldValue
+from urbanlens.dashboard.models.custom_fields.model import CustomField, CustomFieldDisplay, CustomFieldEntity, CustomFieldStyle, CustomFieldType, CustomFieldValue
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.markup.model import MarkupMap
 from urbanlens.dashboard.models.pin.model import Pin
@@ -559,6 +559,130 @@ class CustomFieldDefinitionStyleViewTests(CustomFieldTestsBase):
         )
         field.refresh_from_db()
         self.assertEqual(field.style, CustomFieldStyle.STARS)
+
+
+class CustomFieldDisplayTests(CustomFieldTestsBase):
+    """The display placement (default/section/fixed) and drag-position memory."""
+
+    def _post_position(self, field: CustomField, left: object, top: object):
+        return self.client.post(
+            reverse("custom_fields.position", args=[field.id]),
+            data=json.dumps({"left": left, "top": top}),
+            content_type="application/json",
+        )
+
+    def test_create_with_display(self) -> None:
+        self.client.post(
+            reverse("custom_fields.settings"),
+            {"entity_type": "pin", "name": "History", "field_type": "text", "display": "section"},
+        )
+        field = CustomField.objects.get(profile=self.profile, name="History")
+        self.assertEqual(field.display, CustomFieldDisplay.SECTION)
+
+    def test_display_defaults_when_omitted(self) -> None:
+        self.client.post(
+            reverse("custom_fields.settings"),
+            {"entity_type": "photo", "name": "Camera", "field_type": "text"},
+        )
+        field = CustomField.objects.get(profile=self.profile, name="Camera")
+        self.assertEqual(field.display, CustomFieldDisplay.DEFAULT)
+
+    def test_invalid_display_rejected(self) -> None:
+        self.client.post(
+            reverse("custom_fields.settings"),
+            {"entity_type": "pin", "name": "History", "field_type": "text", "display": "floating"},
+        )
+        self.assertFalse(CustomField.objects.filter(profile=self.profile, name="History").exists())
+
+    def test_update_changes_display(self) -> None:
+        field = self._field(name="Gate code")
+        self.client.post(
+            reverse("custom_fields.update", args=[field.id]),
+            {"name": "Gate code", "field_type": "text", "display": "fixed"},
+        )
+        field.refresh_from_db()
+        self.assertEqual(field.display, CustomFieldDisplay.FIXED)
+
+    def test_pin_panel_places_fields_by_display(self) -> None:
+        self._field(name="Plain field")
+        CustomField.objects.create(profile=self.profile, entity_type="pin", name="Section field", display=CustomFieldDisplay.SECTION)
+        fixed = CustomField.objects.create(profile=self.profile, entity_type="pin", name="Fixed field", display=CustomFieldDisplay.FIXED)
+
+        response = self.client.get(reverse("pin.custom_fields", args=[self.pin.slug]))
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode()
+
+        self.assertContains(response, "cf-section-card")
+        self.assertContains(response, "Section field")
+        self.assertContains(response, "cf-fixed-item")
+        self.assertContains(response, reverse("custom_fields.position", args=[fixed.id]))
+        # The default card's rows hold only the default-display field.
+        rows_html = html.split('class="cf-value-rows"')[1].split("</div>")[0] if 'class="cf-value-rows"' in html else ""
+        self.assertIn("Plain field", rows_html)
+        self.assertNotIn("Section field", rows_html)
+
+    def test_fixed_default_positions_stagger(self) -> None:
+        CustomField.objects.create(profile=self.profile, entity_type="pin", name="Fixed A", display=CustomFieldDisplay.FIXED)
+        CustomField.objects.create(profile=self.profile, entity_type="pin", name="Fixed B", display=CustomFieldDisplay.FIXED)
+        response = self.client.get(reverse("pin.custom_fields", args=[self.pin.slug]))
+        html = response.content.decode()
+        # Never-dragged fields must not overlap: each gets a distinct top offset.
+        self.assertIn("top: 16.00%", html)
+        self.assertIn("top: 27.00%", html)
+
+    def test_position_saves_and_clamps(self) -> None:
+        field = CustomField.objects.create(profile=self.profile, entity_type="pin", name="Fixed", display=CustomFieldDisplay.FIXED)
+        response = self._post_position(field, 150, -20)
+        self.assertEqual(response.status_code, 204)
+        field.refresh_from_db()
+        self.assertEqual(field.config["fixed_pos"], {"left": 92.0, "top": 0.0})
+        self.assertEqual(field.fixed_position, {"left": 92.0, "top": 0.0})
+
+    def test_saved_position_renders_on_the_panel(self) -> None:
+        field = CustomField.objects.create(profile=self.profile, entity_type="pin", name="Fixed", display=CustomFieldDisplay.FIXED)
+        self._post_position(field, 12.5, 33.25)
+        response = self.client.get(reverse("pin.custom_fields", args=[self.pin.slug]))
+        self.assertContains(response, "left: 12.50%; top: 33.25%;")
+
+    def test_position_rejects_garbage(self) -> None:
+        field = CustomField.objects.create(profile=self.profile, entity_type="pin", name="Fixed", display=CustomFieldDisplay.FIXED)
+        self.assertEqual(self._post_position(field, "left", "top").status_code, 400)
+        self.assertEqual(self._post_position(field, float("nan"), 5).status_code, 400)
+        response = self.client.post(reverse("custom_fields.position", args=[field.id]), data="not json", content_type="application/json")
+        self.assertEqual(response.status_code, 400)
+        field.refresh_from_db()
+        self.assertNotIn("fixed_pos", field.config or {})
+
+    def test_position_404_for_another_users_field(self) -> None:
+        other_profile = baker.make("auth.User").profile
+        field = CustomField.objects.create(profile=other_profile, entity_type="pin", name="Theirs", display=CustomFieldDisplay.FIXED)
+        self.assertEqual(self._post_position(field, 10, 10).status_code, 404)
+
+    def test_position_survives_definition_edit(self) -> None:
+        field = CustomField.objects.create(profile=self.profile, entity_type="pin", name="Fixed", display=CustomFieldDisplay.FIXED)
+        self._post_position(field, 40, 40)
+        self.client.post(
+            reverse("custom_fields.update", args=[field.id]),
+            {"name": "Renamed", "field_type": "text", "display": "fixed"},
+        )
+        field.refresh_from_db()
+        self.assertEqual(field.name, "Renamed")
+        self.assertEqual(field.config["fixed_pos"], {"left": 40.0, "top": 40.0})
+
+    def test_fixed_position_property_tolerates_bad_config(self) -> None:
+        self.assertIsNone(CustomField(config={"fixed_pos": "oops"}).fixed_position)
+        self.assertIsNone(CustomField(config={"fixed_pos": {"left": "x", "top": 1}}).fixed_position)
+        self.assertIsNone(CustomField(config=None).fixed_position)
+        clamped = CustomField(config={"fixed_pos": {"left": 500, "top": -3}}).fixed_position
+        self.assertEqual(clamped, {"left": 92.0, "top": 0.0})
+
+    def test_settings_panel_offers_display_only_for_pins(self) -> None:
+        response = self.client.get(reverse("custom_fields.settings"))
+        html = response.content.decode()
+        pin_group = html.split('id="cf-group-pin"')[1].split('id="cf-group-')[0]
+        photo_group = html.split('id="cf-group-photo"')[1].split('id="cf-group-')[0]
+        self.assertIn("cf-display-select", pin_group)
+        self.assertNotIn("cf-display-select", photo_group)
 
 
 class NewTypeValueEndpointTests(CustomFieldTestsBase):

@@ -3,7 +3,8 @@
 {# show/hide logic (style options appear only once a type is chosen, and only styles valid #}
 {# for that type are offered). #}
 {# Context: field_types, optional field (prefills the edit form), require_type (add forms #}
-{# start with no type selected so the style choice reveals itself after the type is picked). #}
+{# start with no type selected so the style choice reveals itself after the type is picked), #}
+{# show_display + display_choices (pin fields only - where the field sits on the pin page). #}
 <select name="field_type" class="cf-input cf-type-select" title="Field type" {% if require_type %}required{% endif %}>
     {% if require_type and not field %}<option value="" disabled selected>Type...</option>{% endif %}
     {% for value, label in field_types %}
@@ -11,6 +12,13 @@
     {% endfor %}
 </select>
 <select name="style" class="cf-input cf-style-select" title="Style" data-current="{{ field.style|default:'' }}" hidden></select>
+{% if show_display %}
+<select name="display" class="cf-input cf-display-select" title="Where this field appears on the pin details page">
+    {% for value, label in display_choices %}
+    <option value="{{ value }}" {% if field.display == value %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+</select>
+{% endif %}
 <select name="ref_type" class="cf-input cf-ref-kind-select" title="What this field references" hidden>
     <option value="" disabled {% if not field.reference_kind %}selected{% endif %}>References...</option>
     {% for value, label in reference_kinds %}

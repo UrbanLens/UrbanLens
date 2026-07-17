@@ -758,6 +758,7 @@ urlpatterns = [
     path("settings/custom-fields/", custom_fields.CustomFieldSettingsPanelView.as_view(), name="custom_fields.settings"),
     path("settings/custom-fields/<int:field_id>/", custom_fields.CustomFieldUpdateView.as_view(), name="custom_fields.update"),
     path("settings/custom-fields/<int:field_id>/delete/", custom_fields.CustomFieldDeleteView.as_view(), name="custom_fields.delete"),
+    path("custom-fields/<int:field_id>/position/", custom_fields.CustomFieldPositionView.as_view(), name="custom_fields.position"),
     path("custom-fields/photo/<int:image_id>/", custom_fields.PhotoCustomFieldsView.as_view(), name="custom_fields.photo"),
     path("custom-fields/markup-map/<uuid:map_uuid>/", custom_fields.MarkupMapCustomFieldsView.as_view(), name="custom_fields.markup_map"),
     path("settings/geocode/", settings.geocode_address, name="settings.geocode"),

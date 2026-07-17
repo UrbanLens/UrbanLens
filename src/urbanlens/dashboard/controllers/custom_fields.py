@@ -24,8 +24,11 @@ from django.views import View
 
 from urbanlens.dashboard.models.custom_fields.model import (
     ENTITY_ICONS,
+    FIXED_POS_MAX_LEFT,
+    FIXED_POS_MAX_TOP,
     STYLES_BY_TYPE,
     CustomField,
+    CustomFieldDisplay,
     CustomFieldEntity,
     CustomFieldType,
     CustomFieldValue,
@@ -165,12 +168,15 @@ def _parse_definition(request: HttpRequest) -> tuple[dict[str, Any], str | None]
     name = (request.POST.get("name") or "").strip()
     field_type = (request.POST.get("field_type") or "").strip() or CustomFieldType.TEXT
     style = (request.POST.get("style") or "").strip()
+    display = (request.POST.get("display") or "").strip() or CustomFieldDisplay.DEFAULT
     if not name:
         return {}, "Name is required."
     if len(name) > 100:
         return {}, "Name is too long (100 characters max)."
     if field_type not in CustomFieldType.values:
         return {}, "Invalid field type."
+    if display not in CustomFieldDisplay.values:
+        return {}, "Invalid display option."
 
     allowed_styles = [value for value, _ in STYLES_BY_TYPE.get(field_type, [])]
     if style and style not in allowed_styles:
@@ -204,7 +210,7 @@ def _parse_definition(request: HttpRequest) -> tuple[dict[str, Any], str | None]
             return {}, "The slider minimum must be less than its maximum."
         config.update(bounds)
 
-    return {"name": name, "field_type": field_type, "style": style, "config": config}, None
+    return {"name": name, "field_type": field_type, "style": style, "display": display, "config": config}, None
 
 
 def create_field(profile: Profile, entity_type: str, request: HttpRequest) -> str | None:
@@ -249,12 +255,20 @@ class CustomFieldSettingsPanelView(LoginRequiredMixin, View):
                     "label": label,
                     "icon": ENTITY_ICONS.get(entity_type, "tune"),
                     "fields": list(CustomField.objects.for_entity(profile, entity_type)),
+                    # display placement only exists on the pin detail page today.
+                    "supports_display": entity_type == CustomFieldEntity.PIN,
                 },
             )
         response = render(
             request,
             "dashboard/partials/custom_fields/settings_panel.html",
-            {"groups": groups, "field_types": CustomFieldType.choices, "styles_by_type": STYLES_BY_TYPE, "reference_kinds": REFERENCE_KINDS},
+            {
+                "groups": groups,
+                "field_types": CustomFieldType.choices,
+                "styles_by_type": STYLES_BY_TYPE,
+                "reference_kinds": REFERENCE_KINDS,
+                "display_choices": CustomFieldDisplay.choices,
+            },
         )
         if error:
             return _show_toast(response, error, level="error")
@@ -288,14 +302,16 @@ class CustomFieldUpdateView(LoginRequiredMixin, View):
             field.name = name
             field.field_type = definition["field_type"]
             field.style = definition["style"]
+            field.display = definition["display"]
             # Keep any config keys the form doesn't manage, but replace the managed ones.
+            # (fixed_pos survives here on purpose - a dragged position outlives edits.)
             config = dict(field.config or {})
             for key in ("choices", "min", "max", "ref_type"):
                 config.pop(key, None)
             config.update(definition["config"])
             field.config = config
             try:
-                field.save(update_fields=["name", "field_type", "style", "config", "updated"])
+                field.save(update_fields=["name", "field_type", "style", "display", "config", "updated"])
             except IntegrityError:
                 error = f"You already have a “{name}” field there."
         return CustomFieldSettingsPanelView()._render_panel(request, profile, error=error)  # noqa: SLF001
@@ -316,17 +332,46 @@ class CustomFieldDeleteView(LoginRequiredMixin, View):
 # -- Pin detail panel ----------------------------------------------------------
 
 
+#: Default placement (viewport %) for fixed fields that were never dragged:
+#: stacked down the right edge, offset per field so they don't overlap.
+_FIXED_DEFAULT_LEFT = 72.0
+_FIXED_DEFAULT_TOP = 16.0
+_FIXED_DEFAULT_STEP = 11.0
+
+
 def _render_pin_panel(request: HttpRequest, profile: Profile, pin: Pin, error: str | None = None) -> HttpResponse:
-    """Render the pin detail page's Custom Fields card."""
+    """Render the pin detail page's custom-fields area.
+
+    The response is one wrapper (``#pin-custom-fields-panel``) holding the
+    Custom Fields card (display=default rows), one standalone card per
+    display=section field, and one draggable overlay per display=fixed field -
+    so every value save or definition change re-renders all three placements
+    consistently in a single swap.
+    """
+    rows = rows_for_target(profile, CustomFieldEntity.PIN, pin)
+    default_rows = [row for row in rows if row["field"].display == CustomFieldDisplay.DEFAULT]
+    section_rows = [row for row in rows if row["field"].display == CustomFieldDisplay.SECTION]
+    fixed_rows = [row for row in rows if row["field"].display == CustomFieldDisplay.FIXED]
+    for index, row in enumerate(fixed_rows):
+        position = row["field"].fixed_position or {
+            "left": _FIXED_DEFAULT_LEFT,
+            "top": min(_FIXED_DEFAULT_TOP + index * _FIXED_DEFAULT_STEP, float(FIXED_POS_MAX_TOP)),
+        }
+        # Pre-formatted so template locale settings can't mangle the floats.
+        row["position_style"] = f"left: {position['left']:.2f}%; top: {position['top']:.2f}%;"
     response = render(
         request,
         "dashboard/partials/custom_fields/pin_panel.html",
         {
             "pin": pin,
-            "rows": rows_for_target(profile, CustomFieldEntity.PIN, pin),
+            "rows": default_rows,
+            "section_rows": section_rows,
+            "fixed_rows": fixed_rows,
+            "total_field_count": len(rows),
             "field_types": CustomFieldType.choices,
             "styles_by_type": STYLES_BY_TYPE,
             "reference_kinds": REFERENCE_KINDS,
+            "display_choices": CustomFieldDisplay.choices,
         },
     )
     if error:
@@ -358,6 +403,37 @@ class PinCustomFieldValueView(LoginRequiredMixin, View):
         field = get_object_or_404(CustomField, id=field_id, profile=profile, entity_type=CustomFieldEntity.PIN)
         _, error = save_value(field, pin, request.POST.get("value", ""))
         return _render_pin_panel(request, profile, pin, error=error)
+
+
+class CustomFieldPositionView(LoginRequiredMixin, View):
+    """POST: remember where the user dragged a fixed-display field.
+
+    The position is per-field (fields are already per-user) and applies to
+    every pin detail page, per the feature request. Values are viewport
+    percentages, clamped server-side so a bad client can't park a field
+    off-screen for good.
+    """
+
+    def post(self, request: HttpRequest, field_id: int) -> HttpResponse:
+        profile = _profile_for(request)
+        field = get_object_or_404(CustomField, id=field_id, profile=profile)
+        try:
+            body = json.loads(request.body or b"{}")
+            left = float(body.get("left"))
+            top = float(body.get("top"))
+        except (json.JSONDecodeError, TypeError, ValueError):
+            return HttpResponse("Invalid position.", status=400)
+        if not (math.isfinite(left) and math.isfinite(top)):
+            return HttpResponse("Invalid position.", status=400)
+
+        config = dict(field.config or {})
+        config["fixed_pos"] = {
+            "left": round(min(max(left, 0.0), float(FIXED_POS_MAX_LEFT)), 2),
+            "top": round(min(max(top, 0.0), float(FIXED_POS_MAX_TOP)), 2),
+        }
+        field.config = config
+        field.save(update_fields=["config", "updated"])
+        return HttpResponse(status=204)
 
 
 # -- Profile annotation values ---------------------------------------------------

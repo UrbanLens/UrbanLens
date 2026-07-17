@@ -273,16 +273,21 @@
         </div>
 
         <div hx-get="{% url 'pin.custom_fields' pin.slug %}"
-            hx-trigger="load[!window.ulSectionCollapsed('pin','custom-fields')], ul:unhide"
+            hx-trigger="load, ul:unhide"
             hx-swap="outerHTML"
             id="pin-custom-fields-panel"
-            class="custom-fields-panel card card--secondary"
-            data-collapse-scope="pin" data-collapse-section="custom-fields">
-            <div class="card-header">
-                <i class="material-symbols-outlined">tune</i>
-                <span>Custom Fields</span>
+            class="cf-panel-area">
+            {# Loads unconditionally (no collapse gate): section-display cards and #}
+            {# fixed-display overlays live in this response too, and they must render #}
+            {# even when the Custom Fields card itself is collapsed. #}
+            <div class="custom-fields-panel card card--secondary"
+                 data-collapse-scope="pin" data-collapse-section="custom-fields">
+                <div class="card-header">
+                    <i class="material-symbols-outlined">tune</i>
+                    <span>Custom Fields</span>
+                </div>
+                <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
             </div>
-            <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
         </div>
 
         <div hx-get="{% url 'pin.ownership' pin.slug %}"

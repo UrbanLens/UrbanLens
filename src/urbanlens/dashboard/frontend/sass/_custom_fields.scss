@@ -49,12 +49,77 @@
 }
 
 .cf-style-select,
-.cf-ref-kind-select {
+.cf-ref-kind-select,
+.cf-display-select {
   flex: 0 0 auto;
   width: 9.5rem;
   cursor: pointer;
 
   &[hidden] { display: none; }
+}
+
+// -- Pin detail placements (display=section / display=fixed) ------------------
+
+// Transparent wrapper: the Custom Fields card and any section-display cards
+// participate in the page grid as if they were direct children.
+.cf-panel-area {
+  display: contents;
+}
+
+.cf-section-card .cf-section-body {
+  padding: .75rem 1rem 1rem;
+}
+
+.cf-fixed-item {
+  position: fixed;
+  z-index: 850;
+  width: min(280px, calc(100vw - 2rem));
+  margin: 0;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, .28);
+
+  &.is-dragging {
+    opacity: .85;
+    user-select: none;
+  }
+
+  .cf-fixed-handle {
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+    padding: .45rem .6rem;
+    cursor: grab;
+    font-size: .85rem;
+    font-weight: 600;
+    border-bottom: 1px solid var(--ul-control-border);
+    touch-action: none;
+
+    .material-symbols-outlined {
+      font-size: 1rem;
+      color: var(--ul-grey-5);
+    }
+  }
+
+  &.is-dragging .cf-fixed-handle { cursor: grabbing; }
+
+  .cf-fixed-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .cf-fixed-body {
+    padding: .6rem;
+  }
+
+  // Small screens have no room for floating overlays: fall back to normal
+  // flow, where the item renders as one more card at the end of the area.
+  @media (max-width: 768px) {
+    position: static;
+    width: auto;
+    box-shadow: none;
+
+    .cf-fixed-handle { cursor: default; }
+  }
 }
 
 .cf-options-input {
