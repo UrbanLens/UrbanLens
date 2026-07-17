@@ -6,15 +6,16 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
 
 ## Mapping & Pins
 
-- Interactive Leaflet map with satellite, street, and topographic layers, HTMX-driven panels,
-  and a filter sidebar (labels, rating, visited status, etc.)
+- Interactive Leaflet map with 9 configurable layers (Street, Terrain, Satellite, Weather, Dark,
+  Borders, Places, Pins, Sub Pins), HTMX-driven panels, and a filter sidebar (labels, rating,
+  visited status, date pinned, scores, saved filter configurations)
 - **Pin** — a user's personal record for a place (custom name, private notes, icon, priority,
   status, last-visited date, marker coordinates), separate from the shared **Location** record
   it points to (canonical name, address, coordinates, Google CID). See `docs/NOTES.md` for why
   this split exists.
 - Pin types: location, building, entrance, POI, danger, other
 - Add pins by map click, coordinate entry, or place search/autocomplete; drag to reposition
-- Pin list view alongside the map (particularly useful while searching/filtering)
+- Pin list view alongside the map (particularly useful while searching/filtering); "Add these pins to a list" bulk action from the pin list panel adds all currently-visible/filtered pins to a trip or saved collection at once
 - Bulk pin operations: multi-select, bulk edit, bulk merge, bulk delete (with undo)
 - Per-pin alternate names (**aliases**) — private aliases on a Pin vs. shared aliases on a Wiki
 - Private per-pin notes (`PinNote`), independent of public comments
@@ -48,8 +49,11 @@ On-demand, cached lookups shown as panels on the pin detail page:
 - **National Park Service** (USA) — nearby park info
 - **LoopNet** (USA) — commercial real-estate listings
 - **USGS Historical Topo Maps** (USA) — historical topographic maps
-- **Nominatim/OpenStreetMap** — reverse geocoding and place metadata
-- **OpenWeatherMap** — weather forecast for the pin's location
+- **Nominatim/OpenStreetMap** — reverse geocoding and place metadata (two panels: Nominatim structured data and Photon nearest-feature lookup)
+- **Regional Data** — US Census, Wildlife, Seismic, and EPA data loaded on demand per sub-tab
+- **Building Characteristics** — structured property/building data (appears for commercial and historic properties)
+- **News** — web news results scoped to the location (appears for notable locations)
+- **OpenWeatherMap** — weather forecast; appears on Trip detail pages (keyed to activity location) and on the pin detail page when weather data is available
 - Satellite imagery carousel: Google Maps, Esri (incl. Wayback historical imagery), NASA GIBS,
   Mapbox, Bing Maps, OpenAerialMap
 - Street-view carousel: Google Street View, Mapillary, KartaView
@@ -74,7 +78,10 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
 - Site-wide photo library (Memories → Photos) that matches unfiled photos (by GPS + timestamp) to
   existing pins and proposes **visit suggestions** for confirmation
 - **Memories** page — aggregated timeline/map view of routes, trips, visits, and photos, including
-  an "on this day" retrospective and a prompt to log visits for pins already marked visited
+  an "on this day" retrospective and a prompt to log visits for pins already marked visited; tabs
+  for Timeline, Photos, Maps, Sharing, Journal, and Visits; date range filter with presets
+  (Last 90 days / Last year / All time); "Import routes & history" for importing GPS tracks and
+  location history (separate from the map's pin import flow)
 - Storage quota accounting per user (role-based), automatic downscaling/WebP conversion on upload
 
 ## Trips
@@ -137,7 +144,9 @@ relationships, bulk edit and bulk convert between kinds, per-user color/icon cus
 - Email/password signup with verification, plus Google and Discord OAuth (social-auth pipeline)
 - Password reset (themed to match the app, not bare Django pages)
 - Self-service account deletion (request with grace period, cancel)
-- First-run setup wizard and a first-login onboarding tour with feature opt-outs
+- First-run setup wizard and a first-login onboarding tour with feature opt-outs; contextual
+  in-product help tooltips on first visit to key sections (e.g. trip permissions, itinerary),
+  with "Don't show again" opt-out per tooltip
 - Login lockout after repeated failed attempts
 
 ## Undo / Data Safety
