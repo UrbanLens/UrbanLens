@@ -164,6 +164,8 @@ register_map_layer(
         aria_label="Show or hide sub pins",
         tooltip="Show pins nested inside other pins",
         icon="subdirectory_arrow_right",
+        thumb="dashboard/images/map_layer_child_pins.jpg",
+        thumb_alt="Child Pins Layer",
         button_id="child-pins-button",
     )
 )
@@ -240,6 +242,8 @@ register_map_layer(
         aria_label="Show or hide the user's other nearby pins",
         tooltip="Show your other pins near this location",
         icon="share_location",
+        thumb="dashboard/images/map_layer_nearby_pins.jpg",
+        thumb_alt="Nearby Pins Layer",
         button_id="nearby-pins-button",
     )
 )
@@ -251,6 +255,8 @@ register_map_layer(
         aria_label="Show or hide past activities",
         tooltip="Show completed/past activities on the map",
         icon="history",
+        thumb="dashboard/images/map_layer_previous_pins.jpg",
+        thumb_alt="Previous Pins Layer",
         button_id="past-activities-button",
     )
 )

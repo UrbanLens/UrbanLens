@@ -1294,10 +1294,6 @@
 
     .nominatim-meta {
         margin: .75rem 0 0;
-        padding: .5rem .6rem;
-        border: 1px solid var(--ul-border);
-        border-radius: 6px;
-        background: var(--ul-surface-raised);
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
         gap: .3rem .75rem;
@@ -1438,10 +1434,6 @@
 
     .simple-info-meta {
         margin: .75rem 0 0;
-        padding: .5rem .6rem;
-        border: 1px solid var(--ul-border);
-        border-radius: 6px;
-        background: var(--ul-surface-raised);
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
         gap: .3rem .75rem;

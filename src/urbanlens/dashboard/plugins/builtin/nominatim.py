@@ -51,7 +51,7 @@ class NominatimPanelSource(LocationCachePanelSource):
     # services (Nominatim vs. Komoot's Photon), by design, for cross-checking
     # - not a duplicate query against one provider. The bare "OpenStreetMap"
     # title this used to have was ambiguous next to Photon's own title.
-    title = "OpenStreetMap (Nominatim)"
+    title = "OpenStreetMap"
 
     def fetch(self, pin: Pin) -> None:
         """Reverse-geocode the pin's coordinates and cache the place metadata.
