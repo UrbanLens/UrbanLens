@@ -22,36 +22,10 @@
             <h3>Defaults</h3>
             <div class="safety-defaults-header-actions">
                 <span class="safety-autosave-status" id="safety-autosave-status" aria-live="polite"></span>
-                <button type="button" class="btn btn--ghost btn--sm" id="safety-defaults-toggle-btn" title="Edit">
-                    <i class="material-symbols-outlined">edit</i> <span id="safety-defaults-toggle-label">Edit</span>
-                </button>
             </div>
         </div>
 
-        <div class="safety-defaults-summary" id="safety-defaults-summary">
-            <div class="safety-defaults-summary-row">
-                <span class="safety-defaults-summary-label">Message to contacts</span>
-                <span class="safety-defaults-summary-value" id="safety-defaults-summary-message">{{ preference.default_message|default:"Not set" }}</span>
-            </div>
-            <div class="safety-defaults-summary-row">
-                <span class="safety-defaults-summary-label">Grace period</span>
-                <span class="safety-defaults-summary-value" id="safety-defaults-summary-grace">{{ preference.default_grace_period_display }}</span>
-            </div>
-            <div class="safety-defaults-summary-row">
-                <span class="safety-defaults-summary-label">Emergency contacts</span>
-                <span class="safety-defaults-summary-value" id="safety-defaults-summary-contacts">
-                    {% if default_contacts %}{% for contact_profile, email, name in default_contacts %}{{ contact_profile.username|default:name|default:email }}{% if not forloop.last %}, {% endif %}{% endfor %}{% else %}Not set{% endif %}
-                </span>
-            </div>
-            <div class="safety-defaults-summary-row">
-                <span class="safety-defaults-summary-label">Auto-delete after</span>
-                <span class="safety-defaults-summary-value" id="safety-defaults-summary-auto-delete">
-                    {% if preference.auto_delete_after_days %}{{ preference.auto_delete_after_days }} day{{ preference.auto_delete_after_days|pluralize }}{% else %}Never{% endif %}
-                </span>
-            </div>
-        </div>
-
-        <form method="post" action="{% url 'safety.settings' %}" class="safety-defaults-form" id="safety-defaults-form" hidden>
+        <form method="post" action="{% url 'safety.settings' %}" class="safety-defaults-form" id="safety-defaults-form">
             {% csrf_token %}
             <div class="form-row">
                 <label for="default_message">Default message to emergency contacts</label>
@@ -84,43 +58,9 @@
 {% include "dashboard/partials/safety/_autoexpand_textareas.html" %}
 <script>
 (function () {
-    var toggleBtn = document.getElementById('safety-defaults-toggle-btn');
-    var toggleIcon = toggleBtn ? toggleBtn.querySelector('.material-symbols-outlined') : null;
-    var toggleLabel = document.getElementById('safety-defaults-toggle-label');
-    var summary = document.getElementById('safety-defaults-summary');
     var form = document.getElementById('safety-defaults-form');
     var status = document.getElementById('safety-autosave-status');
-    if (!toggleBtn || !form || !summary) return;
-
-    // One button toggles between the two states - it used to be two separate
-    // buttons (Edit / Close) that swapped `hidden`, which worked but left two
-    // near-identical-looking controls in the DOM to keep in sync instead of
-    // one that just reflects whichever state is current.
-    function showForm() {
-        summary.hidden = true;
-        form.hidden = false;
-        if (toggleIcon) toggleIcon.textContent = 'expand_less';
-        if (toggleLabel) toggleLabel.textContent = 'Close';
-        toggleBtn.title = 'Close';
-        // Auto-expanding textareas can't measure scrollHeight while hidden
-        // (display:none), so re-trigger sizing now that the form is visible.
-        if (window.safetyAutoExpand) {
-            form.querySelectorAll('textarea.safety-autoexpand').forEach(window.safetyAutoExpand);
-        }
-        var firstField = form.querySelector('textarea, input');
-        if (firstField) firstField.focus();
-    }
-    function showSummary() {
-        summary.hidden = false;
-        form.hidden = true;
-        if (toggleIcon) toggleIcon.textContent = 'edit';
-        if (toggleLabel) toggleLabel.textContent = 'Edit';
-        toggleBtn.title = 'Edit';
-    }
-
-    toggleBtn.addEventListener('click', function () {
-        if (form.hidden) showForm(); else showSummary();
-    });
+    if (!form) return;
 
     // -- Autosave -------------------------------------------------------------
     // Text fields debounce briefly after typing stops; everything else (the
@@ -144,10 +84,6 @@
             if (!response.ok) throw new Error('Save failed');
             return response.json();
         }).then(function (data) {
-            document.getElementById('safety-defaults-summary-message').textContent = data.default_message || 'Not set';
-            document.getElementById('safety-defaults-summary-grace').textContent = data.default_grace_period_display;
-            document.getElementById('safety-defaults-summary-contacts').textContent = data.contact_labels.length ? data.contact_labels.join(', ') : 'Not set';
-            document.getElementById('safety-defaults-summary-auto-delete').textContent = data.auto_delete_after_days ? (data.auto_delete_after_days + (data.auto_delete_after_days === 1 ? ' day' : ' days')) : 'Never';
             setStatus('Saved', false);
             if (window.toastr) {
                 (data.rejected_contacts || []).forEach(function (message) { toastr.error(message); });

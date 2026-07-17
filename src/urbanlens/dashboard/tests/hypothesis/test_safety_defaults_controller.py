@@ -20,6 +20,7 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.controllers.safety import SafetySettingsView, _contact_display_label
 from urbanlens.dashboard.models.friendship import Friendship, FriendshipStatus
 from urbanlens.dashboard.models.safety.model import EmergencyContactDefault
+from urbanlens.dashboard.services.safety import get_or_create_preference
 
 
 class ContactDisplayLabelTests(TestCase):
@@ -121,25 +122,39 @@ class SafetySettingsViewDefaultsPostTests(TestCase):
         self.assertEqual(payload["contact_labels"], [self.friend_profile.username])
 
 
-class SafetySettingsSingleToggleButtonTests(TestCase):
-    """The Defaults card's edit/close controls used to be two separate buttons
-    that swapped `hidden` - consolidated into one toggle button whose icon and
-    label reflect the current state instead."""
+class SafetySettingsAlwaysEditableTests(TestCase):
+    """The Defaults card used to show a read-only summary behind an Edit
+    toggle (first a two-button edit/close pair, later consolidated into one
+    toggle button - see the now-removed SafetySettingsSingleToggleButtonTests).
+    Per the "edit in place without having to open edit mode" request, the
+    toggle/summary are gone entirely now - the already-autosaving form (see
+    SafetySettingsViewDefaultsPostTests above) is simply always what's shown."""
 
     def setUp(self) -> None:
         self.user = baker.make(User)
         self.client = Client()
         self.client.force_login(self.user)
 
-    def test_page_renders_a_single_toggle_button(self) -> None:
+    def test_page_no_longer_renders_a_toggle_button_or_summary(self) -> None:
         response = self.client.get(reverse("safety.settings"))
         content = response.content.decode()
-        self.assertIn('id="safety-defaults-toggle-btn"', content)
-        self.assertNotIn("safety-defaults-edit-btn", content)
-        self.assertNotIn("safety-defaults-close-btn", content)
+        self.assertNotIn("safety-defaults-toggle-btn", content)
+        self.assertNotIn("safety-defaults-summary", content)
 
-    def test_toggle_button_starts_in_the_edit_state(self) -> None:
+    def test_the_defaults_form_renders_without_the_hidden_attribute(self) -> None:
         response = self.client.get(reverse("safety.settings"))
         content = response.content.decode()
-        idx = content.index('id="safety-defaults-toggle-btn"')
-        self.assertIn("Edit", content[idx : idx + 300])
+        idx = content.index('id="safety-defaults-form"')
+        # The tag itself, up to its closing '>', must not carry `hidden`.
+        tag_end = content.index(">", idx)
+        self.assertNotIn("hidden", content[idx:tag_end])
+
+    def test_current_defaults_are_visible_directly_in_the_form_fields(self) -> None:
+        profile = self.user.profile
+        preference = get_or_create_preference(profile)
+        preference.default_message = "Please check on me if I go quiet."
+        preference.save(update_fields=["default_message"])
+
+        response = self.client.get(reverse("safety.settings"))
+        content = response.content.decode()
+        self.assertIn("Please check on me if I go quiet.", content)

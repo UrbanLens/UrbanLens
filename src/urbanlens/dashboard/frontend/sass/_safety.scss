@@ -160,46 +160,11 @@
     }
 }
 
-.safety-defaults-summary {
-    padding: 1rem 1.25rem;
-    display: flex;
-    flex-direction: column;
-    gap: .6rem;
-
-    // display:flex overrides the HTML [hidden] attribute - be explicit
-    &[hidden] {
-        display: none;
-    }
-}
-
-.safety-defaults-summary-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: .25rem .75rem;
-    font-size: .9rem;
-}
-
-.safety-defaults-summary-label {
-    color: var(--ul-grey-6);
-    min-width: 9rem;
-}
-
-.safety-defaults-summary-value {
-    color: var(--ul-grey-8);
-    font-weight: 600;
-    overflow-wrap: anywhere;
-}
-
 .safety-defaults-form {
     padding: 1rem 1.25rem;
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
-
-    // display:flex overrides the HTML [hidden] attribute - be explicit
-    &[hidden] {
-        display: none;
-    }
 }
 
 .safety-checkin-list {
