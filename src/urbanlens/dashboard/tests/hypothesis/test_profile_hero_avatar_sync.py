@@ -41,3 +41,32 @@ class ProfileHeroAvatarIdTests(TestCase):
         the id must be present there too, not just on the edit page."""
         response = self.client.get(reverse("profile.view"))
         self.assertContains(response, 'id="profile-hero-avatar"')
+
+
+class ProfileBioShownOnceTests(TestCase):
+    """The hero used to show a 2-line-clamped copy of the bio directly above
+    the "About" section's full, un-clamped copy - the exact same text twice
+    in a row. The hero no longer renders it at all; only the About section does."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.bio = "Exploring abandoned places since childhood."
+        self.user = baker.make(User)
+        self.user.profile.bio = self.bio
+        self.user.profile.save(update_fields=["bio"])
+        self.client = Client()
+        self.client.force_login(self.user)
+
+    def test_bio_appears_exactly_once(self) -> None:
+        response = self.client.get(reverse("profile.view"))
+        self.assertContains(response, self.bio, count=1)
+
+    def test_bio_lives_in_the_about_section_not_the_hero(self) -> None:
+        content = self.client.get(reverse("profile.view")).content.decode()
+        hero_start = content.index('id="profile-hero"')
+        about_start = content.index("profile-bio-full")
+        self.assertLess(hero_start, about_start)
+        # The bio text itself must not appear before the About section's own
+        # marker - i.e. not inside the hero markup that precedes it.
+        bio_idx = content.index(self.bio)
+        self.assertGreater(bio_idx, about_start)

@@ -82,9 +82,16 @@
     }
 
     // Profile | Edit hero body: avatar beside identity, matching the old
-    // standalone .profile-hero card's layout (see _profile.scss).
+    // standalone .profile-hero card's layout (see _profile.scss). Wider than
+    // the other heroes' cap (90rem here vs 64rem generally) - on a wide
+    // screen the identity block (name/username, left) and the friendship/
+    // edit-profile actions (right) used to read as bunched toward the
+    // center, since .profile-name-row's space-between only spreads them
+    // across whatever width THIS container actually gets, not the full
+    // hero background. 100rem gives it more room to use on large screens
+    // without going fully edge-to-edge.
     &--profile &__inner {
-        max-width: 90rem;
+        max-width: 100rem;
         width: 100%;
         flex-direction: row;
         align-items: center;

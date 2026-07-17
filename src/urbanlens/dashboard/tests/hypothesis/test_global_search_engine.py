@@ -45,6 +45,12 @@ class PinSearchTests(TestCase):
                 return [result.title for result in group.results]
         return []
 
+    def _results(self, response, slug="pins"):
+        for group in response.groups:
+            if group.meta.slug == slug:
+                return group.results
+        return []
+
     def test_finds_own_pin_by_name(self):
         response = GlobalSearchEngine().search(self.profile, "willow grove")
         self.assertIn("Willow Grove Mill", self._titles(response))
@@ -68,6 +74,45 @@ class PinSearchTests(TestCase):
         titles = self._titles(response)
         self.assertIn("Willow Grove Mill", titles)
         self.assertNotIn("Elsewhere Spot", titles)
+
+    def test_result_subtitle_is_the_address_not_a_duplicate_name(self):
+        """Regression guard: the subtitle used to be location.display_name (a
+        NAME - wiki/official name), which for two same-named pins was often
+        identical to the title itself, leaving users with no way to tell
+        duplicate-named search results apart. It must be the address instead."""
+        self.location.street_number = "123"
+        self.location.route = "Main St"
+        self.location.save(update_fields=["street_number", "route"])
+
+        response = GlobalSearchEngine().search(self.profile, "willow grove")
+        result = next(r for r in self._results(response) if r.title == "Willow Grove Mill")
+        self.assertIn("123 Main St", result.subtitle)
+        self.assertNotEqual(result.subtitle, result.title)
+
+    def test_result_subtitle_falls_back_to_display_name_without_an_address(self):
+        """A pin with only coordinates (no reverse-geocoded address yet) keeps
+        showing SOME context rather than a blank subtitle."""
+        location = baker.make("dashboard.Location", latitude="10.0", longitude="10.0", official_name="Remote Outpost")
+        baker.make("dashboard.Pin", profile=self.profile, location=location, name="Unnamed Location")
+
+        response = GlobalSearchEngine().search(self.profile, "unnamed location")
+        result = next(r for r in self._results(response) if r.title == "Unnamed Location")
+        self.assertEqual(result.subtitle, "Remote Outpost")
+
+    def test_duplicate_named_pins_get_distinguishing_subtitles(self):
+        other_location = baker.make(
+            "dashboard.Location",
+            latitude="41.0", longitude="-85.0",
+            street_number="55", route="Oak Ave", locality="Dayton", administrative_area_level_1="OH",
+        )
+        self.location.street_number = "123"
+        self.location.route = "Main St"
+        self.location.save(update_fields=["street_number", "route"])
+        baker.make("dashboard.Pin", profile=self.profile, location=other_location, name="Willow Grove Mill")
+
+        response = GlobalSearchEngine().search(self.profile, "willow grove")
+        subtitles = {r.subtitle for r in self._results(response) if r.title == "Willow Grove Mill"}
+        self.assertEqual(len(subtitles), 2)
 
     def test_type_filter_excludes_other_sections(self):
         response = GlobalSearchEngine().search(self.profile, "willow pins")

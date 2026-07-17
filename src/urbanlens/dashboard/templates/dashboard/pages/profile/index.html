@@ -17,7 +17,7 @@
 {% block content %}
 <div class="profile-page page-content">
 
-    {# -- About (full, un-clamped bio - the hero's copy is clamped to 2 lines) #}
+    {# -- About (bio) - the hero used to show a clamped duplicate above this, removed #}
     {% if profile.bio %}
     <div class="profile-section ul-section">
         <h3 class="profile-section-title{% if profile.user == request.user %} ul-privacy-hint-row{% endif %}">

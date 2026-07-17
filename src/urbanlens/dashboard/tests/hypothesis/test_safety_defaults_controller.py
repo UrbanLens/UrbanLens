@@ -11,7 +11,8 @@ import json
 from types import SimpleNamespace
 
 from django.contrib.auth.models import User
-from django.test import RequestFactory
+from django.test import Client, RequestFactory
+from django.urls import reverse
 from hypothesis import given, settings, strategies as st
 from model_bakery import baker
 
@@ -118,3 +119,27 @@ class SafetySettingsViewDefaultsPostTests(TestCase):
         self.assertEqual(payload["default_message"], "Ping me if I go quiet.")
         self.assertEqual(payload["default_grace_period_display"], "1 hour 30 minutes")
         self.assertEqual(payload["contact_labels"], [self.friend_profile.username])
+
+
+class SafetySettingsSingleToggleButtonTests(TestCase):
+    """The Defaults card's edit/close controls used to be two separate buttons
+    that swapped `hidden` - consolidated into one toggle button whose icon and
+    label reflect the current state instead."""
+
+    def setUp(self) -> None:
+        self.user = baker.make(User)
+        self.client = Client()
+        self.client.force_login(self.user)
+
+    def test_page_renders_a_single_toggle_button(self) -> None:
+        response = self.client.get(reverse("safety.settings"))
+        content = response.content.decode()
+        self.assertIn('id="safety-defaults-toggle-btn"', content)
+        self.assertNotIn("safety-defaults-edit-btn", content)
+        self.assertNotIn("safety-defaults-close-btn", content)
+
+    def test_toggle_button_starts_in_the_edit_state(self) -> None:
+        response = self.client.get(reverse("safety.settings"))
+        content = response.content.decode()
+        idx = content.index('id="safety-defaults-toggle-btn"')
+        self.assertIn("Edit", content[idx : idx + 300])

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from functools import cached_property
 import logging
 from typing import TYPE_CHECKING
 
@@ -56,6 +57,20 @@ class NotificationLog(abstract.DashboardModel):
         """True when this notification has not been read yet."""
         return self.status == Status.UNREAD
 
+    @cached_property
+    def _friend_request_friendship(self):
+        """The Friendship row backing a friend_request notification, or None.
+
+        Cached per-instance since both `is_friend_request_pending` and
+        `friend_request_resolution` need it and templates commonly read both.
+        """
+        if self.notification_type != NotificationType.FRIEND_REQUEST or not self.source_profile_id or not self.profile_id:
+            return None
+
+        from urbanlens.dashboard.models.friendship.model import Friendship
+
+        return Friendship.objects.between(self.source_profile_id, self.profile_id)
+
     @property
     def is_friend_request_pending(self) -> bool:
         """True when this is a friend_request notification still awaiting a response.
@@ -64,14 +79,32 @@ class NotificationLog(abstract.DashboardModel):
         marks notifications read, but the Accept/Decline buttons must stay visible
         until the recipient actually accepts or declines the request.
         """
-        if self.notification_type != NotificationType.FRIEND_REQUEST or not self.source_profile_id or not self.profile_id:
-            return False
-
         from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
-        from urbanlens.dashboard.models.friendship.model import Friendship
 
-        friendship = Friendship.objects.between(self.source_profile_id, self.profile_id)
+        friendship = self._friend_request_friendship
         return friendship is not None and friendship.status == FriendshipStatus.REQUESTED
+
+    @property
+    def friend_request_resolution(self) -> str | None:
+        """Returns "accepted"/"declined" once a friend_request notification's underlying
+        request has been resolved one way or the other, else None (still pending,
+        or this isn't a friend_request notification).
+
+        Without this, a friend_request notification's Accept/Decline buttons
+        disappear once resolved (see `is_friend_request_pending`) but the title/
+        message stayed frozen at "Sarah wants to be your friend." forever after -
+        looking like a dangling, unactionable request instead of a settled one.
+        """
+        from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
+
+        friendship = self._friend_request_friendship
+        if friendship is None:
+            return None
+        if friendship.status == FriendshipStatus.ACCEPTED:
+            return "accepted"
+        if FriendshipStatus.rejected(friendship.status):
+            return "declined"
+        return None
 
     class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_notifications"

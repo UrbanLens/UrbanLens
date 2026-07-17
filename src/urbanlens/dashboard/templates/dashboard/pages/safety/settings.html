@@ -22,11 +22,8 @@
             <h3>Defaults</h3>
             <div class="safety-defaults-header-actions">
                 <span class="safety-autosave-status" id="safety-autosave-status" aria-live="polite"></span>
-                <button type="button" class="btn btn--ghost btn--sm" id="safety-defaults-edit-btn">
-                    <i class="material-symbols-outlined">edit</i> Edit
-                </button>
-                <button type="button" class="safety-defaults-close-btn" id="safety-defaults-close-btn" hidden title="Close">
-                    <i class="material-symbols-outlined">expand_less</i>
+                <button type="button" class="btn btn--ghost btn--sm" id="safety-defaults-toggle-btn" title="Edit">
+                    <i class="material-symbols-outlined">edit</i> <span id="safety-defaults-toggle-label">Edit</span>
                 </button>
             </div>
         </div>
@@ -87,18 +84,24 @@
 {% include "dashboard/partials/safety/_autoexpand_textareas.html" %}
 <script>
 (function () {
-    var editBtn = document.getElementById('safety-defaults-edit-btn');
-    var closeBtn = document.getElementById('safety-defaults-close-btn');
+    var toggleBtn = document.getElementById('safety-defaults-toggle-btn');
+    var toggleIcon = toggleBtn ? toggleBtn.querySelector('.material-symbols-outlined') : null;
+    var toggleLabel = document.getElementById('safety-defaults-toggle-label');
     var summary = document.getElementById('safety-defaults-summary');
     var form = document.getElementById('safety-defaults-form');
     var status = document.getElementById('safety-autosave-status');
-    if (!editBtn || !form || !summary) return;
+    if (!toggleBtn || !form || !summary) return;
 
+    // One button toggles between the two states - it used to be two separate
+    // buttons (Edit / Close) that swapped `hidden`, which worked but left two
+    // near-identical-looking controls in the DOM to keep in sync instead of
+    // one that just reflects whichever state is current.
     function showForm() {
         summary.hidden = true;
         form.hidden = false;
-        editBtn.hidden = true;
-        closeBtn.hidden = false;
+        if (toggleIcon) toggleIcon.textContent = 'expand_less';
+        if (toggleLabel) toggleLabel.textContent = 'Close';
+        toggleBtn.title = 'Close';
         // Auto-expanding textareas can't measure scrollHeight while hidden
         // (display:none), so re-trigger sizing now that the form is visible.
         if (window.safetyAutoExpand) {
@@ -110,12 +113,14 @@
     function showSummary() {
         summary.hidden = false;
         form.hidden = true;
-        editBtn.hidden = false;
-        closeBtn.hidden = true;
+        if (toggleIcon) toggleIcon.textContent = 'edit';
+        if (toggleLabel) toggleLabel.textContent = 'Edit';
+        toggleBtn.title = 'Edit';
     }
 
-    editBtn.addEventListener('click', showForm);
-    closeBtn.addEventListener('click', showSummary);
+    toggleBtn.addEventListener('click', function () {
+        if (form.hidden) showForm(); else showSummary();
+    });
 
     // -- Autosave -------------------------------------------------------------
     // Text fields debounce briefly after typing stops; everything else (the

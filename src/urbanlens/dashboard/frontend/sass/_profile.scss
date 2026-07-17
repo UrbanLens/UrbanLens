@@ -181,27 +181,9 @@
     gap: .4rem;
 }
 
-.profile-bio {
-    font-size: 0.95rem;
-    color: var(--ul-grey-8);
-    line-height: 1.6;
-    margin: 0.5rem 0 0.75rem;
-    // Clamped to 2 lines - bio length is user-controlled and unbounded, but
-    // .ul-page-hero--profile is a fixed height (see _page_hero.scss) so it
-    // can't grow to fit a long one. Full text is still on the profile below.
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-
-    &.empty {
-        color: var(--ul-grey-6b);
-        font-style: italic;
-    }
-}
-
-// Full, un-clamped bio shown in its own "About" card further down the page -
-// the hero's .profile-bio is clamped to 2 lines to keep the hero's height fixed.
+// Bio shown once, in its own "About" card - the hero used to show a
+// 2-line-clamped duplicate above it, which read as redundant since this
+// full version sat immediately below. Removed from the hero entirely.
 .profile-bio-full {
     font-size: 0.95rem;
     color: var(--ul-grey-8);

@@ -648,6 +648,27 @@ nav {
         letter-spacing: .01em;
     }
 
+    &__resolution {
+        display: flex;
+        align-items: center;
+        gap: .3rem;
+        font-size: .74rem;
+        font-weight: 500;
+        margin: .3rem 0 0;
+
+        .material-symbols-outlined {
+            font-size: .95rem;
+        }
+
+        &--accepted {
+            color: $color-green-600;
+        }
+
+        &--declined {
+            color: var(--ul-grey-6);
+        }
+    }
+
     &__dot {
         flex-shrink: 0;
         width: 8px;

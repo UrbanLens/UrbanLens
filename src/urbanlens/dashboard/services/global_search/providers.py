@@ -319,7 +319,14 @@ class PinSearchProvider(SearchProvider):
         results = []
         for pin in queryset[:limit]:
             location = pin.location
-            subtitle = location.display_name if location else ""
+            # An address ("123 Main St, Springfield, IL") is what actually
+            # tells same-named pins apart in a result list - location.display_name
+            # is a NAME (wiki/official name), which for a generic tag like
+            # "Hospital" is often identical to the pin's own title, leaving
+            # duplicate-named pins with an equally-duplicate subtitle. Only
+            # fall back to the name when no address is known at all (e.g. a
+            # pin with coordinates but no reverse-geocoded address yet).
+            subtitle = pin.effective_address or (location.display_name if location else "")
             image_url = None
             if pin.cover_photo is not None and pin.cover_photo.image:
                 image_url = pin.cover_photo.image.url

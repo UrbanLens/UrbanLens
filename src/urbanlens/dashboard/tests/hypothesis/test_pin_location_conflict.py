@@ -163,3 +163,51 @@ class ConflictingLocationsPayloadTests(TestCase):
         payload = response.json()
         entries = {entry["uuid"]: entry for entry in payload["conflicting_locations"]}
         self.assertNotIn("existing_pin_url", entries[str(other.uuid)])
+
+
+class BlankNamePinCreationTests(TestCase):
+    """A pin added without a typed name must stay blank (not get a placeholder
+    string like 'Unnamed Location' written to it) so `Pin.effective_name`'s
+    fallback to the location's own display name keeps working, and so the
+    pin isn't incorrectly locked out of future name upgrades via
+    `name_is_user_provided`."""
+
+    def setUp(self) -> None:
+        baker.make(User)  # bootstrap site admin
+        self.user = baker.make(User)
+        self.profile = Profile.objects.get(user=self.user)
+        self.client.force_login(self.user)
+
+    def test_blank_name_leaves_pin_name_empty_and_not_user_provided(self) -> None:
+        response = self.client.post(
+            reverse("pin.add"),
+            {"name": "", "latitude": "42.00", "longitude": "-73.50"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        pin = Pin.objects.get(location__latitude="42.00", location__longitude="-73.50")
+        self.assertEqual(pin.name, "")
+        self.assertFalse(pin.name_is_user_provided)
+
+    def test_blank_name_falls_back_to_location_display_name(self) -> None:
+        response = self.client.post(
+            reverse("pin.add"),
+            {"name": "", "latitude": "42.10", "longitude": "-73.60"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        pin = Pin.objects.get(location__latitude="42.10", location__longitude="-73.60")
+        pin.location.official_name = "Old Grain Mill"
+        pin.location.save(update_fields=["official_name"])
+        self.assertEqual(pin.effective_name, "Old Grain Mill")
+
+    def test_typed_name_is_saved_and_marked_user_provided(self) -> None:
+        response = self.client.post(
+            reverse("pin.add"),
+            {"name": "My Spot", "latitude": "42.20", "longitude": "-73.70"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        pin = Pin.objects.get(location__latitude="42.20", location__longitude="-73.70")
+        self.assertEqual(pin.name, "My Spot")
+        self.assertTrue(pin.name_is_user_provided)

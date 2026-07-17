@@ -5654,7 +5654,15 @@
                 return;
             }
             const formData = new FormData();
-            formData.append('name', document.getElementById('apdlg-name').value.trim() || 'Unnamed Location');
+            // Leave name blank (never 'Unnamed Location') when the user
+            // didn't type one - Pin.effective_name already falls back to the
+            // location's own display name, live, forever. Submitting a
+            // placeholder string here used to get saved as a real pin.name
+            // AND get flagged name_is_user_provided=True (see post_add_pin's
+            // bool((name or "").strip())), permanently locking the pin out of
+            // ever picking up a better name once one becomes available - the
+            // exact opposite of what leaving the field blank should mean.
+            formData.append('name', document.getElementById('apdlg-name').value.trim());
             formData.append('latitude', lat);
             formData.append('longitude', lng);
 
