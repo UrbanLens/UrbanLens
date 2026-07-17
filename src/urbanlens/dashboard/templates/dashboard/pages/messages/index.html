@@ -357,7 +357,13 @@
     function autoExpandComposer(el) {
         if (!el) return;
         el.style.height = 'auto';
+        // A resting/empty textarea can report scrollHeight a pixel or two
+        // taller than its clientHeight (a cross-browser rounding quirk), which
+        // would otherwise leave a persistent scrollbar on an empty composer;
+        // only allow scrolling once content actually exceeds the cap.
+        var overflowing = el.scrollHeight > COMPOSER_MAX_HEIGHT;
         el.style.height = Math.min(el.scrollHeight, COMPOSER_MAX_HEIGHT) + 'px';
+        el.style.overflowY = overflowing ? 'auto' : 'hidden';
     }
     function resetComposerInput(input) {
         if (!input) return;
@@ -1780,8 +1786,11 @@
             sendOpenThread();
             refreshEncryption();
             var input = document.getElementById('dm-composer-input');
-            if (input) input.focus();
-        } else if (ev.detail.target.id === 'dm-conversation-list' || ev.detail.target.closest && ev.detail.target.closest('#dm-conversation-list')) {
+            if (input) {
+                autoExpandComposer(input);
+                input.focus();
+            }
+        } else if (ev.detail.target.id === 'dm-conversation-list' || (ev.detail.target.querySelector && ev.detail.target.querySelector('#dm-conversation-list'))) {
             decryptSidebarPreviews();
         }
     });
@@ -1890,6 +1899,7 @@
 
     refreshEncryption();
     decryptSidebarPreviews();
+    autoExpandComposer(document.getElementById('dm-composer-input'));
     scrollMessages();
 }());
 </script>

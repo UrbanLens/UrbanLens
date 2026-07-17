@@ -249,6 +249,15 @@
 @media (min-width: 721px) {
     .dm-layout--sidebar-collapsed {
         grid-template-columns: 0 1fr;
+
+        // .dm-sidebar-expand-btn floats at top:.9rem/left:.6rem relative to
+        // .dm-layout, which lands right on top of the thread header's own
+        // back button/avatar once the sidebar's 0-width column puts the
+        // thread pane flush against that same corner - push the header's
+        // content clear of it instead of overlapping.
+        .dm-thread__header {
+            padding-left: 3rem;
+        }
     }
 }
 
@@ -1139,6 +1148,14 @@
             left: auto;
             right: .35rem;
         }
+    }
+
+    // Preserves line breaks (Shift+Enter in the composer) - without this the
+    // browser's default whitespace collapsing renders every message as one
+    // run-on line despite the newline characters surviving all the way
+    // through storage and back.
+    &__body {
+        white-space: pre-wrap;
     }
 
     &__images {
