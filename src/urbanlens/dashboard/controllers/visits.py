@@ -275,7 +275,7 @@ class VisitHistoryView(LoginRequiredMixin, View):
             visited_at=visited_at,
             notes=notes,
             source=VisitSource.MANUAL,
-            markup_map=materialize_markup_map(pin.profile, map_data),
+            markup_map=materialize_markup_map(pin.profile, map_data, context=pin),
         )
         sync_last_visited(pin)
         add_visited_status(pin)
@@ -377,7 +377,7 @@ class VisitEditView(LoginRequiredMixin, View):
 
         visit.visited_at = visited_at
         visit.notes = request.POST.get("notes", "").strip() or None
-        visit.markup_map = materialize_markup_map(pin.profile, parse_map_data(request), existing_map=visit.markup_map)
+        visit.markup_map = materialize_markup_map(pin.profile, parse_map_data(request), existing_map=visit.markup_map, context=pin)
         visit.save()
         sync_last_visited(pin)
 

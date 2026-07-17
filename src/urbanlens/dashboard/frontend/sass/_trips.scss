@@ -2033,6 +2033,15 @@ a.trip-activity-name {
     }
 }
 
+// Prefixes the bare Yes/No/Maybe value with "RSVP:" so it doesn't read as an
+// unexplained status word on its own - most noticeable on the trip owner's
+// own row, whose value ("Yes") otherwise looks like an unlabeled badge.
+.trip-member-rsvp-label {
+    font-weight: 500;
+    opacity: .7;
+    margin-right: 2px;
+}
+
 // -- RSVP inline popup (replaces the top banner) ---------------------------
 
 .trip-member-rsvp-wrap {

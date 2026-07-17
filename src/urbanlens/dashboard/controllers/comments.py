@@ -146,7 +146,7 @@ class PinCommentsView(LoginRequiredMixin, View):
         parent = None
         if parent_id:
             parent = get_object_or_404(Comment, id=parent_id, pin=pin)
-        comment = Comment.objects.create(pin=pin, profile=profile, text=text, parent=parent, markup_map=materialize_markup_map(profile, map_data))
+        comment = Comment.objects.create(pin=pin, profile=profile, text=text, parent=parent, markup_map=materialize_markup_map(profile, map_data, context=pin))
         if image:
             comment.image = image
             comment.save(update_fields=["image"])
@@ -209,7 +209,7 @@ class WikiCommentsView(LoginRequiredMixin, View):
             profile=profile,
             text=text,
             parent=parent,
-            markup_map=materialize_markup_map(profile, map_data),
+            markup_map=materialize_markup_map(profile, map_data, context=wiki),
         )
         if image:
             comment.image = image

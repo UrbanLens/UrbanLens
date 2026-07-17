@@ -3960,6 +3960,21 @@ div.container .addr-search-bar {
         max-height: clamp(70px, 28cqmin, 104px);
     }
 
+    // The md+ ceiling above was also the ceiling for every larger screen too -
+    // on a genuinely wide desktop the map container itself is well past the
+    // point these clamp() maxes ever mattered, so the toggle plateaued at a
+    // size sized for a "standard laptop", never actually growing any larger
+    // no matter how much room the map had. Let it keep scaling up through lg/xl.
+    @include up($breakpoint-lg) {
+        max-width: clamp(90px, 22cqmin, 112px);
+        max-height: clamp(104px, 28cqmin, 130px);
+    }
+
+    @include up($breakpoint-xl) {
+        max-width: clamp(112px, 22cqmin, 136px);
+        max-height: clamp(130px, 28cqmin, 156px);
+    }
+
     &:hover, &.active, &:focus, &:active { opacity: 1; box-shadow: 0 3px 10px rgba(0, 0, 0, .18); }
     &.active {
         .map-layers-toggle-icon { color: $color-blue-500; }
@@ -4065,6 +4080,19 @@ div.container .addr-search-bar {
         max-height: clamp(70px, 24cqmin, 112px);
     }
 
+    // See .map-layers-toggle's matching lg/xl comment - this menu's options
+    // were capped at the same "standard laptop" ceiling regardless of how
+    // much wider the map actually got.
+    @include up($breakpoint-lg) {
+        max-width: clamp(76px, 20cqmin, 92px);
+        max-height: clamp(112px, 24cqmin, 136px);
+    }
+
+    @include up($breakpoint-xl) {
+        max-width: clamp(92px, 20cqmin, 108px);
+        max-height: clamp(136px, 24cqmin, 160px);
+    }
+
     &:hover, &:focus-visible { background: var(--ul-hover-bg); color: var(--ul-grey-9); opacity: .85; }
 
     &.active {
@@ -4101,6 +4129,16 @@ div.container .addr-search-bar {
         width: clamp(40px, 16cqmin, 4rem);
         height: clamp(40px, 16cqmin, 4rem);
         border-radius: 7px;
+    }
+
+    @include up($breakpoint-lg) {
+        width: clamp(56px, 16cqmin, 4.5rem);
+        height: clamp(56px, 16cqmin, 4.5rem);
+    }
+
+    @include up($breakpoint-xl) {
+        width: clamp(64px, 16cqmin, 5rem);
+        height: clamp(64px, 16cqmin, 5rem);
     }
 
     img {

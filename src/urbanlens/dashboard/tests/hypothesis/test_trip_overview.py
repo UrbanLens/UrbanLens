@@ -92,6 +92,43 @@ class TripOverviewViewTests(TestCase):
         self.assertEqual(list(resp.context["recently_viewed_trips"]), [])
 
 
+class TripSectionLabelConsistencyTests(TestCase):
+    """The top nav says "Trips", so the hero/breadcrumb/subnav must too - they
+    used to say "Plan" (hero/breadcrumb) with a sub-tab also confusingly named
+    "Trips" (same name as the parent nav item, one level down)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.user = baker.make("auth.User")
+        self.profile = self.user.profile
+        self.client_ = Client()
+        self.client_.force_login(self.user)
+
+    def test_overview_hero_says_trips_not_plan(self) -> None:
+        resp = self.client_.get(reverse("trips.overview"))
+        content = resp.content.decode()
+        idx = content.index('class="ul-page-hero__title"')
+        title_block = content[idx : idx + 200]
+        self.assertIn("Trips", title_block)
+        self.assertNotIn(">Plan<", title_block)
+        self.assertNotRegex(title_block, r">\s*Plan\s*<")
+
+    def test_events_subnav_tab_no_longer_says_trips(self) -> None:
+        resp = self.client_.get(reverse("trips.overview"))
+        content = resp.content.decode()
+        self.assertIn("<span>Events</span>", content)
+        self.assertNotIn("<span>Trips</span>", content)
+
+    def test_detail_page_back_link_says_trips_not_plan(self) -> None:
+        trip = _make_trip(self.profile)
+        resp = self.client_.get(reverse("trips.detail", kwargs={"trip_slug": trip.slug}))
+        content = resp.content.decode()
+        idx = content.index('class="ul-page-hero__back"')
+        back_block = content[idx : idx + 200]
+        self.assertIn("Trips", back_block)
+        self.assertNotRegex(back_block, r">\s*Plan\s*<")
+
+
 class TripDetailViewLastViewedTests(TestCase):
     def setUp(self) -> None:
         super().setUp()

@@ -1246,7 +1246,7 @@ class TripCommentsView(LoginRequiredMixin, View):
         if parent_id:
             parent = get_object_or_404(TripComment, id=parent_id, trip=trip)
 
-        comment = TripComment.objects.create(trip=trip, author=profile, text=text, parent=parent, markup_map=materialize_markup_map(profile, map_data))
+        comment = TripComment.objects.create(trip=trip, author=profile, text=text, parent=parent, markup_map=materialize_markup_map(profile, map_data, context=trip))
         if image:
             comment.image = image
             comment.save(update_fields=["image"])

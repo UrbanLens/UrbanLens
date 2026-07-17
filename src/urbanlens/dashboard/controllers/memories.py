@@ -556,7 +556,7 @@ class MemoriesVisitView(LoginRequiredMixin, View):
             visit = get_object_or_404(PinVisit, id=visit_id, pin=pin)
             visit.visited_at = visited_at
             visit.notes = notes
-            visit.markup_map = materialize_markup_map(profile, map_data, existing_map=visit.markup_map)
+            visit.markup_map = materialize_markup_map(profile, map_data, existing_map=visit.markup_map, context=pin)
             visit.save()
             created = False
         else:
@@ -567,7 +567,7 @@ class MemoriesVisitView(LoginRequiredMixin, View):
                 visited_at=visited_at,
                 notes=notes,
                 source=VisitSource.MANUAL,
-                markup_map=materialize_markup_map(profile, map_data),
+                markup_map=materialize_markup_map(profile, map_data, context=pin),
             )
             add_visited_status(pin)
             created = True

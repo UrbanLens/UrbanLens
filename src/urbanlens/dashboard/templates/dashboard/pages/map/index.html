@@ -1360,6 +1360,16 @@
             _togglePinSelection(pin.uuid);
         });
 
+        // Right-clicking an existing pin should behave exactly like left-
+        // clicking it (open its popup), not fall through to the map's own
+        // contextmenu handler (the blank-area "Add Pin Here" menu) - stopping
+        // the event here keeps it from bubbling up to that handler.
+        marker.on('contextmenu', function (e) {
+            L.DomEvent.stop(e);
+            if (_selectMode) { _togglePinSelection(pin.uuid); return; }
+            marker.openPopup();
+        });
+
         if (pin.id) {
             let _savedLat = parseFloat(pin.latitude);
             let _savedLng = parseFloat(pin.longitude);
@@ -1859,6 +1869,15 @@
             marker.closePopup();
             L.DomEvent.stop(e);
             _togglePinSelection(pin.uuid);
+        });
+
+        // Right-click behaves like left-click, matching _buildMarker - see its
+        // own comment for why this must stop propagation to the map's own
+        // contextmenu handler.
+        marker.on('contextmenu', function (e) {
+            L.DomEvent.stop(e);
+            if (_selectMode) { _togglePinSelection(pin.uuid); return; }
+            marker.openPopup();
         });
         return marker;
     }

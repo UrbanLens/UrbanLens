@@ -47,6 +47,7 @@
                         class="trip-member-rsvp trip-member-rsvp--{{ membership.rsvp|default:'none' }} trip-member-rsvp--mine"
                         title="Change your RSVP"
                         onclick="var p=document.getElementById('rsvp-popup-{{ member.id }}');p.hidden=!p.hidden;event.stopPropagation()">
+                    {% if membership.rsvp %}<span class="trip-member-rsvp-label">RSVP:</span>{% endif %}
                     {% if membership.rsvp == 'yes' %}Yes
                     {% elif membership.rsvp == 'no' %}No
                     {% elif membership.rsvp == 'maybe' %}Maybe
@@ -65,7 +66,8 @@
                 </div>
             </div>
             {% else %}
-            <span class="trip-member-rsvp trip-member-rsvp--{{ membership.rsvp|default:'none' }}">
+            <span class="trip-member-rsvp trip-member-rsvp--{{ membership.rsvp|default:'none' }}" title="RSVP status">
+                {% if membership.rsvp %}<span class="trip-member-rsvp-label">RSVP:</span>{% endif %}
                 {% if membership.rsvp == 'yes' %}Yes
                 {% elif membership.rsvp == 'no' %}No
                 {% elif membership.rsvp == 'maybe' %}Maybe

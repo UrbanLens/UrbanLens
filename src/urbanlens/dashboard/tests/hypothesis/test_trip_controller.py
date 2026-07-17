@@ -706,12 +706,20 @@ class TripAddableFriendsPickerTests(TestCase):
         self.assertContains(resp, "trip-add-friend-btn")
 
     def test_friend_already_on_trip_is_excluded(self):
+        """Regression guard: this used to assert the username never appears
+        anywhere in the response at all, which false-failed the moment the
+        member list itself (a different section of the same page) started
+        legitimately rendering it - being a real trip member is exactly what
+        "already on the trip" means. What actually must exclude them is the
+        add-member dialog's friend picker specifically, checked here via its
+        hidden username input (see the picker's own markup)."""
         friend = self._befriend("already-in")
         TripMembership.objects.create(trip=self.trip, profile=friend)
 
         resp = self.client.get(reverse("trips.members", kwargs={"trip_slug": self.trip.slug}))
 
-        self.assertNotContains(resp, "already-in")
+        self.assertContains(resp, "@already-in")  # still a real member, shown in the list
+        self.assertNotContains(resp, 'value="already-in"')  # but not offered again in the picker
 
     def test_non_creator_sees_no_picker(self):
         friend = self._befriend("visible-to-creator-only")

@@ -32,7 +32,9 @@ if TYPE_CHECKING:
 
     from urbanlens.dashboard.models.markup.model import MarkupMap
     from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.models.pin_list.model import PinList
     from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.models.trips.model import Trip
     from urbanlens.dashboard.models.wiki.model import Wiki
 
 logger = logging.getLogger(__name__)
@@ -168,23 +170,25 @@ def parse_map_data(request: HttpRequest, field: str = "map_data") -> dict | None
     return sanitize_map_data(data)
 
 
-def default_markup_map_title(context: Pin | Wiki | None = None) -> str:
+def default_markup_map_title(context: Pin | Wiki | Trip | PinList | None = None) -> str:
     """Return the default MarkupMap title to use when none was explicitly given.
 
     Args:
-        context: The Pin or Wiki this map was created from, if known.
+        context: The Pin, Wiki, Trip, or PinList this map was created from, if known.
 
     Returns:
-        ``"<pin/wiki name> - <date>"`` when a Pin/Wiki context is given,
-        otherwise just the creation date (e.g. ``"Jul 10, 2026"``).
+        ``"<name> - <date>"`` when a context is given, otherwise just the
+        creation date (e.g. ``"Jul 10, 2026"``).
     """
     from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.models.pin_list.model import PinList
+    from urbanlens.dashboard.models.trips.model import Trip
     from urbanlens.dashboard.models.wiki.model import Wiki
 
     date_str = format_date(timezone.localdate(), "M j, Y")
     if isinstance(context, Pin):
         return f"{context.effective_name} - {date_str}"
-    if isinstance(context, Wiki):
+    if isinstance(context, (Wiki, Trip, PinList)):
         return f"{context.name} - {date_str}"
     return date_str
 
@@ -193,6 +197,7 @@ def materialize_markup_map(
     profile: Profile,
     snapshot: dict | None,
     existing_map: MarkupMap | None = None,
+    context: Pin | Wiki | Trip | PinList | None = None,
 ) -> MarkupMap | None:
     """Create/update/delete a MarkupMap so it matches a submitted snapshot.
 
@@ -205,6 +210,10 @@ def materialize_markup_map(
         profile: Owner for a newly created map.
         snapshot: Sanitized snapshot dict, or None when no map was submitted.
         existing_map: The map currently linked by the host, if any.
+        context: The Pin/Wiki/Trip/PinList this map is attached to, if known -
+            used only for a newly-created map's default title (see
+            ``default_markup_map_title``); ignored when updating an existing
+            map, whose title the user may have already customized.
 
     Returns:
         The MarkupMap the host should now link to, or None when the map was
@@ -219,6 +228,6 @@ def materialize_markup_map(
     if existing_map is not None and existing_map.profile_id == profile.pk:
         markup_map = existing_map
     else:
-        markup_map = MarkupMap.objects.create(profile=profile, title=default_markup_map_title())
+        markup_map = MarkupMap.objects.create(profile=profile, title=default_markup_map_title(context))
     markup_map.replace_items_from_snapshot(snapshot)
     return markup_map

@@ -544,7 +544,7 @@ class PinListMarkupMapView(LoginRequiredMixin, View):
         if snapshot is None:
             return JsonResponse({"ok": False, "error": "This list has no pins with map coordinates yet."}, status=400)
 
-        markup_map = materialize_markup_map(profile, snapshot, existing_map=pin_list.markup_map)
+        markup_map = materialize_markup_map(profile, snapshot, existing_map=pin_list.markup_map, context=pin_list)
         if markup_map is None:
             # materialize_markup_map only returns None when the snapshot itself is
             # None (map removed) - unreachable here since we already checked above,

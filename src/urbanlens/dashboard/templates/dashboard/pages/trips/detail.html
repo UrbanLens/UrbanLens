@@ -10,7 +10,7 @@
 
 {% block hero %}
 {% url 'trips.overview' as trips_overview_url %}
-{% include "dashboard/partials/ui/_page_hero.html" with id="trip-hero" body_template="dashboard/partials/trips/_trip_detail_hero_body.html" back_url=trips_overview_url back_label="Plan" modifier="top" %}
+{% include "dashboard/partials/ui/_page_hero.html" with id="trip-hero" body_template="dashboard/partials/trips/_trip_detail_hero_body.html" back_url=trips_overview_url back_label="Trips" modifier="top" %}
 {% endblock %}
 
 {% block subnav %}
@@ -464,7 +464,15 @@
                 var addBtn = document.querySelector('#trip-activities-panel .add-activity-btn, #trip-activities-panel [data-action="add"]');
                 if (addBtn) addBtn.click(); else document.getElementById('trip-activities-panel')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
             },
-            ready: function () { return !!document.getElementById('trip-activities-panel'); },
+            // Only relevant before the trip has any activities yet - once one
+            // exists, the user has already discovered/used the feature this
+            // guides them to, so it should stop showing rather than nag
+            // indefinitely (matches every other card here having a real
+            // "not applicable anymore" condition, not just element presence).
+            ready: function () {
+                var panel = document.getElementById('trip-activities-panel');
+                return !!panel && !panel.querySelector('.trip-activity-item');
+            },
         },
         {
             id: 'members-rsvp', icon: 'groups', target: '#trip-members-panel',

@@ -231,6 +231,14 @@ class DefaultMarkupMapTitleTests(TestCase):
         wiki = baker.make("dashboard.Wiki", location=location, name="Curated Mill")
         self.assertEqual(default_markup_map_title(wiki), f"Curated Mill - {self._today()}")
 
+    def test_trip_context_uses_trip_name_and_date(self) -> None:
+        trip = baker.make("dashboard.Trip", name="Fall Roadtrip")
+        self.assertEqual(default_markup_map_title(trip), f"Fall Roadtrip - {self._today()}")
+
+    def test_pin_list_context_uses_list_name_and_date(self) -> None:
+        pin_list = baker.make("dashboard.PinList", name="Ohio Ruins")
+        self.assertEqual(default_markup_map_title(pin_list), f"Ohio Ruins - {self._today()}")
+
 
 class MaterializeMarkupMapTests(TestCase):
     """materialize_markup_map create/update/remove semantics."""
@@ -264,6 +272,28 @@ class MaterializeMarkupMapTests(TestCase):
         existing = materialize_markup_map(self.profile, _snapshot())
         self.assertIsNone(materialize_markup_map(self.profile, None, existing_map=existing))
         self.assertFalse(MarkupMap.objects.filter(pk=existing.pk).exists())
+
+    def test_context_gives_a_new_map_a_named_default_title(self) -> None:
+        """Regression guard: comments/trip comments/pin visits/list maps all
+        create through this one function - without threading their own
+        context through, every map created from those flows was stuck with a
+        bare date title, even though default_markup_map_title has always
+        supported a named default when given one."""
+        pin = baker.make("dashboard.Pin", name="Old Mill")
+        markup_map = materialize_markup_map(self.profile, _snapshot(), context=pin)
+        assert markup_map is not None  # nosec B101
+        self.assertEqual(markup_map.title, default_markup_map_title(pin))
+
+    def test_context_is_ignored_when_updating_an_existing_map(self) -> None:
+        """The user may have already renamed the map - an update must never
+        silently overwrite a customized title just because a context was passed."""
+        pin = baker.make("dashboard.Pin", name="Old Mill")
+        existing = materialize_markup_map(self.profile, _snapshot())
+        existing.title = "My Custom Title"
+        existing.save(update_fields=["title"])
+        updated = materialize_markup_map(self.profile, _snapshot(markup=[]), existing_map=existing, context=pin)
+        assert updated is not None  # nosec B101
+        self.assertEqual(updated.title, "My Custom Title")
 
 
 class UnattachedQuerySetTests(TestCase):
