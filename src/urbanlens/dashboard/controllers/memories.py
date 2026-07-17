@@ -364,6 +364,8 @@ class MemoriesView(LoginRequiredMixin, View):
                 "earliest_date": earliest.isoformat() if earliest else today.isoformat(),
                 **_unlogged_band_context(profile),
                 **profile.get_map_center_template_context(),
+                "default_map_view": profile.default_map_view,
+                "map_dark_mode": profile.map_dark_mode,
                 "show_map_footer": True,
             },
         )

@@ -40,3 +40,43 @@ class MemoriesViewEmptyStateTests(TestCase):
         self.assertContains(response, "memories-controls")
         self.assertContains(response, "memories-map")
         self.assertContains(response, "memories-timeline")
+
+
+class MemoriesMapDefaultLayerTests(TestCase):
+    """The Memories map must start on the same base layer/dark-mode the user has
+    configured for the main map, instead of always falling back to whatever
+    window.MapLayers.create() defaults to when no options are passed - see
+    map/index.html's own defaultBase/darkMode/storageKey wiring, which this
+    page's map init now mirrors exactly."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.user: User = baker.make(User)
+        self.client.force_login(self.user)
+
+    def test_default_map_view_context_reflects_profile_setting(self) -> None:
+        baker.make(Image, profile=self.user.profile)
+        self.user.profile.default_map_view = "topographic"
+        self.user.profile.save(update_fields=["default_map_view"])
+
+        response = self.client.get(reverse("memories.view"))
+
+        self.assertEqual(response.context["default_map_view"], "topographic")
+        self.assertIn("defaultBase: 'topographic'", response.content.decode())
+
+    def test_map_dark_mode_context_reflects_profile_setting(self) -> None:
+        baker.make(Image, profile=self.user.profile)
+        self.user.profile.map_dark_mode = "dark"
+        self.user.profile.save(update_fields=["map_dark_mode"])
+
+        response = self.client.get(reverse("memories.view"))
+
+        self.assertEqual(response.context["map_dark_mode"], "dark")
+        self.assertIn("darkMode: 'dark'", response.content.decode())
+
+    def test_storage_key_matches_the_main_maps_format(self) -> None:
+        baker.make(Image, profile=self.user.profile)
+
+        response = self.client.get(reverse("memories.view"))
+
+        self.assertIn(f"ul_layers_v1_{self.user.profile.uuid}", response.content.decode())

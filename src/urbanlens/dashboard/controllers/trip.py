@@ -815,6 +815,8 @@ class TripDetailView(LoginRequiredMixin, View):
                 "viewer_has_joined": _viewer_has_joined(profile, trip),
                 **calendar_context(profile, trip),
                 **profile.get_map_center_template_context(),
+                "default_map_view": profile.default_map_view,
+                "map_dark_mode": profile.map_dark_mode,
                 "show_map_footer": True,
             },
         )

@@ -158,8 +158,14 @@
     // (see {% templatetag openblock %} map_layers_panel {% templatetag closeblock %} above).
     // Attribution renders in the page footer (show_map_footer=True) instead of
     // an on-map overlay - attributionControl is disabled above.
+    // defaultBase/darkMode/storageKey mirror the main map's own values
+    // (map/index.html) exactly, including the "remember" storage key format,
+    // so this map's starting layer never diverges from the main map's.
     window.MapLayers.create(map, {
         root: document.getElementById('memories-map-layers'),
+        defaultBase: '{{ default_map_view|default:"street" }}',
+        darkMode: '{{ map_dark_mode|default:"light" }}',
+        storageKey: 'ul_layers_v1_{{ profile.uuid }}',
         onAttribution: function (text) {
             var el = document.getElementById('page-footer-attribution-text');
             if (el) el.textContent = text;

@@ -219,6 +219,26 @@ class TripDetailViewTests(TestCase):
         resp = client.get(url)
         self.assertEqual(resp.status_code, 404)
 
+    def test_map_default_layer_matches_the_profiles_main_map_setting(self):
+        """The trip map used to always start on window.MapLayers.create()'s own
+        hardcoded default, ignoring the user's actual default_map_view/
+        map_dark_mode settings entirely - now mirrors the main map's own
+        defaultBase/darkMode/storageKey wiring exactly (map/index.html)."""
+        self.creator.default_map_view = "topographic"
+        self.creator.map_dark_mode = "dark"
+        self.creator.save(update_fields=["default_map_view", "map_dark_mode"])
+        client = Client()
+        client.force_login(self.creator_user)
+
+        resp = client.get(self._url())
+
+        self.assertEqual(resp.context["default_map_view"], "topographic")
+        self.assertEqual(resp.context["map_dark_mode"], "dark")
+        content = resp.content.decode()
+        self.assertIn("defaultBase: 'topographic'", content)
+        self.assertIn("darkMode: 'dark'", content)
+        self.assertIn(f"ul_layers_v1_{self.creator.uuid}", content)
+
     def test_edit_activity_dialog_matches_add_activity_redesign(self):
         """Regression guard: the Edit-Activity dialog previously still had the old
         proposed/confirmed pill toggle, "(optional)" label text, and an always-visible
