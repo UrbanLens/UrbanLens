@@ -115,6 +115,72 @@ class PinListMarkupMapErrorIsJsonTests(TestCase):
         self.assertIn("disabled", content[tag_start:tag_end])
 
 
+class PinListDetailInlineEditableTests(TestCase):
+    """Click-to-edit-in-place title/description on the list detail hero.
+
+    Reuses the pre-existing PinListEditView (lists.edit) endpoint - only the
+    template/JS wiring is new. name/description via that endpoint were
+    exercised only incidentally by the smart-filter tests above, never with
+    a dedicated "just rename it" test, so this batch adds that too.
+    """
+
+    def setUp(self) -> None:
+        self.user = baker.make(User)
+        self.client.force_login(self.user)
+        self.profile = self.user.profile
+
+    def test_title_and_description_render_as_editable(self) -> None:
+        pin_list = baker.make(PinList, profile=self.profile, name="Urban Ruins", description="Places I want to explore.")
+        response = self.client.get(reverse("lists.detail", kwargs={"list_slug": pin_list.slug}))
+        self.assertContains(response, "pin-list-title-editable")
+        self.assertContains(response, 'data-raw-name="Urban Ruins"')
+        self.assertContains(response, "pin-list-description-editable")
+        self.assertContains(response, 'data-raw-description="Places I want to explore."')
+
+    def test_empty_description_shows_a_placeholder(self) -> None:
+        pin_list = baker.make(PinList, profile=self.profile, name="No description yet", description="")
+        response = self.client.get(reverse("lists.detail", kwargs={"list_slug": pin_list.slug}))
+        self.assertContains(response, ">Add a description...<")
+
+    def test_renaming_via_the_edit_endpoint(self) -> None:
+        pin_list = baker.make(PinList, profile=self.profile, name="Old Name", description="Kept as-is.")
+        response = self.client.post(
+            reverse("lists.edit", kwargs={"list_slug": pin_list.slug}),
+            data=json.dumps({"name": "New Name"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        pin_list.refresh_from_db()
+        self.assertEqual(pin_list.name, "New Name")
+        self.assertEqual(pin_list.description, "Kept as-is.")
+
+    def test_updating_description_via_the_edit_endpoint(self) -> None:
+        pin_list = baker.make(PinList, profile=self.profile, name="Kept as-is", description="Old description.")
+        response = self.client.post(
+            reverse("lists.edit", kwargs={"list_slug": pin_list.slug}),
+            data=json.dumps({"description": "New description."}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        pin_list.refresh_from_db()
+        self.assertEqual(pin_list.name, "Kept as-is")
+        self.assertEqual(pin_list.description, "New description.")
+
+    def test_blank_name_is_ignored_not_cleared(self) -> None:
+        """The model requires a name - PinListEditView silently no-ops a blank
+        one rather than erroring, matching how the inline editor reverts to
+        the prior text instead of submitting an empty rename."""
+        pin_list = baker.make(PinList, profile=self.profile, name="Keep Me")
+        response = self.client.post(
+            reverse("lists.edit", kwargs={"list_slug": pin_list.slug}),
+            data=json.dumps({"name": ""}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        pin_list.refresh_from_db()
+        self.assertEqual(pin_list.name, "Keep Me")
+
+
 class SelectingSavedFilterImmediatelyPopulatesListTests(TestCase):
     """Picking a saved filter must show matching pins right away, not only after also enabling "is_smart"."""
 

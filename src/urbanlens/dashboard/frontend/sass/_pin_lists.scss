@@ -212,6 +212,44 @@
     font-size: .8rem;
 }
 
+// -- Click-to-edit-in-place title/description (hero) ------------------------
+
+.pin-list-title-editable,
+.pin-list-description-editable {
+    cursor: pointer;
+    border-radius: 6px;
+    padding: .1rem .4rem;
+    margin-left: -.4rem;
+    transition: background .15s;
+    display: inline-block;
+
+    &:hover,
+    &:focus-visible {
+        background: var(--ul-grey-0a);
+        outline: none;
+    }
+}
+
+.pin-list-title-input,
+.pin-list-description-input {
+    font: inherit;
+    font-weight: inherit;
+    line-height: inherit;
+    color: inherit;
+    background: var(--ul-control-bg);
+    border: 1px solid var(--ul-color-accent);
+    border-radius: 6px;
+    padding: .1rem .4rem;
+    margin-left: -.4rem;
+    outline: none;
+}
+
+.pin-list-description-input {
+    display: block;
+    width: 100%;
+    resize: vertical;
+}
+
 .pin-list-detail-actions {
     display: flex;
     flex-wrap: wrap;

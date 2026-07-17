@@ -325,6 +325,71 @@
             .catch(_toastError);
     };
 
+    // -- Click-to-edit-in-place title/description (an alternative to the Edit
+    // list dialog above, for a quick rename without opening a modal) ----------
+    function wireInlineEditable(el, field, opts) {
+        if (!el) return;
+        opts = opts || {};
+        function startEdit() {
+            if (el.querySelector('input, textarea')) return;
+            var rawValue = el.dataset[opts.dataKey] || '';
+            var input = document.createElement(opts.multiline ? 'textarea' : 'input');
+            if (!opts.multiline) input.type = 'text';
+            else input.rows = 2;
+            input.className = opts.inputClass;
+            input.value = rawValue;
+            input.placeholder = opts.placeholder || '';
+            if (opts.maxLength) input.maxLength = opts.maxLength;
+
+            var displayText = el.textContent;
+            el.textContent = '';
+            el.appendChild(input);
+            input.focus();
+            if (!opts.multiline) input.select();
+
+            var done = false;
+            function finish(save) {
+                if (done) return;
+                done = true;
+                var newValue = input.value.trim();
+                if (save && newValue !== rawValue.trim() && (opts.allowEmpty || newValue)) {
+                    var payload = {};
+                    payload[field] = newValue;
+                    _postJson(LIST_EDIT_URL, payload)
+                        .then(function () {
+                            el.dataset[opts.dataKey] = newValue;
+                            el.textContent = newValue || opts.placeholder;
+                            _toastSuccess(opts.successMessage);
+                        })
+                        .catch(function (err) {
+                            el.textContent = displayText;
+                            _toastError(err);
+                        });
+                } else {
+                    el.textContent = displayText;
+                }
+            }
+
+            input.addEventListener('blur', function () { finish(true); });
+            input.addEventListener('keydown', function (e) {
+                e.stopPropagation();
+                if (!opts.multiline && e.key === 'Enter') { e.preventDefault(); input.blur(); }
+                else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+            });
+        }
+        el.addEventListener('click', startEdit);
+        el.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); startEdit(); }
+        });
+    }
+    wireInlineEditable(document.querySelector('.pin-list-title-editable'), 'name', {
+        dataKey: 'rawName', inputClass: 'pin-list-title-input', maxLength: 100, successMessage: 'List renamed.',
+    });
+    wireInlineEditable(document.querySelector('.pin-list-description-editable'), 'description', {
+        dataKey: 'rawDescription', inputClass: 'pin-list-description-input', multiline: true, allowEmpty: true,
+        placeholder: 'Add a description...', maxLength: 50000, successMessage: 'Description updated.',
+    });
+
     // -- More-actions overflow menu --------------------------------------------
     window.pinListToggleMoreMenu = function () {
         const panel = document.getElementById('pin-list-more-menu-panel');
