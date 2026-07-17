@@ -666,7 +666,7 @@ def _export_trips(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
 def _export_pin_lists(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
     from urbanlens.dashboard.models.pin_list.model import PinList
 
-    lists = PinList.objects.filter(profile=profile).prefetch_related("items__pin").order_by("created")
+    lists = PinList.objects.for_profile(profile).prefetch_related("items__pin").order_by("created")
 
     rows = []
     for pin_list in lists:

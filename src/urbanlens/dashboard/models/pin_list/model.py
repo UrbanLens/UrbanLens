@@ -19,6 +19,7 @@ from django.db.models import CASCADE, SET_NULL, BooleanField, CharField, Foreign
 from django.db.models.constraints import UniqueConstraint
 
 from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.pin_list.queryset import PinListManager
 from urbanlens.dashboard.services.text_limits import MAX_PIN_LIST_DESCRIPTION_LENGTH
 
 if TYPE_CHECKING:
@@ -66,6 +67,8 @@ class PinList(abstract.PublicDashboardModel):
         related_name="pin_list",
     )
 
+    objects = PinListManager()
+
     if TYPE_CHECKING:
         items: DjangoManager[PinListItem]
 
@@ -81,7 +84,7 @@ class PinList(abstract.PublicDashboardModel):
         return self.name or "list"
 
     def _slugify_qs(self):
-        qs = PinList.objects.filter(profile_id=self.profile_id)
+        qs = PinList.objects.for_profile(self.profile_id)
         if self.pk:
             qs = qs.exclude(pk=self.pk)
         return qs

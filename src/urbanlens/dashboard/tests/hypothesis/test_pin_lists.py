@@ -372,3 +372,51 @@ class PinListSlugTests(TestCase):
         pin_list = baker.make(PinList, profile=other_profile, name="Not Yours")
         response = self.client.get(reverse("lists.detail", kwargs={"list_slug": pin_list.slug}))
         self.assertEqual(response.status_code, 404)
+
+
+class PinListQuerySetTests(TestCase):
+    """PinListQuerySet.for_profile()/active_smart_lists() - previously six
+    call sites across the codebase each re-wrote `.filter(profile=profile)`
+    (or `profile_id=`) directly."""
+
+    def setUp(self) -> None:
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+        self.other_user = baker.make(User)
+        self.other_profile = self.other_user.profile
+
+    def test_for_profile_returns_only_that_profiles_lists(self) -> None:
+        mine = baker.make(PinList, profile=self.profile, name="Mine")
+        baker.make(PinList, profile=self.other_profile, name="Theirs")
+
+        result = list(PinList.objects.for_profile(self.profile))
+
+        self.assertEqual(result, [mine])
+
+    def test_for_profile_accepts_a_raw_profile_id(self) -> None:
+        mine = baker.make(PinList, profile=self.profile, name="Mine")
+
+        result = list(PinList.objects.for_profile(self.profile.pk))
+
+        self.assertEqual(result, [mine])
+
+    def test_active_smart_lists_excludes_non_smart_lists(self) -> None:
+        baker.make(PinList, profile=self.profile, name="Plain List", is_smart=False)
+
+        result = list(PinList.objects.active_smart_lists(self.profile))
+
+        self.assertEqual(result, [])
+
+    def test_active_smart_lists_excludes_smart_lists_with_no_rules_configured(self) -> None:
+        baker.make(PinList, profile=self.profile, name="Empty Smart List", is_smart=True, smart_filter=None, smart_boundary=None)
+
+        result = list(PinList.objects.active_smart_lists(self.profile))
+
+        self.assertEqual(result, [])
+
+    def test_active_smart_lists_includes_a_list_with_a_smart_filter(self) -> None:
+        smart_list = baker.make(PinList, profile=self.profile, name="Filtered", is_smart=True, smart_filter={"name": "ruins"})
+
+        result = list(PinList.objects.active_smart_lists(self.profile))
+
+        self.assertEqual(result, [smart_list])

@@ -191,7 +191,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         saved_filters = list(profile.saved_filters.all())
         from urbanlens.dashboard.models.pin_list.model import PinList
 
-        pin_lists = list(PinList.objects.filter(profile=profile).order_by("name"))
+        pin_lists = list(PinList.objects.for_profile(profile).order_by("name"))
 
         site = SiteSettings.get_current()
         show_pin_count = site.show_dev_admin_features(request.user)

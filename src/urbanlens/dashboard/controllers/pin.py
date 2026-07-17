@@ -140,7 +140,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         from urbanlens.dashboard.models.pin_list.model import PinList
 
-        pin_lists = list(PinList.objects.filter(profile=profile).order_by("name"))
+        pin_lists = list(PinList.objects.for_profile(profile).order_by("name"))
 
         pin_cover_candidates: list[dict] = []
         if pin.cover_photo_id:

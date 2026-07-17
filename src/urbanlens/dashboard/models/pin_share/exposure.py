@@ -28,6 +28,7 @@ from django.db import models
 from django.db.models import Index, UniqueConstraint
 
 from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.pin_share.queryset import LocationExposureManager
 
 
 class ExposureSource(abstract.TextChoices):
@@ -55,6 +56,8 @@ class LocationExposure(abstract.DashboardModel):
     # information. Onward shares by `profile` of this place chain under it.
     share = models.ForeignKey("dashboard.PinShare", on_delete=models.CASCADE, related_name="exposures")
     source = models.CharField(max_length=20, choices=ExposureSource.choices, default=ExposureSource.SHARE_RECEIVED)
+
+    objects = LocationExposureManager()
 
     if TYPE_CHECKING:
         profile_id: int

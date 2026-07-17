@@ -36,7 +36,7 @@ def sync_pin_against_smart_lists(pin: Pin) -> None:
     """
     from urbanlens.dashboard.models.pin_list.model import PinList, PinListItem
 
-    smart_lists = PinList.objects.filter(profile_id=pin.profile_id, is_smart=True).filter(Q(smart_filter__isnull=False) | Q(smart_boundary__isnull=False))
+    smart_lists = PinList.objects.active_smart_lists(pin.profile_id)
     for pin_list in smart_lists:
         matches = _pin_matches_smart_list(pin, pin_list)
         existing = PinListItem.objects.filter(pin_list=pin_list, pin=pin).first()

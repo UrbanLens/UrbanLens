@@ -35,7 +35,7 @@ from urbanlens.dashboard.controllers.pin_sharing import _create_pin_from_share
 from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
-from urbanlens.dashboard.models.pin_share import LocationExposure, PinShare, PinShareStatus
+from urbanlens.dashboard.models.pin_share import ExposureSource, LocationExposure, PinShare, PinShareStatus
 from urbanlens.dashboard.services.share_provenance import (
     record_share_exposure,
     resolve_origin_share,
@@ -363,3 +363,59 @@ class ShareViewIntegrationTests(_ProvenanceTestCase):
         self.assertEqual(response.status_code, 200)
         share = PinShare.objects.get(pin=self.sarah_pin, to_profile=self.profiles["john"])
         self.assertTrue(LocationExposure.objects.filter(profile=self.profiles["john"], location=self.location, share=share).exists())
+
+
+class LocationExposureQuerySetTests(_ProvenanceTestCase):
+    """Direct coverage of LocationExposureQuerySet.near() / LocationExposureManager.record()
+    - previously a private module-level helper (_exposures_near) and three
+    near-identical get_or_create calls duplicated across share_provenance.py,
+    now a proper queryset/manager pair matching the rest of the codebase's
+    convention."""
+
+    def test_near_finds_an_exposure_within_radius(self) -> None:
+        share = self._share(self.sarah_pin, "sarah", "john")
+
+        found = LocationExposure.objects.near(self.profiles["john"].pk, self.location, radius_meters=150)
+
+        self.assertTrue(found.filter(share=share).exists())
+
+    def test_near_excludes_an_exposure_outside_radius(self) -> None:
+        self._share(self.sarah_pin, "sarah", "john")
+
+        found = LocationExposure.objects.near(self.profiles["john"].pk, self.far_location, radius_meters=150)
+
+        self.assertFalse(found.exists())
+
+    def test_near_is_scoped_to_the_given_profile(self) -> None:
+        self._share(self.sarah_pin, "sarah", "john")
+
+        found = LocationExposure.objects.near(self.profiles["kim"].pk, self.location, radius_meters=150)
+
+        self.assertFalse(found.exists())
+
+    def test_record_creates_a_new_exposure(self) -> None:
+        share = self._share(self.sarah_pin, "sarah", "kim")
+        LocationExposure.objects.filter(profile=self.profiles["kim"], location=self.location, share=share).delete()
+
+        exposure, created = LocationExposure.objects.record(
+            profile_id=self.profiles["kim"].pk,
+            location_id=self.location.pk,
+            share_id=share.pk,
+            source=ExposureSource.PIN_MOVED,
+        )
+
+        self.assertTrue(created)
+        self.assertEqual(exposure.source, ExposureSource.PIN_MOVED)
+
+    def test_record_is_idempotent_for_the_same_profile_location_share(self) -> None:
+        share = self._share(self.sarah_pin, "sarah", "kim")
+
+        _exposure, created = LocationExposure.objects.record(
+            profile_id=self.profiles["kim"].pk,
+            location_id=self.location.pk,
+            share_id=share.pk,
+            source=ExposureSource.PIN_MOVED,
+        )
+
+        self.assertFalse(created)
+        self.assertEqual(LocationExposure.objects.filter(profile=self.profiles["kim"], location=self.location, share=share).count(), 1)

@@ -179,7 +179,7 @@ class PinListsIndexView(LoginRequiredMixin, View):
             )
 
         sort = request.GET.get("sort") or "updated"
-        pin_lists = PinList.objects.filter(profile=profile).prefetch_related("items__pin")
+        pin_lists = PinList.objects.for_profile(profile).prefetch_related("items__pin")
         if sort == "name":
             pin_lists = pin_lists.order_by("name")
         elif sort == "pin_count":

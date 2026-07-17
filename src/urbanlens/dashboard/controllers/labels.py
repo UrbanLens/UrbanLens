@@ -1138,7 +1138,7 @@ class LabelPinMembershipView(LoginRequiredMixin, View):
         # The pin's Organize dialog combines label-picking with list-picking under
         # tabs (see _label_dialog.html), so this panel also needs the profile's lists.
         ctx["dialog_title"] = "Add to Pin"
-        ctx["pin_lists"] = list(PinList.objects.filter(profile=profile).order_by("name"))
+        ctx["pin_lists"] = list(PinList.objects.for_profile(profile).order_by("name"))
         return ctx
 
     def get(self, request: HttpRequest, pin_slug: str, *args, **kwargs) -> HttpResponse:

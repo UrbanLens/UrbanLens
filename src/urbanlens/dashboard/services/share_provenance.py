@@ -29,8 +29,9 @@ Two independent mechanisms cooperate, and it matters which one is in play:
   *current* location every time it's about to be shared. Every step that
   touches this radius match - the live resolution, the duplicate-share dedup
   check, and propagation across a move - must use the same radius query
-  (:func:`_exposures_near`), or a pin that was only ever *near* (not exactly
-  on) an exposed spot can silently lose the trail across a second move.
+  (``LocationExposure.objects.near``), or a pin that was only ever *near*
+  (not exactly on) an exposed spot can silently lose the trail across a
+  second move.
 
 Every code path that creates a ``PinShare`` - the share dialog, ``@pin`` chat
 shares, map-geometry detection, DM coordinate/address detection, trip
@@ -88,7 +89,7 @@ def find_profile_pin_near_location(profile_id: int, location: Location | None, *
     ).first()
 
 
-def record_share_exposure(share: PinShare, *, source: str = ExposureSource.SHARE_RECEIVED) -> LocationExposure | None:
+def record_share_exposure(share: PinShare, *, source: ExposureSource = ExposureSource.SHARE_RECEIVED) -> LocationExposure | None:
     """Record that ``share.to_profile`` learned about the shared place via ``share``.
 
     Skipped when the recipient already has their own pin at the place - the
@@ -110,37 +111,16 @@ def record_share_exposure(share: PinShare, *, source: str = ExposureSource.SHARE
     if find_profile_pin_near_location(share.to_profile_id, location) is not None:
         return None
     try:
-        exposure, _created = LocationExposure.objects.get_or_create(
+        exposure, _created = LocationExposure.objects.record(
             profile_id=share.to_profile_id,
             location_id=location.pk,
-            share=share,
-            defaults={"source": source},
+            share_id=share.pk,
+            source=source,
         )
     except DatabaseError:
         logger.exception("Could not record exposure for share %s", share.pk)
         return None
     return exposure
-
-
-def _exposures_near(profile_id: int, location: Location, *, radius_meters: int = EXPOSURE_RADIUS_METERS):
-    """``LocationExposure`` rows for ``profile_id`` within ``radius_meters`` of ``location``.
-
-    The one spatial query every resolution/propagation step shares, so "same
-    place" always means the same thing (a radius match, never an exact
-    Location-row match) no matter which caller is asking.
-
-    Args:
-        profile_id: PK of the profile whose exposures to search.
-        location: The place to match against.
-        radius_meters: Match radius; defaults to :data:`EXPOSURE_RADIUS_METERS`.
-
-    Returns:
-        A queryset of matching exposure rows.
-    """
-    return LocationExposure.objects.filter(
-        profile_id=profile_id,
-        location__point__distance_lte=(location.point, D(m=radius_meters)),
-    )
 
 
 def profile_is_exposed_to(profile_id: int, location: Location, *, radius_meters: int = EXPOSURE_RADIUS_METERS) -> bool:
@@ -158,7 +138,7 @@ def profile_is_exposed_to(profile_id: int, location: Location, *, radius_meters:
     Returns:
         True when an exposure already covers this place for this profile.
     """
-    return _exposures_near(profile_id, location, radius_meters=radius_meters).exists()
+    return LocationExposure.objects.near(profile_id, location, radius_meters=radius_meters).exists()
 
 
 def resolve_origin_share(profile_id: int, *, pin: Pin | None = None, location: Location | None = None) -> PinShare | None:
@@ -194,7 +174,7 @@ def resolve_origin_share(profile_id: int, *, pin: Pin | None = None, location: L
     if location is None and pin is not None:
         location = pin.location
     if location is not None:
-        exposure = _exposures_near(profile_id, location).select_related("share").order_by("created").first()
+        exposure = LocationExposure.objects.near(profile_id, location, radius_meters=EXPOSURE_RADIUS_METERS).select_related("share").order_by("created").first()
         if exposure is not None:
             return exposure.share
 
@@ -267,25 +247,25 @@ def propagate_exposures_for_pin_move(pin: Pin, old_location_id: int | None) -> i
         old_location = Location.objects.filter(pk=old_location_id).only("pk", "point").first()
         share_ids: set[int] = set()
         if old_location is not None:
-            share_ids.update(_exposures_near(pin.profile_id, old_location).values_list("share_id", flat=True))
+            share_ids.update(LocationExposure.objects.near(pin.profile_id, old_location, radius_meters=EXPOSURE_RADIUS_METERS).values_list("share_id", flat=True))
         if lineage_share_id is not None:
             share_ids.add(lineage_share_id)
         for share_id in share_ids:
-            _exposure, was_created = LocationExposure.objects.get_or_create(
+            _exposure, was_created = LocationExposure.objects.record(
                 profile_id=pin.profile_id,
                 location_id=pin.location_id,
                 share_id=share_id,
-                defaults={"source": ExposureSource.PIN_MOVED},
+                source=ExposureSource.PIN_MOVED,
             )
             created += int(was_created)
         # The pin also touched (and may have been shared from) the old spot;
         # make sure its own lineage is recorded there for future pins at it.
         if lineage_share_id is not None:
-            _exposure, was_created = LocationExposure.objects.get_or_create(
+            _exposure, was_created = LocationExposure.objects.record(
                 profile_id=pin.profile_id,
                 location_id=old_location_id,
                 share_id=lineage_share_id,
-                defaults={"source": ExposureSource.PIN_MOVED},
+                source=ExposureSource.PIN_MOVED,
             )
             created += int(was_created)
     except DatabaseError:
