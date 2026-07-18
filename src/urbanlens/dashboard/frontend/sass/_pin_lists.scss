@@ -726,6 +726,63 @@
     margin: 0;
 }
 
+// -- Saved filter detail page (map + every option, side by side) ------------
+.saved-filter-detail-layout {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+    align-items: start;
+
+    @include up($breakpoint-lg) {
+        grid-template-columns: minmax(0, 1fr) minmax(320px, 420px);
+    }
+}
+
+.saved-filter-detail-map-col {
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+
+    @include up($breakpoint-lg) {
+        position: sticky;
+        top: 1rem;
+    }
+}
+
+.saved-filter-detail-map-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .5rem;
+}
+
+.saved-filter-preview-count {
+    font-weight: 600;
+    color: var(--ul-grey-7);
+    font-size: .9rem;
+}
+
+.saved-filter-preview-status {
+    font-size: .8rem;
+    color: var(--ul-grey-5);
+    font-style: italic;
+}
+
+.saved-filter-preview-map-section {
+    position: relative;
+}
+
+.saved-filter-preview-map {
+    height: 420px;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid var(--ul-surface-border);
+
+    @include up($breakpoint-sm) {
+        height: 560px;
+    }
+}
+
 // -- Region field (include/exclude polygon drawing) --------------------------
 .saved-filter-region-field {
     border-top: 1px solid var(--ul-surface-border);

@@ -300,5 +300,15 @@ Context:
         const nameInput = document.getElementById('saved-filter-name');
         _sfNameManuallyEdited = !!(nameInput && nameInput.value.trim());
     };
+
+    // Same init as savedFilterOpenDialog(), minus the modal - for the filter's
+    // own always-visible detail page (saved_filter_detail.html), where the
+    // form is part of the page itself rather than a dialog to open.
+    window.savedFilterInitInlinePage = function () {
+        window.initSavedFilterRegionMap();
+        _sfInitVisits();
+        const nameInput = document.getElementById('saved-filter-name');
+        _sfNameManuallyEdited = !!(nameInput && nameInput.value.trim());
+    };
 </script>
 {% include "dashboard/partials/ui/_dual_range_slider_script.html" %}

@@ -107,6 +107,52 @@ class SavedFilterCreateView(LoginRequiredMixin, View):
         return _render_section(request, profile)
 
 
+def _build_filter_form_context(profile: Profile, filter_uuid) -> dict:
+    """Build the shared context every "every option editable" filter form needs.
+
+    Used by both the create/edit dialog and the filter's own dedicated detail
+    page, so the two never drift out of sync on what fields/choices they offer.
+
+    Args:
+        profile: The requesting user.
+        filter_uuid: The SavedFilter's uuid, or None for a blank "new filter" form.
+
+    Returns:
+        Context dict ready to merge into either template's render() call.
+    """
+    from urbanlens.dashboard.models.abstract.choices import SecurityLevel
+    from urbanlens.dashboard.models.abstract.security import SECURITY_FIELDS
+
+    saved_filter = None
+    criteria: dict = {}
+    initial: dict = {}
+    if filter_uuid is not None:
+        saved_filter = get_object_or_404(SavedFilter, uuid=filter_uuid, profile=profile)
+        criteria = deserialize_criteria(saved_filter.criteria, profile)
+        initial = {
+            "tags": [label.pk for label in criteria.get("tags", [])],
+            "exclude_tags": [label.pk for label in criteria.get("exclude_tags", [])],
+            "has_visits": criteria.get("has_visits", ""),
+        }
+    search_form = SearchForm(profile=profile, initial=initial)
+    custom_field_values = {c["field"].pk: c for c in criteria.get("custom_fields", [])}
+    security_values = {key: criteria.get(f"security_{key}", "") for key, _label in SECURITY_FIELDS}
+    return {
+        "saved_filter": saved_filter,
+        "criteria": criteria,
+        "form": search_form,
+        "custom_field_values": custom_field_values,
+        "security_fields": SECURITY_FIELDS,
+        "security_level_choices": SecurityLevel.choices,
+        "security_values": security_values,
+        "has_label_groups": bool(saved_filter.criteria.get("label_groups")) if saved_filter else False,
+        "selected_tag_ids": initial.get("tags", []),
+        "selected_exclude_tag_ids": initial.get("exclude_tags", []),
+        "icon_categories": ICON_CATEGORIES,
+        "current_icon": saved_filter.icon if saved_filter else "bookmark",
+    }
+
+
 class SavedFilterEditView(LoginRequiredMixin, View):
     """Render the Filters tab's create/edit dialog, and save edits.
 
@@ -130,41 +176,8 @@ class SavedFilterEditView(LoginRequiredMixin, View):
 
     def get(self, request, filter_uuid=None):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        saved_filter = None
-        criteria: dict = {}
-        initial: dict = {}
-        if filter_uuid is not None:
-            saved_filter = get_object_or_404(SavedFilter, uuid=filter_uuid, profile=profile)
-            criteria = deserialize_criteria(saved_filter.criteria, profile)
-            initial = {
-                "tags": [label.pk for label in criteria.get("tags", [])],
-                "exclude_tags": [label.pk for label in criteria.get("exclude_tags", [])],
-                "has_visits": criteria.get("has_visits", ""),
-            }
-        search_form = SearchForm(profile=profile, initial=initial)
-        custom_field_values = {c["field"].pk: c for c in criteria.get("custom_fields", [])}
-        from urbanlens.dashboard.models.abstract.choices import SecurityLevel
-        from urbanlens.dashboard.models.abstract.security import SECURITY_FIELDS
-
-        security_values = {key: criteria.get(f"security_{key}", "") for key, _label in SECURITY_FIELDS}
-        return render(
-            request,
-            _FORM_DIALOG_TEMPLATE,
-            {
-                "saved_filter": saved_filter,
-                "criteria": criteria,
-                "form": search_form,
-                "custom_field_values": custom_field_values,
-                "security_fields": SECURITY_FIELDS,
-                "security_level_choices": SecurityLevel.choices,
-                "security_values": security_values,
-                "has_label_groups": bool(saved_filter.criteria.get("label_groups")) if saved_filter else False,
-                "selected_tag_ids": initial.get("tags", []),
-                "selected_exclude_tag_ids": initial.get("exclude_tags", []),
-                "icon_categories": ICON_CATEGORIES,
-                "current_icon": saved_filter.icon if saved_filter else "bookmark",
-            },
-        )
+        context = _build_filter_form_context(profile, filter_uuid)
+        return render(request, _FORM_DIALOG_TEMPLATE, context)
 
     def post(self, request, filter_uuid):
         profile, _ = Profile.objects.get_or_create(user=request.user)
@@ -302,3 +315,77 @@ class SavedFilterDeleteView(LoginRequiredMixin, View):
         response = _render_section(request, profile)
         response["HX-Trigger"] = json.dumps({"showToast": {"level": "success", "message": "Filter deleted. Undo within 7 days from Settings → Undo History."}})
         return response
+
+
+#: Cap on markers drawn for the live preview map - a filter matching thousands
+#: of pins would just paint an unreadable blob; the match count (shown
+#: separately) stays accurate even when the marker list is truncated.
+_PREVIEW_MAP_PIN_LIMIT = 500
+
+
+def _serialize_preview_pins(pins) -> list[dict]:
+    """Minimal per-pin payload for the live preview map (not the full map_data shape)."""
+    rows = []
+    for pin in pins:
+        lat, lng = pin.effective_latitude, pin.effective_longitude
+        if lat is None or lng is None:
+            continue
+        rows.append({"uuid": str(pin.uuid), "lat": float(lat), "lng": float(lng), "name": pin.effective_name, "slug": pin.slug})
+    return rows
+
+
+class SavedFilterDetailView(LoginRequiredMixin, View):
+    """A saved filter's own page: a live-updating map of its matching pins plus
+    every editable option - replaces the old static card + "Edit" dialog (see
+    _filters_tab_grid.html, whose card now links here instead).
+
+    GET /saved-filters/<uuid>/
+    """
+
+    def get(self, request, filter_uuid):
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        context = _build_filter_form_context(profile, filter_uuid)
+        query = Pin.objects.filter(profile=profile).root_pins().filter_by_criteria(context["criteria"]).select_related("location")
+        context.update(
+            {
+                # Raw list, not pre-serialized - the template's |json_script
+                # filter does its own json.dumps(); passing an already-dumped
+                # string here would double-encode it.
+                "initial_pins": _serialize_preview_pins(query[:_PREVIEW_MAP_PIN_LIMIT]),
+                "initial_match_count": query.count(),
+                "preview_pin_limit": _PREVIEW_MAP_PIN_LIMIT,
+                **profile.get_map_center_template_context(),
+            },
+        )
+        return render(request, "dashboard/pages/pin_lists/saved_filter_detail.html", context)
+
+
+class SavedFilterPreviewView(LoginRequiredMixin, View):
+    """Live map preview: pins matching whatever criteria the detail page's form
+    currently holds, whether or not it's been saved yet.
+
+    POST /saved-filters/preview/ → JSON {"pins": [...], "count": N}
+
+    Reads the same SearchForm-shaped POST fields the create/edit endpoints
+    read (via hx-include="#saved-filter-form" style form serialization on the
+    client), so the preview always matches what Save would actually persist.
+    """
+
+    def post(self, request):
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        search_form = SearchForm(request.POST, profile=profile)
+        if not search_form.is_valid():
+            return JsonResponse({"pins": [], "count": 0, "error": "Invalid filter criteria."}, status=400)
+
+        cleaned = dict(search_form.cleaned_data)
+        parsed_groups = search_form.parse_label_groups()
+        if parsed_groups is not None:
+            cleaned["label_groups"] = parsed_groups
+        if (custom_field_criteria := search_form.parse_custom_field_criteria()) is not None:
+            cleaned["custom_fields"] = custom_field_criteria
+        regions = _dissolve_regions(search_form)
+        cleaned["include_regions"] = regions["include_regions"]
+        cleaned["exclude_regions"] = regions["exclude_regions"]
+
+        query = Pin.objects.filter(profile=profile).root_pins().filter_by_criteria(cleaned).select_related("location")
+        return JsonResponse({"pins": _serialize_preview_pins(query[:_PREVIEW_MAP_PIN_LIMIT]), "count": query.count()})

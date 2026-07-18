@@ -673,8 +673,10 @@ urlpatterns = [
             [
                 path("create/", saved_filters.SavedFilterCreateView.as_view(), name="saved_filters.create"),
                 path("new/", saved_filters.SavedFilterEditView.as_view(), name="saved_filters.new"),
+                path("preview/", saved_filters.SavedFilterPreviewView.as_view(), name="saved_filters.preview"),
                 path("<uuid:filter_uuid>/edit/", saved_filters.SavedFilterEditView.as_view(), name="saved_filters.edit"),
                 path("<uuid:filter_uuid>/delete/", saved_filters.SavedFilterDeleteView.as_view(), name="saved_filters.delete"),
+                path("<uuid:filter_uuid>/", saved_filters.SavedFilterDetailView.as_view(), name="saved_filters.detail"),
                 path("suggest-name/", saved_filters.SavedFilterSuggestNameView.as_view(), name="saved_filters.suggest_name"),
                 path("counts/", saved_filters.SavedFilterMatchCountsView.as_view(), name="saved_filters.counts"),
             ],
