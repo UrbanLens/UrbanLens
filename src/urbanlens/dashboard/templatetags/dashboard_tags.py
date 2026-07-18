@@ -86,11 +86,14 @@ def group_share_for(message: Any, viewer_id: int) -> Any:
 
 @register.filter
 def message_preview(message: Any, viewer_id: int) -> str:
-    """Short preview text for a DirectMessage, honoring its tombstone state for `viewer_id`.
+    """Short preview text for a DirectMessage or GroupMessage, honoring its tombstone state.
 
-    Used for reply-quote boxes so a quoted message that's been deleted or has
-    expired for the viewer shows the same placeholder as the original bubble
-    would, rather than leaking its content through the quote.
+    Used for reply-quote boxes and conversation-list row previews, so a
+    message that's been deleted or has expired for the viewer shows the same
+    placeholder its own bubble would, rather than leaking its content through
+    a quote box or the sidebar's last-message line. GroupMessage doesn't
+    (yet) support image/map attachments, so those checks are skipped for it
+    via `getattr` rather than raising.
 
     Usage: {{ message|message_preview:viewer_id }}
     """
@@ -103,11 +106,12 @@ def message_preview(message: Any, viewer_id: int) -> str:
         return "🔒 Message"
     if message.body:
         return message.body[:80]
-    if message.images.exists():
+    images = getattr(message, "images", None)
+    if images is not None and images.exists():
         return "📷 Photo"
-    if message.markup_map_id:
+    if getattr(message, "markup_map_id", None):
         return "🗺️ Map"
-    if message.map_removed:
+    if getattr(message, "map_removed", False):
         return "Map removed"
     return "Message"
 

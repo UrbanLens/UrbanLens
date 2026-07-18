@@ -50,17 +50,22 @@ class DirectMessageQuerySet(abstract.DashboardQuerySet):
         """Exclude messages `profile` has removed from their own view.
 
         A message deleted "for everyone" by its sender stays visible here as
-        a tombstone (rendered as removed text, not excluded); this only hides
-        a message the *viewing* profile chose to delete for themselves alone.
+        a tombstone (rendered as removed text, not excluded) - for BOTH
+        parties, including the sender: the sender always sees their own sent
+        messages in full regardless of delete/expiry state (see
+        ``DirectMessage.tombstone_text_for``), so ``deleted_by_sender_at``
+        never gates a sender's own row here. This only hides a message the
+        *viewing* profile chose to delete for themselves alone
+        (``deleted_by_recipient_at``, which only a recipient can set).
 
         Args:
             profile: The viewing profile.
 
         Returns:
-            Messages sent (and not self-deleted) or received (and not
-            self-deleted) by `profile`.
+            Every message `profile` sent, plus every message `profile`
+            received that they have not self-deleted.
         """
-        return self.filter(Q(sender=profile, deleted_by_sender_at__isnull=True) | Q(recipient=profile, deleted_by_recipient_at__isnull=True))
+        return self.filter(Q(sender=profile) | Q(recipient=profile, deleted_by_recipient_at__isnull=True))
 
     def unread_for(self, profile: Profile) -> Self:
         """Return messages addressed to the profile that have not been read yet.

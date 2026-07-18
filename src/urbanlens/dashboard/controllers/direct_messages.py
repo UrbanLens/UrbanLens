@@ -235,6 +235,7 @@ class MessagesPageView(LoginRequiredMixin, View):
                 "active_partner": None,
                 "active_slug": "",
                 "profile": profile,
+                "viewer_id": profile.pk,
             },
         )
 
@@ -698,6 +699,7 @@ class ConversationListView(LoginRequiredMixin, View):
                 "conversations": all_conversations_for(profile),
                 "active_slug": request.GET.get("active", ""),
                 "active_group_uuid": request.GET.get("active_group", ""),
+                "viewer_id": profile.pk,
             },
         )
 

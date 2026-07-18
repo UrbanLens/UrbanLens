@@ -822,3 +822,62 @@ class SelfDeletedMessageVisibilityTests(TestCase):
         only = create_direct_message(self.partner, self.me, "hi")
         delete_message_for_self(only, self.me)
         self.assertEqual(conversations_for(self.me), [])
+
+
+class SenderOwnDeletedForEveryoneVisibilityTests(TestCase):
+    """visible_to() must never hide a sender's own sent message from themselves.
+
+    Regression found while adding SelfDeletedMessageVisibilityTests above:
+    the pre-existing `visible_to()` filter gated the SENDER's own rows on
+    `deleted_by_sender_at__isnull=True` too - so once a sender used "delete
+    for everyone" (which only tombstones the RECIPIENT's view -
+    tombstone_text_for always returns None for the sender), any call site
+    built on visible_to() silently dropped that message from the sender's
+    OWN results. Applying visible_to() to conversations_for() (this session's
+    fix for self-deleted-by-recipient leaking into the sidebar) turned that
+    into a much bigger problem: a sender's entire conversation could vanish
+    from their own sidebar once every message in it had been "deleted for
+    everyone" by them. The filter itself is fixed so `deleted_by_sender_at`
+    never gates the sender's own view anywhere - only `deleted_by_recipient_at`
+    gates the recipient's own view.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.sender = _profile()
+        self.recipient = _profile()
+        _set_dm_visibility(self.recipient, VisibilityChoice.ANYONE)
+
+    def test_visible_to_never_excludes_the_senders_own_deleted_for_everyone_row(self) -> None:
+        from urbanlens.dashboard.services.direct_messages import delete_message_for_everyone
+
+        message = create_direct_message(self.sender, self.recipient, "hi")
+        delete_message_for_everyone(message, self.sender)
+        self.assertIn(message, DirectMessage.objects.visible_to(self.sender))
+
+    def test_conversation_stays_in_the_senders_sidebar_after_deleting_for_everyone(self) -> None:
+        from urbanlens.dashboard.services.direct_messages import delete_message_for_everyone
+
+        message = create_direct_message(self.sender, self.recipient, "hi")
+        delete_message_for_everyone(message, self.sender)
+        conversations = conversations_for(self.sender)
+        self.assertEqual(len(conversations), 1)
+        self.assertEqual(conversations[0]["last_message"].pk, message.pk)
+
+    def test_recipient_still_only_sees_the_tombstone(self) -> None:
+        """The fix must not resurrect the message's content for the recipient."""
+        from urbanlens.dashboard.services.direct_messages import delete_message_for_everyone
+
+        message = create_direct_message(self.sender, self.recipient, "hi")
+        delete_message_for_everyone(message, self.sender)
+        self.assertIn(message, DirectMessage.objects.visible_to(self.recipient))
+        self.assertEqual(message.tombstone_text_for(self.recipient.pk), "Message deleted")
+
+    def test_recipient_self_delete_is_still_excluded_from_their_own_view(self) -> None:
+        """The fix only changes the sender-side gate - deleted_by_recipient_at still hides it."""
+        from urbanlens.dashboard.services.direct_messages import delete_message_for_self
+
+        message = create_direct_message(self.sender, self.recipient, "hi")
+        delete_message_for_self(message, self.recipient)
+        self.assertNotIn(message, DirectMessage.objects.visible_to(self.recipient))
+        self.assertIn(message, DirectMessage.objects.visible_to(self.sender))

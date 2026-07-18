@@ -198,3 +198,57 @@ class WhenReadFirstOpenTests(TestCase):
         self.client.force_login(self.sender.user)
         response = self.client.get(reverse("messages.conversation", kwargs={"profile_slug": self.recipient.slug}))
         self.assertContains(response, self.SECRET)
+
+
+class SidebarPreviewTombstoneTests(TestCase):
+    """The conversation-list sidebar's last-message preview honors tombstone state too.
+
+    Regression: `_conversation_list.html` rendered `conv.last_message.body`
+    directly (only branching on `is_encrypted`), so a message tombstoned in
+    its own thread bubble - deleted-for-everyone, or expired via the
+    "delete as soon as read" retention setting - still leaked its raw text
+    into the sidebar preview line on every other page render, including the
+    full messages page loaded right after the thread itself had already
+    started tombstoning it.
+    """
+
+    SECRET = "the spare key is under the third flowerpot"
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.sender = _profile()
+        self.recipient = _profile()
+        self.sender.ensure_slug()
+        self.recipient.ensure_slug()
+
+    def test_expired_when_read_message_is_not_in_the_sidebar_preview(self) -> None:
+        _make_message(
+            self.sender,
+            self.recipient,
+            sender_delete_after=MessageRetentionChoice.WHEN_READ,
+            read_at=timezone.now() - datetime.timedelta(minutes=1),
+            body=self.SECRET,
+        )
+        self.client.force_login(self.recipient.user)
+        response = self.client.get(reverse("messages.list"))
+        self.assertNotContains(response, self.SECRET)
+        self.assertContains(response, "This message is no longer available")
+
+    def test_deleted_for_everyone_message_is_not_in_the_sidebar_preview(self) -> None:
+        from urbanlens.dashboard.services.direct_messages import delete_message_for_everyone
+
+        message = _make_message(self.sender, self.recipient, sender_delete_after=MessageRetentionChoice.NEVER, body=self.SECRET)
+        delete_message_for_everyone(message, self.sender)
+        self.client.force_login(self.recipient.user)
+        response = self.client.get(reverse("messages.list"))
+        self.assertNotContains(response, self.SECRET)
+        self.assertContains(response, "Message deleted")
+
+    def test_the_sender_still_sees_their_own_deleted_message_in_their_own_sidebar(self) -> None:
+        from urbanlens.dashboard.services.direct_messages import delete_message_for_everyone
+
+        message = _make_message(self.sender, self.recipient, sender_delete_after=MessageRetentionChoice.NEVER, body=self.SECRET)
+        delete_message_for_everyone(message, self.sender)
+        self.client.force_login(self.sender.user)
+        response = self.client.get(reverse("messages.list"))
+        self.assertContains(response, self.SECRET)

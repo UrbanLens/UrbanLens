@@ -27,7 +27,6 @@ from urbanlens.dashboard.services.group_chats import (
     create_group_chat,
     create_group_message,
     delete_group_message,
-    group_conversations_for,
     group_e2ee_ready,
     group_thread_page,
     mark_group_thread_open,
@@ -160,7 +159,7 @@ class GroupConversationView(LoginRequiredMixin, View):
             Thread partial for HTMX requests; the whole messages page with
             this group active otherwise.
         """
-        from urbanlens.dashboard.services.direct_messages import conversations_for
+        from urbanlens.dashboard.services.direct_messages import all_conversations_for
 
         profile = _get_profile(request)
         group, membership = _get_group(profile, group_uuid)
@@ -171,8 +170,10 @@ class GroupConversationView(LoginRequiredMixin, View):
 
         context = {
             **_group_thread_context(profile, group, membership),
-            "conversations": conversations_for(profile),
-            "group_conversations": group_conversations_for(profile),
+            # all_conversations_for (not the 1:1-only conversations_for): the
+            # sidebar on a directly-loaded group-thread URL must show every
+            # conversation, groups included - not just 1:1 threads.
+            "conversations": all_conversations_for(profile),
             "active_partner": None,
             "active_slug": "",
             "active_group_uuid": str(group.uuid),
