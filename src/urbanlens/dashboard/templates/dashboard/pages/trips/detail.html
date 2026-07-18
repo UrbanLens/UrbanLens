@@ -1721,5 +1721,103 @@ window.tripOpenCompleteDialog = function (url, activityDate) {
         }
     });
 }());
+
+// -- Click-to-edit-in-place hero title/description (joined members only) --
+// TripEditView returns an HTML partial (header + hero OOB swap), not JSON -
+// unlike the pin-list detail page's equivalent, this just ignores the
+// response body on success and patches the clicked element's own text
+// locally, the same way the pin detail page's description editor does.
+// Wired via delegation on document.body (not direct listeners on the hero
+// elements) because #trip-hero itself gets replaced wholesale by an
+// out-of-band swap whenever an activity date shifts the trip's effective
+// date range (see _trip_hero_oob/_render_activities_panel) - direct
+// listeners would silently stop working after that swap; delegation
+// survives it since document.body is never replaced.
+(function () {
+    var csrftoken = '{{ csrf_token }}';
+    var editUrl = '{% url "trips.edit" trip.slug %}';
+    var FIELD_OPTS = {
+        name: {
+            dataKey: 'rawName', inputClass: 'trip-title-input', maxLength: 255,
+            successMessage: 'Trip renamed.', errorMessage: 'Failed to rename trip.',
+        },
+        description: {
+            dataKey: 'rawDescription', inputClass: 'trip-description-input', multiline: true, allowEmpty: true,
+            placeholder: 'Add a description...', maxLength: 50000,
+            successMessage: 'Description updated.', errorMessage: 'Failed to update description.',
+        },
+    };
+
+    function startEdit(el, field) {
+        var opts = FIELD_OPTS[field];
+        if (el.querySelector('input, textarea')) return;
+        var rawValue = el.dataset[opts.dataKey] || '';
+        var input = document.createElement(opts.multiline ? 'textarea' : 'input');
+        if (!opts.multiline) input.type = 'text';
+        else input.rows = 2;
+        input.className = opts.inputClass;
+        input.value = rawValue;
+        if (opts.maxLength) input.maxLength = opts.maxLength;
+
+        var displayText = el.textContent;
+        el.textContent = '';
+        el.appendChild(input);
+        input.focus();
+        if (!opts.multiline) input.select();
+
+        var done = false;
+        function finish(save) {
+            if (done) return;
+            done = true;
+            var newValue = input.value.trim();
+            if (save && newValue !== rawValue.trim() && (opts.allowEmpty || newValue)) {
+                var body = new URLSearchParams();
+                body.set(field, newValue);
+                fetch(editUrl, {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': csrftoken },
+                    body: body,
+                })
+                    .then(function (r) { if (!r.ok) throw new Error(); })
+                    .then(function () {
+                        el.dataset[opts.dataKey] = newValue;
+                        el.textContent = newValue || opts.placeholder;
+                        if (typeof toastr !== 'undefined') toastr.success(opts.successMessage);
+                    })
+                    .catch(function () {
+                        el.textContent = displayText;
+                        if (typeof toastr !== 'undefined') toastr.error(opts.errorMessage);
+                    });
+            } else {
+                el.textContent = displayText;
+            }
+        }
+
+        input.addEventListener('blur', function () { finish(true); });
+        input.addEventListener('keydown', function (e) {
+            e.stopPropagation();
+            if (!opts.multiline && e.key === 'Enter') { e.preventDefault(); input.blur(); }
+            else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+        });
+    }
+
+    document.body.addEventListener('click', function (e) {
+        var titleEl = e.target.closest('.trip-title-editable');
+        if (titleEl) { startEdit(titleEl, 'name'); return; }
+        var descEl = e.target.closest('.trip-description-editable');
+        if (descEl) startEdit(descEl, 'description');
+    });
+    document.body.addEventListener('keydown', function (e) {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        var el = e.target.closest('.trip-title-editable, .trip-description-editable');
+        // Only when the outer span itself has focus - once editing starts,
+        // Enter/Space is typed inside the input/textarea instead, which this
+        // same delegated listener would otherwise wrongly intercept again.
+        if (el && el === e.target) {
+            e.preventDefault();
+            startEdit(el, el.classList.contains('trip-title-editable') ? 'name' : 'description');
+        }
+    });
+}());
 </script>
 {% endblock %}

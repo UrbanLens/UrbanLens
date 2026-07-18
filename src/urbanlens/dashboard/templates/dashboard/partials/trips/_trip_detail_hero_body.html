@@ -1,9 +1,18 @@
 {% comment %}
 Hero body for trip_header_partial.html. Expects trip in context.
 {% endcomment %}
+{% if viewer_has_joined %}
+<h1 class="ul-page-hero__title">
+    <span class="trip-title-editable" tabindex="0" role="button"
+          data-raw-name="{{ trip.name }}" title="Click to rename">{{ trip.name }}</span>
+</h1>
+<p class="ul-page-hero__subtitle trip-description-editable" tabindex="0" role="button"
+   data-raw-description="{{ trip.description|default:'' }}" title="Click to edit the description">{{ trip.description|default:"Add a description..." }}</p>
+{% else %}
 <h1 class="ul-page-hero__title">{{ trip.name }}</h1>
 {% if trip.description %}
 <p class="ul-page-hero__subtitle">{{ trip.description }}</p>
+{% endif %}
 {% endif %}
 {% if trip.effective_start_date %}
 <div class="trip-detail-dates">

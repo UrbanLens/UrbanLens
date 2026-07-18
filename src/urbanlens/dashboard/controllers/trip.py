@@ -843,16 +843,20 @@ class TripEditView(LoginRequiredMixin, View):
         except (json.JSONDecodeError, ValueError):
             body = request.POST.dict()
 
-        name = (body.get("name") or "").strip()
-        if name:
-            trip.name = name
-        description = body.get("description") or None
-        length_error = text_length_error(description, MAX_TRIP_DESCRIPTION_LENGTH, "Description")
-        if length_error:
-            return HttpResponse(length_error, status=400)
-        trip.description = description
-        trip.start_date = body.get("start_date") or None
-        trip.end_date = body.get("end_date") or None
+        if "name" in body:
+            name = (body.get("name") or "").strip()
+            if name:
+                trip.name = name
+        if "description" in body:
+            description = body.get("description") or None
+            length_error = text_length_error(description, MAX_TRIP_DESCRIPTION_LENGTH, "Description")
+            if length_error:
+                return HttpResponse(length_error, status=400)
+            trip.description = description
+        if "start_date" in body:
+            trip.start_date = body.get("start_date") or None
+        if "end_date" in body:
+            trip.end_date = body.get("end_date") or None
         trip.save()
 
         from urbanlens.dashboard.controllers.calendar_sync import calendar_context

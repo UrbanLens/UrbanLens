@@ -596,6 +596,42 @@
     }
 }
 
+.trip-title-editable,
+.trip-description-editable {
+    display: inline-block;
+    cursor: pointer;
+    border-radius: 6px;
+    padding: .1rem .4rem;
+    margin: 0 0 0 -.4rem;
+    transition: background .15s;
+
+    &:hover,
+    &:focus-visible {
+        background: var(--ul-grey-0a);
+        outline: none;
+    }
+}
+
+.trip-title-input,
+.trip-description-input {
+    font: inherit;
+    font-weight: inherit;
+    color: inherit;
+    background: var(--ul-control-bg);
+    border: 1px solid var(--ul-color-accent);
+    border-radius: 6px;
+    padding: .1rem .4rem;
+    margin: 0 0 0 -.4rem;
+    outline: none;
+    min-width: 8rem;
+}
+
+.trip-description-input {
+    display: block;
+    width: 100%;
+    resize: vertical;
+}
+
 .trip-detail-header-right {
     display: flex;
     align-items: center;
