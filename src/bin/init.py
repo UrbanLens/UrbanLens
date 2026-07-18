@@ -387,7 +387,7 @@ class DjangoProjectInitializer:
             UnrecoverableError: if the server fails to run
 
         """
-        self.run_command(["python", "src/urbanlens/manage.py", "runserver"], "running development server")
+        self.run_command(["python", "src/urbanlens/manage.py", "runserver", "0.0.0.0:8000"], "running development server")
 
     def run_prod_server(self):
         """

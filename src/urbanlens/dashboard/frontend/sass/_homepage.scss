@@ -79,7 +79,6 @@ body.page-index {
 
         &--secondary {
             background: rgba(255, 255, 255, .12);
-            color: var(--ul-grey-4);
             border: 1.5px solid rgba(255, 255, 255, .35);
 
             &:hover {
@@ -260,10 +259,12 @@ body.page-index {
 }
 
 [data-theme="dark"] {
-   
-    .home-feature-title,
-    .home-section-title {
-        color: $color-indigo-200;
+
+    body.page-index {
+        .home-feature-title,
+        .home-section-title {
+            color: $color-indigo-200;
+        }
     }
 
     .home-api-list li {
