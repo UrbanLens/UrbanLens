@@ -29,14 +29,16 @@ among several detail-item fields with no title of its own.
     {% if not use_dialog %}<span class="field-label">Links</span>{% endif %}
     <span class="field-value pin-links-value">
         {% for link in links %}
-        <span class="pin-link-chip">
-            <a href="{{ link.url }}" target="_blank" rel="noopener noreferrer" title="{{ link.url }}"
-               {% if wiki %}onclick="return window.urbanlensConfirmExternalLink(event, this.href)"{% endif %}>{{ link.display_name }}</a>
-            {% if link.wayback_url %}
-            <a href="{{ link.wayback_url }}" target="_blank" rel="noopener noreferrer" class="pin-link-chip-wayback" title="View archived snapshot (Wayback Machine)">
-                <i class="material-symbols-outlined">history</i>
-            </a>
-            {% endif %}
+        <span class="pin-link-item">
+            <span class="pin-link-chip">
+                <a href="{{ link.url }}" target="_blank" rel="noopener noreferrer" title="{{ link.url }}"
+                   {% if wiki %}onclick="return window.urbanlensConfirmExternalLink(event, this.href)"{% endif %}>{{ link.display_name }}</a>
+                {% if link.wayback_url %}
+                <a href="{{ link.wayback_url }}" target="_blank" rel="noopener noreferrer" class="pin-link-chip-wayback" title="View archived snapshot (Wayback Machine)">
+                    <i class="material-symbols-outlined">history</i>
+                </a>
+                {% endif %}
+            </span>
             {% include "dashboard/partials/pins/_ai_extract_button.html" with url=link.url %}
             <button type="button" class="pin-link-chip-remove"
                     hx-delete="{% url delete_url_name owner_slug link.id %}"

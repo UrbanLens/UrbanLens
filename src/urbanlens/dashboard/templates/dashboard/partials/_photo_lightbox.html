@@ -233,7 +233,7 @@ Context:
   // Anchor element each page's cover-hero banner is inserted directly before
   // when created for the first time (mirrors the server-side markup's fixed
   // position - see location/index.html and location/wiki.html).
-  var COVER_HERO_INSERT_BEFORE = { pin: '.pin-detail-grid', wiki: '.wiki-banner' };
+  var COVER_HERO_INSERT_BEFORE = { pin: '#pin-detail-hero', wiki: '.wiki-banner' };
 
   // Live-updates the page's cover-hero banner - creating it if this is the
   // first cover photo, updating its background if one already existed, or
@@ -242,6 +242,18 @@ Context:
   // COVER_HERO_KEY (e.g. safety check-ins) or missing insertion anchor.
   function _applyCoverHeroUpdate(url) {
     if (!COVER_HERO_KEY) return;
+    if (COVER_HERO_KEY === 'pin') {
+      var pageHero = document.getElementById('pin-detail-hero');
+      if (!pageHero) return;
+      if (url && COVER_HERO_ENABLED) {
+        pageHero.classList.add('ul-page-hero--cover');
+        pageHero.style.backgroundImage = "url('" + url + "')";
+      } else {
+        pageHero.classList.remove('ul-page-hero--cover', 'is-adjusting-cover');
+        pageHero.style.backgroundImage = '';
+      }
+      return;
+    }
     var heroId = COVER_HERO_KEY + '-cover-hero';
     var hero = document.getElementById(heroId);
     if (url && COVER_HERO_ENABLED) {

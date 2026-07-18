@@ -48,13 +48,22 @@ Usage:
     <div class="ul-page-subnav"><div class="ul-page-subnav__inner">...tabs...</div></div>
     {% endblock %}
 {% endcomment %}
-<section class="ul-page-hero{% if modifier %} ul-page-hero--{{ modifier }}{% endif %}"{% if id %} id="{{ id }}"{% endif %}{% if oob %} hx-swap-oob="true"{% endif %}>
-    <div class="ul-page-hero__inner">
+<section class="ul-page-hero{% if modifier %} ul-page-hero--{{ modifier }}{% endif %}{% if hero_image_url %} ul-page-hero--cover{% endif %}"{% if id %} id="{{ id }}"{% endif %}{% if hero_image_url %} data-cover-hero-key="{{ hero_cover_key|default:'page' }}" style="background-image:url('{{ hero_image_url }}')"{% endif %}{% if oob %} hx-swap-oob="true"{% endif %}>
+    <div class="ul-page-hero__inner"{% if hero_image_url %} style="background: rgba(0,0,0,0.3); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px);"{% endif %}>
         {% if back_url %}
         <a href="{{ back_url }}" class="ul-page-hero__back">
             <i class="material-symbols-outlined">arrow_back</i>
             {{ back_label|default:"Back" }}
         </a>
+        {% endif %}
+        {% if hero_image_url %}
+        <button type="button" class="ul-page-hero__adjust" data-cover-adjust-toggle title="Adjust cover photo">
+            <i class="material-symbols-outlined">tune</i><span>Adjust</span>
+        </button>
+        <div class="ul-page-hero__cover-controls" data-cover-adjust-controls hidden>
+            <label>Zoom <input type="range" min="100" max="300" value="100" data-cover-zoom></label>
+            <button type="button" class="btn btn--ghost btn--sm" onclick="window._setCoverPhoto && window._setCoverPhoto(null)">Remove cover</button>
+        </div>
         {% endif %}
         {% if body_template %}
         {% include body_template %}
@@ -71,3 +80,49 @@ Usage:
         {% endif %}
     </div>
 </section>
+{% if hero_image_url %}
+<script>
+(function () {
+    var hero = document.getElementById('{{ id|default:"" }}');
+    if (!hero) return;
+    var key = 'ul_cover_hero_' + (hero.dataset.coverHeroKey || '{{ hero_cover_key|default:"page" }}') + '_' + '{{ pin.slug|default:wiki.location.slug|default:"" }}';
+    var toggle = hero.querySelector('[data-cover-adjust-toggle]');
+    var controls = hero.querySelector('[data-cover-adjust-controls]');
+    var zoom = hero.querySelector('[data-cover-zoom]');
+    var dragging = false, startX = 0, startY = 0, startPos = {x: 50, y: 50};
+    function state() {
+        try { return JSON.parse(localStorage.getItem(key) || '{}'); } catch (_) { return {}; }
+    }
+    function save(st) { try { localStorage.setItem(key, JSON.stringify(st)); } catch (_) {} }
+    function apply(st) {
+        var z = Math.max(100, Math.min(300, parseInt(st.zoom || 100, 10)));
+        var x = Math.max(0, Math.min(100, parseFloat(st.x == null ? 50 : st.x)));
+        var y = Math.max(0, Math.min(100, parseFloat(st.y == null ? 50 : st.y)));
+        hero.style.backgroundSize = z + '% auto';
+        hero.style.backgroundPosition = x + '% ' + y + '%';
+        if (zoom) zoom.value = z;
+    }
+    apply(state());
+    if (toggle && controls) toggle.addEventListener('click', function () {
+        var on = !hero.classList.contains('is-adjusting-cover');
+        hero.classList.toggle('is-adjusting-cover', on);
+        controls.hidden = !on;
+        toggle.classList.toggle('is-active', on);
+    });
+    if (zoom) zoom.addEventListener('input', function () { var st = state(); st.zoom = zoom.value; apply(st); save(st); });
+    hero.addEventListener('pointerdown', function (e) {
+        if (!hero.classList.contains('is-adjusting-cover') || (controls && controls.contains(e.target)) || (toggle && toggle.contains(e.target))) return;
+        dragging = true; hero.setPointerCapture(e.pointerId); startX = e.clientX; startY = e.clientY;
+        var st = state(); startPos = {x: st.x == null ? 50 : parseFloat(st.x), y: st.y == null ? 50 : parseFloat(st.y)};
+    });
+    hero.addEventListener('pointermove', function (e) {
+        if (!dragging) return;
+        var st = state();
+        st.x = Math.max(0, Math.min(100, startPos.x + ((e.clientX - startX) / hero.clientWidth) * 100));
+        st.y = Math.max(0, Math.min(100, startPos.y + ((e.clientY - startY) / hero.clientHeight) * 100));
+        apply(st); save(st);
+    });
+    hero.addEventListener('pointerup', function () { dragging = false; });
+})();
+</script>
+{% endif %}
