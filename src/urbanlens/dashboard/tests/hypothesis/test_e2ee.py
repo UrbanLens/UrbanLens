@@ -217,7 +217,7 @@ class PartnerKeyEndpointTests(TestCase):
 class ConversationKeyEndpointTests(TestCase):
     """Conversation keys are created once per pair with race handling."""
 
-    def _create(self, client: Client, partner: Profile, version: int = 1) -> "object":
+    def _create(self, client: Client, partner: Profile, version: int = 1) -> object:
         return client.post(
             reverse("e2ee.conversation_key", kwargs={"profile_slug": partner.ensure_slug()}),
             data=json.dumps({"version": version, "wrapped_for_me": _b64(os.urandom(48)), "wrapped_for_partner": _b64(os.urandom(48))}),
@@ -303,6 +303,129 @@ class RewrapAndResetTests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["version"], 2)
+        self.assertEqual(response.json()["rewrapped"], 0)
+
+
+class RewrapAllAndResetPreservationTests(TestCase):
+    """rewrap-all lists only the caller's copies; reset applies re-sealed copies atomically."""
+
+    def _pair_key(self, a: Profile, b: Profile) -> ConversationKey:
+        low, high = (a, b) if a.pk < b.pk else (b, a)
+        return ConversationKey.objects.create(
+            profile_low=low,
+            profile_high=high,
+            wrapped_for_low=_b64(os.urandom(48)),
+            wrapped_for_high=_b64(os.urandom(48)),
+            version=1,
+        )
+
+    def _group_envelope(self, profile: Profile):
+        from urbanlens.dashboard.models.e2ee import GroupKey, GroupKeyEnvelope
+        from urbanlens.dashboard.models.group_chats.model import GroupChat
+
+        group: GroupChat = baker.make("dashboard.GroupChat")
+        key = GroupKey.objects.create(group=group, version=1)
+        return GroupKeyEnvelope.objects.create(key=key, profile=profile, wrapped_key=_b64(os.urandom(48)))
+
+    def test_rewrap_all_requires_enrollment(self) -> None:
+        profile = _profile()
+        response = _client_for(profile).get(reverse("e2ee.rewrap_all"))
+        self.assertEqual(response.status_code, 404)
+
+    def test_rewrap_all_lists_only_the_callers_copies(self) -> None:
+        me, partner, other = _profile(), _profile(), _profile()
+        _enroll(me)
+        mine = self._pair_key(me, partner)
+        self._pair_key(partner, other)  # not mine - must not appear
+        my_envelope = self._group_envelope(me)
+        self._group_envelope(partner)  # not mine either
+
+        payload = _client_for(me).get(reverse("e2ee.rewrap_all")).json()
+        self.assertEqual([entry["id"] for entry in payload["conversation_keys"]], [mine.pk])
+        self.assertEqual(payload["conversation_keys"][0]["wrapped_key"], mine.wrapped_for(me.pk))
+        self.assertEqual([entry["id"] for entry in payload["group_envelopes"]], [my_envelope.pk])
+        self.assertEqual(payload["group_envelopes"][0]["wrapped_key"], my_envelope.wrapped_key)
+
+    def test_rewrap_all_returns_the_high_side_for_the_high_participant(self) -> None:
+        a, b = _profile(), _profile()
+        high = a if a.pk > b.pk else b
+        _enroll(high)
+        row = self._pair_key(a, b)
+
+        payload = _client_for(high).get(reverse("e2ee.rewrap_all")).json()
+        self.assertEqual(payload["conversation_keys"][0]["wrapped_key"], row.wrapped_for_high)
+
+    def _reset_body(self, **extra) -> str:
+        return json.dumps({"confirm": "RESET", "public_key": _b64(os.urandom(32)), "recovery_wrapped_secret": _b64(os.urandom(72)), **extra})
+
+    def test_reset_applies_rewrapped_copies_and_reports_the_count(self) -> None:
+        me, partner = _profile(), _profile()
+        _enroll(me)
+        row = self._pair_key(me, partner)
+        envelope = self._group_envelope(me)
+        partner_side_before = row.wrapped_for(partner.pk)
+        new_conv_blob = _b64(os.urandom(48))
+        new_env_blob = _b64(os.urandom(48))
+
+        response = _client_for(me).post(
+            reverse("e2ee.reset"),
+            data=self._reset_body(
+                rewrapped_conversation_keys=[{"id": row.pk, "wrapped_key": new_conv_blob}],
+                rewrapped_group_envelopes=[{"id": envelope.pk, "wrapped_key": new_env_blob}],
+            ),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["rewrapped"], 2)
+        row.refresh_from_db()
+        envelope.refresh_from_db()
+        self.assertEqual(row.wrapped_for(me.pk), new_conv_blob)
+        # The partner's sealed copy must be untouchable from this endpoint.
+        self.assertEqual(row.wrapped_for(partner.pk), partner_side_before)
+        self.assertEqual(envelope.wrapped_key, new_env_blob)
+
+    def test_reset_rejects_a_foreign_conversation_key_id_without_applying_anything(self) -> None:
+        me, partner, other = _profile(), _profile(), _profile()
+        bundle = _enroll(me)
+        foreign = self._pair_key(partner, other)
+        foreign_blob_before = foreign.wrapped_for_low
+
+        response = _client_for(me).post(
+            reverse("e2ee.reset"),
+            data=self._reset_body(rewrapped_conversation_keys=[{"id": foreign.pk, "wrapped_key": _b64(os.urandom(48))}]),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
+        bundle.refresh_from_db()
+        foreign.refresh_from_db()
+        # Atomicity: the rejected request must not have swapped the bundle
+        # or written the foreign row.
+        self.assertEqual(bundle.version, 1)
+        self.assertEqual(foreign.wrapped_for_low, foreign_blob_before)
+
+    def test_reset_rejects_a_foreign_group_envelope_id(self) -> None:
+        me, other = _profile(), _profile()
+        bundle = _enroll(me)
+        foreign = self._group_envelope(other)
+
+        response = _client_for(me).post(
+            reverse("e2ee.reset"),
+            data=self._reset_body(rewrapped_group_envelopes=[{"id": foreign.pk, "wrapped_key": _b64(os.urandom(48))}]),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
+        bundle.refresh_from_db()
+        self.assertEqual(bundle.version, 1)
+
+    def test_reset_rejects_a_malformed_rewrap_entry(self) -> None:
+        me = _profile()
+        _enroll(me)
+        response = _client_for(me).post(
+            reverse("e2ee.reset"),
+            data=self._reset_body(rewrapped_conversation_keys=[{"id": 1, "wrapped_key": "not base64!!!"}]),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
 
 
 # -- create_direct_message with ciphertext ---------------------------------------

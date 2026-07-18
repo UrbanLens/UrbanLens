@@ -34,6 +34,10 @@ export interface E2EEUrls {
     enroll: string;
     keys: string;
     rewrap: string;
+    /** Bulk listing of every wrapped key copy addressed to the caller, used
+     * by the reset flow to re-encrypt history. Optional; only pages that
+     * offer reset wire it. */
+    rewrapAll?: string;
     reset: string;
     /** Base of the partner-key endpoint; the client appends "<slug>/". */
     partnerKeyBase: string;
@@ -731,20 +735,70 @@ export async function regenerateRecoveryKey(): Promise<string | null> {
     return response.ok ? recovery.display : null;
 }
 
+export interface ResetResult {
+    recoveryDisplay: string;
+    /** Number of conversation-key copies / group envelopes re-sealed to the
+     * new keypair - when > 0, the account's message history stays readable. */
+    rewrapped: number;
+    /** True when the old private key was available (cached or unlocked with
+     * the password), so history preservation was even attempted. */
+    preserved: boolean;
+}
+
+interface RewrapAllPayload {
+    conversation_keys: { id: number; wrapped_key: string }[];
+    group_envelopes: { id: number; wrapped_key: string }[];
+}
+
 /**
- * Nuclear option: replace the keypair entirely. Old encrypted messages become
- * permanently unreadable to this account.
+ * Recover the CURRENT (pre-reset) private key if at all possible.
+ *
+ * Tries the cached identity first (device unlocked), then - when a password
+ * was typed into the reset dialog - unwrapping the bundle's password-wrapped
+ * copy with it, exactly like the unlock dialog would.
+ *
+ * @param bundle - The current server-side bundle.
+ * @param password - The password typed into the reset dialog, if any.
+ * @returns The old private key, or null when it is genuinely unavailable.
+ */
+async function recoverOldPrivateKey(bundle: KeyBundlePayload, password?: string): Promise<Uint8Array | null> {
+    const cached = await getIdentity(bundle.profile_slug);
+    if (cached !== null && cached.version === bundle.version && cached.publicKey === bundle.public_key) {
+        return cached.privateKey;
+    }
+    if (password && bundle.password_wrapped_secret && bundle.password_wrap_salt && !bundle.password_wrap_stale) {
+        const wrapKey = deriveKey(password, bundle.password_wrap_salt, bundle.kdf_opslimit, bundle.kdf_memlimit);
+        return unwrapSecretKey(bundle.password_wrapped_secret, wrapKey);
+    }
+    return null;
+}
+
+/**
+ * Replace the keypair. When the old private key is still available (cached on
+ * this device, or unlockable with the supplied password), every conversation
+ * key and group envelope is unsealed and re-sealed to the new public key in
+ * the same request, so the account's message history stays readable. Only
+ * when the old key is genuinely gone does the reset become destructive.
  *
  * @param password - The account password when one exists (re-creates the
- *   password-wrapped copy); omit for OAuth accounts.
- * @returns The new recovery key display string, or null on failure.
+ *   password-wrapped copy, and doubles as an unlock path for the old key);
+ *   omit for OAuth accounts.
+ * @returns The reset outcome, or null on failure.
  */
-export async function resetKeys(password?: string): Promise<string | null> {
+export async function resetKeys(password?: string): Promise<ResetResult | null> {
     await cryptoReady();
     const selfSlug = cfg().selfSlug;
     if (!selfSlug) {
         return null;
     }
+
+    const bundleResponse = await fetch(cfg().urls.keys, { credentials: "same-origin" });
+    if (!bundleResponse.ok) {
+        return null;
+    }
+    const bundle = (await bundleResponse.json()) as KeyBundlePayload;
+    const oldPrivateKey = await recoverOldPrivateKey(bundle, password);
+
     const identity = generateIdentity();
     const recovery = generateRecoveryKey();
     const body: Record<string, unknown> = {
@@ -757,14 +811,38 @@ export async function resetKeys(password?: string): Promise<string | null> {
         body.password_wrapped_secret = wrapSecretKey(identity.privateKey, deriveKey(password, wrapSalt));
         body.password_wrap_salt = wrapSalt;
     }
+
+    // Re-encrypt history: unseal every wrapped key copy with the OLD key and
+    // re-seal it to the NEW public key, all client-side. Entries that fail to
+    // unseal (corrupt, or sealed to an even older keypair) are skipped - they
+    // were already unreadable, so leaving them behind loses nothing.
+    if (oldPrivateKey !== null && cfg().urls.rewrapAll) {
+        const rewrapResponse = await fetch(cfg().urls.rewrapAll as string, { credentials: "same-origin" });
+        if (rewrapResponse.ok) {
+            const payload = (await rewrapResponse.json()) as RewrapAllPayload;
+            const rewrapEntries = (items: { id: number; wrapped_key: string }[]) => {
+                const out: { id: number; wrapped_key: string }[] = [];
+                for (const item of items) {
+                    const key = unseal(item.wrapped_key, bundle.public_key, oldPrivateKey);
+                    if (key !== null) {
+                        out.push({ id: item.id, wrapped_key: sealToPublicKey(key, identity.publicKey) });
+                    }
+                }
+                return out;
+            };
+            body.rewrapped_conversation_keys = rewrapEntries(payload.conversation_keys);
+            body.rewrapped_group_envelopes = rewrapEntries(payload.group_envelopes);
+        }
+    }
+
     const response = await postJson(cfg().urls.reset, body);
     if (!response.ok) {
         return null;
     }
-    const payload = (await response.json()) as { version: number };
+    const payload = (await response.json()) as { version: number; rewrapped?: number };
     await clearProfileKeys(selfSlug);
     await putIdentity(selfSlug, { privateKey: identity.privateKey, publicKey: identity.publicKey, version: payload.version });
-    return recovery.display;
+    return { recoveryDisplay: recovery.display, rewrapped: payload.rewrapped ?? 0, preserved: oldPrivateKey !== null };
 }
 
 //: Accepted spellings of the reset confirmation word - case-insensitive,
@@ -776,10 +854,11 @@ const RESET_CONFIRMATION_WORD = "reset";
  * Show one dialog collecting both the typed confirmation and (when the
  * account has a password) the account password, then perform the reset.
  *
- * Replaces two separate native `window.prompt()` calls: those showed the
- * password in plaintext with no way to mask it, silently did nothing on a
- * mistyped confirmation (no feedback at all), and gave no indication that
- * the reset - a real network round trip - was in progress.
+ * The description is honest about the actual consequence: when this device
+ * still holds the current private key (or the typed password can unlock it),
+ * the reset RE-ENCRYPTS the message history under the new keypair and
+ * nothing becomes unreadable - the old "permanently unreadable" warning only
+ * appears when destruction is genuinely the outcome.
  *
  * @param hasPassword - Whether to also collect and require the account
  *   password (omit the field entirely for OAuth accounts with none).
@@ -788,86 +867,109 @@ const RESET_CONFIRMATION_WORD = "reset";
  */
 export function showResetDialog(hasPassword: boolean): Promise<string | null> {
     return new Promise((resolve) => {
-        const overlay = document.createElement("div");
-        overlay.className = "e2ee-recovery-overlay";
-        const passwordField = hasPassword
-            ? `<label class="e2ee-unlock-label">Account password
-                   <input type="password" class="e2ee-reset-password" autocomplete="current-password" placeholder="Your password">
-               </label>`
-            : "";
-        overlay.innerHTML = `
-            <div class="e2ee-recovery-dialog" role="dialog" aria-modal="true" aria-labelledby="e2ee-reset-title">
-                <h2 id="e2ee-reset-title">Reset encryption keys</h2>
-                <p>This permanently makes your existing encrypted messages unreadable to you. Type RESET to confirm.</p>
-                <label class="e2ee-unlock-label">Confirmation
-                    <input type="text" class="e2ee-reset-confirm" autocomplete="off" spellcheck="false" placeholder="RESET">
-                </label>
-                ${passwordField}
-                <p class="e2ee-unlock-error" hidden></p>
-                <p class="e2ee-reset-progress" hidden><i class="material-symbols-outlined e2ee-reset-spinner" aria-hidden="true">progress_activity</i> Resetting your encryption keys…</p>
-                <div class="e2ee-recovery-actions">
-                    <button type="button" class="e2ee-reset-submit">Reset</button>
-                    <button type="button" class="e2ee-reset-cancel">Cancel</button>
-                </div>
-            </div>`;
-        const errorEl = overlay.querySelector(".e2ee-unlock-error") as HTMLElement;
-        const progressEl = overlay.querySelector(".e2ee-reset-progress") as HTMLElement;
-        const confirmInput = overlay.querySelector<HTMLInputElement>(".e2ee-reset-confirm");
-        const passwordInput = overlay.querySelector<HTMLInputElement>(".e2ee-reset-password");
-        const submitBtn = overlay.querySelector<HTMLButtonElement>(".e2ee-reset-submit");
-        const cancelBtn = overlay.querySelector<HTMLButtonElement>(".e2ee-reset-cancel");
-        const close = (recoveryDisplay: string | null) => {
-            overlay.remove();
-            resolve(recoveryDisplay);
-        };
-        const setBusy = (busy: boolean) => {
-            progressEl.hidden = !busy;
-            if (submitBtn) submitBtn.disabled = busy;
-            if (cancelBtn) cancelBtn.disabled = busy;
-            if (confirmInput) confirmInput.disabled = busy;
-            if (passwordInput) passwordInput.disabled = busy;
-        };
-        const attempt = async () => {
-            errorEl.hidden = true;
-            const confirmation = (confirmInput?.value ?? "").trim().toLowerCase();
-            if (confirmation !== RESET_CONFIRMATION_WORD) {
-                errorEl.textContent = 'Type "RESET" to confirm - this step can\'t be skipped.';
-                errorEl.hidden = false;
-                return;
-            }
-            const password = passwordInput?.value ?? "";
-            if (hasPassword && !password) {
-                errorEl.textContent = "Enter your account password to continue.";
-                errorEl.hidden = false;
-                return;
-            }
-            setBusy(true);
-            try {
-                const recoveryDisplay = await resetKeys(password || undefined);
-                if (recoveryDisplay === null) {
-                    setBusy(false);
-                    errorEl.textContent = "Could not reset your encryption keys. Please try again.";
-                    errorEl.hidden = false;
-                    return;
-                }
-                close(recoveryDisplay);
-            } catch {
+        void buildResetDialog(hasPassword, resolve);
+    });
+}
+
+async function resetDescription(hasPassword: boolean): Promise<string> {
+    const state = await getUnlockState().catch(() => "locked" as UnlockState);
+    if (state === "unlocked") {
+        return "Your encryption keys will be replaced, and your existing messages will be re-encrypted under the new key so they stay readable. Type RESET to confirm.";
+    }
+    if (hasPassword) {
+        return "This device can't read your messages right now. If your password can unlock your current key, your messages will be preserved under the new key - otherwise they become permanently unreadable to you. Type RESET to confirm.";
+    }
+    return "This permanently makes your existing encrypted messages unreadable to you. Type RESET to confirm.";
+}
+
+async function buildResetDialog(hasPassword: boolean, resolve: (value: string | null) => void): Promise<void> {
+    const description = await resetDescription(hasPassword);
+    const overlay = document.createElement("div");
+    overlay.className = "e2ee-recovery-overlay";
+    const passwordField = hasPassword
+        ? `<label class="e2ee-unlock-label">Account password
+               <input type="password" class="e2ee-reset-password" autocomplete="current-password" placeholder="Your password">
+           </label>`
+        : "";
+    overlay.innerHTML = `
+        <div class="e2ee-recovery-dialog" role="dialog" aria-modal="true" aria-labelledby="e2ee-reset-title">
+            <h2 id="e2ee-reset-title">Reset encryption keys</h2>
+            <p class="e2ee-reset-description"></p>
+            <label class="e2ee-unlock-label">Confirmation
+                <input type="text" class="e2ee-reset-confirm" autocomplete="off" spellcheck="false" placeholder="RESET">
+            </label>
+            ${passwordField}
+            <p class="e2ee-unlock-error" hidden></p>
+            <p class="e2ee-reset-progress" hidden><i class="material-symbols-outlined e2ee-reset-spinner" aria-hidden="true">progress_activity</i> Resetting your encryption keys…</p>
+            <div class="e2ee-recovery-actions">
+                <button type="button" class="e2ee-reset-submit">Reset</button>
+                <button type="button" class="e2ee-reset-cancel">Cancel</button>
+            </div>
+        </div>`;
+    (overlay.querySelector(".e2ee-reset-description") as HTMLElement).textContent = description;
+    const errorEl = overlay.querySelector(".e2ee-unlock-error") as HTMLElement;
+    const progressEl = overlay.querySelector(".e2ee-reset-progress") as HTMLElement;
+    const confirmInput = overlay.querySelector<HTMLInputElement>(".e2ee-reset-confirm");
+    const passwordInput = overlay.querySelector<HTMLInputElement>(".e2ee-reset-password");
+    const submitBtn = overlay.querySelector<HTMLButtonElement>(".e2ee-reset-submit");
+    const cancelBtn = overlay.querySelector<HTMLButtonElement>(".e2ee-reset-cancel");
+    const close = (recoveryDisplay: string | null) => {
+        overlay.remove();
+        resolve(recoveryDisplay);
+    };
+    const setBusy = (busy: boolean) => {
+        progressEl.hidden = !busy;
+        if (submitBtn) submitBtn.disabled = busy;
+        if (cancelBtn) cancelBtn.disabled = busy;
+        if (confirmInput) confirmInput.disabled = busy;
+        if (passwordInput) passwordInput.disabled = busy;
+    };
+    const attempt = async () => {
+        errorEl.hidden = true;
+        const confirmation = (confirmInput?.value ?? "").trim().toLowerCase();
+        if (confirmation !== RESET_CONFIRMATION_WORD) {
+            errorEl.textContent = 'Type "RESET" to confirm - this step can\'t be skipped.';
+            errorEl.hidden = false;
+            return;
+        }
+        const password = passwordInput?.value ?? "";
+        if (hasPassword && !password) {
+            errorEl.textContent = "Enter your account password to continue.";
+            errorEl.hidden = false;
+            return;
+        }
+        setBusy(true);
+        try {
+            const result = await resetKeys(password || undefined);
+            if (result === null) {
                 setBusy(false);
                 errorEl.textContent = "Could not reset your encryption keys. Please try again.";
                 errorEl.hidden = false;
+                return;
             }
-        };
-        submitBtn?.addEventListener("click", () => void attempt());
-        cancelBtn?.addEventListener("click", () => close(null));
-        overlay.addEventListener("keydown", (event) => {
-            if ((event as KeyboardEvent).key === "Enter") {
-                event.preventDefault();
-                void attempt();
+            const toastr = (window as { toastr?: { success?: (msg: string) => void; warning?: (msg: string) => void } }).toastr;
+            if (result.rewrapped > 0) {
+                toastr?.success?.("Your keys were reset and your message history was re-encrypted - everything stays readable.");
+            } else if (!result.preserved) {
+                toastr?.warning?.("Your keys were reset. Previously encrypted messages are no longer readable on this account.");
             }
-        });
-        document.body.appendChild(overlay);
-        confirmInput?.focus();
+            close(result.recoveryDisplay);
+        } catch {
+            setBusy(false);
+            errorEl.textContent = "Could not reset your encryption keys. Please try again.";
+            errorEl.hidden = false;
+        }
+    };
+    submitBtn?.addEventListener("click", () => void attempt());
+    cancelBtn?.addEventListener("click", () => close(null));
+    overlay.addEventListener("keydown", (event) => {
+        if ((event as KeyboardEvent).key === "Enter") {
+            event.preventDefault();
+            void attempt();
+        }
     });
+    document.body.appendChild(overlay);
+    confirmInput?.focus();
 }
 
 async function requireIdentity(): Promise<CachedIdentity | null> {

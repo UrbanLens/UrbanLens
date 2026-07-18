@@ -1311,6 +1311,7 @@ urlpatterns = [
                 path("group-key/<uuid:group_uuid>/", e2ee.E2EEGroupKeyView.as_view(), name="e2ee.group_key"),
                 path("change-password/", e2ee.E2EEChangePasswordView.as_view(), name="e2ee.change_password"),
                 path("rewrap/", e2ee.E2EERewrapView.as_view(), name="e2ee.rewrap"),
+                path("rewrap-all/", e2ee.E2EERewrapAllView.as_view(), name="e2ee.rewrap_all"),
                 path("reset/", e2ee.E2EEResetView.as_view(), name="e2ee.reset"),
             ],
         ),

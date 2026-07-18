@@ -22287,12 +22287,29 @@ https://github.com/browserify/crypto-browserify`);
     });
     return response.ok ? recovery.display : null;
   }
+  async function recoverOldPrivateKey(bundle, password) {
+    const cached = await getIdentity(bundle.profile_slug);
+    if (cached !== null && cached.version === bundle.version && cached.publicKey === bundle.public_key) {
+      return cached.privateKey;
+    }
+    if (password && bundle.password_wrapped_secret && bundle.password_wrap_salt && !bundle.password_wrap_stale) {
+      const wrapKey = deriveKey(password, bundle.password_wrap_salt, bundle.kdf_opslimit, bundle.kdf_memlimit);
+      return unwrapSecretKey(bundle.password_wrapped_secret, wrapKey);
+    }
+    return null;
+  }
   async function resetKeys(password) {
     await cryptoReady();
     const selfSlug = cfg().selfSlug;
     if (!selfSlug) {
       return null;
     }
+    const bundleResponse = await fetch(cfg().urls.keys, { credentials: "same-origin" });
+    if (!bundleResponse.ok) {
+      return null;
+    }
+    const bundle = await bundleResponse.json();
+    const oldPrivateKey = await recoverOldPrivateKey(bundle, password);
     const identity = generateIdentity();
     const recovery = generateRecoveryKey();
     const body = {
@@ -22305,6 +22322,24 @@ https://github.com/browserify/crypto-browserify`);
       body.password_wrapped_secret = wrapSecretKey(identity.privateKey, deriveKey(password, wrapSalt));
       body.password_wrap_salt = wrapSalt;
     }
+    if (oldPrivateKey !== null && cfg().urls.rewrapAll) {
+      const rewrapResponse = await fetch(cfg().urls.rewrapAll, { credentials: "same-origin" });
+      if (rewrapResponse.ok) {
+        const payload2 = await rewrapResponse.json();
+        const rewrapEntries = (items) => {
+          const out = [];
+          for (const item of items) {
+            const key = unseal(item.wrapped_key, bundle.public_key, oldPrivateKey);
+            if (key !== null) {
+              out.push({ id: item.id, wrapped_key: sealToPublicKey(key, identity.publicKey) });
+            }
+          }
+          return out;
+        };
+        body.rewrapped_conversation_keys = rewrapEntries(payload2.conversation_keys);
+        body.rewrapped_group_envelopes = rewrapEntries(payload2.group_envelopes);
+      }
+    }
     const response = await postJson(cfg().urls.reset, body);
     if (!response.ok) {
       return null;
@@ -22312,93 +22347,114 @@ https://github.com/browserify/crypto-browserify`);
     const payload = await response.json();
     await clearProfileKeys(selfSlug);
     await putIdentity(selfSlug, { privateKey: identity.privateKey, publicKey: identity.publicKey, version: payload.version });
-    return recovery.display;
+    return { recoveryDisplay: recovery.display, rewrapped: payload.rewrapped ?? 0, preserved: oldPrivateKey !== null };
   }
   var RESET_CONFIRMATION_WORD = "reset";
   function showResetDialog(hasPassword) {
     return new Promise((resolve) => {
-      const overlay = document.createElement("div");
-      overlay.className = "e2ee-recovery-overlay";
-      const passwordField = hasPassword ? `<label class="e2ee-unlock-label">Account password
-                   <input type="password" class="e2ee-reset-password" autocomplete="current-password" placeholder="Your password">
-               </label>` : "";
-      overlay.innerHTML = `
-            <div class="e2ee-recovery-dialog" role="dialog" aria-modal="true" aria-labelledby="e2ee-reset-title">
-                <h2 id="e2ee-reset-title">Reset encryption keys</h2>
-                <p>This permanently makes your existing encrypted messages unreadable to you. Type RESET to confirm.</p>
-                <label class="e2ee-unlock-label">Confirmation
-                    <input type="text" class="e2ee-reset-confirm" autocomplete="off" spellcheck="false" placeholder="RESET">
-                </label>
-                ${passwordField}
-                <p class="e2ee-unlock-error" hidden></p>
-                <p class="e2ee-reset-progress" hidden><i class="material-symbols-outlined e2ee-reset-spinner" aria-hidden="true">progress_activity</i> Resetting your encryption keys…</p>
-                <div class="e2ee-recovery-actions">
-                    <button type="button" class="e2ee-reset-submit">Reset</button>
-                    <button type="button" class="e2ee-reset-cancel">Cancel</button>
-                </div>
-            </div>`;
-      const errorEl = overlay.querySelector(".e2ee-unlock-error");
-      const progressEl = overlay.querySelector(".e2ee-reset-progress");
-      const confirmInput = overlay.querySelector(".e2ee-reset-confirm");
-      const passwordInput = overlay.querySelector(".e2ee-reset-password");
-      const submitBtn = overlay.querySelector(".e2ee-reset-submit");
-      const cancelBtn = overlay.querySelector(".e2ee-reset-cancel");
-      const close = (recoveryDisplay) => {
-        overlay.remove();
-        resolve(recoveryDisplay);
-      };
-      const setBusy = (busy) => {
-        progressEl.hidden = !busy;
-        if (submitBtn)
-          submitBtn.disabled = busy;
-        if (cancelBtn)
-          cancelBtn.disabled = busy;
-        if (confirmInput)
-          confirmInput.disabled = busy;
-        if (passwordInput)
-          passwordInput.disabled = busy;
-      };
-      const attempt = async () => {
-        errorEl.hidden = true;
-        const confirmation = (confirmInput?.value ?? "").trim().toLowerCase();
-        if (confirmation !== RESET_CONFIRMATION_WORD) {
-          errorEl.textContent = `Type "RESET" to confirm - this step can't be skipped.`;
-          errorEl.hidden = false;
-          return;
-        }
-        const password = passwordInput?.value ?? "";
-        if (hasPassword && !password) {
-          errorEl.textContent = "Enter your account password to continue.";
-          errorEl.hidden = false;
-          return;
-        }
-        setBusy(true);
-        try {
-          const recoveryDisplay = await resetKeys(password || undefined);
-          if (recoveryDisplay === null) {
-            setBusy(false);
-            errorEl.textContent = "Could not reset your encryption keys. Please try again.";
-            errorEl.hidden = false;
-            return;
-          }
-          close(recoveryDisplay);
-        } catch {
+      buildResetDialog(hasPassword, resolve);
+    });
+  }
+  async function resetDescription(hasPassword) {
+    const state = await getUnlockState().catch(() => "locked");
+    if (state === "unlocked") {
+      return "Your encryption keys will be replaced, and your existing messages will be re-encrypted under the new key so they stay readable. Type RESET to confirm.";
+    }
+    if (hasPassword) {
+      return "This device can't read your messages right now. If your password can unlock your current key, your messages will be preserved under the new key - otherwise they become permanently unreadable to you. Type RESET to confirm.";
+    }
+    return "This permanently makes your existing encrypted messages unreadable to you. Type RESET to confirm.";
+  }
+  async function buildResetDialog(hasPassword, resolve) {
+    const description = await resetDescription(hasPassword);
+    const overlay = document.createElement("div");
+    overlay.className = "e2ee-recovery-overlay";
+    const passwordField = hasPassword ? `<label class="e2ee-unlock-label">Account password
+               <input type="password" class="e2ee-reset-password" autocomplete="current-password" placeholder="Your password">
+           </label>` : "";
+    overlay.innerHTML = `
+        <div class="e2ee-recovery-dialog" role="dialog" aria-modal="true" aria-labelledby="e2ee-reset-title">
+            <h2 id="e2ee-reset-title">Reset encryption keys</h2>
+            <p class="e2ee-reset-description"></p>
+            <label class="e2ee-unlock-label">Confirmation
+                <input type="text" class="e2ee-reset-confirm" autocomplete="off" spellcheck="false" placeholder="RESET">
+            </label>
+            ${passwordField}
+            <p class="e2ee-unlock-error" hidden></p>
+            <p class="e2ee-reset-progress" hidden><i class="material-symbols-outlined e2ee-reset-spinner" aria-hidden="true">progress_activity</i> Resetting your encryption keys…</p>
+            <div class="e2ee-recovery-actions">
+                <button type="button" class="e2ee-reset-submit">Reset</button>
+                <button type="button" class="e2ee-reset-cancel">Cancel</button>
+            </div>
+        </div>`;
+    overlay.querySelector(".e2ee-reset-description").textContent = description;
+    const errorEl = overlay.querySelector(".e2ee-unlock-error");
+    const progressEl = overlay.querySelector(".e2ee-reset-progress");
+    const confirmInput = overlay.querySelector(".e2ee-reset-confirm");
+    const passwordInput = overlay.querySelector(".e2ee-reset-password");
+    const submitBtn = overlay.querySelector(".e2ee-reset-submit");
+    const cancelBtn = overlay.querySelector(".e2ee-reset-cancel");
+    const close = (recoveryDisplay) => {
+      overlay.remove();
+      resolve(recoveryDisplay);
+    };
+    const setBusy = (busy) => {
+      progressEl.hidden = !busy;
+      if (submitBtn)
+        submitBtn.disabled = busy;
+      if (cancelBtn)
+        cancelBtn.disabled = busy;
+      if (confirmInput)
+        confirmInput.disabled = busy;
+      if (passwordInput)
+        passwordInput.disabled = busy;
+    };
+    const attempt = async () => {
+      errorEl.hidden = true;
+      const confirmation = (confirmInput?.value ?? "").trim().toLowerCase();
+      if (confirmation !== RESET_CONFIRMATION_WORD) {
+        errorEl.textContent = `Type "RESET" to confirm - this step can't be skipped.`;
+        errorEl.hidden = false;
+        return;
+      }
+      const password = passwordInput?.value ?? "";
+      if (hasPassword && !password) {
+        errorEl.textContent = "Enter your account password to continue.";
+        errorEl.hidden = false;
+        return;
+      }
+      setBusy(true);
+      try {
+        const result = await resetKeys(password || undefined);
+        if (result === null) {
           setBusy(false);
           errorEl.textContent = "Could not reset your encryption keys. Please try again.";
           errorEl.hidden = false;
+          return;
         }
-      };
-      submitBtn?.addEventListener("click", () => void attempt());
-      cancelBtn?.addEventListener("click", () => close(null));
-      overlay.addEventListener("keydown", (event) => {
-        if (event.key === "Enter") {
-          event.preventDefault();
-          attempt();
+        const toastr = window.toastr;
+        if (result.rewrapped > 0) {
+          toastr?.success?.("Your keys were reset and your message history was re-encrypted - everything stays readable.");
+        } else if (!result.preserved) {
+          toastr?.warning?.("Your keys were reset. Previously encrypted messages are no longer readable on this account.");
         }
-      });
-      document.body.appendChild(overlay);
-      confirmInput?.focus();
+        close(result.recoveryDisplay);
+      } catch {
+        setBusy(false);
+        errorEl.textContent = "Could not reset your encryption keys. Please try again.";
+        errorEl.hidden = false;
+      }
+    };
+    submitBtn?.addEventListener("click", () => void attempt());
+    cancelBtn?.addEventListener("click", () => close(null));
+    overlay.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        attempt();
+      }
     });
+    document.body.appendChild(overlay);
+    confirmInput?.focus();
   }
   async function requireIdentity() {
     const selfSlug = cfg().selfSlug;

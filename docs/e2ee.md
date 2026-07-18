@@ -146,12 +146,27 @@ identifiers so enrolled and non-existent accounts are indistinguishable.
   stale. On the next login from a device that still holds the cached private
   key, the client silently re-wraps it under the new password. A cold device
   falls back to the recovery key.
+- **Reset keys (Settings → Direct Messages):** generates a fresh keypair.
+  When the resetting device still holds the current private key (unlocked), or
+  the password typed into the reset dialog can unwrap the password-wrapped
+  copy, the client first fetches every wrapped key copy addressed to the
+  account (`GET e2ee/rewrap-all/` — every `ConversationKey` side plus every
+  `GroupKeyEnvelope`), unseals each with the OLD private key, re-seals each to
+  the NEW public key, and submits them alongside the reset. The server applies
+  the bundle swap and every re-sealed copy in one atomic transaction (rejecting
+  the whole request if any submitted id isn't the caller's own row, and only
+  ever writing the caller's side of a conversation-key pair), so there is no
+  partial state: history stays fully readable, and message ciphertext itself
+  never changes — only the seal on each symmetric key. Copies that fail to
+  unseal client-side (sealed to an even older keypair) are skipped; they were
+  already unreadable, so nothing is lost. The reset dialog states which outcome
+  will occur before the user confirms.
 - **Lost everything (password + recovery key):** history is unrecoverable —
-  this is inherent to real E2EE. The **Reset keys** action (Settings → Direct
-  Messages) generates a fresh keypair; the user's old encrypted messages become
-  unreadable to them, but each conversation partner keeps their own copy
-  (old `ConversationKey` versions are retained), and new messages encrypt under
-  a fresh conversation-key version.
+  this is inherent to real E2EE. Reset from a locked device with no usable
+  password falls back to the destructive path: the user's old encrypted
+  messages become unreadable to them, but each conversation partner keeps
+  their own copy (old `ConversationKey` versions are retained), and new
+  messages encrypt under a fresh conversation-key version.
 
 ## Opportunistic encryption
 

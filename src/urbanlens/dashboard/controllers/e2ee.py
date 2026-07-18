@@ -600,11 +600,86 @@ class E2EEChangePasswordView(LoginRequiredMixin, View):
         return JsonResponse({"ok": True, "had_password": had_password})
 
 
-class E2EEResetView(LoginRequiredMixin, View):
-    """POST: replace the caller's keypair entirely (destructive, last resort).
+class E2EERewrapAllView(LoginRequiredMixin, View):
+    """GET: every wrapped key copy addressed to the caller, for bulk re-wrap.
 
-    Old encrypted messages become permanently unreadable to the caller (the
-    conversation partners keep their own copies - old ``ConversationKey``
+    Used by the reset flow when the client still holds (or can unlock) the
+    OLD private key: it unseals each copy locally, re-seals it to the new
+    public key, and submits the results alongside the reset so the caller's
+    message history stays readable. Returns only blobs the caller could
+    already fetch one conversation/group at a time - this just avoids N
+    round trips.
+    """
+
+    def get(self, request: HttpRequest) -> HttpResponse:
+        """List the caller's sealed conversation-key copies and group envelopes.
+
+        Args:
+            request: The authenticated request.
+
+        Returns:
+            JSON ``{conversation_keys: [{id, wrapped_key}],
+            group_envelopes: [{id, wrapped_key}]}``; 404 when not enrolled.
+        """
+        from django.db.models import Q
+
+        from urbanlens.dashboard.models.e2ee import GroupKeyEnvelope
+
+        profile = _get_profile(request)
+        if not MessagingKeyBundle.objects.for_profile(profile).exists():
+            return JsonResponse({"error": "Not enrolled."}, status=404)
+
+        conversation_keys = [
+            {"id": row.pk, "wrapped_key": row.wrapped_for(profile.pk)}
+            for row in ConversationKey.objects.filter(Q(profile_low=profile) | Q(profile_high=profile))
+        ]
+        group_envelopes = [
+            {"id": envelope.pk, "wrapped_key": envelope.wrapped_key}
+            for envelope in GroupKeyEnvelope.objects.filter(profile=profile)
+        ]
+        return JsonResponse({"conversation_keys": conversation_keys, "group_envelopes": group_envelopes})
+
+
+#: Upper bound on rewrapped-entry lists accepted by the reset endpoint. Far
+#: above any plausible real count (one entry per conversation-key version /
+#: group membership) - purely an abuse guard against giant request bodies.
+MAX_REWRAP_ENTRIES = 10_000
+
+
+def _parse_rewrap_entries(raw: Any) -> dict[int, str] | None:
+    """Validate a client-submitted rewrapped-key list into an id→blob mapping.
+
+    Args:
+        raw: The JSON value (expected: list of ``{id, wrapped_key}`` dicts).
+
+    Returns:
+        Mapping of row id to the re-sealed blob, or None when the shape or
+        any blob is invalid.
+    """
+    if raw is None:
+        return {}
+    if not isinstance(raw, list) or len(raw) > MAX_REWRAP_ENTRIES:
+        return None
+    entries: dict[int, str] = {}
+    for item in raw:
+        if not isinstance(item, dict):
+            return None
+        row_id = item.get("id")
+        wrapped = item.get("wrapped_key")
+        if not isinstance(row_id, int) or not isinstance(wrapped, str) or not valid_blob(wrapped, MAX_WRAPPED_CONVERSATION_KEY_LENGTH):
+            return None
+        entries[row_id] = wrapped
+    return entries
+
+
+class E2EEResetView(LoginRequiredMixin, View):
+    """POST: replace the caller's keypair entirely (last resort).
+
+    When the client still holds the old private key it submits re-sealed
+    copies of every conversation/group key alongside the reset, and the
+    caller's message history stays readable under the new keypair. Without
+    them, old encrypted messages become permanently unreadable to the caller
+    (conversation partners keep their own copies - old ``ConversationKey``
     versions are retained for them). Requires a typed confirmation string.
     """
 
@@ -613,13 +688,23 @@ class E2EEResetView(LoginRequiredMixin, View):
 
         Args:
             request: JSON body with ``confirm`` (must equal ``"RESET"``),
-                ``public_key``, ``recovery_wrapped_secret``, and optional
-                ``password_wrapped_secret``/``password_wrap_salt``.
+                ``public_key``, ``recovery_wrapped_secret``, optional
+                ``password_wrapped_secret``/``password_wrap_salt``, and
+                optional ``rewrapped_conversation_keys``/
+                ``rewrapped_group_envelopes`` (lists of ``{id, wrapped_key}``
+                re-sealed to the NEW public key; ids must be the caller's own
+                rows). The bundle swap and every rewrap apply in one atomic
+                transaction - there is no partial state.
 
         Returns:
-            JSON ``{version}``; 400 on malformed input or missing confirmation;
-            404 when not enrolled.
+            JSON ``{version, rewrapped}``; 400 on malformed input, missing
+            confirmation, or a rewrap id that isn't the caller's; 404 when
+            not enrolled.
         """
+        from django.db.models import Q
+
+        from urbanlens.dashboard.models.e2ee import GroupKeyEnvelope
+
         profile = _get_profile(request)
         bundle = MessagingKeyBundle.objects.for_profile(profile).first()
         if bundle is None:
@@ -641,22 +726,59 @@ class E2EEResetView(LoginRequiredMixin, View):
         if bool(password_wrapped) != bool(password_wrap_salt):
             return HttpResponseBadRequest("password_wrapped_secret and password_wrap_salt must be provided together")
 
-        bundle.public_key = public_key
-        bundle.recovery_wrapped_secret = recovery_wrapped
-        bundle.password_wrapped_secret = password_wrapped
-        bundle.password_wrap_salt = password_wrap_salt
-        bundle.password_wrap_stale = False
-        bundle.version += 1
-        bundle.save(
-            update_fields=[
-                "public_key",
-                "recovery_wrapped_secret",
-                "password_wrapped_secret",
-                "password_wrap_salt",
-                "password_wrap_stale",
-                "version",
-                "updated",
-            ],
-        )
-        logger.info("E2EE key reset for profile %s (now v%s)", profile.pk, bundle.version)
-        return JsonResponse({"version": bundle.version})
+        rewrapped_conversations = _parse_rewrap_entries(data.get("rewrapped_conversation_keys"))
+        rewrapped_envelopes = _parse_rewrap_entries(data.get("rewrapped_group_envelopes"))
+        if rewrapped_conversations is None or rewrapped_envelopes is None:
+            return HttpResponseBadRequest("Invalid rewrapped key entries")
+
+        # Resolve every submitted id to a row the caller actually owns BEFORE
+        # writing anything - a single foreign/unknown id rejects the whole
+        # request rather than partially applying it.
+        conversation_rows = []
+        if rewrapped_conversations:
+            conversation_rows = list(
+                ConversationKey.objects.filter(Q(profile_low=profile) | Q(profile_high=profile), pk__in=rewrapped_conversations),
+            )
+            if len(conversation_rows) != len(rewrapped_conversations):
+                return HttpResponseBadRequest("Unknown conversation key id")
+        envelope_rows = []
+        if rewrapped_envelopes:
+            envelope_rows = list(GroupKeyEnvelope.objects.filter(profile=profile, pk__in=rewrapped_envelopes))
+            if len(envelope_rows) != len(rewrapped_envelopes):
+                return HttpResponseBadRequest("Unknown group envelope id")
+
+        with transaction.atomic():
+            # Only ever the caller's own side of each pair - the partner's
+            # sealed copy is untouchable from this endpoint by construction.
+            for row in conversation_rows:
+                if row.profile_low_id == profile.pk:
+                    row.wrapped_for_low = rewrapped_conversations[row.pk]
+                    row.save(update_fields=["wrapped_for_low", "updated"])
+                else:
+                    row.wrapped_for_high = rewrapped_conversations[row.pk]
+                    row.save(update_fields=["wrapped_for_high", "updated"])
+            for envelope in envelope_rows:
+                envelope.wrapped_key = rewrapped_envelopes[envelope.pk]
+                envelope.save(update_fields=["wrapped_key", "updated"])
+
+            bundle.public_key = public_key
+            bundle.recovery_wrapped_secret = recovery_wrapped
+            bundle.password_wrapped_secret = password_wrapped
+            bundle.password_wrap_salt = password_wrap_salt
+            bundle.password_wrap_stale = False
+            bundle.version += 1
+            bundle.save(
+                update_fields=[
+                    "public_key",
+                    "recovery_wrapped_secret",
+                    "password_wrapped_secret",
+                    "password_wrap_salt",
+                    "password_wrap_stale",
+                    "version",
+                    "updated",
+                ],
+            )
+
+        rewrapped_count = len(conversation_rows) + len(envelope_rows)
+        logger.info("E2EE key reset for profile %s (now v%s, %s key copies re-wrapped)", profile.pk, bundle.version, rewrapped_count)
+        return JsonResponse({"version": bundle.version, "rewrapped": rewrapped_count})
