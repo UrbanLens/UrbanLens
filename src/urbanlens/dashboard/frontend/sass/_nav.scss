@@ -1107,6 +1107,16 @@ $notif-prefs-cols: minmax(10rem, 1fr) repeat(5, 4.5rem);
 }
 
 [data-theme="dark"] {
+
+    .app-nav-link {
+        color: var(--ul-grey-5);
+
+        &--active {
+            a {
+                color: var(--ul-grey-7);
+            }
+        }
+    }
    
     .app-nav-brand-name {
         color: var(--ul-grey-9);

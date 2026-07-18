@@ -1491,6 +1491,7 @@
     gap: 2px;
     padding: 0 $space-md;
     border-bottom: 1px solid var(--ul-border);
+    background: rgba(0,0,0,0.04);
 }
 
 .pin-plugin-tab-btn {
@@ -3835,16 +3836,16 @@ body.page-location-details {
     gap: .25rem;
     padding: .2rem .55rem;
     border-radius: 20px;
-    background: color-mix(in srgb, $primary-color 12%, transparent);
+    background: color-mix(in srgb, $primary-color 40%, transparent);
     border: 1px solid color-mix(in srgb, $primary-color 35%, transparent);
     font-size: .82rem;
 
     a {
-        color: var(--primary-color);
+        color: #eee;
         font-weight: 500;
         text-decoration: none;
 
-        &:hover { text-decoration: underline; }
+        &:hover { color: #fff; }
     }
 
     .pin-link-chip-wayback {
@@ -5463,4 +5464,17 @@ body.page-location-details .pin-detail-grid {
 
 .immich-import-error-msg {
     color: $color-red-500;
+}
+
+// Dark mode
+[data-theme="dark"] {
+    .pin-plugin-tabs-nav {
+        background: rgba(255,255,255,0.04)
+    }
+
+    .pin-plugin-tab-btn {
+        &.active {
+            color: $color-blue-300;
+        }
+    }
 }
