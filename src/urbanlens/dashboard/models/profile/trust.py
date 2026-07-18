@@ -8,6 +8,7 @@ from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db.models import CASCADE, ForeignKey, IntegerField, UniqueConstraint
 
 from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.profile.queryset import ProfileTrustManager
 
 
 class ProfileTrust(abstract.DashboardModel):
@@ -32,6 +33,8 @@ class ProfileTrust(abstract.DashboardModel):
         on_delete=CASCADE,
         related_name="received_trust_ratings",
     )
+
+    objects = ProfileTrustManager()
 
     if TYPE_CHECKING:
         author_id: int

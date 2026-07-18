@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from django.db.models import CASCADE, CharField, ForeignKey, UniqueConstraint
 
 from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.profile.queryset import ProfileNicknameManager
 
 
 class ProfileNickname(abstract.DashboardModel):
@@ -32,6 +33,8 @@ class ProfileNickname(abstract.DashboardModel):
         on_delete=CASCADE,
         related_name="received_nicknames",
     )
+
+    objects = ProfileNicknameManager()
 
     if TYPE_CHECKING:
         author_id: int

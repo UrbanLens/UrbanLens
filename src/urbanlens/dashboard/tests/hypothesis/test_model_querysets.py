@@ -1,7 +1,8 @@
 """DB-backed tests for small queryset methods across multiple models.
 
 Covers: CommentQuerySet, PinMarkupQuerySet, VisitQuerySet, SocialLinkQuerySet,
-NotificationQuerySet, and SiteSettings.get_current().
+NotificationQuerySet, SiteSettings.get_current(), and
+ProfileNote/ProfileNickname/ProfileTrust's for_pair().
 
 Each test creates minimal fixture data via baker and exercises the queryset
 filter methods, verifying inclusion/exclusion semantics.
@@ -169,7 +170,7 @@ class TripCommentQuerySetByAuthorTests(TestCase):
     def test_by_author_includes_own_comments_only(self) -> None:
         from urbanlens.dashboard.models.trips.model import TripComment
 
-        mine = baker.make("dashboard.TripComment", trip=self.trip, author=self.user.profile)
+        mine: TripComment = baker.make("dashboard.TripComment", trip=self.trip, author=self.user.profile)
         baker.make("dashboard.TripComment", trip=self.other_trip, author=self.other_user.profile)
 
         qs = TripComment.objects.by_author(self.user.profile)
@@ -179,8 +180,8 @@ class TripCommentQuerySetByAuthorTests(TestCase):
     def test_by_author_orders_most_recent_first(self) -> None:
         from urbanlens.dashboard.models.trips.model import TripComment
 
-        older = baker.make("dashboard.TripComment", trip=self.trip, author=self.user.profile)
-        newer = baker.make("dashboard.TripComment", trip=self.trip, author=self.user.profile)
+        older: TripComment = baker.make("dashboard.TripComment", trip=self.trip, author=self.user.profile)
+        newer: TripComment = baker.make("dashboard.TripComment", trip=self.trip, author=self.user.profile)
         TripComment.objects.filter(pk=older.pk).update(created=datetime(2020, 1, 1, tzinfo=UTC))
         TripComment.objects.filter(pk=newer.pk).update(created=datetime(2020, 1, 2, tzinfo=UTC))
 
@@ -463,5 +464,65 @@ class SavedFilterQuerySetNameTakenForTests(TestCase):
     def test_exclude_pk_does_not_hide_a_collision_with_a_different_filter(self) -> None:
         from urbanlens.dashboard.models.saved_filter.model import SavedFilter
 
-        other = baker.make("dashboard.SavedFilter", profile=self.user.profile, name="Other Filter")
+        other: SavedFilter = baker.make("dashboard.SavedFilter", profile=self.user.profile, name="Other Filter")
         self.assertTrue(SavedFilter.objects.name_taken_for(self.user.profile, "My Filter", exclude_pk=other.pk))
+
+
+# -- ProfileNote/ProfileNickname/ProfileTrust for_pair() ------------------------
+
+class ProfileAnnotationForPairTests(TestCase):
+    """for_pair() scopes each of the three private-annotation models to one author+subject pair."""
+
+    def setUp(self):
+        self.author = baker.make("auth.User").profile
+        self.subject = baker.make("auth.User").profile
+        self.other_subject = baker.make("auth.User").profile
+        self.other_author = baker.make("auth.User").profile
+
+    def test_note_for_pair_includes_matching_notes_only(self) -> None:
+        from urbanlens.dashboard.models.profile.note import ProfileNote
+
+        mine: ProfileNote = baker.make("dashboard.ProfileNote", author=self.author, subject=self.subject)
+        baker.make("dashboard.ProfileNote", author=self.author, subject=self.other_subject)
+        baker.make("dashboard.ProfileNote", author=self.other_author, subject=self.subject)
+
+        qs = ProfileNote.objects.for_pair(self.author, self.subject)
+        self.assertIn(mine, qs)
+        self.assertEqual(qs.count(), 1)
+
+    def test_note_for_pair_returns_every_note_for_that_pair(self) -> None:
+        from urbanlens.dashboard.models.profile.note import ProfileNote
+
+        baker.make("dashboard.ProfileNote", author=self.author, subject=self.subject, _quantity=3)
+
+        self.assertEqual(ProfileNote.objects.for_pair(self.author, self.subject).count(), 3)
+
+    def test_nickname_for_pair_finds_the_row(self) -> None:
+        from urbanlens.dashboard.models.profile.nickname import ProfileNickname
+
+        nickname: ProfileNickname = baker.make("dashboard.ProfileNickname", author=self.author, subject=self.subject)
+        baker.make("dashboard.ProfileNickname", author=self.author, subject=self.other_subject)
+
+        self.assertEqual(ProfileNickname.objects.for_pair(self.author, self.subject).first(), nickname)
+
+    def test_nickname_for_pair_empty_for_a_different_pair(self) -> None:
+        from urbanlens.dashboard.models.profile.nickname import ProfileNickname
+
+        baker.make("dashboard.ProfileNickname", author=self.other_author, subject=self.subject)
+
+        self.assertIsNone(ProfileNickname.objects.for_pair(self.author, self.subject).first())
+
+    def test_trust_for_pair_finds_the_row(self) -> None:
+        from urbanlens.dashboard.models.profile.trust import ProfileTrust
+
+        trust: ProfileTrust = baker.make("dashboard.ProfileTrust", author=self.author, subject=self.subject, rating=4)
+        baker.make("dashboard.ProfileTrust", author=self.other_author, subject=self.subject, rating=2)
+
+        self.assertEqual(ProfileTrust.objects.for_pair(self.author, self.subject).first(), trust)
+
+    def test_trust_for_pair_empty_for_a_different_pair(self) -> None:
+        from urbanlens.dashboard.models.profile.trust import ProfileTrust
+
+        baker.make("dashboard.ProfileTrust", author=self.author, subject=self.other_subject, rating=3)
+
+        self.assertIsNone(ProfileTrust.objects.for_pair(self.author, self.subject).first())

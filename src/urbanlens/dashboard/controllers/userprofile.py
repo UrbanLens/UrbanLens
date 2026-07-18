@@ -226,8 +226,8 @@ class ViewProfileView(LoginRequiredMixin, View):
         from urbanlens.dashboard.models.profile.note import ProfileNote
         from urbanlens.dashboard.models.profile.trust import ProfileTrust
 
-        context["viewer_notes"] = ProfileNote.objects.filter(author=my_profile, subject=profile)
-        nickname = ProfileNickname.objects.filter(author=my_profile, subject=profile).first()
+        context["viewer_notes"] = ProfileNote.objects.for_pair(my_profile, profile)
+        nickname = ProfileNickname.objects.for_pair(my_profile, profile).first()
         context["nickname"] = nickname.nickname if nickname else ""
         user_labels = Label.objects.user_labels().visible_to(my_profile).ordered()
         assigned_label_ids = set(
@@ -239,7 +239,7 @@ class ViewProfileView(LoginRequiredMixin, View):
         context["user_labels"] = user_labels
         context["assigned_label_ids"] = assigned_label_ids
         context["unassigned_labels"] = [label for label in user_labels if label.id not in assigned_label_ids]
-        trust = ProfileTrust.objects.filter(author=my_profile, subject=profile).first()
+        trust = ProfileTrust.objects.for_pair(my_profile, profile).first()
         context["trust_rating"] = trust.rating if trust else 0
 
         from urbanlens.dashboard.controllers.custom_fields import rows_for_target
@@ -931,7 +931,7 @@ class ProfileNoteDeleteView(LoginRequiredMixin, View):
 
         subject = get_object_or_404(Profile, slug=profile_slug)
         author = _authenticated_profile(request)
-        ProfileNote.objects.filter(pk=note_id, author=author, subject=subject).delete()
+        ProfileNote.objects.for_pair(author, subject).filter(pk=note_id).delete()
         return _render_profile_annotation_partial(request, author, subject)
 
 
@@ -944,7 +944,7 @@ class ProfileNoteEditView(LoginRequiredMixin, View):
         subject = get_object_or_404(Profile, slug=profile_slug)
         author = _authenticated_profile(request)
         content = request.POST.get("content", "").strip()
-        ProfileNote.objects.filter(pk=note_id, author=author, subject=subject).update(content=content)
+        ProfileNote.objects.for_pair(author, subject).filter(pk=note_id).update(content=content)
         return _render_profile_annotation_partial(request, author, subject)
 
 
@@ -1002,7 +1002,7 @@ class ProfileTrustView(LoginRequiredMixin, View):
                 defaults={"rating": rating},
             )
         else:
-            ProfileTrust.objects.filter(author=author, subject=subject).delete()
+            ProfileTrust.objects.for_pair(author, subject).delete()
 
         return _render_profile_annotation_partial(request, author, subject)
 
@@ -1031,7 +1031,7 @@ class ProfileNicknameView(LoginRequiredMixin, View):
                 defaults={"nickname": nickname},
             )
         else:
-            ProfileNickname.objects.filter(author=author, subject=subject).delete()
+            ProfileNickname.objects.for_pair(author, subject).delete()
 
         return _render_profile_annotation_partial(request, author, subject)
 
@@ -1059,13 +1059,13 @@ def _render_profile_annotation_partial(
     from urbanlens.dashboard.models.profile.note import ProfileNote
     from urbanlens.dashboard.models.profile.trust import ProfileTrust
 
-    viewer_notes = ProfileNote.objects.filter(author=author, subject=subject)
+    viewer_notes = ProfileNote.objects.for_pair(author, subject)
     user_labels = Label.objects.user_labels().visible_to(author).ordered()
     assigned_ids = set(
         ProfileLabelAssignment.objects.filter(author=author, subject=subject).values_list("label_id", flat=True),
     )
-    trust = ProfileTrust.objects.filter(author=author, subject=subject).first()
-    nickname = ProfileNickname.objects.filter(author=author, subject=subject).first()
+    trust = ProfileTrust.objects.for_pair(author, subject).first()
+    nickname = ProfileNickname.objects.for_pair(author, subject).first()
 
     return render(
         request,
