@@ -16,7 +16,7 @@ from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
-from urbanlens.dashboard.services.images import compute_checksum, image_to_gallery_json
+from urbanlens.dashboard.services.images import compute_checksum, image_to_gallery_json, parse_reposition_payload
 from urbanlens.dashboard.services.pagination import get_page
 from urbanlens.dashboard.services.storage import quota_error_for_upload
 from urbanlens.dashboard.services.wiki_access import resolve_visible_wiki
@@ -238,13 +238,11 @@ class PinImageView(LoginRequiredMixin, View):
         if img.profile != profile:
             raise Http404
         try:
-            data = json.loads(request.body)
-            img.latitude = Decimal(str(data["latitude"]))
-            img.longitude = Decimal(str(data["longitude"]))
-            img.save(update_fields=["latitude", "longitude", "updated"])
-        except (KeyError, ValueError, json.JSONDecodeError) as exc:
+            img.latitude, img.longitude = parse_reposition_payload(request.body)
+        except ValueError as exc:
             logger.warning("Failed to update image %s on pin %s: %s", image_id, pin_slug, exc)
             return JsonResponse({"error": "Invalid request data."}, status=400)
+        img.save(update_fields=["latitude", "longitude", "updated"])
         return JsonResponse({"latitude": float(img.latitude), "longitude": float(img.longitude)})
 
     def delete(self, request: HttpRequest, pin_slug: str, image_id: int) -> HttpResponse:
@@ -356,13 +354,11 @@ class WikiImageView(LoginRequiredMixin, View):
         if img.profile != profile:
             raise Http404
         try:
-            data = json.loads(request.body)
-            img.latitude = Decimal(str(data["latitude"]))
-            img.longitude = Decimal(str(data["longitude"]))
-            img.save(update_fields=["latitude", "longitude", "updated"])
-        except (KeyError, ValueError, json.JSONDecodeError) as exc:
+            img.latitude, img.longitude = parse_reposition_payload(request.body)
+        except ValueError as exc:
             logger.warning("Failed to update image %s on location %s: %s", image_id, location_slug, exc)
             return JsonResponse({"error": "Invalid request data."}, status=400)
+        img.save(update_fields=["latitude", "longitude", "updated"])
         return JsonResponse({"latitude": float(img.latitude), "longitude": float(img.longitude)})
 
     def delete(self, request: HttpRequest, location_slug: str, image_id: int) -> HttpResponse:

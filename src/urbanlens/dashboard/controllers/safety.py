@@ -22,7 +22,7 @@ from urbanlens.dashboard.models.markup.model import MarkupMap
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinContact, SafetyCheckinStatus, SafetyContactOptOutScope
 from urbanlens.dashboard.services.connections import get_connections
-from urbanlens.dashboard.services.images import image_to_gallery_json
+from urbanlens.dashboard.services.images import image_to_gallery_json, parse_reposition_payload
 from urbanlens.dashboard.services.map_snapshot import default_markup_map_title
 from urbanlens.dashboard.services.pagination import get_page
 from urbanlens.dashboard.services.safety import (
@@ -1062,13 +1062,11 @@ class SafetyImageView(LoginRequiredMixin, View):
         """
         img = self._get_image(request, checkin_slug, image_id)
         try:
-            data = json.loads(request.body)
-            img.latitude = Decimal(str(data["latitude"]))
-            img.longitude = Decimal(str(data["longitude"]))
-            img.save(update_fields=["latitude", "longitude", "updated"])
-        except (KeyError, ValueError, json.JSONDecodeError) as exc:
+            img.latitude, img.longitude = parse_reposition_payload(request.body)
+        except ValueError as exc:
             logger.warning("Failed to update image %s on checkin %s: %s", image_id, checkin_slug, exc)
             return JsonResponse({"error": "Invalid request data."}, status=400)
+        img.save(update_fields=["latitude", "longitude", "updated"])
         return JsonResponse({"latitude": float(img.latitude), "longitude": float(img.longitude)})
 
     def delete(self, request: HttpRequest, checkin_slug: str, image_id: int) -> HttpResponse:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 from datetime import datetime
+from decimal import Decimal
 import hashlib
 import io
 import logging
@@ -35,6 +36,43 @@ _FORMAT_EXTENSIONS = {"JPEG": ".jpg", "PNG": ".png", "WEBP": ".webp", "TIFF": ".
 # Cap for binary EXIF payloads (e.g. MakerNote blobs) stored as hex in the
 # JSON snapshot; larger values are summarized instead of embedded.
 _EXIF_BYTES_HEX_LIMIT = 4096
+
+
+def parse_reposition_payload(body: bytes) -> tuple[Decimal, Decimal]:
+    """Parse a photo-reposition JSON payload into validated latitude/longitude Decimals.
+
+    Shared by the pin/wiki/safety gallery reposition endpoints, which all
+    accept ``{"latitude": ..., "longitude": ...}`` from a dragged map marker.
+    Centralized because each of the three had the same subtle hole: they
+    caught ``ValueError`` but ``Decimal("abc")`` raises
+    ``decimal.InvalidOperation`` (an ``ArithmeticError``, not a
+    ``ValueError``), turning garbage input into a 500 instead of a 400 - and
+    ``Decimal("nan")`` parses fine and Postgres ``numeric`` happily stores
+    NaN, so nothing rejected non-finite coordinates at all.
+
+    Args:
+        body: The raw request body.
+
+    Returns:
+        ``(latitude, longitude)`` as finite, in-range Decimals.
+
+    Raises:
+        ValueError: On malformed JSON, a non-object payload, missing keys,
+            non-numeric/non-finite values, or out-of-range coordinates.
+    """
+    import json
+
+    try:
+        data = json.loads(body)
+        latitude = Decimal(str(data["latitude"]))
+        longitude = Decimal(str(data["longitude"]))
+    except (KeyError, TypeError, ValueError, ArithmeticError) as exc:
+        raise ValueError("Invalid request data.") from exc
+    if not (latitude.is_finite() and longitude.is_finite()):
+        raise ValueError("Coordinates must be finite numbers.")
+    if abs(latitude) > 90 or abs(longitude) > 180:
+        raise ValueError("Coordinates out of range.")
+    return latitude, longitude
 
 
 def _get_gps_ifd(image_file: IO[bytes]) -> dict[int, Any] | None:

@@ -209,6 +209,59 @@ class MessageShareRespondViewTests(TestCase):
         )
 
 
+class MessageShareTripScopingTests(TestCase):
+    """The trip-invite POST resolves the trip through the caller's own memberships.
+
+    The service layer already refuses to invite anyone to a trip the sender
+    isn't a member of (403), but the view used to look the trip up unscoped
+    first - so a non-member could distinguish "trip slug exists" (403) from
+    "doesn't exist" (404), a slug-probing existence oracle. Both cases must
+    be an identical 404 now.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.sender = _profile()
+        self.recipient = _profile()
+        _make_accepted_friendship(self.sender, self.recipient)
+        _set_dm_visibility(self.recipient, VisibilityChoice.ANYONE)
+        self.sender.ensure_slug()
+        self.recipient.ensure_slug()
+        self.client.force_login(self.sender.user)
+
+    def _invite(self, trip_slug: str):
+        return self.client.post(
+            reverse("messages.share.trip", kwargs={"profile_slug": self.recipient.slug}),
+            {"trip_slug": trip_slug},
+            HTTP_HX_REQUEST="true",
+        )
+
+    def test_member_can_invite_partner_to_their_trip(self) -> None:
+        from urbanlens.dashboard.models.trips.model import Trip, TripMembership
+
+        trip = Trip.objects.create(name="My Trip", creator=self.sender)
+        TripMembership.objects.create(trip=trip, profile=self.sender)
+
+        response = self._invite(trip.slug)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(TripMembership.objects.filter(trip=trip, profile=self.recipient, status=TripMembership.STATUS_INVITED).exists())
+
+    def test_someone_elses_trip_and_a_nonexistent_trip_are_indistinguishable(self) -> None:
+        from urbanlens.dashboard.models.trips.model import Trip, TripMembership
+
+        outsider = _profile()
+        foreign_trip = Trip.objects.create(name="Foreign Trip", creator=outsider)
+        TripMembership.objects.create(trip=foreign_trip, profile=outsider)
+
+        foreign_response = self._invite(foreign_trip.slug)
+        missing_response = self._invite("no-such-trip-slug")
+
+        self.assertEqual(foreign_response.status_code, 404)
+        self.assertEqual(missing_response.status_code, 404)
+        self.assertFalse(TripMembership.objects.filter(trip=foreign_trip, profile=self.recipient).exists())
+
+
 class ShareStatusNotLeakedToSharerTests(TestCase):
     """The sharer must never see the recipient's accept/reject decision in the
     DM thread itself - that's the recipient's own choice to disclose or not.

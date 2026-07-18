@@ -266,7 +266,11 @@ class MessageShareTripView(LoginRequiredMixin, View):
         """
         profile = _get_profile(request)
         partner = _get_partner(profile, profile_slug)
-        trip = get_object_or_404(Trip, slug=request.POST.get("trip_slug"))
+        # Scoped to the caller's own trips (like the GET picker above) rather
+        # than any slug: the service re-checks membership anyway, but an
+        # unscoped lookup let a non-member distinguish "trip exists" (403)
+        # from "doesn't exist" (404) - a slug-probing existence oracle.
+        trip = get_object_or_404(Trip, slug=request.POST.get("trip_slug"), memberships__profile=profile)
         body = request.POST.get("body", "").strip() or f'I invited you to "{trip.name}"!'
 
         try:
