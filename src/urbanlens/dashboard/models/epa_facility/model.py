@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from django.db import models
+from django.db import IntegrityError, models
 from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract
@@ -33,7 +33,10 @@ class EpaFacility(abstract.DashboardModel):
     Report has actually been fetched (``detail_fetched_at`` set) - ECHO's
     nearby-search listing alone includes a latitude but not a longitude (see
     ``EpaEchoGateway.get_nearby_facilities``), so a search-only row can't yet
-    support a real distance check.
+    support a real distance check. A row with ``detail_fetched_at`` set but
+    still-null coordinates is also meaningful: ECHO's DFR genuinely has no
+    coordinates for that facility (no Permits data), so it can never be an
+    exact-site match - recording that saves re-fetching it to re-rule it out.
     """
 
     registry_id = models.CharField(max_length=50, unique=True, db_index=True)
@@ -96,7 +99,7 @@ class EpaFacility(abstract.DashboardModel):
         """
         if not registry_id:
             return
-        entry, created = cls.objects.get_or_create(registry_id=registry_id, defaults={"name": name, "address": address, "latitude": latitude, "data": data})
+        entry, created = cls._get_or_create_row(registry_id, defaults={"name": name, "address": address, "latitude": latitude, "data": data})
         if created:
             return
         entry.name = name or entry.name
@@ -110,28 +113,59 @@ class EpaFacility(abstract.DashboardModel):
     def record_detail_result(cls, registry_id: str, *, name: str, address: str, latitude: float | None, longitude: float | None, data: dict[str, Any]) -> EpaFacility:
         """Upsert a facility's fetched Detailed Facility Report.
 
+        A DFR without coordinates (ECHO has no Permits data for some
+        facilities) is still recorded - ``detail_fetched_at`` marks it as
+        "already checked, can never be an exact-site match" so future fetches
+        never re-spend rate-limited budget on it - but ``None`` coordinates
+        never overwrite real ones already on the row (e.g. a search-derived
+        latitude, or a previous richer DFR).
+
         Args:
             registry_id: EPA FRS Registry ID.
             name: Facility name.
             address: Facility address.
-            latitude: The DFR's exact latitude.
-            longitude: The DFR's exact longitude.
+            latitude: The DFR's exact latitude, when it has one.
+            longitude: The DFR's exact longitude, when it has one.
             data: Normalized detail fields (e.g. ``programs``) to merge into ``data``.
 
         Returns:
             The saved EpaFacility instance.
         """
-        entry, created = cls.objects.get_or_create(
-            registry_id=registry_id,
+        entry, created = cls._get_or_create_row(
+            registry_id,
             defaults={"name": name, "address": address, "latitude": latitude, "longitude": longitude, "data": data, "detail_fetched_at": timezone.now()},
         )
         if created:
             return entry
         entry.name = name or entry.name
         entry.address = address or entry.address
-        entry.latitude = latitude
-        entry.longitude = longitude
+        if latitude is not None:
+            entry.latitude = latitude
+        if longitude is not None:
+            entry.longitude = longitude
         entry.data = {**entry.data, **data}
         entry.detail_fetched_at = timezone.now()
         entry.save(update_fields=["name", "address", "latitude", "longitude", "data", "detail_fetched_at", "updated"])
         return entry
+
+    @classmethod
+    def _get_or_create_row(cls, registry_id: str, *, defaults: dict[str, Any]) -> tuple[EpaFacility, bool]:
+        """``get_or_create`` hardened against the concurrent-fetch race.
+
+        The two EPA panel sources deliberately share one upstream fetch and can
+        briefly run concurrently (see ``epa_echo.py``'s module docstring), so
+        two workers may both miss the ``get`` and race the ``create`` - the
+        loser's ``IntegrityError`` on the unique ``registry_id`` must resolve
+        to the winner's row instead of aborting its whole panel fetch.
+
+        Args:
+            registry_id: EPA FRS Registry ID (the unique key raced on).
+            defaults: Field values used only when creating.
+
+        Returns:
+            Same ``(instance, created)`` tuple as ``get_or_create``.
+        """
+        try:
+            return cls.objects.get_or_create(registry_id=registry_id, defaults=defaults)
+        except IntegrityError:
+            return cls.objects.get(registry_id=registry_id), False

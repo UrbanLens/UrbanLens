@@ -78,6 +78,18 @@ class RecordDetailResultTests(TestCase):
         self.assertEqual(entry.latitude, 41.0)
         self.assertEqual(entry.longitude, -75.0)
 
+    def test_coordinate_less_detail_is_recorded_but_never_clobbers_real_coordinates(self) -> None:
+        """A real DFR response with no Permits data (so no coordinates) still
+        marks the facility as detail-fetched - it can never be an exact-site
+        match, and recording that saves re-fetching it for every nearby pin -
+        but its None coordinates must not erase a search-derived latitude or
+        a previous richer DFR's coordinates."""
+        EpaFacility.record_search_result("R1", name="Test", address="1 Main St", latitude=40.0, data={})
+        entry = EpaFacility.record_detail_result("R1", name="Test", address="1 Main St", latitude=None, longitude=None, data={"programs": []})
+        self.assertIsNotNone(entry.detail_fetched_at)
+        self.assertEqual(entry.latitude, 40.0)
+        self.assertIsNone(entry.longitude)
+
 
 class KnownDetailsByRegistryIdTests(TestCase):
     def test_empty_input_returns_empty_dict(self) -> None:
@@ -145,6 +157,34 @@ class FetchEpaEchoDataReusesPersistedFacilitiesTests(TestCase):
         entry = EpaFacility.objects.get(registry_id="R1")
         self.assertIsNotNone(entry.detail_fetched_at)
         self.assertEqual(entry.longitude, -74.0)
+
+    def test_coordinate_less_detail_is_persisted_and_never_re_fetched(self) -> None:
+        """A facility whose DFR genuinely has no coordinates must be recorded
+        as already-checked - the whole point of the persistent store is that a
+        SECOND pin's fetch spends none of ECHO's 5-calls/minute budget
+        re-ruling out a facility that can never be an exact-site match."""
+        facilities = [{"name": "No Coords Facility", "address": "1 Main St", "registry_id": "R1", "latitude": 40.0}]
+        gateway = self._gateway(facilities=facilities, detail_by_registry_id={"R1": {"latitude": None, "longitude": None, "programs": []}})
+        with mock.patch("urbanlens.dashboard.services.apis.locations.epa_echo.EpaEchoGateway", return_value=gateway):
+            _fetch_epa_echo_data(self.pin)
+        gateway.get_facility_detail.assert_called_once_with("R1")
+        self.assertIsNotNone(EpaFacility.objects.get(registry_id="R1").detail_fetched_at)
+
+        second_gateway = self._gateway(facilities=facilities, detail_by_registry_id={})
+        with mock.patch("urbanlens.dashboard.services.apis.locations.epa_echo.EpaEchoGateway", return_value=second_gateway):
+            result = _fetch_epa_echo_data(self.pin)
+        second_gateway.get_facility_detail.assert_not_called()
+        self.assertIsNone(result["exact_site"])
+
+    def test_a_transient_detail_failure_is_not_recorded_as_checked(self) -> None:
+        """get_facility_detail returning None means a failed/unknown lookup -
+        recording THAT as detail-fetched would permanently mark a facility
+        coordinate-less off one flaky response. It must stay re-fetchable."""
+        facilities = [{"name": "Flaky Facility", "address": "1 Main St", "registry_id": "R1", "latitude": 40.0}]
+        gateway = self._gateway(facilities=facilities, detail_by_registry_id={})
+        with mock.patch("urbanlens.dashboard.services.apis.locations.epa_echo.EpaEchoGateway", return_value=gateway):
+            _fetch_epa_echo_data(self.pin)
+        self.assertIsNone(EpaFacility.objects.get(registry_id="R1").detail_fetched_at)
 
     def test_a_stale_pre_existing_row_still_counts_as_known_forever(self) -> None:
         """EpaFacility is reference data, not a time-limited cache - even a very

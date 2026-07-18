@@ -156,13 +156,20 @@ def _fetch_epa_echo_data(pin: Pin) -> dict[str, Any]:
             except RateLimitExceededError:
                 logger.warning("EPA ECHO rate limit exhausted mid exact-site match for pin %s; keeping partial results", pin.pk)
                 break
-            if detail and detail.get("latitude") is not None and detail.get("longitude") is not None:
+            # Record every REAL DFR response, even one without coordinates
+            # (ECHO has no Permits data for some facilities) - a coordinate-less
+            # facility can never be an exact-site match, and recording that
+            # fact is exactly what stops every future nearby pin's fetch from
+            # re-spending one of ECHO's 5-calls/minute budget re-ruling it
+            # out. None (transient failure / unknown ID) is NOT recorded, so
+            # a flaky response can't permanently mark a facility coordinate-less.
+            if detail is not None:
                 EpaFacility.record_detail_result(
                     registry_id,
                     name=facility.get("name") or "",
                     address=facility.get("address") or "",
-                    latitude=detail["latitude"],
-                    longitude=detail["longitude"],
+                    latitude=detail.get("latitude"),
+                    longitude=detail.get("longitude"),
                     data={k: v for k, v in detail.items() if k not in ("latitude", "longitude")},
                 )
 
@@ -174,6 +181,33 @@ def _fetch_epa_echo_data(pin: Pin) -> dict[str, Any]:
             exact_site = {**detail, "registry_id": registry_id, "name": facility.get("name") or "", "address": facility.get("address") or ""}
 
     return {"facilities": facilities, "exact_site": exact_site}
+
+
+def _fetch_and_cache(pin: Pin) -> dict[str, Any]:
+    """Run the shared upstream fetch, persist the shared cache row, and propagate any exact-site match.
+
+    Both panel sources' ``fetch()`` methods are this exact sequence (they
+    deliberately share one ``LocationCache`` row - see the module docstring),
+    so it lives here once instead of being duplicated in each.
+
+    Args:
+        pin: The pin whose location's EPA data should be (re)fetched.
+
+    Returns:
+        The freshly-cached payload, so a caller can act on ``exact_site``
+        without re-reading the cache row.
+    """
+    from urbanlens.dashboard.models.cache.location_cache import LocationCache
+
+    lat = float(pin.effective_latitude or 0)
+    lng = float(pin.effective_longitude or 0)
+    data = _fetch_epa_echo_data(pin)
+    LocationCache.set(pin.location, _CACHE_SOURCE, data, query_key=f"{lat:.5f},{lng:.5f}")
+
+    exact_site = data.get("exact_site")
+    if exact_site:
+        _propagate_exact_site_to_nearby_locations(pin.location, exact_site)
+    return data
 
 
 def _propagate_exact_site_to_nearby_locations(location: Location, exact_site: dict[str, Any]) -> None:
@@ -240,16 +274,7 @@ class EpaEchoNearbyPanelSource(CoordinateGatedInfoPanelSource):
 
     def fetch(self, pin: Pin) -> None:
         """Fetch and cache nearby-facility + exact-site data (see module docstring)."""
-        from urbanlens.dashboard.models.cache.location_cache import LocationCache
-
-        lat = float(pin.effective_latitude or 0)
-        lng = float(pin.effective_longitude or 0)
-        data = _fetch_epa_echo_data(pin)
-        LocationCache.set(pin.location, self.cache_source, data, query_key=f"{lat:.5f},{lng:.5f}")
-
-        exact_site = data.get("exact_site")
-        if exact_site:
-            _propagate_exact_site_to_nearby_locations(pin.location, exact_site)
+        _fetch_and_cache(pin)
 
     def render_context(self, pin: Pin, data: dict) -> dict | None:
         """Build the nearby-facility list, excluding the exact-site match (it has its own unconditional card)."""
@@ -297,16 +322,10 @@ class EpaEchoDetailPanelSource(CoordinateGatedInfoPanelSource):
 
     def fetch(self, pin: Pin) -> None:
         """Fetch and cache nearby-facility + exact-site data (see module docstring)."""
-        from urbanlens.dashboard.models.cache.location_cache import LocationCache
-
-        lat = float(pin.effective_latitude or 0)
-        lng = float(pin.effective_longitude or 0)
-        data = _fetch_epa_echo_data(pin)
-        LocationCache.set(pin.location, self.cache_source, data, query_key=f"{lat:.5f},{lng:.5f}")
+        data = _fetch_and_cache(pin)
 
         exact_site = data.get("exact_site")
         if exact_site:
-            _propagate_exact_site_to_nearby_locations(pin.location, exact_site)
             registry_id = exact_site.get("registry_id")
             if registry_id:
                 self._add_echo_report_link(pin, pin.location, registry_id)
