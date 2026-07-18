@@ -31,6 +31,7 @@ from urbanlens.dashboard.services.apis.calendar.google import ACTIVITY_ID_EVENT_
 from urbanlens.dashboard.services.calendar_sync import (
     DEFAULT_ACTIVITY_EVENT_DURATION,
     activity_to_event_body,
+    disconnect_member_calendar_sync,
     event_originated_from_urbanlens,
     event_to_trip_kwargs,
     export_trip_to_calendar,
@@ -548,6 +549,132 @@ class ExportTripTests(_CalendarSyncDBTestCase):
 
         self.assertFalse(removed)
         gateway.delete_event.assert_not_called()
+
+
+class DisconnectMemberCalendarSyncTests(_CalendarSyncDBTestCase):
+    """disconnect_member_calendar_sync stops a departing member's auto-sync.
+
+    Regression coverage for a real gap: removing/leaving a trip only ever
+    deleted the TripMembership row, so a departed member's Google Calendar
+    kept receiving live pushes of the trip's evolving details forever via
+    push_auto_synced_trip_changes - trip access control and live calendar
+    export are two independent channels to the same data.
+    """
+
+    def _trip_with_link(self, *, auto_sync: bool = True) -> tuple[Trip, TripCalendarLink]:
+        trip = Trip.objects.create(name="Shared trip", creator=self.profile, start_date=datetime.date(2026, 11, 1), end_date=datetime.date(2026, 11, 2))
+        link = TripCalendarLink.objects.create(
+            trip=trip,
+            profile=self.profile,
+            google_event_id="evt-departing",
+            direction=CalendarSyncDirection.EXPORTED,
+            auto_sync=auto_sync,
+        )
+        return trip, link
+
+    def test_deletes_the_link_and_the_remote_event(self):
+        gateway = self._patch_gateway()
+        trip, _link = self._trip_with_link()
+
+        disconnect_member_calendar_sync(trip, self.profile)
+
+        gateway.delete_event.assert_called_once_with("evt-departing")
+        self.assertFalse(TripCalendarLink.objects.filter(trip=trip, profile=self.profile).exists())
+
+    def test_revoked_token_still_drops_the_link(self):
+        """A failed remote delete (e.g. revoked OAuth grant) must not leave
+        auto-sync active - the DB-side link is what actually re-enables
+        future pushes, so it has to go regardless of the API call's outcome."""
+        gateway = self._patch_gateway()
+        gateway.delete_event.side_effect = GatewayRequestError("token revoked")
+        trip, _link = self._trip_with_link()
+
+        disconnect_member_calendar_sync(trip, self.profile)
+
+        self.assertFalse(TripCalendarLink.objects.filter(trip=trip, profile=self.profile).exists())
+
+    def test_no_calendar_account_is_a_noop(self):
+        trip, _link = self._trip_with_link()
+        self.account.delete()
+
+        disconnect_member_calendar_sync(trip, self.profile)  # must not raise
+
+        self.assertFalse(TripCalendarLink.objects.filter(trip=trip, profile=self.profile).exists())
+
+    def test_no_link_is_a_noop(self):
+        self._patch_gateway()
+        trip = Trip.objects.create(name="Never synced", creator=self.profile)
+
+        disconnect_member_calendar_sync(trip, self.profile)  # must not raise
+
+    def test_departed_member_no_longer_receives_auto_sync_pushes(self):
+        """End-to-end: after disconnecting, push_auto_synced_trip_changes has
+        nothing left to push to for this profile."""
+        gateway = self._patch_gateway()
+        trip, _link = self._trip_with_link(auto_sync=True)
+
+        disconnect_member_calendar_sync(trip, self.profile)
+        synced_count = push_auto_synced_trip_changes(trip)
+
+        self.assertEqual(synced_count, 0)
+        gateway.update_event.assert_not_called()
+        gateway.create_event.assert_not_called()
+
+
+class TripMemberRemovalCalendarSyncTests(_CalendarSyncDBTestCase):
+    """The trip member-removal/leave controllers must disconnect calendar sync."""
+
+    def setUp(self):
+        super().setUp()
+        self.creator_user = User.objects.create_user(username="trip-creator")
+        self.creator = self.creator_user.profile
+        self.trip = Trip.objects.create(name="Group trip", creator=self.creator, start_date=datetime.date(2026, 12, 10), end_date=datetime.date(2026, 12, 12))
+        TripMembership.objects.create(trip=self.trip, profile=self.profile, status=TripMembership.STATUS_JOINED)
+        self.link = TripCalendarLink.objects.create(
+            trip=self.trip,
+            profile=self.profile,
+            google_event_id="evt-member",
+            direction=CalendarSyncDirection.EXPORTED,
+            auto_sync=True,
+        )
+
+    def test_creator_removing_member_drops_their_calendar_link(self):
+        self._patch_gateway()
+        self.creator_user.set_password("pw")
+        self.creator_user.save()
+        self.client.force_login(self.creator_user)
+
+        response = self.client.delete(reverse("trips.member.remove", kwargs={"trip_slug": self.trip.slug, "profile_id": self.profile.pk}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(TripCalendarLink.objects.filter(pk=self.link.pk).exists())
+
+    def test_member_leaving_drops_their_own_calendar_link(self):
+        self._patch_gateway()
+        self.user.set_password("pw")
+        self.user.save()
+        self.client.force_login(self.user)
+
+        response = self.client.delete(reverse("trips.leave", kwargs={"trip_slug": self.trip.slug}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(TripCalendarLink.objects.filter(pk=self.link.pk).exists())
+
+    def test_removal_does_not_touch_other_members_links(self):
+        self._patch_gateway()
+        other_user = User.objects.create_user(username="unrelated-member")
+        other_profile = other_user.profile
+        TripMembership.objects.create(trip=self.trip, profile=other_profile, status=TripMembership.STATUS_JOINED)
+        other_link = TripCalendarLink.objects.create(
+            trip=self.trip, profile=other_profile, google_event_id="evt-other", direction=CalendarSyncDirection.EXPORTED, auto_sync=True,
+        )
+        self.creator_user.set_password("pw")
+        self.creator_user.save()
+        self.client.force_login(self.creator_user)
+
+        self.client.delete(reverse("trips.member.remove", kwargs={"trip_slug": self.trip.slug, "profile_id": self.profile.pk}))
+
+        self.assertTrue(TripCalendarLink.objects.filter(pk=other_link.pk).exists())
 
 
 class TripCalendarExportViewTests(_CalendarSyncDBTestCase):

@@ -740,6 +740,46 @@ def remove_trip_from_calendar(account: GoogleCalendarAccount, trip: Trip) -> boo
     return True
 
 
+def disconnect_member_calendar_sync(trip: Trip, profile: Profile) -> None:
+    """Stop syncing a trip to one profile's calendar when they leave or are removed.
+
+    Trip access control lives on ``TripMembership``, but a live calendar
+    export is a second, independent channel to the same data - without this,
+    a removed (or departed) member's Google Calendar would keep silently
+    receiving the trip's evolving name, dates, and activity locations/notes
+    via ``push_auto_synced_trip_changes`` forever, even though they've lost
+    every other form of access. Callers must invoke this whenever a
+    ``TripMembership`` row for a non-creator is deleted.
+
+    Deleting each event on the Google side is best-effort: a revoked or
+    expired token must never block dropping the link rows, since those rows
+    - not the remote event - are what re-enables future auto-sync.
+
+    Args:
+        trip: The trip the profile is leaving/being removed from.
+        profile: The departing profile.
+    """
+    links = list(TripCalendarLink.objects.filter(trip=trip, profile=profile))
+    if not links:
+        return
+
+    account = GoogleCalendarAccount.objects.get_for_profile(profile)
+    if account is not None:
+        gateway = GoogleCalendarGateway(account=account)
+        for link in links:
+            try:
+                gateway.delete_event(link.google_event_id)
+            except GatewayRequestError:
+                logger.warning(
+                    "Could not delete calendar event %s for departing trip member %s; dropping the sync link anyway.",
+                    link.google_event_id,
+                    profile.pk,
+                    exc_info=True,
+                )
+
+    TripCalendarLink.objects.filter(trip=trip, profile=profile).delete()
+
+
 def push_auto_synced_trip_changes(trip: Trip) -> int:
     """Push a trip's current state to every calendar it is set to auto-sync with.
 

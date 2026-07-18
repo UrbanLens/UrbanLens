@@ -27,6 +27,7 @@ from urbanlens.dashboard.models.trips.model import (
     TripMembership,
 )
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
+from urbanlens.dashboard.services.calendar_sync import disconnect_member_calendar_sync
 from urbanlens.dashboard.services.text_limits import (
     MAX_COMMENT_TEXT_LENGTH,
     MAX_TRIP_ACTIVITY_NOTES_LENGTH,
@@ -1359,6 +1360,7 @@ class TripMemberRemoveView(LoginRequiredMixin, View):
         if profile not in {target, trip.creator}:
             return HttpResponse("Only the trip creator can remove other members.", status=403)
         TripMembership.objects.for_trip_and_profile(trip, target).delete()
+        disconnect_member_calendar_sync(trip, target)
 
         return _render_members_panel(request, trip, profile)
 
@@ -1649,6 +1651,7 @@ class TripLeaveView(LoginRequiredMixin, View):
             return HttpResponse("The trip creator cannot leave - delete the trip instead.", status=400)
 
         TripMembership.objects.for_trip_and_profile(trip, profile).delete()
+        disconnect_member_calendar_sync(trip, profile)
 
         from django.urls import reverse as _reverse
 
