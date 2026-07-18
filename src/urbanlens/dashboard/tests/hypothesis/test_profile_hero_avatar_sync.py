@@ -57,9 +57,17 @@ class ProfileBioShownOnceTests(TestCase):
         self.client = Client()
         self.client.force_login(self.user)
 
-    def test_bio_appears_exactly_once(self) -> None:
-        response = self.client.get(reverse("profile.view"))
-        self.assertContains(response, self.bio, count=1)
+    def test_bio_appears_exactly_once_as_visible_text(self) -> None:
+        content = self.client.get(reverse("profile.view")).content.decode()
+        # The click-to-edit bio element legitimately carries the raw value
+        # twice in markup - once in its data-raw-bio attribute (the editor's
+        # source of truth) and once as its visible text - so a raw substring
+        # count of 1 is impossible by construction. The regression this test
+        # guards (the hero rendering a clamped VISIBLE duplicate above the
+        # About section) is caught by counting visible-text occurrences only:
+        # element text is always preceded by '>', the attribute copy never is.
+        self.assertEqual(content.count(f">{self.bio}"), 1)
+        self.assertEqual(content.count(self.bio), 2)
 
     def test_bio_lives_in_the_about_section_not_the_hero(self) -> None:
         content = self.client.get(reverse("profile.view")).content.decode()
