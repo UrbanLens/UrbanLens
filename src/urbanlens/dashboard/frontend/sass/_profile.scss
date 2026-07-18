@@ -2911,9 +2911,8 @@ a.profile-stat--link {
 .profile-strip {
     overflow: hidden;
     padding: 1rem;
-    background:
-        radial-gradient(circle at top left, color-mix(in srgb, var(--ul-color-accent-bg) 55%, transparent), transparent 34rem),
-        var(--ul-surface);
+    background: radial-gradient(circle at top left, color-mix(in srgb, var(--ul-color-accent-bg) 55%, transparent), transparent 44rem),rgba(0,0,0,0.2);
+    border-radius: 20px;
 }
 
 .profile-strip[hidden] {
