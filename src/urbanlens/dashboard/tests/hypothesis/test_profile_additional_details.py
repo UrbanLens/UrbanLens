@@ -10,6 +10,7 @@ to data governed by a VisibilityChoice setting.
 from __future__ import annotations
 
 import datetime
+import re
 
 from django.contrib.auth.models import User
 from django.urls import reverse
@@ -17,8 +18,15 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.profile.email import ProfileEmail
-from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.profile.meta import VisibilityChoice
+from urbanlens.dashboard.models.profile.model import Profile
+
+
+def _strip_scripts(html: str) -> str:
+    """Remove <script> blocks so a substring check can't false-positive on the
+    click-to-edit wiring script's own inert HTML-shaped string literals
+    (e.g. its renderText() closures build "...>Birthday: ..." as JS text)."""
+    return re.sub(r"<script\b[^>]*>.*?</script>", "", html, flags=re.DOTALL)
 
 
 class AdditionalDetailsSectionTests(TestCase):
@@ -40,7 +48,9 @@ class AdditionalDetailsSectionTests(TestCase):
 
     def test_birth_date_omitted_when_unset(self) -> None:
         response = self._get()
-        self.assertNotContains(response, "Birthday:")
+        content = _strip_scripts(response.content.decode())
+        self.assertNotIn(">Birthday: ", content)
+        self.assertIn("Add your birthday...", content)
 
     def test_secondary_email_shown(self) -> None:
         ProfileEmail.objects.create(profile=self.profile, email="alt@example.com", is_verified=True)
@@ -52,9 +62,12 @@ class AdditionalDetailsSectionTests(TestCase):
         response = self._get()
         self.assertContains(response, "pending@example.com (unverified)")
 
-    def test_section_omitted_when_nothing_to_show(self) -> None:
+    def test_section_shown_for_owner_even_with_nothing_set_yet(self) -> None:
+        """Changed from "hidden when empty" to "shown with a placeholder" for
+        the owner, so there's something to click to add a birthday - matching
+        the same empty-state fix applied to bio/area/contact fields."""
         response = self._get()
-        self.assertNotContains(response, "Additional Details")
+        self.assertContains(response, "Additional Details")
 
     def test_other_viewer_never_sees_section(self) -> None:
         self.profile.birth_date = datetime.date(1990, 6, 15)
@@ -63,8 +76,9 @@ class AdditionalDetailsSectionTests(TestCase):
         other = baker.make(User)
         self.client.force_login(other)
         response = self.client.get(reverse("profile.view_user", kwargs={"profile_slug": self.profile.slug or self.profile.ensure_slug()}))
-        self.assertNotContains(response, "Birthday:")
-        self.assertNotContains(response, "Additional Details")
+        content = _strip_scripts(response.content.decode())
+        self.assertNotIn(">Birthday: ", content)
+        self.assertNotIn(">Additional Details<", content)
 
 
 class ProfilePrivacyHintTests(TestCase):

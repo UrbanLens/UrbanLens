@@ -268,6 +268,27 @@
     min-width: 6rem;
 }
 
+// Click-to-edit-in-place contact fields + birthday, inside .contact-info-item
+.profile-phone-editable,
+.profile-whatsapp-editable,
+.profile-signal-editable,
+.profile-telegram-editable,
+.profile-discord-editable,
+.profile-matrix-editable,
+.profile-birth-date-editable {
+    cursor: pointer;
+    border-radius: 6px;
+    padding: .1rem .3rem;
+    margin: -.1rem -.3rem;
+    transition: background .15s;
+
+    &:hover,
+    &:focus-visible {
+        background: var(--ul-grey-0a);
+        outline: none;
+    }
+}
+
 // Stats row
 .profile-stats-row {
     display: flex;

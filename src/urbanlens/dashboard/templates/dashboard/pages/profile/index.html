@@ -108,7 +108,7 @@
     {# -- Contact Info -------------------------------------------------------- #}
     {% if contact_info %}
     {% with ci=contact_info %}
-    {% if ci.phone_number or ci.signal_username or ci.discord_username or ci.whatsapp_number or ci.telegram_username or ci.matrix_handle %}
+    {% if ci.phone_number or ci.signal_username or ci.discord_username or ci.whatsapp_number or ci.telegram_username or ci.matrix_handle or profile.user == request.user %}
     <div class="profile-section ul-section">
         <h3 class="profile-section-title{% if profile.user == request.user %} ul-privacy-hint-row{% endif %}">
             Contact
@@ -117,6 +117,38 @@
             {% endif %}
         </h3>
         <div class="contact-info-list">
+            {% if profile.user == request.user %}
+            <span class="contact-info-item profile-phone-editable" tabindex="0" role="button"
+                  data-raw-phone="{{ ci.phone_number|default:'' }}" title="Click to edit">
+                <i class="material-symbols-outlined">phone</i>
+                <span class="profile-meta-text">{{ ci.phone_number|default:"Add phone number..." }}</span>
+            </span>
+            <span class="contact-info-item profile-whatsapp-editable" tabindex="0" role="button"
+                  data-raw-whatsapp="{{ ci.whatsapp_number|default:'' }}" title="Click to edit">
+                <i class="fa-brands fa-whatsapp"></i>
+                <span class="profile-meta-text">{{ ci.whatsapp_number|default:"Add WhatsApp..." }}</span>
+            </span>
+            <span class="contact-info-item profile-signal-editable" tabindex="0" role="button"
+                  data-raw-signal="{{ ci.signal_username|default:'' }}" title="Click to edit">
+                <i class="fa-brands fa-signal-messenger" title="Signal"></i>
+                <span class="profile-meta-text">{{ ci.signal_username|default:"Add Signal..." }}</span>
+            </span>
+            <span class="contact-info-item profile-telegram-editable" tabindex="0" role="button"
+                  data-raw-telegram="{{ ci.telegram_username|default:'' }}" title="Click to edit">
+                <i class="fa-brands fa-telegram"></i>
+                <span class="profile-meta-text">{{ ci.telegram_username|default:"Add Telegram..." }}</span>
+            </span>
+            <span class="contact-info-item profile-discord-editable" tabindex="0" role="button"
+                  data-raw-discord="{{ ci.discord_username|default:'' }}" title="Click to edit">
+                <i class="fa-brands fa-discord"></i>
+                <span class="profile-meta-text">{{ ci.discord_username|default:"Add Discord..." }}</span>
+            </span>
+            <span class="contact-info-item profile-matrix-editable" tabindex="0" role="button"
+                  data-raw-matrix="{{ ci.matrix_handle|default:'' }}" title="Click to edit">
+                <i class="material-icons" title="Matrix">chat</i>
+                <span class="profile-meta-text">{{ ci.matrix_handle|default:"Add Matrix..." }}</span>
+            </span>
+            {% else %}
             {% if ci.phone_number %}
             <a href="tel:{{ ci.phone_number }}" class="contact-info-item">
                 <i class="material-symbols-outlined">phone</i>
@@ -153,6 +185,7 @@
                 <span>{{ ci.matrix_handle }}</span>
             </span>
             {% endif %}
+            {% endif %}
         </div>
     </div>
     {% endif %}
@@ -162,17 +195,17 @@
     {# -- Additional account details (own profile only) - birth date, secondary #}
     {# emails, and other stored data that has nowhere else to be shown.        #}
     {% if profile.user == request.user %}
-    {% if profile.birth_date or profile.secondary_emails.exists %}
     <div class="profile-section ul-section">
         <h3 class="profile-section-title">Additional Details</h3>
         <div class="contact-info-list">
-            {% if profile.birth_date %}
             <span class="contact-info-item ul-privacy-hint-row">
                 <i class="material-symbols-outlined">cake</i>
-                <span>Birthday: {{ profile.birth_date|date:"F j, Y" }}</span>
+                <span class="profile-birth-date-editable" tabindex="0" role="button"
+                      data-raw-birth-date="{{ profile.birth_date|date:'Y-m-d'|default:'' }}" title="Click to edit">
+                    <span class="profile-meta-text">{% if profile.birth_date %}Birthday: {{ profile.birth_date|date:"F j, Y" }}{% else %}Add your birthday...{% endif %}</span>
+                </span>
                 {% include "dashboard/partials/ui/_privacy_hint.html" with text="Only visible to you" %}
             </span>
-            {% endif %}
             {% for secondary_email in profile.secondary_emails.all %}
             <span class="contact-info-item ul-privacy-hint-row">
                 <i class="material-symbols-outlined">{% if secondary_email.is_verified %}mark_email_read{% else %}mark_email_unread{% endif %}</i>
@@ -182,7 +215,6 @@
             {% endfor %}
         </div>
     </div>
-    {% endif %}
     {% endif %}
 
     {# -- Private annotation panel (viewer ≠ profile owner) ------------------- #}
@@ -702,6 +734,46 @@ function panToggleEdit(noteId) {
             if (!value) return '<span class="profile-meta-text">Add when you started exploring...</span>';
             var year = value.slice(0, 4);
             return '<span class="profile-meta-text">Exploring since ' + htmlEscape(year) + '</span>';
+        },
+    });
+
+    function simpleTextField(selector, dataKey, field, placeholder, label) {
+        wireMetaField({
+            selector: selector,
+            dataKey: dataKey,
+            field: field,
+            inputTag: 'input',
+            inputType: 'text',
+            inputClass: 'profile-meta-input',
+            successMessage: label + ' updated.',
+            errorMessage: 'Failed to update ' + label.toLowerCase() + '.',
+            renderText: function (value) {
+                return '<span class="profile-meta-text">' + (value ? htmlEscape(value) : placeholder) + '</span>';
+            },
+        });
+    }
+
+    simpleTextField('.profile-phone-editable', 'rawPhone', 'phone_number', 'Add phone number...', 'Phone');
+    simpleTextField('.profile-whatsapp-editable', 'rawWhatsapp', 'whatsapp_number', 'Add WhatsApp...', 'WhatsApp');
+    simpleTextField('.profile-signal-editable', 'rawSignal', 'signal_username', 'Add Signal...', 'Signal');
+    simpleTextField('.profile-telegram-editable', 'rawTelegram', 'telegram_username', 'Add Telegram...', 'Telegram');
+    simpleTextField('.profile-discord-editable', 'rawDiscord', 'discord_username', 'Add Discord...', 'Discord');
+    simpleTextField('.profile-matrix-editable', 'rawMatrix', 'matrix_handle', 'Add Matrix...', 'Matrix');
+
+    wireMetaField({
+        selector: '.profile-birth-date-editable',
+        dataKey: 'rawBirthDate',
+        field: 'birth_date',
+        inputTag: 'input',
+        inputType: 'date',
+        inputClass: 'profile-meta-input',
+        successMessage: 'Birthday updated.',
+        errorMessage: 'Failed to update birthday.',
+        renderText: function (value) {
+            if (!value) return '<span class="profile-meta-text">Add your birthday...</span>';
+            var d = new Date(value + 'T00:00:00');
+            var formatted = d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+            return '<span class="profile-meta-text">Birthday: ' + htmlEscape(formatted) + '</span>';
         },
     });
 
