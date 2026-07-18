@@ -19,7 +19,7 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.api_call_log.model import ApiCallLog
 from urbanlens.dashboard.models.api_rate_limit.model import ApiRateLimit
-from urbanlens.dashboard.services.rate_limiter import ServiceDefaults, check_rate_limit
+from urbanlens.dashboard.services.rate_limiter import RateLimitExceededError, RequestCancelledError, ServiceDefaults, ServiceDisabledError, check_rate_limit
 from urbanlens.dashboard.services.site_admin import add_user_to_site_admin_group
 
 
@@ -121,3 +121,27 @@ class ApiLimitsAdminPageThirtyDayFieldTests(TestCase):
             response = self.client.get(reverse("site_admin_api_limits"))
         tab_names = [tab["name"] for tab in response.context["tabs"]]
         self.assertIn("Reference & Archives", tab_names)
+
+
+class RequestCancelledErrorMessageTests(TestCase):
+    """The cancellation exceptions must carry the service key and a single, un-nested message.
+
+    Regression guard: the subclasses used to pass their formatted message to the
+    base class's ``service`` parameter, producing doubled-up log lines like
+    ``Request cancelled for service 'Rate limit exceeded for service 'nps'''``.
+    """
+
+    def test_base_error_message_and_service(self) -> None:
+        exc = RequestCancelledError("nps")
+        self.assertEqual(str(exc), "Request cancelled for service 'nps'")
+        self.assertEqual(exc.service, "nps")
+
+    def test_rate_limit_error_message_is_not_nested(self) -> None:
+        exc = RateLimitExceededError("nps")
+        self.assertEqual(str(exc), "Rate limit exceeded for service 'nps'")
+        self.assertEqual(exc.service, "nps")
+
+    def test_service_disabled_error_message_is_not_nested(self) -> None:
+        exc = ServiceDisabledError("nps")
+        self.assertEqual(str(exc), "Service 'nps' is disabled")
+        self.assertEqual(exc.service, "nps")

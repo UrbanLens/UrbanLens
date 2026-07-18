@@ -4,7 +4,7 @@ Features planned for this release.
 ## Smaller Features
 * Cleanup git history, and begin using branches for dev. [UL-14]
 * Include screenshots of the app in About page, and in the README.md file. [UL-16]
-* Provide explanation of how to do a google takeout to import pins. (Possible onboarding process?) [UL-142]
+* ~~Provide explanation of how to do a google takeout to import pins. (Possible onboarding process?) [UL-142]~~ (dedicated help page `help/import_pins.html` walks through the Takeout process)
 * ~~Ensure fully sanitized user input for pin names, location names, etc, which are passed into external urls. Require strict character sets, min/max lengths, and so on. [UL-143]~~ (added `naming.sanitize_name` - an allowlisted-charset sanitizer invoked from `Pin`/`Wiki`/`Location`/alias `save()`, so it applies regardless of write path; length limits were already enforced via each field's `max_length`)
 * UI: Edit category dialog [UL-146]
 * UI: Bulk edit category dialog (buttons are awful) [UL-147]
@@ -61,7 +61,7 @@ Features planned for this release.
 * Changing badge icon / color in organize doesn't immediately trigger cache update. [UL-279]
 ---
 * ~~Throughout site: tooltips clip (overflow: hidden) [UL-280]~~ (the JS float portal that already escaped `overflow:hidden` was opt-in per-trigger; made it the default for every `[data-tooltip]` instead)
-* Consider again: Pin count while filtering [UL-281]
+* ~~Consider again: Pin count while filtering [UL-281]~~ (main map shows a "pins shown" counter while filtering, behind the `show_filtered_pin_count` view option)
 
 ## Optimizations / Latency
 * Adding a pin to the map. [UL-36]
@@ -72,17 +72,17 @@ Features planned for this release.
 * Provide secondary safeguards for permissions. [UL-39]
 
 ## Features that need verification
-* password reset. [UL-41]
+* ~~password reset. [UL-41]~~ (custom E2EE-aware flow - `E2EEPasswordResetConfirmView` - with app-styled templates and reset emails)
 * Verify Feature: Possible issue with then pulling or displaying visit history entries. [UL-114]
 * ~~Verify Feature: On the pin details page, if the smithsonian archive section is empty, then hide it. [UL-115]~~
 * ~~Verify Feature: On the pin details page, there is a notes section and a comments section. But only one is needed. Keep comments, but remove the notes. Attempt to display a street address for the pin, assuming we can figure out what that address would be, and make sure that address is cached so we don't have to contact an external api multiple times. [UL-116]~~
 * Verify Feature: When performing google or brave searches, add the street name, city, and state to the search query as optional keywords, to help disambiguate with unrelated results. [UL-117]
-* Support partial cache updates, instead of refreshing the cache for all pins at once. [UL-22]
-* Limit failed login attempts. [UL-28]
+* ~~Support partial cache updates, instead of refreshing the cache for all pins at once. [UL-22]~~ (pin cache is tile-based, with per-pin partial updates via `updateCachedPin`/`_refreshPinInStore`)
+* ~~Limit failed login attempts. [UL-28]~~ (per-username failed-attempt counter + cache-backed lockout, configurable via `SiteSettings.login_max_attempts`/`login_lockout_minutes`)
 * Add metadata for emojis (i.e. icons) to aid in searching for them. [UL-12]
-* When creating maps for comments, allow using street mode, satellite mode, or topographic mode for the default view. [UL-13]
-* Discord SSO [UL-11]
-* "Don't leave page" dialog before a settings page is fully saved. [UL-9]
+* ~~When creating maps for comments, allow using street mode, satellite mode, or topographic mode for the default view. [UL-13]~~ (`MarkupMap.layer_mode` saves a street/satellite/topographic/dark default view)
+* ~~Discord SSO [UL-11]~~ (`DiscordOAuth2` backend wired, incl. a pipeline step saving the Discord username as a social link)
+* ~~"Don't leave page" dialog before a settings page is fully saved. [UL-9]~~ (global `autosaveGuard` in base.html blocks unload while dirty or a save is in flight)
 * Clicking outside of a dialog closes it, which is great. But clicking in the dialog and dragging outside unexpectedly closes it. [UL-32]
 * ~~On the public profile page, when saving a note, the note section is duplicated. [UL-112]~~ (already fixed - `hx-swap` corrected to `outerHTML`)
 * When in the main map and the trip details page, drag/drop of a pin shouldn't be as easy at higher zoom levels. Not sure what I want here. Confirmation dialog? Disable at higher zoom? [UL-33]
@@ -95,10 +95,10 @@ Features planned for this release.
 * Verify the UX for changing the kind of a badge (do other properties get updated too, and is that clear?) [UL-155]
 * ~~UI Bug in Dark Mode: Organize page -> Merge dialog doesn't show titles of cats being merged. [UL-191]~~
 * Verify: Child trips work as expected. [UL-228]
-* Password reset should go to application page, not django password reset page. [UL-256]
+* ~~Password reset should go to application page, not django password reset page. [UL-256]~~ (reset templates are overridden and extend the app's `auth_base` theme)
 * Password reset should work elegantly with SSO users. [UL-257]
 * Celery / async tasks: Move slow operations (API calls, geocoding, import jobs) to Celery tasks; all non-instant UI operations must show a progress indicator and use toast notifications on completion or failure [UL-119]
-* In tools page, do only admins have access to the db backup tool? I guess we should probably move that to an admin-only page to be certain. (also, page width is wrong). [UL-282]
+* ~~In tools page, do only admins have access to the db backup tool? I guess we should probably move that to an admin-only page to be certain. (also, page width is wrong). [UL-282]~~ (backups live on a separate admin-only tools page behind `PermissionRequiredMixin`; page width not re-verified)
 
 # Future Features
 Features planned for future releases.
@@ -107,14 +107,14 @@ Features planned for future releases.
 * On the profile page, if the user has instagram linked, then show a section with the most recent instagram posts for that user. [UL-44]
 * Allow users to specify their signal username. Ideally, make it easy for users to add them to their signal contacts if it's provided. [UL-45]
 * On the pin details and location wiki pages, we want to be able to show the property ownership records. However, there is not a consistent database to access that information that I'm aware of. Therefore, we need to have a strategy for looking up that information per county. To accomplish this, we need to create code to use AI to determine where to find that information for the given county, attempt to access the record for the given location, and if that's successful, then save the strategy used to the DB so that the same strategy can be used for other addresses in that county in the future. [UL-46]
-* Visit logs can include photos or maps with markup, if the user desires. [UL-48]
-* When user uploads a photo containing GPS data and a date, mark a visit log entry for that date, and attach the photo to it. [UL-49]
+* ~~Visit logs can include photos or maps with markup, if the user desires. [UL-48]~~ (`PinVisit.markup_map` FK + `Image.visit` FK)
+* ~~When user uploads a photo containing GPS data and a date, mark a visit log entry for that date, and attach the photo to it. [UL-49]~~ (photo ingest raises `VisitSuggestion`s; accepting creates the visit entry with the photo attached)
 * Full explanation (user friendly) to setup the app [UL-50]
 * Implement a report button for comments and other user content. I'm not certain how this should work given there cannot be a manual moderation system, by design, since the moderator would then be able to see pins they shouldn't otherwise be able to see. Some ideas: we could allow manual moderation but mask some details (including pin coordinates). We could allow manual moderation of comments and images in isolation without sharing pin details. We could implement a community-driven moderation system without giving access to anyone who can't already see the content. [UL-51]
 * API cost tracking and reporting. We should keep track of estimated costs for each individual user, so that future reporting strategies can be implemented that have access to legacy data. Track "hours used", and page loads for estimated CPU load cost, and track API costs by their actual cost at time of use. [UL-52]
 * Public "costs" reporting page for accountability, showing only combined costs for all users. [UL-53]
-* Messaging between users. [UL-55]
-* Request browser notification permissions for users. [UL-56]
+* ~~Messaging between users. [UL-55]~~ (full DM system with E2EE, search, reactions, and group chats)
+* ~~Request browser notification permissions for users. [UL-56]~~ (permissions client + browser-permissions settings UI; notification push partial requests permission)
 * Integrate gotify (?) for notifications to site admin. [UL-57]
 * Allow users to vote on making a location "public", which would share it to all users (if those users wish). This requires substantial thought to get just right. The upside is that it would substantially encourage use of the app for new users, who haven't yet imported their own pins, by pre-populating their map with well known locations that are not vulnerable. [UL-58]
 * "Get directions" button to send directions to their phone (or show on screen). [UL-59]
@@ -125,25 +125,25 @@ Features planned for future releases.
 * Types of friends: "connections", "friends", "close friends", etc? I'm not sure this is needed in light of people badges. However, the mobile app idea of "connect with explorer" would encourage adding someone as a connection without necessarily wanting them to be a friend. I suppose this is also useful in the web app if you regularly encounter someone you may want to DM or keep track of, but don't want them to be impacted by your privacy and sharing settings. [UL-66]
 * Outside of app error logging. Alerts on certain kinds of errors. [UL-69]
 * Address DDOS, spamming, etc. [UL-70]
-* Saved map searches ("My Bucket List", etc). [UL-71]
-* Allow importing of timeline data to mark pins as Visited [UL-118]
+* ~~Saved map searches ("My Bucket List", etc). [UL-71]~~ (`SavedFilter` with full CRUD on /lists/ plus map toolbar integration)
+* ~~Allow importing of timeline data to mark pins as Visited [UL-118]~~ (Takeout Semantic Location History import creates `PinVisit` records for matching pins)
 * Hypothesis unit tests: Add property-based tests wherever possible. [UL-120]
 * Discord Integration [UL-29]
 * Setup bug tracking (github issues?) [UL-1]
-* Share button on pin details page to share with a specific friend. [UL-20]
-* "Accept" / "Reject" shared pin for the user being shared with. [UL-21]
+* ~~Share button on pin details page to share with a specific friend. [UL-20]~~ (pin-share dialog on the pin detail page, loaded via `pin.share.dialog`)
+* ~~"Accept" / "Reject" shared pin for the user being shared with. [UL-21]~~ (`PinShare` pending/accepted/rejected statuses + accept/decline buttons on the notification via `pin.share.respond`)
 * Implement "hide user", and "mute user" features, alongside the existing "block user" feature. [UL-27]
 * Proper CI/CD pipeline, tags, releases, etc. [UL-25]
 * Support non-USA formats for dates, currency, distances via user settings. [UL-131]
 * Support non-English language. [UL-132]
 * User stats page (fun stats about the user: breakdown of pins by continent, etc). [UL-133]
-* Lists (these aren't strictly necessary, due to badges, but could allow users to create lists of unrelated things. Like "my favorite explores in February" or "1 Best Church in Each State"). [UL-134]
+* ~~Lists (these aren't strictly necessary, due to badges, but could allow users to create lists of unrelated things. Like "my favorite explores in February" or "1 Best Church in Each State"). [UL-134]~~ (`PinList` with slug URLs, detail pages, and smart lists)
 * During site setup, tests for features (i.e. "send test email" button) [UL-135]
 * Ensure rotating logs, purging cache data, etc, in the event of hacking incident. [UL-136]
 * Review API Key restrictions for cloud providers (e.g. referrer restrictions for google, etc) [UL-137]
 * Use remote secret store (maybe?) [UL-138]
 * Automatic backups [UL-139]
-* Users created with SSO should still get a password so they can login without SSO. [UL-156]
+* ~~Users created with SSO should still get a password so they can login without SSO. [UL-156]~~ (post-login `SetPasswordPromptView` prompts passwordless OAuth accounts once per session)
 * Ensure mobile-first. [UL-7]
 * On pin details page: Google Places information section, showing Google's place name, nearby photos, extra street view / 360 / etc views, google reviews, website, etc. [UL-157]
 * If a website exists, check if it is defunct, and check for recent activity. [UL-158]
@@ -152,8 +152,8 @@ Features planned for future releases.
 * Notepad import (AI Parsing) [UL-161]
 * XLS import [UL-162]
 * Ensure AI sandboxing. This isn't really necessary now, but would be necessary prior to any MCP usage for security reasons, and would also allow for local AI models. (ollama, etc) [UL-163]
-* Create separate logged-in homepage (small map, widgets, links to other pages, commonly visited pins, etc) [UL-164]
-* "View my profile as..." feature to help explain to user's how privacy settings are being applied. [UL-165]
+* ~~Create separate logged-in homepage (small map, widgets, links to other pages, commonly visited pins, etc) [UL-164]~~ (home overview page with activity panel, recent pins/wikis strips, and photo strip)
+* ~~"View my profile as..." feature to help explain to user's how privacy settings are being applied. [UL-165]~~ (`profile_preview` ghost-user simulation via middleware)
 * Badges that are created automatically: start them in a sensible priority order [UL-167]
 * Organize Page: Move badge to child of another just by dragging (maybe??) [UL-169]
 * Better emojis for: legal stuff (admission ticket, museum), underground, tunnel, sewer grate, hardhat. Verify we have: religions, languages, countries, urbex gear (boots, flashlight, backpack), photography stuff, time/calendar stuff (seasons?), greek letters, shapes (square, triangle, etc), ceramic tile (mosaic, etc), eyeglasses, book, magnifying glass, share symbol, muscle icon, weights, ninja, gavel, snake eating itself, better "repeat" arrow, "tag" icon (i.e. 'labelled'), save symbol, fleur d'lis [UL-170]
@@ -173,9 +173,9 @@ Features planned for future releases.
 * Main map: Some ability to go "back to home" quickly. [UL-187]
 * UI Bug: Bulk edit dialog -> visual bug for parent categories without an icon with respect to the tag chip and selector. [UL-190]
 * Organize page: Confirm before deleting badge with pins. [UL-192]
-* Bulk editing pins (based on search, badges, etc). For instance: Bulk set rating. [UL-193]
+* Bulk editing pins (based on search, badges, etc). For instance: Bulk set rating. [UL-193] (mostly done: `PinBulk*` views cover bulk edit of description/labels/parent plus bulk delete/merge/undo; bulk rating not yet)
 * Main Map: When searching, show loading overlay [UL-194]
-* Main map: Way to show pins as a list (particularly when searching). [UL-196]
+* ~~Main map: Way to show pins as a list (particularly when searching). [UL-196]~~ (pin-list side panel on the main map with edge-handle toggle)
 * Organize > Merge Dialog -> Make an effort to choose the best merge candidate. (The one with an icon, then most pins). Is this done already?? [UL-198]
 * Organize Page -> Allow reordering kind tabs somehow, to make understanding the feature set more accessible. [UL-200]
 * Organize Page > Edit Badge -> The first parent badges to show are the ones already selected. [UL-201]
@@ -187,10 +187,10 @@ Features planned for future releases.
 * ~~on client browser, const _PROFILE_ID = 1; is unnecessary and hints at vulnerabilities. [UL-208]~~
 * Main map: add pin dialog -> tags and categories picker has them in 2 sections, instead of standardized picker with other badge kinds and a search. Icon section is empty (no options). No option to make it private. Overall: This dialog should reuse existing components instead of redefining the dialog features. [UL-210]
 * BUG: Something I did caused a new pin to be created with a badge named "Unknown". My workflow started with the creation of a new pin by right-clicking on the main map. [UL-212]
-* Add FAQ to about page. [UL-217]
+* ~~Add FAQ to about page. [UL-217]~~ (implemented as a dedicated FAQ page with jump links)
 * Export Feature: Additional method of delivery in case the page is reloaded or closed. [UL-218]
 * Handle case where user has a comment, someone else replies to it, and then the original comment is deleted. [UL-219]
-* New Site Tool -> Delete My Data: Fully removes all the user's submitted data from everywhere on the site. [UL-220]
+* ~~New Site Tool -> Delete My Data: Fully removes all the user's submitted data from everywhere on the site. [UL-220]~~ (`account_deletion` controller + hypothesis coverage)
 * BUG: When loading main map, it initially loads a different location than the starting point, then after a second it refreshes. [UL-221]
 * "Import from map" feature to load pins from a different service (mapquest, google custom map, etc). Maybe? Does this encourage pin hoarding, or is it just useful? Is it even useful? [UL-222]
 * If task UL-222 is implemented, then we could have a "subscribe to map" feature that would automatically pull updates. [UL-223]
@@ -201,7 +201,7 @@ Features planned for future releases.
 * Trip Detail Page > Add Pin Dialog: "Proposed / Confirmed" toggle looks weird. Hide location checkbox doesn't have an active state. Explanation of hide location should be a tooltip, not raw text below. The option for a Child Trip is great, but it should replace the pin selection area, not look like it's a separate option from pin selection. [UL-230]
 * Trip Detail Page > Activities: After adding an activity with "hidden", the user who added the activity can't see the pin. That user should be able to, regardless of privacy settings... but we should show a "hidden" icon to make it clear that others may not see it. [UL-231]
 * UI Bug: Trip Details Page > Activity section: When no confirmed activities exist, and you click on the activity tab, the content section seems to disappear, rather than existing with no content. [UL-233]
-* Implement a few extra "undos". For instance: pin deletion, etc. [UL-234]
+* ~~Implement a few extra "undos". For instance: pin deletion, etc. [UL-234]~~ (undo framework with handlers for pin, trip, wiki, saved filter, and safety check-in, plus the Undo History page)
 * Handle case where a user is invited via one email address, but joins the site using a different email. [UL-235]
 * When a user signs up from an email invite link, they shouldn't need to verify their email again (assuming they provide the same email as the invite link was sent out to). [UL-236]
 * Friend request pipeline needs UX work. Clicking notification does nothing, and the notification doesn't include an accept/reject button. Going to your profile, you see the accept/reject buttons there... great! clicking accept makes the section go away (great!) but the friends section isn't refreshed to show the new connection, so the user is left confused if it worked or not. Dotted line is distracting. Add label dropdown isn't closed when clicking somewhere else. Hovering over stars doesn't show the filled in stars (this must reuse existing components, not reinvent the wheel). [UL-237]
@@ -218,11 +218,11 @@ Features planned for future releases.
 * "Organize a meetup", which would encourage a larger audience, encourage invitees to invite friends, etc. To prevent abuse, possibly: meetup pin would only be shown to those who already had it, and invitees could vote on whether it was too vulnerable to share? Idk. [UL-283]
 * Only check US-centric APIs (like loopnet, NPS, etc) when the location is in the USA. [UL-284]
 * Max zoom out on the map still isn't quite right. Try clamping? [UL-285]
-* Undo pin deletion feature. (Initially mark the pin as deleted, but only realize the deletion in X days. User can undo the action in a new page.) [UL-286]
+* ~~Undo pin deletion feature. (Initially mark the pin as deleted, but only realize the deletion in X days. User can undo the action in a new page.) [UL-286]~~ (implemented as immediate delete + restorable `UndoAction` snapshot with 7-day retention, undoable from the Undo History page)
 * Offline maps: mimicing other maps offline features, but tailored for areas around your known pins. For instance: offline maps for a trip would save data around each trip pin, entrance info, directions, etc, without needing to save offline info for the entire city. [UL-287]
 * pages/location/index.html and pages/location/satellite_view.html seem to have duplicate code. Confirm. [UL-288]
 * Move inline JS into separate TS files for performance, maintainability, typescript. [UL-289]
-* Community wiki: Average Danger/Rating/Vulnerability scores when 5+ people have pinned it. [UL-290]
+* ~~Community wiki: Average Danger/Rating/Vulnerability scores when 5+ people have pinned it. [UL-290]~~ (implemented as `WikiStatVote` - explicit 1-5 community votes with composite averages; no 5-pin gate, votes are opt-in instead)
 * Reorganize api services [UL-291]
 * Reorganize template partials [UL-292]
 * AI chat assistant to find, organize (add/remove badges), pin, etc. e.g. "Plan a trip to Washington DC" -> find 5 pins in DC that aren't visited, create trip, etc. Perhaps ask questions about invitees, visited/not visited, etc. [UL-293]
@@ -235,25 +235,25 @@ Features planned for future releases.
 * "max members per trip" is not really the problem... "max pin shares per time period" is. We need to track and cap that instead, including through trips. [UL-299]
 * After invite -> Edit profile doesn't visually look very good. [UL-300]
 * Bookmark to add a pin to the menu for quick access (maybe?) [UL-301]
-* 2FA [UL-302]
+* ~~2FA [UL-302]~~ (optional TOTP + WebAuthn passkeys + backup codes)
 * Tagging users in photos, and automatic face redactions based on user preferences. [UL-303]
 * Allow multiple email addresses to make it easier for other users to find you. [UL-304]
 * Allow searching by social media handle (maybe? We definitely need a user preference to allow this) [UL-305]
-* About / FAQ entries about privacy and consent. (no ips, no js tracking, consent first) [UL-306]
-* User option to opt-out of visit entry tracking. [UL-307]
-* Onboarding screen for "what do you care about", wherein they can opt out of everything privacy related. [UL-308]
+* ~~About / FAQ entries about privacy and consent. (no ips, no js tracking, consent first) [UL-306]~~ (FAQ has a full Privacy & sharing section, incl. IP-address reality-check copy)
+* ~~User option to opt-out of visit entry tracking. [UL-307]~~ (`history_enabled` toggle, offered during onboarding and in settings)
+* ~~Onboarding screen for "what do you care about", wherein they can opt out of everything privacy related. [UL-308]~~ (welcome onboarding page with history/community/external-API opt-out cards)
 * Consider: "anonymize me" setting. [UL-309]
 * User setting for "make pins always private" - unless they manually attach to a location. [UL-310]
-* "I didn't come home" feature can be implemented via email prior to mobile app. [UL-311]
+* ~~"I didn't come home" feature can be implemented via email prior to mobile app. [UL-311]~~ (safety check-in feature is email-based: escalation emails contacts with a tokenized status page)
 * Create visit entry by geolocation. [UL-312]
 * Specify / change API keys in admin settings (e.g. api key rotated, but we don't want to reboot to load new env) [UL-313]
-* "Memories" page, showing location history and location visits over time. [UL-314]
+* ~~"Memories" page, showing location history and location visits over time. [UL-314]~~ (/memories/ suite: feed, on-this-day, visits + map, photos, maps)
 * In the pin import dialog, allow unselect all / select all for each section, and "make all private" type functionality. Also allow applying badges to every section at once (maybe).
 * Pin Details Page: Google Image Search
 * Pin Details Page: Instagram location-tagged posts (subscription required? to discourage location-tagging).
 * When importing kmz, the suggested badge is "doc". It should be the filename.
 * Trip List > New Trip Dialog: Suggested title is "Detroit factory run". Generate a large number of other suggestions, so this doesn't get stale, and encourages trip planning. Also, trip name shouldn't be required.
-* Onboarding: Set general privacy preferences, letting the user balance "Features" vs "Privacy". For instance: turn off all Visit History tracking.
+* ~~Onboarding: Set general privacy preferences, letting the user balance "Features" vs "Privacy". For instance: turn off all Visit History tracking.~~ (same welcome onboarding page as UL-308 above)
 * Connect with immich / google photos / etc to automatically grab visit info based on timestamps and coordinate metadata.
 * Audit for XSS risks related to badge names, and all other fields, etc
 * Cleanup TODO file (This file). Remove completed, verify features, etc.
@@ -272,7 +272,7 @@ Features planned for future releases.
 * User settings page: AI Features section needs better explanations.
 * Create TOS -> I'm one person, please don't sue me. Safety checkin is best effort. For legal reasons, this site cannot advocate doing anything illegal.
 * More targetted exports. For instance: exporting all pins that match a certain search, or exporting just a list of pins (once lists are implemented). This would allow importing select things into another app without importing everything.
-* Create unit tests for typescript.
+* ~~Create unit tests for typescript.~~ (bun `test:ts` script, also run from pre-commit)
 * Markup: Dotted lines.
 * Badge merge dialog: Show a big, obvious visual displaying what badges will go into what other badge, and which badges will no longer exist.
 * On pin details page, allow dragging map vertically bigger, which saves between sessions.
@@ -370,7 +370,7 @@ Items previously listed in README.md that are not already tracked elsewhere in t
 ### Community
 * Ability to @ friends in comments, etc. [UL-330]
 * User list (with privacy settings). [UL-331]
-* Ability to view other user profiles by clicking on comments, etc. [UL-332]
+* ~~Ability to view other user profiles by clicking on comments, etc. [UL-332]~~ (comment author names link to `profile.view_user`)
 
 ### UI - General
 * Allow user to reorder pin details sections. [UL-333]
@@ -416,8 +416,8 @@ Items previously listed in README.md that are not already tracked elsewhere in t
 * Address is often incorrect Smithsonian results (AI filtering? Only names >= certain length?).
 
 ### Misc
-* User settings: Allow friend requests checkbox is missing. Should have additional option for "from users with one pin in common", "1 mutual", etc. [UL-346]
-* Clicking on notification should take you to the relevant page. [UL-347]
+* ~~User settings: Allow friend requests checkbox is missing. Should have additional option for "from users with one pin in common", "1 mutual", etc. [UL-346]~~ (`friend_request_visibility` setting with the shared visibility choices, incl. "anything in common")
+* ~~Clicking on notification should take you to the relevant page. [UL-347]~~ (notification items carry their target url and navigate on click; actionable types get inline buttons instead)
 * ~~Viewing notifications in the dropdown should mark them read. Not just clicking on them. [UL-348]~~ (already fixed - `NotificationDropdownView.get` marks fetched notifications read)
 * ~~Hide "(schedule) Never" in pin popup for last visited. This is already implied. [UL-349]~~ (the `.popup-meta` line is now omitted entirely when there's no last-visited date)
 

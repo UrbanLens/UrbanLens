@@ -1,7 +1,7 @@
 # UrbanLens Features
 
 A feature inventory of what UrbanLens currently supports, generated from a codebase audit
-(2026-07-11). This is a snapshot, not a promise — see `TODO.md` for what's planned or partially
+(2026-07-11, last verified/expanded 2026-07-18). This is a snapshot, not a promise — see `TODO.md` for what's planned or partially
 built, and `docs/NOTES.md` for non-obvious behavior behind these features.
 
 ## Mapping & Pins
@@ -20,10 +20,32 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
 - Per-pin alternate names (**aliases**) — private aliases on a Pin vs. shared aliases on a Wiki
 - Private per-pin notes (`PinNote`), independent of public comments
 - **Private per-pin Article** — Wikipedia-style long-form private notes per pin (sections, links, references) with full **revision history** (every saved version stored, restorable from the Edit History tab)
-- Pin sharing — share a single pin with one friend, including re-share chains
+- Pin sharing — share a single pin with one friend, including re-share chains; every share
+  records a provenance chain (`LocationExposure`) of how a location reached each user
 - Import/export: Google Takeout (Saved Places, Location History, My Activity), GPX, GPX tracks,
   OSM XML, Shapefile, WKT/WKB, KML/KMZ; AI-assisted import from freeform documents/notes
 - Data export/import of a user's full dataset, plus scheduled/on-demand backups
+
+## Search & Navigation
+
+- Logged-in home page (`/dashboard/home/`) — a private activity-overview dashboard
+- **Global search** (navbar, Ctrl+K) across result types (pins, wikis, photos, trips,
+  messages, …) with lightweight natural-language parsing ("photos from last summer",
+  "pins in Cincinnati", "pins near me", "messages from Alice"), pg_trgm typo tolerance,
+  and a plain-text fallback when no structured interpretation matches
+
+## Lists & Saved Filters
+
+- **Pin lists** — ordered, slug-addressed collections of pins with their own detail page
+  (list-scoped map using the shared toolbar/layers, drag-to-reorder, bulk add from the current
+  map filter); create a trip from a list, add a list's pins to an existing trip, or generate a
+  markup map from one
+- **Smart lists** — lists auto-populated from saved-filter criteria and resynced automatically
+  as pins and labels change
+- **Saved filters** — reusable filter configurations with full CRUD (managed alongside lists at
+  `/lists/`), name suggestion, live match counts, and geographic include/exclude polygon
+  regions selected via boundary search; usable from the map's filter sidebar and as smart-list
+  criteria
 
 ## Locations & Community Wiki
 
@@ -62,6 +84,12 @@ On-demand, cached lookups shown as panels on the pin detail page:
 All external integrations are cached (DB-backed, per-Location) and rate-limited per service, with
 usage tracked in `ApiCallLog`/`ApiRateLimit` and toggled at `/site-admin/api-limits/`.
 
+Beyond on-demand fetches, an hourly **background enrichment** task drips high-value lookups
+(official names, aliases, street addresses, building boundaries) into whatever rate-limit budget
+is left over after real traffic, spread evenly so multi-day quotas can't be burned in one day.
+Sources are plugin-contributable (`EnrichmentSource`) and admin-tunable (run window, reserve
+buffer, per-run caps).
+
 ## Extensibility: Plugin System
 
 Third-party integrations are packaged as **plugins** (`dashboard/plugins/builtin/`) — see
@@ -81,6 +109,10 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
   for Timeline, Photos, Maps, Sharing, Journal, and Visits; date range filter with presets
   (Last 90 days / Last year / All time); "Import routes & history" for importing GPS tracks and
   location history (separate from the map's pin import flow)
+- **Pin suggestions** — batch photo-location ingestion (a client-side local-folder scanner on
+  the Tools page, or a full Immich library sweep) matches photo GPS against existing pins and
+  clusters the rest into suggested new pins, reviewed on a multi-select map with bulk accept,
+  pagination, and opt-in photo import
 - Storage quota accounting per user (role-based), automatic downscaling/WebP conversion on upload
 
 ## Trips
@@ -181,7 +213,12 @@ User-defined private fields for **pins**, **photos**, **people**, and **maps**. 
 - AI-assisted import: extract pins from freeform documents/notes
 - AI-assisted label styling: suggest colors/icons for auto-created labels
 - Keyword-based and AI-assisted auto-tagging of pins/wikis
-- **AI link analysis** — when a pin has external links, AI reads the linked pages in the background and fills in relevant fields; completion shown as a notification
+- **AI link extraction** — a per-link sparkle button (on the pin's Links card and inside
+  external-data panels such as web search, Wikipedia, LoopNet, and news results) has AI read the
+  linked page and extract allowlisted structured fields (date built, date abandoned, owner
+  name/company, sale date/price, aliases) into the pin; admin-settable per-user daily limit, a
+  review page (`/ai/extractions/`) for results that couldn't be applied automatically, and a
+  completion notification
 - **Local keyword tagging** — entirely local (no AI or network call), keyword-match auto-categorize / auto-tag / auto-status on pin save; master toggle + per-type sub-toggles in Settings → Connections
 
 ## REST API
@@ -199,6 +236,11 @@ DRF `ModelViewSet`s under `/dashboard/rest/`, session-authenticated:
 - Rich compose toolbar: image attachment, share location/map, share pin, @mention, emoji
 - Read receipts, online status indicator, typing indicator (visibility of each configurable per user)
 - Per-message emoji reactions
+- Message search — within a single conversation or across all of them, with jump-to-message
+  scroll and highlight
+- Coordinates and street addresses pasted in chat are auto-detected and offered a one-click
+  "Add to my map"
+- Pin sharing into group chats, with per-member accept/reject
 - **Disappearing messages** — configurable per-account expiry (never / on read / 1 day / 30 days / 90 days / 1 year)
 - E2E encryption key management in Settings → Messages: view or reset recovery key; old messages
   encrypted under a rotated key are shown inline as "Unable to decrypt on this device" with a lock icon
@@ -207,5 +249,7 @@ DRF `ModelViewSet`s under `/dashboard/rest/`, session-authenticated:
 ## Real-time (WebSockets)
 
 - `ws/notifications/` — live notification push per logged-in user
+- `ws/messages/` — direct-message delivery, typing indicators, read/open tracking, and
+  reaction updates for DMs and group chats (with an HTTP fallback for sending)
 - `ws/safety/checkin/<uuid>/chat/` and `ws/safety/contact/<token>/chat/` — safety check-in chat,
   shared between the check-in owner and emergency contacts

@@ -5,12 +5,6 @@
 
 ### Map, log, and share the places worth exploring.
 
-[CI](https://github.com/UrbanLens/UrbanLens/actions/workflows/ci.yml)
-[Security](https://github.com/UrbanLens/UrbanLens/actions/workflows/security.yml)
-[Release Please](https://github.com/UrbanLens/UrbanLens/actions/workflows/release-please.yml)
-
-
-
 ---
 
 
@@ -21,13 +15,19 @@ UrbanLens is a web mapping platform for photographers and urban explorers. It gi
 
 ## Feature Highlights
 
-- **Interactive mapping** — pin locations, draw campus/boundary areas, and browse layered map views built on Leaflet + HTMX
-- **Personal notes & status** — track visit status, priority, and private notes per pin, independent of the shared location data
-- **Trip planning** — organize multi-stop trips with friends, RSVPs, and scheduling
-- **Social layer** — friendships, reviews, and shared trips
-- **Location intelligence** — on-demand enrichment from external sources (weather, Wikipedia, Wikimedia Commons, National Park Service, and others), cached to keep API usage in check
-- **Photo galleries** — attach and browse images per pin and per location
-- **Responsible-exploration ethos** — the product is built around discretion and respect for the places it helps you track, not public broadcasting
+- **Interactive mapping** — layered Leaflet map with a filter sidebar, boundary drawing, bulk pin operations, markup/annotation maps, and HTMX-driven panels
+- **Personal pins over shared locations** — private notes, status, priority, aliases, custom fields, and long-form per-pin articles with revision history, kept separate from the shared location record
+- **Lists & saved filters** — slug-addressed pin collections, reusable filter configurations with geographic include/exclude regions, and smart lists that resync automatically
+- **Community wikis** — opt-in, community-editable pages per location with danger/rating stat voting and edit history; visible only to users who have discovered the location
+- **Location intelligence** — on-demand and budget-aware background enrichment from dozens of sources (Wikipedia, Wikimedia Commons, Smithsonian, Library of Congress, NPS, USGS historical topo maps, EPA/census regional data, weather, satellite and street-view carousels), cached and rate-limited, extensible via a plugin system
+- **Trip planning** — multi-stop trips with friends, RSVPs, per-activity voting, comments, and two-way Google Calendar sync
+- **Photos & Memories** — galleries with EXIF/GPS extraction and dedupe, visit suggestions from unfiled photos, timeline/"on this day" retrospectives, Immich and Google Photos import
+- **Safety check-ins** — "I didn't come home" alerts that escalate to emergency contacts, with a tokenized no-login contact portal and live chat
+- **End-to-end encrypted messaging** — 1:1 and group chats with reactions, disappearing messages, message search, and pin/location sharing
+- **Social layer** — friendships, granular per-field profile visibility, reviews, and comments with mentions and reactions
+- **AI assistance** — pluggable provider gateway (OpenAI, Cloudflare, Hugging Face) for import-from-notes, auto-tagging, and structured link extraction
+- **Import/export** — Google Takeout, GPX, KML/KMZ, OSM XML, Shapefile, WKT/WKB; full-account export plus scheduled backups
+- **Responsible-exploration ethos** — discovery-gated wikis and discretion by design, not public broadcasting
 
 
 
@@ -38,9 +38,9 @@ UrbanLens is a web mapping platform for photographers and urban explorers. It gi
 | --------------- | ------------------------------------------------------------------------------------------------------------ |
 | Backend         | Django + Django REST Framework, Channels (WebSockets), Celery                                                |
 | Database        | PostgreSQL with PostGIS (geospatial queries)                                                                 |
-| Frontend        | HTMX-first interactivity, Mapbox GL for maps, TypeScript/TSX where JS is unavoidable, SCSS, bundled with Bun |
+| Frontend        | HTMX-first interactivity, Leaflet for maps, TypeScript/TSX where JS is unavoidable, SCSS, bundled with Bun   |
 | Geospatial      | GeoDjango, GeoPandas, Shapely, FastKML, geopy                                                                |
-| Auth            | Django auth plus Google and Discord OAuth                                                                    |
+| Auth            | Django auth plus Google and Discord OAuth, passkeys (WebAuthn), and TOTP 2FA                                 |
 | External data   | Google Maps/Places/Search, OpenWeatherMap, Smithsonian, National Park Service, OpenAI, and more              |
 | Quality tooling | Ruff, MyPy, pytest-django, Hypothesis, pre-commit                                                            |
 

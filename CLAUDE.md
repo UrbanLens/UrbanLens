@@ -8,6 +8,8 @@ UrbanLens is a Django-based web mapping application for photographers and urban 
 
 **This project is under active development.** Irregularities, inconsistencies, or suboptimal patterns in existing code are bugs to be fixed - not conventions to follow or replicate. When something looks wrong, it probably is.
 
+**Before assuming a feature doesn't exist, check `docs/FEATURES.md`** - a maintained inventory of everything already built (mapping/pins, lists/smart lists/saved filters, wikis, trips, safety check-ins, E2EE direct messages + group chats, notifications matrix, photos/Memories, plugin system, AI integration, passkeys/TOTP, undo framework, site admin, and more). Many "new feature" requests are already implemented or have reusable infrastructure (e.g. a generic height-based client pagination system, a shared visit dialog, shared map toolbar/layers components, the undo framework). `docs/NOTES.md` explains non-obvious behavior behind features; `docs/plugins.md` documents the plugin contribution API.
+
 ## Development Environment
 
 - **Development machine**: Windows. Use **PowerShell** for all terminal commands requiring access to project files - the Bash
@@ -153,7 +155,8 @@ docs/
 - **Backend**: Django >= 5.1.6, Django REST Framework, Channels (WebSockets)
 - **Database**: PostgreSQL with PostGIS for geospatial queries
 - **Frontend**: SCSS, TypeScript/TSX, Bun bundler, **HTMX** for interactivity
-- **Authentication**: Django auth + social-auth (Google OAuth2, Discord OAuth2)
+- **Authentication**: Django auth + social-auth (Google OAuth2, Discord OAuth2), passkeys (WebAuthn) + TOTP 2FA
+- **Async tasks**: Celery (note the dedicated `panel_fetch` queue for pin-detail panel fetches; CPU-heavy panels opt out via `PanelSource.queue`)
 - **Geospatial**: django-gis, GeoPandas, Shapely, FastKML, geopy
 - **APIs integrated**: OpenAI, Google Places/Maps/Search, Smithsonian, OpenWeatherMap, NPS, and others
 - **Other**: Ruff, MyPy, pytest-django, Model Bakery
@@ -214,6 +217,11 @@ dashboard/
 └-- friendship/   → FriendController
 ```
 
+User-facing objects are increasingly **slug-addressed**: trips are `/trips/<slug>/` (not uuid),
+pin lists are slug-based (PinList has no `uuid` field). Prefer slugs for new URLs. Check
+`dashboard/urls.py` for the full current route map (lists, trips, messages, memories, safety,
+settings, site-admin, etc.).
+
 ### Frontend & HTMX Philosophy
 
 **HTMX is the preferred approach for all interactivity.** New features should use HTMX (hx-get, hx-post, hx-swap, etc.) to request server-rendered HTML fragments, minimizing hand-written JavaScript. Reach for JavaScript only when HTMX cannot accomplish the interaction (e.g., Leaflet map manipulation, drag-and-drop, real-time updates). Every existing JS-heavy interaction is a candidate for HTMX refactoring.
@@ -250,13 +258,23 @@ Custom runner in `urbanlens.core.tests.runner.TestRunner` (extends DiscoverRunne
 
 Do not create unit tests for trivial code, such as __init__.py, or to test that a logging message precisely matches a string, especially when it will cause extremely minor changes to result in tests failing. Make sure to mock and patch appropriately, especially when testing anything that contacts an external service. Add hypothesis property-based unit tests whenever possible.
 
+**Test-running gotchas**:
+- **Use pytest, not `manage.py test`**: `manage.py test` never sets the `TESTING` flag, so any
+  test rendering a full page template hits a staticfiles-manifest 500.
+- **Always set `UL_TEST_DB_NAME`** to a unique value when running pytest, so parallel agent
+  sessions don't collide on the test database.
+- **Hypothesis `@given` and `self.client` don't mix** in this repo's TestCase - the test client
+  keeps state across generated examples. Use `@given` for pure logic; use plain tests for views.
+- When a user reports a bug you plan to fix, first reproduce it with a failing unit test (TDD),
+  then fix - the test guards against regression.
+
 ## Roadmap / Known TODOs
 
 These are planned features - treat any missing implementation as a gap to fill, not a deliberate omission:
 
-- **AI support**: Add AI-assisted suggestions and customization throughout the application (OpenAI integration exists, extend it)
+- **AI support**: Add AI-assisted suggestions and customization throughout the application (a pluggable AI gateway with import/tagging/link-extraction features exists - extend it)
 - **API cost tracking**: Log and aggregate cost estimates on every external API call
-- **Celery / async tasks**: Move slow operations (API calls, geocoding, import jobs) to Celery tasks; all non-instant UI operations must show a progress indicator and use toast notifications on completion or failure
+- **Celery / async tasks**: Celery is in place - keep moving remaining slow operations (API calls, geocoding, import jobs) onto it; all non-instant UI operations must show a progress indicator and use toast notifications on completion or failure
 - **Hypothesis unit tests**: Add property-based tests wherever possible.
 
 ## UI & UX Standards
@@ -273,9 +291,41 @@ These are planned features - treat any missing implementation as a gap to fill, 
 3. PostGIS geo queries use django-gis operators (`__distance_lte`, `__contains`, etc.)
 4. Settings are split: Django config in `settings/base.py`, app-level env-driven config in `settings/app.py` (Pydantic)
 
-## Testing
+## Gotchas
 
-When the user points out incorrect behavior and bugs, and you plan to replicate the behavior, you should do that by creating a unit tests via TDD. That unit test will then be useful after fixing the problem to ensure the behavior does not return.
+**Signals & saves**
+- Never call `save()` inside a `post_save` handler or `__str__` - use `queryset.update()` for
+  side-effect writes. Always pass `dispatch_uid` when connecting signals.
+- The linter has been observed stripping early-return guards from signal handlers; write handlers
+  so the guard is redundant rather than load-bearing.
+
+**Migrations**
+- In any migration chain, index creation goes dead last (after schema/data/cleanup steps).
+- For a new nullable+unique field, add `unique=True` directly in the `AddField` - the
+  AddField-then-AlterField dance creates a duplicate index.
+- `RenameIndex` runs immediately even when `CreateModel` indexes are deferred - beware when
+  squashing.
+
+**Templates & HTMX**
+- `htmx:afterSwap` fires before `showModal()` - initialize Leaflet maps inside dialogs from the
+  after-request handler, not afterSwap.
+- To make the page hero OOB-swappable, pass `id=` into the `_page_hero.html` include; never wrap
+  it in a div.
+- `_pagination_controls.html` assumes `request.path` is stable - for dual-rendered partials,
+  hardcode `{% url %}` instead.
+- Django's `page.next_page_number()` raises when exhausted and `|default:` does not catch it -
+  branch the whole tag on `has_next`.
+
+**Frontend caches**
+- `pin-cache.ts` has a `CACHE_VERSION` constant that must be bumped whenever the pin payload
+  shape changes - it goes silently stale otherwise.
+- Non-map pages invalidate the map's pin cache via the `ul_pins_dirty` localStorage flag.
+
+**Other**
+- Any new pin/location share path must call `resolve_origin_share` + `record_share_exposure` to
+  keep the `LocationExposure` provenance chain intact.
+- `EncryptedTextField` derives its key from Django `SECRET_KEY` - changing it corrupts all
+  encrypted data (Immich tokens, etc.).
 
 ## Additional Notes
 Keep in mind that the application is in a beta state, and if you notice quirks, bugs, or poorly implemented code, it should not be assumed that this is by design. Investigate and fix problems that you identify. If you can't fix or investigate a problem in the current scope of your work, immediately note the problem in a file docs/PROBLEMS.md to investigate and address later.

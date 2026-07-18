@@ -439,10 +439,18 @@ class _RateLimitedSession:
 
 
 class RequestCancelledError(DashboardError):
-    """Raised when a request is cancelled."""
+    """Raised when a request is cancelled.
 
-    def __init__(self, service: str) -> None:
-        super().__init__(f"Request cancelled for service '{service}'")
+    Args:
+        service: The rate-limiter service key the cancelled request targeted.
+        message: Optional message override for subclasses; without it, the
+            subclass's formatted message would be mistaken for the service
+            name and wrapped again (e.g. ``Request cancelled for service
+            'Rate limit exceeded for service 'nps'''``).
+    """
+
+    def __init__(self, service: str, message: str | None = None) -> None:
+        super().__init__(message or f"Request cancelled for service '{service}'")
         self.service = service
 
 
@@ -450,13 +458,11 @@ class RateLimitExceededError(RequestCancelledError):
     """Raised when a rate limit prevents an API call from proceeding."""
 
     def __init__(self, service: str) -> None:
-        super().__init__(f"Rate limit exceeded for service '{service}'")
-        self.service = service
+        super().__init__(service, f"Rate limit exceeded for service '{service}'")
 
 
 class ServiceDisabledError(RequestCancelledError):
     """Raised when a service is disabled."""
 
     def __init__(self, service: str) -> None:
-        super().__init__(f"Service '{service}' is disabled")
-        self.service = service
+        super().__init__(service, f"Service '{service}' is disabled")
