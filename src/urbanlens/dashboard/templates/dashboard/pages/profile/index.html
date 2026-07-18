@@ -777,6 +777,209 @@ function panToggleEdit(noteId) {
         },
     });
 
+    // -- Identity fields (email / username / name) - unlike the fields above,
+    // their endpoint branches perform real validation (email format +
+    // uniqueness, username format + availability) and return the specific
+    // failure reason as JSON, sometimes with a 200 status (the dates branch)
+    // and sometimes 4xx - so these save via a shared helper that surfaces
+    // the server's own message instead of a generic failure toast.
+    function postFieldWithErrors(field, value) {
+        var body = new URLSearchParams();
+        body.set('field', field);
+        body.set('value', value);
+        return fetch(updateUrl, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrftoken },
+            body: body,
+        }).then(function (r) {
+            return r.json().catch(function () { return {}; }).then(function (data) {
+                if (!r.ok || data.error) throw new Error(data.error || 'Something went wrong.');
+                return data;
+            });
+        });
+    }
+
+    function wireIdentityField(config) {
+        var el = document.querySelector(config.selector);
+        if (!el) return;
+
+        function startEdit() {
+            if (el.querySelector('input')) return;
+            var textEl = config.textSelector ? el.querySelector(config.textSelector) : null;
+            var target = textEl || el;
+            var rawValue = el.dataset[config.dataKey] || '';
+            var input = document.createElement('input');
+            input.type = config.inputType || 'text';
+            input.className = 'profile-meta-input';
+            input.value = rawValue;
+            if (config.maxLength) input.maxLength = config.maxLength;
+
+            var displayHTML = target.outerHTML;
+            target.replaceWith(input);
+            input.focus();
+            input.select();
+
+            var done = false;
+            function finish(save) {
+                if (done) return;
+                done = true;
+                var newValue = input.value.trim();
+                if (save && newValue !== rawValue.trim() && newValue) {
+                    postFieldWithErrors(config.field, newValue)
+                        .then(function () {
+                            el.dataset[config.dataKey] = newValue;
+                            input.outerHTML = config.renderText(newValue);
+                            if (typeof toastr !== 'undefined') toastr.success(config.successMessage);
+                            if (config.afterSave) config.afterSave(newValue);
+                        })
+                        .catch(function (err) {
+                            input.outerHTML = displayHTML;
+                            if (typeof toastr !== 'undefined') toastr.error(err.message || 'Something went wrong.');
+                        });
+                } else {
+                    input.outerHTML = displayHTML;
+                }
+            }
+
+            input.addEventListener('blur', function () { finish(true); });
+            input.addEventListener('keydown', function (e) {
+                e.stopPropagation();
+                if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+                else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+            });
+        }
+
+        el.addEventListener('click', startEdit);
+        el.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); startEdit(); }
+        });
+    }
+
+    wireIdentityField({
+        selector: '.profile-email-editable',
+        textSelector: '.profile-meta-text',
+        dataKey: 'rawEmail',
+        field: 'email',
+        inputType: 'email',
+        maxLength: 254,
+        successMessage: 'Email updated.',
+        renderText: function (value) {
+            return '<span class="profile-meta-text">' + htmlEscape(value) + '</span>';
+        },
+    });
+
+    wireIdentityField({
+        selector: '.profile-username-editable',
+        dataKey: 'rawUsername',
+        field: 'username',
+        maxLength: 30,
+        successMessage: 'Username updated.',
+        renderText: function (value) {
+            return '<span class="profile-username-editable" tabindex="0" role="button" data-raw-username="' + htmlEscape(value) + '" title="Click to change your username">' + htmlEscape(value) + '</span>';
+        },
+        afterSave: function (value) {
+            // The username is also the name-editable element's fallback
+            // display (when first/last are empty) - keep its copy fresh.
+            var nameEl = document.querySelector('.profile-name-editable');
+            if (nameEl) {
+                nameEl.dataset.username = value;
+                if (!(nameEl.dataset.rawFirst || nameEl.dataset.rawLast)) nameEl.textContent = value;
+            }
+            // Re-wire: renderText replaced the element wholesale, so the
+            // original listeners are gone.
+            wireIdentityField({
+                selector: '.profile-username-editable', dataKey: 'rawUsername', field: 'username', maxLength: 30,
+                successMessage: 'Username updated.',
+                renderText: this.renderText, afterSave: this.afterSave,
+            });
+        },
+    });
+
+    // Name is two backend fields (first_name/last_name) - a single click
+    // swaps in two side-by-side inputs; focus leaving BOTH saves whichever
+    // changed (two independent single-field POSTs, matching the endpoint's
+    // per-field shape); Escape anywhere cancels both.
+    (function wireNameField() {
+        var el = document.querySelector('.profile-name-editable');
+        if (!el) return;
+
+        function startEdit() {
+            if (el.querySelector('input')) return;
+            var rawFirst = el.dataset.rawFirst || '';
+            var rawLast = el.dataset.rawLast || '';
+            var displayText = el.textContent;
+
+            var wrap = document.createElement('span');
+            wrap.className = 'profile-name-edit-wrap';
+            var firstInput = document.createElement('input');
+            firstInput.type = 'text';
+            firstInput.className = 'profile-meta-input';
+            firstInput.placeholder = 'First name';
+            firstInput.value = rawFirst;
+            firstInput.maxLength = 150;
+            var lastInput = document.createElement('input');
+            lastInput.type = 'text';
+            lastInput.className = 'profile-meta-input';
+            lastInput.placeholder = 'Last name';
+            lastInput.value = rawLast;
+            lastInput.maxLength = 150;
+            wrap.appendChild(firstInput);
+            wrap.appendChild(lastInput);
+
+            el.textContent = '';
+            el.appendChild(wrap);
+            firstInput.focus();
+            firstInput.select();
+
+            var done = false;
+            function restore() {
+                el.textContent = displayText;
+            }
+            function finish(save) {
+                if (done) return;
+                done = true;
+                var newFirst = firstInput.value.trim();
+                var newLast = lastInput.value.trim();
+                if (!save || (newFirst === rawFirst.trim() && newLast === rawLast.trim())) {
+                    restore();
+                    return;
+                }
+                var saves = [];
+                if (newFirst !== rawFirst.trim()) saves.push(postFieldWithErrors('first_name', newFirst));
+                if (newLast !== rawLast.trim()) saves.push(postFieldWithErrors('last_name', newLast));
+                Promise.all(saves)
+                    .then(function () {
+                        el.dataset.rawFirst = newFirst;
+                        el.dataset.rawLast = newLast;
+                        var full = (newFirst + ' ' + newLast).trim();
+                        el.textContent = full || el.dataset.username || '';
+                        if (typeof toastr !== 'undefined') toastr.success('Name updated.');
+                    })
+                    .catch(function (err) {
+                        restore();
+                        if (typeof toastr !== 'undefined') toastr.error(err.message || 'Failed to update name.');
+                    });
+            }
+
+            // Save only when focus leaves BOTH inputs (tabbing between them
+            // must not trigger a save mid-edit).
+            wrap.addEventListener('focusout', function (e) {
+                if (e.relatedTarget && wrap.contains(e.relatedTarget)) return;
+                finish(true);
+            });
+            wrap.addEventListener('keydown', function (e) {
+                e.stopPropagation();
+                if (e.key === 'Enter') { e.preventDefault(); document.activeElement.blur(); }
+                else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+            });
+        }
+
+        el.addEventListener('click', startEdit);
+        el.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); startEdit(); }
+        });
+    }());
+
     function htmlEscape(s) {
         var div = document.createElement('div');
         div.textContent = s;

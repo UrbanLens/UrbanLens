@@ -289,6 +289,35 @@
     }
 }
 
+// Click-to-edit-in-place identity fields in the hero (name/username/email)
+.profile-name-editable,
+.profile-username-editable,
+.profile-email-editable {
+    cursor: pointer;
+    border-radius: 6px;
+    padding: .1rem .3rem;
+    margin: -.1rem -.3rem;
+    transition: background .15s;
+
+    &:hover,
+    &:focus-visible {
+        background: var(--ul-grey-0a);
+        outline: none;
+    }
+}
+
+.profile-name-edit-wrap {
+    display: inline-flex;
+    gap: .4rem;
+    flex-wrap: wrap;
+
+    .profile-meta-input {
+        font-size: 1rem;
+        font-weight: 500;
+        max-width: 11rem;
+    }
+}
+
 // Stats row
 .profile-stats-row {
     display: flex;

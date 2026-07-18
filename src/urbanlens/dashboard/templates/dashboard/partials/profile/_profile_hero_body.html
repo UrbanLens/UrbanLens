@@ -38,12 +38,23 @@ Expects:
     <div class="profile-name-row">
         <div{% if profile.user == request.user %} class="ul-privacy-hint-row"{% endif %}>
             <h1 class="profile-full-name">
+                {% if profile.user == request.user and not edit_mode %}
+                <span class="profile-name-editable" tabindex="0" role="button"
+                      data-raw-first="{{ profile.first_name|default:'' }}" data-raw-last="{{ profile.last_name|default:'' }}"
+                      data-username="{{ profile.username }}" title="Click to edit your name">{% if profile.full_name %}{{ profile.full_name }}{% else %}{{ profile.username }}{% endif %}</span>
+                {% else %}
                 {% if profile.full_name %}{{ profile.full_name }}{% else %}{{ profile.username }}{% endif %}
+                {% endif %}
                 {% if profile.user == request.user %}
                 {% include "dashboard/partials/ui/_privacy_hint.html" with label="Name, avatar & bio" value=profile.get_profile_visibility_display field="profile_visibility" raw_value=profile.profile_visibility owner=profile %}
                 {% endif %}
             </h1>
+            {% if profile.user == request.user and not edit_mode %}
+            <p class="profile-username">@<span class="profile-username-editable" tabindex="0" role="button"
+                  data-raw-username="{{ profile.username }}" title="Click to change your username">{{ profile.username }}</span></p>
+            {% else %}
             <p class="profile-username">@{{ profile.username }}</p>
+            {% endif %}
         </div>
 
         {# -- Friendship actions (only when viewing another user) -- #}
@@ -197,7 +208,15 @@ Expects:
         </span>
         {% endif %}
         {% endif %}
-        {% if profile.email and can_view_contact %}
+        {% if profile.user == request.user and not edit_mode %}
+        <span class="profile-meta-item ul-privacy-hint-row">
+            <span class="profile-email-editable" tabindex="0" role="button"
+                  data-raw-email="{{ profile.email|default:'' }}" title="Click to change your email">
+                <i class="material-symbols-outlined">email</i><span class="profile-meta-text">{{ profile.email|default:"Add email..." }}</span>
+            </span>
+            {% include "dashboard/partials/ui/_privacy_hint.html" with value=profile.get_contact_visibility_display field="contact_visibility" raw_value=profile.contact_visibility owner=profile %}
+        </span>
+        {% elif profile.email and can_view_contact %}
         <span class="profile-meta-item{% if profile.user == request.user %} ul-privacy-hint-row{% endif %}">
             <i class="material-symbols-outlined">email</i>{{ profile.email }}
             {% if profile.user == request.user %}
