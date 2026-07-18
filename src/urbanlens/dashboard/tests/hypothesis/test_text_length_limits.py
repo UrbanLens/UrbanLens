@@ -152,7 +152,6 @@ class PinEditDescriptionLengthTests(TestCase):
         )
         req.user = self.user
         with (
-            patch("urbanlens.dashboard.controllers.pin_edit._ensure_location_address"),
             patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None),
         ):
             return PinEditView.as_view()(req, pin_slug=self.pin.slug)

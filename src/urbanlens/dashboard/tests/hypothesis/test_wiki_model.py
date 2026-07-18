@@ -10,6 +10,7 @@ Covers the core invariants of the community-wiki extraction:
 from __future__ import annotations
 
 from datetime import date, timedelta
+from unittest.mock import patch
 
 from model_bakery import baker
 
@@ -56,6 +57,69 @@ class WikiLocationRelationTests(TestCase):
         loc = baker.make(Location, official_name="", city="", state="", country="", latitude="40.0", longitude="-74.0")
         wiki, _created = Wiki.objects.get_or_create_for_location(loc)
         self.assertEqual(wiki.name, "Unnamed Location")
+
+
+class EnrichWikiLocationNameTests(TestCase):
+    """tasks.enrich_wiki_location's placeholder-name replacement.
+
+    Previously verified by code review only (noted as a test gap when the
+    area-suffixed placeholder shipped) - these lock in the three behaviors
+    that matter: any non-meaningful seeded name gets replaced, a placeholder
+    seeded from an OLDER area_label (address backfill may have changed the
+    location's city/state since the wiki was created) still gets replaced,
+    and a real community name is never touched.
+    """
+
+    def _run(self, wiki: Wiki, resolved_name: str | None = "Resolved Factory") -> None:
+        from urbanlens.dashboard import tasks
+
+        with (
+            patch("urbanlens.dashboard.tasks.update_task_progress"),
+            patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService.ensure_linked"),
+            patch("urbanlens.dashboard.services.locations.google.PlaceNameResolverChain.resolve", return_value=resolved_name),
+            patch("urbanlens.dashboard.services.locations.boundaries.boundary_generation_ran", return_value=True),
+        ):
+            tasks.enrich_wiki_location(wiki.pk)
+
+    def _location(self, **kwargs) -> Location:
+        defaults = {"official_name": "", "latitude": "40.0", "longitude": "-74.0", "google_place": None}
+        return baker.make(Location, **{**defaults, **kwargs})
+
+    def test_bare_placeholder_is_replaced_with_the_resolved_name(self) -> None:
+        wiki = baker.make(Wiki, location=self._location(), name="Unnamed Location")
+        self._run(wiki)
+        wiki.refresh_from_db()
+        self.assertEqual(wiki.name, "Resolved Factory")
+
+    def test_area_suffixed_placeholder_from_a_stale_area_label_is_still_replaced(self) -> None:
+        """The wiki was seeded "Unnamed Location in Albany, NY" but the
+        location's address data has since changed, so that exact string can no
+        longer be reconstructed from the CURRENT area_label - the update must
+        key on the name actually read, not a rebuilt placeholder set."""
+        location = self._location(city="Troy", state="NY", country="USA")
+        wiki = baker.make(Wiki, location=location, name="Unnamed Location in Albany, NY")
+        self._run(wiki)
+        wiki.refresh_from_db()
+        self.assertEqual(wiki.name, "Resolved Factory")
+
+    def test_meaningful_community_name_is_never_replaced(self) -> None:
+        wiki = baker.make(Wiki, location=self._location(), name="Beloved Community Ruin")
+        self._run(wiki)
+        wiki.refresh_from_db()
+        self.assertEqual(wiki.name, "Beloved Community Ruin")
+
+    def test_placeholder_survives_when_nothing_resolves(self) -> None:
+        wiki = baker.make(Wiki, location=self._location(), name="Unnamed Location")
+        self._run(wiki, resolved_name=None)
+        wiki.refresh_from_db()
+        self.assertEqual(wiki.name, "Unnamed Location")
+
+    def test_official_name_is_preferred_over_live_resolution(self) -> None:
+        location = self._location(official_name="Official Mill")
+        wiki = baker.make(Wiki, location=location, name="Unnamed Location")
+        self._run(wiki, resolved_name="Should Not Be Used")
+        wiki.refresh_from_db()
+        self.assertEqual(wiki.name, "Official Mill")
 
 
 class DisplayNameResolutionTests(TestCase):

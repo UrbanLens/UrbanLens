@@ -67,15 +67,17 @@ def enrich_wiki_location(self, wiki_id: int) -> bool:
         # This bypasses Wiki.save() (a bulk .update()), so sanitize here too -
         # location.official_name is already sanitized by Location.save(), but
         # name_resolver.resolve() is a live external-source result that isn't.
-        # The name__in filter re-checks the name is still a placeholder at
-        # write time (atomically, in the same query) so a concurrent
-        # user-driven rename isn't clobbered. Wiki.get_or_create_for_location
-        # may have seeded either the bare or area-suffixed placeholder.
-        placeholder_names = {"", "Unnamed Location"}
-        if location.area_label:
-            placeholder_names.add(f"Unnamed Location in {location.area_label}")
+        # The name= filter re-checks the wiki still carries the exact
+        # non-meaningful name read above (atomically, in the same query), so a
+        # concurrent user-driven rename isn't clobbered. Filtering on the name
+        # actually read - rather than reconstructing the set of possible
+        # placeholders - also can't drift out of sync with whatever variant
+        # was seeded: an area-suffixed placeholder built from an OLDER
+        # area_label (the address backfill may have changed it since),
+        # a coordinate-style name, or any future placeholder shape all pass
+        # the is_meaningful_name gate above and match here.
         if place_name := sanitize_name(place_name):
-            Wiki.objects.filter(pk=wiki.pk, name__in=placeholder_names).update(name=place_name)
+            Wiki.objects.filter(pk=wiki.pk, name=wiki.name).update(name=place_name)
 
     update_task_progress(self, current=1, total=2, message="Generating boundaries...")
     if not boundary_generation_ran(location):
@@ -294,6 +296,33 @@ def resolve_location_place_name(location_id: int) -> str | None:
         logger.info("resolve_location_place_name: location %s no longer exists", location_id)
         return None
     return location.get_place_name()
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def backfill_location_address(location_id: int) -> bool:
+    """Reverse-geocode and persist a Location's street address outside the request/response cycle.
+
+    The background counterpart to ``resolve_location_place_name`` for address
+    components: ``ensure_location_address`` makes a live Google Geocoding
+    call, so it must never run inline on a page render - PinOverviewView
+    dispatches this instead when it notices a route-less location, and the
+    next render (by any pin/user sharing this Location) reads the backfilled
+    row straight from the DB.
+
+    Args:
+        location_id: PK of the Location to backfill.
+
+    Returns:
+        True when at least one address component was written.
+    """
+    from urbanlens.dashboard.models.location.model import Location
+    from urbanlens.dashboard.services.locations.addresses import ensure_location_address
+
+    location = Location.objects.filter(pk=location_id).first()
+    if location is None:
+        logger.info("backfill_location_address: location %s no longer exists", location_id)
+        return False
+    return ensure_location_address(location)
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})

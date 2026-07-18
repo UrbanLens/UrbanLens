@@ -429,9 +429,22 @@ def _add_pin_aliases(location: Location, candidates: Sequence[NameCandidate]) ->
         return False
     from urbanlens.dashboard.models.aliases.model import AliasType, PinAlias
 
+    pins = list(location.pins.all())
+    if not pins or not candidates:
+        return False
+
+    # This runs on every external-data name refresh, and in the steady state
+    # every (pin, name) pair already exists - prefetch those in one query so
+    # the common case costs 2 queries total instead of pins x candidates
+    # get_or_create round-trips. The get_or_create (not a bare create) below
+    # still handles the race where the same pair lands concurrently.
+    existing_pairs = set(PinAlias.objects.filter(pin__in=pins, name__in=[candidate.name for candidate in candidates]).values_list("pin_id", "name"))
+
     changed = False
-    for pin in location.pins.all():
+    for pin in pins:
         for candidate in candidates:
+            if (pin.pk, candidate.name) in existing_pairs:
+                continue
             try:
                 _alias, created = PinAlias.objects.get_or_create(
                     pin=pin,

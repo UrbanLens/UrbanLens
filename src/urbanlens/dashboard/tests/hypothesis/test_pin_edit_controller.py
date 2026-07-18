@@ -41,7 +41,6 @@ class PinEditCategoryUpdateTests(TestCase):
         # resolves an uncached Location's place name from Google - mock it
         # so the response render doesn't make an outbound API call.
         with (
-            patch("urbanlens.dashboard.controllers.pin_edit._ensure_location_address"),
             patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None),
         ):
             return PinEditView.as_view()(req, pin_slug=self.pin.slug)
@@ -108,7 +107,6 @@ class PinEditNameAliasTests(TestCase):
         # resolves an uncached Location's place name from Google - mock it
         # so the response render doesn't make an outbound API call.
         with (
-            patch("urbanlens.dashboard.controllers.pin_edit._ensure_location_address"),
             patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None),
         ):
             return PinEditView.as_view()(req, pin_slug=self.pin.slug)
@@ -152,7 +150,6 @@ class PinEditDateFieldsTests(TestCase):
         )
         req.user = self.user
         with (
-            patch("urbanlens.dashboard.controllers.pin_edit._ensure_location_address"),
             patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None),
         ):
             return PinEditView.as_view()(req, pin_slug=self.pin.slug)
@@ -177,41 +174,68 @@ class PinEditDateFieldsTests(TestCase):
         self.assertEqual(self.pin.date_built, date(1900, 1, 1))
 
 
-class PinOverviewGeocodingFailureTests(TestCase):
-    """The Details card must degrade gracefully, not 500, when geocoding fails.
+class PinOverviewAddressBackfillDispatchTests(TestCase):
+    """A route-less location's address backfill is dispatched to Celery, never geocoded inline.
 
-    Regression test for a bug where a pin whose Location has no street data
-    yet (true for any new pin, and for any pin never previously backfilled)
-    re-triggers a synchronous Google Geocoding call on every /overview/ visit.
-    Once the geocoding service's rate limit is exhausted or it's disabled,
-    that call raises RequestCancelledError/RateLimitExceededError, which
-    _ensure_location_address didn't catch - unlike every other Google Places
-    call site in this codebase - so the whole request 500'd instead of just
-    rendering without the freshly-geocoded address fields.
+    Successor to the old inline-geocoding failure regression test: the view
+    used to call ensure_location_address (a live Google Geocoding call)
+    synchronously on every /overview/ visit for a route-less location - first
+    500ing on rate-limit errors, then (after that was fixed) still blocking
+    the render on the API round-trip. It now enqueues
+    tasks.backfill_location_address instead, mirroring the place-name lazy
+    dispatch - so a rate-limited/slow/down geocoding API can no longer affect
+    this page's render at all.
     """
 
     def setUp(self) -> None:
         self.factory = RequestFactory()
         self.profile = baker.make(User).profile
+        self.profile.external_apis_enabled = True
+        self.profile.save(update_fields=["external_apis_enabled"])
         self.user = self.profile.user
         self.pin = baker.make(Pin, profile=self.profile)
         self.pin.location.route = ""
         self.pin.location.save(update_fields=["route"])
 
-    def test_rate_limit_exceeded_during_geocoding_does_not_500(self) -> None:
+    def _get(self, mock_enqueue_target: str = "urbanlens.dashboard.services.celery.safely_enqueue_task"):
         req = self.factory.get(f"/map/pin/{self.pin.slug}/overview/")
         req.user = self.user
         with (
-            patch("urbanlens.UrbanLens.settings.app.settings.google_unrestricted_api_key", "test-key"),
-            patch(
-                "urbanlens.dashboard.services.apis.locations.google.geocoding.GoogleGeocodingGateway.geocode_coordinates",
-                side_effect=RateLimitExceededError("google_geocoding"),
-            ),
+            patch(mock_enqueue_target) as mock_enqueue,
             patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None),
         ):
             response = PinOverviewView.as_view()(req, pin_slug=self.pin.slug)
+        return response, mock_enqueue
 
+    def _address_dispatches(self, mock_enqueue) -> list[int]:
+        from urbanlens.dashboard.tasks import backfill_location_address
+
+        return [call.args[1] for call in mock_enqueue.call_args_list if call.args and call.args[0] is backfill_location_address]
+
+    def test_route_less_location_dispatches_the_backfill_task(self) -> None:
+        response, mock_enqueue = self._get()
         self.assertEqual(response.status_code, 200)
+        self.assertIn(self.pin.location_id, self._address_dispatches(mock_enqueue))
+
+    def test_location_with_a_route_does_not_dispatch(self) -> None:
+        self.pin.location.route = "Somewhere St"
+        self.pin.location.save(update_fields=["route"])
+        _response, mock_enqueue = self._get()
+        self.assertEqual(self._address_dispatches(mock_enqueue), [])
+
+    def test_render_never_geocodes_inline(self) -> None:
+        """The actual guarantee: no live geocoding call can run (and therefore
+        neither block nor 500 this render), regardless of API state."""
+        req = self.factory.get(f"/map/pin/{self.pin.slug}/overview/")
+        req.user = self.user
+        with (
+            patch("urbanlens.dashboard.services.apis.locations.google.geocoding.GoogleGeocodingGateway.geocode_coordinates") as mock_geocode,
+            patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None),
+            patch("urbanlens.dashboard.services.celery.safely_enqueue_task"),
+        ):
+            response = PinOverviewView.as_view()(req, pin_slug=self.pin.slug)
+        self.assertEqual(response.status_code, 200)
+        mock_geocode.assert_not_called()
 
 
 class PinOverviewEditableTitleTests(TestCase):
@@ -227,7 +251,6 @@ class PinOverviewEditableTitleTests(TestCase):
         req = self.factory.get(f"/map/pin/{self.pin.slug}/overview/")
         req.user = self.user
         with (
-            patch("urbanlens.dashboard.controllers.pin_edit._ensure_location_address"),
             patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None),
             # pin.location.cached_place_name is falsy for a fresh baker Location (no
             # GooglePlace stub relation), so PinOverviewView.get() tries to enqueue a
@@ -267,7 +290,6 @@ class PinOverviewEditableDescriptionTests(TestCase):
         req = self.factory.get(f"/map/pin/{pin.slug}/overview/")
         req.user = self.user
         with (
-            patch("urbanlens.dashboard.controllers.pin_edit._ensure_location_address"),
             patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None),
             patch("urbanlens.dashboard.services.celery.safely_enqueue_task"),
         ):

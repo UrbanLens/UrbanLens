@@ -95,9 +95,9 @@ class PinDetailsPageLinksCardTests(TestCase):
         self.user = baker.make("auth.User")
         self.profile = Profile.objects.get(user=self.user)
         self.pin = baker.make_recipe("dashboard.pin", profile=self.profile, name="Old Mill", description="A creaky old mill.")
-        # pin.overview's GET path geocodes an address-less location on the fly
-        # (_ensure_location_address) - give it a route so that's skipped, since
-        # tests block outbound network access.
+        # pin.overview's GET path enqueues an address backfill task for a
+        # route-less location - give it a route so that dispatch is skipped
+        # and the test never touches a broker.
         self.pin.location.route = "Test St"
         self.pin.location.save(update_fields=["route"])
         # deduplicated_identity_fields reads Location.place_name, which is

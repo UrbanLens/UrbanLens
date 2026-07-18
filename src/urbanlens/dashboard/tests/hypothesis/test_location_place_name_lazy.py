@@ -53,9 +53,9 @@ class PinViewDispatchesPlaceNameResolutionTests(TestCase):
         self.profile = Profile.objects.get(user=self.user)
         self.pin = baker.make(Pin, profile=self.profile, name="Old Mill")
         # Gives the location a route so PinOverviewView's separate address-backfill
-        # call (_ensure_location_address) is skipped - unrelated to this fix, but
-        # its own live geocoding call would otherwise fire first and mask what
-        # these tests are actually checking (tests block outbound network access).
+        # dispatch (tasks.backfill_location_address) is skipped - unrelated to this
+        # fix, and _dispatched_location_ids filters by task identity anyway; this
+        # just keeps each test's dispatch surface down to the one being tested.
         self.pin.location.route = "Test St"
         self.pin.location.save(update_fields=["route"])
         self.client.force_login(self.user)

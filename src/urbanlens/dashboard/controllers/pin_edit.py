@@ -15,7 +15,6 @@ from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.model import Pin, PinType
 from urbanlens.dashboard.models.pin.note import PinNote
 from urbanlens.dashboard.models.reviews.model import Review
-from urbanlens.dashboard.services.locations.addresses import ensure_location_address as _ensure_location_address
 from urbanlens.dashboard.services.text_limits import MAX_PIN_DESCRIPTION_LENGTH, text_length_error
 
 logger = logging.getLogger(__name__)
@@ -144,19 +143,22 @@ class PinOverviewView(LoginRequiredMixin, View):
             return result
         pin = result
         pin.backfill_wiki_link_slugs()
-        if pin.location and not pin.location.route and pin.profile.external_apis_enabled:
-            _ensure_location_address(pin.location)
-        # deduplicated_identity_fields (rendered below) reads Location.place_name,
-        # which is cache-only and never blocks this request on a live Google call
-        # (see its docstring) - warm the cache in the background the first time
-        # it's missing, so the next render of this Location (by any pin/user
-        # sharing its coordinates) finds it cached instead of staying permanently
-        # empty.
-        if pin.location and not pin.location.cached_place_name and pin.profile.external_apis_enabled:
+        # Address and place-name backfills both happen in the background:
+        # neither may block this request on a live Google call. The rendered
+        # partial reads whatever the Location row / place-name cache already
+        # hold, and the next render of this Location (by any pin/user sharing
+        # its coordinates) finds the backfilled data instead of it staying
+        # permanently empty. (The address half used to be a synchronous
+        # geocoding call right here - the last inline external call on this
+        # page's render path.)
+        if pin.location and pin.profile.external_apis_enabled:
             from urbanlens.dashboard.services.celery import safely_enqueue_task
-            from urbanlens.dashboard.tasks import resolve_location_place_name
+            from urbanlens.dashboard.tasks import backfill_location_address, resolve_location_place_name
 
-            safely_enqueue_task(resolve_location_place_name, pin.location_id)
+            if not pin.location.route:
+                safely_enqueue_task(backfill_location_address, pin.location_id)
+            if not pin.location.cached_place_name:
+                safely_enqueue_task(resolve_location_place_name, pin.location_id)
         return render(request, "dashboard/partials/pins/pin_overview_partial.html", _overview_context(pin))
 
 
