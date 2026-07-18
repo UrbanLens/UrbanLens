@@ -9,6 +9,7 @@ from urbanlens.dashboard.models.profile.model import (
     MapCenterMode,
     MapViewChoice,
     Profile,
+    SyncAliasesDirection,
     ThemeChoice,
     VisibilityChoice,
 )
@@ -574,6 +575,52 @@ class CommunitySettingsForm(forms.ModelForm):
     class Meta:
         model = Profile
         fields = ["community_enabled", "show_wiki_cover_photos"]
+
+
+class WikiSyncSettingsForm(forms.ModelForm):
+    """Automatic syncing between a pin's private details and its community wiki."""
+
+    sync_rating_to_wiki = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
+        label="Rating",
+        help_text="When you rate a pin, also count that rating on its community wiki.",
+    )
+    sync_vulnerability_to_wiki = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
+        label="Vulnerability",
+        help_text="When you set a pin's vulnerability, also count it on its community wiki.",
+    )
+    sync_priority_to_wiki = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
+        label="Priority",
+        help_text="When you set a pin's priority, also count it on its community wiki.",
+    )
+    sync_danger_to_wiki = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
+        label="Danger",
+        help_text="When you set a pin's danger, also count it on its community wiki.",
+    )
+    sync_aliases = forms.ChoiceField(
+        choices=SyncAliasesDirection.choices,
+        widget=forms.Select(attrs={"class": "settings-select browser-default"}),
+        label="Aliases",
+        help_text="Automatically copy newly-added alternate names between a pin and its community wiki. Never deletes an alias on either side, and never syncs edits to an existing alias - only new ones.",
+    )
+
+    class Meta:
+        model = Profile
+        fields = ["sync_rating_to_wiki", "sync_vulnerability_to_wiki", "sync_priority_to_wiki", "sync_danger_to_wiki", "sync_aliases"]
+
+    def __init__(self, *args, **kwargs):
+        """Disable every field while Community is off, mirroring PrivacySettingsForm."""
+        super().__init__(*args, **kwargs)
+        if self.instance is not None and not self.instance.community_enabled:
+            for field in self.fields.values():
+                field.disabled = True
 
 
 class ExternalApiSettingsForm(forms.ModelForm):

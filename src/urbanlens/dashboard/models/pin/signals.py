@@ -137,6 +137,88 @@ def refresh_map_pin_cache_for_deleted_review(sender, instance: Review, **kwargs)
         _refresh_cached_pin(instance.pin_id, instance.pin.profile_id)
 
 
+# -- Wiki-sync: mirror rating/vulnerability/priority/danger onto WikiStatVote ---
+# One-way only (pin -> wiki): the wiki has no single owner, so there's no
+# equivalent "wiki value" to pull back the other way - see
+# Profile.sync_rating_to_wiki etc. and models.wiki_stat_vote.model.WikiStatVote's
+# own docstring on why a composite average, not a single stored field, is
+# the wiki-side representation of these dimensions.
+
+
+def _sync_pin_stat_to_wiki(wiki_id: int, profile_id: int, field: str, value: int | None) -> None:
+    """Upsert (1-5) or clear (anything else) one profile's WikiStatVote for a field.
+
+    Mirrors WikiStatVoteView's own upsert-or-delete behavior exactly, so a
+    pin's star rating going back to "unset" clears the vote the same way
+    manually clearing it on the wiki page would - never leaves a stale 0/None
+    row skewing the wiki's composite average.
+    """
+
+    def _run() -> None:
+        from urbanlens.dashboard.models.wiki_stat_vote.model import WikiStatVote
+
+        if value is not None and 1 <= value <= 5:
+            WikiStatVote.objects.update_or_create(wiki_id=wiki_id, profile_id=profile_id, field=field, defaults={"value": value})
+        else:
+            WikiStatVote.objects.filter(wiki_id=wiki_id, profile_id=profile_id, field=field).delete()
+
+    transaction.on_commit(_run)
+
+
+@receiver(post_save, sender=Review, dispatch_uid="review_sync_rating_to_wiki")
+def sync_rating_to_wiki(sender, instance: Review, **kwargs) -> None:
+    if not instance.pin_id:
+        return
+    pin = instance.pin
+    if pin.wiki_id is None or not pin.profile.sync_rating_to_wiki:
+        return
+    from urbanlens.dashboard.models.wiki_stat_vote.model import WikiStatField
+
+    _sync_pin_stat_to_wiki(pin.wiki_id, pin.profile_id, WikiStatField.RATING, instance.rating)
+
+
+@receiver(post_delete, sender=Review, dispatch_uid="review_sync_rating_deletion_to_wiki")
+def sync_rating_deletion_to_wiki(sender, instance: Review, **kwargs) -> None:
+    if not instance.pin_id:
+        return
+    pin = instance.pin
+    if pin.wiki_id is None or not pin.profile.sync_rating_to_wiki:
+        return
+    from urbanlens.dashboard.models.wiki_stat_vote.model import WikiStatField
+
+    _sync_pin_stat_to_wiki(pin.wiki_id, pin.profile_id, WikiStatField.RATING, None)
+
+
+#: pin field name -> (Profile setting name, WikiStatField value)
+_PIN_TO_WIKI_STAT_FIELDS = (
+    ("vulnerability", "sync_vulnerability_to_wiki", "vulnerability"),
+    ("priority", "sync_priority_to_wiki", "priority"),
+    ("danger", "sync_danger_to_wiki", "danger"),
+)
+
+
+@receiver(post_save, sender=Pin, dispatch_uid="pin_sync_stats_to_wiki")
+def sync_pin_stats_to_wiki(sender: type[Pin], instance: Pin, **kwargs) -> None:
+    """Mirror vulnerability/priority/danger onto the pin's wiki, per-field opt-in.
+
+    Guarded on ``update_fields`` when present (a full save touches every
+    field, so nothing to filter there) to skip the profile lookup entirely on
+    saves that never touched any of these three fields.
+    """
+    if instance.wiki_id is None:
+        return
+    update_fields = kwargs.get("update_fields")
+    if update_fields is not None and not any(pin_field in update_fields for pin_field, _, _ in _PIN_TO_WIKI_STAT_FIELDS):
+        return
+    profile = instance.profile
+    for pin_field, setting_name, wiki_field in _PIN_TO_WIKI_STAT_FIELDS:
+        if update_fields is not None and pin_field not in update_fields:
+            continue
+        if not getattr(profile, setting_name):
+            continue
+        _sync_pin_stat_to_wiki(instance.wiki_id, instance.profile_id, wiki_field, getattr(instance, pin_field))
+
+
 # NOTE: Pins no longer trigger any community wiki or boundary creation on save.
 # Wikis are created explicitly by the user from the pin detail page, and default
 # boundaries are generated lazily when a pin detail page is first viewed - so

@@ -26,7 +26,7 @@ from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.direct_messages.meta import MessageRetentionChoice
-from urbanlens.dashboard.models.profile.meta import DistanceUnit, GuidanceLevel, MapCenterMode, MapViewChoice, ThemeChoice, VisibilityChoice
+from urbanlens.dashboard.models.profile.meta import DistanceUnit, GuidanceLevel, MapCenterMode, MapViewChoice, SyncAliasesDirection, ThemeChoice, VisibilityChoice
 from urbanlens.dashboard.models.profile.queryset import ProfileManager
 from urbanlens.dashboard.services.text_limits import MAX_PROFILE_BIO_LENGTH
 
@@ -64,6 +64,17 @@ _COMMUNITY_GATED_VISIBILITY_FIELDS = (
     "read_receipt_visibility",
     "typing_indicator_visibility",
     "common_pins_visibility",
+)
+
+# Wiki-sync boolean fields forced to False while community_enabled is False -
+# there's no wiki to sync with once community features are off. sync_aliases
+# (a choice field, not a bool) is handled separately since its "off" value
+# isn't False - see save() below.
+_COMMUNITY_GATED_SYNC_FIELDS = (
+    "sync_rating_to_wiki",
+    "sync_vulnerability_to_wiki",
+    "sync_priority_to_wiki",
+    "sync_danger_to_wiki",
 )
 
 
@@ -348,6 +359,26 @@ class Profile(abstract.PublicDashboardModel):
     # or receive friend requests. Enforced in Pin.save()/Profile.save().
     community_enabled = BooleanField(default=True, help_text="Enable features that allow you to interact with other users. Community wikis, Trips, and Friend Requests are included in this.")
 
+    # Wiki sync preferences: automatically mirror star ratings and aliases
+    # between a pin's private details and its (shared) community wiki, so the
+    # user only has to set a value in one place. Rating/vulnerability/priority/
+    # danger are one-way (pin -> wiki, via WikiStatVote - see
+    # models.pin.signals); the wiki has no single owner, so there's no
+    # equivalent "wiki value" to pull back the other way. Aliases are additive
+    # in whichever direction(s) are enabled (see models.aliases.signals).
+    # All forced to their off value while community_enabled is False - see
+    # _COMMUNITY_GATED_SYNC_FIELDS below.
+    sync_rating_to_wiki = BooleanField(default=True, help_text="When you rate a pin, also count that rating on its community wiki.")
+    sync_vulnerability_to_wiki = BooleanField(default=True, help_text="When you set a pin's vulnerability, also count it on its community wiki.")
+    sync_priority_to_wiki = BooleanField(default=True, help_text="When you set a pin's priority, also count it on its community wiki.")
+    sync_danger_to_wiki = BooleanField(default=True, help_text="When you set a pin's danger, also count it on its community wiki.")
+    sync_aliases = CharField(
+        max_length=10,
+        choices=SyncAliasesDirection.choices,
+        default=SyncAliasesDirection.FROM_WIKI,
+        help_text="Automatically copy newly-added alternate names between a pin and its community wiki. Never deletes an alias on either side.",
+    )
+
     # Master switch for all external API calls made on your behalf (weather,
     # geocoding, place data, AI, etc). Individual services also have their own
     # toggles below/elsewhere that remain independently adjustable.
@@ -401,6 +432,13 @@ class Profile(abstract.PublicDashboardModel):
             forced = [field for field in _COMMUNITY_GATED_VISIBILITY_FIELDS if getattr(self, field) != VisibilityChoice.NO_ONE]
             for field in forced:
                 setattr(self, field, VisibilityChoice.NO_ONE)
+            sync_forced = [field for field in _COMMUNITY_GATED_SYNC_FIELDS if getattr(self, field)]
+            for field in sync_forced:
+                setattr(self, field, False)
+            if self.sync_aliases != SyncAliasesDirection.OFF:
+                self.sync_aliases = SyncAliasesDirection.OFF
+                sync_forced.append("sync_aliases")
+            forced = [*forced, *sync_forced]
             if forced and update_fields is not None:
                 kwargs["update_fields"] = [*update_fields, *forced]
         super().save(*args, **kwargs)

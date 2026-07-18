@@ -216,6 +216,88 @@
             </form>
         </div>
 
+        {# -- Wiki Sync (subsection) -------------------------------------------- #}
+        <div class="settings-subsection" id="wiki-sync-settings-section">
+            <h3 class="settings-subsection-title">
+                <i class="material-symbols-outlined">sync</i>
+                Wiki Sync
+            </h3>
+            <p class="settings-section-desc">Automatically send information from a pin's private details to its community wiki, and/or receive new alternate names back.</p>
+
+            <form method="post" class="settings-form" id="wiki-sync-form">
+                {% csrf_token %}
+                <input type="hidden" name="section" value="wiki_sync">
+
+                <div class="settings-field">
+                    <label class="settings-toggle-row">
+                        {{ wiki_sync_form.sync_rating_to_wiki }}
+                        <span class="settings-toggle-label">
+                            <strong>{{ wiki_sync_form.sync_rating_to_wiki.label }}</strong>
+                            <span class="settings-help">{{ wiki_sync_form.sync_rating_to_wiki.help_text }}</span>
+                        </span>
+                    </label>
+                    {% if wiki_sync_form.sync_rating_to_wiki.errors %}
+                    <p class="settings-error">{{ wiki_sync_form.sync_rating_to_wiki.errors|join:", " }}</p>
+                    {% endif %}
+                </div>
+                <div class="settings-field">
+                    <label class="settings-toggle-row">
+                        {{ wiki_sync_form.sync_vulnerability_to_wiki }}
+                        <span class="settings-toggle-label">
+                            <strong>{{ wiki_sync_form.sync_vulnerability_to_wiki.label }}</strong>
+                            <span class="settings-help">{{ wiki_sync_form.sync_vulnerability_to_wiki.help_text }}</span>
+                        </span>
+                    </label>
+                    {% if wiki_sync_form.sync_vulnerability_to_wiki.errors %}
+                    <p class="settings-error">{{ wiki_sync_form.sync_vulnerability_to_wiki.errors|join:", " }}</p>
+                    {% endif %}
+                </div>
+                <div class="settings-field">
+                    <label class="settings-toggle-row">
+                        {{ wiki_sync_form.sync_priority_to_wiki }}
+                        <span class="settings-toggle-label">
+                            <strong>{{ wiki_sync_form.sync_priority_to_wiki.label }}</strong>
+                            <span class="settings-help">{{ wiki_sync_form.sync_priority_to_wiki.help_text }}</span>
+                        </span>
+                    </label>
+                    {% if wiki_sync_form.sync_priority_to_wiki.errors %}
+                    <p class="settings-error">{{ wiki_sync_form.sync_priority_to_wiki.errors|join:", " }}</p>
+                    {% endif %}
+                </div>
+                <div class="settings-field">
+                    <label class="settings-toggle-row">
+                        {{ wiki_sync_form.sync_danger_to_wiki }}
+                        <span class="settings-toggle-label">
+                            <strong>{{ wiki_sync_form.sync_danger_to_wiki.label }}</strong>
+                            <span class="settings-help">{{ wiki_sync_form.sync_danger_to_wiki.help_text }}</span>
+                        </span>
+                    </label>
+                    {% if wiki_sync_form.sync_danger_to_wiki.errors %}
+                    <p class="settings-error">{{ wiki_sync_form.sync_danger_to_wiki.errors|join:", " }}</p>
+                    {% endif %}
+                </div>
+
+                <div class="settings-field">
+                    <label class="settings-label" for="{{ wiki_sync_form.sync_aliases.id_for_label }}">
+                        {{ wiki_sync_form.sync_aliases.label }}
+                    </label>
+                    <p class="settings-help">{{ wiki_sync_form.sync_aliases.help_text }}</p>
+                    {{ wiki_sync_form.sync_aliases }}
+                    {% if wiki_sync_form.sync_aliases.errors %}
+                    <p class="settings-error">{{ wiki_sync_form.sync_aliases.errors|join:", " }}</p>
+                    {% endif %}
+                </div>
+
+                {% if not wiki_sync_form.instance.community_enabled %}
+                <p class="settings-help">Wiki syncing is off while Community Features (above) is off.</p>
+                {% endif %}
+
+                <div class="settings-actions">
+                    <button type="submit" class="settings-save-btn">Save</button>
+                </div>
+            </form>
+        </div>
+
         {# -- History (subsection) -------------------------------------------- #}
         <div class="settings-subsection" id="history-settings-section">
             <h3 class="settings-subsection-title">
