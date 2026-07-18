@@ -50,3 +50,4 @@ src/urbanlens/frontend/static/icons/unused/
 sample_data/*.jpg
 src/urbanlens/media/
 docs/prompts/
+docs/screenshots/

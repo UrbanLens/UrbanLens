@@ -19,6 +19,7 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
 - Bulk pin operations: multi-select, bulk edit, bulk merge, bulk delete (with undo)
 - Per-pin alternate names (**aliases**) — private aliases on a Pin vs. shared aliases on a Wiki
 - Private per-pin notes (`PinNote`), independent of public comments
+- **Private per-pin Article** — Wikipedia-style long-form private notes per pin (sections, links, references) with full **revision history** (every saved version stored, restorable from the Edit History tab)
 - Pin sharing — share a single pin with one friend, including re-share chains
 - Import/export: Google Takeout (Saved Places, Location History, My Activity), GPX, GPX tracks,
   OSM XML, Shapefile, WKT/WKB, KML/KMZ; AI-assisted import from freeform documents/notes
@@ -31,12 +32,10 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
 - **Wiki** — opt-in, community-editable page for a Location: description, aliases, community
   danger/vulnerability/rating stat voting (`WikiStatVote`, fuzzed community counts for privacy),
   edit history with revert (`WikiEdit`)
-- Place-name resolution across multiple sources (Google Places, OSM/Nominatim, NPS, etc.) with
-  agreement-based and admin-configurable priority ordering
+- Place-name resolution across multiple sources (Google Places, OSM/Nominatim, NPS, Photon, EPA ECHO, **Azure Maps**, Wikipedia, OpenStreetMap former name) with agreement-based priority ordering and a **user-configurable drag-to-reorder name source priority list** in Settings → Privacy
 - Boundary drawing — property/building polygons per pin, generated automatically from external
   building-footprint data where available, editable by the user
-- Standalone reusable **MarkupMaps** with freehand drawing/annotation tools, attachable to pins,
-  wikis, safety check-ins, or kept independent
+- Standalone reusable **MarkupMaps** with freehand drawing/annotation tools (point, line, arrow, text, box, circle, polygon), attachable to pins, wikis, safety check-ins, or kept independent; also embedded in the **safety check-in creation form** for drawing routes and destinations
 - Detail pins — sub-markers placed inside a pin/wiki's bounding box for finer-grained mapping
   (rooms, entrances, hazards, etc.)
 
@@ -109,8 +108,8 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
 
 - Friendships: request/accept/reject/ignore/remove/block/mute, invite by email
 - Configurable friend-request visibility ("anyone", "friends of friends", "anything in common", etc.)
-- Public/friends-scoped profile pages with visibility controls per field, "view my profile as..."
-  preview mode
+- Public/friends-scoped profile pages with visibility controls per field (9 controls, each with 7 granularity levels from "Anyone" to "No one"), "view my profile as..." preview mode
+- **"Show Photos From" visibility** — photos from users outside your chosen tier are blurred rather than hidden
 - Reviews (0–5 star rating, no text) and comments (with @mentions, emoji reactions, image
   attachments) on pins, wikis, and trips
 - Private per-profile notes and trust ratings you keep about other users (not visible to them)
@@ -137,12 +136,24 @@ relationships, bulk edit and bulk convert between kinds, per-user color/icon cus
 - Real-time push over WebSockets (`ws/notifications/`) with desktop `Notification` API support and
   a 60s polling fallback
 - Outbound email notifications with per-role rate caps (hourly/daily/monthly) and safety controls
+- **11-event × 4-channel notification matrix** (Settings → Account): each event type (new message, friend request, check-in alert, AI task completion, etc.) can be independently configured for in-app, email, WhatsApp, and SMS delivery. WhatsApp/SMS require a phone number on the profile.
 - Admin-only critical alerting via email + Gotify push (distinct from user-facing notifications)
+
+## Custom Fields
+
+User-defined private fields for **pins**, **photos**, **people**, and **maps**. Power-user feature for tracking non-standard attributes (e.g. access status, personal reference IDs, condition notes). Managed in Settings → Advanced.
+
+## External Photo Integrations
+
+- **Immich** — connect a self-hosted Immich instance (server URL + API key) to browse and import nearby photos linked to pins
+- **Google Photos** — OAuth import from a connected Google Photos library
 
 ## Account & Auth
 
 - Email/password signup with verification, plus Google and Discord OAuth (social-auth pipeline)
 - Password reset (themed to match the app, not bare Django pages)
+- **Passkeys** (Face ID, Windows Hello, security keys, Bitwarden-compatible) and **TOTP 2FA** (Google Authenticator, Authy, Bitwarden TOTP); backup codes available once passkey or TOTP is configured
+- OAuth accounts can set a password separately to enable new-device encryption unlock without the recovery key
 - Self-service account deletion (request with grace period, cancel)
 - First-run setup wizard and a first-login onboarding tour with feature opt-outs; contextual
   in-product help tooltips on first visit to key sections (e.g. trip permissions, itinerary),
@@ -170,6 +181,8 @@ relationships, bulk edit and bulk convert between kinds, per-user color/icon cus
 - AI-assisted import: extract pins from freeform documents/notes
 - AI-assisted label styling: suggest colors/icons for auto-created labels
 - Keyword-based and AI-assisted auto-tagging of pins/wikis
+- **AI link analysis** — when a pin has external links, AI reads the linked pages in the background and fills in relevant fields; completion shown as a notification
+- **Local keyword tagging** — entirely local (no AI or network call), keyword-match auto-categorize / auto-tag / auto-status on pin save; master toggle + per-type sub-toggles in Settings → Connections
 
 ## REST API
 
@@ -179,6 +192,17 @@ DRF `ModelViewSet`s under `/dashboard/rest/`, session-authenticated:
 - `reviews` — full CRUD plus a `create_or_update` action for star ratings
 - `profiles` — profile data (read-only)
 - Notification access via a matching viewset
+
+## Direct Messaging
+
+- End-to-end encrypted 1:1 direct messages and named group chats
+- Rich compose toolbar: image attachment, share location/map, share pin, @mention, emoji
+- Read receipts, online status indicator, typing indicator (visibility of each configurable per user)
+- Per-message emoji reactions
+- **Disappearing messages** — configurable per-account expiry (never / on read / 1 day / 30 days / 90 days / 1 year)
+- E2E encryption key management in Settings → Messages: view or reset recovery key; old messages
+  encrypted under a rotated key are shown inline as "Unable to decrypt on this device" with a lock icon
+- **Friend recommendations** opt-in toggle (Settings → Messages)
 
 ## Real-time (WebSockets)
 
