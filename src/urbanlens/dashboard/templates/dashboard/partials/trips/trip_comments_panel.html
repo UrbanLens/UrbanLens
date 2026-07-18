@@ -13,15 +13,15 @@
     {% with c=item.comment %}
     <li class="comment-item" id="comment-{{ c.id }}">
       <div class="comment-avatar">
-        {% if c.author and c.author.avatar %}
-        <img src="{{ c.author.avatar.url }}" alt="" class="comment-avatar-img">
+        {% if c.author and c.author.display_avatar_url %}
+        <img src="{{ c.author.display_avatar_url }}" alt="" class="comment-avatar-img">
         {% else %}
-        <span class="comment-avatar-initial">{{ c.author.user.username|first|upper|default:"?" }}</span>
+        <span class="comment-avatar-initial {{ c.author.avatar_color_class }}">{{ c.author.display_name|first|upper|default:"?" }}</span>
         {% endif %}
       </div>
       <div class="comment-body">
         <div class="comment-meta">
-          <span class="comment-author">{{ c.author.user.username|default:"Unknown" }}</span>
+          <span class="comment-author">{{ c.author.display_name|default:"Unknown" }}</span>
           <span class="comment-date">{{ c.created|human_timesince }}</span>
           {% if c.author == profile or trip.creator == profile %}
           <button type="button" class="comment-delete-btn" title="Delete"
@@ -141,15 +141,15 @@
           {% with r=reply_item.comment %}
           <li class="comment-item comment-item--reply" id="comment-{{ r.id }}">
             <div class="comment-avatar comment-avatar--sm">
-              {% if r.author and r.author.avatar %}
-              <img src="{{ r.author.avatar.url }}" alt="" class="comment-avatar-img">
+              {% if r.author and r.author.display_avatar_url %}
+              <img src="{{ r.author.display_avatar_url }}" alt="" class="comment-avatar-img">
               {% else %}
-              <span class="comment-avatar-initial">{{ r.author.user.username|first|upper|default:"?" }}</span>
+              <span class="comment-avatar-initial {{ r.author.avatar_color_class }}">{{ r.author.display_name|first|upper|default:"?" }}</span>
               {% endif %}
             </div>
             <div class="comment-body">
               <div class="comment-meta">
-                <span class="comment-author">{{ r.author.user.username|default:"Unknown" }}</span>
+                <span class="comment-author">{{ r.author.display_name|default:"Unknown" }}</span>
                 <span class="comment-date">{{ r.created|human_timesince }}</span>
                 {% if r.author == profile or trip.creator == profile %}
                 <button type="button" class="comment-delete-btn" title="Delete"

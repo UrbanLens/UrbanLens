@@ -3271,9 +3271,18 @@ div.container .addr-search-bar {
     }
 }
 
-/* Boundary editing auto-saves in the background, so the Leaflet.draw
-   Save/Cancel action list next to "Edit Layers" is redundant - always hidden. */
-.leaflet-draw-actions {
+/* Boundary editing (map-annotations.ts, mounted on #map) auto-saves in the
+   background and uses its own right-click-to-delete-a-vertex handler
+   (edit: { remove: false }), so the Leaflet.draw Save/Cancel action list
+   next to "Edit Layers" is redundant there - hidden, but scoped to #map
+   only. Every other Leaflet-Draw usage on the site (e.g. the saved-filter
+   region map, _saved_filter_dialog_scripts.html) uses the vanilla
+   edit: { remove: true } flow, which *requires* that action bar to confirm
+   a pending delete - hiding it globally silently broke deleting a region:
+   Leaflet-Draw reverts an unconfirmed deletion back onto the map the
+   moment another tool is selected, since DELETED never fires without a
+   click on the (invisible) Save action. */
+#map .leaflet-draw-actions {
     display: none !important;
 }
 

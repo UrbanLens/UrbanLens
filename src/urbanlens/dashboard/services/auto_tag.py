@@ -102,7 +102,9 @@ class AutoTagService:
             eligible = self._eligible_labels(kind, profile=profile)
             matched = self._match(pin, eligible, kind, do_keyword=do_keyword, do_ai=do_ai)
             if apply and matched:
-                pin.labels.add(*matched)
+                to_apply = self._exclude_removed(pin, matched)
+                if to_apply:
+                    pin.labels.add(*to_apply)
             results.extend(matched)
         return results
 
@@ -124,9 +126,36 @@ class AutoTagService:
             eligible = self._eligible_labels(kind, profile=None)
             matched = self._match(wiki, eligible, kind)
             if apply and matched:
-                wiki.labels.add(*matched)
+                to_apply = self._exclude_removed(wiki, matched)
+                if to_apply:
+                    wiki.labels.add(*to_apply)
             results.extend(matched)
         return results
+
+    # -- deletion-awareness -----------------------------------------------------
+
+    @staticmethod
+    def _exclude_removed(target: Pin | Wiki, matched: list[Label]) -> list[Label]:
+        """Drop any matched label the user has already removed from this target.
+
+        Prevents auto-tagging from silently reattaching a label a user
+        deliberately took off (see LabelPinMembershipView/LabelLocationMembershipView's
+        "remove" action, which records the tombstone this checks).
+
+        Args:
+            target: Pin or Wiki being tagged.
+            matched: Labels the matching pipeline selected.
+
+        Returns:
+            ``matched``, minus any label previously removed from this target.
+        """
+        from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, PinAutoRemoval, WikiAutoRemoval
+
+        if type(target).__name__ == "Wiki":
+            removed_ids = set(WikiAutoRemoval.objects.filter(wiki=target, kind=AutoRemovalKind.LABEL).values_list("value", flat=True))
+        else:
+            removed_ids = set(PinAutoRemoval.objects.filter(pin=target, kind=AutoRemovalKind.LABEL).values_list("value", flat=True))
+        return [label for label in matched if str(label.pk) not in removed_ids]
 
     # -- eligibility ----------------------------------------------------------
 

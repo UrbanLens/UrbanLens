@@ -21,6 +21,7 @@ from django.utils import timezone
 from django.utils.html import escape
 from django.views import View
 
+from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, PinAutoRemoval, WikiAutoRemoval
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.labels.model import (
     COLOR_CHOICES,
@@ -1170,6 +1171,9 @@ class LabelPinMembershipView(LoginRequiredMixin, View):
         if action == "add":
             pin.labels.add(label)
         elif action == "remove":
+            # Tombstone first: keyword/AI auto-tagging can otherwise silently
+            # reattach this exact label the next time it runs on this pin.
+            PinAutoRemoval.objects.record(pin=pin, kind=AutoRemovalKind.LABEL, value=str(label.pk))
             pin.labels.remove(label)
         return render(
             request,
@@ -1211,6 +1215,9 @@ class LabelLocationMembershipView(LoginRequiredMixin, View):
         if action == "add":
             wiki.labels.add(label)
         elif action == "remove":
+            # Tombstone first: keyword/AI auto-tagging can otherwise silently
+            # reattach this exact label the next time it runs on this wiki.
+            WikiAutoRemoval.objects.record(wiki=wiki, kind=AutoRemovalKind.LABEL, value=str(label.pk))
             wiki.labels.remove(label)
         return render(
             request,

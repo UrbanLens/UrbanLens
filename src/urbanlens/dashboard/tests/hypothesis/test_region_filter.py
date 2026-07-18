@@ -221,9 +221,12 @@ class FiltersTabViewRenderingTests(TestCase):
 
 
 class SavedFilterLabelPickerTests(TestCase):
-    """The Filters-tab include/exclude label pickers reuse the shared `.tag-chip`
-    styling (see _saved_filter_label_picker.html) instead of a bespoke checkbox-pill
-    style - confirm the checked/unchecked state still round-trips correctly."""
+    """The Filters-tab include/exclude label pickers are a search-driven chip
+    picker (see _saved_filter_label_picker.html + initSavedFilterLabelPickers in
+    _saved_filter_dialog_scripts.html), reusing the same .apdlg-* markup/CSS as
+    the main map's add-pin/bulk-edit label pickers. The server only renders a
+    hidden data-id/data-selected catalog for the client-side JS to build chips
+    and hidden checkboxes from - confirm that catalog carries the right state."""
 
     def setUp(self) -> None:
         self.user = baker.make(User)
@@ -232,15 +235,15 @@ class SavedFilterLabelPickerTests(TestCase):
         self.selected_label = Label.objects.create(profile=self.profile, name="Abandoned", kind="tag")
         self.other_label = Label.objects.create(profile=self.profile, name="Active", kind="tag")
 
-    def test_new_filter_dialog_renders_all_labels_unchecked(self) -> None:
+    def test_new_filter_dialog_renders_all_labels_unselected(self) -> None:
         response = self.client.get(reverse("saved_filters.new"))
         html = response.content.decode()
-        label_grid_html = html.split("saved-filter-label-grid", 1)[1].split("form-actions", 1)[0]
-        self.assertIn(f'value="{self.selected_label.pk}"', label_grid_html)
-        self.assertIn(f'value="{self.other_label.pk}"', label_grid_html)
-        self.assertNotIn("checked", label_grid_html)
+        catalog_html = html.split('id="sf-label-catalog-tags"', 1)[1].split("</div>", 1)[0]
+        self.assertIn(f'data-id="{self.selected_label.pk}"', catalog_html)
+        self.assertIn(f'data-id="{self.other_label.pk}"', catalog_html)
+        self.assertNotIn('data-selected="1"', catalog_html)
 
-    def test_edit_filter_dialog_checks_only_the_saved_labels(self) -> None:
+    def test_edit_filter_dialog_selects_only_the_saved_labels(self) -> None:
         saved_filter = SavedFilter.objects.create(
             profile=self.profile,
             name="Abandoned spots",
@@ -250,14 +253,15 @@ class SavedFilterLabelPickerTests(TestCase):
         html = response.content.decode()
         self.assertEqual(response.status_code, 200)
 
-        # The selected label's checkbox is checked; the other one's is not.
-        selected_chip = html.split(f'value="{self.selected_label.pk}"', 1)[1][:40]
-        other_chip = html.split(f'value="{self.other_label.pk}"', 1)[1][:40]
-        self.assertIn("checked", selected_chip)
-        self.assertNotIn("checked", other_chip)
+        # The selected label's catalog entry is marked selected; the other one's is not.
+        selected_entry = html.split(f'data-id="{self.selected_label.pk}"', 1)[1][:120]
+        other_entry = html.split(f'data-id="{self.other_label.pk}"', 1)[1][:120]
+        self.assertIn('data-selected="1"', selected_entry)
+        self.assertIn('data-selected="0"', other_entry)
 
-        # Chips reuse the shared .tag-chip component, not a bespoke checkbox-pill class.
-        self.assertIn("tag-chip tag-chip--tag tag-chip--selectable", html)
+        # Chip picker reuses the shared .apdlg-* component, not a bespoke checkbox-pill class.
+        self.assertIn("saved-filter-label-picker", html)
+        self.assertIn('id="sf-label-chips-tags"', html)
 
 
 class PinListBoundaryDrawButtonTests(TestCase):

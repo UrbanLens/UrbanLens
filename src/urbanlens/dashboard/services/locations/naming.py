@@ -139,6 +139,113 @@ _STREET_TYPE_WORDS: frozenset[str] = frozenset(
 
 _NAME_TOKEN_PATTERN = re.compile(r"[^a-z0-9]+", re.IGNORECASE)
 
+# Maps both the abbreviated and spelled-out form of common street-suffix
+# words to one shared canonical form, so "Main Street" and "Main St" compare
+# equal. _STREET_TYPE_WORDS above only asks "is this token a street-type
+# word at all" - it doesn't equate different spellings of the same one.
+_STREET_SUFFIX_CANONICAL: dict[str, str] = {
+    "street": "st",
+    "st": "st",
+    "road": "rd",
+    "rd": "rd",
+    "place": "pl",
+    "pl": "pl",
+    "boulevard": "blvd",
+    "blvd": "blvd",
+    "avenue": "ave",
+    "ave": "ave",
+    "lane": "ln",
+    "ln": "ln",
+    "drive": "dr",
+    "dr": "dr",
+    "court": "ct",
+    "ct": "ct",
+    "terrace": "ter",
+    "ter": "ter",
+    "highway": "hwy",
+    "hwy": "hwy",
+    "route": "rt",
+    "rt": "rt",
+    "rte": "rt",
+    "circle": "cir",
+    "cir": "cir",
+    "trail": "trl",
+    "trl": "trl",
+    "parkway": "pkwy",
+    "pkwy": "pkwy",
+    "square": "sq",
+    "sq": "sq",
+    "alley": "aly",
+    "aly": "aly",
+}
+
+# Full state/territory name -> two-letter postal abbreviation, so "New York"
+# and "NY" compare equal regardless of which form an external source or
+# location.administrative_area_level_1 happens to use.
+_US_STATE_ABBREVIATIONS: dict[str, str] = {
+    "alabama": "al",
+    "alaska": "ak",
+    "arizona": "az",
+    "arkansas": "ar",
+    "california": "ca",
+    "colorado": "co",
+    "connecticut": "ct",
+    "delaware": "de",
+    "florida": "fl",
+    "georgia": "ga",
+    "hawaii": "hi",
+    "idaho": "id",
+    "illinois": "il",
+    "indiana": "in",
+    "iowa": "ia",
+    "kansas": "ks",
+    "kentucky": "ky",
+    "louisiana": "la",
+    "maine": "me",
+    "maryland": "md",
+    "massachusetts": "ma",
+    "michigan": "mi",
+    "minnesota": "mn",
+    "mississippi": "ms",
+    "missouri": "mo",
+    "montana": "mt",
+    "nebraska": "ne",
+    "nevada": "nv",
+    "new hampshire": "nh",
+    "new jersey": "nj",
+    "new mexico": "nm",
+    "new york": "ny",
+    "north carolina": "nc",
+    "north dakota": "nd",
+    "ohio": "oh",
+    "oklahoma": "ok",
+    "oregon": "or",
+    "pennsylvania": "pa",
+    "rhode island": "ri",
+    "south carolina": "sc",
+    "south dakota": "sd",
+    "tennessee": "tn",
+    "texas": "tx",
+    "utah": "ut",
+    "vermont": "vt",
+    "virginia": "va",
+    "washington": "wa",
+    "west virginia": "wv",
+    "wisconsin": "wi",
+    "wyoming": "wy",
+    "district of columbia": "dc",
+}
+
+# Matches a leading house number, or a hyphenated range of them ("1030-1060
+# Main St" - how some external sources describe a building spanning
+# multiple street numbers), at the start of a free-text address-like string.
+_HOUSE_NUMBER_RANGE_PATTERN = re.compile(r"^\s*(\d+)\s*(?:-\s*(\d+))?(?=\D|\s|$)")
+
+# Adjacent house numbers ("1050" vs "1051") commonly refer to the same
+# building or an immediately neighboring unit reported inconsistently across
+# sources - treated as the same address rather than a genuine mismatch.
+_HOUSE_NUMBER_TOLERANCE = 1
+
 # Everyday punctuation kept as-is in sanitize_name (beyond letters/digits/space).
 # Deliberately excludes markup-significant characters (<, >, backtick, braces,
 # backslash, pipe, semicolon, ...) and symbols/emoji, which are dropped instead.
@@ -198,6 +305,49 @@ def is_meaningful_name(name: str | None) -> bool:
     return normalized not in _MEANINGLESS_NAME_PHRASES
 
 
+def _canonical_state_text(text: str) -> str:
+    """Normalize a state name or abbreviation to its two-letter form, for equality comparison."""
+    normalized = re.sub(r"[^a-z\s]", "", text.casefold()).strip()
+    return _US_STATE_ABBREVIATIONS.get(normalized, normalized)
+
+
+def _parse_house_number_range(text: str) -> tuple[int, int] | None:
+    """Extract a leading house number, or a hyphenated range of them, from free text.
+
+    Args:
+        text: Free-text address-like string, e.g. "1050 Main St" or
+            "1030-1060 Main St".
+
+    Returns:
+        ``(low, high)`` (equal when there's no range), or None when the text
+        doesn't start with a number at all.
+    """
+    match = _HOUSE_NUMBER_RANGE_PATTERN.match(text.strip())
+    if not match:
+        return None
+    low = int(match.group(1))
+    high = int(match.group(2)) if match.group(2) else low
+    return (low, high) if low <= high else (high, low)
+
+
+def _house_numbers_are_compatible(candidate_range: tuple[int, int] | None, location_street_number: str) -> bool:
+    """Return True when a candidate's (possibly ranged) house number plausibly refers to this location.
+
+    True whenever either side has no parseable number at all (nothing to
+    contradict), or when the two overlap within `_HOUSE_NUMBER_TOLERANCE` -
+    covering an exact match, an off-by-one adjacent unit, and a ranged/block
+    address ("1030-1060 Main St") that contains this location's number.
+    """
+    if candidate_range is None:
+        return True
+    digits = re.sub(r"\D", "", location_street_number or "")
+    if not digits:
+        return True
+    location_number = int(digits)
+    low, high = candidate_range
+    return low - _HOUSE_NUMBER_TOLERANCE <= location_number <= high + _HOUSE_NUMBER_TOLERANCE
+
+
 def is_address_derived_name(name: str, location: Location) -> bool:
     """Return True when a candidate name is merely a fragment of the location's address.
 
@@ -207,11 +357,18 @@ def is_address_derived_name(name: str, location: Location) -> bool:
     names identify the surroundings, not the place, so they must not become
     the official name. A name is considered address-derived when:
 
-    * it contains a street-type word (street, road, blvd, ...) **and** appears
-      within the location's address - so "Westwood Northern Blvd" is rejected,
-      but "Kenwood" at "1 Kenwood Road" is kept (the street was named after
-      the place); or
-    * it matches or appears within the location's city or state name.
+    * it matches or appears within the location's city or state name
+      (state names and abbreviations, e.g. "New York" and "NY", are treated
+      as equivalent); or
+    * it contains a street-type word (street, road, blvd, ...) **and**
+      either appears within the location's full formatted address, or -
+      catching variants a plain substring check misses - decomposes into a
+      house number compatible with `location.street_number` (exact, an
+      off-by-one adjacent unit, or a ranged/block address containing it)
+      plus a street name matching `location.route` once suffix
+      abbreviations are canonicalized ("Main Street" vs "Main St"). "Kenwood"
+      at "1 Kenwood Road" is kept either way - it carries no street-type
+      word, so the street was named after the place, not the reverse.
 
     Comparisons use :func:`normalize_name_for_comparison`, so punctuation,
     case, and spacing differences do not affect the verdict.
@@ -232,14 +389,26 @@ def is_address_derived_name(name: str, location: Location) -> bool:
         normalized_component = normalize_name_for_comparison(component)
         if normalized_component and normalized in normalized_component:
             return True
+    candidate_state = _canonical_state_text(name)
+    location_state = _canonical_state_text(location.state or "")
+    if candidate_state and location_state and candidate_state == location_state:
+        return True
 
     tokens = {token.casefold() for token in _NAME_TOKEN_PATTERN.split(name) if token}
-    if tokens & _STREET_TYPE_WORDS:
-        normalized_address = normalize_name_for_comparison(location.address)
-        if normalized_address and normalized in normalized_address:
-            return True
+    if not (tokens & _STREET_TYPE_WORDS):
+        return False
 
-    return False
+    normalized_address = normalize_name_for_comparison(location.address)
+    if normalized_address and normalized in normalized_address:
+        return True
+
+    candidate_house_numbers = _parse_house_number_range(name)
+    if not _house_numbers_are_compatible(candidate_house_numbers, location.street_number or ""):
+        return False
+
+    route_tokens = {_STREET_SUFFIX_CANONICAL.get(t, t) for t in (token.casefold() for token in _NAME_TOKEN_PATTERN.split(location.route or "") if token) if t}
+    name_street_tokens = {_STREET_SUFFIX_CANONICAL.get(t, t) for t in tokens if not t.isdigit()}
+    return bool(route_tokens) and bool(name_street_tokens) and route_tokens <= name_street_tokens
 
 
 def sanitize_name(value: str | None) -> str | None:
@@ -394,9 +563,12 @@ def _add_wiki_aliases(wiki, candidates: Sequence[NameCandidate]) -> bool:
     if wiki is None or not getattr(wiki, "pk", None):
         return False
     from urbanlens.dashboard.models.aliases.model import AliasType, WikiAlias
+    from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, WikiAutoRemoval
 
     changed = False
     for candidate in candidates:
+        if WikiAutoRemoval.objects.was_removed(wiki=wiki, kind=AutoRemovalKind.ALIAS, value=candidate.name):
+            continue
         try:
             _alias, created = WikiAlias.objects.get_or_create(
                 wiki=wiki,
@@ -428,6 +600,7 @@ def _add_pin_aliases(location: Location, candidates: Sequence[NameCandidate]) ->
     if location is None or not getattr(location, "pk", None):
         return False
     from urbanlens.dashboard.models.aliases.model import AliasType, PinAlias
+    from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, PinAutoRemoval
 
     pins = list(location.pins.all())
     if not pins or not candidates:
@@ -437,13 +610,23 @@ def _add_pin_aliases(location: Location, candidates: Sequence[NameCandidate]) ->
     # every (pin, name) pair already exists - prefetch those in one query so
     # the common case costs 2 queries total instead of pins x candidates
     # get_or_create round-trips. The get_or_create (not a bare create) below
-    # still handles the race where the same pair lands concurrently.
-    existing_pairs = set(PinAlias.objects.filter(pin__in=pins, name__in=[candidate.name for candidate in candidates]).values_list("pin_id", "name"))
+    # still handles the race where the same pair lands concurrently. Compared
+    # case-insensitively via a Lower() annotation (matching the DB-level
+    # constraint), so a differently-cased existing row still counts as
+    # "already there" instead of costing an extra failed-insert round-trip.
+    from django.db.models.functions import Lower
+
+    candidate_names_lower = [candidate.name.casefold() for candidate in candidates]
+    existing_pairs = set(PinAlias.objects.filter(pin__in=pins).annotate(name_lower=Lower("name")).filter(name_lower__in=candidate_names_lower).values_list("pin_id", "name_lower"))
+    # Same shape for tombstoned (user-deleted) names, so a deleted alias never
+    # silently comes back the next time this backfill runs.
+    removed_pairs = set(PinAutoRemoval.objects.filter(pin__in=pins, kind=AutoRemovalKind.ALIAS).values_list("pin_id", "value"))
 
     changed = False
     for pin in pins:
         for candidate in candidates:
-            if (pin.pk, candidate.name) in existing_pairs:
+            candidate_lower = candidate.name.casefold()
+            if (pin.pk, candidate_lower) in existing_pairs or (pin.pk, candidate_lower) in removed_pairs:
                 continue
             try:
                 _alias, created = PinAlias.objects.get_or_create(

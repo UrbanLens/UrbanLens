@@ -1,11 +1,3 @@
-var __require = /* @__PURE__ */ ((x) => typeof require !== "undefined" ? require : typeof Proxy !== "undefined" ? new Proxy(x, {
-  get: (a, b) => (typeof require !== "undefined" ? require : a)[b]
-}) : x)(function(x) {
-  if (typeof require !== "undefined")
-    return require.apply(this, arguments);
-  throw Error('Dynamic require of "' + x + '" is not supported');
-});
-
 // src/urbanlens/dashboard/frontend/ts/shared/csrf.ts
 function getCsrfToken() {
   return window.csrftoken ?? "";
@@ -36,4 +28,4 @@ function htmxProcess(element) {
   window.htmx?.process(element);
 }
 
-export { __require, getCsrfToken, confirmAction, toast, htmxProcess };
+export { getCsrfToken, confirmAction, toast, htmxProcess };

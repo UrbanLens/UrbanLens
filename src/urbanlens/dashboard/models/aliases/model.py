@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 from django.db.models import CASCADE, SET_NULL, ForeignKey, Index, TextChoices, UniqueConstraint
 from django.db.models.fields import CharField
+from django.db.models.functions import Lower
 
 from urbanlens.dashboard.models import abstract
 
@@ -114,7 +115,8 @@ class PinAlias(_AliasBase):
             Index(fields=["pin", "source"], name="idxdb_palias_pin_source"),
         ]
         constraints = [
-            UniqueConstraint(fields=["pin", "name"], name="db_pin_alias_unique"),
+            # Case-insensitive: "Main Street" and "main street" are the same alias.
+            UniqueConstraint(Lower("name"), "pin", name="db_pin_alias_unique"),
         ]
 
 
@@ -153,5 +155,6 @@ class WikiAlias(_AliasBase):
             Index(fields=["wiki", "source"], name="idxdb_walias_wiki_source"),
         ]
         constraints = [
-            UniqueConstraint(fields=["wiki", "name"], name="db_walias_unique"),
+            # Case-insensitive: "Main Street" and "main street" are the same alias.
+            UniqueConstraint(Lower("name"), "wiki", name="db_walias_unique"),
         ]

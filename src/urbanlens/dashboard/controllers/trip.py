@@ -473,6 +473,23 @@ def _notify_added_to_trip(inviter: Profile, invitee: Profile, trip: Trip) -> Non
     )
 
 
+def _suggest_connections_for_new_member(new_member: Profile, existing_members) -> None:
+    """Soft-introduce a newly added trip member to existing members they aren't friends with.
+
+    Both sides must allow friend recommendations (see
+    ``services.connections.recommendable_strangers``) - never presumes on
+    anyone's behalf, just makes an already-opted-in connection discoverable.
+
+    Args:
+        new_member: The profile that was just added to the trip.
+        existing_members: The trip's other current members (any iterable of Profile).
+    """
+    from urbanlens.dashboard.services.connections import recommendable_strangers, suggest_mutual_connection
+
+    for other in recommendable_strangers(new_member, list(existing_members)):
+        suggest_mutual_connection(new_member, other)
+
+
 def _addable_friends(trip: Trip, profile: Profile) -> list[Profile]:
     """The creator's friends not already on this trip, for the add-member dialog's picker.
 
@@ -490,7 +507,13 @@ def _addable_friends(trip: Trip, profile: Profile) -> list[Profile]:
 
 def _render_members_panel(request: HttpRequest, trip: Trip, profile: Profile) -> HttpResponse:
     """Re-render the members panel partial."""
-    members = trip.memberships.select_related("profile__user").order_by("profile__user__username")
+    from urbanlens.dashboard.services.identity_visibility import resolve_visible_identities
+
+    members = list(trip.memberships.select_related("profile__user").order_by("profile__user__username"))
+    # A trip can include people who aren't friends with everyone else on it,
+    # whose privacy settings may not permit some viewers to see their name/
+    # avatar - RSVP status and trip activity involving them still show.
+    resolve_visible_identities(profile, [m.profile for m in members])
     return render(
         request,
         "dashboard/partials/trips/trip_members_panel.html",
@@ -513,9 +536,24 @@ def _activities_panel_html(request: HttpRequest, trip: Trip, profile: Profile, *
             (which would leave two ``#trip-activities-panel`` nodes in the DOM).
     """
     from urbanlens.dashboard.models.trips.model import TripActivity, TripActivityVote
+    from urbanlens.dashboard.services.identity_visibility import resolve_visible_identities
 
     activities = list(_activity_qs(trip))
     index_map = _compute_activity_index_map(activities)
+
+    # The "Added by" attribution shows even when the adder's privacy settings
+    # don't permit this viewer to see their name/avatar (distinct from the
+    # separate trip_pin_location_visibility gate above, which hides the
+    # activity's *location* - this only masks who gets credit for adding it).
+    # select_related gives each activity its own added_by instance even for
+    # the same underlying profile, so resolve once per distinct adder and
+    # re-point every activity at that same (now-mutated) instance.
+    distinct_adders = {act.added_by_id: act.added_by for act in activities if act.added_by_id}
+    if distinct_adders:
+        resolve_visible_identities(profile, list(distinct_adders.values()))
+        for act in activities:
+            if act.added_by_id:
+                act.added_by = distinct_adders[act.added_by_id]
 
     activity_ids = [a.id for a in activities]
     raw_votes = TripActivityVote.objects.filter(activity_id__in=activity_ids).values(
@@ -1161,13 +1199,37 @@ def _render_trip_comments(request: HttpRequest, trip: Trip, profile: Profile) ->
     act_index_for_render = {idx: act_objects[act_id] for idx, act_id in act_by_index.items()}
 
     pinned = viewer_pinned_uuids(profile)
-    top_comments = (
+    top_comments = list(
         trip.comments.filter(parent__isnull=True)
         .select_related("author__user", "markup_map")
         # comment.map_data derives its snapshot from the markup map's items.
         .prefetch_related("reactions", "replies__reactions", "replies__author__user", "markup_map__items", "replies__markup_map__items")
         .order_by("created")
     )
+
+    # Comment content stays visible regardless of privacy settings (matching
+    # pin/wiki comments) - only the author's name/avatar are masked when the
+    # author's own profile_visibility doesn't permit this viewer to see them.
+    # select_related gives each comment/reply its own author instance even for
+    # the same underlying profile, so resolve once per distinct author and
+    # re-point every comment/reply at that same (now-mutated) instance.
+    from urbanlens.dashboard.services.identity_visibility import resolve_visible_identities
+
+    distinct_authors: dict[int, Profile] = {}
+    for c in top_comments:
+        if c.author is not None:
+            distinct_authors[c.author.pk] = c.author
+        for r in c.replies.all():
+            if r.author is not None:
+                distinct_authors[r.author.pk] = r.author
+    if distinct_authors:
+        resolve_visible_identities(profile, list(distinct_authors.values()))
+        for c in top_comments:
+            if c.author is not None:
+                c.author = distinct_authors[c.author.pk]
+            for r in c.replies.all():
+                if r.author is not None:
+                    r.author = distinct_authors[r.author.pk]
 
     rendered: list[_CommentData] = []
     for c in top_comments:
@@ -1346,6 +1408,7 @@ class TripMembersView(LoginRequiredMixin, View):
         _membership, created = TripMembership.objects.get_or_create(trip=trip, profile=new_profile, defaults={"status": TripMembership.STATUS_INVITED})
         if created:
             _notify_added_to_trip(profile, new_profile, trip)
+            _suggest_connections_for_new_member(new_profile, trip.profiles.exclude(pk=new_profile.pk))
 
         return _render_members_panel(request, trip, profile)
 

@@ -640,6 +640,7 @@ class MemoriesVisitsView(LoginRequiredMixin, View):
             Rendered Visits page listing every visited-but-unlogged pin.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
+        band_context = _unlogged_band_context(profile)
         return render(
             request,
             "dashboard/pages/memories/visits.html",
@@ -647,7 +648,10 @@ class MemoriesVisitsView(LoginRequiredMixin, View):
                 "profile": profile,
                 "page_name": "memories",
                 "bulk_actions": _VISITS_BULK_ACTIONS,
-                **_unlogged_band_context(profile),
+                # The map (and its attribution) only renders when there are
+                # unlogged visits to plot - see visits.html's {% if unlogged_visits %}.
+                "show_map_footer": bool(band_context["unlogged_visits"]),
+                **band_context,
             },
         )
 

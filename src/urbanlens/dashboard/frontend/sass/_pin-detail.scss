@@ -1167,6 +1167,19 @@
 
 // -- Wikipedia summary panel ------------------------------------------------
 .wikipedia-info {
+    .wikipedia-thumb-wrap {
+        display: flex;
+        justify-content: center;
+        margin: 0 0 .6rem;
+    }
+
+    .wikipedia-thumb {
+        max-width: 100%;
+        max-height: 12rem;
+        border-radius: 6px;
+        object-fit: contain;
+    }
+
     .wikipedia-body {
         display: flex;
         flex-direction: column;

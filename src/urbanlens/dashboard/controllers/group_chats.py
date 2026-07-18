@@ -96,10 +96,24 @@ def _group_thread_context(profile: Profile, group: GroupChat, membership: GroupC
     Returns:
         Context dict for ``_group_thread.html``.
     """
+    from urbanlens.dashboard.services.identity_visibility import resolve_visible_identities
+
     GroupMessage.objects.mark_read(membership)
     mark_group_thread_open(profile.pk, group.pk)
     thread_messages, has_more_older = group_thread_page(membership)
     members = [row.profile for row in group.active_memberships().select_related("profile", "profile__user").order_by("created")]
+
+    # A group can include people who aren't friends with everyone else in it,
+    # whose privacy settings may not permit some viewers to see their name/
+    # avatar - the message content itself still shows (this is "who sent it",
+    # not "what they said"), same as any other shared space. Resolved once
+    # per distinct sender (not per message) and attached for the template.
+    distinct_senders = {message.sender_id: message.sender for message in thread_messages if message.sender_id}
+    sender_identities = resolve_visible_identities(profile, list(distinct_senders.values()))
+    for message in thread_messages:
+        if message.sender_id:
+            message.sender_identity = sender_identities.get(message.sender_id)
+
     return {
         "group": group,
         "membership": membership,
@@ -230,12 +244,23 @@ class GroupOlderMessagesView(LoginRequiredMixin, View):
         Returns:
             The message-items partial for that page, or 400 for a bad cursor.
         """
+        from urbanlens.dashboard.services.identity_visibility import resolve_visible_identities
+
         profile = _get_profile(request)
         group, membership = _get_group(profile, group_uuid)
         before_raw = request.GET.get("before", "")
         if not before_raw.isdigit():
             return HttpResponseBadRequest("A valid message id is required.")
         messages, has_more_older = group_thread_page(membership, before_id=int(before_raw))
+
+        # See _group_thread_context's identical comment - masks sender name/
+        # avatar per the sender's own privacy settings toward this viewer.
+        distinct_senders = {message.sender_id: message.sender for message in messages if message.sender_id}
+        sender_identities = resolve_visible_identities(profile, list(distinct_senders.values()))
+        for message in messages:
+            if message.sender_id:
+                message.sender_identity = sender_identities.get(message.sender_id)
+
         return render(
             request,
             "dashboard/partials/messages/_group_thread_messages_page.html",
@@ -331,15 +356,25 @@ class GroupMembersDialogView(LoginRequiredMixin, View):
         Returns:
             The rendered dialog partial.
         """
+        from urbanlens.dashboard.services.identity_visibility import resolve_visible_identities
+
         profile = _get_profile(request)
         group, _membership = _get_group(profile, group_uuid)
-        memberships = group.active_memberships().select_related("profile", "profile__user").order_by("created")
+        memberships = list(group.active_memberships().select_related("profile", "profile__user").order_by("created"))
+        # Resolves each member's display name/avatar per their own privacy
+        # settings toward the viewer (a member added by someone else may not
+        # be friends with everyone here) and gives every member - masked or
+        # not - a distinct fallback-avatar color, so two members sharing the
+        # same default color/placeholder aren't indistinguishable apart from
+        # an initial letter.
+        identities = resolve_visible_identities(profile, [m.profile for m in memberships])
         return render(
             request,
             "dashboard/partials/messages/_group_members_dialog.html",
             {
                 "group": group,
                 "memberships": memberships,
+                "identities": identities,
                 "is_manager": group.is_manager(profile),
                 "viewer_id": profile.pk,
             },
@@ -552,6 +587,8 @@ class GroupMemberSearchView(LoginRequiredMixin, View):
         """
         from django.db.models import Q
 
+        from urbanlens.dashboard.services.avatar_colors import assign_avatar_colors
+
         profile = _get_profile(request)
         query = request.GET.get("q", "").strip()
         results: list[Profile] = []
@@ -560,4 +597,6 @@ class GroupMemberSearchView(LoginRequiredMixin, View):
             results = [candidate for candidate in candidates if can_direct_message(profile, candidate)][:MEMBER_SEARCH_LIMIT]
             for candidate in results:
                 candidate.ensure_slug()
+            # Distinct-per-list fallback avatar colors - see GroupMembersDialogView.get.
+            assign_avatar_colors(results, identity=lambda p: p.slug or str(p.pk))
         return render(request, "dashboard/partials/messages/_group_member_results.html", {"results": results, "query": query})

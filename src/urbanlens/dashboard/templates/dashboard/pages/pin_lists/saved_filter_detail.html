@@ -1,4 +1,5 @@
 {% extends 'dashboard/themes/base.html' %}
+{% load static %}
 {% load map_components %}
 {% load dashboard_tags %}
 
@@ -171,4 +172,8 @@
     window.savedFilterInitInlinePage();
 })();
 </script>
+{% endblock %}
+
+{% block scripts %}
+<script type="module" src="{% static 'dashboard/js/saved-filter-detail.js' %}"></script>
 {% endblock %}

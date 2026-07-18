@@ -340,14 +340,19 @@
                 <i class="material-symbols-outlined">collections</i>
                 <h3>Media</h3>
                 <span class="badge" id="media-count-badge" hidden></span>
-                <button type="button" class="media-gallery-header-btn" id="media-select-btn" title="Select media"
-                        onclick="window.mediaToggleSelectMode()">
-                    <i class="material-symbols-outlined">checklist</i>
-                </button>
-                <button type="button" class="media-gallery-header-btn" id="media-settings-btn" title="Media settings"
-                        onclick="window.mediaToggleSettingsMenu()">
-                    <i class="material-symbols-outlined">tune</i>
-                </button>
+                {# .card-header-actions is the shared multi-action wrapper (see panel-header-grid #}
+                {# mixin) - without it, these two buttons had no grid-area of their own and fell #}
+                {# to CSS Grid auto-placement, landing on an implicit second row below the title. #}
+                <div class="card-header-actions">
+                    <button type="button" class="media-gallery-header-btn" id="media-select-btn" title="Select media"
+                            onclick="window.mediaToggleSelectMode()">
+                        <i class="material-symbols-outlined">checklist</i>
+                    </button>
+                    <button type="button" class="media-gallery-header-btn" id="media-settings-btn" title="Media settings"
+                            onclick="window.mediaToggleSettingsMenu()">
+                        <i class="material-symbols-outlined">tune</i>
+                    </button>
+                </div>
                 <div class="media-settings-menu" id="media-settings-menu" hidden>
                     <div class="media-settings-group">
                         <span class="media-settings-label">Visibility</span>
@@ -1352,8 +1357,19 @@
             // any reason - most commonly a sibling .pin-aux-grid card loading
             // in and changing the row's stretched height. Our own clamp writes
             // never grow the card past that height, so this can't self-trigger.
+            //
+            // Also observe .pin-aux-grid itself, not just this card: a sibling
+            // that finishes loading well after this one (a slow external-API
+            // panel, or one that only appears once its own hx-get resolves)
+            // changes the *grid's* auto-sized row height first, which then
+            // stretches every card in the row - watching the grid container
+            // directly is a more direct signal than waiting on that
+            // propagation to also show up as a resize of this card specifically.
             if (window.ResizeObserver) {
-                new ResizeObserver(function () { scheduleClamp(section); }).observe(section);
+                var ro = new ResizeObserver(function () { scheduleClamp(section); });
+                ro.observe(section);
+                var grid = section.closest('.pin-aux-grid');
+                if (grid) ro.observe(grid);
             }
         });
 

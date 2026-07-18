@@ -132,7 +132,108 @@ Context:
         if (includeInput) includeInput.value = includeCoords.length ? JSON.stringify({ type: 'MultiPolygon', coordinates: includeCoords }) : '';
         if (excludeInput) excludeInput.value = excludeCoords.length ? JSON.stringify({ type: 'MultiPolygon', coordinates: excludeCoords }) : '';
         _sfScheduleNameSuggestion();
+        // Plain property assignment above doesn't fire a DOM event, so anything
+        // listening on the form for 'change' (e.g. the standalone filter detail
+        // page's live preview map) would otherwise miss region edits entirely.
+        const form = document.getElementById('saved-filter-form');
+        if (form) form.dispatchEvent(new Event('change', { bubbles: true }));
     }
+
+    // -- Saved filter label pickers (include/exclude) -------------------------
+    function _sfEscHtml(s) {
+        const div = document.createElement('div');
+        div.textContent = s || '';
+        return div.innerHTML;
+    }
+
+    function _sfMakeLabelPicker(fieldName) {
+        const root = document.querySelector('.saved-filter-label-picker[data-field-name="' + fieldName + '"]');
+        const chipsEl = document.getElementById('sf-label-chips-' + fieldName);
+        const searchEl = document.getElementById('sf-label-search-' + fieldName);
+        const suggEl = document.getElementById('sf-label-suggestions-' + fieldName);
+        const catalogEl = document.getElementById('sf-label-catalog-' + fieldName);
+        if (!root || !chipsEl || !searchEl || !suggEl || !catalogEl) return;
+
+        const candidates = [];
+        let selected = [];
+        catalogEl.querySelectorAll('[data-id]').forEach((el) => {
+            const item = { id: el.dataset.id, name: el.dataset.name, icon: el.dataset.icon, color: el.dataset.color };
+            candidates.push(item);
+            if (el.dataset.selected === '1') selected.push(item);
+        });
+
+        function syncHiddenInputs() {
+            root.querySelectorAll('input[data-sf-label-input]').forEach((el) => el.remove());
+            selected.forEach((item) => {
+                const input = document.createElement('input');
+                input.type = 'checkbox';
+                input.hidden = true;
+                input.checked = true;
+                input.name = fieldName;
+                input.value = item.id;
+                input.dataset.sfLabelInput = '1';
+                root.appendChild(input);
+            });
+        }
+
+        function notifyChanged() {
+            root.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+
+        function renderChips() {
+            chipsEl.innerHTML = '';
+            selected.forEach((item) => {
+                const chip = document.createElement('span');
+                chip.className = 'apdlg-label-chip-item';
+                if (item.color) chip.style.setProperty('--tag-color', item.color);
+                const iconHtml = item.icon ? `<span class="apdlg-chip-icon">${_sfEscHtml(item.icon)}</span>` : '';
+                chip.innerHTML = `${iconHtml}<span class="apdlg-chip-name">${_sfEscHtml(item.name)}</span><button type="button" class="apdlg-chip-remove" aria-label="Remove">x</button>`;
+                chip.querySelector('.apdlg-chip-remove').addEventListener('click', () => {
+                    selected = selected.filter((s) => s.id !== item.id);
+                    renderChips();
+                    notifyChanged();
+                });
+                chipsEl.appendChild(chip);
+            });
+            syncHiddenInputs();
+        }
+
+        function renderSuggestions(query) {
+            const q = (query || '').toLowerCase().trim();
+            const selectedIds = new Set(selected.map((s) => s.id));
+            const matches = candidates.filter((c) => !selectedIds.has(c.id) && (!q || c.name.toLowerCase().includes(q))).slice(0, 12);
+            if (!matches.length) { suggEl.hidden = true; suggEl.innerHTML = ''; return; }
+            suggEl.innerHTML = '';
+            matches.forEach((item) => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'apdlg-label-sugg-item';
+                const iconHtml = item.icon ? `<span class="apdlg-sugg-icon">${_sfEscHtml(item.icon)}</span>` : '';
+                btn.innerHTML = `${iconHtml}<span class="apdlg-sugg-name">${_sfEscHtml(item.name)}</span>`;
+                btn.addEventListener('click', () => {
+                    selected.push(item);
+                    renderChips();
+                    searchEl.value = '';
+                    suggEl.hidden = true;
+                    searchEl.focus();
+                    notifyChanged();
+                });
+                suggEl.appendChild(btn);
+            });
+            suggEl.hidden = false;
+        }
+
+        searchEl.addEventListener('input', () => renderSuggestions(searchEl.value));
+        searchEl.addEventListener('focus', () => renderSuggestions(searchEl.value));
+        searchEl.addEventListener('blur', () => setTimeout(() => { suggEl.hidden = true; }, 150));
+
+        renderChips();
+    }
+
+    window.initSavedFilterLabelPickers = function () {
+        _sfMakeLabelPicker('tags');
+        _sfMakeLabelPicker('exclude_tags');
+    };
 
     // -- Saved filter name auto-suggestion ------------------------------------
     // Pre-fills "Filter name" with a summary of whatever criteria are currently
@@ -294,6 +395,7 @@ Context:
     window.savedFilterOpenDialog = function () {
         document.getElementById('saved-filter-form-dialog').showModal();
         window.initSavedFilterRegionMap();
+        window.initSavedFilterLabelPickers();
         _sfInitVisits();
         // Editing an existing filter already has a real name - don't clobber it
         // with a fresh suggestion; a blank "New Filter" dialog starts eligible.
@@ -306,6 +408,7 @@ Context:
     // form is part of the page itself rather than a dialog to open.
     window.savedFilterInitInlinePage = function () {
         window.initSavedFilterRegionMap();
+        window.initSavedFilterLabelPickers();
         _sfInitVisits();
         const nameInput = document.getElementById('saved-filter-name');
         _sfNameManuallyEdited = !!(nameInput && nameInput.value.trim());

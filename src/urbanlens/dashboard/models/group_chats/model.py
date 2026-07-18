@@ -24,7 +24,7 @@ creator may add or remove members.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 import uuid
 
 from django.db.models import CASCADE, SET_NULL, BooleanField, CharField, CheckConstraint, DateTimeField, ForeignKey, Index, PositiveIntegerField, Q, TextField, UniqueConstraint, UUIDField
@@ -230,6 +230,9 @@ class GroupMessage(abstract.DashboardModel):
     if TYPE_CHECKING:
         group_id: int
         sender_id: int
+        # Set request-scoped by controllers.group_chats._group_thread_context /
+        # GroupOlderMessagesView, via services.identity_visibility - not a real field.
+        sender_identity: dict[str, Any] | None
 
     objects = GroupMessageManager()
 

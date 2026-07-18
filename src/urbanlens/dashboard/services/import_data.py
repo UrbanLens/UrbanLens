@@ -453,15 +453,22 @@ def _import_pins(
     coordinate (e.g. several pins that all rely on one shared Location for
     placement), which would otherwise collide with the one-root-pin-per-point
     per-profile database constraint.
+
+    A pin's review rating and private article are only ever created here (never
+    on a re-import that skips an already-existing pin), matching the same
+    "create-time only" treatment as labels below.
     """
     from django.db import IntegrityError
 
+    from urbanlens.dashboard.models.abstract.choices import SecurityLevel
+    from urbanlens.dashboard.models.abstract.security import SECURITY_FIELDS
     from urbanlens.dashboard.models.pin.model import Pin
 
     rows = _read_json(data_dir, "pins.json")
     if not rows:
         return
     total_rows = len(rows)
+    security_level_values = set(SecurityLevel.values)
 
     for idx, row in enumerate(rows, start=1):
         if report_progress:
@@ -491,12 +498,19 @@ def _import_pins(
             "icon": row.get("icon") or None,
             "color": row.get("color") or None,
             "priority": int(row.get("priority", 0)),
+            "vulnerability": int(row.get("vulnerability", 0)),
+            "danger": int(row.get("danger", 0)),
             "pin_type": row.get("pin_type", "location"),
             "detail_bg_color": row.get("detail_bg_color") or None,
             "detail_bg_opacity": int(row.get("detail_bg_opacity", 80)),
             "detail_border_color": row.get("detail_border_color") or None,
             "detail_border_opacity": int(row.get("detail_border_opacity", 100)),
         }
+        security = row.get("security") or {}
+        for field_name, _label in SECURITY_FIELDS:
+            value = security.get(field_name)
+            if value in security_level_values:
+                defaults[field_name] = value
         # Only carry the archive's uuid onto the new pin when it isn't
         # already taken by another user's pin (uuid is globally unique);
         # otherwise import as a fresh pin. pin_uuid_map still keys on the
@@ -529,6 +543,19 @@ def _import_pins(
         for label_uuid in row.get("label_uuids") or row.get("badge_uuids", []):
             if label_uuid in label_uuid_map:
                 pin.labels.add(label_uuid_map[label_uuid])
+
+        rating = row.get("rating")
+        if isinstance(rating, int) and 0 <= rating <= 5:
+            from urbanlens.dashboard.models.reviews.model import Review
+
+            Review.objects.create(profile=profile, pin=pin, rating=rating)
+
+        article_data = row.get("article") or {}
+        content = article_data.get("content")
+        if content:
+            from urbanlens.dashboard.services.articles import save_article
+
+            save_article(editor=profile, content=content, edit_summary="Imported", pin=pin)
 
 
 def _import_visit_history(
@@ -680,6 +707,67 @@ def _import_connections(
             result.inc_skipped("connections")
 
 
+#: Settings that are plain scalar Profile fields, copied through as-is when
+#: present (booleans/ints round-trip through JSON natively; choice fields are
+#: separately validated via ``_safe_set`` below since a foreign instance's
+#: choices module could differ in a future version).
+_SETTINGS_PASSTHROUGH_FIELDS: tuple[str, ...] = (
+    "cluster_radius",
+    "use_pin_cache",
+    "map_default_zoom",
+    "remembered_map_zoom",
+    "markup_fill_color",
+    "markup_fill_opacity",
+    "markup_border_color",
+    "markup_border_opacity",
+    "pin_detail_map_height",
+    "media_gallery_sort",
+    "show_wiki_cover_photos",
+    "external_apis_enabled",
+    "name_source_priority",
+)
+
+#: Settings stored as DecimalField on Profile - imported only when parseable.
+_SETTINGS_DECIMAL_FIELDS: tuple[str, ...] = (
+    "map_center_latitude",
+    "map_center_longitude",
+    "map_custom_latitude",
+    "map_custom_longitude",
+    "remembered_map_lat",
+    "remembered_map_lng",
+)
+
+#: Nested boolean/int groups in settings.json - flattened onto Profile fields
+#: of the same name (each group mirrors one settings-page section).
+_SETTINGS_GROUPS: tuple[str, ...] = ("ai", "keyword_tagging", "photos", "places_layers", "tracking", "community")
+
+#: Choice fields validated against the model's own choices before being applied.
+_SETTINGS_CHOICE_FIELDS: tuple[str, ...] = (
+    "theme_mode",
+    "guidance_level",
+    "distance_units",
+    "map_dark_mode",
+    "default_map_view",
+    "map_center_mode",
+)
+
+_PRIVACY_FIELDS: tuple[str, ...] = (
+    "profile_visibility",
+    "comment_visibility",
+    "friend_request_visibility",
+    "photo_upload_visibility",
+    "viewer_photo_filter",
+    "trip_pin_location_visibility",
+    "contact_visibility",
+    "direct_message_visibility",
+    "online_status_visibility",
+    "read_receipt_visibility",
+    "typing_indicator_visibility",
+    "common_pins_visibility",
+    "direct_message_delete_after",
+)
+
+
 def _import_settings(
     profile: Any,
     data_dir: str,
@@ -690,6 +778,8 @@ def _import_settings(
     report_progress: ProgressReporter | None = None,
 ) -> None:
     """Import user settings, overwriting the current profile settings."""
+    from decimal import Decimal, InvalidOperation
+
     from urbanlens.dashboard.models.profile.model import Profile
 
     data = _read_json(data_dir, "settings.json")
@@ -699,44 +789,55 @@ def _import_settings(
     privacy = data.get("privacy", {})
     update_fields: dict[str, Any] = {}
 
-    _safe_set(update_fields, "theme_mode", data, Profile, "theme_mode")
-    _safe_set(update_fields, "guidance_level", data, Profile, "guidance_level")
-    _safe_set(update_fields, "map_dark_mode", data, Profile, "map_dark_mode")
-    _safe_set(update_fields, "default_map_view", data, Profile, "default_map_view")
-    _safe_set(update_fields, "map_center_mode", data, Profile, "map_center_mode")
+    for field_name in _SETTINGS_CHOICE_FIELDS:
+        _safe_set(update_fields, field_name, data, Profile, field_name)
 
-    if "cluster_radius" in data:
-        update_fields["cluster_radius"] = data["cluster_radius"]
-    if "use_pin_cache" in data:
-        update_fields["use_pin_cache"] = bool(data["use_pin_cache"])
-    if "map_default_zoom" in data:
-        update_fields["map_default_zoom"] = int(data["map_default_zoom"])
-    if "markup_fill_color" in data:
-        update_fields["markup_fill_color"] = data["markup_fill_color"]
-    if "markup_fill_opacity" in data:
-        update_fields["markup_fill_opacity"] = int(data["markup_fill_opacity"])
-    if "markup_border_color" in data:
-        update_fields["markup_border_color"] = data["markup_border_color"]
-    if "markup_border_opacity" in data:
-        update_fields["markup_border_opacity"] = int(data["markup_border_opacity"])
+    for field_name in _SETTINGS_PASSTHROUGH_FIELDS:
+        if field_name in data and data[field_name] is not None:
+            update_fields[field_name] = data[field_name]
 
-    for field_name in (
-        "profile_visibility",
-        "comment_visibility",
-        "friend_request_visibility",
-        "photo_upload_visibility",
-        "viewer_photo_filter",
-        "trip_pin_location_visibility",
-        "contact_visibility",
-    ):
+    for field_name in _SETTINGS_DECIMAL_FIELDS:
+        raw = data.get(field_name)
+        if raw is None:
+            continue
+        try:
+            update_fields[field_name] = Decimal(str(raw))
+        except InvalidOperation:
+            continue
+
+    for group_name in _SETTINGS_GROUPS:
+        group = data.get(group_name) or {}
+        update_fields.update({field_name: value for field_name, value in group.items() if hasattr(Profile, field_name)})
+
+    if "sync_aliases" in (data.get("community") or {}):
+        _safe_set(update_fields, "sync_aliases", data["community"], Profile, "sync_aliases")
+
+    for field_name in _PRIVACY_FIELDS:
         if field_name in privacy:
             update_fields[field_name] = privacy[field_name]
+    if "allow_friend_recommendations" in privacy:
+        update_fields["allow_friend_recommendations"] = bool(privacy["allow_friend_recommendations"])
 
     if update_fields:
         Profile.objects.filter(pk=profile.pk).update(**update_fields)
         result.inc_created("settings")
     else:
         result.inc_skipped("settings")
+
+    _import_notification_preferences(profile, data.get("notification_preferences") or {}, result)
+
+
+def _import_notification_preferences(profile: Any, data: dict[str, Any], result: ImportResult) -> None:
+    """Apply exported per-notification-type delivery preferences, if present."""
+    if not data:
+        return
+    from urbanlens.dashboard.models.notifications.model import NotificationPreference
+
+    fields = {f.name for f in NotificationPreference._meta.get_fields() if getattr(f, "concrete", False)}  # noqa: SLF001
+    update_fields = {name: value for name, value in data.items() if name in fields and name not in {"id", "profile", "created", "updated"}}
+    if not update_fields:
+        return
+    NotificationPreference.objects.update_or_create(profile=profile, defaults=update_fields)
 
 
 def _safe_set(
@@ -836,13 +937,139 @@ def _import_pin_lists(
         result.inc_created("pin_lists")
 
 
+def _import_custom_fields(
+    profile: Any,
+    data_dir: str,
+    result: ImportResult,
+    *,
+    pin_uuid_map: dict[str, int],
+    label_uuid_map: dict[str, int],
+    report_progress: ProgressReporter | None = None,
+) -> None:
+    """Import custom field definitions, plus values for pin-targeted fields.
+
+    Field *definitions* (name/type/config) are always imported (idempotent by
+    profile+entity_type+name, matching the DB's own uniqueness constraint) -
+    they're useful on their own even with no data. Values are only re-created
+    for entity_type=pin, since that's the only target type this import can
+    resolve a real local object for (photos/people/maps aren't imported by
+    any other step); other entity types' values are skipped with a warning
+    rather than silently dropped.
+    """
+    from urbanlens.dashboard.models.custom_fields.model import CustomField, CustomFieldEntity, CustomFieldType, CustomFieldValue
+
+    rows = _read_json(data_dir, "custom_fields.json")
+    if not rows:
+        return
+    total_rows = len(rows)
+    skipped_value_entities: set[str] = set()
+
+    for idx, row in enumerate(rows, start=1):
+        if report_progress:
+            report_progress(idx, total_rows)
+        entity_type = row.get("entity_type", "")
+        name = (row.get("name") or "").strip()
+        if entity_type not in CustomFieldEntity.values or not name:
+            result.inc_skipped("custom_fields")
+            continue
+
+        field, created = CustomField.objects.get_or_create(
+            profile=profile,
+            entity_type=entity_type,
+            name=name,
+            defaults={
+                "field_type": row.get("field_type", CustomFieldType.TEXT),
+                "style": row.get("style") or "",
+                "config": row.get("config") or {},
+            },
+        )
+        if created:
+            result.inc_created("custom_fields")
+        else:
+            result.inc_skipped("custom_fields")
+
+        if entity_type != CustomFieldEntity.PIN:
+            if row.get("values"):
+                skipped_value_entities.add(entity_type)
+            continue
+
+        for value_row in row.get("values", []):
+            pin_pk = pin_uuid_map.get(value_row.get("target_uuid", ""))
+            if pin_pk is None:
+                continue
+            if CustomFieldValue.objects.filter(field=field, pin_id=pin_pk).exists():
+                result.inc_skipped("custom_field_values")
+                continue
+            value_obj = CustomFieldValue(field=field, pin_id=pin_pk)
+            if _apply_exported_custom_field_value(value_obj, field.field_type, value_row.get("value"), pin_uuid_map):
+                value_obj.save()
+                result.inc_created("custom_field_values")
+            else:
+                result.inc_skipped("custom_field_values")
+
+    for entity_type in sorted(skipped_value_entities):
+        label = dict(CustomFieldEntity.choices).get(entity_type, entity_type)
+        result.warnings.append(f"Custom field values for {label} were not re-created - only pin-targeted values can be imported.")
+
+
+def _apply_exported_custom_field_value(value_obj: Any, field_type: str, exported: Any, pin_uuid_map: dict[str, int]) -> bool:
+    """Set the typed column on ``value_obj`` from an ``export_value()``-shaped payload.
+
+    Args:
+        value_obj: An unsaved CustomFieldValue with ``field``/target already set.
+        field_type: The owning field's ``CustomFieldType``.
+        exported: The value as written by ``CustomFieldValue.export_value()``.
+        pin_uuid_map: Archive uuid -> local pk, for resolving pin references.
+
+    Returns:
+        True when a value was applied, False when it couldn't be (caller should skip).
+    """
+    from decimal import Decimal, InvalidOperation
+
+    from django.utils.dateparse import parse_date, parse_time
+
+    from urbanlens.dashboard.models.custom_fields.model import CustomFieldType
+
+    if exported is None:
+        return False
+
+    if field_type == CustomFieldType.NUMBER:
+        try:
+            value_obj.value_number = Decimal(str(exported))
+        except InvalidOperation:
+            return False
+    elif field_type == CustomFieldType.DATE:
+        parsed_date = parse_date(str(exported))
+        if parsed_date is None:
+            return False
+        value_obj.value_date = parsed_date
+    elif field_type == CustomFieldType.TIME:
+        parsed_time = parse_time(str(exported))
+        if parsed_time is None:
+            return False
+        value_obj.value_time = parsed_time
+    elif field_type == CustomFieldType.CHECKBOX:
+        value_obj.value_boolean = bool(exported)
+    elif field_type == CustomFieldType.REFERENCE:
+        if not isinstance(exported, dict) or exported.get("kind") != "pin":
+            return False
+        target_pk = pin_uuid_map.get(exported.get("uuid", ""))
+        if target_pk is None:
+            return False
+        value_obj.ref_pin_id = target_pk
+    else:
+        value_obj.value_text = str(exported)
+    return True
+
+
 # -- Dispatch table -------------------------------------------------------------
 
-_IMPORT_ORDER = ["labels", "pins", "pin_lists", "visit_history", "connections", "settings"]
+_IMPORT_ORDER = ["labels", "pins", "custom_fields", "pin_lists", "visit_history", "connections", "settings"]
 
 _IMPORTERS: dict[str, Any] = {
     "labels": _import_labels,
     "pins": _import_pins,
+    "custom_fields": _import_custom_fields,
     "pin_lists": _import_pin_lists,
     "visit_history": _import_visit_history,
     "connections": _import_connections,
@@ -852,6 +1079,7 @@ _IMPORTERS: dict[str, Any] = {
 _STEP_MESSAGES = {
     "labels": "Importing labels...",
     "pins": "Importing pins and locations...",
+    "custom_fields": "Importing custom fields...",
     "pin_lists": "Importing lists...",
     "visit_history": "Importing visit history...",
     "connections": "Importing connections...",

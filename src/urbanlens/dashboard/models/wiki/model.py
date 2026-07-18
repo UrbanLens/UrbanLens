@@ -188,8 +188,12 @@ class Wiki(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addre
         if self.name != getattr(self, "_loaded_name", None) and is_meaningful_name(self.name):
             from urbanlens.dashboard.models.aliases.model import WikiAlias
 
+            new_name = (self.name or "").strip()
             try:
-                WikiAlias.objects.get_or_create(wiki=self, name=(self.name or "").strip())
+                # Case-insensitive lookup matches the alias uniqueness rule, so
+                # renaming to a different casing of an existing alias reuses
+                # that row instead of racing the DB constraint.
+                WikiAlias.objects.get_or_create(wiki=self, name__iexact=new_name, defaults={"name": new_name})
             except DatabaseError:
                 logger.debug("Could not ensure alias for wiki %s name %r", self.pk, self.name, exc_info=True)
         self._loaded_name = self.name

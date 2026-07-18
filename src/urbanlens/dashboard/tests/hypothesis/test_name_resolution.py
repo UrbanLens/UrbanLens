@@ -113,6 +113,57 @@ class IsAddressDerivedNameTests(TestCase):
         self.assertFalse(is_address_derived_name(transform("Kenwood") + pad, keep_loc))
 
 
+class IsAddressDerivedNameFuzzyVariantsTests(TestCase):
+    """Real-world address variants (off-by-one house numbers, ranged/block addresses,
+    abbreviated vs. full street suffixes and state names) must still be recognized
+    as address-derived, not just an exact/near-exact match of the stored fields."""
+
+    def _amsterdam_location(self) -> Location:
+        return _location(street_number="1050", route="Main St", locality="Amsterdam", administrative_area_level_1="NY")
+
+    def test_off_by_one_house_number_is_still_address_derived(self) -> None:
+        self.assertTrue(is_address_derived_name("1051 Main St", self._amsterdam_location()))
+
+    def test_off_by_one_house_number_with_full_address_text(self) -> None:
+        self.assertTrue(is_address_derived_name("1051 main st, amsterdam, ny", self._amsterdam_location()))
+
+    def test_ranged_block_address_containing_the_house_number(self) -> None:
+        self.assertTrue(is_address_derived_name("1030-1060 Main St, Amsterdam, NY", self._amsterdam_location()))
+
+    def test_full_street_suffix_and_full_state_name_and_zip(self) -> None:
+        self.assertTrue(is_address_derived_name("1049 Main Street, Amsterdam, New York, 12010", self._amsterdam_location()))
+
+    def test_house_number_far_outside_tolerance_is_not_matched(self) -> None:
+        """A house number too far off to plausibly be the same building/block must still be kept."""
+        self.assertFalse(is_address_derived_name("2200 Main St", self._amsterdam_location()))
+
+    def test_ranged_address_not_containing_the_house_number_is_not_matched(self) -> None:
+        self.assertFalse(is_address_derived_name("2000-2010 Main St", self._amsterdam_location()))
+
+    def test_matching_number_but_different_street_is_not_matched(self) -> None:
+        self.assertFalse(is_address_derived_name("1050 Elm St", self._amsterdam_location()))
+
+    def test_full_state_name_alone_matches_stored_abbreviation(self) -> None:
+        loc = _location(locality="Poughkeepsie", administrative_area_level_1="NY")
+        self.assertTrue(is_address_derived_name("New York", loc))
+
+    def test_abbreviation_alone_matches_stored_full_state_name(self) -> None:
+        loc = _location(locality="Poughkeepsie", administrative_area_level_1="New York")
+        self.assertTrue(is_address_derived_name("NY", loc))
+
+    def test_abbreviated_route_matches_full_suffix_candidate(self) -> None:
+        loc = _location(street_number="12", route="Miller Rd", locality="Utica", administrative_area_level_1="NY")
+        self.assertTrue(is_address_derived_name("Miller Road", loc))
+
+    def test_kenwood_still_kept_even_with_a_ranged_or_fuzzy_number(self) -> None:
+        """Regression guard: the new house-number tolerance path must not
+        accidentally reopen the "place the street was named after" exception -
+        Kenwood carries no street-type word, so it's rejected before house
+        numbers are even considered."""
+        loc = _location(street_number="1", route="Kenwood Road", locality="Albany", administrative_area_level_1="NY")
+        self.assertFalse(is_address_derived_name("1 Kenwood", loc))
+
+
 # -- RuleBasedNameResolver ----------------------------------------------------------
 
 

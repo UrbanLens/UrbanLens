@@ -15,6 +15,7 @@ from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
 
+from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, PinAutoRemoval, WikiAutoRemoval
 from urbanlens.dashboard.models.links.model import MAX_LINK_URL_LENGTH, PinLink, WikiLink
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.services.wiki_access import resolve_visible_wiki
@@ -98,6 +99,9 @@ class PinLinkDeleteView(LoginRequiredMixin, View):
     def delete(self, request, pin_slug, link_id):
         pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         link = get_object_or_404(PinLink, id=link_id, pin=pin)
+        # Tombstone first: a plugin panel (Nominatim, EPA) can otherwise
+        # recreate this exact link the next time its cache goes stale.
+        PinAutoRemoval.objects.record(pin=pin, kind=AutoRemovalKind.LINK, value=link.url)
         link.delete()
         return _render_pin_links(request, pin)
 
@@ -123,5 +127,8 @@ class LocationLinkDeleteView(LoginRequiredMixin, View):
     def delete(self, request, location_slug, link_id):
         _location, wiki, _profile = resolve_visible_wiki(request, location_slug)
         link = get_object_or_404(WikiLink, id=link_id, wiki=wiki)
+        # Tombstone first: a plugin panel (Nominatim, EPA) can otherwise
+        # recreate this exact link the next time its cache goes stale.
+        WikiAutoRemoval.objects.record(wiki=wiki, kind=AutoRemovalKind.LINK, value=link.url)
         link.delete()
         return _render_wiki_links(request, wiki)

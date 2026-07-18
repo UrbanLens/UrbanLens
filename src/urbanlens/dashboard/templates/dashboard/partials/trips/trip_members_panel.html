@@ -18,15 +18,19 @@
         {% with member=membership.profile %}
         <li class="trip-member-item" id="trip-member-{{ member.id }}">
             <div class="trip-member-avatar">
-                {% if member.avatar %}
-                <img src="{{ member.avatar.url }}" alt="" class="trip-member-avatar-img">
+                {% if member.display_avatar_url %}
+                <img src="{{ member.display_avatar_url }}" alt="" class="trip-member-avatar-img">
                 {% else %}
-                <span class="trip-member-avatar-initial">{{ member.user.username|first|upper }}</span>
+                <span class="trip-member-avatar-initial {{ member.avatar_color_class }}">{{ member.display_name|first|upper }}</span>
                 {% endif %}
             </div>
             <div class="trip-member-info">
-                <a href="{% url 'profile.view_user' member.slug %}" class="trip-member-name trip-member-name--link">{{ member.user.get_full_name|default:member.user.username }}</a>
+                {% if member.is_masked %}
+                <span class="trip-member-name">{{ member.display_name }}</span>
+                {% else %}
+                <a href="{{ member.display_profile_url }}" class="trip-member-name trip-member-name--link">{{ member.user.get_full_name|default:member.user.username }}</a>
                 <span class="trip-member-username">@{{ member.user.username }}</span>
+                {% endif %}
             </div>
 
             {# Role badge #}
@@ -91,7 +95,7 @@
                         hx-delete="{% url 'trips.member.remove' trip.slug member.id %}"
                         hx-target="#trip-members-panel"
                         hx-swap="outerHTML"
-                        hx-confirm="Remove {{ member.user.username }} from this trip?"
+                        hx-confirm="Remove {{ member.display_name }} from this trip?"
                         hx-on::before-request="this.closest('li').classList.add('is-deleting')">
                     <i class="material-symbols-outlined">person_remove</i>
                 </button>

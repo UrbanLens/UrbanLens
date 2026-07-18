@@ -280,6 +280,39 @@
     min-width: 6rem;
 }
 
+// Contact / Additional Details sections (profile/index.html) - each item is a
+// <span> or <a>, which default to inline with no separation between them.
+// Stacked one-per-line, mirroring .profile-meta-row/.profile-meta-item's
+// pattern (the hero's own contact-ish row) but vertical instead of wrapped.
+.contact-info-list {
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+    margin-top: .25rem;
+}
+
+.contact-info-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: .875rem;
+    color: $color-grey-0;
+    text-decoration: none;
+
+    &:hover {
+        color: $color-grey-0;
+    }
+
+    .material-symbols-outlined,
+    .material-icons,
+    .fa-brands {
+        font-size: 16px;
+        width: 16px;
+        text-align: center;
+        opacity: .7;
+    }
+}
+
 // Click-to-edit-in-place contact fields + birthday, inside .contact-info-item
 .profile-phone-editable,
 .profile-whatsapp-editable,

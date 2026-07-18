@@ -39,6 +39,7 @@ def sync_pin_alias_to_wiki(sender: type[PinAlias], instance: PinAlias, created: 
         return
 
     def _run() -> None:
+        from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, WikiAutoRemoval
         from urbanlens.dashboard.models.pin.model import Pin
         from urbanlens.dashboard.models.profile.meta import SyncAliasesDirection
 
@@ -50,10 +51,15 @@ def sync_pin_alias_to_wiki(sender: type[PinAlias], instance: PinAlias, created: 
             return
         if pin.profile.sync_aliases not in (SyncAliasesDirection.TO_WIKI, SyncAliasesDirection.BOTH):
             return
+        if WikiAutoRemoval.objects.was_removed(wiki_id=pin.wiki_id, kind=AutoRemovalKind.ALIAS, value=instance.name):
+            return
+        # Case-insensitive lookup: the mirrored wiki may already have this
+        # name under different casing (its own uniqueness is case-insensitive
+        # too, but independent of PinAlias's), which would otherwise race it.
         WikiAlias.objects.get_or_create(
             wiki_id=pin.wiki_id,
-            name=instance.name,
-            defaults={"kind": instance.kind, "source": WIKI_SYNC_SOURCE, "created_by_id": pin.profile_id},
+            name__iexact=instance.name,
+            defaults={"name": instance.name, "kind": instance.kind, "source": WIKI_SYNC_SOURCE, "created_by_id": pin.profile_id},
         )
 
     transaction.on_commit(_run)
@@ -72,6 +78,8 @@ def sync_wiki_alias_to_pins(sender: type[WikiAlias], instance: WikiAlias, create
         return
 
     def _run() -> None:
+        from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, PinAutoRemoval
+        from urbanlens.dashboard.models.auto_removals.queryset import normalize_auto_removal_value
         from urbanlens.dashboard.models.pin.model import Pin
         from urbanlens.dashboard.models.profile.meta import SyncAliasesDirection
         from urbanlens.dashboard.models.wiki.model import Wiki
@@ -84,7 +92,16 @@ def sync_wiki_alias_to_pins(sender: type[WikiAlias], instance: WikiAlias, create
             location_id=wiki.location_id,
             profile__sync_aliases__in=(SyncAliasesDirection.FROM_WIKI, SyncAliasesDirection.BOTH),
         )
+        removed_pin_ids = set(
+            PinAutoRemoval.objects.filter(
+                pin__in=pins, kind=AutoRemovalKind.ALIAS, value=normalize_auto_removal_value(AutoRemovalKind.ALIAS, instance.name)
+            ).values_list("pin_id", flat=True)
+        )
         for pin in pins:
-            PinAlias.objects.get_or_create(pin=pin, name=instance.name, defaults={"kind": instance.kind, "source": WIKI_SYNC_SOURCE})
+            if pin.pk in removed_pin_ids:
+                continue
+            # Case-insensitive lookup: this pin may already have the name
+            # under different casing, which would otherwise race it.
+            PinAlias.objects.get_or_create(pin=pin, name__iexact=instance.name, defaults={"name": instance.name, "kind": instance.kind, "source": WIKI_SYNC_SOURCE})
 
     transaction.on_commit(_run)

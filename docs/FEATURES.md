@@ -17,7 +17,10 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
 - Add pins by map click, coordinate entry, or place search/autocomplete; drag to reposition
 - Pin list view alongside the map (particularly useful while searching/filtering); "Add these pins to a list" bulk action from the pin list panel adds all currently-visible/filtered pins to a trip or saved collection at once
 - Bulk pin operations: multi-select, bulk edit, bulk merge, bulk delete (with undo)
-- Per-pin alternate names (**aliases**) — private aliases on a Pin vs. shared aliases on a Wiki
+- Per-pin alternate names (**aliases**) — private aliases on a Pin vs. shared aliases on a Wiki;
+  names are unique per pin/wiki case-insensitively. Deleting an auto-added alias, link, label, or
+  property owner is permanent - automatic sources (external name lookups, AI extraction,
+  keyword/AI auto-tagging) won't silently recreate something you removed
 - Private per-pin notes (`PinNote`), independent of public comments
 - **Private per-pin Article** — Wikipedia-style long-form private notes per pin (sections, links, references) with full **revision history** (every saved version stored, restorable from the Edit History tab)
 - Pin sharing — share a single pin with one friend, including re-share chains; every share
@@ -141,6 +144,13 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
 - Friendships: request/accept/reject/ignore/remove/block/mute, invite by email
 - Configurable friend-request visibility ("anyone", "friends of friends", "anything in common", etc.)
 - Public/friends-scoped profile pages with visibility controls per field (9 controls, each with 7 granularity levels from "Anyone" to "No one"), "view my profile as..." preview mode
+- **Identity masking in shared spaces** — a trip or group chat member whose `profile_visibility`
+  doesn't permit another member to see them shows as an anonymous "Member" (name/avatar hidden,
+  distinct color/number per hidden person so several aren't indistinguishable) in the member
+  list, activity attribution, comments, and group messages; their content still shows. Adding
+  someone unconnected to a trip/group chat sends both sides a soft "you might know each other"
+  notification (gated on each person's "allow friend recommendations" setting) — never an
+  automatic friend request or profile-view bypass
 - **"Show Photos From" visibility** — photos from users outside your chosen tier are blurred rather than hidden
 - Reviews (0–5 star rating, no text) and comments (with @mentions, emoji reactions, image
   attachments) on pins, wikis, and trips
@@ -240,7 +250,12 @@ DRF `ModelViewSet`s under `/dashboard/rest/`, session-authenticated:
   detection, disappearing messages, typing indicators, read receipts, or delete-for-self (only
   the sender's delete-for-everyone exists). A group whose creator leaves becomes permanently
   unmanaged (no ownership transfer). Extending any of these is a product decision, not a bug fix.
-- Rich compose toolbar: image attachment, share location/map, share pin, @mention, emoji
+- Rich compose toolbar: image attachment, share location/map, share pin, @mention, emoji. The
+  map composer dialog has two tabs - draw a new map, or choose one of your existing maps (search
+  by title) - both attach the same way
+- Fallback (initial-letter) avatars use a deterministic per-person color that's guaranteed
+  distinct from everyone else shown in the same list (e.g. a group chat's member dialog), so two
+  people without photos never look identical there
 - Read receipts, online status indicator, typing indicator (visibility of each configurable per user)
 - Per-message emoji reactions
 - Message search — within a single conversation or across all of them, with jump-to-message

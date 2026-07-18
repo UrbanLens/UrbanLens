@@ -109,7 +109,9 @@ class WikiCreationService:
         official = pin.aliases.filter(kind=AliasType.OFFICIAL)
         chosen = pin.aliases.filter(pk__in=alias_ids).exclude(kind=AliasType.OFFICIAL)
         for alias in list(official) + list(chosen):
-            WikiAlias.objects.get_or_create(wiki=wiki, name=alias.name, defaults={"kind": alias.kind, "source": alias.source})
+            # Case-insensitive lookup matches the alias uniqueness rule, so two
+            # source aliases differing only by case don't race the DB constraint.
+            WikiAlias.objects.get_or_create(wiki=wiki, name__iexact=alias.name, defaults={"name": alias.name, "kind": alias.kind, "source": alias.source})
 
     def _seed_photos(self, pin: Pin, wiki: Wiki, image_ids: set[int]) -> None:
         """Attach the chosen photos to the wiki's gallery, keeping their pin link intact."""

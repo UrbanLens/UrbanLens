@@ -83,6 +83,23 @@ class SavedFilterDetailViewTests(TestCase):
         response = self.client.get(reverse("saved_filters.detail", args=[self.saved_filter.uuid]))
         self.assertContains(response, reverse("saved_filters.edit", args=[self.saved_filter.uuid]))
 
+    def test_icon_picker_script_is_loaded(self) -> None:
+        """The Icon field's trigger button calls window.IconPicker - previously
+        nothing on this page ever defined it (silent ReferenceError, dead
+        button). saved-filter-detail.js installs the global picker."""
+        response = self.client.get(reverse("saved_filters.detail", args=[self.saved_filter.uuid]))
+        self.assertContains(response, "dashboard/js/saved-filter-detail.js")
+
+    def test_label_pickers_render_search_driven_catalog(self) -> None:
+        """Include/exclude labels use the shared search+chip picker (see
+        initSavedFilterLabelPickers), not a flat checkbox list."""
+        response = self.client.get(reverse("saved_filters.detail", args=[self.saved_filter.uuid]))
+        content = response.content.decode()
+        self.assertIn('id="sf-label-catalog-tags"', content)
+        self.assertIn('id="sf-label-catalog-exclude_tags"', content)
+        self.assertIn('id="sf-label-chips-tags"', content)
+        self.assertIn('id="sf-label-search-tags"', content)
+
 
 class SavedFilterPreviewViewTests(TestCase):
     """POST /saved-filters/preview/ - the live map's data source."""

@@ -2,7 +2,8 @@ import {
   confirmAction,
   getCsrfToken,
   toast
-} from "./map-annotations-9jdqkrz7.js";
+} from "./map-annotations-5jnnp4sj.js";
+import"./map-annotations-6j5pq722.js";
 
 // src/urbanlens/dashboard/frontend/ts/shared/map-layers.ts
 var TILE_DEFS = {

@@ -58,6 +58,16 @@
         padding: 1rem 1.25rem;
         border-radius: 16px;
         color: #fff;
+        // Was previously an inline style set once at initial page render
+        // (hero_image_url truthy) - it never got re-applied when the cover
+        // photo is set/cleared live via the lightbox's "Set as cover
+        // photo"/"Remove cover" actions (_applyCoverHeroUpdate only toggles
+        // the --cover class), so it either stuck around after removal or
+        // never appeared on a freshly-set cover. Tying it to this class
+        // keeps it in sync automatically.
+        background: rgba(0, 0, 0, .3);
+        backdrop-filter: blur(5px);
+        -webkit-backdrop-filter: blur(5px);
     }
 
     &--cover &__title,
@@ -348,17 +358,17 @@
     gap: .25rem;
 }
 
-.pin-lists-row > .cf-panel-area {
-    display: flex;
-}
-
-.pin-lists-row > .cf-panel-area > .custom-fields-panel {
-    width: 100%;
-    height: 100%;
-}
-
-#media-gallery-section > .card-header {
-    flex-wrap: nowrap;
+// .cf-panel-area is `display: contents` (see _custom_fields.scss) so its
+// children participate directly as .pin-lists-row grid items - but that
+// also means the `.pin-lists-row > * { align-self: stretch }` rule can't
+// reach them (they're grandchildren, not direct children), so they fall
+// back to the grid's `align-items: start` and don't match sibling card
+// heights. Stretch them explicitly instead of overriding display: flex,
+// which would collapse section-display custom fields into one flex row
+// inside a single grid cell instead of separate cards across the row.
+.pin-lists-row .cf-panel-area > .custom-fields-panel,
+.pin-lists-row .cf-panel-area > .cf-section-card {
+    align-self: stretch;
 }
 
 .pin-detail-hero-body {

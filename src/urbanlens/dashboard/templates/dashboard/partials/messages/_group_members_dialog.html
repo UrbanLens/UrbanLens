@@ -3,6 +3,12 @@ Group members dialog: list the active members; the creator can remove members
 and add new ones (search reuses the group member-search endpoint). Injected
 into #dm-share-dialog-host by the messages page JS. Context: `group`,
 `memberships`, `is_manager`, `viewer_id`.
+
+Each membership.profile has been run through resolve_visible_identities
+(controllers/group_chats.py), which sets display_name/display_avatar_url/
+is_masked/avatar_color_class directly on it - a member added by someone
+else may not be friends with everyone here, so their real name/avatar only
+shows when their own privacy settings permit this viewer to see it.
 {% endcomment %}
 <dialog id="dm-group-members-dialog" class="dm-share-dialog ul-dialog">
   <div class="dialog-header">
@@ -17,14 +23,14 @@ into #dm-share-dialog-host by the messages page JS. Context: `group`,
       {% for membership in memberships %}
       <li class="dm-group-member-row">
         <span class="msg-avatar" aria-hidden="true">
-          {% if membership.profile.avatar %}
-          <img src="{{ membership.profile.avatar.url }}" alt="" class="msg-avatar-img">
+          {% if membership.profile.display_avatar_url %}
+          <img src="{{ membership.profile.display_avatar_url }}" alt="" class="msg-avatar-img">
           {% else %}
-          <span class="msg-avatar-initial">{{ membership.profile.username|first|upper }}</span>
+          <span class="msg-avatar-initial {{ membership.profile.avatar_color_class }}">{{ membership.profile.display_name|first|upper }}</span>
           {% endif %}
         </span>
         <span class="dm-group-member-row__name">
-          {{ membership.profile.username }}
+          {{ membership.profile.display_name }}
           {% if membership.profile_id == group.creator_id %}<span class="dm-group-member-row__badge">creator</span>{% endif %}
         </span>
         {% if is_manager and membership.profile_id != viewer_id %}
@@ -32,7 +38,7 @@ into #dm-share-dialog-host by the messages page JS. Context: `group`,
                 hx-post="{% url 'messages.group.members.remove' group.uuid %}"
                 hx-vals='{"profile_slug": "{{ membership.profile.slug }}"}'
                 hx-target="#dm-thread-pane" hx-swap="innerHTML"
-                hx-confirm="Remove {{ membership.profile.username }} from “{{ group.name }}”?"
+                hx-confirm="Remove {{ membership.profile.display_name }} from “{{ group.name }}”?"
                 onclick="this.closest('dialog').close()">
           <i class="material-symbols-outlined">person_remove</i> Remove
         </button>

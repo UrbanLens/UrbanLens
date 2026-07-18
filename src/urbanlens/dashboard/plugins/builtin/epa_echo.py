@@ -346,15 +346,18 @@ class EpaEchoDetailPanelSource(CoordinateGatedInfoPanelSource):
         """
         from django.core.exceptions import ObjectDoesNotExist
 
+        from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, PinAutoRemoval, WikiAutoRemoval
         from urbanlens.dashboard.models.links.model import PinLink, WikiLink
 
         url = f"https://echo.epa.gov/detailed-facility-report?fid={registry_id}"
-        PinLink.objects.get_or_create(pin=pin, url=url, defaults={"name": "EPA Compliance Report"})
+        if not PinAutoRemoval.objects.was_removed(pin=pin, kind=AutoRemovalKind.LINK, value=url):
+            PinLink.objects.get_or_create(pin=pin, url=url, defaults={"name": "EPA Compliance Report"})
         try:
             wiki = location.wiki
         except ObjectDoesNotExist:
             return
-        WikiLink.objects.get_or_create(wiki=wiki, url=url, defaults={"name": "EPA Compliance Report"})
+        if not WikiAutoRemoval.objects.was_removed(wiki=wiki, kind=AutoRemovalKind.LINK, value=url):
+            WikiLink.objects.get_or_create(wiki=wiki, url=url, defaults={"name": "EPA Compliance Report"})
 
     def render_context(self, pin: Pin, data: dict) -> dict | None:
         """Build the exact-site detail card; None (204, hidden) when no facility matched this pin's coordinates."""

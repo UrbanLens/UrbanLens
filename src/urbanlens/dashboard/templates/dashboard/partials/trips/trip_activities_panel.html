@@ -136,7 +136,7 @@
                     <span class="trip-activity-notes">{{ act.notes }}</span>
                     {% endif %}
                     {% if act.added_by %}
-                    <span class="trip-activity-attr">Added by {% if act.added_by.user == request.user %}you{% else %}<a href="{% url 'profile.view_user' act.added_by.slug %}" class="trip-attr-link">{{ act.added_by.user.get_full_name|default:act.added_by.user.username }}</a>{% endif %}</span>
+                    <span class="trip-activity-attr">Added by {% if act.added_by.user == request.user %}you{% elif act.added_by.is_masked %}{{ act.added_by.display_name }}{% else %}<a href="{{ act.added_by.display_profile_url }}" class="trip-attr-link">{{ act.added_by.user.get_full_name|default:act.added_by.user.username }}</a>{% endif %}</span>
                     {% endif %}
 
                     {# -- Voting (proposed activities only, joined members only) #}

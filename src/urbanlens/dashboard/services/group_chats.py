@@ -132,7 +132,46 @@ def create_group_chat(creator: Profile, name: str, members: list[Profile]) -> Gr
         _notify_group_event(group, member, f"{creator.username} added you to the group “{group.name}”.")
     _broadcast_group_event(group, {"type": "group_updated", "group_uuid": str(group.uuid)})
     logger.info("Group chat %s created by profile %s with %d members", group.pk, creator.pk, len(unique_members) + 1)
+
+    _suggest_connections_among_new_members([*unique_members.values(), creator])
     return group
+
+
+def _suggest_connections_among_new_members(people: list[Profile]) -> None:
+    """Soft-introduce every pair in ``people`` who isn't already connected.
+
+    Used right after a group is created (or grown) - everyone in ``people``
+    just ended up sharing a group with everyone else. Both sides of a pair
+    must allow friend recommendations (see
+    ``services.connections.recommendable_strangers``) - never presumes on
+    anyone's behalf, just makes an already-opted-in connection discoverable.
+
+    Args:
+        people: Profiles who just started sharing this group.
+    """
+    from urbanlens.dashboard.services.connections import recommendable_strangers, suggest_mutual_connection
+
+    seen_pairs: set[frozenset[int]] = set()
+    for i, person in enumerate(people):
+        for other in recommendable_strangers(person, people[i + 1 :]):
+            pair = frozenset({person.pk, other.pk})
+            if pair in seen_pairs:
+                continue
+            seen_pairs.add(pair)
+            suggest_mutual_connection(person, other)
+
+
+def _suggest_connections_for_new_member(new_member: Profile, existing_members: list[Profile]) -> None:
+    """Soft-introduce a newly added member to existing members they aren't friends with.
+
+    Args:
+        new_member: The profile that was just added to the group.
+        existing_members: The group's other current members.
+    """
+    from urbanlens.dashboard.services.connections import recommendable_strangers, suggest_mutual_connection
+
+    for other in recommendable_strangers(new_member, existing_members):
+        suggest_mutual_connection(new_member, other)
 
 
 def rename_group_chat(group: GroupChat, actor: Profile, name: str) -> GroupChat:
@@ -198,11 +237,17 @@ def add_group_members(group: GroupChat, actor: Profile, members: list[Profile]) 
         if not can_direct_message(actor, member):
             raise PermissionError(f"{member.username} isn't accepting messages from you.")
 
+    from urbanlens.dashboard.models.profile.model import Profile as ProfileModel
+
+    existing_members = list(ProfileModel.objects.filter(pk__in=active_ids))
     created = [GroupChatMembership.objects.create(group=group, profile=member) for member in to_add.values()]
     for member in to_add.values():
         _notify_group_event(group, member, f"{actor.username} added you to the group “{group.name}”.")
     _broadcast_group_event(group, {"type": "group_updated", "group_uuid": str(group.uuid)})
     logger.info("Profile %s added %d members to group %s", actor.pk, len(created), group.pk)
+
+    for member in to_add.values():
+        _suggest_connections_for_new_member(member, existing_members)
     return created
 
 

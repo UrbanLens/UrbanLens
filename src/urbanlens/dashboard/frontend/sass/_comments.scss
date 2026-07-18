@@ -687,6 +687,100 @@
     margin: 0 .1rem;
 }
 
+// -- Tab strip (Draw New / Choose Existing) -------------------------------------
+// Hidden entirely unless the caller passes opts.existingMapPicker (see
+// window._openCommentMapComposer's docstring) - every other caller of this
+// shared dialog (comments/visits/trips/screenshot) never shows this.
+.cmc-tabs {
+    display: flex;
+    flex-shrink: 0;
+    gap: .25rem;
+    padding: 0 1rem;
+    border-bottom: 1px solid var(--ul-surface-border);
+}
+
+.cmc-tab {
+    padding: .55rem .75rem;
+    border: none;
+    border-bottom: 2px solid transparent;
+    background: none;
+    color: var(--ul-grey-6);
+    font-size: .85rem;
+    font-weight: 600;
+    cursor: pointer;
+
+    &:hover { color: var(--ul-grey-8); }
+
+    &.is-active {
+        color: var(--primary-color);
+        border-bottom-color: var(--primary-color);
+    }
+}
+
+// -- "Choose Existing" tab panel -------------------------------------------------
+.cmc-existing-panel {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    overflow: hidden;
+    padding: .75rem 1rem;
+    gap: .6rem;
+}
+
+.cmc-existing-search {
+    max-width: none;
+    flex-shrink: 0;
+}
+
+.cmc-existing-list {
+    flex: 1;
+    overflow-y: auto;
+}
+
+// Shared by the DM composer's existing-map tab (rendered by
+// DirectMessageMapPickerView/_map_picker.html) - mirrors the safety
+// check-in map picker's item styling (.safety-map-picker-item et al).
+.dm-map-picker-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: .3rem;
+}
+
+.dm-map-picker-item {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    width: 100%;
+    padding: .5rem .65rem;
+    border: none;
+    border-radius: $radius-sm;
+    background: transparent;
+    cursor: pointer;
+    text-align: left;
+
+    &:hover { background: var(--ul-hover-bg); }
+}
+
+.dm-map-picker-item-title {
+    flex: 1;
+    min-width: 0;
+    font-size: .88rem;
+    font-weight: 600;
+    color: var(--ul-grey-8);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.dm-map-picker-item-meta {
+    flex-shrink: 0;
+    font-size: .75rem;
+    color: var(--ul-grey-6);
+}
+
 .cmc-hint-text {
     margin-left: auto;
     font-size: .72rem;

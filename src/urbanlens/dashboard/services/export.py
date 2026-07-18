@@ -260,25 +260,89 @@ def _export_profile(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
         "birth_date": str(profile.birth_date) if profile.birth_date else None,
         "started_exploring": str(profile.started_exploring) if profile.started_exploring else None,
         "date_joined": str(profile.user.date_joined),
+        "contact": {
+            "phone_number": profile.phone_number or "",
+            "signal_username": profile.signal_username or "",
+            "discord_username": profile.discord_username or "",
+            "whatsapp_number": profile.whatsapp_number or "",
+            "telegram_username": profile.telegram_username or "",
+            "matrix_handle": profile.matrix_handle or "",
+        },
     }
     with open(os.path.join(temp_dir, "profile.json"), "w", encoding="utf-8") as fh:
         json.dump(data, fh, indent=2, ensure_ascii=False)
 
 
 def _export_settings(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
+    """Export every user-configurable Profile setting, plus per-notification-type delivery preferences.
+
+    Deliberately excludes fields that aren't really "settings": identity/PII
+    (covered by profile.json), internal bookkeeping (deletion_requested_at,
+    profile_setup_complete, tos_accepted_at, ...), and anything security-
+    sensitive (there is none stored directly on Profile - passkeys/TOTP/etc.
+    live in their own models and are never exported).
+    """
     data = {
         "theme_mode": profile.theme_mode,
         "guidance_level": profile.guidance_level,
+        "distance_units": profile.distance_units,
         "map_dark_mode": profile.map_dark_mode,
         "default_map_view": profile.default_map_view,
         "cluster_radius": profile.cluster_radius,
         "use_pin_cache": profile.use_pin_cache,
         "map_center_mode": profile.map_center_mode,
         "map_default_zoom": profile.map_default_zoom,
+        "map_center_latitude": str(profile.map_center_latitude) if profile.map_center_latitude is not None else None,
+        "map_center_longitude": str(profile.map_center_longitude) if profile.map_center_longitude is not None else None,
+        "map_custom_latitude": str(profile.map_custom_latitude) if profile.map_custom_latitude is not None else None,
+        "map_custom_longitude": str(profile.map_custom_longitude) if profile.map_custom_longitude is not None else None,
+        "remembered_map_lat": str(profile.remembered_map_lat) if profile.remembered_map_lat is not None else None,
+        "remembered_map_lng": str(profile.remembered_map_lng) if profile.remembered_map_lng is not None else None,
+        "remembered_map_zoom": profile.remembered_map_zoom,
         "markup_fill_color": profile.markup_fill_color,
         "markup_fill_opacity": profile.markup_fill_opacity,
         "markup_border_color": profile.markup_border_color,
         "markup_border_opacity": profile.markup_border_opacity,
+        "pin_detail_map_height": profile.pin_detail_map_height,
+        "media_gallery_sort": profile.media_gallery_sort,
+        "show_wiki_cover_photos": profile.show_wiki_cover_photos,
+        "ai": {
+            "ai_enabled": profile.ai_enabled,
+            "ai_label_tags": profile.ai_label_tags,
+            "ai_label_categories": profile.ai_label_categories,
+            "ai_label_statuses": profile.ai_label_statuses,
+        },
+        "keyword_tagging": {
+            "keyword_tagging_enabled": profile.keyword_tagging_enabled,
+            "keyword_label_tags": profile.keyword_label_tags,
+            "keyword_label_categories": profile.keyword_label_categories,
+            "keyword_label_statuses": profile.keyword_label_statuses,
+        },
+        "photos": {
+            "generate_photo_keywords": profile.generate_photo_keywords,
+            "image_downscale_max_dimension": profile.image_downscale_max_dimension,
+            "video_downscale_max_height": profile.video_downscale_max_height,
+        },
+        "places_layers": {
+            "places_google_enabled": profile.places_google_enabled,
+            "places_nps_enabled": profile.places_nps_enabled,
+            "places_wikipedia_enabled": profile.places_wikipedia_enabled,
+        },
+        "tracking": {
+            "track_pin_visits": profile.track_pin_visits,
+            "track_routes": profile.track_routes,
+            "track_geolocation": profile.track_geolocation,
+        },
+        "community": {
+            "community_enabled": profile.community_enabled,
+            "sync_rating_to_wiki": profile.sync_rating_to_wiki,
+            "sync_vulnerability_to_wiki": profile.sync_vulnerability_to_wiki,
+            "sync_priority_to_wiki": profile.sync_priority_to_wiki,
+            "sync_danger_to_wiki": profile.sync_danger_to_wiki,
+            "sync_aliases": profile.sync_aliases,
+        },
+        "external_apis_enabled": profile.external_apis_enabled,
+        "name_source_priority": profile.name_source_priority,
         "privacy": {
             "profile_visibility": profile.profile_visibility,
             "comment_visibility": profile.comment_visibility,
@@ -291,12 +355,33 @@ def _export_settings(profile: Any, temp_dir: str, *, base_url: str = "") -> None
             "online_status_visibility": profile.online_status_visibility,
             "read_receipt_visibility": profile.read_receipt_visibility,
             "typing_indicator_visibility": profile.typing_indicator_visibility,
+            "common_pins_visibility": profile.common_pins_visibility,
             "direct_message_delete_after": profile.direct_message_delete_after,
             "allow_friend_recommendations": profile.allow_friend_recommendations,
         },
+        "notification_preferences": _notification_preferences_dict(profile),
     }
     with open(os.path.join(temp_dir, "settings.json"), "w", encoding="utf-8") as fh:
         json.dump(data, fh, indent=2, ensure_ascii=False)
+
+
+def _notification_preferences_dict(profile: Any) -> dict[str, Any]:
+    """Every field on the user's NotificationPreference row (delivery channel per notification type).
+
+    Introspected via the model's own field list rather than hand-enumerated:
+    every field here really is a plain delivery-channel setting (no PII, no
+    relations besides the owning profile), so this stays correct automatically
+    as new notification types are added - unlike the rest of this file, which
+    hand-lists fields deliberately so a new *sensitive* Profile field is never
+    exported without a human noticing.
+    """
+    from urbanlens.dashboard.models.notifications.model import NotificationPreference
+
+    prefs = NotificationPreference.objects.filter(profile=profile).first()
+    if prefs is None:
+        return {}
+    skip = {"id", "profile", "created", "updated", "uuid"}
+    return {f.name: getattr(prefs, f.name) for f in NotificationPreference._meta.get_fields() if getattr(f, "concrete", False) and f.name not in skip}  # noqa: SLF001
 
 
 def _export_custom_fields(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
@@ -369,13 +454,27 @@ def _export_pins(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
     placement still has somewhere to land on import. On import, pins are
     re-linked to an existing nearby Location or get a new one created, the
     same way a manually-added pin or a Google Takeout import would be.
-    """
-    from urbanlens.dashboard.models.pin.model import Pin
 
-    pins = Pin.objects.filter(profile=profile).select_related("location").prefetch_related("labels").order_by("created")
+    Also carries the pin's own review rating, security indicators (fences,
+    alarms, cameras, ...), and private article (if any) - a pin article is
+    only ever visible to its owner (see ``models.article.Article.is_private``),
+    so it's fully covered by exporting it alongside the rest of this pin.
+    """
+    from urbanlens.dashboard.models.abstract.security import SECURITY_FIELDS
+    from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.models.reviews.model import Review
+
+    pins = (
+        Pin.objects.filter(profile=profile)
+        .select_related("location", "article")
+        .prefetch_related("labels")
+        .order_by("created")
+    )
+    ratings = dict(Review.objects.filter(profile=profile).values_list("pin_id", "rating"))
 
     rows = []
     for pin in pins:
+        article = getattr(pin, "article", None)
         rows.append(
             {
                 "uuid": str(pin.uuid),
@@ -384,6 +483,10 @@ def _export_pins(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
                 "icon": pin.icon or "",
                 "color": pin.color or "",
                 "priority": pin.priority,
+                "vulnerability": pin.vulnerability,
+                "danger": pin.danger,
+                "rating": ratings.get(pin.pk),
+                "security": {field_name: getattr(pin, field_name) for field_name, _label in SECURITY_FIELDS},
                 "pin_type": pin.pin_type,
                 "latitude": str(pin.effective_latitude) if pin.effective_latitude is not None else None,
                 "longitude": str(pin.effective_longitude) if pin.effective_longitude is not None else None,
@@ -398,6 +501,7 @@ def _export_pins(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
                 "created": str(pin.created),
                 "updated": str(pin.updated),
                 "label_uuids": [str(b.uuid) for b in pin.labels.all()],
+                "article": {"content": article.content} if article and article.content else None,
             },
         )
 
@@ -635,7 +739,7 @@ def _export_comments(profile: Any, temp_dir: str, *, base_url: str = "") -> None
 def _export_photos(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
     from urbanlens.dashboard.models.images.model import Image
 
-    images = Image.objects.filter(profile=profile).select_related("pin__location", "wiki").order_by("created")
+    images = Image.objects.filter(profile=profile).select_related("pin__location", "wiki").prefetch_related("labels").order_by("created")
 
     photos_dir = os.path.join(temp_dir, "photos")
     os.makedirs(photos_dir, exist_ok=True)
@@ -664,6 +768,7 @@ def _export_photos(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
                 "latitude": str(image.latitude) if image.latitude else None,
                 "longitude": str(image.longitude) if image.longitude else None,
                 "created": str(image.created),
+                "label_uuids": [str(label.uuid) for label in image.labels.all()],
             },
         )
 

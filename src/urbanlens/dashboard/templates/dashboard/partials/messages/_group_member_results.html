@@ -14,7 +14,7 @@ into a picked-member chip + hidden `member_slugs` input. Context: `results`,
         {% if candidate.avatar %}
         <img src="{{ candidate.avatar.url }}" alt="" class="msg-avatar-img">
         {% else %}
-        <span class="msg-avatar-initial">{{ candidate.username|first|upper }}</span>
+        <span class="msg-avatar-initial {{ candidate.avatar_color_class }}">{{ candidate.username|first|upper }}</span>
         {% endif %}
       </span>
       <span>{{ candidate.username }}</span>

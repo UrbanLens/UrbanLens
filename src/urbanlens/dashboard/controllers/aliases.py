@@ -13,12 +13,13 @@ import logging
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
 
 from urbanlens.dashboard.models.aliases.model import AliasType, PinAlias, WikiAlias
+from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, PinAutoRemoval, WikiAutoRemoval
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
 from urbanlens.dashboard.services.locations.naming import normalize_name_for_comparison, persist_official_aliases_for_location
@@ -144,7 +145,15 @@ class PinAliasView(LoginRequiredMixin, View):
             return HttpResponse("Name is required.", status=400)
         kind = AliasType.NICKNAME if request.POST.get("is_nickname") else AliasType.ALTERNATE
         try:
-            PinAlias.objects.create(pin=pin, name=name, kind=kind)
+            # atomic() gives IntegrityError its own savepoint to roll back to -
+            # without it, catching the error still leaves the DB connection's
+            # surrounding transaction (if any) unusable for further queries
+            # (this view's own re-render right below included) until an
+            # explicit rollback. Case-insensitive alias matching (the whole
+            # point of this constraint) makes this collision far more common
+            # than the old exact-name-only version ever was.
+            with transaction.atomic():
+                PinAlias.objects.create(pin=pin, name=name, kind=kind)
         except IntegrityError:
             return HttpResponse("That alias already exists.", status=409)
         return _render_pin_panel(request, pin)
@@ -156,6 +165,10 @@ class PinAliasDeleteView(LoginRequiredMixin, View):
         alias = get_object_or_404(PinAlias, id=alias_id, pin=pin)
         if normalize_name_for_comparison(alias.name) == normalize_name_for_comparison(pin.effective_name):
             return HttpResponse("This alias is the current name - pick another name first.", status=400)
+        # Tombstone first: an external-source sync or the pin<->wiki alias-mirror
+        # signal could otherwise recreate this exact name the moment either one
+        # next runs, silently undoing the deletion.
+        PinAutoRemoval.objects.record(pin=pin, kind=AutoRemovalKind.ALIAS, value=alias.name)
         alias.delete()
         return _render_pin_panel(request, pin)
 
@@ -205,7 +218,9 @@ class LocationAliasView(LoginRequiredMixin, View):
             return JsonResponse({"ok": False, "error": "Name is required."}, status=400)
         kind = AliasType.NICKNAME if request.POST.get("is_nickname") else AliasType.ALTERNATE
         try:
-            WikiAlias.objects.create(wiki=wiki, name=name, kind=kind, created_by=profile)
+            # See PinAliasView.post's atomic() comment - same reasoning here.
+            with transaction.atomic():
+                WikiAlias.objects.create(wiki=wiki, name=name, kind=kind, created_by=profile)
         except IntegrityError:
             return JsonResponse({"ok": False, "error": "That alias already exists."}, status=409)
         WikiEdit.objects.create(
@@ -223,6 +238,10 @@ class LocationAliasDeleteView(LoginRequiredMixin, View):
         if normalize_name_for_comparison(alias.name) == normalize_name_for_comparison(wiki.name):
             return HttpResponse("This alias is the current name - pick another name first.", status=400)
         alias_name = alias.name
+        # Tombstone first: an external-source sync or the pin<->wiki alias-mirror
+        # signal could otherwise recreate this exact name the moment either one
+        # next runs, silently undoing the deletion.
+        WikiAutoRemoval.objects.record(wiki=wiki, kind=AutoRemovalKind.ALIAS, value=alias_name)
         alias.delete()
         WikiEdit.objects.create(
             wiki=wiki,

@@ -186,17 +186,21 @@ def _apply_date_abandoned(pin: Pin, value: date, context: dict[str, Any]) -> tup
 
 
 def _apply_owner_name(pin: Pin, value: str, context: dict[str, Any]) -> tuple[bool, str]:
+    from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, PinAutoRemoval
     from urbanlens.dashboard.models.property_owner import PinOwner
 
     existing = pin.owners.filter(name__iexact=value).first()
     if existing is not None:
         context["owner"] = existing
         return False, "Skipped - this owner is already recorded."
+    if PinAutoRemoval.objects.was_removed(pin=pin, kind=AutoRemovalKind.OWNER, value=value):
+        return False, "Skipped - this owner was previously removed."
     context["owner"] = PinOwner.objects.create(pin=pin, name=value)
     return True, "Added as a property owner."
 
 
 def _apply_owner_company(pin: Pin, value: str, context: dict[str, Any]) -> tuple[bool, str]:
+    from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, PinAutoRemoval
     from urbanlens.dashboard.models.property_owner import PinOwner
 
     owner = context.get("owner")
@@ -205,6 +209,8 @@ def _apply_owner_company(pin: Pin, value: str, context: dict[str, Any]) -> tuple
         existing = pin.owners.filter(company_name__iexact=value).first()
         if existing is not None:
             return False, "Skipped - this company is already recorded."
+        if PinAutoRemoval.objects.was_removed(pin=pin, kind=AutoRemovalKind.OWNER, value=value):
+            return False, "Skipped - this owner was previously removed."
         PinOwner.objects.create(pin=pin, name=value, company_name=value)
         return True, "Added as a property owner (company)."
     if owner.company_name:
@@ -269,13 +275,19 @@ def _parse_aliases(raw: Any) -> list[str]:
 
 def _apply_aliases(pin: Pin, value: list[str], context: dict[str, Any]) -> tuple[bool, str]:
     from urbanlens.dashboard.models.aliases.model import AliasType, PinAlias
+    from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, PinAutoRemoval
 
     added = []
     for name in value:
+        if PinAutoRemoval.objects.was_removed(pin=pin, kind=AutoRemovalKind.ALIAS, value=name):
+            continue
+        # Case-insensitive lookup matches the alias uniqueness rule, so a
+        # differently-cased existing alias counts as "already recorded"
+        # instead of racing the DB constraint.
         _alias, created = PinAlias.objects.get_or_create(
             pin=pin,
-            name=name,
-            defaults={"kind": AliasType.ALTERNATE, "source": EXTRACTION_SOURCE},
+            name__iexact=name,
+            defaults={"name": name, "kind": AliasType.ALTERNATE, "source": EXTRACTION_SOURCE},
         )
         if created:
             added.append(name)

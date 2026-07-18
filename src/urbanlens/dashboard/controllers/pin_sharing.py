@@ -165,8 +165,10 @@ class PinShareCreateView(LoginRequiredMixin, View):
             # A typed name becomes a permanent alias on the sharer's own pin
             # too, same as any other place the pin's name is set (see
             # Pin.save's alias-sync, which this mirrors for a name that never
-            # touches pin.name itself).
-            PinAlias.objects.get_or_create(pin=pin, name=custom_name)
+            # touches pin.name itself). Case-insensitive lookup matches the
+            # alias uniqueness rule, so re-sharing under a different casing of
+            # an existing alias reuses that row instead of raising IntegrityError.
+            PinAlias.objects.get_or_create(pin=pin, name__iexact=custom_name, defaults={"name": custom_name})
         # else: blank input keeps shared_name None - "use the pin's current name".
 
         image_ids = request.POST.getlist("image_ids")

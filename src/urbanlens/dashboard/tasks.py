@@ -349,7 +349,7 @@ def archive_link_to_wayback(link_model: str, link_id: int) -> bool:
     import requests
 
     from urbanlens.dashboard.models.links.model import PinLink, WikiLink
-    from urbanlens.dashboard.services.apis.locations.wayback_machine import WaybackMachineGateway
+    from urbanlens.dashboard.services.apis.locations.wayback_machine import WaybackMachineGateway, is_own_site_url
 
     model = {"PinLink": PinLink, "WikiLink": WikiLink}.get(link_model)
     if model is None:
@@ -358,6 +358,11 @@ def archive_link_to_wayback(link_model: str, link_id: int) -> bool:
 
     link = model.objects.filter(pk=link_id).first()
     if link is None or link.wayback_url:
+        return False
+
+    if is_own_site_url(link.url):
+        # Most of our own pages require being logged in - archiving them would
+        # only ever save an unreadable login wall, not the actual content.
         return False
 
     gateway = WaybackMachineGateway()

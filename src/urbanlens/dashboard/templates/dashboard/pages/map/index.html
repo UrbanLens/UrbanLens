@@ -1778,15 +1778,21 @@
     // -- Remember last position ------------------------------------------------
     if (_MAP_CENTER_MODE === 'remember') {
         let _rememberTid = null;
-        function _saveMapPosition() {
+        let _pendingPositionBody = null;
+        function _positionBody() {
             const c = map.getCenter();
             const z = map.getZoom();
-            const body = new URLSearchParams({
+            return new URLSearchParams({
                 lat: c.lat.toFixed(6),
                 lng: c.lng.toFixed(6),
                 zoom: z,
                 csrfmiddlewaretoken: document.querySelector('[name=csrfmiddlewaretoken]')?.value || '',
             });
+        }
+        function _saveMapPosition() {
+            _rememberTid = null;
+            _pendingPositionBody = null;
+            const body = _positionBody();
             fetch('{% url "settings.save_map_position" %}', {
                 method: 'POST',
                 headers: { 'X-CSRFToken': body.get('csrfmiddlewaretoken'), 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -1795,10 +1801,28 @@
         }
         function _onRememberChange() {
             if (_rememberTid) clearTimeout(_rememberTid);
+            _pendingPositionBody = _positionBody();
             _rememberTid = setTimeout(_saveMapPosition, 800);
         }
         map.on('moveend', _onRememberChange);
         map.on('zoomend', _onRememberChange);
+
+        // The 800ms debounce above can still be pending when the user
+        // navigates away (closes the tab, follows a link) - fetch() isn't
+        // guaranteed to finish once the page starts unloading, so the very
+        // last pan/zoom was silently never saved. sendBeacon is designed
+        // for exactly this: the browser keeps it alive across the
+        // navigation. Both events are registered since pagehide doesn't
+        // fire reliably in every browser for every kind of navigation.
+        function _flushPendingPosition() {
+            if (!_pendingPositionBody || _rememberTid === null) return;
+            clearTimeout(_rememberTid);
+            navigator.sendBeacon('{% url "settings.save_map_position" %}', new Blob([_pendingPositionBody.toString()], { type: 'application/x-www-form-urlencoded' }));
+            _rememberTid = null;
+            _pendingPositionBody = null;
+        }
+        window.addEventListener('pagehide', _flushPendingPosition);
+        window.addEventListener('beforeunload', _flushPendingPosition);
     }
 
     // -- Filter mode -----------------------------------------------------------

@@ -1827,6 +1827,16 @@ function applyGuidancePreview(level) {
             previewMap.removeLayer(_previewTileLayer);
             _previewTileLayer = window.MapLayers.tileLayer(radio.value).addTo(previewMap);
             _updatePreviewAttribution();
+            // The server only stamps .active on the saved value at render time;
+            // without clearing it here too, the newly-picked tile gets
+            // highlighted via the :has(input:checked) CSS fallback while the
+            // old server-rendered .active class stays on the previous tile,
+            // showing two tiles selected at once (same fix map_center_mode's
+            // selectMapMode() already applies to its own tile group).
+            document.querySelectorAll('input[name="default_map_view"]').forEach(function (other) {
+                var tile = other.closest('.settings-option-tile');
+                if (tile) tile.classList.toggle('active', other === radio);
+            });
         });
     });
 

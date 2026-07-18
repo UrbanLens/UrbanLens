@@ -123,7 +123,6 @@
 </div>
 
 <div id="dm-share-dialog-host"></div>
-<div id="dm-map-picker-dialog-host"></div>
 
 {# Minimal photo lightbox for DM image attachments - reuses the shared #}
 {# gallery-lightbox CSS (see _gallery.scss) but skips the side panel (no #}
@@ -272,6 +271,26 @@
     function refreshList() {
         htmx.trigger(document.body, 'dmListRefresh');
         htmx.trigger(document.body, 'msgCountRefresh');
+    }
+
+    // Sidebar `.dm-conv-item--active` is normally server-rendered from
+    // active_slug/active_group_uuid, correctly refreshed whenever the list
+    // itself re-renders (refreshList()) - but a plain click on a sidebar
+    // conversation only swaps #dm-thread-pane, with no accompanying list
+    // refresh, so the previously-active row stayed highlighted until some
+    // unrelated event happened to trigger refreshList() later. Recomputing
+    // the class client-side here, keyed off the just-swapped thread's own
+    // data attributes, needs no extra request and can't drift out of sync.
+    function syncActiveConversationHighlight() {
+        var slug = window.dmActiveSlug();
+        var group = window.dmActiveGroup();
+        document.querySelectorAll('.dm-conv-item--active').forEach(function (el) {
+            el.classList.remove('dm-conv-item--active');
+        });
+        var selector = group ? '.dm-conv-item[data-group-uuid="' + group + '"]' : (slug ? '.dm-conv-item[data-partner-slug="' + slug + '"]' : null);
+        if (!selector) return;
+        var active = document.querySelector(selector);
+        if (active) active.classList.add('dm-conv-item--active');
     }
 
     // -- Photo lightbox -----------------------------------------------------------
@@ -1291,25 +1310,38 @@
     });
 
     // -- Attach map ----------------------------------------------------------------
-    document.addEventListener('click', function (e) {
-        if (e.target.closest('#dm-attach-map-btn')) {
-            if (!window._openCommentMapComposer) return;
-            var mapOpts = {
-                onSaved: function (uuid) {
+    // One button opens the shared composer dialog, which now offers both a
+    // "Draw New" tab (the composer exactly as it's always looked) and a
+    // "Choose Existing" tab (this conversation's own maps, searchable) -
+    // previously two separate buttons/dialogs, the second of which was a
+    // hand-rolled, unstyled dialog with no search.
+    function _mapComposerOpts() {
+        var opts = {
+            onSaved: function (uuid) {
+                pendingAttachments.mapUuid = uuid;
+                renderAttachmentChips();
+            },
+            existingMapPicker: {
+                fetchUrl: '{% url "messages.attach_map.picker" %}',
+                onPick: function (uuid) {
                     pendingAttachments.mapUuid = uuid;
                     renderAttachmentChips();
                 },
-            };
-            // Center on the pin being shared, when one is staged, so drawing
-            // a map to go with it doesn't open on the default world view.
-            var stagedShare = pendingAttachments.share;
-            if (stagedShare && stagedShare.kind === 'pin' && stagedShare.lat != null && stagedShare.lng != null) {
-                mapOpts.initialView = { lat: stagedShare.lat, lng: stagedShare.lng, zoom: 15 };
-            }
-            window._openCommentMapComposer(mapOpts);
+            },
+        };
+        // Center on the pin being shared, when one is staged, so drawing
+        // a map to go with it doesn't open on the default world view.
+        var stagedShare = pendingAttachments.share;
+        if (stagedShare && stagedShare.kind === 'pin' && stagedShare.lat != null && stagedShare.lng != null) {
+            opts.initialView = { lat: stagedShare.lat, lng: stagedShare.lng, zoom: 15 };
         }
-        if (e.target.closest('#dm-attach-existing-map-btn')) {
-            openExistingMapPicker();
+        return opts;
+    }
+
+    document.addEventListener('click', function (e) {
+        if (e.target.closest('#dm-attach-map-btn')) {
+            if (!window._openCommentMapComposer) return;
+            window._openCommentMapComposer(_mapComposerOpts());
         }
         if (e.target.closest('#dm-map-chip-remove')) {
             pendingAttachments.mapUuid = null;
@@ -1347,30 +1379,14 @@
             .catch(function () { toast('error', 'Could not load that map.'); });
     });
 
+    // Used by the "@map" mention action - jumps straight to the composer's
+    // "Choose Existing" tab (see _mapComposerOpts()/base.html's startTab handling).
     function openExistingMapPicker() {
-        fetch('{% url "messages.attach_map.picker" %}', { credentials: 'same-origin' })
-            .then(function (r) { return r.text(); })
-            .then(function (html) {
-                var host = document.getElementById('dm-map-picker-dialog-host');
-                if (!host) return;
-                host.innerHTML =
-                    '<dialog class="dm-map-picker-dialog"><form method="dialog"><h3>Attach an existing map</h3><div class="dm-map-picker-body">' +
-                    html +
-                    '</div><button type="submit" class="btn btn--ghost">Cancel</button></form></dialog>';
-                var dlg = host.querySelector('dialog');
-                if (dlg) dlg.showModal();
-            })
-            .catch(function () { toast('error', 'Could not load your maps. Please try again.'); });
+        if (!window._openCommentMapComposer) return;
+        var opts = _mapComposerOpts();
+        opts.startTab = 'existing';
+        window._openCommentMapComposer(opts);
     }
-
-    document.addEventListener('click', function (e) {
-        var item = e.target.closest('.dm-map-picker-item');
-        if (!item) return;
-        pendingAttachments.mapUuid = item.dataset.mapUuid;
-        renderAttachmentChips();
-        var dlg = item.closest('dialog');
-        if (dlg) dlg.close();
-    });
 
     // -- @pin / @trip / @map / @friend actions --------------------------------
     // Typing "@" opens a filtering suggestion list positioned right under the
@@ -1379,9 +1395,9 @@
     // action removes the typed "@query" text and hands off to that action's
     // existing flow (the share dialog for pin/trip/friend, the existing-map
     // picker for map) exactly as if the toolbar button had been clicked.
-    // "map" reuses the same #dm-attach-existing-map-btn flow (openExistingMapPicker)
-    // rather than the share-dialog flow the other three kinds use - see
-    // pickMentionAction below.
+    // "map" opens the shared map composer straight to its "Choose Existing" tab
+    // (openExistingMapPicker) rather than the share-dialog flow the other
+    // three kinds use - see pickMentionAction below.
     var MENTION_ACTIONS = [
         { kind: 'pin', icon: 'location_on', label: 'Share a pin' },
         { kind: 'trip', icon: 'luggage', label: 'Invite to a trip' },
@@ -1780,6 +1796,7 @@
         if (!ev.detail.target) return;
         if (ev.detail.target.id === 'dm-thread-pane') {
             page.classList.add('dm-page--thread-open');
+            syncActiveConversationHighlight();
             resetAttachments();
             cancelReply();
             scrollMessages();

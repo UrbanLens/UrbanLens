@@ -32,10 +32,7 @@
         <div class="pin-select-map-wrap">
             <div id="unlogged-visits-map" class="pin-select-map" data-map-data-url="{% url 'memories.visits.map_data' %}"></div>
             {% map_layers_panel "street,terrain,satellite,dark" panel_id="unlogged-visits-map-layers" %}
-            <button type="button" class="pin-select-toggle" id="unlogged-visits-select-toggle" title="Drag-select multiple pins">
-                <i class="material-symbols-outlined">select_all</i>
-                <span>Select multiple</span>
-            </button>
+            {% map_toolbar "select_unlogged_visits" panel_id="unlogged-visits-map-buttons" %}
         </div>
         {% include "dashboard/partials/memories/_unlogged_visits.html" %}
         {% else %}

@@ -17,7 +17,8 @@ Conversation list for the messages page sidebar. Context: `conversations`
          hx-get="{% url 'messages.group' conv.group.uuid %}"
          hx-target="#dm-thread-pane"
          hx-swap="innerHTML"
-         hx-push-url="true">
+         hx-push-url="true"
+         data-group-uuid="{{ conv.group.uuid }}">
         <span class="msg-avatar msg-avatar--lg msg-avatar--group" aria-hidden="true">
           <i class="material-symbols-outlined">groups</i>
         </span>
@@ -41,7 +42,8 @@ Conversation list for the messages page sidebar. Context: `conversations`
          hx-get="{% url 'messages.conversation' conv.partner.slug %}"
          hx-target="#dm-thread-pane"
          hx-swap="innerHTML"
-         hx-push-url="true">
+         hx-push-url="true"
+         data-partner-slug="{{ conv.partner.slug }}">
         <span class="msg-avatar msg-avatar--lg" aria-hidden="true">
           {% if conv.display_avatar_url %}
           <img src="{{ conv.display_avatar_url }}" alt="" class="msg-avatar-img">

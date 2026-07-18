@@ -1,8 +1,10 @@
 import {
-  __require,
   getCsrfToken,
   toast
-} from "./map-annotations-9jdqkrz7.js";
+} from "./map-annotations-5jnnp4sj.js";
+import {
+  __require
+} from "./map-annotations-6j5pq722.js";
 
 // node_modules/exifr/dist/full.esm.mjs
 var e = typeof self != "undefined" ? self : global;

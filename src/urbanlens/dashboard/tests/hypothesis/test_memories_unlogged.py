@@ -200,6 +200,29 @@ class MemoriesVisitsViewTests(TestCase):
         response = self.client.get(reverse("memories.visits"))
         self.assertNotContains(response, 'id="unlogged-visits-map"')
 
+    def test_map_uses_the_shared_toolbar_not_the_bespoke_pill_button(self) -> None:
+        """Regression guard: the old .pin-select-toggle pill had its own unstyled
+        top-right button and never disabled Leaflet's on-map attribution control.
+        Replaced with the same {% map_toolbar %} component every other map uses."""
+        _make_pin(self.profile, last_visited=_aware(2024, 6, 1), name="My Place")
+        response = self.client.get(reverse("memories.visits"))
+        self.assertContains(response, 'id="unlogged-visits-select-toggle"')
+        self.assertContains(response, "map-btn-icon")
+        self.assertContains(response, 'id="unlogged-visits-map-buttons"')
+        self.assertNotContains(response, "pin-select-toggle")
+
+    def test_map_page_enables_footer_attribution(self) -> None:
+        """show_map_footer must be set whenever the map itself renders, so
+        pin-select-map.js's onAttribution callback has somewhere to write to."""
+        _make_pin(self.profile, last_visited=_aware(2024, 6, 1), name="My Place")
+        response = self.client.get(reverse("memories.visits"))
+        self.assertTrue(response.context["show_map_footer"])
+        self.assertContains(response, "page-footer--map")
+
+    def test_empty_queue_does_not_enable_footer_attribution(self) -> None:
+        response = self.client.get(reverse("memories.visits"))
+        self.assertFalse(response.context["show_map_footer"])
+
     def test_requires_login(self) -> None:
         self.client.logout()
         response = self.client.get(reverse("memories.visits"))

@@ -31,6 +31,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.shortcuts import get_object_or_404, render
 from django.views import View
 
+from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, PinAutoRemoval
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.property_owner.meta import OwnerSource
@@ -225,6 +226,9 @@ class PinOwnerRemoveView(LoginRequiredMixin, View):
         pin = _get_pin(request, pin_slug)
         owner = get_object_or_404(PinOwner, id=owner_id, pin=pin)
         owner_name = owner.name
+        # Tombstone first: the AI link-extraction pipeline can be re-run after
+        # its cooldown and would otherwise silently recreate this exact owner.
+        PinAutoRemoval.objects.record(pin=pin, kind=AutoRemovalKind.OWNER, value=owner_name)
         owner.delete()
         response = _render_pin_ownership_panel(request, pin)
         return _show_toast(response, f"Removed “{owner_name}”.")

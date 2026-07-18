@@ -41,8 +41,17 @@
         var itemsKey = opts.itemsKey || 'items';
         var refreshEvent = opts.refreshEvent || 'refreshQueue';
 
-        var map = L.map(mapEl).setView([20, 0], 2);
-        window.MapLayers.create(map, { root: document.getElementById(opts.layersPanelId) });
+        // attributionControl: false - required attribution text belongs in the
+        // page footer (#page-footer-attribution-text), not floating over the
+        // map, matching every other map on the site (see footer.html).
+        var map = L.map(mapEl, { attributionControl: false }).setView([20, 0], 2);
+        window.MapLayers.create(map, {
+            root: document.getElementById(opts.layersPanelId),
+            onAttribution: function (text) {
+                var el = document.getElementById('page-footer-attribution-text');
+                if (el) el.textContent = text;
+            },
+        });
 
         var selectedIds = new Set();
         var markerMap = new Map();  // id -> L.Marker

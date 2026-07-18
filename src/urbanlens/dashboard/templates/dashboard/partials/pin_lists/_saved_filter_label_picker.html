@@ -1,21 +1,25 @@
 {% load dashboard_tags %}
-{# Reuses the site's shared `.tag-chip` styling (see _label_chips.html) instead of a #}
-{# bespoke checkbox-as-pill style, just swapping the remove-form for a checkbox input #}
-{# so browser-native FormData picks up the selection on submit. #}
-<div class="tag-chips-row saved-filter-label-list">
-    {% for label in labels %}
-    <label class="tag-chip tag-chip--{{ label.kind }} tag-chip--selectable" {% if label.color %}style="--tag-color:{{ label.color }}"{% endif %}>
-        <input type="checkbox" name="{{ field_name }}" value="{{ label.pk }}" {% if label.pk in selected_ids %}checked{% endif %}>
-        {% if label.icon %}
-        <span class="tag-chip-icon">
-            {% if label.icon|is_material_icon %}
-            <i class="material-icons" style="font-size:13px{% if label.color %};color:{{ label.color }}{% endif %}">{{ label.icon }}</i>
-            {% else %}{{ label.icon }}{% endif %}
-        </span>
-        {% endif %}
-        <span class="tag-chip-name">{{ label.name }}</span>
-    </label>
-    {% empty %}
-    <span class="tag-chips-empty">No labels yet.</span>
-    {% endfor %}
+{# Search-driven chip picker - same markup/CSS (.apdlg-*, see _map.scss) as the #}
+{# main map's add-pin and bulk-edit label pickers, so "pick from a search box, #}
+{# selected ones become removable chips" behaves identically everywhere labels #}
+{# are picked. initSavedFilterLabelPickers() in _saved_filter_dialog_scripts.html #}
+{# drives this from the catalog below. Hidden checkboxes (name=field_name, #}
+{# value=label pk) are created/removed to match the chip selection, so the #}
+{# existing server-side ModelMultipleChoiceField processing needs no changes. #}
+<div class="saved-filter-label-picker" data-field-name="{{ field_name }}">
+    <div class="apdlg-label-chips" id="sf-label-chips-{{ field_name }}"></div>
+    <div class="apdlg-label-input-wrap form-input-wrap">
+        <input type="text" class="form-input apdlg-label-input" autocomplete="off"
+               id="sf-label-search-{{ field_name }}" placeholder="Search labels...">
+        <div class="apdlg-label-suggestions" id="sf-label-suggestions-{{ field_name }}" hidden></div>
+    </div>
+    <div class="saved-filter-label-catalog" id="sf-label-catalog-{{ field_name }}" hidden>
+        {% for label in labels %}
+        <span data-id="{{ label.pk }}" data-name="{{ label.name }}" data-icon="{{ label.icon|default:'' }}"
+              data-color="{{ label.color|default:'' }}"
+              data-selected="{% if label.pk in selected_ids %}1{% else %}0{% endif %}"></span>
+        {% empty %}
+        <span class="tag-chips-empty">No labels yet.</span>
+        {% endfor %}
+    </div>
 </div>

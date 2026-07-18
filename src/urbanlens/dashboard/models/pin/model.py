@@ -244,8 +244,12 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
         if self.name != getattr(self, "_loaded_name", None) and is_meaningful_name(self.name):
             from urbanlens.dashboard.models.aliases.model import PinAlias
 
+            new_name = (self.name or "").strip()
             try:
-                PinAlias.objects.get_or_create(pin=self, name=(self.name or "").strip())
+                # Case-insensitive lookup matches the alias uniqueness rule, so
+                # renaming to a different casing of an existing alias reuses
+                # that row instead of racing the DB constraint.
+                PinAlias.objects.get_or_create(pin=self, name__iexact=new_name, defaults={"name": new_name})
             except DatabaseError:
                 logger.debug("Could not ensure alias for pin %s name %r", self.pk, self.name, exc_info=True)
         self._loaded_name = self.name

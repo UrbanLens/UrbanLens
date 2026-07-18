@@ -18,7 +18,7 @@ Context: `thread_messages`, `group`, `viewer_id`, `my_slug`.
   </button>
   {% endif %}
   {% if message.sender_id != viewer_id %}
-  <span class="dm-bubble__sender">{{ message.sender.username }}</span>
+  <span class="dm-bubble__sender">{{ message.sender_identity.display_name|default:message.sender.username }}</span>
   {% endif %}
   {% if tombstone %}
   <span class="dm-bubble__tombstone"><i class="material-symbols-outlined">block</i> {{ tombstone }}</span>

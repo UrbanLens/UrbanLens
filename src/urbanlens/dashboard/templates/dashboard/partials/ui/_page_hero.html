@@ -49,7 +49,7 @@ Usage:
     {% endblock %}
 {% endcomment %}
 <section class="ul-page-hero{% if modifier %} ul-page-hero--{{ modifier }}{% endif %}{% if hero_image_url %} ul-page-hero--cover{% endif %}"{% if id %} id="{{ id }}"{% endif %}{% if hero_image_url %} data-cover-hero-key="{{ hero_cover_key|default:'page' }}" style="background-image:url('{{ hero_image_url }}')"{% endif %}{% if oob %} hx-swap-oob="true"{% endif %}>
-    <div class="ul-page-hero__inner"{% if hero_image_url %} style="background: rgba(0,0,0,0.3); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px);"{% endif %}>
+    <div class="ul-page-hero__inner">
         {% if back_url %}
         <a href="{{ back_url }}" class="ul-page-hero__back">
             <i class="material-symbols-outlined">arrow_back</i>

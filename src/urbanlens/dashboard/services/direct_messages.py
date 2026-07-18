@@ -867,21 +867,11 @@ def display_identity_for(viewer: Profile, partner: Profile) -> dict[str, Any]:
         Dict with ``display_name``, ``display_avatar_url`` (str or None),
         ``display_profile_url`` (str or None), and ``is_anonymized`` (bool).
     """
-    if partner.can_view_profile(viewer):
-        from django.urls import reverse
+    from urbanlens.dashboard.services.identity_visibility import resolve_visible_identity
 
-        return {
-            "display_name": partner.username,
-            "display_avatar_url": partner.avatar.url if partner.avatar else None,
-            "display_profile_url": reverse("profile.view_user", kwargs={"profile_slug": partner.slug}) if partner.slug else None,
-            "is_anonymized": False,
-        }
-    return {
-        "display_name": "Former contact",
-        "display_avatar_url": None,
-        "display_profile_url": None,
-        "is_anonymized": True,
-    }
+    identity = resolve_visible_identity(viewer, partner, placeholder="Former contact")
+    identity["is_anonymized"] = identity.pop("is_masked")
+    return identity
 
 
 def conversations_for(profile: Profile) -> list[dict[str, Any]]:

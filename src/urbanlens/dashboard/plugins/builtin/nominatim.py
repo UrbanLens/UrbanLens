@@ -96,14 +96,17 @@ class NominatimPanelSource(LocationCachePanelSource):
         """
         from django.core.exceptions import ObjectDoesNotExist
 
+        from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, PinAutoRemoval, WikiAutoRemoval
         from urbanlens.dashboard.models.links.model import PinLink, WikiLink
 
-        PinLink.objects.get_or_create(pin=pin, url=osm_url, defaults={"name": "OpenStreetMap"})
+        if not PinAutoRemoval.objects.was_removed(pin=pin, kind=AutoRemovalKind.LINK, value=osm_url):
+            PinLink.objects.get_or_create(pin=pin, url=osm_url, defaults={"name": "OpenStreetMap"})
         try:
             wiki = location.wiki
         except ObjectDoesNotExist:
             return
-        WikiLink.objects.get_or_create(wiki=wiki, url=osm_url, defaults={"name": "OpenStreetMap"})
+        if not WikiAutoRemoval.objects.was_removed(wiki=wiki, kind=AutoRemovalKind.LINK, value=osm_url):
+            WikiLink.objects.get_or_create(wiki=wiki, url=osm_url, defaults={"name": "OpenStreetMap"})
 
 
 class NominatimEnrichmentSource(LocationCacheEnrichmentSource):

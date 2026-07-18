@@ -25,6 +25,7 @@ class NotificationType(TextChoices):
     ACCOUNT_DELETION_REQUESTED = "account_deletion_requested", "Account Deletion Requested"
     ACCOUNT_DELETION_REMINDER = "account_deletion_reminder", "Account Deletion Reminder"
     AI_EXTRACTION = "ai_extraction", "AI Link Analysis Complete"
+    FRIEND_SUGGESTION = "friend_suggestion", "Friend Suggestion"
     ERROR = "error", "Error"
     WARNING = "warning", "Warning"
     INFO = "info", "Info"

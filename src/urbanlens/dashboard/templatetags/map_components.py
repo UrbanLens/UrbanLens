@@ -448,6 +448,21 @@ register_map_tool(
 )
 register_map_tool(
     MapToolSpec(
+        key="select_unlogged_visits",
+        icon="check_box",
+        aria_label="Select pins",
+        tooltip="Select multiple pins",
+        tooltip_pos="below",
+        # Matches pin-select-map.js's `selectToggleBtnId` option, passed as this
+        # exact id from memories/visits.html - no onclick here since that script
+        # binds its own click handler by id (see setSelectMode()) rather than
+        # using an inline onclick, same as select/select_detail_pins' pattern
+        # but through addEventListener instead of a global function call.
+        button_id="unlogged-visits-select-toggle",
+    )
+)
+register_map_tool(
+    MapToolSpec(
         key="screenshot",
         icon="photo_camera",
         aria_label="Take a screenshot",

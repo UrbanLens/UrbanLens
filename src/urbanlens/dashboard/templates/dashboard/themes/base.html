@@ -578,7 +578,14 @@
           <i class="material-symbols-outlined">close</i>
         </button>
       </div>
-      <div class="comment-map-composer-body">
+      {# Only shown when the caller passes opts.existingMapPicker (currently just #}
+      {# the DM composer) - every other caller (comments/visits/trips/screenshot) #}
+      {# never sees this and keeps the exact single-panel dialog it always had.  #}
+      <div class="cmc-tabs" id="cmc-tabs" hidden role="tablist">
+        <button type="button" class="cmc-tab is-active" id="cmc-tab-btn-draw" data-tab="draw" role="tab" aria-selected="true">Draw New</button>
+        <button type="button" class="cmc-tab" id="cmc-tab-btn-existing" data-tab="existing" role="tab" aria-selected="false">Choose Existing</button>
+      </div>
+      <div class="comment-map-composer-body" id="cmc-tab-panel-draw">
         <div class="comment-map-composer-controls">
           <label class="cmcc-label">Go to</label>
           {# Shared jump-to search component - same multi-source search as the #}
@@ -646,6 +653,16 @@
           <span class="cmc-hint-text" id="cmc-hint"></span>
         </div>
       </div>
+
+      {# Existing-map picker tab - only populated/shown via opts.existingMapPicker. #}
+      <div class="cmc-existing-panel" id="cmc-tab-panel-existing" hidden>
+        <input type="search" id="cmc-existing-search" class="cmcc-title-input cmc-existing-search"
+               placeholder="Search your maps..." autocomplete="off">
+        <div id="cmc-existing-list" class="cmc-existing-list">
+          <p class="form-hint">Loading your maps&hellip;</p>
+        </div>
+      </div>
+
       <div class="dialog-footer">
         <span class="cmc-attribution" id="cmc-attribution" aria-live="polite"></span>
         <button type="button" class="btn btn--ghost" id="comment-map-composer-cancel">Cancel</button>
@@ -875,10 +892,77 @@
         var _titleRow = document.getElementById('cmc-title-row');
         var _titleInput = document.getElementById('cmc-title-input');
 
+        // -- Existing-map picker tab (only used when a caller passes opts.existingMapPicker) --
+        var _tabsEl = document.getElementById('cmc-tabs');
+        var _tabBtnDraw = document.getElementById('cmc-tab-btn-draw');
+        var _tabBtnExisting = document.getElementById('cmc-tab-btn-existing');
+        var _panelDraw = document.getElementById('cmc-tab-panel-draw');
+        var _panelExisting = document.getElementById('cmc-tab-panel-existing');
+        var _existingSearch = document.getElementById('cmc-existing-search');
+        var _existingList = document.getElementById('cmc-existing-list');
+        var _existingMapPicker = null;   // { fetchUrl, onPick } | null
+        var _existingSearchToken = 0;    // invalidates stale search responses
+
+        function _switchComposerTab(tab) {
+            var onExisting = tab === 'existing';
+            _tabBtnDraw.classList.toggle('is-active', !onExisting);
+            _tabBtnDraw.setAttribute('aria-selected', String(!onExisting));
+            _tabBtnExisting.classList.toggle('is-active', onExisting);
+            _tabBtnExisting.setAttribute('aria-selected', String(onExisting));
+            _panelDraw.hidden = onExisting;
+            _panelExisting.hidden = !onExisting;
+            _saveBtn.hidden = onExisting;
+            if (onExisting) {
+                _loadExistingMaps('');
+                if (_existingSearch) _existingSearch.focus();
+            }
+        }
+
+        function _loadExistingMaps(query) {
+            if (!_existingMapPicker) return;
+            var token = ++_existingSearchToken;
+            _existingList.innerHTML = '<p class="form-hint">Loading your maps&hellip;</p>';
+            var url = _existingMapPicker.fetchUrl + (query ? '?q=' + encodeURIComponent(query) : '');
+            fetch(url, { credentials: 'same-origin' })
+                .then(function (r) { return r.text(); })
+                .then(function (html) {
+                    if (token !== _existingSearchToken) return; // a newer search superseded this one
+                    _existingList.innerHTML = html;
+                })
+                .catch(function () {
+                    if (token !== _existingSearchToken) return;
+                    _existingList.innerHTML = '<p class="form-hint">Could not load your maps. Please try again.</p>';
+                });
+        }
+
+        if (_tabBtnDraw) _tabBtnDraw.addEventListener('click', function () { _switchComposerTab('draw'); });
+        if (_tabBtnExisting) _tabBtnExisting.addEventListener('click', function () { _switchComposerTab('existing'); });
+        if (_existingSearch) {
+            var _existingSearchDebounce = null;
+            _existingSearch.addEventListener('input', function () {
+                clearTimeout(_existingSearchDebounce);
+                var value = _existingSearch.value.trim();
+                _existingSearchDebounce = setTimeout(function () { _loadExistingMaps(value); }, 300);
+            });
+        }
+        if (_existingList) {
+            _existingList.addEventListener('click', function (e) {
+                var item = e.target.closest('.dm-map-picker-item');
+                if (!item || !_existingMapPicker) return;
+                _existingMapPicker.onPick(item.dataset.mapUuid);
+                _closeComposer();
+            });
+        }
+
         // -- Open composer -----------------------------------------------------
         // Accepts either a host form element (existing comment/visit/trip-comment
-        // usage - back-compat) or an options object { form, context, onSaved }
-        // with no form, which switches on standalone mode.
+        // usage - back-compat) or an options object
+        // { form, context, onSaved, existingMapPicker, startTab } with no form,
+        // which switches on standalone mode. existingMapPicker (currently only
+        // passed by the DM composer) reveals the tab strip and a second
+        // "Choose Existing" tab backed by { fetchUrl, onPick(uuid) }; every
+        // other caller never sets it, so the dialog looks exactly as it always
+        // has for them.
         window._openCommentMapComposer = function (formOrOptions) {
             if (typeof L === 'undefined') {
                 toastr.warning('Map feature is not available on this page. Try from a pin or wiki page.');
@@ -890,10 +974,14 @@
             _standaloneMode = !form;
             _standaloneContext = opts.context || null;
             _standaloneOnSaved = opts.onSaved || null;
+            _existingMapPicker = opts.existingMapPicker || null;
 
             _titleRow.hidden = !_standaloneMode;
             _titleInput.value = '';
             _saveBtn.textContent = _standaloneMode ? 'Save map' : 'Attach map';
+
+            _tabsEl.hidden = !_existingMapPicker;
+            _switchComposerTab(_existingMapPicker && opts.startTab === 'existing' ? 'existing' : 'draw');
 
             // Restore existing map_data if the form already has one, or if the
             // caller passed a snapshot directly (e.g. "Edit" on a received map:
