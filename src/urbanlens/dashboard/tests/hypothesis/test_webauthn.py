@@ -350,6 +350,62 @@ class PasskeyOwnershipTests(TestCase):
         self.assertFalse(WebAuthnCredential.objects.filter(pk=self.credential.pk).exists())
 
 
+class PasskeyRegistrationEndpointTests(TestCase):
+    """The JSON endpoints driving the browser registration ceremony.
+
+    The service functions behind them are covered above; these lock in the
+    HTTP contract (status codes, error shape, auth requirement) that
+    webauthn-client.ts depends on.
+    """
+
+    def setUp(self) -> None:
+        self.user: User = baker.make(User, is_active=True)
+        self.client.force_login(self.user)
+
+    def test_options_endpoint_returns_service_json(self) -> None:
+        with patch("urbanlens.dashboard.controllers.webauthn.build_registration_options", return_value='{"challenge": "abc"}'):
+            response = self.client.post(reverse("settings.security.passkeys.options"))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "application/json")
+        self.assertEqual(response.content, b'{"challenge": "abc"}')
+
+    def test_options_endpoint_maps_service_errors_to_400(self) -> None:
+        with patch(
+            "urbanlens.dashboard.controllers.webauthn.build_registration_options",
+            side_effect=webauthn_service.WebAuthnError("Too many passkeys."),
+        ):
+            response = self.client.post(reverse("settings.security.passkeys.options"))
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json(), {"error": "Too many passkeys."})
+
+    def test_register_endpoint_requires_a_credential_payload(self) -> None:
+        response = self.client.post(reverse("settings.security.passkeys.register"), {"name": "My Key"})
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json(), {"error": "Missing credential."})
+
+    def test_register_endpoint_maps_verification_failure_to_400(self) -> None:
+        with patch(
+            "urbanlens.dashboard.controllers.webauthn.verify_and_save_registration",
+            side_effect=webauthn_service.WebAuthnError("Verification failed."),
+        ):
+            response = self.client.post(reverse("settings.security.passkeys.register"), {"credential": "{}", "name": "My Key"})
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json(), {"error": "Verification failed."})
+
+    def test_register_endpoint_returns_201_with_the_saved_name(self) -> None:
+        credential = baker.make(WebAuthnCredential, user=self.user, name="Saved Key")
+        with patch("urbanlens.dashboard.controllers.webauthn.verify_and_save_registration", return_value=credential):
+            response = self.client.post(reverse("settings.security.passkeys.register"), {"credential": "{}", "name": "Saved Key"})
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json(), {"ok": True, "name": "Saved Key"})
+
+    def test_both_endpoints_require_login(self) -> None:
+        self.client.logout()
+        for url_name in ("settings.security.passkeys.options", "settings.security.passkeys.register"):
+            response = self.client.post(reverse(url_name))
+            self.assertEqual(response.status_code, 302, url_name)
+
+
 class SettingsViewPasskeyContextTests(TestCase):
     def test_settings_page_lists_the_users_passkeys(self) -> None:
         user: User = baker.make(User, is_active=True)
