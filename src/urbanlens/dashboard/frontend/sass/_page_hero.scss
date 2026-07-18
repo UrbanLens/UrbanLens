@@ -234,7 +234,7 @@
     }
 
     &__subtitle {
-        margin: .1rem 0 0;
+        margin: .1rem auto 0;
         color: var(--ul-grey-7);
         font-size: .92rem;
         max-width: 34rem;
@@ -388,6 +388,10 @@
     text-align: left;
     backdrop-filter: blur(7px);
     -webkit-backdrop-filter: blur(7px);
+    position: absolute;
+    top: 3rem;
+    right: 1rem;
+    flex-direction: column;
 }
 
 .pin-hero-wiki-box > .material-symbols-outlined {

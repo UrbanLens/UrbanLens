@@ -401,13 +401,18 @@ nav {
         font-size: 0.72rem;
         font-weight: 600;
         letter-spacing: 0.02em;
-        color: var(--ul-grey-5);
+        color: rgba(255,255,255,0.7);
         opacity: 0.55;
         user-select: none;
     }
 
     &__github {
         gap: 0.4rem;
+
+        i.material-icons {
+            font-size: 1rem;
+            color: rgba(255,255,255,0.6);
+        }
     }
 
     // -- Map page modifier: adds a live tile-attribution slot between the
@@ -430,7 +435,7 @@ nav {
     &__attribution {
         margin: 0;
         line-height: 1.4;
-        color: var(--ul-grey-4);
+        color: rgba(255,255,255,0.7);
         white-space: nowrap;
         text-overflow: ellipsis;
         text-align: right;

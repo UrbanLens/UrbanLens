@@ -1751,7 +1751,7 @@ img.leaflet-marker-icon.is-selected {
     }
 
     &:hover {
-        background: var(--ul-hover-bg);
+        background: var(--ul-surface-0);
         color: var(--ul-grey-9);
     }
 
@@ -2701,7 +2701,15 @@ div.container .addr-search-bar {
 
 .leaflet-bar {
     a {
-        border-bottom: 1px solid var(--ul-grey-2)
+        border-bottom: 1px solid var(--ul-grey-2);
+    }
+
+    @include up($breakpoint-sm) {
+        opacity: 0.5;
+
+        &:hover {
+            opacity: 1;
+        }
     }
 }
 

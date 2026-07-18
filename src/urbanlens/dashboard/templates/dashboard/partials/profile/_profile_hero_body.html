@@ -71,13 +71,13 @@ Expects:
                 <div class="friendship-btn-group">
                     <form method="post" action="{% url 'friend.remove' profile.id %}">
                         {% csrf_token %}
-                        <button type="submit" class="btn friendship-btn btn--ghost" title="Remove friend">
+                        <button type="submit" class="btn friendship-btn btn--secondary" title="Remove friend">
                             <i class="material-symbols-outlined">person_remove</i> Remove
                         </button>
                     </form>
                     <form method="post" action="{% url 'friend.mute' profile.id %}">
                         {% csrf_token %}
-                        <button type="submit" class="btn friendship-btn btn--ghost" title="Mute this user">
+                        <button type="submit" class="btn friendship-btn btn--secondary" title="Mute this user">
                             <i class="material-symbols-outlined">volume_off</i> Mute
                         </button>
                     </form>

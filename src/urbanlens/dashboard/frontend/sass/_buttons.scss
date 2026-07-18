@@ -72,6 +72,8 @@
 	}
 
 	&--ghost {
+		background: rgba(0,0,0,0.3);
+		backdrop-filter: blur(10px);
 		border-color: var(--ul-grey-2b);
 		color: var(--ul-grey-7);
 

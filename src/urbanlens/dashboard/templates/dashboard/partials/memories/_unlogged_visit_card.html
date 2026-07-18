@@ -49,12 +49,12 @@ Context:
                 </button>
             </form>
 
-            <button type="button" class="btn btn--sm btn--ghost unlogged-card-details"
+            <button type="button" class="btn btn--sm btn--secondary unlogged-card-details"
                     onclick="memoriesOpenVisitDialog('{% url 'memories.visit' pin.slug %}')">
                 <i class="material-symbols-outlined">add_photo_alternate</i> Add details
             </button>
 
-            <button type="button" class="btn btn--sm btn--ghost unlogged-card-unmark"
+            <button type="button" class="btn btn--sm btn--secondary unlogged-card-unmark"
                     title="This pin wasn't actually visited"
                     hx-post="{% url 'memories.unlogged.action' pin.slug 'unmark' %}"
                     hx-target="#unlogged-card-{{ pin.slug }}" hx-swap="outerHTML swap:0.2s">
