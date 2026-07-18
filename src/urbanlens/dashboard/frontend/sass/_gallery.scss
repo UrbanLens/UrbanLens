@@ -361,7 +361,10 @@
   &:hover { background: rgba(200,0,0,.7); }
 
   .material-symbols-outlined,
-  .material-icons { font-size: 1.2rem; }
+  .material-icons { 
+    font-size: 1.2rem; 
+    color: #fff;
+  }
 }
 
 .lightbox-nav {

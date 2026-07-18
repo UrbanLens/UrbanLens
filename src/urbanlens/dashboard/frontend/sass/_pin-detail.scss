@@ -3811,11 +3811,6 @@ body.page-location-details {
     }
 }
 
-// -- Pin detail page layout -------------------------------------------------
-body.page-location-details {
-    background: var(--ul-grey-0);
-}
-
 // -- Link chip row (_pin_links_row.html) - shared between the pin details
 // page's own "Links" card and the wiki page's "About" card, so this is
 // intentionally unscoped rather than nested under body.page-location-details
@@ -3929,6 +3924,11 @@ body.page-location-details {
 
     input[name="name"] { width: 9rem; }
     input[name="url"] { width: 14rem; }
+}
+
+
+body.page-location-details .card {
+    box-shadow: 0 2px 12px rgba(0, 0, 0, .4);
 }
 
 body.page-location-details .pin-detail-grid {
