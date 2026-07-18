@@ -126,6 +126,7 @@ class PrivacySettingsFormContactVisibilityTests(TestCase):
             "trip_pin_location_visibility": VisibilityChoice.ANYONE,
             "contact_visibility": VisibilityChoice.FRIENDS,
             "direct_message_visibility": VisibilityChoice.ANYONE,
+            "common_pins_visibility": VisibilityChoice.ANYONE,
             **overrides,
         }
 
@@ -183,6 +184,7 @@ class ContactMethodsFormSaveTests(TestCase):
                 "trip_pin_location_visibility": VisibilityChoice.ANYONE,
                 "contact_visibility": VisibilityChoice.NO_ONE,
                 "direct_message_visibility": VisibilityChoice.ANYONE,
+                "common_pins_visibility": VisibilityChoice.ANYONE,
             },
             instance=profile,
         )

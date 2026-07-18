@@ -27,6 +27,7 @@ class _FakeProfile:
         self.viewer_photo_filter = "anyone"
         self.contact_visibility = "no_one"
         self.direct_message_visibility = "friends"
+        self.common_pins_visibility = "no_one"
         for key, value in overrides.items():
             setattr(self, key, value)
 
@@ -57,7 +58,7 @@ class PrivacyHintEditableTests(TestCase):
         self.assertNotIn("ul-privacy-hint-btn", html)
         self.assertNotIn("ul-privacy-hint-select", html)
 
-    def test_other_fields_snapshot_includes_all_eight_privacy_form_fields(self) -> None:
+    def test_other_fields_snapshot_includes_every_privacy_form_field(self) -> None:
         owner = _FakeProfile(profile_visibility="anyone", contact_visibility="friends")
         html = render_to_string(
             "dashboard/partials/ui/_privacy_hint.html",
@@ -78,6 +79,7 @@ class PrivacyHintEditableTests(TestCase):
                 "viewer_photo_filter": "anyone",
                 "contact_visibility": "friends",
                 "direct_message_visibility": "friends",
+                "common_pins_visibility": "no_one",
             },
         )
 

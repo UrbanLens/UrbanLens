@@ -518,9 +518,9 @@ class SiteSettings(abstract.FrontendDashboardModel):
 
         Site admins see it whenever the effective environment is development or local.
         Non-admin users can also see it, but only when the ``UL_ALLOW_DEV_TOOLBAR_FOR_NON_ADMINS``
-        env var is enabled AND the effective environment is development, local, or testing -
-        this lets QA/test accounts exercise dev tooling without granting them site-admin permission,
-        while staying off by default and never active in staging/production.
+        env var is enabled AND the effective environment is development, local, testing, or
+        staging - this lets QA/test accounts exercise dev tooling without granting them
+        site-admin permission, while staying off by default and never active in production.
 
         Args:
             user: The current request user.

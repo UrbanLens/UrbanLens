@@ -1,6 +1,7 @@
 """Tests for the own-profile "private activity" filters.
 
-Covers two bugs found in the profile page's private strips:
+Covers two bugs found in the private activity panel's strips (now rendered
+on the Home overview page):
 
 - "High-priority places to visit" only excluded pins by ``last_visited``,
   missing pins that have a dated ``PinVisit`` but whose ``last_visited``
@@ -41,7 +42,11 @@ def _make_pin(profile, *, last_visited=None, priority=5, name="Priority Spot") -
 
 
 class PriorityUnvisitedPinsTests(TestCase):
-    """The profile page's "High-priority places to visit" strip."""
+    """The "High-priority places to visit" strip in the private activity panel.
+
+    The panel (and its context) moved from the profile page to the Home
+    overview page - see controllers.index.own_profile_activity_context.
+    """
 
     def setUp(self) -> None:
         super().setUp()
@@ -50,7 +55,7 @@ class PriorityUnvisitedPinsTests(TestCase):
         self.client.force_login(self.user)
 
     def _priority_pins(self) -> list[Pin]:
-        response = self.client.get(reverse("profile.view"))
+        response = self.client.get(reverse("home.view"))
         return list(response.context["profile_priority_unvisited_pins"])
 
     def test_unvisited_priority_pin_is_shown(self) -> None:

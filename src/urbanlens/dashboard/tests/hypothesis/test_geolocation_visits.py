@@ -97,17 +97,26 @@ class RecordGeolocationPinVisitsTests(TestCase):
         now excludes far-away pins before that loop runs, so the query count
         must stay flat regardless of how many distant pins exist, rather than
         growing per pin."""
+        # Warm-up ping (unmeasured): records today's visit for the nearby pin,
+        # absorbing the one-time first-visit side effects (visited-status label
+        # creation and its smart-list resync, last-visited sync) that would
+        # otherwise make the two measured runs differ for reasons unrelated to
+        # distant pins. Both measured runs below then traverse identical state:
+        # the repeat-ping path where today's visit already exists.
+        record_geolocation_pin_visits(self.profile, latitude=40.0002, longitude=-74.0002, visited_at=timezone.now())
+
         with CaptureQueriesContext(connection) as baseline:
             record_geolocation_pin_visits(self.profile, latitude=40.0002, longitude=-74.0002, visited_at=timezone.now())
         baseline_query_count = len(baseline.captured_queries)
 
-        PinVisit.objects.all().delete()
-        other_location = baker.make("dashboard.Location", latitude="10.000000", longitude="10.000000")
-        for _ in range(25):
-            baker.make("dashboard.Pin", profile=self.profile, location=other_location)
+        # One location per pin - a profile can only have one pin per location
+        # (db_pin_unique_location_per_profile), which this fixture used to violate.
+        for i in range(25):
+            distant_location = baker.make("dashboard.Location", latitude=f"10.{i:06d}", longitude="10.000000")
+            baker.make("dashboard.Pin", profile=self.profile, location=distant_location)
 
         with CaptureQueriesContext(connection) as with_distant_pins:
             visits = record_geolocation_pin_visits(self.profile, latitude=40.0002, longitude=-74.0002, visited_at=timezone.now())
 
-        self.assertEqual(len(visits), 1)
+        self.assertEqual(visits, [])
         self.assertEqual(len(with_distant_pins.captured_queries), baseline_query_count)

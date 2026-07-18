@@ -30,8 +30,15 @@ from urbanlens.dashboard.services.undo.service import (
 
 
 def _expire(undo_action: UndoAction) -> None:
-    """Push ``undo_action`` past its retention window, simulating elapsed time."""
+    """Push ``undo_action`` past its retention window, simulating elapsed time.
+
+    ``.update()`` bypasses the instance, so the caller's in-memory ``created``
+    (and therefore ``is_expired``) would still read fresh without the
+    refresh - production callers always re-fetch the row, so the staleness
+    is a test-fixture artifact, not something restore() needs to guard.
+    """
     UndoAction.objects.filter(pk=undo_action.pk).update(created=timezone.now() - UNDO_RETENTION - datetime.timedelta(days=1))
+    undo_action.refresh_from_db()
 
 
 def _make_wiki(**kwargs) -> Wiki:

@@ -18,6 +18,7 @@ from __future__ import annotations
 from datetime import timedelta
 from typing import TYPE_CHECKING
 
+from django.core.serializers.json import DjangoJSONEncoder
 from django.db.models import CASCADE, ForeignKey, Index, JSONField
 from django.db.models.fields import CharField
 from django.utils import timezone
@@ -42,7 +43,14 @@ class UndoAction(abstract.FrontendDashboardModel):
 
     model_label = CharField(max_length=50)
     object_repr = CharField(max_length=255)
-    payload = JSONField()
+    # DjangoJSONEncoder because handlers snapshot model fields as-is, and some
+    # (SafetyCheckin's checkin_by/escalated_at/... datetimes and grace_period
+    # duration) aren't plain-JSON types. The cache this payload used to live
+    # in pickled values, so raw datetimes round-tripped silently; a bare
+    # JSONField made every such delete crash at stash time instead. Restore
+    # feeds the ISO strings back through normal model-field coercion
+    # (DateTimeField/DurationField.to_python), so no decoder is needed.
+    payload = JSONField(encoder=DjangoJSONEncoder)
 
     profile = ForeignKey("dashboard.Profile", on_delete=CASCADE, related_name="undo_actions")
 

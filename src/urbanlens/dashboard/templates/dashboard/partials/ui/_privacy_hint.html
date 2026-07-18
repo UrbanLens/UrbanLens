@@ -41,7 +41,7 @@ Usage:
     <select class="ul-privacy-hint-select" hidden aria-label="{{ label|default:'Visibility' }}"
             data-field="{{ field }}"
             data-settings-url="{% url 'settings.view' %}"
-            data-other-fields='{"profile_visibility":"{{ owner.profile_visibility }}","comment_visibility":"{{ owner.comment_visibility }}","friend_request_visibility":"{{ owner.friend_request_visibility }}","photo_upload_visibility":"{{ owner.photo_upload_visibility }}","trip_pin_location_visibility":"{{ owner.trip_pin_location_visibility }}","viewer_photo_filter":"{{ owner.viewer_photo_filter }}","contact_visibility":"{{ owner.contact_visibility }}","direct_message_visibility":"{{ owner.direct_message_visibility }}"}'
+            data-other-fields='{"profile_visibility":"{{ owner.profile_visibility }}","comment_visibility":"{{ owner.comment_visibility }}","friend_request_visibility":"{{ owner.friend_request_visibility }}","photo_upload_visibility":"{{ owner.photo_upload_visibility }}","trip_pin_location_visibility":"{{ owner.trip_pin_location_visibility }}","viewer_photo_filter":"{{ owner.viewer_photo_filter }}","contact_visibility":"{{ owner.contact_visibility }}","direct_message_visibility":"{{ owner.direct_message_visibility }}","common_pins_visibility":"{{ owner.common_pins_visibility }}"}'
             onchange="window.ulPrivacyHintChange(this)"
             onblur="window.ulPrivacyHintClose(this)">
         <option value="anyone"{% if raw_value == "anyone" %} selected{% endif %}>Anyone (Logged In)</option>

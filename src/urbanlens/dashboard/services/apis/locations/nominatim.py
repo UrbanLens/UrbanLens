@@ -62,6 +62,7 @@ _BOOLISH_VALUE_LABELS: dict[str, str] = {
     "designated": "Designated",
     "permissive": "Permissive",
     "private": "Private",
+    "public": "Public",
     "customers": "Customers only",
     "only": "Only",
 }
