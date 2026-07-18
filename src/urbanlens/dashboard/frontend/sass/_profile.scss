@@ -4,11 +4,23 @@
 // -- Profile page --------------------------------------------------------------
 
 .profile-page {
-    //margin: 2rem auto;
-    //padding: 0 1rem;
     display: flex;
     flex-direction: column;
-    gap: 1.25rem;
+    // Roomier rhythm between the body sections (About / Social / Contact /
+    // Additional Details / Friends) so they don't read as one dense stack,
+    // plus breathing room below the subnav and above the footer.
+    gap: 2rem;
+    padding: 1.5rem 0 3rem;
+}
+
+// The logged-in homepage (pages/home/overview.html) hosts the private
+// activity panel that used to live on the profile page - same container
+// rhythm as the profile page body.
+.home-overview-page {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+    padding: 1.5rem 0 3rem;
 }
 
 // Avatar + identity, rendered inside the shared .ul-page-hero--profile banner

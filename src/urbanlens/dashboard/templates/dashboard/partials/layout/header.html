@@ -10,6 +10,7 @@
         {# -- Primary links ----------------------------------------------------- #}
         <ul class="app-nav-links">
             {% if user.is_authenticated %}
+            <li{% if nav_section == 'home' %} class="app-nav-link--active"{% endif %}><a href="{% url 'home.view' %}" class="app-nav-link">Home</a></li>
             <li{% if nav_section == 'map' %} class="app-nav-link--active"{% endif %}><a href="{% url 'map.view' %}" class="app-nav-link">Map</a></li>
             <li{% if nav_section == 'organize' or nav_section == 'lists' %} class="app-nav-link--active"{% endif %}><a href="{% url 'organize.index' %}" class="app-nav-link">Organize</a></li>
             <li{% if nav_section == 'trips' %} class="app-nav-link--active"{% endif %}><a href="{% url 'trips.overview' %}" class="app-nav-link">Trips</a></li>
@@ -168,6 +169,9 @@
 {# -- Mobile nav drawer (shown below nav bar on small screens) ---------------- #}
 <div class="app-nav-drawer" id="app-nav-drawer" aria-hidden="true">
     <ul class="app-nav-drawer-links">
+        {% if user.is_authenticated %}
+        <li{% if nav_section == 'home' %} class="app-nav-link--active"{% endif %}><a href="{% url 'home.view' %}" class="app-nav-link">Home</a></li>
+        {% endif %}
         <li{% if nav_section == 'map' %} class="app-nav-link--active"{% endif %}><a href="{% url 'map.view' %}" class="app-nav-link">Map</a></li>
         {% if user.is_authenticated %}
         <li{% if nav_section == 'organize' or nav_section == 'lists' %} class="app-nav-link--active"{% endif %}><a href="{% url 'organize.index' %}" class="app-nav-link">Organize</a></li>
