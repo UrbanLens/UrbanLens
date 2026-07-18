@@ -121,8 +121,30 @@ class GooglePhotosSettingsViewTests(TestCase):
 
     def test_disconnect_removes_the_account(self) -> None:
         GooglePhotosAccount.objects.create(profile=self.profile, access_token="a", refresh_token="r")
-        self.client.post(reverse("settings.google_photos.disconnect"))
+        with mock.patch("urbanlens.dashboard.controllers.google_photos.revoke_token"):
+            self.client.post(reverse("settings.google_photos.disconnect"))
         self.assertFalse(GooglePhotosAccount.objects.filter(profile=self.profile).exists())
+
+    def test_disconnect_revokes_the_token_at_google(self) -> None:
+        """Regression: the account model's own docstring promises "deleted
+        (after best-effort token revocation)", matching GoogleCalendarAccount's
+        disconnect flow - the view previously just deleted the row, leaving
+        the OAuth grant live on Google's side indefinitely."""
+        GooglePhotosAccount.objects.create(profile=self.profile, access_token="access-tok", refresh_token="refresh-tok")
+        with mock.patch("urbanlens.dashboard.controllers.google_photos.revoke_token") as mock_revoke:
+            self.client.post(reverse("settings.google_photos.disconnect"))
+        mock_revoke.assert_called_once_with("refresh-tok")
+
+    def test_disconnect_falls_back_to_access_token_when_no_refresh_token(self) -> None:
+        GooglePhotosAccount.objects.create(profile=self.profile, access_token="access-only", refresh_token="")
+        with mock.patch("urbanlens.dashboard.controllers.google_photos.revoke_token") as mock_revoke:
+            self.client.post(reverse("settings.google_photos.disconnect"))
+        mock_revoke.assert_called_once_with("access-only")
+
+    def test_disconnect_without_a_connected_account_does_not_call_revoke(self) -> None:
+        with mock.patch("urbanlens.dashboard.controllers.google_photos.revoke_token") as mock_revoke:
+            self.client.post(reverse("settings.google_photos.disconnect"))
+        mock_revoke.assert_not_called()
 
 
 # -- Pin detail: session / status ----------------------------------------------

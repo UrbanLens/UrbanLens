@@ -43,7 +43,7 @@ from urbanlens.dashboard.services.apis.photos.google import (
 )
 from urbanlens.dashboard.services.celery import get_task_progress, safely_enqueue_task
 from urbanlens.dashboard.services.gateway import GatewayRequestError
-from urbanlens.dashboard.services.google_oauth import extract_email_from_id_token
+from urbanlens.dashboard.services.google_oauth import extract_email_from_id_token, revoke_token
 
 if TYPE_CHECKING:
     from django.http import HttpRequest
@@ -156,10 +156,13 @@ class GooglePhotosCallbackView(LoginRequiredMixin, View):
 
 
 class GooglePhotosDisconnectView(LoginRequiredMixin, View):
-    """POST /settings/google-photos/disconnect/ - remove the stored Google Photos connection."""
+    """POST /settings/google-photos/disconnect/ - revoke and remove the stored Google Photos connection."""
 
     def post(self, request: HttpRequest) -> HttpResponse:
         profile = _request_profile(request)
+        account = GooglePhotosAccount.objects.get_for_profile(profile)
+        if account is not None:
+            revoke_token(account.refresh_token or account.access_token)
         GooglePhotosAccount.objects.delete_for_profile(profile)
         response = render(request, _SETTINGS_PARTIAL, {"account": None})
         return _with_toast(response, "Google Photos disconnected.")
