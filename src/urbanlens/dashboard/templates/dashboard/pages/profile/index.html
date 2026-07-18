@@ -74,7 +74,7 @@
     {% endif %}
 
     {# -- Social links -------------------------------------------------------- #}
-    {% if social_links %}
+    {% if social_links or profile.user == request.user %}
     <div class="profile-section ul-section">
         <h3 class="profile-section-title{% if profile.user == request.user %} ul-privacy-hint-row{% endif %}">
             Social
@@ -82,6 +82,12 @@
             {% include "dashboard/partials/ui/_privacy_hint.html" with value=profile.get_profile_visibility_display field="profile_visibility" raw_value=profile.profile_visibility owner=profile %}
             {% endif %}
         </h3>
+        {% if profile.user == request.user %}
+        {# Same self-contained HTMX add/remove partial the Edit Profile page #}
+        {# uses - its posts target the absolute profile.edit URL and it #}
+        {# re-renders itself in place, so it works from any hosting page. #}
+        {% include "dashboard/partials/profile/profile_social_links.html" %}
+        {% else %}
         <div class="social-links">
             {% for link in social_links %}
             {% if link.platform == "website" %}
@@ -102,6 +108,7 @@
             {% endif %}
             {% endfor %}
         </div>
+        {% endif %}
     </div>
     {% endif %}
 
@@ -222,195 +229,8 @@
     {% include "dashboard/partials/profile/profile_annotation_partial.html" with subject=profile viewer_notes=viewer_notes user_labels=user_labels assigned_label_ids=assigned_label_ids %}
     {% endif %}
 
-    {% if profile.user == request.user %}
-    <section class="profile-owner-activity-panel profile-private-zone" aria-label="Your recent UrbanLens activity - only visible to you">
-        <span class="profile-annotation-title">My Private Activity</span>
-        <span class="profile-private-zone-cap profile-private-zone-cap--top" role="note"><i class="material-symbols-outlined" aria-hidden="true">lock</i> Only visible to you</span>
-        <p class="profile-private-zone-note">Everything inside this frame is private - other explorers never see it.</p>
-        <div class="profile-private-stats" aria-label="Private profile stats">
-            {% for stat in profile_private_stats %}
-                {% if stat.value > 0 %}
-                    <div class="profile-private-stat">
-                        <span class="profile-private-stat-icon"><i class="material-symbols-outlined">{{ stat.icon }}</i></span>
-                        <span class="profile-private-stat-value">{{ stat.value }}</span>
-                        <span class="profile-private-stat-label">{{ stat.label }}</span>
-                    </div>
-                {% endif %}
-            {% endfor %}
-        </div>
-        <div class="profile-dashboard-strips">
-        {% if profile_active_checkin %}
-        <section class="profile-strip profile-strip--emergency ul-section">
-            <div class="profile-strip-heading">
-                <span class="profile-strip-icon"><i class="material-symbols-outlined">emergency_home</i></span>
-                <div><h3>Active emergency check-in</h3><p>Keep this plan current until you're safely checked in.</p></div>
-            </div>
-            <a class="profile-feature-card" href="{% url 'safety.checkin.detail' profile_active_checkin.slug %}">
-                <strong>{{ profile_active_checkin.title }}</strong>
-                <span>{{ profile_active_checkin.get_status_display }} · due {{ profile_active_checkin.checkin_by|date:"M j, g:i A" }}</span>
-                {% if profile_active_checkin.destination_location %}<small>{{ profile_active_checkin.destination_location.display_name }}</small>{% endif %}
-            </a>
-        </section>
-        {% endif %}
-
-        {% if profile_recent_photos %}
-        <section class="profile-strip ul-section">
-            <div class="profile-strip-heading">
-                <span class="profile-strip-icon"><i class="material-symbols-outlined">photo_library</i></span>
-                <div><h3>Recent photos</h3><p>Your latest uploads from Memories.</p></div>
-                <a href="{% url 'memories.photos' %}" class="profile-strip-link">View all</a>
-            </div>
-            <ul class="profile-photo-strip photos-grid">
-                {% for img in profile_recent_photos %}
-                <li class="photo-tile" data-id="{{ img.pk }}" data-url="{{ img.image.url }}"
-                    data-caption="{{ img.caption|default:'' }}"
-                    data-author="{{ img.author|default:'' }}"
-                    data-copyright="{{ img.copyright|default:'' }}"
-                    data-source-url="{{ img.source_url|default:'' }}"
-                    data-taken-at="{{ img.taken_at|date:'c'|default:'' }}">
-                    <button type="button" class="photo-tile-btn" onclick="profileOpenLightbox({{ img.pk }})">
-                        <img src="{{ img.image.url }}" alt="{{ img.caption|default:'Photo' }}" loading="lazy"
-                             onerror="urbanlensMediaThumbFallback(this, 'broken_image', 'photo-tile-fallback')">
-                        {% if img.latitude and img.longitude %}<span class="photo-tile-badge" title="Has location"><i class="material-symbols-outlined">place</i></span>{% endif %}
-                    </button>
-                </li>
-                {% endfor %}
-            </ul>
-        </section>
-        {% endif %}
-
-        <section class="profile-strip ul-section" id="profile-recent-pins-strip" hidden>
-            <div class="profile-strip-heading">
-                <span class="profile-strip-icon"><i class="material-symbols-outlined">history</i></span>
-                <div><h3>Recently viewed pins</h3><p>Pins you've opened recently on the map.</p></div>
-            </div>
-            <div class="profile-card-strip" data-recent-pins></div>
-        </section>
-
-        {% if profile_recent_pins %}
-        <section class="profile-strip ul-section">
-            <div class="profile-strip-heading">
-                <span class="profile-strip-icon"><i class="material-symbols-outlined">add_location_alt</i></span>
-                <div><h3>Recently created pins</h3><p>Your newest saved places.</p></div>
-            </div>
-            <div class="profile-card-strip">
-                {% for pin in profile_recent_pins %}
-                <a class="profile-mini-card" href="{% url 'pin.details' pin.slug %}">
-                    <i class="material-symbols-outlined">push_pin</i>
-                    <strong>{{ pin.display_label|default:pin.name|default:"Unnamed pin" }}</strong>
-                    <span>{{ pin.created|date:"M j" }}{% if pin.location.address %} · {{ pin.location.address|truncatechars:48 }}{% endif %}</span>
-                </a>
-                {% endfor %}
-            </div>
-        </section>
-        {% endif %}
-
-        {% if profile_priority_unvisited_pins %}
-        <section class="profile-strip ul-section">
-            <div class="profile-strip-heading">
-                <span class="profile-strip-icon profile-strip-icon--warm"><i class="material-symbols-outlined">priority_high</i></span>
-                <div><h3>High-priority places to visit</h3><p>Your most important unvisited pins.</p></div>
-            </div>
-            <div class="profile-card-strip">
-                {% for pin in profile_priority_unvisited_pins %}
-                <a class="profile-mini-card profile-mini-card--priority" href="{% url 'pin.details' pin.slug %}">
-                    <i class="material-symbols-outlined">flag</i>
-                    <strong>{{ pin.display_label|default:pin.name|default:"Unnamed pin" }}</strong>
-                    <span>Priority {{ pin.priority }}{% if pin.location.address %} · {{ pin.location.address|truncatechars:42 }}{% endif %}</span>
-                </a>
-                {% endfor %}
-            </div>
-        </section>
-        {% endif %}
-
-        {% if profile_recent_comments %}
-        <section class="profile-strip ul-section">
-            <div class="profile-strip-heading">
-                <span class="profile-strip-icon"><i class="material-symbols-outlined">forum</i></span>
-                <div><h3>Recent comments</h3><p>Conversations you've joined lately.</p></div>
-            </div>
-            <div class="profile-card-strip">
-                {% for comment in profile_recent_comments %}
-                {% if comment.pin %}<a class="profile-mini-card" href="{% url 'pin.details' comment.pin.slug %}#comments">
-                {% elif comment.wiki %}<a class="profile-mini-card" href="{% url 'location.wiki' comment.wiki.location.slug %}#comments">
-                {% elif comment.trip %}<a class="profile-mini-card" href="{% url 'trips.detail' comment.trip.slug %}#trip-comments">
-                {% else %}<article class="profile-mini-card">{% endif %}
-                    <i class="material-symbols-outlined">chat_bubble</i>
-                    <strong>{% if comment.pin %}{{ comment.pin.display_label|default:comment.pin.name }}{% elif comment.wiki %}{{ comment.wiki.name }}{% elif comment.trip %}{{ comment.trip.name }}{% else %}Comment{% endif %}</strong>
-                    <span>{{ comment.text|striptags|truncatechars:88 }}</span>
-                {% if comment.pin or comment.wiki or comment.trip %}</a>{% else %}</article>{% endif %}
-                {% endfor %}
-            </div>
-        </section>
-        {% endif %}
-
-        <section class="profile-strip ul-section" id="profile-recent-wikis-strip" hidden>
-            <div class="profile-strip-heading">
-                <span class="profile-strip-icon"><i class="material-symbols-outlined">menu_book</i></span>
-                <div><h3>Recently viewed wikis</h3><p>Community pages you've opened recently.</p></div>
-            </div>
-            <div class="profile-card-strip" data-recent-wikis></div>
-        </section>
-
-        {% if profile_recent_markup_maps %}
-        <section class="profile-strip ul-section">
-            <div class="profile-strip-heading">
-                <span class="profile-strip-icon"><i class="material-symbols-outlined">gesture</i></span>
-                <div><h3>Recent markup maps</h3><p>Your newest annotated maps and routes.</p></div>
-                <a href="{% url 'memories.maps' %}" class="profile-strip-link">All maps</a>
-            </div>
-            <div class="profile-card-strip">
-                {% for map in profile_recent_markup_maps %}
-                <a class="profile-mini-card" href="{% url 'memories.maps' %}">
-                    <i class="material-symbols-outlined">edit_location_alt</i>
-                    <strong>{{ map.title|default:"Untitled map" }}</strong>
-                    <span>{{ map.created|date:"M j" }} · {{ map.items.all|length }} annotation{{ map.items.all|length|pluralize }}</span>
-                </a>
-                {% endfor %}
-            </div>
-        </section>
-        {% endif %}
-
-        {% if profile_recent_trips %}
-        <section class="profile-strip ul-section">
-            <div class="profile-strip-heading">
-                <span class="profile-strip-icon"><i class="material-symbols-outlined">luggage</i></span>
-                <div><h3>Recent trips</h3><p>Past trips with new comments in the last week.</p></div>
-                <a href="{% url 'trips.list' %}" class="profile-strip-link">All trips</a>
-            </div>
-            <div class="profile-card-strip">
-                {% for trip in profile_recent_trips %}
-                <a class="profile-mini-card" href="{% url 'trips.detail' trip.slug %}">
-                    <i class="material-symbols-outlined">map</i>
-                    <strong>{{ trip.name }}</strong>
-                    <span>{{ trip.timeline_status|title }}{% if trip.effective_start_date %} · {{ trip.effective_start_date|date:"M j" }}{% endif %}</span>
-                </a>
-                {% endfor %}
-            </div>
-        </section>
-        {% endif %}
-
-        {% if profile_upcoming_trips %}
-        <section class="profile-strip ul-section">
-            <div class="profile-strip-heading">
-                <span class="profile-strip-icon"><i class="material-symbols-outlined">event_upcoming</i></span>
-                <div><h3>Upcoming trips</h3><p>What's next on your calendar.</p></div>
-            </div>
-            <div class="profile-card-strip">
-                {% for trip in profile_upcoming_trips %}
-                <a class="profile-mini-card" href="{% url 'trips.detail' trip.slug %}">
-                    <i class="material-symbols-outlined">calendar_month</i>
-                    <strong>{{ trip.name }}</strong>
-                    <span>{% if trip.effective_start_date %}Starts {{ trip.effective_start_date|date:"M j, Y" }}{% else %}Planning{% endif %}</span>
-                </a>
-                {% endfor %}
-            </div>
-        </section>
-        {% endif %}
-        </div>
-        <span class="profile-private-zone-cap profile-private-zone-cap--bottom" aria-hidden="true"><i class="material-symbols-outlined">lock</i> Only visible to you</span>
-    </section>
-    {% endif %}
+    {# The "My Private Activity" dashboard moved to the logged-in homepage - #}
+    {# see pages/home/overview.html and _private_activity_panel.html. #}
 
 
     {# -- Friends ------------------------------------------------------------- #}
@@ -450,10 +270,6 @@
     </div>
 </div>
 
-{% if profile_recent_photos %}
-{# -- Lightbox (shared component - same as Memories > Photos and the pin detail gallery) -- #}
-{% include "dashboard/partials/_photo_lightbox.html" %}
-{% endif %}
 {% endblock %}
 
 {% block scripts %}
@@ -504,52 +320,7 @@
         });
     }
 
-    function renderRecentStrip(storageKey, stripId, targetSelector, iconName, fallbackSubtitle) {
-        var strip = document.getElementById(stripId);
-        if (!strip) return;
-        var target = strip.querySelector(targetSelector);
-        if (!target) return;
-        var items = [];
-        try { items = JSON.parse(window.localStorage.getItem(storageKey) || '[]'); } catch (e) { items = []; }
-        items = Array.isArray(items) ? items.slice(0, 6) : [];
-        if (!items.length) return;
-        target.innerHTML = '';
-        items.forEach(function (item) {
-            var href = item.url || (item.slug ? ('/dashboard/map/pin/' + encodeURIComponent(item.slug) + '/') : '#');
-            var title = item.title || item.name || 'Untitled';
-            var subtitle = item.subtitle || fallbackSubtitle;
-            var card = document.createElement('a');
-            card.className = 'profile-mini-card';
-            card.href = href;
-            card.innerHTML = '<i class="material-symbols-outlined"></i><strong></strong><span></span>';
-            card.querySelector('i').textContent = iconName;
-            card.querySelector('strong').textContent = title;
-            card.querySelector('span').textContent = subtitle;
-            target.appendChild(card);
-        });
-        strip.hidden = false;
-    }
-
-    var recentHistoryProfileId = '{{ profile.id }}';
-    renderRecentStrip('ul_recent_pins_v1_' + recentHistoryProfileId, 'profile-recent-pins-strip', '[data-recent-pins]', 'push_pin', 'Recently viewed');
-    renderRecentStrip('ul_recent_wikis_v1_' + recentHistoryProfileId, 'profile-recent-wikis-strip', '[data-recent-wikis]', 'menu_book', 'Recently viewed');
-
 }());
-
-// Opens the shared lightbox (dashboard/partials/_photo_lightbox.html,
-// included above) with the "Recent photos" strip's items.
-function profileOpenLightbox(id) {
-    var items = Array.prototype.map.call(document.querySelectorAll('.profile-photo-strip .photo-tile'), function (el) {
-        return {
-            url: el.dataset.url, caption: el.dataset.caption || '',
-            author: el.dataset.author || '', copyright: el.dataset.copyright || '',
-            sourceUrl: el.dataset.sourceUrl || '', sourceName: '', takenAt: el.dataset.takenAt || '',
-            imageId: parseInt(el.dataset.id, 10), canRelevance: false, relevant: null,
-        };
-    });
-    var idx = items.findIndex(function (i) { return i.imageId === id; });
-    window.galleryOpenLightboxItem(items, Math.max(idx, 0));
-}
 
 function panToggleEdit(noteId) {
     var body = document.getElementById('pan-note-body-' + noteId);
