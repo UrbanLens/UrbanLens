@@ -116,26 +116,52 @@ def send_deletion_reminder(profile: Profile) -> None:
     profile.save(update_fields=["deletion_reminder_sent_at", "updated"])
 
 
+def _delete_file_field(instance, field_name: str, *, label: str) -> None:
+    """Best-effort delete of one FileField's underlying storage file.
+
+    Args:
+        instance: The model instance owning the file field.
+        field_name: Name of the FileField/ImageField attribute.
+        label: Short description for the failure log line.
+    """
+    field_file = getattr(instance, field_name)
+    if not field_file:
+        return
+    try:
+        field_file.delete(save=False)
+    except OSError:
+        logger.exception("Failed to delete %s file for %s %s", field_name, label, instance.pk)
+
+
 def _delete_profile_files(profile: Profile) -> None:
     """Best-effort delete of storage files owned by this profile, before the DB rows go.
+
+    Every model below cascade-deletes its row when the profile's User row is
+    deleted (see ``hard_delete_profile``) - Django never deletes a FileField's
+    underlying file on row deletion, so each one must be cleaned up here first
+    or the physical file is orphaned forever. ``TripComment.image`` is
+    deliberately excluded: ``TripComment.author`` is ``SET_NULL`` (the row and
+    its content survive account deletion, rendered with an "Unknown" author,
+    so other trip members keep the conversation) - deleting that file would
+    break an image the app intentionally keeps showing.
 
     A failure deleting any single file is logged and skipped rather than
     aborting the account deletion - a leaked file is a much smaller problem
     than a user stuck unable to delete their account.
     """
-    if profile.avatar:
-        try:
-            profile.avatar.delete(save=False)
-        except OSError:
-            logger.exception("Failed to delete avatar file for profile %s", profile.pk)
+    _delete_file_field(profile, "avatar", label="profile")
 
     for image in profile.uploaded_images.all():
-        if not image.image:
-            continue
-        try:
-            image.image.delete(save=False)
-        except OSError:
-            logger.exception("Failed to delete image file %s for profile %s", image.pk, profile.pk)
+        _delete_file_field(image, "image", label="image")
+
+    for pin in profile.pins.all():
+        _delete_file_field(pin, "custom_icon", label="pin")
+
+    for comment in profile.comments.all():
+        _delete_file_field(comment, "image", label="comment")
+
+    for label in profile.custom_labels.all():
+        _delete_file_field(label, "custom_icon", label="label")
 
 
 def hard_delete_profile(profile: Profile) -> None:
