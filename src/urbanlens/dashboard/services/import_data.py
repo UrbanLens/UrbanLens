@@ -167,7 +167,7 @@ def run_import(user_id: int, zip_path: str, job_id: str) -> bool:
 
     try:
         job_status.write("running", 5, "Validating archive...")
-        data_dir = _extract_and_validate(zip_path, extract_dir, job_id)
+        data_dir = _extract_and_validate(zip_path, extract_dir, job_id, profile=profile)
 
         manifest = _read_json(data_dir, "manifest.json") or {}
         contents: list[str] = manifest.get("contents", [])
@@ -222,16 +222,48 @@ class _ImportValidationError(Exception):
 
 
 #: Ceilings on what an uploaded archive may declare before extraction even
-#: starts. Imports only ever read the JSON data files (photos in an archive
-#: are ignored), so legitimate archives' extracted footprint is small - these
-#: exist to stop a crafted zip from filling the disk (decompression bomb) or
-#: exhausting inodes, not to constrain real exports.
-_MAX_EXTRACTED_BYTES = 2 * 1024**3
+#: starts, guarding against a crafted zip filling the disk (decompression
+#: bomb) or exhausting inodes. The byte ceiling is dynamic (see
+#: ``_extraction_size_ceiling``) because export archives bundle the user's
+#: actual photo files, so a legitimate archive can approach the user's
+#: storage quota - the floor below is only its minimum.
+_EXTRACTED_BYTES_FLOOR = 2 * 1024**3
 _MAX_ARCHIVE_MEMBERS = 50_000
 
 
-def _extract_and_validate(zip_path: str, extract_dir: str, job_id: str) -> str:
-    """Extract the ZIP and return the path to the data directory inside it."""
+def _extraction_size_ceiling(profile: Any | None) -> int:
+    """Upper bound on an archive's declared uncompressed size, in bytes.
+
+    Allows twice the profile's resolved storage quota (photo payload plus
+    headroom for the JSON data and quota changes between export and import),
+    never below the 2 GiB floor. Unlimited-quota users get a fixed generous
+    ceiling rather than no ceiling at all - the guard exists to stop
+    decompression bombs, not real exports.
+
+    Args:
+        profile: The importing profile, or None when unknown (floor-based
+            fallback, used by direct callers in tests).
+
+    Returns:
+        The maximum declared uncompressed size to accept, in bytes.
+    """
+    from urbanlens.dashboard.services.storage import get_quota_bytes
+
+    quota_bytes = get_quota_bytes(profile) if profile is not None else None
+    if quota_bytes is None:
+        return _EXTRACTED_BYTES_FLOOR * 32
+    return max(_EXTRACTED_BYTES_FLOOR, quota_bytes * 2)
+
+
+def _extract_and_validate(zip_path: str, extract_dir: str, job_id: str, profile: Any | None = None) -> str:
+    """Extract the ZIP and return the path to the data directory inside it.
+
+    Args:
+        zip_path: Path to the uploaded archive.
+        extract_dir: Directory to extract into.
+        job_id: Import job UUID (for log context).
+        profile: The importing profile, used to size the extraction ceiling.
+    """
     if not os.path.exists(zip_path):
         raise _ImportValidationError("Uploaded file not found. Please try again.")
 
@@ -244,7 +276,7 @@ def _extract_and_validate(zip_path: str, extract_dir: str, job_id: str) -> str:
         members = zf.infolist()
         if len(members) > _MAX_ARCHIVE_MEMBERS:
             raise _ImportValidationError("Archive contains too many files.")
-        if sum(member.file_size for member in members) > _MAX_EXTRACTED_BYTES:
+        if sum(member.file_size for member in members) > _extraction_size_ceiling(profile):
             raise _ImportValidationError("Archive is too large to import.")
         # Guard against zip-slip path traversal. The separator is part of the
         # comparison on purpose: a bare prefix check would accept an entry
@@ -436,8 +468,11 @@ def _import_pins(
             report_progress(idx, total_rows)
         uuid_str = row.get("uuid", "")
 
-        # Idempotency: skip pins that already exist for this user.
-        existing = Pin.objects.filter(uuid=uuid_str).first() if uuid_str else None
+        # Idempotency: skip pins that already exist FOR THIS USER. The
+        # profile scope is load-bearing: the archive is user-supplied, so a
+        # uuid belonging to another user's pin must not enter pin_uuid_map -
+        # later steps (visit history) create rows against the mapped pks.
+        existing = Pin.objects.filter(uuid=uuid_str, profile=profile).first() if uuid_str else None
         if existing:
             pin_uuid_map[uuid_str] = existing.pk
             result.inc_skipped("pins")
@@ -462,7 +497,12 @@ def _import_pins(
             "detail_border_color": row.get("detail_border_color") or None,
             "detail_border_opacity": int(row.get("detail_border_opacity", 100)),
         }
-        if uuid_str:
+        # Only carry the archive's uuid onto the new pin when it isn't
+        # already taken by another user's pin (uuid is globally unique);
+        # otherwise import as a fresh pin. pin_uuid_map still keys on the
+        # archive's uuid either way - it exists to resolve the archive's own
+        # internal cross-references.
+        if uuid_str and not Pin.objects.filter(uuid=uuid_str).exists():
             defaults["uuid"] = uuid_str
 
         try:
@@ -560,7 +600,22 @@ def _import_connections(
     label_uuid_map: dict[str, int],
     report_progress: ProgressReporter | None = None,
 ) -> None:
-    """Import friendship connections. Skips connections to users not on this instance."""
+    """Import friendship connections as fresh friend requests.
+
+    The archive is user-supplied input, so its rows are treated as requests
+    rather than facts: an import may only re-create actions the importing
+    user could take themselves through the UI. Each outgoing row becomes a
+    new friend REQUEST via ``Friendship.request`` - the chokepoint that
+    enforces the community-enabled and existing/blocked-row guards - except
+    an outgoing BLOCK, which is restored directly since blocking is a
+    unilateral action the importer owns. The exported status, permissions,
+    and incoming rows are otherwise ignored: honoring them would let a
+    crafted archive forge an ACCEPTED friendship (or a row "from" another
+    user) and grant itself friend-level access to that user's data.
+    """
+    from django.db.models import Q
+
+    from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType
     from urbanlens.dashboard.models.friendship.model import Friendship
     from urbanlens.dashboard.models.profile.model import Profile
 
@@ -572,36 +627,57 @@ def _import_connections(
     for idx, row in enumerate(rows, start=1):
         if report_progress:
             report_progress(idx, total_rows)
-        other_uuid = row.get("other_user_uuid", "")
+        other_uuid = row.get("other_user_uuid") or ""
         direction = row.get("direction", "outgoing")
 
+        if not other_uuid or direction != "outgoing":
+            # Outgoing not-yet-accepted rows export with identity withheld
+            # (nothing to act on), and an incoming row records the OTHER
+            # user's action - it cannot be re-created on their behalf; they
+            # must send the request themselves.
+            result.inc_skipped("connections")
+            continue
+
         other_profile = Profile.objects.filter(uuid=other_uuid).first()
-        if other_profile is None:
+        if other_profile is None or other_profile.pk == profile.pk:
             result.warnings.append(
                 f"Skipped connection with '{row.get('other_username', other_uuid)}': user not found on this instance.",
             )
             result.inc_skipped("connections")
             continue
 
-        from_p = profile if direction == "outgoing" else other_profile
-        to_p = other_profile if direction == "outgoing" else profile
-
-        if Friendship.objects.filter(from_profile=from_p, to_profile=to_p).exists():
+        already_connected = Friendship.objects.filter(
+            Q(from_profile=profile, to_profile=other_profile) | Q(from_profile=other_profile, to_profile=profile),
+        ).exists()
+        if already_connected:
             result.inc_skipped("connections")
             continue
 
+        relationship_type = row.get("relationship_type", "")
+        if relationship_type not in FriendshipType.values:
+            relationship_type = FriendshipType.FRIEND
+
         try:
-            Friendship.objects.create(
-                from_profile=from_p,
-                to_profile=to_p,
-                status=row.get("status", "Requested"),
-                relationship_type=row.get("relationship_type", "Friend"),
-                permissions=row.get("permissions", "View Profile"),
-            )
-            result.inc_created("connections")
+            if row.get("status") == FriendshipStatus.BLOCKED:
+                Friendship.objects.create(
+                    from_profile=profile,
+                    to_profile=other_profile,
+                    status=FriendshipStatus.BLOCKED,
+                    relationship_type=relationship_type,
+                )
+                result.inc_created("connections")
+                continue
+
+            friendship = Friendship.request(from_profile=profile, to_profile=other_profile, relationship_type=relationship_type)
         except Exception:
-            logger.warning("Failed to import connection %s → %s", from_p, to_p, exc_info=True)
+            logger.warning("Failed to import connection %s → %s", profile, other_profile, exc_info=True)
             result.warnings.append(f"Could not import connection with '{row.get('other_username', other_uuid)}'.")
+            continue
+
+        if friendship is not None:
+            result.inc_created("connections")
+        else:
+            result.inc_skipped("connections")
 
 
 def _import_settings(
