@@ -20,10 +20,10 @@ from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.models.labels.meta import KIND_TAG
-from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.comments.model import Comment
 from urbanlens.dashboard.models.images.model import Image
+from urbanlens.dashboard.models.labels.meta import KIND_TAG
+from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.model import Pin
 
 
@@ -113,6 +113,58 @@ class LabelMembershipVisibilityTests(TestCase):
         response = self._add(global_label.id)
         self.assertEqual(response.status_code, 200)
         self.assertIn(global_label, self.pin.labels.all())
+
+
+class MapEndpointLabelVisibilityTests(TestCase):
+    """The map add/quick-edit endpoints must apply the same label visibility
+    rule as the label membership panels - a guessed foreign label id must not
+    attach (and thereby expose the name of) another user's private label."""
+
+    def setUp(self) -> None:
+        self.user = baker.make(User)
+        self.other = baker.make(User)
+        self.client.force_login(self.user)
+        self.own_label = baker.make(Label, kind=KIND_TAG, profile=self.user.profile)
+        self.foreign_label = baker.make(Label, kind=KIND_TAG, profile=self.other.profile)
+
+    def test_add_pin_ignores_foreign_label_ids(self) -> None:
+        response = self.client.post(
+            reverse("pin.add"),
+            data={"name": "Test", "latitude": "42.65", "longitude": "-73.75", "label_ids": [self.own_label.id, self.foreign_label.id]},
+        )
+        self.assertEqual(response.status_code, 200)
+        pin = Pin.objects.get(profile=self.user.profile)
+        self.assertIn(self.own_label, pin.labels.all())
+        self.assertNotIn(self.foreign_label, pin.labels.all())
+
+    def test_add_pin_ignores_foreign_tag_ids(self) -> None:
+        response = self.client.post(
+            reverse("pin.add"),
+            data={"name": "Test", "latitude": "42.66", "longitude": "-73.76", "tag_ids": [self.foreign_label.id]},
+        )
+        self.assertEqual(response.status_code, 200)
+        pin = Pin.objects.get(profile=self.user.profile)
+        self.assertNotIn(self.foreign_label, pin.labels.all())
+
+    def test_quick_edit_ignores_foreign_label_ids(self) -> None:
+        pin = baker.make(Pin, profile=self.user.profile)
+        response = self.client.post(
+            reverse("pin.quick_edit", args=[pin.slug]),
+            data={"label_ids": [self.own_label.id, self.foreign_label.id]},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(self.own_label, pin.labels.all())
+        self.assertNotIn(self.foreign_label, pin.labels.all())
+
+    def test_quick_edit_accepts_global_labels(self) -> None:
+        pin = baker.make(Pin, profile=self.user.profile)
+        global_label = baker.make(Label, kind=KIND_TAG, profile=None)
+        response = self.client.post(
+            reverse("pin.quick_edit", args=[pin.slug]),
+            data={"label_ids": [global_label.id]},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(global_label, pin.labels.all())
 
 
 class CommentReactionScopingTests(TestCase):

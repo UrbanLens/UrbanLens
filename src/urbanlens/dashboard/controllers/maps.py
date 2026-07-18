@@ -19,7 +19,6 @@ from geopy.exc import GeocoderTimedOut, GeocoderUnavailable
 from geopy.geocoders import Nominatim
 from rest_framework.viewsets import GenericViewSet
 
-from urbanlens.dashboard.forms.advanced_search import AdvancedSearchForm
 from urbanlens.dashboard.forms.search import SearchForm
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.labels.model import (
@@ -287,15 +286,18 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 profile=request.user.profile,
             )
 
+            # visible_to keeps the id__in lookups from resolving another
+            # user's private labels - a guessed foreign label id would
+            # otherwise attach (and render the name of) someone else's label.
             if label_ids:
-                pin.labels.set(Label.objects.location_labels().filter(id__in=label_ids))
+                pin.labels.set(Label.objects.location_labels().visible_to(request.user.profile).filter(id__in=label_ids))
             else:
                 if tag_ids:
                     pin.labels.remove(*pin.labels.filter(kind="tag"))
-                    pin.labels.add(*Label.objects.tags().filter(id__in=tag_ids))
+                    pin.labels.add(*Label.objects.tags().visible_to(request.user.profile).filter(id__in=tag_ids))
                 if category_ids:
                     pin.labels.remove(*pin.labels.filter(kind="category"))
-                    pin.labels.add(*Label.objects.categories().filter(id__in=category_ids))
+                    pin.labels.add(*Label.objects.categories().visible_to(request.user.profile).filter(id__in=category_ids))
 
             # Generate slug immediately so the "View Details" URL resolves without a
             # separate lookup - Pin.slug is nullable and is not auto-populated by create().
@@ -418,7 +420,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         if not request.user.profile.external_apis_enabled:
             return JsonResponse({"results": [], "source": "places", "disabled": True})
 
-        api_key = settings.google_unrestricted_api_key or settings.google_unrestricted_api_key
+        api_key = settings.google_unrestricted_api_key
         if not api_key:
             return JsonResponse({"results": [], "source": "places", "disabled": True})
 
@@ -452,7 +454,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         if not place_id:
             return JsonResponse({"error": "missing place_id"}, status=400)
 
-        api_key = settings.google_unrestricted_api_key or settings.google_unrestricted_api_key
+        api_key = settings.google_unrestricted_api_key
         if not api_key:
             return JsonResponse({"error": "no_api_key"}, status=503)
 
@@ -477,7 +479,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         except (TypeError, ValueError):
             return JsonResponse({"error": "invalid coordinates"}, status=400)
 
-        api_key = settings.google_domain_restricted_api_key or settings.google_unrestricted_api_key or settings.google_unrestricted_api_key
+        api_key = settings.google_domain_restricted_api_key or settings.google_unrestricted_api_key
         if not api_key:
             return JsonResponse({"available": False, "reason": "no_key"})
 
@@ -625,17 +627,6 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         pin.change_category(category_id)
         return HttpResponseRedirect(reverse("view_map"))
-
-    def post_advanced_search(self, request, *args, **kwargs):
-        form = AdvancedSearchForm(request.POST)
-        if form.is_valid():
-            pins = Pin.objects.all().filter_by_criteria(form.cleaned_data)
-            return render(request, "dashboard/pages/map/index.html", {"pins": pins})
-        return None
-
-    def get_advanced_search(self, request, *args, **kwargs):
-        form = AdvancedSearchForm()
-        return render(request, "dashboard/pages/map/advanced_search.html", {"form": form})
 
     def map_pins_json(self, request, *args, **kwargs):
         """Return pin data as JSON with optional bbox filtering for two-phase map loading.
@@ -822,7 +813,8 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         if label_ids:
             from urbanlens.dashboard.models.labels.model import KIND_USER as _KIND_USER
 
-            pin.labels.set(Label.objects.exclude(kind=_KIND_USER).filter(id__in=label_ids))
+            # visible_to: same foreign-label-id guard as post_add_pin.
+            pin.labels.set(Label.objects.exclude(kind=_KIND_USER).visible_to(request.user.profile).filter(id__in=label_ids))
         elif "label_ids" in request.POST:
             pin.labels.clear()
 
@@ -892,7 +884,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
 
         # -- Google historical landmarks (Places API v1 - supports historical_landmark type) --
         if use_google:
-            api_key = settings.google_unrestricted_api_key or settings.google_unrestricted_api_key
+            api_key = settings.google_unrestricted_api_key
             if not api_key:
                 logger.info("Google Places skipped: no API key configured.")
             else:
@@ -1026,7 +1018,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         if not place_id:
             return JsonResponse({"error": "missing place_id"}, status=400)
 
-        api_key = settings.google_unrestricted_api_key or settings.google_unrestricted_api_key
+        api_key = settings.google_unrestricted_api_key
         if not api_key:
             return JsonResponse({"error": "no_api_key"}, status=503)
 
