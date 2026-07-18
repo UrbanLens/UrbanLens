@@ -668,6 +668,30 @@ class Profile(abstract.PublicDashboardModel):
         ).exists()
 
     @staticmethod
+    def are_blocked(subject: Profile, other: Profile) -> bool:
+        """Return True when either profile has blocked the other.
+
+        Blocking is checked in both directions deliberately: it must be an
+        absolute veto on contact regardless of who blocked whom, unlike
+        :meth:`are_friends` and the ``VisibilityChoice`` settings, which are
+        never consulted for it - a BLOCKED ``Friendship`` row exists whether
+        ``subject`` blocked ``other`` or the reverse.
+
+        Args:
+            subject: One profile of the pair.
+            other: The other profile.
+
+        Returns:
+            True when a BLOCKED Friendship row exists in either direction.
+        """
+        from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
+
+        return Friendship.objects.filter(
+            models.Q(from_profile=subject, to_profile=other) | models.Q(from_profile=other, to_profile=subject),
+            status=FriendshipStatus.BLOCKED,
+        ).exists()
+
+    @staticmethod
     def has_pending_request_to(sender: Profile, recipient: Profile) -> bool:
         """Return True when ``sender`` has an unanswered friend request to ``recipient``.
 
@@ -865,20 +889,28 @@ class Profile(abstract.PublicDashboardModel):
     def accepts_direct_messages_from(self, sender: Profile) -> bool:
         """Return True if ``sender`` may send this profile a direct message.
 
-        Evaluates this profile's ``direct_message_visibility`` setting through
-        the shared ``visibility_permits`` evaluator, with one addition: a
-        profile that has already messaged the sender can always be replied to,
-        regardless of the setting - starting a conversation is an implicit
-        invitation to answer.
+        A BLOCKED relationship in either direction is an absolute veto,
+        checked before anything else - it overrides even the "already
+        messaged them, so they can always reply" exception below, since
+        blocking someone you've previously messaged must still stop them
+        from replying. Short of that, evaluates this profile's
+        ``direct_message_visibility`` setting through the shared
+        ``visibility_permits`` evaluator, with one addition: a profile that
+        has already messaged the sender can always be replied to, regardless
+        of the setting - starting a conversation is an implicit invitation
+        to answer.
 
         Args:
             sender: The profile attempting to send a message.
 
         Returns:
             True when the sender passes the direct_message_visibility setting
-            or this profile previously messaged the sender.
+            or this profile previously messaged the sender, and neither
+            profile has blocked the other.
         """
         if self.pk == sender.pk:
+            return False
+        if Profile.are_blocked(self, sender):
             return False
         if self.visibility_permits(self.direct_message_visibility, self, sender):
             return True
