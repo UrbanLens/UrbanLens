@@ -3827,9 +3827,12 @@
         // on until resetFilters() clears the whole panel rather than toggling.
         chipEl.classList.add('fp-saved-filter-apply--active');
 
-        // Trigger the sidebar's normal submission path.
+        // Trigger the sidebar's normal submission path. The form's own 'change'
+        // listener (registered above) already calls _refreshPinList() - calling
+        // it again here would fire a second, unsynchronized request to the same
+        // target racing the first (whichever response lands last silently wins
+        // the DOM, which could show stale/empty results).
         htmx.trigger(form, 'change');
-        _refreshPinList();
         _updateFilterLabel();
     }
 
@@ -3948,11 +3951,12 @@
         _sfApplyFilterClientSide(uuid, criteria, turningOn);
 
         // 2. Authoritative reconciliation, same pipeline every other filter change uses.
+        // (The form's own 'change' listener already calls _refreshPinList() -
+        // see the note in applySavedFilter() for why not to call it again here.)
         const hidden = document.getElementById('fp-toolbar-filter-ids');
         if (hidden) hidden.value = Array.from(_activeToolbarFilters.keys()).join(',');
         const form = document.getElementById('filter-form');
         htmx.trigger(form, 'change');
-        _refreshPinList();
         sfToolbarRefreshCounts();
         _updateFilterLabel();
     }

@@ -125,7 +125,11 @@
             });
             document.body.addEventListener('htmx:sendError', function () { _toastError('Network error sending request.'); });
             document.body.addEventListener('htmx:timeout', function () { _toastError('Request timed out.'); });
-            document.body.addEventListener('htmx:abort', function () { _toastError('Request was cancelled.'); });
+            // No htmx:abort handler: hx-sync="this:replace" (the map filter form's
+            // rapid-filter-change guard) aborts a still-in-flight request every
+            // time a newer one supersedes it - that's routine, expected behavior,
+            // not a failure, and was surfacing as a spurious "Request was
+            // cancelled" error toast on ordinary filter interactions.
 
             var nativeFetch = window.fetch;
             if (nativeFetch && !nativeFetch.__urbanLensWrapped) {
