@@ -1326,6 +1326,15 @@ class TripMembersView(LoginRequiredMixin, View):
         except User.DoesNotExist:
             return HttpResponse(f'No user found with username "{escape(username)}".', status=404)
 
+        new_profile, _ = Profile.objects.get_or_create(user=user)
+        # A block must stop this the same way it stops a direct message - it's
+        # another unsolicited-contact vector (a forced membership row plus a
+        # notification), not a passive visibility setting. Message kept
+        # direction-agnostic, matching accepts_direct_messages_from's
+        # rejection wording, so it never discloses who blocked whom.
+        if Profile.are_blocked(profile, new_profile):
+            return HttpResponse("This user isn't accepting invitations from you.", status=403)
+
         max_members = SiteSettings.get_current().max_trip_members
         current_count = trip.profiles.count()
         if current_count >= max_members:
@@ -1334,7 +1343,6 @@ class TripMembersView(LoginRequiredMixin, View):
                 status=400,
             )
 
-        new_profile, _ = Profile.objects.get_or_create(user=user)
         _membership, created = TripMembership.objects.get_or_create(trip=trip, profile=new_profile, defaults={"status": TripMembership.STATUS_INVITED})
         if created:
             _notify_added_to_trip(profile, new_profile, trip)

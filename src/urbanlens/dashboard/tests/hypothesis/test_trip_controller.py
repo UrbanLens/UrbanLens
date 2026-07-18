@@ -694,6 +694,36 @@ class TripMembersViewTests(TestCase):
         )
         self.assertEqual(resp.status_code, 400)
 
+    def test_cannot_add_a_user_who_blocked_the_inviter(self) -> None:
+        """A block must stop this the same way it stops a direct message -
+        forcing a membership row + notification onto someone is exactly the
+        unsolicited contact a block exists to prevent."""
+        blocker = baker.make("auth.User", username="has-blocked-creator").profile
+        Friendship.objects.create(from_profile=blocker, to_profile=self.creator, status=FriendshipStatus.BLOCKED)
+
+        resp = self.client.post(
+            self._url(),
+            data=json.dumps({"username": "has-blocked-creator"}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(resp.status_code, 403)
+        self.assertFalse(TripMembership.objects.filter(trip=self.trip, profile=blocker).exists())
+
+    def test_cannot_add_a_user_the_inviter_blocked(self) -> None:
+        """Blocking is mutual - it must not matter which side initiated it."""
+        target = baker.make("auth.User", username="blocked-by-creator").profile
+        Friendship.objects.create(from_profile=self.creator, to_profile=target, status=FriendshipStatus.BLOCKED)
+
+        resp = self.client.post(
+            self._url(),
+            data=json.dumps({"username": "blocked-by-creator"}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(resp.status_code, 403)
+        self.assertFalse(TripMembership.objects.filter(trip=self.trip, profile=target).exists())
+
 
 class TripAddableFriendsPickerTests(TestCase):
     """The add-member dialog's friend picker (trip_members_panel.html/_addable_friends).
