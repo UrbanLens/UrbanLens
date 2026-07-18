@@ -8,62 +8,14 @@ $article-serif: Georgia, 'Times New Roman', Times, serif;
     padding: 1.25rem 1.5rem 1.75rem;
 }
 
-// -- Meta bar (privacy chip, word count, last edited, Edit button) ----------
+// -- Actions row (just the Edit button - the old meta bar's privacy/word-count/
+// last-edited/revision-count text was removed as redundant now the pin detail
+// page's subnav always shows an Edit History tab) ----------------------------
 
-.article-meta-bar {
+.article-actions {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    flex-wrap: wrap;
-    padding-bottom: .75rem;
-    margin-bottom: 1rem;
-    border-bottom: 1px solid var(--ul-grey-1);
-}
-
-.article-meta-info {
-    display: flex;
-    align-items: center;
-    gap: .85rem;
-    flex-wrap: wrap;
-    color: var(--ul-grey-6);
-    font-size: .85rem;
-}
-
-.article-meta-item strong {
-    color: var(--ul-grey-8);
-}
-
-.article-meta-link {
-    border: none;
-    background: transparent;
-    padding: 0;
-    color: var(--ul-primary-color);
-    font-size: .85rem;
-    cursor: pointer;
-
-    &:hover { text-decoration: underline; }
-}
-
-.article-privacy-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: .3rem;
-    padding: .2rem .6rem;
-    border-radius: $radius-full;
-    background: var(--ul-color-accent-bg);
-    color: var(--ul-color-accent-fg);
-    font-size: .78rem;
-    font-weight: 600;
-
-    .material-symbols-outlined {
-        font-size: .95rem;
-    }
-
-    &--private {
-        background: var(--ul-color-warning-bg);
-        color: var(--ul-color-warning-text);
-    }
+    justify-content: flex-end;
+    margin-bottom: .75rem;
 }
 
 .article-edit-btn {

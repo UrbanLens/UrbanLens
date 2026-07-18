@@ -1,0 +1,21 @@
+{% comment %}
+Hero body for the pin detail page (pages/location/index.html) - gives it the
+same shared gradient hero every other page uses. Expects `pin` in context.
+
+The title here is a read-only mirror of the pin's name - the actual
+click-to-edit surface stays in pin_overview_partial.html's Overview panel
+(unchanged, still the source of truth for renames) since it shares a flex row
+there with the community-wiki link/detach/create controls. A small script in
+that partial keeps this mirror in sync immediately after a successful rename
+(see the #pin-detail-hero-title lookup in pin_overview_partial.html).
+{% endcomment %}
+<p class="ul-page-hero__eyebrow">
+    <i class="material-symbols-outlined">place</i> Pin
+</p>
+<h1 id="pin-detail-hero-title" class="ul-page-hero__title">{{ pin.effective_name }}</h1>
+{% if pin.location.address %}
+<p class="ul-page-hero__subtitle">
+    <i class="material-symbols-outlined">location_on</i>
+    {{ pin.location.address }}{% if pin.location.city %}, {{ pin.location.city }}{% endif %}{% if pin.location.state %}, {{ pin.location.state }}{% endif %}
+</p>
+{% endif %}

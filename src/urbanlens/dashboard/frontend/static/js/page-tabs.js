@@ -1,12 +1,14 @@
 /*
  * Wikipedia-style page tabs (Overview / Article / Comments / Edit History).
  *
- * Markup contract:
- *   <nav class="page-tabs" data-page-tabs>
- *     <button type="button" class="page-tab" data-tab="overview">...</button>
+ * Markup contract (attribute-driven - the classnames are cosmetic and vary by
+ * page; pin details reuses the shared .ul-subnav-tabs/.ul-subnav-tab look,
+ * wiki still uses its own .page-tabs/.page-tab):
+ *   <nav data-page-tabs>
+ *     <button type="button" data-tab="overview">...</button>
  *     ...
  *   </nav>
- *   <section class="page-tab-panel" data-tab-panel="overview">...</section>
+ *   <section data-tab-panel="overview">...</section>
  *
  * Behavior:
  *   - Clicking a tab shows its panel and hides the rest.
@@ -93,8 +95,7 @@
         });
     }
 
-    // Expose for anything that wants to switch tabs programmatically
-    // (e.g. "N revisions" links jumping to the History tab).
+    // Expose for anything that wants to switch tabs programmatically.
     window.ulActivatePageTab = activate;
 
     if (document.readyState === 'loading') {

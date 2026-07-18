@@ -198,6 +198,52 @@ class PinDetailPageSimpleInfoPanelsContextTests(TestCase):
         self.assertContains(response, reverse("pin.panel", args=[self.pin.slug, "photon"]))
         self.assertContains(response, reverse("pin.panel", args=[self.pin.slug, "usgs_earthquakes"]))
 
+
+class PinDetailHeroSubnavTests(TestCase):
+    """The pin detail page has a standard page hero + subnav (like every other page)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        baker.make(User)  # first user is auto-promoted to bootstrap site admin
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+        self.client.force_login(self.user)
+        self.pin: Pin = baker.make_recipe("dashboard.pin", profile=self.profile, name="Old Mill", name_is_user_provided=True)
+
+    def test_hero_renders_the_pin_name(self) -> None:
+        response = self.client.get(reverse("pin.details", args=[self.pin.slug]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="pin-detail-hero"')
+        self.assertContains(response, 'id="pin-detail-hero-title"')
+        content = response.content.decode()
+        hero_title = content.split('id="pin-detail-hero-title"')[1].split("</h1>")[0]
+        self.assertIn("Old Mill", hero_title)
+
+    def test_subnav_uses_the_shared_subnav_classes(self) -> None:
+        response = self.client.get(reverse("pin.details", args=[self.pin.slug]))
+        content = response.content.decode()
+        self.assertIn("ul-page-subnav", content)
+        self.assertIn("ul-subnav-tabs", content)
+        # Four tabs, still driven by the same data-tab attributes page-tabs.js reads.
+        for tab in ("overview", "article", "comments", "history"):
+            self.assertIn(f'data-tab="{tab}"', content)
+
+    def test_content_is_wrapped_in_the_standard_page_content_div(self) -> None:
+        response = self.client.get(reverse("pin.details", args=[self.pin.slug]))
+        self.assertContains(response, "page-content")
+
+    def test_hero_and_subnav_render_outside_the_htmx_overview_panel(self) -> None:
+        """The hero/subnav must be present on the initial full page load, not
+        only after the #pin-overview panel's own hx-trigger="load" fetch completes -
+        otherwise every tab (Article/Comments/History) would flash with no hero."""
+        response = self.client.get(reverse("pin.details", args=[self.pin.slug]))
+        content = response.content.decode()
+        hero_pos = content.find('id="pin-detail-hero"')
+        overview_panel_pos = content.find('id="pin-overview"')
+        self.assertNotEqual(hero_pos, -1)
+        self.assertNotEqual(overview_panel_pos, -1)
+        self.assertLess(hero_pos, overview_panel_pos)
+
     def test_condensed_panels_are_excluded_from_the_autoloading_list(self) -> None:
         """Census/iNaturalist/Seismic/EPA's nearby-list all move into the single "Regional Data"
         tab strip (panel_tabs) instead of auto-loading as their own standalone cards. EPA's

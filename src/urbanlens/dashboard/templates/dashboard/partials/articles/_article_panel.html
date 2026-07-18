@@ -5,30 +5,7 @@
      hx-swap="outerHTML">
 
     {% if article and article.content %}
-    <div class="article-meta-bar">
-        <div class="article-meta-info">
-            {% if scope.is_private %}
-            <span class="article-privacy-chip article-privacy-chip--private" data-tooltip="Only you can see this article.">
-                <i class="material-symbols-outlined">lock</i> Private
-            </span>
-            {% else %}
-            <span class="article-privacy-chip" data-tooltip="Visible to everyone who has this location pinned. Anyone with access can edit it.">
-                <i class="material-symbols-outlined">public</i> Community
-            </span>
-            {% endif %}
-            <span class="article-meta-item">{{ article.word_count }} word{{ article.word_count|pluralize }}</span>
-            {% if article.last_edited_by %}
-            <span class="article-meta-item">Last edited by <strong>{{ article.last_edited_by.username }}</strong> on {{ article.updated|date:"M d, Y" }}</span>
-            {% else %}
-            <span class="article-meta-item">Last edited {{ article.updated|date:"M d, Y" }}</span>
-            {% endif %}
-            {% if revision_count %}
-            <button type="button" class="article-meta-link"
-                    onclick="window.ulActivatePageTab && window.ulActivatePageTab('history')">
-                {{ revision_count }} revision{{ revision_count|pluralize }}
-            </button>
-            {% endif %}
-        </div>
+    <div class="article-actions">
         <button type="button" class="btn btn--secondary article-edit-btn"
                 hx-get="{{ scope.urls.edit }}"
                 hx-target="#article-panel"

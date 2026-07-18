@@ -218,6 +218,19 @@ class PinArticleViewTests(TestCase):
         self.assertContains(response, "<strong>bold</strong>")
         self.assertFalse(Article.objects.filter(pin=self.pin).exists())
 
+    def test_meta_bar_is_gone_but_edit_button_still_works(self) -> None:
+        """The privacy/word-count/last-edited/revision-count meta bar was removed
+        as redundant now the pin detail page always shows an Edit History tab -
+        but the Edit button it also contained must still be reachable."""
+        save_article(editor=self.profile, content="Built in 1900. Some history here.", pin=self.pin)
+        response = self.client.get(reverse("pin.article", args=[self.pin.slug]))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "article-meta-bar")
+        self.assertNotContains(response, "Last edited")
+        self.assertNotContains(response, "word")
+        self.assertContains(response, "article-edit-btn")
+        self.assertContains(response, reverse("pin.article.edit", args=[self.pin.slug]))
+
 
 class WikiArticleViewTests(TestCase):
     """Wiki article endpoints follow the standard wiki visibility gate."""

@@ -13,7 +13,37 @@
 <script src="{% static 'js/article-editor.js' %}" defer></script>
 {% endblock %}
 
+{% block hero %}
+{% url 'map.view' as map_view_url %}
+{% include "dashboard/partials/ui/_page_hero.html" with id="pin-detail-hero" body_template="dashboard/partials/pins/_pin_detail_hero_body.html" back_url=map_view_url back_label="Map" modifier="top" %}
+{% endblock %}
+
+{% block subnav %}
+<div class="ul-page-subnav">
+    <div class="ul-page-subnav__inner">
+        {# -- Page tabs: Overview / Article / Comments / Edit History -------- #}
+        <nav class="ul-subnav-tabs" data-page-tabs aria-label="Pin sections">
+            <button type="button" class="ul-subnav-tab is-active" data-tab="overview">
+                <i class="material-symbols-outlined">dashboard</i><span>Overview</span>
+            </button>
+            <button type="button" class="ul-subnav-tab" data-tab="article"
+                    title="Your private article about this place - only you can see it">
+                <i class="material-symbols-outlined">article</i><span>Article</span>
+            </button>
+            <button type="button" class="ul-subnav-tab" data-tab="comments">
+                <i class="material-symbols-outlined">chat</i><span>Comments</span>
+                {% if pin_comment_count %}<span class="page-tab-badge">{{ pin_comment_count }}</span>{% endif %}
+            </button>
+            <button type="button" class="ul-subnav-tab" data-tab="history">
+                <i class="material-symbols-outlined">history</i><span>Edit History</span>
+            </button>
+        </nav>
+    </div>
+</div>
+{% endblock %}
+
 {% block content %}
+<div class="location-detail-page page-content">
 {% if can_view_debug_overlay %}
 <div id="pin-debug-overlay" class="pin-debug-overlay" hidden>
     <div class="pin-debug-overlay__header">
@@ -114,24 +144,6 @@
 </div>
 <script src="{% static 'js/cover-hero.js' %}"></script>
 {% endif %}
-{# -- Page tabs: Overview / Article / Comments / Edit History -------------- #}
-<nav class="page-tabs" data-page-tabs aria-label="Pin sections">
-    <button type="button" class="page-tab is-active" data-tab="overview">
-        <i class="material-symbols-outlined">dashboard</i><span>Overview</span>
-    </button>
-    <button type="button" class="page-tab" data-tab="article"
-            title="Your private article about this place - only you can see it">
-        <i class="material-symbols-outlined">article</i><span>Article</span>
-    </button>
-    <button type="button" class="page-tab" data-tab="comments">
-        <i class="material-symbols-outlined">chat</i><span>Comments</span>
-        {% if pin_comment_count %}<span class="page-tab-badge">{{ pin_comment_count }}</span>{% endif %}
-    </button>
-    <button type="button" class="page-tab" data-tab="history">
-        <i class="material-symbols-outlined">history</i><span>Edit History</span>
-    </button>
-</nav>
-
 <section class="page-tab-panel" data-tab-panel="overview">
 <div class="pin-detail-grid">
     <div id="pin-detail-onboarding" class="page-onboarding" aria-live="polite"></div>
@@ -764,6 +776,7 @@
         </div>
     </form>
 </dialog>
+</div>
 
 {% endblock %}
 

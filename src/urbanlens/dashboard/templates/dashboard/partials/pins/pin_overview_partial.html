@@ -228,6 +228,11 @@
                     .then(function () {
                         titleEl.dataset.rawName = newName;
                         titleEl.textContent = newName || locationName;
+                        // Keep the page hero's read-only title mirror in sync -
+                        // it's outside this HTMX-swappable panel (see
+                        // _pin_detail_hero_body.html), so nothing else updates it.
+                        var heroTitleEl = document.getElementById('pin-detail-hero-title');
+                        if (heroTitleEl) heroTitleEl.textContent = newName || locationName;
                         if (typeof toastr !== 'undefined') toastr.success('Pin renamed.');
                     })
                     .catch(function () {
