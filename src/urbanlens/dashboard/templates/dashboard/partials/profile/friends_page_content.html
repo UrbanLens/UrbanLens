@@ -7,8 +7,8 @@
      hx-swap="outerHTML">
 
     {# -- Outgoing friend requests (own profile only) ---------------------------- #}
-    {# No identity shown until accepted - see friend_list_partial.html's matching  #}
-    {# block for why (also unifies Friendship + FriendInvitation display).         #}
+    {# No identity shown until accepted, and one shared loop/URL shape for both    #}
+    {# pending kinds - see _friend_list_ctx's docstring on outgoing_pending.       #}
     {% if is_own_profile and outgoing_pending_count %}
     <section class="friends-section friends-section--requests card">
         <div class="card-header">
@@ -17,7 +17,7 @@
             <span class="badge">{{ outgoing_pending_count }}</span>
         </div>
         <ul class="friend-request-list friend-request-list--page">
-            {% for req in outgoing_requests %}
+            {% for pending in outgoing_pending %}
             <li class="friend-request-item">
                 <div class="friend-avatar friend-avatar-placeholder"><i class="material-symbols-outlined">hourglass_top</i></div>
                 <div class="friend-request-info">
@@ -26,24 +26,7 @@
                 </div>
                 <div class="friend-request-actions">
                     <button type="button" class="btn btn--primary btn-friend btn-friend--reject"
-                            hx-post="{% url 'friend.remove' req.to_profile.id %}"
-                            hx-target="#friends_page_list"
-                            hx-swap="outerHTML">
-                        <i class="material-symbols-outlined">cancel</i> Cancel
-                    </button>
-                </div>
-            </li>
-            {% endfor %}
-            {% for invitation in outgoing_email_invitations %}
-            <li class="friend-request-item">
-                <div class="friend-avatar friend-avatar-placeholder"><i class="material-symbols-outlined">hourglass_top</i></div>
-                <div class="friend-request-info">
-                    <span class="friend-request-name">Pending request</span>
-                    <span class="friend-request-sub">Hidden until accepted</span>
-                </div>
-                <div class="friend-request-actions">
-                    <button type="button" class="btn btn--primary btn-friend btn-friend--reject"
-                            hx-post="{% url 'friend.cancel_invitation' invitation.id %}"
+                            hx-post="{% url 'friend.cancel_pending' pending.cancel_token %}"
                             hx-target="#friends_page_list"
                             hx-swap="outerHTML">
                         <i class="material-symbols-outlined">cancel</i> Cancel

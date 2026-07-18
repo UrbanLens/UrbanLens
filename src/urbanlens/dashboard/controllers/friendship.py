@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User
@@ -19,7 +20,38 @@ from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.services.connections import get_connections
 from urbanlens.dashboard.services.text_limits import MAX_FRIEND_REQUEST_MESSAGE_LENGTH, text_length_error
 
+if TYPE_CHECKING:
+    from datetime import datetime
+
 logger = logging.getLogger(__name__)
+
+
+def _pending_cancel_token(profile_id: int, kind: str, pk: int) -> str:
+    """Opaque per-item token for cancelling a pending outgoing request.
+
+    A pending outgoing Friendship (email matched a registered account, or a
+    direct profile-click request) and a pending FriendInvitation (unmatched
+    email) must be completely indistinguishable to the sender until accepted
+    - see ``_friend_list_ctx``. That rules out exposing either row's real
+    id or a type-specific cancel URL in the widget markup: differing URL
+    shapes (or a numeric target-profile id) would tell the sender whether
+    their invited email belongs to an account. This HMAC is what the cancel
+    button carries instead: fixed-length hex, identical shape for both kinds,
+    and not reversible or forgeable without ``SECRET_KEY``. The server
+    resolves it by recomputing tokens over the sender's own (small) pending
+    set - see ``FriendController.cancel_pending``.
+
+    Args:
+        profile_id: The SENDER's profile pk - scopes tokens per user.
+        kind: ``"friendship"`` or ``"invitation"``.
+        pk: The pending row's pk within that kind's table.
+
+    Returns:
+        Hex HMAC token, safe to embed in a URL.
+    """
+    from django.utils.crypto import salted_hmac
+
+    return salted_hmac("dashboard.friendship.pending_cancel", f"{profile_id}:{kind}:{pk}").hexdigest()
 
 
 def _friend_list_ctx(viewer: Profile | None, profile: Profile) -> dict:
@@ -28,15 +60,20 @@ def _friend_list_ctx(viewer: Profile | None, profile: Profile) -> dict:
     Determines:
     - friends: accepted friendship records for this profile
     - incoming_requests: pending requests TO this profile (only if viewer == profile)
-    - outgoing_requests / outgoing_email_invitations: this profile's own pending
-      sent requests (only if viewer == profile) - templates must render these
-      WITHOUT the target's identity (name/avatar/username/profile link). Until
-      a request is accepted, the sender must not be able to learn who they
-      reached, nor even whether an invited email belongs to a registered
-      account at all - showing full identity only for Friendship rows (which
-      always resolve to a real account) while FriendInvitation rows (unmatched
-      emails) were invisible turned "does a pending card exist" into an
-      account-enumeration side channel. Both are rendered identically instead.
+    - outgoing_pending: this profile's own pending sent requests (only if
+      viewer == profile) - Friendship and FriendInvitation rows merged into
+      one list of ``{"cancel_token", "created"}`` dicts, sorted by created.
+      Templates must render these WITHOUT the target's identity (name/avatar/
+      username/profile link). Until a request is accepted, the sender must not
+      be able to learn who they reached, nor even whether an invited email
+      belongs to a registered account at all - showing full identity only for
+      Friendship rows (which always resolve to a real account) while
+      FriendInvitation rows (unmatched emails) were invisible turned "does a
+      pending card exist" into an account-enumeration side channel. The merge
+      goes further than rendering both identically: per-kind loops (or
+      kind-specific cancel URLs/ids) would leak the same bit through markup
+      ordering or the DOM, so both kinds share one loop, one opaque
+      cancel-token URL shape, and one chronological ordering.
     - viewer_friendship_status: status of the friendship between viewer and this profile
     - viewer_can_request: whether the viewer can send a friend request to this profile
     """
@@ -62,11 +99,14 @@ def _friend_list_ctx(viewer: Profile | None, profile: Profile) -> dict:
                     status=FriendshipStatus.REQUESTED,
                 ).select_related("from_profile__user"),
             )
+            # No select_related here on purpose: the target's identity must
+            # never be rendered for a pending outgoing request (see docstring),
+            # so nothing ever touches to_profile.
             outgoing_requests = list(
                 Friendship.objects.filter(
                     from_profile=profile,
                     status=FriendshipStatus.REQUESTED,
-                ).select_related("to_profile__user"),
+                ),
             )
             outgoing_email_invitations = list(
                 FriendInvitation.objects.filter(
@@ -95,13 +135,17 @@ def _friend_list_ctx(viewer: Profile | None, profile: Profile) -> dict:
             mutual_ids = profile_friend_ids & viewer_friend_ids
             mutual_friends = [fp for fp in friend_profiles if fp.pk in mutual_ids]
 
+    pending_entries: list[tuple[datetime, str]] = [(req.created, _pending_cancel_token(profile.pk, "friendship", req.pk)) for req in outgoing_requests] + [
+        (inv.created, _pending_cancel_token(profile.pk, "invitation", inv.pk)) for inv in outgoing_email_invitations
+    ]
+    outgoing_pending = [{"cancel_token": token, "created": created} for created, token in sorted(pending_entries)]
+
     return {
         "friends": friend_profiles,
         "mutual_friends": mutual_friends,
         "incoming_requests": incoming_requests,
-        "outgoing_requests": outgoing_requests,
-        "outgoing_email_invitations": outgoing_email_invitations,
-        "outgoing_pending_count": len(outgoing_requests) + len(outgoing_email_invitations),
+        "outgoing_pending": outgoing_pending,
+        "outgoing_pending_count": len(outgoing_pending),
         "viewer_friendship": viewer_friendship,
         "viewer_can_request": viewer_can_request,
         "is_own_profile": viewer is not None and viewer.pk == profile.pk,
@@ -417,24 +461,43 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
             return _own_friend_widget_response(request)
         return _redirect_to_profile(profile_id)
 
-    def cancel_invitation(self, request: HttpRequest, invitation_id: int):
-        """Cancel a pending email invitation the current user sent (unmatched-address case).
+    def cancel_pending(self, request: HttpRequest, token: str):
+        """Cancel one of the current user's own pending outgoing requests, by opaque token.
 
-        Mirrors remove_friend's ownership check and response shape so an
-        outgoing FriendInvitation can be cancelled the same way an outgoing
-        Friendship request can - see _friend_list_ctx's docstring for why both
-        must be indistinguishable to the sender until accepted.
+        One endpoint for BOTH pending kinds - an outgoing Friendship request
+        (email matched a registered account, or a direct profile-click
+        request) and an outgoing FriendInvitation (unmatched email). The
+        token (see ``_pending_cancel_token``) is resolved by recomputing the
+        HMAC over the caller's own pending rows, so the URL shape, the
+        response, and the 404 behavior are byte-identical regardless of which
+        kind (or neither) matched - a sender can't use this endpoint, or the
+        markup pointing at it, to learn whether an invited email belongs to a
+        registered account.
         """
         if not isinstance(request.user, User):
             return HttpResponse("Authentication required.", status=401)
 
+        from django.utils import timezone
+        from django.utils.crypto import constant_time_compare
+
         from urbanlens.dashboard.models.friendship.invitation import FriendInvitation
 
-        invitation = FriendInvitation.objects.filter(pk=invitation_id, inviter=request.user.profile).first()
-        if not invitation:
-            return HttpResponse("Invitation not found.", status=404)
+        profile = request.user.profile
+        cancelled = False
+        for friendship in Friendship.objects.filter(from_profile=profile, status=FriendshipStatus.REQUESTED):
+            if constant_time_compare(token, _pending_cancel_token(profile.pk, "friendship", friendship.pk)):
+                friendship.remove()
+                cancelled = True
+                break
+        if not cancelled:
+            for invitation in FriendInvitation.objects.filter(inviter=profile, accepted_at__isnull=True, expires_at__gt=timezone.now()):
+                if constant_time_compare(token, _pending_cancel_token(profile.pk, "invitation", invitation.pk)):
+                    invitation.delete()
+                    cancelled = True
+                    break
+        if not cancelled:
+            return HttpResponse("Pending request not found.", status=404)
 
-        invitation.delete()
         if request.headers.get("HX-Request"):
             return _own_friend_widget_response(request)
         return redirect("profile.view_user", profile_slug=request.user.profile.slug or str(request.user.profile.uuid))
