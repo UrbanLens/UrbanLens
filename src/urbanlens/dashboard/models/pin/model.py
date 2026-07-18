@@ -23,6 +23,7 @@ from django.db.models import (
     UniqueConstraint,
 )
 from django.db.models.fields import BooleanField, CharField, DateField, DateTimeField, DecimalField, IntegerField, TextField
+from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.abstract.choices import TextChoices
@@ -108,6 +109,9 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
     date_built = DateField(null=True, blank=True)
     date_abandoned = DateField(null=True, blank=True)
     date_last_active = DateField(null=True, blank=True)
+    # When the owner last opened this pin's detail page - distinct from
+    # last_visited (the user's own in-person visit log). See mark_viewed().
+    last_viewed_at = DateTimeField(null=True, blank=True)
 
     profile = ForeignKey(
         "dashboard.Profile",
@@ -245,6 +249,23 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
             except DatabaseError:
                 logger.debug("Could not ensure alias for pin %s name %r", self.pk, self.name, exc_info=True)
         self._loaded_name = self.name
+
+    def mark_viewed(self) -> None:
+        """Record that the owner just opened this pin's detail page.
+
+        Throttled to once per calendar day per pin - the detail page is
+        typically reloaded many times in a single visit (partial swaps,
+        re-fetches after edits), and this is a "recently viewed" signal, not
+        a precise view-count. Uses ``save(update_fields=[...])`` rather than a
+        bare ``.update()`` so the normal post_save signal still fires,
+        keeping smart-list/saved-filter resync in sync with any
+        ``last_viewed_after``/``last_viewed_before`` filter criteria.
+        """
+        now = timezone.now()
+        if self.last_viewed_at is not None and self.last_viewed_at.date() == now.date():
+            return
+        self.last_viewed_at = now
+        self.save(update_fields=["last_viewed_at", "updated"])
 
     def _sync_exposures_after_save(self, update_fields) -> None:
         """Propagate share-chain exposures when this save moved the pin.

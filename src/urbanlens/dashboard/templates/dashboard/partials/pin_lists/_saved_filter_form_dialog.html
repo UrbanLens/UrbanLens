@@ -81,6 +81,65 @@
                 <label for="id_created_before">Pinned before</label>
                 <input type="date" name="created_before" id="id_created_before" value="{{ criteria.created_before|date:'Y-m-d'|default:'' }}">
             </div>
+            <div class="form-row">
+                <label for="id_date_built_after">Built after</label>
+                <input type="date" name="date_built_after" id="id_date_built_after" value="{{ criteria.date_built_after|date:'Y-m-d'|default:'' }}">
+            </div>
+            <div class="form-row">
+                <label for="id_date_built_before">Built before</label>
+                <input type="date" name="date_built_before" id="id_date_built_before" value="{{ criteria.date_built_before|date:'Y-m-d'|default:'' }}">
+            </div>
+            <div class="form-row">
+                <label for="id_date_abandoned_after">Abandoned after</label>
+                <input type="date" name="date_abandoned_after" id="id_date_abandoned_after" value="{{ criteria.date_abandoned_after|date:'Y-m-d'|default:'' }}">
+            </div>
+            <div class="form-row">
+                <label for="id_date_abandoned_before">Abandoned before</label>
+                <input type="date" name="date_abandoned_before" id="id_date_abandoned_before" value="{{ criteria.date_abandoned_before|date:'Y-m-d'|default:'' }}">
+            </div>
+            <div class="form-row">
+                <label for="id_last_viewed_after">Last viewed after</label>
+                <input type="date" name="last_viewed_after" id="id_last_viewed_after" value="{{ criteria.last_viewed_after|date:'Y-m-d'|default:'' }}">
+            </div>
+            <div class="form-row">
+                <label for="id_last_viewed_before">Last viewed before</label>
+                <input type="date" name="last_viewed_before" id="id_last_viewed_before" value="{{ criteria.last_viewed_before|date:'Y-m-d'|default:'' }}">
+            </div>
+        </div>
+
+        <div class="form-row">
+            <label>Has links</label>
+            <select name="has_links" class="fp-select">
+                <option value="" {% if not criteria.has_links %}selected{% endif %}>Any</option>
+                <option value="yes" {% if criteria.has_links == "yes" %}selected{% endif %}>Has links</option>
+                <option value="no" {% if criteria.has_links == "no" %}selected{% endif %}>No links</option>
+            </select>
+        </div>
+
+        <div class="saved-filter-score-grid">
+            <div class="fp-score-group">
+                <div class="fp-score-label">Detail pin count</div>
+                {% include "dashboard/partials/ui/_dual_range_slider.html" with min=0 max=20 min_value=criteria.min_detail_pins|default:0 max_value=criteria.max_detail_pins|default:20 min_field="min_detail_pins" max_field="max_detail_pins" format="default" %}
+            </div>
+        </div>
+
+        <div class="form-row">
+            <label>Security indicators</label>
+            <div class="security-edit-grid">
+                {% for sf_key, sf_label in security_fields %}
+                <div class="security-edit-row">
+                    <label for="id_security_{{ sf_key }}">{{ sf_label }}</label>
+                    <select name="security_{{ sf_key }}" id="id_security_{{ sf_key }}" class="fp-select">
+                        <option value="">Any</option>
+                        {% with current=security_values|dict_get:sf_key %}
+                        {% for val, lbl in security_level_choices %}
+                        <option value="{{ val }}" {% if current == val %}selected{% endif %}>{{ lbl }}</option>
+                        {% endfor %}
+                        {% endwith %}
+                    </select>
+                </div>
+                {% endfor %}
+            </div>
         </div>
 
         <div class="saved-filter-label-grid">

@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Self
 
 from django.contrib.gis.db.models.functions import Distance
 from django.contrib.gis.measure import D
-from django.db.models import F, Q
+from django.db.models import Count, Exists, F, OuterRef, Q
 from django.utils import timezone
 
 # App Imports
@@ -33,6 +33,31 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
     def root_pins(self) -> Self:
         """Return only top-level pins (excludes personal detail pins)."""
         return self.filter(parent_pin__isnull=True)
+
+    def filter_by_security_indicators(self, criteria) -> Self:
+        """Filter by exact match on each ``security_<field>`` criterion.
+
+        Each of the 8 :data:`SECURITY_FIELDS` gets its own optional exact-match
+        filter (e.g. ``security_fences="everywhere"``); unset/invalid values
+        are ignored rather than raising, matching the rest of
+        ``filter_by_criteria``'s tolerance for a hand-edited/stale criteria dict.
+
+        Args:
+            criteria: The same criteria dict ``filter_by_criteria`` receives.
+
+        Returns:
+            Filtered QuerySet.
+        """
+        from urbanlens.dashboard.models.abstract.choices import SecurityLevel
+        from urbanlens.dashboard.models.abstract.security import SECURITY_FIELDS
+
+        valid_levels = {value for value, _ in SecurityLevel.choices}
+        qs = self
+        for field_key, _label in SECURITY_FIELDS:
+            value = criteria.get(f"security_{field_key}")
+            if value and value in valid_levels:
+                qs = qs.filter(**{field_key: value})
+        return qs
 
     def detail_pins(self) -> Self:
         """Return only personal detail pins (sub-markers owned by a user's pin)."""
@@ -230,6 +255,11 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
                 min_danger (int), max_danger (int), min_vulnerability (int), max_vulnerability (int),
                 created_after (date), created_before (date),
                 visited_after (date), visited_before (date), overlapping_pins (bool),
+                date_built_after (date), date_built_before (date),
+                date_abandoned_after (date), date_abandoned_before (date),
+                last_viewed_after (date), last_viewed_before (date),
+                security_<field> (SecurityLevel value, one per SECURITY_FIELDS entry),
+                has_links ('yes'|'no'|''), min_detail_pins (int), max_detail_pins (int),
                 include_regions (MultiPolygon | None), exclude_regions (MultiPolygon | None).
 
         Returns:
@@ -297,6 +327,37 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
             qs = qs.filter(created__date__gte=created_after)
         if created_before := criteria.get("created_before"):
             qs = qs.filter(created__date__lte=created_before)
+        if date_built_after := criteria.get("date_built_after"):
+            qs = qs.filter(date_built__gte=date_built_after)
+        if date_built_before := criteria.get("date_built_before"):
+            qs = qs.filter(date_built__lte=date_built_before)
+        if date_abandoned_after := criteria.get("date_abandoned_after"):
+            qs = qs.filter(date_abandoned__gte=date_abandoned_after)
+        if date_abandoned_before := criteria.get("date_abandoned_before"):
+            qs = qs.filter(date_abandoned__lte=date_abandoned_before)
+        if last_viewed_after := criteria.get("last_viewed_after"):
+            qs = qs.filter(last_viewed_at__date__gte=last_viewed_after)
+        if last_viewed_before := criteria.get("last_viewed_before"):
+            qs = qs.filter(last_viewed_at__date__lte=last_viewed_before)
+        qs = qs.filter_by_security_indicators(criteria)
+        if has_links := criteria.get("has_links"):
+            from urbanlens.dashboard.models.links.model import PinLink
+
+            link_exists = Exists(PinLink.objects.filter(pin=OuterRef("pk")))
+            if has_links == "yes":
+                qs = qs.filter(link_exists)
+            elif has_links == "no":
+                qs = qs.filter(~link_exists)
+        min_detail_pins = criteria.get("min_detail_pins")
+        max_detail_pins = criteria.get("max_detail_pins")
+        if min_detail_pins is not None or max_detail_pins is not None:
+            qs = qs.annotate(detail_pin_count=Count("detail_pins", distinct=True))
+            if min_detail_pins is not None:
+                with contextlib.suppress(ValueError, TypeError):
+                    qs = qs.filter(detail_pin_count__gte=int(min_detail_pins))
+            if max_detail_pins is not None:
+                with contextlib.suppress(ValueError, TypeError):
+                    qs = qs.filter(detail_pin_count__lte=int(max_detail_pins))
         if custom_fields := criteria.get("custom_fields"):
             qs = qs.filter_by_custom_fields(custom_fields)
         if include_regions := criteria.get("include_regions"):

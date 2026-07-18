@@ -190,6 +190,8 @@ class MapController(LoginRequiredMixin, GenericViewSet):
 
         custom_filter_fields = list(CustomField.objects.for_entity(profile, CustomFieldEntity.PIN))
         saved_filters = list(profile.saved_filters.all())
+        from urbanlens.dashboard.models.abstract.choices import SecurityLevel
+        from urbanlens.dashboard.models.abstract.security import SECURITY_FIELDS
         from urbanlens.dashboard.models.pin_list.model import PinList
 
         pin_lists = list(PinList.objects.for_profile(profile).order_by("name"))
@@ -209,6 +211,8 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 "filter_labels": filter_labels_list,
                 "filter_labels_json": filter_labels_json,
                 "custom_filter_fields": custom_filter_fields,
+                "security_fields": SECURITY_FIELDS,
+                "security_level_choices": SecurityLevel.choices,
                 "saved_filters": saved_filters,
                 "pin_lists": pin_lists,
                 "icon_categories": ICON_CATEGORIES,

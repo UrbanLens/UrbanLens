@@ -109,6 +109,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 )
 
         pin.backfill_wiki_link_slugs()
+        pin.mark_viewed()
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
 

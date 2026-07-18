@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 
 from django import forms
 
+from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.custom_fields.model import CustomField, CustomFieldEntity, CustomFieldType
 from urbanlens.dashboard.models.labels.model import Label
 
@@ -28,6 +29,11 @@ class SearchForm(forms.Form):
     ``and``  - pin must have ALL labels in the group.
     ``or``   - pin must have AT LEAST ONE label in the group.
     ``not``  - pin must have NONE of the labels in the group.
+
+    ``security_<field>`` filters (one per ``SECURITY_FIELDS`` entry) match a
+    pin's security indicator exactly against a chosen ``SecurityLevel``.
+    ``has_links`` is tri-state ("yes"/"no"/"" for any). ``min_detail_pins``/
+    ``max_detail_pins`` filter by the count of a pin's own detail pins.
 
     When constructed with a ``profile``, one form field per custom pin field is
     added dynamically (named ``cf_<id>`` for text, ``cf_<id>_min``/``_max`` for
@@ -64,6 +70,30 @@ class SearchForm(forms.Form):
     max_vulnerability = forms.IntegerField(required=False, min_value=0, max_value=5)
     created_after = forms.DateField(required=False, input_formats=["%Y-%m-%d"])
     created_before = forms.DateField(required=False, input_formats=["%Y-%m-%d"])
+    date_built_after = forms.DateField(required=False, input_formats=["%Y-%m-%d"])
+    date_built_before = forms.DateField(required=False, input_formats=["%Y-%m-%d"])
+    date_abandoned_after = forms.DateField(required=False, input_formats=["%Y-%m-%d"])
+    date_abandoned_before = forms.DateField(required=False, input_formats=["%Y-%m-%d"])
+    # "Date the user last viewed the pin" (Pin.last_viewed_at) - distinct from
+    # visited_after/before, which is the user's own in-person visit log.
+    last_viewed_after = forms.DateField(required=False, input_formats=["%Y-%m-%d"])
+    last_viewed_before = forms.DateField(required=False, input_formats=["%Y-%m-%d"])
+    has_links = forms.ChoiceField(
+        choices=[("", ""), ("yes", "yes"), ("no", "no")],
+        required=False,
+    )
+    min_detail_pins = forms.IntegerField(required=False, min_value=0)
+    max_detail_pins = forms.IntegerField(required=False, min_value=0)
+    # One filter per security indicator (fences, alarms, cameras, ...) - see
+    # models.abstract.security.SECURITY_FIELDS.
+    security_fences = forms.ChoiceField(required=False, choices=[("", "Any"), *SecurityLevel.choices])
+    security_alarms = forms.ChoiceField(required=False, choices=[("", "Any"), *SecurityLevel.choices])
+    security_cameras = forms.ChoiceField(required=False, choices=[("", "Any"), *SecurityLevel.choices])
+    security_security = forms.ChoiceField(required=False, choices=[("", "Any"), *SecurityLevel.choices])
+    security_signs = forms.ChoiceField(required=False, choices=[("", "Any"), *SecurityLevel.choices])
+    security_vps = forms.ChoiceField(required=False, choices=[("", "Any"), *SecurityLevel.choices])
+    security_plywood = forms.ChoiceField(required=False, choices=[("", "Any"), *SecurityLevel.choices])
+    security_locked = forms.ChoiceField(required=False, choices=[("", "Any"), *SecurityLevel.choices])
     overlapping_pins = forms.BooleanField(required=False)
     # Raw GeoJSON MultiPolygon text (a SavedFilter's drawn/geocoded regions) - see
     # parse_region_geojson(). Not rendered as a visible field on the map's filter

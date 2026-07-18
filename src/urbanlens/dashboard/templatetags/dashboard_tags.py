@@ -239,6 +239,21 @@ def filter_criteria_summary(criteria: dict[str, Any] | None) -> str:
         parts.append("visit date range")
     if criteria.get("created_after") or criteria.get("created_before"):
         parts.append("created date range")
+    if criteria.get("date_built_after") or criteria.get("date_built_before"):
+        parts.append("date built range")
+    if criteria.get("date_abandoned_after") or criteria.get("date_abandoned_before"):
+        parts.append("date abandoned range")
+    if criteria.get("last_viewed_after") or criteria.get("last_viewed_before"):
+        parts.append("last viewed range")
+    if criteria.get("has_links"):
+        parts.append("has links" if criteria["has_links"] == "yes" else "no links")
+    if criteria.get("min_detail_pins") is not None or criteria.get("max_detail_pins") is not None:
+        parts.append("detail pin count range")
+    from urbanlens.dashboard.models.abstract.security import SECURITY_FIELDS
+
+    security_count = sum(1 for key, _label in SECURITY_FIELDS if criteria.get(f"security_{key}"))
+    if security_count:
+        parts.append(f"{security_count} security indicator(s)")
     if criteria.get("custom_fields"):
         parts.append(f"{len(criteria['custom_fields'])} custom field(s)")
     if criteria.get("overlapping_pins"):

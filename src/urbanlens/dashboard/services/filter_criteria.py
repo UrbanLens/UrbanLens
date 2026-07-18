@@ -33,8 +33,30 @@ _SCALAR_KEYS = (
     "max_vulnerability",
     "has_visits",
     "overlapping_pins",
+    "has_links",
+    "min_detail_pins",
+    "max_detail_pins",
+    "security_fences",
+    "security_alarms",
+    "security_cameras",
+    "security_security",
+    "security_signs",
+    "security_vps",
+    "security_plywood",
+    "security_locked",
 )
-_DATE_KEYS = ("visited_after", "visited_before", "created_after", "created_before")
+_DATE_KEYS = (
+    "visited_after",
+    "visited_before",
+    "created_after",
+    "created_before",
+    "date_built_after",
+    "date_built_before",
+    "date_abandoned_after",
+    "date_abandoned_before",
+    "last_viewed_after",
+    "last_viewed_before",
+)
 _LABEL_LIST_KEYS = ("tags", "exclude_tags")
 
 

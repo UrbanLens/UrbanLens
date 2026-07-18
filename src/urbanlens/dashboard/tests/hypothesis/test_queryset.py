@@ -18,6 +18,7 @@ from datetime import date, timedelta
 from typing import Any
 
 from django.contrib.auth.models import User
+from django.utils import timezone
 from hypothesis import HealthCheck, given, settings, strategies as st
 from model_bakery import baker
 
@@ -141,7 +142,10 @@ class FilterByCriteriaDateTests(TestCase):
 
     def test_pins_created_today_pass_both_bounds(self) -> None:
         pin = baker.make(Pin, profile=self.profile)
-        today = date.today()
+        # timezone.localdate() (not date.today()) - created__date is computed
+        # in Django's configured TIME_ZONE (UTC), which can already be a
+        # different calendar day than the test runner's local machine time.
+        today = timezone.localdate()
         qs = self._base_qs().filter_by_criteria({
             "created_after": today,
             "created_before": today,

@@ -143,6 +143,10 @@ class SavedFilterEditView(LoginRequiredMixin, View):
             }
         search_form = SearchForm(profile=profile, initial=initial)
         custom_field_values = {c["field"].pk: c for c in criteria.get("custom_fields", [])}
+        from urbanlens.dashboard.models.abstract.choices import SecurityLevel
+        from urbanlens.dashboard.models.abstract.security import SECURITY_FIELDS
+
+        security_values = {key: criteria.get(f"security_{key}", "") for key, _label in SECURITY_FIELDS}
         return render(
             request,
             _FORM_DIALOG_TEMPLATE,
@@ -151,6 +155,9 @@ class SavedFilterEditView(LoginRequiredMixin, View):
                 "criteria": criteria,
                 "form": search_form,
                 "custom_field_values": custom_field_values,
+                "security_fields": SECURITY_FIELDS,
+                "security_level_choices": SecurityLevel.choices,
+                "security_values": security_values,
                 "has_label_groups": bool(saved_filter.criteria.get("label_groups")) if saved_filter else False,
                 "selected_tag_ids": initial.get("tags", []),
                 "selected_exclude_tag_ids": initial.get("exclude_tags", []),

@@ -137,26 +137,125 @@
                 </div>
             </details>
 
-            {# Date pinned -- collapsible -- #}
+            {# Dates -- collapsible; one sub-block per date dimension -- #}
             <details class="fp-accordion-item" id="fp-acc-date" data-importance="low">
                 <summary class="fp-accordion-summary">
-                    <span class="fp-accordion-label">Date Pinned</span>
+                    <span class="fp-accordion-label">Dates</span>
                     <i class="material-icons fp-acc-arrow">expand_more</i>
                 </summary>
                 <div class="fp-accordion-body">
-                    <div class="fp-date-block">
-                        <div class="fp-date-row">
-                            <span class="fp-date-label">After</span>
-                            <input type="date" name="created_after" id="fp-created-after" class="fp-date-input">
+                    <div class="fp-date-group">
+                        <div class="fp-date-group-label">Pinned</div>
+                        <div class="fp-date-block">
+                            <div class="fp-date-row">
+                                <span class="fp-date-label">After</span>
+                                <input type="date" name="created_after" id="fp-created-after" class="fp-date-input">
+                            </div>
+                            <div class="fp-date-row">
+                                <span class="fp-date-label">Before</span>
+                                <input type="date" name="created_before" id="fp-created-before" class="fp-date-input">
+                            </div>
+                            <button type="button" class="fp-date-reset" id="fp-created-dates-reset" style="display:none"
+                                    title="Clear date filters" onclick="_resetCreatedDates()">
+                                <i class="material-symbols-outlined">close</i>
+                            </button>
                         </div>
-                        <div class="fp-date-row">
-                            <span class="fp-date-label">Before</span>
-                            <input type="date" name="created_before" id="fp-created-before" class="fp-date-input">
+                    </div>
+                    <div class="fp-date-group">
+                        <div class="fp-date-group-label">Built</div>
+                        <div class="fp-date-block">
+                            <div class="fp-date-row">
+                                <span class="fp-date-label">After</span>
+                                <input type="date" name="date_built_after" id="fp-date-built-after" class="fp-date-input">
+                            </div>
+                            <div class="fp-date-row">
+                                <span class="fp-date-label">Before</span>
+                                <input type="date" name="date_built_before" id="fp-date-built-before" class="fp-date-input">
+                            </div>
+                            <button type="button" class="fp-date-reset" id="fp-date-built-dates-reset" style="display:none"
+                                    title="Clear date filters" onclick="_dateBuiltRange.reset()">
+                                <i class="material-symbols-outlined">close</i>
+                            </button>
                         </div>
-                        <button type="button" class="fp-date-reset" id="fp-created-dates-reset" style="display:none"
-                                title="Clear date filters" onclick="_resetCreatedDates()">
-                            <i class="material-symbols-outlined">close</i>
-                        </button>
+                    </div>
+                    <div class="fp-date-group">
+                        <div class="fp-date-group-label">Abandoned</div>
+                        <div class="fp-date-block">
+                            <div class="fp-date-row">
+                                <span class="fp-date-label">After</span>
+                                <input type="date" name="date_abandoned_after" id="fp-date-abandoned-after" class="fp-date-input">
+                            </div>
+                            <div class="fp-date-row">
+                                <span class="fp-date-label">Before</span>
+                                <input type="date" name="date_abandoned_before" id="fp-date-abandoned-before" class="fp-date-input">
+                            </div>
+                            <button type="button" class="fp-date-reset" id="fp-date-abandoned-dates-reset" style="display:none"
+                                    title="Clear date filters" onclick="_dateAbandonedRange.reset()">
+                                <i class="material-symbols-outlined">close</i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="fp-date-group">
+                        <div class="fp-date-group-label">Last Viewed</div>
+                        <div class="fp-date-block">
+                            <div class="fp-date-row">
+                                <span class="fp-date-label">After</span>
+                                <input type="date" name="last_viewed_after" id="fp-last-viewed-after" class="fp-date-input">
+                            </div>
+                            <div class="fp-date-row">
+                                <span class="fp-date-label">Before</span>
+                                <input type="date" name="last_viewed_before" id="fp-last-viewed-before" class="fp-date-input">
+                            </div>
+                            <button type="button" class="fp-date-reset" id="fp-last-viewed-dates-reset" style="display:none"
+                                    title="Clear date filters" onclick="_lastViewedRange.reset()">
+                                <i class="material-symbols-outlined">close</i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </details>
+
+            {# Security indicators -- collapsible -- #}
+            <details class="fp-accordion-item" id="fp-acc-security" data-importance="low">
+                <summary class="fp-accordion-summary">
+                    <span class="fp-accordion-label">Security Indicators</span>
+                    <i class="material-icons fp-acc-arrow">expand_more</i>
+                </summary>
+                <div class="fp-accordion-body">
+                    <div class="security-edit-grid">
+                        {% for sf_key, sf_label in security_fields %}
+                        <div class="security-edit-row">
+                            <label for="fp-security-{{ sf_key }}">{{ sf_label }}</label>
+                            <select name="security_{{ sf_key }}" id="fp-security-{{ sf_key }}" class="fp-select">
+                                <option value="">Any</option>
+                                {% for val, lbl in security_level_choices %}
+                                <option value="{{ val }}">{{ lbl }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </details>
+
+            {# Links & sub pins -- collapsible -- #}
+            <details class="fp-accordion-item" id="fp-acc-links" data-importance="low">
+                <summary class="fp-accordion-summary">
+                    <span class="fp-accordion-label">Links &amp; Detail Pins</span>
+                    <i class="material-icons fp-acc-arrow">expand_more</i>
+                </summary>
+                <div class="fp-accordion-body">
+                    <div class="fp-score-group">
+                        <div class="fp-score-label">Has links</div>
+                        <select name="has_links" id="fp-has-links" class="fp-select">
+                            <option value="">Any</option>
+                            <option value="yes">Has links</option>
+                            <option value="no">No links</option>
+                        </select>
+                    </div>
+                    <div class="fp-score-group">
+                        <div class="fp-score-label">Detail pin count</div>
+                        {% include "dashboard/partials/ui/_dual_range_slider.html" with min=0 max=20 min_value=0 max_value=20 min_field="min_detail_pins" max_field="max_detail_pins" format="default" htmx_form="filter-form" accordion_id="fp-acc-links" %}
                     </div>
                 </div>
             </details>
@@ -3500,6 +3599,7 @@
         form.querySelectorAll('input[type=text], input[type=date]').forEach(el => { el.value = ''; });
         form.querySelectorAll('input[type=checkbox]').forEach(el => { el.checked = false; });
         form.querySelectorAll('input[type=radio]').forEach(el => { el.checked = false; });
+        form.querySelectorAll('select[name]').forEach(el => { el.selectedIndex = 0; });
         if (window.UrbanLensDualRangeSlider) {
             window.UrbanLensDualRangeSlider.resetAll(form);
         }
@@ -3508,6 +3608,9 @@
         // Reset date reset buttons
         if (typeof _syncVisitDateReset === 'function') _syncVisitDateReset();
         if (typeof _syncCreatedDateReset === 'function') _syncCreatedDateReset();
+        if (typeof _dateBuiltRange !== 'undefined') _dateBuiltRange.sync();
+        if (typeof _dateAbandonedRange !== 'undefined') _dateAbandonedRange.sync();
+        if (typeof _lastViewedRange !== 'undefined') _lastViewedRange.sync();
         // Reset label selected area
         if (typeof _clearAllLabelSelections === 'function') _clearAllLabelSelections();
         // Reset a saved filter's regions, if one had been applied
@@ -3543,6 +3646,10 @@
         // Visit radio selection stored in the separate hidden input
         const visitsHidden = form.querySelector('input[name=has_visits]');
         if ((visitsHidden?.value || '').trim()) n++;
+        // Plain <select> filters: Has Links, Security Indicators, and any custom-field selects
+        for (const el of form.querySelectorAll('select[name]')) {
+            if ((el.value || '').trim()) n++;
+        }
         // Label groups
         const labelGroups = form.querySelector('input[name=label_groups]');
         if ((labelGroups?.value || '').trim()) n++;
@@ -3599,6 +3706,7 @@
             min_priority: 'min', max_priority: 'max',
             min_danger: 'min', max_danger: 'max',
             min_vulnerability: 'min', max_vulnerability: 'max',
+            min_detail_pins: 'min', max_detail_pins: 'max',
         };
         for (const [fieldName, role] of Object.entries(sliderFields)) {
             if (!(fieldName in criteria) || criteria[fieldName] == null) continue;
@@ -3620,13 +3728,30 @@
         }
 
         // Plain date inputs.
-        for (const key of ['visited_after', 'visited_before', 'created_after', 'created_before']) {
+        for (const key of [
+            'visited_after', 'visited_before', 'created_after', 'created_before',
+            'date_built_after', 'date_built_before', 'date_abandoned_after', 'date_abandoned_before',
+            'last_viewed_after', 'last_viewed_before',
+        ]) {
             if (!(key in criteria) || !criteria[key]) continue;
             const input = form.querySelector(`input[name="${key}"]`);
             if (input && !(input.value || '').trim()) input.value = criteria[key];
         }
         if (typeof _syncVisitDateReset === 'function') _syncVisitDateReset();
         if (typeof _syncCreatedDateReset === 'function') _syncCreatedDateReset();
+        if (typeof _dateBuiltRange !== 'undefined') _dateBuiltRange.sync();
+        if (typeof _dateAbandonedRange !== 'undefined') _dateAbandonedRange.sync();
+        if (typeof _lastViewedRange !== 'undefined') _lastViewedRange.sync();
+
+        // Plain select fields (Has Links, Security Indicators): current wins if empty.
+        for (const key of [
+            'has_links', 'security_fences', 'security_alarms', 'security_cameras', 'security_security',
+            'security_signs', 'security_vps', 'security_plywood', 'security_locked',
+        ]) {
+            if (!(key in criteria) || !criteria[key]) continue;
+            const select = form.querySelector(`select[name="${key}"]`);
+            if (select && !(select.value || '').trim()) select.value = criteria[key];
+        }
 
         // Labels: union saved include-ids into the current included set; never
         // touch excludes, and never auto-add a saved filter's exclusions.
@@ -4097,6 +4222,34 @@
     ['fp-created-after', 'fp-created-before'].forEach(id => {
         document.getElementById(id)?.addEventListener('change', _syncCreatedDateReset);
     });
+
+    // -- Additional plain after/before date-range filters (Date Built, Date
+    // Abandoned, Last Viewed) - same after/before + reset-button idiom as
+    // Visited/Created above, factored into a helper since it now repeats
+    // three more times.
+    function _wireDateRangeReset(afterId, beforeId, btnId) {
+        function sync() {
+            const after = document.getElementById(afterId);
+            const before = document.getElementById(beforeId);
+            const btn = document.getElementById(btnId);
+            if (btn) btn.style.display = (after?.value || before?.value) ? '' : 'none';
+        }
+        function reset() {
+            const after = document.getElementById(afterId);
+            const before = document.getElementById(beforeId);
+            if (after) after.value = '';
+            if (before) before.value = '';
+            sync();
+            htmx.trigger(document.getElementById('filter-form'), 'change');
+        }
+        [afterId, beforeId].forEach(id => {
+            document.getElementById(id)?.addEventListener('change', sync);
+        });
+        return { sync, reset };
+    }
+    const _dateBuiltRange = _wireDateRangeReset('fp-date-built-after', 'fp-date-built-before', 'fp-date-built-dates-reset');
+    const _dateAbandonedRange = _wireDateRangeReset('fp-date-abandoned-after', 'fp-date-abandoned-before', 'fp-date-abandoned-dates-reset');
+    const _lastViewedRange = _wireDateRangeReset('fp-last-viewed-after', 'fp-last-viewed-before', 'fp-last-viewed-dates-reset');
     (function _initVisits() {
         ['fp-visits-chip-yes', 'fp-visits-chip-no'].forEach(id => {
             const chip = document.getElementById(id);
