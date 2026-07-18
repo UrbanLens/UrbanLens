@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from django.db.models import CASCADE, ForeignKey, UniqueConstraint
 
 from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.direct_messages.queryset import DirectMessageMuteManager
 
 
 class DirectMessageMute(abstract.DashboardModel):
@@ -28,6 +29,8 @@ class DirectMessageMute(abstract.DashboardModel):
         on_delete=CASCADE,
         related_name="+",
     )
+
+    objects = DirectMessageMuteManager()
 
     if TYPE_CHECKING:
         viewer_id: int

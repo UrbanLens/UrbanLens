@@ -333,7 +333,7 @@ class PinEditView(LoginRequiredMixin, View):
                 defaults={"rating": rating},
             )
         elif rating == 0:
-            Review.objects.filter(profile=request.user.profile, pin=pin).delete()
+            Review.objects.for_pair(request.user.profile, pin).delete()
 
         # Category update: only runs when the field was explicitly submitted (partial requests preserve existing)
         if "categories" in body:

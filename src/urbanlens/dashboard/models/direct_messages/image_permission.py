@@ -8,6 +8,7 @@ from django.db.models import CASCADE, CharField, ForeignKey, UniqueConstraint
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.direct_messages.meta import ImagePermissionStatus
+from urbanlens.dashboard.models.direct_messages.queryset import DirectMessageImagePermissionManager
 
 
 class DirectMessageImagePermission(abstract.DashboardModel):
@@ -31,6 +32,8 @@ class DirectMessageImagePermission(abstract.DashboardModel):
         related_name="+",
     )
     status = CharField(max_length=20, choices=ImagePermissionStatus.choices, default=ImagePermissionStatus.PENDING)
+
+    objects = DirectMessageImagePermissionManager()
 
     if TYPE_CHECKING:
         viewer_id: int

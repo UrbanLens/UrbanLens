@@ -74,7 +74,7 @@ def find_user_by_email(email: str, *, active_only: bool = True) -> User | None:
     if profile:
         return profile.user
 
-    secondary = ProfileEmail.objects.filter(is_verified=True, normalized_email=normalized)
+    secondary = ProfileEmail.objects.verified_for(normalized)
     if active_only:
         secondary = secondary.filter(profile__user__is_active=True)
     match = secondary.select_related("profile__user").first()
@@ -107,7 +107,7 @@ def is_email_taken(email: str, *, exclude_user_id: int | None = None) -> bool:
     if primary.exists():
         return True
 
-    secondary = ProfileEmail.objects.filter(is_verified=True, normalized_email=normalized)
+    secondary = ProfileEmail.objects.verified_for(normalized)
     if exclude_user_id is not None:
         secondary = secondary.exclude(profile__user_id=exclude_user_id)
     return secondary.exists()

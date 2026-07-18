@@ -432,7 +432,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
         relevance = dict(
-            MediaRelevance.objects.filter(profile=profile, location=location, source=source).values_list("item_key", "is_relevant"),
+            MediaRelevance.objects.for_gallery(profile, location, source).values_list("item_key", "is_relevant"),
         )
         rendered_items = [{"item": item, "key": media_item_key(item.url), "is_relevant": relevance.get(media_item_key(item.url))} for item in items]
 
@@ -474,7 +474,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         profile, _ = Profile.objects.get_or_create(user=request.user)
 
         if is_relevant is None:
-            MediaRelevance.objects.filter(profile=profile, location=pin.location, source=source, item_key=item_key).delete()
+            MediaRelevance.objects.for_gallery(profile, pin.location, source).filter(item_key=item_key).delete()
             return JsonResponse({"is_relevant": None})
 
         MediaRelevance.objects.update_or_create(

@@ -170,7 +170,7 @@ def _thread_context(profile: Profile, partner: Profile) -> dict:
         "partner_e2ee_enrolled": _e2ee_enrolled(partner),
         "has_more_older": has_more_older,
         "oldest_message_id": thread_messages[0].pk if thread_messages else None,
-        "is_muted": DirectMessageMute.objects.filter(viewer=profile, sender=partner).exists(),
+        "is_muted": DirectMessageMute.objects.for_pair(profile, partner).exists(),
         **identity,
     }
 
@@ -205,7 +205,7 @@ def _image_permission_status(viewer: Profile, sender: Profile) -> str:
     from urbanlens.dashboard.models.direct_messages.image_permission import DirectMessageImagePermission
     from urbanlens.dashboard.models.direct_messages.meta import ImagePermissionStatus
 
-    permission = DirectMessageImagePermission.objects.filter(viewer=viewer, sender=sender).first()
+    permission = DirectMessageImagePermission.objects.for_pair(viewer, sender).first()
     return permission.status if permission else ImagePermissionStatus.PENDING
 
 

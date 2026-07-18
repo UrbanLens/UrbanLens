@@ -8,6 +8,7 @@ import uuid
 from django.db.models import CASCADE, BooleanField, CharField, DateTimeField, EmailField, ForeignKey, Q, UniqueConstraint, UUIDField
 
 from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.profile.queryset import ProfileEmailManager
 from urbanlens.dashboard.services.email_normalization import normalize_email
 
 
@@ -32,6 +33,8 @@ class ProfileEmail(abstract.DashboardModel):
         on_delete=CASCADE,
         related_name="secondary_emails",
     )
+
+    objects = ProfileEmailManager()
 
     if TYPE_CHECKING:
         profile_id: int

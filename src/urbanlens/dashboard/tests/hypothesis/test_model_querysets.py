@@ -632,3 +632,105 @@ class GroupKeyQuerySetTests(TestCase):
         qs = GroupKey.objects.for_group(self.group)
         self.assertIn(key, qs)
         self.assertEqual(qs.count(), 1)
+
+
+# -- Direct-message pair models ---------------------------------------------------
+
+class DirectMessagePairQuerySetTests(TestCase):
+    """for_pair() scopes mutes and image permissions to one viewer+sender pair."""
+
+    def setUp(self):
+        self.viewer = baker.make("auth.User").profile
+        self.sender = baker.make("auth.User").profile
+        self.other = baker.make("auth.User").profile
+
+    def test_mute_for_pair_is_directional(self) -> None:
+        from urbanlens.dashboard.models.direct_messages.mute import DirectMessageMute
+
+        baker.make("dashboard.DirectMessageMute", viewer=self.viewer, sender=self.sender)
+
+        self.assertTrue(DirectMessageMute.objects.for_pair(self.viewer, self.sender).exists())
+        # The reverse direction is a different row entirely.
+        self.assertFalse(DirectMessageMute.objects.for_pair(self.sender, self.viewer).exists())
+
+    def test_mute_for_pair_excludes_other_senders(self) -> None:
+        from urbanlens.dashboard.models.direct_messages.mute import DirectMessageMute
+
+        baker.make("dashboard.DirectMessageMute", viewer=self.viewer, sender=self.other)
+
+        self.assertFalse(DirectMessageMute.objects.for_pair(self.viewer, self.sender).exists())
+
+    def test_image_permission_for_pair_finds_the_row(self) -> None:
+        from urbanlens.dashboard.models.direct_messages.image_permission import DirectMessageImagePermission
+
+        row: DirectMessageImagePermission = baker.make("dashboard.DirectMessageImagePermission", viewer=self.viewer, sender=self.sender)
+        baker.make("dashboard.DirectMessageImagePermission", viewer=self.viewer, sender=self.other)
+
+        self.assertEqual(DirectMessageImagePermission.objects.for_pair(self.viewer, self.sender).first(), row)
+
+
+# -- MediaRelevance ---------------------------------------------------------------
+
+class MediaRelevanceQuerySetTests(TestCase):
+    """for_gallery() scopes relevance marks to one profile+location+provider."""
+
+    def setUp(self):
+        self.profile = baker.make("auth.User").profile
+        self.location = baker.make("dashboard.Location", latitude=41.0, longitude=-73.5)
+        self.other_location = baker.make("dashboard.Location", latitude=41.1, longitude=-73.6)
+
+    def test_for_gallery_scopes_to_profile_location_and_source(self) -> None:
+        from urbanlens.dashboard.models.images.relevance import MediaRelevance
+
+        mine: MediaRelevance = baker.make("dashboard.MediaRelevance", profile=self.profile, location=self.location, source="wikimedia", item_key="a" * 40, is_relevant=True)
+        baker.make("dashboard.MediaRelevance", profile=self.profile, location=self.location, source="smithsonian", item_key="b" * 40, is_relevant=True)
+        baker.make("dashboard.MediaRelevance", profile=self.profile, location=self.other_location, source="wikimedia", item_key="c" * 40, is_relevant=False)
+
+        qs = MediaRelevance.objects.for_gallery(self.profile, self.location, "wikimedia")
+        self.assertIn(mine, qs)
+        self.assertEqual(qs.count(), 1)
+
+
+# -- ProfileEmail -----------------------------------------------------------------
+
+class ProfileEmailQuerySetTests(TestCase):
+    """verified_for() matches only verified claims on one normalized address."""
+
+    def setUp(self):
+        self.profile = baker.make("auth.User").profile
+
+    def test_verified_for_finds_a_verified_claim(self) -> None:
+        from urbanlens.dashboard.models.profile.email import ProfileEmail
+
+        row = ProfileEmail.objects.create(profile=self.profile, email="alt@example.com", is_verified=True)
+        self.assertEqual(ProfileEmail.objects.verified_for(row.normalized_email).first(), row)
+
+    def test_verified_for_ignores_unverified_claims(self) -> None:
+        from urbanlens.dashboard.models.profile.email import ProfileEmail
+
+        row = ProfileEmail.objects.create(profile=self.profile, email="pending@example.com", is_verified=False)
+        self.assertIsNone(ProfileEmail.objects.verified_for(row.normalized_email).first())
+
+
+# -- Review -----------------------------------------------------------------------
+
+class ReviewForPairQuerySetTests(TestCase):
+    """for_pair() scopes reviews to one profile+pin pair."""
+
+    def setUp(self):
+        self.profile = baker.make("auth.User").profile
+        self.other_profile = baker.make("auth.User").profile
+        self.pin = baker.make("dashboard.Pin", profile=self.profile)
+
+    def test_for_pair_finds_the_row(self) -> None:
+        from urbanlens.dashboard.models.reviews.model import Review
+
+        review: Review = baker.make("dashboard.Review", profile=self.profile, pin=self.pin, rating=4)
+        baker.make("dashboard.Review", profile=self.other_profile, pin=self.pin, rating=2)
+
+        self.assertEqual(Review.objects.for_pair(self.profile, self.pin).first(), review)
+
+    def test_for_pair_empty_for_an_unreviewed_pin(self) -> None:
+        from urbanlens.dashboard.models.reviews.model import Review
+
+        self.assertIsNone(Review.objects.for_pair(self.profile, self.pin).first())

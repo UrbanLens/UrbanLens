@@ -105,3 +105,26 @@ class ProfileTrustQuerySet(abstract.DashboardQuerySet):
 
 class ProfileTrustManager(abstract.DashboardManager.from_queryset(ProfileTrustQuerySet)):
     """Custom query manager for ProfileTrust models."""
+
+
+class ProfileEmailQuerySet(abstract.DashboardQuerySet):
+    """Custom queryset for ProfileEmail models."""
+
+    def verified_for(self, normalized_email: str) -> ProfileEmailQuerySet:
+        """Verified claims on one normalized address (at most one row exists).
+
+        Only verified rows count for identity matching anywhere - an
+        unverified row is inert by design (see the model docstring).
+
+        Args:
+            normalized_email: The normalized form (see ``normalize_email``).
+
+        Returns:
+            A queryset matching at most one row (partial unique constraint on
+            verified rows).
+        """
+        return self.filter(is_verified=True, normalized_email=normalized_email)
+
+
+class ProfileEmailManager(abstract.DashboardManager.from_queryset(ProfileEmailQuerySet)):
+    """Custom query manager for ProfileEmail models."""

@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 from django.db.models import CASCADE, BooleanField, CharField, ForeignKey, Index, UniqueConstraint
 
 from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.images.queryset import MediaRelevanceManager
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
@@ -48,6 +49,8 @@ class MediaRelevance(abstract.DashboardModel):
     source = CharField(max_length=30)
     item_key = CharField(max_length=40)
     is_relevant = BooleanField()
+
+    objects = MediaRelevanceManager()
 
     if TYPE_CHECKING:
         profile_id: int

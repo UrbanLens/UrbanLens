@@ -282,7 +282,7 @@ def _notify_recipient(message: DirectMessage) -> None:
     if pref == DeliveryPreference.NONE:
         return
 
-    if DirectMessageMute.objects.filter(viewer=message.recipient, sender=message.sender).exists():
+    if DirectMessageMute.objects.for_pair(message.recipient, message.sender).exists():
         return
 
     already_unread = DirectMessage.objects.filter(sender=message.sender, recipient=message.recipient, read_at__isnull=True).exclude(pk=message.pk).exists()
@@ -399,7 +399,7 @@ def _schedule_message_email(message: DirectMessage) -> None:
     if pref not in (DeliveryPreference.EMAIL, DeliveryPreference.BOTH):
         return
 
-    if DirectMessageMute.objects.filter(viewer=message.recipient, sender=message.sender).exists():
+    if DirectMessageMute.objects.for_pair(message.recipient, message.sender).exists():
         return
 
     from urbanlens.dashboard.services.celery import safely_enqueue_task

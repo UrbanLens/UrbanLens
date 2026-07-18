@@ -145,3 +145,46 @@ class DirectMessageQuerySet(abstract.DashboardQuerySet):
 
 class DirectMessageManager(abstract.DashboardManager.from_queryset(DirectMessageQuerySet)):
     """Manager for DirectMessage."""
+
+
+class DirectMessageMuteQuerySet(abstract.DashboardQuerySet):
+    """Custom queryset for DirectMessageMute models."""
+
+    def for_pair(self, viewer: Profile, sender: Profile) -> DirectMessageMuteQuerySet:
+        """The mute row (at most one - unique on viewer+sender) for a pair.
+
+        Row existence IS the mute state; callers chain ``.exists()`` to check
+        it or ``.delete()`` to unmute.
+
+        Args:
+            viewer: The profile who muted.
+            sender: The profile whose messages are muted.
+
+        Returns:
+            A queryset matching at most one row.
+        """
+        return self.filter(viewer=viewer, sender=sender)
+
+
+class DirectMessageMuteManager(abstract.DashboardManager.from_queryset(DirectMessageMuteQuerySet)):
+    """Custom query manager for DirectMessageMute models."""
+
+
+class DirectMessageImagePermissionQuerySet(abstract.DashboardQuerySet):
+    """Custom queryset for DirectMessageImagePermission models."""
+
+    def for_pair(self, viewer: Profile, sender: Profile) -> DirectMessageImagePermissionQuerySet:
+        """The image-permission row (at most one - unique on viewer+sender) for a pair.
+
+        Args:
+            viewer: The profile deciding whether to see images.
+            sender: The profile sending them.
+
+        Returns:
+            A queryset matching at most one row.
+        """
+        return self.filter(viewer=viewer, sender=sender)
+
+
+class DirectMessageImagePermissionManager(abstract.DashboardManager.from_queryset(DirectMessageImagePermissionQuerySet)):
+    """Custom query manager for DirectMessageImagePermission models."""

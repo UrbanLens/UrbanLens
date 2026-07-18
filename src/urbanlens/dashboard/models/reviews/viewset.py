@@ -61,7 +61,7 @@ class ReviewViewSet(viewsets.ModelViewSet):
             # ids cannot be enumerated by probing this endpoint.
             return Response({"detail": "Pin not found."}, status=status.HTTP_400_BAD_REQUEST)
 
-        review = Review.objects.filter(profile=profile, pin=pin).first()
+        review = Review.objects.for_pair(profile, pin).first()
         if review is None:
             serializer = self.get_serializer(data=request.data)
             serializer.is_valid(raise_exception=True)

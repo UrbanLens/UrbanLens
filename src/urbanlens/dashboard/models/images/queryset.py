@@ -9,6 +9,7 @@ from django.db.models import Q
 from urbanlens.dashboard.models import abstract
 
 if TYPE_CHECKING:
+    from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 
 
@@ -213,3 +214,24 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet):
 
 class ImageManager(abstract.FrontendDashboardManager.from_queryset(ImageQuerySet)):
     pass
+
+
+class MediaRelevanceQuerySet(abstract.DashboardQuerySet):
+    """Custom queryset for MediaRelevance models."""
+
+    def for_gallery(self, profile: Profile, location: Location, source: str) -> MediaRelevanceQuerySet:
+        """Every relevance mark one profile holds for one provider's gallery at a location.
+
+        Args:
+            profile: The marking profile.
+            location: The location whose Media gallery is being viewed.
+            source: The provider key (e.g. ``"wikimedia"``).
+
+        Returns:
+            Matching marks; chain ``.filter(item_key=...)`` for a single item.
+        """
+        return self.filter(profile=profile, location=location, source=source)
+
+
+class MediaRelevanceManager(abstract.DashboardManager.from_queryset(MediaRelevanceQuerySet)):
+    """Custom query manager for MediaRelevance models."""
