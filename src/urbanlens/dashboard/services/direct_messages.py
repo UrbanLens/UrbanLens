@@ -885,8 +885,7 @@ def key_change_events_for(profile: Profile, partner: Profile) -> list[dict[str, 
     """
     from urbanlens.dashboard.models.e2ee.conversation_key import ConversationKey
 
-    low, high = ConversationKey.canonical_pair(profile, partner)
-    rows = ConversationKey.objects.filter(profile_low=low, profile_high=high, version__gt=1).order_by("version")
+    rows = ConversationKey.objects.between(profile, partner).filter(version__gt=1)
     return [{"kind": "key_change", "created": row.created, "version": row.version} for row in rows]
 
 

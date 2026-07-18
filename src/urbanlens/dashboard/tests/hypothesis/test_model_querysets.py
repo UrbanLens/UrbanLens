@@ -10,10 +10,14 @@ filter methods, verifying inclusion/exclusion semantics.
 from __future__ import annotations
 
 from datetime import UTC, datetime, timezone
+from typing import TYPE_CHECKING
 import unittest
 
 from django.contrib.auth.models import User
 from model_bakery import baker
+
+if TYPE_CHECKING:
+    from urbanlens.dashboard.models.profile.model import Profile
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.comments.queryset import CommentQuerySet
@@ -526,3 +530,105 @@ class ProfileAnnotationForPairTests(TestCase):
         baker.make("dashboard.ProfileTrust", author=self.author, subject=self.other_subject, rating=3)
 
         self.assertIsNone(ProfileTrust.objects.for_pair(self.author, self.subject).first())
+
+
+# -- e2ee querysets ---------------------------------------------------------------
+
+class MessagingKeyBundleQuerySetTests(TestCase):
+    """for_profile()/for_profiles() scope MessagingKeyBundle lookups."""
+
+    def setUp(self):
+        self.profile = baker.make("auth.User").profile
+        self.other_profile = baker.make("auth.User").profile
+
+    def test_for_profile_finds_the_bundle(self) -> None:
+        from urbanlens.dashboard.models.e2ee import MessagingKeyBundle
+
+        bundle: MessagingKeyBundle = baker.make("dashboard.MessagingKeyBundle", profile=self.profile)
+        self.assertEqual(MessagingKeyBundle.objects.for_profile(self.profile).first(), bundle)
+
+    def test_for_profile_empty_when_not_enrolled(self) -> None:
+        from urbanlens.dashboard.models.e2ee import MessagingKeyBundle
+
+        baker.make("dashboard.MessagingKeyBundle", profile=self.other_profile)
+        self.assertIsNone(MessagingKeyBundle.objects.for_profile(self.profile).first())
+
+    def test_for_profiles_accepts_profile_instances(self) -> None:
+        from urbanlens.dashboard.models.e2ee import MessagingKeyBundle
+
+        baker.make("dashboard.MessagingKeyBundle", profile=self.profile)
+        baker.make("dashboard.MessagingKeyBundle", profile=self.other_profile)
+        unrelated: Profile = baker.make("auth.User").profile
+
+        qs = MessagingKeyBundle.objects.for_profiles([self.profile, self.other_profile])
+        self.assertEqual(qs.count(), 2)
+        self.assertFalse(qs.filter(profile=unrelated).exists())
+
+    def test_for_profiles_accepts_raw_ids(self) -> None:
+        from urbanlens.dashboard.models.e2ee import MessagingKeyBundle
+
+        baker.make("dashboard.MessagingKeyBundle", profile=self.profile)
+
+        self.assertEqual(MessagingKeyBundle.objects.for_profiles([self.profile.pk]).count(), 1)
+
+
+class ConversationKeyQuerySetTests(TestCase):
+    """between() finds a conversation's keys regardless of argument order."""
+
+    def setUp(self):
+        self.profile_a = baker.make("auth.User").profile
+        self.profile_b = baker.make("auth.User").profile
+        self.other_profile = baker.make("auth.User").profile
+
+    def test_between_finds_keys_for_the_pair(self) -> None:
+        from urbanlens.dashboard.models.e2ee import ConversationKey
+
+        low, high = ConversationKey.canonical_pair(self.profile_a, self.profile_b)
+        key: ConversationKey = baker.make("dashboard.ConversationKey", profile_low=low, profile_high=high, version=1)
+
+        self.assertIn(key, ConversationKey.objects.between(self.profile_a, self.profile_b))
+
+    def test_between_is_order_independent(self) -> None:
+        from urbanlens.dashboard.models.e2ee import ConversationKey
+
+        low, high = ConversationKey.canonical_pair(self.profile_a, self.profile_b)
+        baker.make("dashboard.ConversationKey", profile_low=low, profile_high=high, version=1)
+
+        # Same pair, arguments reversed - canonicalization inside between()
+        # must find the same row either way.
+        self.assertEqual(ConversationKey.objects.between(self.profile_b, self.profile_a).count(), 1)
+
+    def test_between_excludes_a_different_pair(self) -> None:
+        from urbanlens.dashboard.models.e2ee import ConversationKey
+
+        low, high = ConversationKey.canonical_pair(self.profile_a, self.other_profile)
+        baker.make("dashboard.ConversationKey", profile_low=low, profile_high=high, version=1)
+
+        self.assertEqual(ConversationKey.objects.between(self.profile_a, self.profile_b).count(), 0)
+
+    def test_between_orders_oldest_first(self) -> None:
+        from urbanlens.dashboard.models.e2ee import ConversationKey
+
+        low, high = ConversationKey.canonical_pair(self.profile_a, self.profile_b)
+        v2: ConversationKey = baker.make("dashboard.ConversationKey", profile_low=low, profile_high=high, version=2)
+        v1: ConversationKey = baker.make("dashboard.ConversationKey", profile_low=low, profile_high=high, version=1)
+
+        self.assertEqual(list(ConversationKey.objects.between(self.profile_a, self.profile_b)), [v1, v2])
+
+
+class GroupKeyQuerySetTests(TestCase):
+    """for_group() scopes GroupKey lookups to one group chat."""
+
+    def setUp(self):
+        self.group = baker.make("dashboard.GroupChat")
+        self.other_group = baker.make("dashboard.GroupChat")
+
+    def test_for_group_finds_its_keys(self) -> None:
+        from urbanlens.dashboard.models.e2ee import GroupKey
+
+        key: GroupKey = baker.make("dashboard.GroupKey", group=self.group, version=1)
+        baker.make("dashboard.GroupKey", group=self.other_group, version=1)
+
+        qs = GroupKey.objects.for_group(self.group)
+        self.assertIn(key, qs)
+        self.assertEqual(qs.count(), 1)

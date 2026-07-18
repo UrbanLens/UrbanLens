@@ -28,6 +28,7 @@ from typing import TYPE_CHECKING
 from django.db.models import CASCADE, SET_NULL, ForeignKey, PositiveIntegerField, TextField, UniqueConstraint
 
 from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.e2ee.queryset import GroupKeyManager
 
 
 class GroupKey(abstract.DashboardModel):
@@ -47,6 +48,8 @@ class GroupKey(abstract.DashboardModel):
         null=True,
         blank=True,
     )
+
+    objects = GroupKeyManager()
 
     if TYPE_CHECKING:
         group_id: int

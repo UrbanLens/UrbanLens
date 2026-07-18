@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 from django.db.models import CASCADE, BooleanField, CharField, IntegerField, OneToOneField, PositiveIntegerField, TextField
 
 from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.e2ee.queryset import MessagingKeyBundleManager
 
 #: Argon2id defaults matching libsodium's crypto_pwhash "interactive" limits.
 #: Pinned per-bundle so parameter upgrades never orphan existing blobs.
@@ -69,6 +70,8 @@ class MessagingKeyBundle(abstract.DashboardModel):
     # Bumped on "reset keys" (new keypair, history unreadable). Conversation
     # keys record which bundle version they were sealed to.
     version = PositiveIntegerField(default=1)
+
+    objects = MessagingKeyBundleManager()
 
     if TYPE_CHECKING:
         profile_id: int

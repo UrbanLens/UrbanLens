@@ -684,5 +684,5 @@ def group_e2ee_ready(group: GroupChat) -> bool:
     from urbanlens.dashboard.models.e2ee import MessagingKeyBundle
 
     member_ids = list(group.active_memberships().values_list("profile_id", flat=True))
-    enrolled = MessagingKeyBundle.objects.filter(profile_id__in=member_ids).count()
+    enrolled = MessagingKeyBundle.objects.for_profiles(member_ids).count()
     return enrolled == len(member_ids) and len(member_ids) > 0

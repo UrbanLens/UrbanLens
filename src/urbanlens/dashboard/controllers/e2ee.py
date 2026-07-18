@@ -128,7 +128,7 @@ class E2EEEnrollView(LoginRequiredMixin, View):
         if data is None:
             return HttpResponseBadRequest("Malformed JSON body")
 
-        if MessagingKeyBundle.objects.filter(profile=profile).exists():
+        if MessagingKeyBundle.objects.for_profile(profile).exists():
             return JsonResponse({"error": "A key bundle already exists for this account."}, status=409)
 
         public_key = data.get("public_key", "")
@@ -204,7 +204,7 @@ class E2EEOwnKeysView(LoginRequiredMixin, View):
             JSON with every bundle field the client needs to unlock.
         """
         profile = _get_profile(request)
-        bundle = MessagingKeyBundle.objects.filter(profile=profile).first()
+        bundle = MessagingKeyBundle.objects.for_profile(profile).first()
         if bundle is None:
             return JsonResponse({"error": "Not enrolled."}, status=404)
         return JsonResponse(
@@ -242,7 +242,7 @@ class E2EEPartnerKeyView(LoginRequiredMixin, View):
             return HttpResponseBadRequest("Use the own-keys endpoint for your own bundle")
         if not can_direct_message(profile, partner) and not can_direct_message(partner, profile):
             return JsonResponse({"error": "Not found."}, status=404)
-        bundle = MessagingKeyBundle.objects.filter(profile=partner).first()
+        bundle = MessagingKeyBundle.objects.for_profile(partner).first()
         if bundle is None:
             return JsonResponse({"error": "Not found."}, status=404)
         return JsonResponse({"public_key": bundle.public_key, "version": bundle.version})
@@ -266,8 +266,7 @@ class E2EEConversationKeyView(LoginRequiredMixin, View):
         partner = get_object_or_404(Profile, slug=profile_slug)
         if partner.pk == profile.pk:
             return HttpResponseBadRequest("No self-conversations")
-        low, high = ConversationKey.canonical_pair(profile, partner)
-        rows = list(ConversationKey.objects.filter(profile_low=low, profile_high=high).order_by("version"))
+        rows = list(ConversationKey.objects.between(profile, partner))
         keys = [{"version": row.version, "wrapped_key": row.wrapped_for(profile.pk)} for row in rows]
         return JsonResponse({"keys": keys, "latest": rows[-1].version if rows else 0})
 
@@ -303,12 +302,12 @@ class E2EEConversationKeyView(LoginRequiredMixin, View):
         if not valid_blob(wrapped_for_me, MAX_WRAPPED_CONVERSATION_KEY_LENGTH) or not valid_blob(wrapped_for_partner, MAX_WRAPPED_CONVERSATION_KEY_LENGTH):
             return HttpResponseBadRequest("Invalid wrapped key blobs")
         wrapped_for_low, wrapped_for_high = (wrapped_for_me, wrapped_for_partner) if profile.pk < partner.pk else (wrapped_for_partner, wrapped_for_me)
+        low, high = ConversationKey.canonical_pair(profile, partner)
 
-        if not MessagingKeyBundle.objects.filter(profile=profile).exists() or not MessagingKeyBundle.objects.filter(profile=partner).exists():
+        if not MessagingKeyBundle.objects.for_profile(profile).exists() or not MessagingKeyBundle.objects.for_profile(partner).exists():
             return JsonResponse({"error": "Both participants must be enrolled."}, status=409)
 
-        low, high = ConversationKey.canonical_pair(profile, partner)
-        latest = ConversationKey.objects.filter(profile_low=low, profile_high=high).order_by("-version").first()
+        latest = ConversationKey.objects.between(profile, partner).order_by("-version").first()
         expected_version = (latest.version if latest else 0) + 1
         try:
             requested_version = int(data.get("version", 0))
@@ -354,7 +353,7 @@ class E2EERewrapView(LoginRequiredMixin, View):
             JSON ``{ok: true}``; 400 on malformed blobs; 404 when not enrolled.
         """
         profile = _get_profile(request)
-        bundle = MessagingKeyBundle.objects.filter(profile=profile).first()
+        bundle = MessagingKeyBundle.objects.for_profile(profile).first()
         if bundle is None:
             return JsonResponse({"error": "Not enrolled."}, status=404)
         data = _json_body(request)
@@ -443,13 +442,13 @@ class E2EEGroupKeyView(LoginRequiredMixin, View):
             return JsonResponse({"error": "Not found."}, status=404)
         profile, group, _membership = resolved
 
-        key_rows = list(GroupKey.objects.filter(group=group).order_by("version"))
+        key_rows = list(GroupKey.objects.for_group(group).order_by("version"))
         own_envelopes = {envelope.key_id: envelope.wrapped_key for envelope in GroupKeyEnvelope.objects.filter(key__group=group, profile=profile)}
         keys = [{"version": row.version, "wrapped_key": own_envelopes[row.pk]} for row in key_rows if row.pk in own_envelopes]
         latest = key_rows[-1].version if key_rows else 0
 
         member_profiles = [membership.profile for membership in group.active_memberships().select_related("profile", "profile__user")]
-        bundles = {bundle.profile_id: bundle for bundle in MessagingKeyBundle.objects.filter(profile__in=member_profiles)}
+        bundles = {bundle.profile_id: bundle for bundle in MessagingKeyBundle.objects.for_profiles(member_profiles)}
         all_enrolled = all(member.pk in bundles for member in member_profiles)
 
         needs_rotation = latest == 0
@@ -495,11 +494,11 @@ class E2EEGroupKeyView(LoginRequiredMixin, View):
         for blob in wrapped.values():
             if not valid_blob(blob, MAX_WRAPPED_CONVERSATION_KEY_LENGTH):
                 return HttpResponseBadRequest("Invalid wrapped envelopes")
-        enrolled_count = MessagingKeyBundle.objects.filter(profile__in=members_by_slug.values()).count()
+        enrolled_count = MessagingKeyBundle.objects.for_profiles(members_by_slug.values()).count()
         if enrolled_count != len(members_by_slug):
             return JsonResponse({"error": "Every member must be enrolled before the group can encrypt."}, status=409)
 
-        latest = GroupKey.objects.filter(group=group).order_by("-version").first()
+        latest = GroupKey.objects.for_group(group).order_by("-version").first()
         expected_version = (latest.version if latest else 0) + 1
         try:
             requested_version = int(data.get("version", 0))
@@ -579,7 +578,7 @@ class E2EEChangePasswordView(LoginRequiredMixin, View):
             if not isinstance(current_secret, str) or not user.check_password(current_secret):
                 return JsonResponse({"error": "Your current password is incorrect."}, status=403)
 
-        bundle = MessagingKeyBundle.objects.filter(profile=profile).first()
+        bundle = MessagingKeyBundle.objects.for_profile(profile).first()
         with transaction.atomic():
             AccountKdf.objects.set_auth_salt(user, new_auth_salt)
             user.set_password(new_auth_key)
@@ -622,7 +621,7 @@ class E2EEResetView(LoginRequiredMixin, View):
             404 when not enrolled.
         """
         profile = _get_profile(request)
-        bundle = MessagingKeyBundle.objects.filter(profile=profile).first()
+        bundle = MessagingKeyBundle.objects.for_profile(profile).first()
         if bundle is None:
             return JsonResponse({"error": "Not enrolled."}, status=404)
         data = _json_body(request)

@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from django.db.models import CASCADE, SET_NULL, CheckConstraint, F, ForeignKey, Index, PositiveIntegerField, Q, TextField, UniqueConstraint
 
 from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.e2ee.queryset import ConversationKeyManager
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
@@ -49,6 +50,8 @@ class ConversationKey(abstract.DashboardModel):
         null=True,
         blank=True,
     )
+
+    objects = ConversationKeyManager()
 
     if TYPE_CHECKING:
         profile_low_id: int

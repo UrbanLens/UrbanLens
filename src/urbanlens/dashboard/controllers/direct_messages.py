@@ -189,7 +189,7 @@ def _e2ee_enrolled(profile: Profile) -> bool:
     """
     from urbanlens.dashboard.models.e2ee import MessagingKeyBundle
 
-    return MessagingKeyBundle.objects.filter(profile=profile).exists()
+    return MessagingKeyBundle.objects.for_profile(profile).exists()
 
 
 def _image_permission_status(viewer: Profile, sender: Profile) -> str:
