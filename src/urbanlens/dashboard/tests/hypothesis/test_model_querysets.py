@@ -8,21 +8,20 @@ filter methods, verifying inclusion/exclusion semantics.
 """
 from __future__ import annotations
 
+from datetime import UTC, datetime, timezone
 import unittest
-from datetime import datetime, timezone
 
 from django.contrib.auth.models import User
-from urbanlens.core.tests.testcase import TestCase
 from model_bakery import baker
 
+from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.comments.queryset import CommentQuerySet
 from urbanlens.dashboard.models.markup.queryset import PinMarkupQuerySet
 from urbanlens.dashboard.models.notifications.meta.status import Status
-from urbanlens.dashboard.models.social_link.queryset import SocialLinkQuerySet as SocialLinkQuerySet
 from urbanlens.dashboard.models.site_settings import SiteSettings
+from urbanlens.dashboard.models.social_link.queryset import SocialLinkQuerySet as SocialLinkQuerySet
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
 from urbanlens.dashboard.models.visits.queryset import VisitQuerySet
-
 
 # -- CommentQuerySet ------------------------------------------------------------
 
@@ -158,6 +157,46 @@ class TripCommentDeleteTests(TestCase):
         self.assertIn(reply, self.trip.comments.filter(parent__isnull=True))
 
 
+class TripCommentQuerySetByAuthorTests(TestCase):
+    """by_author() returns a profile's comments across trips, most recent first."""
+
+    def setUp(self):
+        self.user = baker.make("auth.User")
+        self.other_user = baker.make("auth.User")
+        self.trip = baker.make("dashboard.Trip", creator=self.user.profile)
+        self.other_trip = baker.make("dashboard.Trip", creator=self.other_user.profile)
+
+    def test_by_author_includes_own_comments_only(self) -> None:
+        from urbanlens.dashboard.models.trips.model import TripComment
+
+        mine = baker.make("dashboard.TripComment", trip=self.trip, author=self.user.profile)
+        baker.make("dashboard.TripComment", trip=self.other_trip, author=self.other_user.profile)
+
+        qs = TripComment.objects.by_author(self.user.profile)
+        self.assertIn(mine, qs)
+        self.assertEqual(qs.count(), 1)
+
+    def test_by_author_orders_most_recent_first(self) -> None:
+        from urbanlens.dashboard.models.trips.model import TripComment
+
+        older = baker.make("dashboard.TripComment", trip=self.trip, author=self.user.profile)
+        newer = baker.make("dashboard.TripComment", trip=self.trip, author=self.user.profile)
+        TripComment.objects.filter(pk=older.pk).update(created=datetime(2020, 1, 1, tzinfo=UTC))
+        TripComment.objects.filter(pk=newer.pk).update(created=datetime(2020, 1, 2, tzinfo=UTC))
+
+        qs = list(TripComment.objects.by_author(self.user.profile))
+        self.assertEqual(qs, [newer, older])
+
+    def test_by_author_preloads_trip_without_extra_query(self) -> None:
+        from urbanlens.dashboard.models.trips.model import TripComment
+
+        baker.make("dashboard.TripComment", trip=self.trip, author=self.user.profile)
+
+        comment = TripComment.objects.by_author(self.user.profile).first()
+        with self.assertNumQueries(0):
+            _ = comment.trip.name
+
+
 # -- PinMarkupQuerySet ---------------------------------------------------------
 
 class PinMarkupQuerySetTests(TestCase):
@@ -208,7 +247,7 @@ class VisitQuerySetTests(TestCase):
         self.location = baker.make("dashboard.Location", latitude=45.0, longitude=-69.0)
         self.pin = baker.make("dashboard.Pin", profile=self.user.profile, location=self.location)
         self.other_pin = baker.make("dashboard.Pin", profile=self.user.profile)
-        ts = datetime(2024, 6, 1, 12, 0, tzinfo=timezone.utc)
+        ts = datetime(2024, 6, 1, 12, 0, tzinfo=UTC)
         self.manual_visit = baker.make(
             "dashboard.PinVisit",
             pin=self.pin,
@@ -389,3 +428,40 @@ class NotificationStatusBugTests(TestCase):
     def test_read_value_should_be_read(self) -> None:
         """Status.READ.value should be 'read', not 'unread'."""
         self.assertEqual(Status.READ.value, "read")
+
+
+# -- SavedFilterQuerySet ---------------------------------------------------------
+
+class SavedFilterQuerySetNameTakenForTests(TestCase):
+    """name_taken_for() detects a name collision, scoped to one profile and excludable by pk."""
+
+    def setUp(self):
+        self.user = baker.make("auth.User")
+        self.other_user = baker.make("auth.User")
+        self.existing = baker.make("dashboard.SavedFilter", profile=self.user.profile, name="My Filter")
+
+    def test_taken_when_another_of_the_same_profiles_filters_has_that_name(self) -> None:
+        from urbanlens.dashboard.models.saved_filter.model import SavedFilter
+
+        self.assertTrue(SavedFilter.objects.name_taken_for(self.user.profile, "My Filter"))
+
+    def test_not_taken_for_a_different_profile_with_the_same_name(self) -> None:
+        from urbanlens.dashboard.models.saved_filter.model import SavedFilter
+
+        self.assertFalse(SavedFilter.objects.name_taken_for(self.other_user.profile, "My Filter"))
+
+    def test_not_taken_for_an_unused_name(self) -> None:
+        from urbanlens.dashboard.models.saved_filter.model import SavedFilter
+
+        self.assertFalse(SavedFilter.objects.name_taken_for(self.user.profile, "Unused Name"))
+
+    def test_excluding_its_own_pk_lets_a_rename_keep_its_current_name(self) -> None:
+        from urbanlens.dashboard.models.saved_filter.model import SavedFilter
+
+        self.assertFalse(SavedFilter.objects.name_taken_for(self.user.profile, "My Filter", exclude_pk=self.existing.pk))
+
+    def test_exclude_pk_does_not_hide_a_collision_with_a_different_filter(self) -> None:
+        from urbanlens.dashboard.models.saved_filter.model import SavedFilter
+
+        other = baker.make("dashboard.SavedFilter", profile=self.user.profile, name="Other Filter")
+        self.assertTrue(SavedFilter.objects.name_taken_for(self.user.profile, "My Filter", exclude_pk=other.pk))

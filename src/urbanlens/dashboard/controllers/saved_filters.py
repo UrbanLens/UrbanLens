@@ -87,7 +87,7 @@ class SavedFilterCreateView(LoginRequiredMixin, View):
         name = (request.POST.get("filter_name") or "").strip()
         if not name:
             return HttpResponse("A name is required to save a filter.", status=400)
-        if SavedFilter.objects.filter(profile=profile, name=name).exists():
+        if SavedFilter.objects.name_taken_for(profile, name):
             return HttpResponse("You already have a saved filter with that name.", status=409)
 
         search_form = SearchForm(request.POST, profile=profile)
@@ -186,7 +186,7 @@ class SavedFilterEditView(LoginRequiredMixin, View):
         name = (request.POST.get("filter_name") or "").strip()
         if not name:
             return JsonResponse({"ok": False, "error": "A name is required to save a filter."}, status=400)
-        if SavedFilter.objects.filter(profile=profile, name=name).exclude(pk=saved_filter.pk).exists():
+        if SavedFilter.objects.name_taken_for(profile, name, exclude_pk=saved_filter.pk):
             return JsonResponse({"ok": False, "error": "You already have a saved filter with that name."}, status=409)
 
         search_form = SearchForm(request.POST, profile=profile)

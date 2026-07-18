@@ -22,7 +22,7 @@ from django.db.models.fields import BooleanField, CharField, DateField, DateTime
 from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract
-from urbanlens.dashboard.models.trips.queryset import TripManager, TripMembershipManager
+from urbanlens.dashboard.models.trips.queryset import TripCommentManager, TripManager, TripMembershipManager
 from urbanlens.dashboard.services.text_limits import (
     MAX_COMMENT_TEXT_LENGTH,
     MAX_TRIP_ACTIVITY_NOTES_LENGTH,
@@ -389,6 +389,8 @@ class TripComment(abstract.DashboardModel):
         null=True,
         blank=True,
     )
+
+    objects = TripCommentManager()
 
     if TYPE_CHECKING:
         markup_map_id: int | None

@@ -97,7 +97,7 @@ class ViewProfileView(LoginRequiredMixin, View):
         from urbanlens.dashboard.models.wiki_edit import WikiEdit
 
         recent_pin_comments = Comment.objects.filter(profile=profile).select_related("pin", "wiki", "wiki__location").order_by("-created")[:5]
-        recent_trip_comments = TripComment.objects.filter(author=profile).select_related("trip").order_by("-created")[:5]
+        recent_trip_comments = TripComment.objects.by_author(profile)[:5]
         recent_comments = sorted(
             chain(recent_pin_comments, recent_trip_comments),
             key=lambda comment: comment.created,

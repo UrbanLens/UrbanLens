@@ -89,7 +89,7 @@ def _comment_entries(profile: Profile) -> Iterator[JournalEntry]:
     from urbanlens.dashboard.models.trips.model import TripComment
 
     pin_wiki_comments = Comment.objects.filter(profile=profile).select_related("pin", "wiki", "wiki__location").order_by("-created")
-    trip_comments = TripComment.objects.filter(author=profile).select_related("trip").order_by("-created")
+    trip_comments = TripComment.objects.by_author(profile)
 
     for comment in chain(pin_wiki_comments, trip_comments):
         if getattr(comment, "pin_id", None):

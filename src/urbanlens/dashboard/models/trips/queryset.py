@@ -247,3 +247,22 @@ class TripMembershipQuerySet(abstract.DashboardQuerySet):
 
 class TripMembershipManager(abstract.DashboardManager.from_queryset(TripMembershipQuerySet)):
     """Custom query manager for TripMembership models."""
+
+
+class TripCommentQuerySet(abstract.DashboardQuerySet):
+    """Custom queryset for TripComment models."""
+
+    def by_author(self, profile: Profile) -> TripCommentQuerySet:
+        """Comments a profile has left across any of their trips, most recent first.
+
+        Args:
+            profile: The commenting profile.
+
+        Returns:
+            Matching comments with their trip preloaded, most recently created first.
+        """
+        return self.filter(author=profile).select_related("trip").order_by("-created")
+
+
+class TripCommentManager(abstract.DashboardManager.from_queryset(TripCommentQuerySet)):
+    """Custom query manager for TripComment models."""

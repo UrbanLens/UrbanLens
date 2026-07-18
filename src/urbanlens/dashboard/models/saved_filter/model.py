@@ -9,6 +9,7 @@ from django.db.models import CASCADE, CharField, ForeignKey, Index, IntegerField
 from django.db.models.constraints import UniqueConstraint
 
 from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.saved_filter.queryset import SavedFilterManager
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +29,8 @@ class SavedFilter(abstract.FrontendDashboardModel):
     icon = CharField(max_length=64, blank=True, default="bookmark")
     criteria = JSONField(default=dict)
     order = IntegerField(default=0)
+
+    objects = SavedFilterManager()
 
     def __str__(self) -> str:
         return self.name
