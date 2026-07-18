@@ -107,7 +107,7 @@ def _overview_context(pin: Pin) -> dict:
     lat, lng = pin.effective_latitude, pin.effective_longitude
     overlapping_location_count = Location.objects.get_all_for_point(float(lat), float(lng)).count() if lat is not None and lng is not None else 0
 
-    from urbanlens.dashboard.services.ai.link_extraction import link_extraction_available
+    from urbanlens.dashboard.services.ai.link_extraction import ai_extract_button_context
 
     return {
         "pin": pin,
@@ -118,7 +118,7 @@ def _overview_context(pin: Pin) -> dict:
         "color_choices": COLOR_CHOICES,
         "security_level_choices": SecurityLevel.choices,
         "overlapping_location_count": overlapping_location_count,
-        "can_ai_extract": link_extraction_available(pin.profile.user, pin.profile),
+        **ai_extract_button_context(pin.profile.user, pin.profile, pin),
         "pin_security_values": [
             ("fences", "Fences", pin.fences),
             ("alarms", "Alarms", pin.alarms),

@@ -34,10 +34,12 @@ from urbanlens.dashboard.services.ai.link_extraction import (
     _parse_date,
     _parse_price,
     _validate_extraction_url,
+    ai_extract_button_context,
     apply_extracted_fields,
     extractions_remaining_today,
     link_extraction_available,
     parse_ai_response,
+    recently_requested_urls,
     run_extraction,
     start_link_extraction,
 )
@@ -313,6 +315,90 @@ class RunExtractionPipelineTests(TestCase):
         self.assertEqual(self.pin.date_abandoned, date(1998, 1, 1))
         recorded_keys = {row["key"] for row in extraction.results_rows}
         self.assertEqual(recorded_keys, {"date_abandoned"})
+
+
+class RecentlyRequestedUrlsTests(TestCase):
+    """The per-link one-week cooldown: recently_requested_urls / ai_extract_button_context."""
+
+    def setUp(self) -> None:
+        baker.make("auth.User")
+        self.user = baker.make("auth.User")
+        self.profile = Profile.objects.get(user=self.user)
+        self.pin = baker.make(Pin, profile=self.profile, name="Old Mill", name_is_user_provided=True)
+
+    def test_no_extractions_means_empty_set(self) -> None:
+        self.assertEqual(recently_requested_urls(self.pin), frozenset())
+
+    def test_recent_extraction_is_in_the_set(self) -> None:
+        LinkExtraction.objects.create(profile=self.profile, pin=self.pin, url="https://example.com/history")
+        self.assertEqual(recently_requested_urls(self.pin), frozenset({"https://example.com/history"}))
+
+    def test_other_links_on_the_same_pin_are_unaffected(self) -> None:
+        LinkExtraction.objects.create(profile=self.profile, pin=self.pin, url="https://example.com/a")
+        recent = recently_requested_urls(self.pin)
+        self.assertIn("https://example.com/a", recent)
+        self.assertNotIn("https://example.com/b", recent)
+
+    def test_extraction_older_than_the_cooldown_is_excluded(self) -> None:
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        extraction = LinkExtraction.objects.create(profile=self.profile, pin=self.pin, url="https://example.com/old")
+        LinkExtraction.objects.filter(pk=extraction.pk).update(created=timezone.now() - timedelta(days=8))
+        self.assertEqual(recently_requested_urls(self.pin), frozenset())
+
+    def test_another_pins_extraction_does_not_leak_in(self) -> None:
+        other_pin = baker.make(Pin, profile=self.profile)
+        LinkExtraction.objects.create(profile=self.profile, pin=other_pin, url="https://example.com/x")
+        self.assertEqual(recently_requested_urls(self.pin), frozenset())
+
+    def test_button_context_empty_set_when_unavailable(self) -> None:
+        LinkExtraction.objects.create(profile=self.profile, pin=self.pin, url="https://example.com/a")
+        context = ai_extract_button_context(self.user, self.profile, self.pin)
+        self.assertFalse(context["can_ai_extract"])
+        self.assertEqual(context["recently_extracted_urls"], frozenset())
+
+    def test_button_context_populated_when_available(self) -> None:
+        _grant_ai_to_everyone()
+        LinkExtraction.objects.create(profile=self.profile, pin=self.pin, url="https://example.com/a")
+        context = ai_extract_button_context(self.user, self.profile, self.pin)
+        self.assertTrue(context["can_ai_extract"])
+        self.assertEqual(context["recently_extracted_urls"], frozenset({"https://example.com/a"}))
+
+
+class RecentlyRequestedButtonRenderingTests(TestCase):
+    """The button itself hides only for the specific link just requested."""
+
+    def setUp(self) -> None:
+        baker.make("auth.User")
+        self.user = baker.make("auth.User")
+        self.profile = Profile.objects.get(user=self.user)
+        self.pin = baker.make(Pin, profile=self.profile, name="Old Mill", name_is_user_provided=True)
+        self.client.force_login(self.user)
+        _grant_ai_to_everyone()
+
+    def test_button_disappears_only_for_the_requested_link(self) -> None:
+        from urbanlens.dashboard.models.links.model import PinLink
+
+        PinLink.objects.create(pin=self.pin, url="https://example.com/requested")
+        PinLink.objects.create(pin=self.pin, url="https://example.com/other")
+        LinkExtraction.objects.create(profile=self.profile, pin=self.pin, url="https://example.com/requested")
+
+        response = self.client.get(reverse("pin.links", args=[self.pin.slug]))
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        # Each link chip is its own <span> block in source order - split on the
+        # chip boundary so each assertion only looks at that link's own markup.
+        requested_chip, other_chip = content.split('<span class="pin-link-chip">')[1:3]
+        self.assertNotIn("ai-extract-btn", requested_chip)
+        self.assertIn("ai-extract-btn", other_chip)
+
+    def test_extract_endpoint_response_hides_the_button_for_that_link_on_next_render(self) -> None:
+        with patch("urbanlens.dashboard.services.celery.safely_enqueue_task", return_value=object()):
+            self.client.post(reverse("pin.ai_extract", args=[self.pin.slug]), {"url": "https://example.com/history"})
+        context = ai_extract_button_context(self.user, self.profile, self.pin)
+        self.assertIn("https://example.com/history", context["recently_extracted_urls"])
 
 
 class EndpointTests(TestCase):

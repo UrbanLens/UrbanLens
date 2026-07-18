@@ -662,7 +662,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                     "page_obj": page_obj,
                     "adaptive_pagination": True,
                     "can_refresh": can_refresh,
-                    "can_ai_extract": self._can_ai_extract(request, pin),
+                    **self._ai_extract_context(request, pin),
                     "debug": self._debug_entry(request, "web_search", search_name, from_cache=True, count=len(results)),
                 },
             )
@@ -719,7 +719,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 "page_obj": page_obj,
                 "adaptive_pagination": True,
                 "can_refresh": False,
-                "can_ai_extract": self._can_ai_extract(request, pin),
+                **self._ai_extract_context(request, pin),
                 "debug": self._debug_entry(request, "web_search", search_name, from_cache=False, count=len(search_results)),
             },
         )
@@ -1081,7 +1081,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         context = {
             "article": data,
             "pin": pin,
-            "can_ai_extract": self._can_ai_extract(request, pin),
+            **self._ai_extract_context(request, pin),
             "debug": self._debug_entry(request, "wikipedia", cached.query_key, from_cache=True, count=1),
         }
         return render(request, "dashboard/partials/pins/pin_wikipedia.html", context)
@@ -1125,7 +1125,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             "result": data,
             "address": address,
             "pin": pin,
-            "can_ai_extract": self._can_ai_extract(request, pin),
+            **self._ai_extract_context(request, pin),
             "debug": self._debug_entry(request, "loopnet", cached.query_key, from_cache=True, count=len(data.get("listings") or [])),
         }
         return render(request, "dashboard/partials/pins/pin_loopnet.html", context)
@@ -1293,23 +1293,25 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         context = {"place": data, "debug": self._debug_entry(request, "azure_maps", cached.query_key, from_cache=True, count=1)}
         return render(request, "dashboard/partials/pins/pin_azure_maps.html", context)
 
-    def _can_ai_extract(self, request: HttpRequest, pin: Pin) -> bool:
-        """Whether AI extract buttons should render next to this pin's external links.
+    def _ai_extract_context(self, request: HttpRequest, pin: Pin) -> dict:
+        """Context for the AI extract buttons on this pin's external links.
 
-        Single gate shared by every panel render path (generic ``panel_info``
+        Single source shared by every panel render path (generic ``panel_info``
         dispatch plus the bespoke Wikipedia/LoopNet/web-search panels), so the
-        buttons exist-or-don't consistently across the whole detail page.
+        buttons exist-or-don't - and honor the same per-link cooldown -
+        consistently across the whole detail page.
 
         Args:
             request: The current request (viewer is always the pin's owner here).
             pin: The pin being rendered.
 
         Returns:
-            True when the viewer may start AI link extractions.
+            ``{"can_ai_extract": bool, "recently_extracted_urls": frozenset[str]}``,
+            ready to merge into a render context (``**self._ai_extract_context(...)``).
         """
-        from urbanlens.dashboard.services.ai.link_extraction import link_extraction_available
+        from urbanlens.dashboard.services.ai.link_extraction import ai_extract_button_context
 
-        return link_extraction_available(request.user, pin.profile)
+        return ai_extract_button_context(request.user, pin.profile, pin)
 
     def panel_info(self, request: HttpRequest, pin_slug: str, panel_key: str):
         """
@@ -1357,7 +1359,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         context["debug"] = self._debug_entry(request, panel_key, cached.query_key, from_cache=True, count=panel.debug_count(data))
         # Links a panel marks with ai_extract=True get the AI extraction button.
         context["pin"] = pin
-        context["can_ai_extract"] = self._can_ai_extract(request, pin)
+        context.update(self._ai_extract_context(request, pin))
 
         return render(request, "dashboard/partials/pins/_simple_info_panel.html", context)
 

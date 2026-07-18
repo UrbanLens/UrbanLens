@@ -60,6 +60,10 @@ MAX_PAGE_CHARS = 20_000
 FETCH_TIMEOUT_SECONDS = 20
 MAX_FETCH_BYTES = 2 * 1024 * 1024
 
+#: How long a just-requested link's AI extract button stays hidden, so a user
+#: can't immediately re-request the same link (it still shows for other links).
+RECENT_EXTRACTION_COOLDOWN_DAYS = 7
+
 #: Sanity bounds for extracted values.
 _MIN_YEAR = 1600
 _MAX_SALE_PRICE = Decimal(999999999999)  # matches PinPropertySale max_digits=12
@@ -386,6 +390,53 @@ def extractions_remaining_today(profile: Profile) -> int:
     limit = SiteSettings.get_current().ai_link_extraction_daily_limit
     used = LinkExtraction.objects.started_today(profile).count()
     return max(limit - used, 0)
+
+
+def recently_requested_urls(pin: Pin, *, within_days: int = RECENT_EXTRACTION_COOLDOWN_DAYS) -> frozenset[str]:
+    """URLs on this pin already submitted for AI extraction within the cooldown window.
+
+    The extract button hides for these specific links (any other link on the
+    same pin is unaffected) so the user isn't tempted to immediately re-run an
+    extraction that just started - see :data:`RECENT_EXTRACTION_COOLDOWN_DAYS`.
+
+    Args:
+        pin: The pin whose links are being rendered.
+        within_days: Cooldown window in days.
+
+    Returns:
+        The set of recently-requested URLs, exactly as submitted (matched
+        against the button's own ``url`` verbatim - no normalization).
+    """
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    cutoff = timezone.now() - timedelta(days=within_days)
+    return frozenset(LinkExtraction.objects.filter(pin=pin, created__gte=cutoff).values_list("url", flat=True))
+
+
+def ai_extract_button_context(user, profile: Profile, pin: Pin) -> dict[str, Any]:
+    """Shared context for every AI-extract-button render site.
+
+    Single source of truth for both keys ``_ai_extract_button.html`` reads
+    (``can_ai_extract`` and ``recently_extracted_urls``), so every call site
+    stays consistent by construction instead of by convention.
+
+    Args:
+        user: The authenticated user (subscription features hang off User).
+        profile: The user's profile.
+        pin: The pin whose links are being rendered.
+
+    Returns:
+        ``{"can_ai_extract": bool, "recently_extracted_urls": frozenset[str]}``.
+        The URL set is only computed when extraction is available at all -
+        the button never renders otherwise, so the query would be wasted.
+    """
+    available = link_extraction_available(user, profile)
+    return {
+        "can_ai_extract": available,
+        "recently_extracted_urls": recently_requested_urls(pin) if available else frozenset(),
+    }
 
 
 class LinkExtractionError(Exception):

@@ -6,9 +6,11 @@ same way.
 
 Context: pin, url, can_ai_extract (render nothing at all when the viewer
 lacks the AI feature - per the feature request the button must not exist for
-them, not merely be disabled).
+them, not merely be disabled), recently_extracted_urls (a set/frozenset -
+this specific link hides for a week after being requested, so the user isn't
+tempted to immediately re-run it; every other link on the pin is unaffected).
 {% endcomment %}
-{% if can_ai_extract and pin and url %}
+{% if can_ai_extract and pin and url and url not in recently_extracted_urls %}
 <button type="button" class="ai-extract-btn"
         hx-post="{% url 'pin.ai_extract' pin.slug %}"
         hx-vals='{"url": "{{ url|escapejs }}"}'

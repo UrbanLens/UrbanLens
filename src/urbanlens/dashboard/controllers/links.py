@@ -44,7 +44,7 @@ def _clean_link_input(request) -> tuple[str, str] | HttpResponse:
 
 
 def _render_pin_links(request, pin: Pin) -> HttpResponse:
-    from urbanlens.dashboard.services.ai.link_extraction import link_extraction_available
+    from urbanlens.dashboard.services.ai.link_extraction import ai_extract_button_context
 
     return render(
         request,
@@ -57,7 +57,7 @@ def _render_pin_links(request, pin: Pin) -> HttpResponse:
             "row_id": "pin-links-row",
             "owner_slug": pin.slug,
             "use_dialog": True,
-            "can_ai_extract": link_extraction_available(pin.profile.user, pin.profile),
+            **ai_extract_button_context(pin.profile.user, pin.profile, pin),
         },
     )
 
