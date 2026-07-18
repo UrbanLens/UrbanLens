@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import json
 from datetime import date
+import json
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
@@ -251,3 +251,47 @@ class PinOverviewEditableTitleTests(TestCase):
     def test_title_wiring_posts_to_quick_edit(self) -> None:
         content = self._get().content.decode()
         self.assertIn(f"/dashboard/map/quick-edit/{self.pin.slug}/", content)
+
+
+class PinOverviewEditableDescriptionTests(TestCase):
+    """The pin description renders as a click-to-edit-in-place element, wired to pin.edit."""
+
+    def setUp(self) -> None:
+        self.factory = RequestFactory()
+        self.profile = baker.make(User).profile
+        self.user = self.profile.user
+        self.pin = baker.make(Pin, profile=self.profile, description="A crumbling old mill.")
+
+    def _get(self, pin=None):
+        pin = pin or self.pin
+        req = self.factory.get(f"/map/pin/{pin.slug}/overview/")
+        req.user = self.user
+        with (
+            patch("urbanlens.dashboard.controllers.pin_edit._ensure_location_address"),
+            patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None),
+            patch("urbanlens.dashboard.services.celery.safely_enqueue_task"),
+        ):
+            return PinOverviewView.as_view()(req, pin_slug=pin.slug)
+
+    def test_description_is_marked_editable(self) -> None:
+        content = self._get().content.decode()
+        self.assertIn("pin-description--editable", content)
+
+    def test_description_carries_the_raw_value_for_the_edit_textarea(self) -> None:
+        content = self._get().content.decode()
+        self.assertIn('data-raw-description="A crumbling old mill."', content)
+
+    def test_description_wiring_posts_to_pin_edit(self) -> None:
+        content = self._get().content.decode()
+        self.assertIn(f"/map/pin/{self.pin.slug}/edit/", content)
+
+    def test_empty_description_still_renders_with_a_placeholder(self) -> None:
+        empty_pin = baker.make(Pin, profile=self.profile, description=None)
+        content = self._get(empty_pin).content.decode()
+        self.assertIn("pin-description--empty", content)
+        self.assertIn("Add a description...", content)
+        self.assertIn('data-raw-description=""', content)
+
+    def test_populated_description_does_not_carry_the_empty_modifier(self) -> None:
+        content = self._get().content.decode()
+        self.assertNotIn("pin-description--empty", content)

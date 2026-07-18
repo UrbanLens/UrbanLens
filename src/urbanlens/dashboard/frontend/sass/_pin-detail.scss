@@ -1880,6 +1880,40 @@
     min-width: 8rem;
 }
 
+.pin-description--editable {
+    display: block;
+    cursor: pointer;
+    border-radius: 6px;
+    padding: .1rem .4rem;
+    margin: 0 0 0 -.4rem;
+    transition: background .15s;
+
+    &:hover,
+    &:focus-visible {
+        background: var(--ul-grey-0a);
+        outline: none;
+    }
+
+    &.pin-description--empty {
+        color: var(--ul-grey-5);
+        font-style: italic;
+    }
+}
+
+.pin-description-input {
+    display: block;
+    width: 100%;
+    font: inherit;
+    color: inherit;
+    background: var(--ul-control-bg);
+    border: 1px solid var(--ul-color-accent);
+    border-radius: 6px;
+    padding: .3rem .4rem;
+    margin: 0 0 0 -.4rem;
+    outline: none;
+    resize: vertical;
+}
+
 // -- Combined "Organization" card: Labels + "Add to a list" ----------------
 // One header covers both - labels already have a universal look site-wide, so
 // no separate sub-header is needed to identify them. Adding either a label or

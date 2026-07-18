@@ -142,12 +142,12 @@
                 </div>
                 {% endif %}
             </div>
-            {% if pin.description %}
             <div class="detail-row full-width">
                 <span class="field-label">Description</span>
-                <span class="field-value">{{ pin.description }}</span>
+                <span class="field-value pin-description--editable{% if not pin.description %} pin-description--empty{% endif %}"
+                      tabindex="0" role="button" data-raw-description="{{ pin.description|default:'' }}"
+                      title="Click to edit">{{ pin.description|default:"Add a description..." }}</span>
             </div>
-            {% endif %}
         </div>
         {# Security indicators - only shown when at least one is non-unknown #}
         {% if pin.fences != "unknown" or pin.alarms != "unknown" or pin.cameras != "unknown" or pin.security != "unknown" or pin.signs != "unknown" or pin.vps != "unknown" or pin.plywood != "unknown" or pin.locked != "unknown" %}
@@ -258,6 +258,59 @@
 
     titleEl.addEventListener('click', startEdit);
     titleEl.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); startEdit(); }
+    });
+}());
+
+(function () {
+    var descEl = document.querySelector('#pin-overview .pin-description--editable');
+    if (!descEl) return;
+
+    var editUrl = '{% url "pin.edit" pin.slug %}';
+
+    function startEdit() {
+        if (descEl.querySelector('textarea')) return;
+        var rawDescription = descEl.dataset.rawDescription || '';
+        var originalNode = descEl.cloneNode(true);
+
+        var textarea = document.createElement('textarea');
+        textarea.className = 'pin-description-input';
+        textarea.rows = 4;
+        textarea.name = 'description';
+        textarea.value = rawDescription;
+        textarea.placeholder = 'Your personal notes about this location...';
+        // Saving is delegated to HTMX itself (not a manual fetch, unlike the
+        // title above) since pin.edit returns the full re-rendered overview
+        // partial rather than JSON - letting HTMX swap it in keeps every
+        // other field on this card (e.g. the star ratings) in sync for free.
+        // "changed" skips the request entirely on a no-op blur (e.g. clicking
+        // away without typing), so an explicit blur listener below only needs
+        // to handle reverting the display in that same no-op case.
+        textarea.setAttribute('hx-post', editUrl);
+        textarea.setAttribute('hx-trigger', 'blur changed');
+        textarea.setAttribute('hx-target', '#pin-overview');
+        textarea.setAttribute('hx-swap', 'outerHTML');
+
+        descEl.replaceWith(textarea);
+        htmx.process(textarea);
+        textarea.focus();
+        textarea.select();
+
+        textarea.addEventListener('blur', function () {
+            if (textarea.value === rawDescription) textarea.replaceWith(originalNode);
+        });
+        textarea.addEventListener('keydown', function (e) {
+            e.stopPropagation();
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                textarea.value = rawDescription;
+                textarea.replaceWith(originalNode);
+            }
+        });
+    }
+
+    descEl.addEventListener('click', startEdit);
+    descEl.addEventListener('keydown', function (e) {
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); startEdit(); }
     });
 }());
