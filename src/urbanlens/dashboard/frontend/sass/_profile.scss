@@ -163,15 +163,15 @@
     }
 
     &--friend {
-        background: color-mix(in srgb, $primary-color 10%, transparent);
+        background: $primary-color;
         border-color: color-mix(in srgb, $primary-color 35%, transparent);
-        color: var(--primary-color);
+        color: #fff;
     }
 
     &--pending {
-        background: color-mix(in srgb, $color-amber-500 10%, transparent);
+        background: $color-amber-500;
         border-color: color-mix(in srgb, $color-amber-500 35%, transparent);
-        color: var(--ul-accent-amber-fg);
+        color: #fff;
     }
 
     &--muted {

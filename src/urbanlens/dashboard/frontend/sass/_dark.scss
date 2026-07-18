@@ -460,13 +460,11 @@
         color: var(--ul-grey-7);
     }
 
-    .btn--danger {
-        color: $color-red-300;
-        background: rgba($dk-danger-text, .07);
-        border-color: rgba($dk-danger-text, .25);
-
-        &:hover {
-            background: rgba($dk-danger-text, .13);
+    .btn {
+        &--danger {
+            color: $color-red-300;
+            background: $color-red-1300;
+            border-color: rgba($dk-danger-text, .25);
         }
     }
 
