@@ -147,10 +147,15 @@ def _thread_context(profile: Profile, partner: Profile) -> dict:
     """
     from urbanlens.dashboard.models.direct_messages.mute import DirectMessageMute
 
-    DirectMessage.objects.between(profile, partner).filter(recipient=profile).mark_read()
     clear_email_debounce(partner.pk, profile.pk)
     mark_thread_open(profile.pk, partner.pk)
     thread_messages, has_more_older = thread_page(profile, partner)
+    # Mark read only AFTER loading the page: the loaded instances keep their
+    # in-memory read_at=None, so a "delete as soon as read" message renders
+    # its content on this first open instead of tombstoning the instant the
+    # read mark lands (is_expired_for_recipient keys off read_at). The next
+    # render sees the persisted read_at and tombstones it as intended.
+    DirectMessage.objects.between(profile, partner).filter(recipient=profile).mark_read()
     timeline = build_thread_timeline(thread_messages, _visible_key_events(profile, partner, thread_messages))
     identity = display_identity_for(profile, partner)
     partner_online = False

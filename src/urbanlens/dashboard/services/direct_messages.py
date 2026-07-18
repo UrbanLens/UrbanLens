@@ -279,7 +279,12 @@ def _notify_recipient(message: DirectMessage) -> None:
         pref = message.recipient.notification_preferences.message
     except AttributeError:
         pref = DeliveryPreference.SITE
-    if pref == DeliveryPreference.NONE:
+    # Only SITE and BOTH create an in-app row. A user who chose "Email" chose
+    # email *instead of* the bell (that's what the separate "Notification and
+    # email" option is for) - the unread badge on the messages icon still
+    # reflects the message either way, since it counts DirectMessage rows,
+    # not NotificationLog rows.
+    if pref not in (DeliveryPreference.SITE, DeliveryPreference.BOTH):
         return
 
     if DirectMessageMute.objects.for_pair(message.recipient, message.sender).exists():
@@ -358,6 +363,10 @@ def _email_debounce_key(sender_id: int, recipient_id: int) -> str:
     return f"dm_email_sent_{sender_id}_{recipient_id}"
 
 
+def _text_alert_debounce_key(sender_id: int, recipient_id: int) -> str:
+    return f"dm_text_alert_sent_{sender_id}_{recipient_id}"
+
+
 def is_email_debounced(sender_id: int, recipient_id: int) -> bool:
     """Return True if an email was already sent for this sender/recipient's current unread streak.
 
@@ -371,16 +380,33 @@ def is_email_debounced(sender_id: int, recipient_id: int) -> bool:
     return bool(cache.get(_email_debounce_key(sender_id, recipient_id)))
 
 
-def clear_email_debounce(sender_id: int, recipient_id: int) -> None:
-    """Clear the "already emailed" marker so the next unread streak can email again.
+def is_text_alert_debounced(sender_id: int, recipient_id: int) -> bool:
+    """Return True if a WhatsApp/SMS alert already went out for this unread streak.
 
-    Called whenever `recipient_id` views their conversation with `sender_id`.
+    Args:
+        sender_id: PK of the message sender.
+        recipient_id: PK of the recipient.
+
+    Returns:
+        True if the debounce marker is set.
+    """
+    return bool(cache.get(_text_alert_debounce_key(sender_id, recipient_id)))
+
+
+def clear_email_debounce(sender_id: int, recipient_id: int) -> None:
+    """Clear the "already alerted" markers so the next unread streak can alert again.
+
+    Clears both the email marker and the WhatsApp/SMS marker - viewing the
+    conversation ends the current unread streak for every delayed channel at
+    once. Called whenever `recipient_id` views their conversation with
+    `sender_id`.
 
     Args:
         sender_id: PK of the message sender.
         recipient_id: PK of the recipient who just viewed the thread.
     """
     cache.delete(_email_debounce_key(sender_id, recipient_id))
+    cache.delete(_text_alert_debounce_key(sender_id, recipient_id))
 
 
 def _schedule_message_email(message: DirectMessage) -> None:
@@ -406,6 +432,64 @@ def _schedule_message_email(message: DirectMessage) -> None:
     from urbanlens.dashboard.tasks import send_direct_message_email_if_unread
 
     safely_enqueue_task(send_direct_message_email_if_unread, message.pk, countdown=EMAIL_DELAY_SECONDS)
+
+
+def _schedule_message_text_alerts(message: DirectMessage) -> None:
+    """Queue the delayed WhatsApp/SMS "new message" alert, honoring the recipient's toggles.
+
+    The ``message_whatsapp``/``message_sms`` booleans are independent add-on
+    channels on top of the site/email preference enum (they are billed per
+    message sent, hence the separate opt-ins). Same shape as the email flow:
+    delayed so an active user reads organically first, re-checked for
+    unreadness in the task, debounced per unread streak.
+
+    Args:
+        message: The freshly created, still-unread message.
+    """
+    from urbanlens.dashboard.models.direct_messages.mute import DirectMessageMute
+
+    try:
+        prefs = message.recipient.notification_preferences
+    except AttributeError:
+        return
+    if not (prefs.message_whatsapp or prefs.message_sms):
+        return
+
+    if DirectMessageMute.objects.for_pair(message.recipient, message.sender).exists():
+        return
+
+    from urbanlens.dashboard.services.celery import safely_enqueue_task
+    from urbanlens.dashboard.tasks import send_direct_message_text_alerts_if_unread
+
+    safely_enqueue_task(send_direct_message_text_alerts_if_unread, message.pk, countdown=EMAIL_DELAY_SECONDS)
+
+
+def send_message_text_alerts_now(message: DirectMessage) -> None:
+    """Send the WhatsApp/SMS "new message" alert(s), marking the unread streak as alerted.
+
+    Called by the Celery task once the send delay has elapsed - `message`
+    must still be unread and not already debounced (both checked by the
+    caller). Never includes message content beyond a sender attribution: the
+    text goes to a third-party carrier, so even non-E2EE bodies stay off
+    that channel.
+
+    Args:
+        message: The message to alert about.
+    """
+    from urbanlens.dashboard.services.notification_delivery import send_sms, send_whatsapp
+
+    try:
+        prefs = message.recipient.notification_preferences
+    except AttributeError:
+        return
+
+    cache.set(_text_alert_debounce_key(message.sender_id, message.recipient_id), 1, timeout=_EMAIL_DEBOUNCE_TTL_SECONDS)
+
+    body = f"UrbanLens: new message from {message.sender.username}. Open the site to read it."
+    if prefs.message_whatsapp:
+        send_whatsapp(message.recipient, body)
+    if prefs.message_sms:
+        send_sms(message.recipient, body)
 
 
 def send_message_email_now(message: DirectMessage) -> None:
@@ -586,6 +670,7 @@ def create_direct_message(
     else:
         _notify_recipient(message)
         _schedule_message_email(message)
+        _schedule_message_text_alerts(message)
 
     if not defer_broadcast:
         _broadcast_direct_message(message)
@@ -813,7 +898,9 @@ def conversations_for(profile: Profile) -> list[dict[str, Any]]:
     from urbanlens.dashboard.models.direct_messages.mute import DirectMessageMute
     from urbanlens.dashboard.models.profile.model import Profile as ProfileModel
 
-    rows = list(DirectMessage.objects.conversation_rows(profile))
+    # visible_to: a message this profile deleted from their own view must not
+    # surface as the sidebar's last-message preview or count as unread there.
+    rows = list(DirectMessage.objects.visible_to(profile).conversation_rows(profile))
     if not rows:
         return []
 

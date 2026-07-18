@@ -15,6 +15,7 @@ from __future__ import annotations
 import datetime
 
 from django.contrib.auth.models import User
+from django.urls import reverse
 from django.utils import timezone
 from model_bakery import baker
 
@@ -29,14 +30,14 @@ def _profile():
     return baker.make(User).profile
 
 
-def _make_message(sender, recipient, *, sender_delete_after, read_at=None, **extra) -> DirectMessage:
+def _make_message(sender, recipient, *, sender_delete_after, read_at=None, body="hello", **extra) -> DirectMessage:
     return baker.make(
         DirectMessage,
         sender=sender,
         recipient=recipient,
         sender_delete_after=sender_delete_after,
         read_at=read_at,
-        body="hello",
+        body=body,
         **extra,
     )
 
@@ -146,3 +147,54 @@ class HardDeleteExpiredDirectMessagesTaskTests(TestCase):
     def test_returns_zero_and_no_op_when_nothing_is_due(self) -> None:
         _make_message(self.sender, self.recipient, sender_delete_after=MessageRetentionChoice.NEVER)
         self.assertEqual(hard_delete_expired_direct_messages(), 0)
+
+
+class WhenReadFirstOpenTests(TestCase):
+    """A "delete as soon as read" message is readable exactly once on a cold open.
+
+    Regression test: _thread_context used to mark the thread read BEFORE
+    loading the page, so is_expired_for_recipient was already True by render
+    time and a recipient who opened the conversation cold only ever saw the
+    "no longer available" tombstone - the content was destroyed by the act of
+    trying to read it. The read mark must land after the page is loaded, so
+    the first render shows the content and only later renders tombstone it.
+    """
+
+    SECRET = "the water tower ladder is on the north side"
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.sender = _profile()
+        self.recipient = _profile()
+        self.sender.ensure_slug()
+        self.recipient.ensure_slug()
+        self.message = _make_message(
+            self.sender,
+            self.recipient,
+            sender_delete_after=MessageRetentionChoice.WHEN_READ,
+            read_at=None,
+            body=self.SECRET,
+        )
+        self.url = reverse("messages.conversation", kwargs={"profile_slug": self.sender.slug})
+
+    def test_first_open_shows_the_content_and_marks_it_read(self) -> None:
+        self.client.force_login(self.recipient.user)
+        response = self.client.get(self.url)
+        self.assertContains(response, self.SECRET)
+        self.message.refresh_from_db()
+        self.assertIsNotNone(self.message.read_at)
+
+    def test_second_open_tombstones_it(self) -> None:
+        self.client.force_login(self.recipient.user)
+        self.client.get(self.url)
+        response = self.client.get(self.url)
+        self.assertNotContains(response, self.SECRET)
+        self.assertContains(response, "This message is no longer available")
+
+    def test_sender_still_sees_their_own_message_after_it_expires(self) -> None:
+        self.client.force_login(self.recipient.user)
+        self.client.get(self.url)
+        self.client.logout()
+        self.client.force_login(self.sender.user)
+        response = self.client.get(reverse("messages.conversation", kwargs={"profile_slug": self.recipient.slug}))
+        self.assertContains(response, self.SECRET)

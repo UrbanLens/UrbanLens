@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any
 from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import IntegrityError, transaction
-from django.http import HttpResponseBadRequest, JsonResponse
+from django.http import Http404, HttpResponseBadRequest, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.views import View
 
@@ -261,12 +261,22 @@ class E2EEConversationKeyView(LoginRequiredMixin, View):
         Returns:
             JSON ``{keys: [{version, wrapped_key}], latest}`` (``latest`` is 0
             when no key exists yet).
+
+        Raises:
+            Http404: When no keys exist for the pair and no DM relationship is
+                permitted in either direction - identical to an unknown slug,
+                so this endpoint can't be used to probe which profile slugs
+                exist. Existing keys are always returned regardless of the
+                current relationship: a participant must stay able to decrypt
+                their history even after a block or privacy change.
         """
         profile = _get_profile(request)
         partner = get_object_or_404(Profile, slug=profile_slug)
         if partner.pk == profile.pk:
             return HttpResponseBadRequest("No self-conversations")
         rows = list(ConversationKey.objects.between(profile, partner))
+        if not rows and not can_direct_message(profile, partner) and not can_direct_message(partner, profile):
+            raise Http404
         keys = [{"version": row.version, "wrapped_key": row.wrapped_for(profile.pk)} for row in rows]
         return JsonResponse({"keys": keys, "latest": rows[-1].version if rows else 0})
 

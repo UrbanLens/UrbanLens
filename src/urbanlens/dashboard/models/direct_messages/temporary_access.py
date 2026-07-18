@@ -44,14 +44,31 @@ class DirectMessageTemporaryAccess(abstract.DashboardModel):
     def grants_access(cls, profile_id: int, viewer_id: int) -> bool:
         """Return True if an active grant lets `viewer_id` view `profile_id`'s profile.
 
+        A BLOCKED relationship in either direction vetoes the grant even
+        while it is unexpired - a block placed after the recommendation was
+        made must kill the access immediately, and recommendations to a
+        blocked party are refused at creation time as well (see
+        ``services.direct_message_shares.recommend_friend_in_message``).
+
         Args:
             profile_id: The profile being viewed.
             viewer_id: The profile requesting access.
 
         Returns:
-            True when an unexpired grant exists.
+            True when an unexpired grant exists and neither profile has
+            blocked the other.
         """
-        return cls.objects.filter(profile_id=profile_id, granted_to_id=viewer_id, expires_at__gt=timezone.now()).exists()
+        if not cls.objects.filter(profile_id=profile_id, granted_to_id=viewer_id, expires_at__gt=timezone.now()).exists():
+            return False
+
+        from django.db.models import Q
+
+        from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
+
+        return not Friendship.objects.filter(
+            Q(from_profile_id=profile_id, to_profile_id=viewer_id) | Q(from_profile_id=viewer_id, to_profile_id=profile_id),
+            status=FriendshipStatus.BLOCKED,
+        ).exists()
 
     class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_dm_temporary_access"

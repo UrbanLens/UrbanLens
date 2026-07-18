@@ -1424,6 +1424,33 @@ def send_direct_message_email_if_unread(message_id: int) -> None:
     send_message_email_now(message)
 
 
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def send_direct_message_text_alerts_if_unread(message_id: int) -> None:
+    """Send the delayed WhatsApp/SMS "new message" alert, unless read or already alerted.
+
+    Scheduled by ``services.direct_messages._schedule_message_text_alerts``
+    with a countdown, mirroring the delayed-email flow: no-ops if the message
+    was read in the meantime or an earlier message in the same unread streak
+    already triggered an alert (``send_message_text_alerts_now`` sets that
+    marker; viewing the conversation clears it).
+
+    Args:
+        message_id: PK of the message to check and possibly alert about.
+    """
+    from urbanlens.dashboard.models.direct_messages.model import DirectMessage
+    from urbanlens.dashboard.services.direct_messages import is_text_alert_debounced, send_message_text_alerts_now
+
+    try:
+        message = DirectMessage.objects.select_related("sender", "recipient__user").get(pk=message_id)
+    except DirectMessage.DoesNotExist:
+        return
+    if message.read_at is not None:
+        return
+    if is_text_alert_debounced(message.sender_id, message.recipient_id):
+        return
+    send_message_text_alerts_now(message)
+
+
 @shared_task
 def run_link_extraction(extraction_id: int) -> None:
     """Execute one queued AI link-extraction run (fetch, AI call, apply, notify).

@@ -31,6 +31,23 @@ profile via boundary-matching" helper that both `wiki_access.py` and
 
 ---
 
+## Most per-event WhatsApp/SMS notification toggles are stored but never delivered (found 2026-07-18)
+
+`NotificationPreference` has `*_whatsapp` opt-in booleans for ~10 event types (trip_updated,
+friend_request, comment_reply, comment_liked, friend_accepted, added_to_trip, wiki_updated,
+pin_shared, visit_suggested, ...), settable in Settings → Account — but the only delivery code
+that ever reads any of them is the safety check-in path (`services/safety.py:518-521`) and, as of
+the 2026-07-18 DM audit fixes, the new-message path (`services/direct_messages.py`
+`_schedule_message_text_alerts` → `tasks.send_direct_message_text_alerts_if_unread`). Every other
+toggle silently does nothing: a user who enables "trip updated → WhatsApp" never receives
+anything. Fix pattern to follow: the DM implementation (delayed Celery task, re-check relevance,
+per-streak debounce, dispatch via `services/notification_delivery.py`). Alternatively, if these
+channels aren't wanted for a given event type, remove its toggle from the settings UI rather than
+leaving a dead control. `docs/FEATURES.md`'s notification-matrix description was corrected to
+reflect current reality.
+
+---
+
 ## ~~Profile hero renders the bio/ghost-viewer content twice under certain conditions~~ (RESOLVED 2026-07-18 - both were test false-positives, not rendering bugs)
 
 Originally logged as two suspected profile-page rendering bugs surfaced by failing tests.

@@ -499,3 +499,55 @@ class ExportTests(TestCase):
         self.assertTrue(rows[0]["encrypted"])
         self.assertTrue(rows[0]["ciphertext"])
         self.assertIn("note", rows[0])
+
+
+# -- Conversation-key GET gating --------------------------------------------------
+
+
+class ConversationKeyGetOracleTests(TestCase):
+    """The conversation-key GET must not be a profile-slug existence oracle.
+
+    Regression: the GET returned 200-with-empty-keys for any existing profile
+    slug (no relationship required) and a 404 only for unknown slugs, letting
+    a logged-in user enumerate which slugs exist - which ConversationView
+    deliberately prevents. With no keys and no permitted DM relationship in
+    either direction, the response must now be the same 404 an unknown slug
+    produces. Existing keys stay fetchable regardless of the current
+    relationship, because a participant must still decrypt their history
+    after a block or privacy change.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.me = _profile()
+        self.stranger = _profile()  # default visibility, nothing in common: no DM permitted either way
+        self.stranger.ensure_slug()
+        self.client.force_login(self.me.user)
+
+    def _get(self, slug: str):
+        return self.client.get(reverse("e2ee.conversation_key", kwargs={"profile_slug": slug}))
+
+    def test_unrelated_existing_slug_matches_unknown_slug(self) -> None:
+        existing = self._get(self.stranger.slug)
+        unknown = self._get("no-such-profile-slug")
+        self.assertEqual(existing.status_code, 404)
+        self.assertEqual(unknown.status_code, 404)
+
+    def test_messageable_partner_without_keys_still_gets_empty_payload(self) -> None:
+        _open_dms(self.me, self.stranger)
+        response = self._get(self.stranger.slug)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"keys": [], "latest": 0})
+
+    def test_existing_keys_stay_fetchable_without_a_current_relationship(self) -> None:
+        low, high = (self.me, self.stranger) if self.me.pk < self.stranger.pk else (self.stranger, self.me)
+        ConversationKey.objects.create(
+            profile_low=low,
+            profile_high=high,
+            wrapped_for_low=_b64(b"low-copy"),
+            wrapped_for_high=_b64(b"high-copy"),
+            version=1,
+        )
+        response = self._get(self.stranger.slug)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["latest"], 1)

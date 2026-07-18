@@ -367,6 +367,10 @@ def _notify_group_message(message: GroupMessage) -> None:
             pref = membership.profile.notification_preferences.message
         except AttributeError:
             pref = DeliveryPreference.SITE
+        # Unlike the 1:1 path (which suppresses the in-app row for EMAIL-only
+        # users because a delayed email actually goes out instead), group
+        # messages have no email channel - so anything short of NONE still
+        # gets the in-app row rather than silently nothing.
         if pref == DeliveryPreference.NONE:
             continue
         NotificationLog.objects.create(

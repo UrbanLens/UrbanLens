@@ -12,6 +12,8 @@ Covers:
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 from django.urls import reverse
 from hypothesis import HealthCheck, given, settings, strategies as st
 from model_bakery import baker
@@ -656,3 +658,167 @@ class ThreadMapAttachmentRenderingTests(TestCase):
         # message - assert it never comes back.
         self.assertNotIn('id="comment-map-data-"', content)
         self.assertNotIn('id="comment-map-dialog-"', content)
+
+
+class NotificationChannelPreferenceTests(TestCase):
+    """The `message` delivery preference actually selects the channels used.
+
+    Regression: _notify_recipient only skipped the in-app row for NONE, so a
+    user who chose "Email" (not "Notification and email") still got bell
+    notifications. EMAIL must mean email only; the messages icon's unread
+    badge still reflects the message either way (it counts DirectMessage
+    rows, not NotificationLog rows).
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.sender = _profile()
+        self.recipient = _profile()
+        _set_dm_visibility(self.recipient, VisibilityChoice.ANYONE)
+
+    def _message_notifications(self):
+        return NotificationLog.objects.filter(profile=self.recipient, notification_type=NotificationType.MESSAGE)
+
+    def _set_pref(self, value: str) -> None:
+        NotificationPreference.objects.update_or_create(profile=self.recipient, defaults={"message": value})
+
+    def test_site_pref_creates_in_app_row(self) -> None:
+        from urbanlens.dashboard.models.notifications.meta import DeliveryPreference
+
+        self._set_pref(DeliveryPreference.SITE)
+        create_direct_message(self.sender, self.recipient, "hi")
+        self.assertEqual(self._message_notifications().count(), 1)
+
+    def test_both_pref_creates_in_app_row(self) -> None:
+        from urbanlens.dashboard.models.notifications.meta import DeliveryPreference
+
+        self._set_pref(DeliveryPreference.BOTH)
+        create_direct_message(self.sender, self.recipient, "hi")
+        self.assertEqual(self._message_notifications().count(), 1)
+
+    def test_email_only_pref_creates_no_in_app_row(self) -> None:
+        from urbanlens.dashboard.models.notifications.meta import DeliveryPreference
+
+        self._set_pref(DeliveryPreference.EMAIL)
+        create_direct_message(self.sender, self.recipient, "hi")
+        self.assertEqual(self._message_notifications().count(), 0)
+
+    def test_none_pref_creates_no_in_app_row(self) -> None:
+        from urbanlens.dashboard.models.notifications.meta import DeliveryPreference
+
+        self._set_pref(DeliveryPreference.NONE)
+        create_direct_message(self.sender, self.recipient, "hi")
+        self.assertEqual(self._message_notifications().count(), 0)
+
+
+class MessageTextAlertTests(TestCase):
+    """The message_whatsapp/message_sms toggles actually deliver.
+
+    Regression: the preference booleans were stored and settable but no
+    delivery code ever read them - enabling "new message -> WhatsApp/SMS"
+    silently did nothing. The send path now schedules a delayed task
+    (mirroring the delayed-email flow) that re-checks unreadness and a
+    per-streak debounce before dispatching through notification_delivery.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.sender = _profile()
+        self.recipient = _profile()
+        _set_dm_visibility(self.recipient, VisibilityChoice.ANYONE)
+
+    def _set_toggles(self, *, whatsapp: bool = False, sms: bool = False) -> None:
+        NotificationPreference.objects.update_or_create(profile=self.recipient, defaults={"message_whatsapp": whatsapp, "message_sms": sms})
+
+    def test_send_schedules_the_text_alert_task_when_enabled(self) -> None:
+        self._set_toggles(whatsapp=True)
+        with patch("urbanlens.dashboard.services.celery.safely_enqueue_task") as mock_enqueue:
+            create_direct_message(self.sender, self.recipient, "hi")
+        scheduled = {call.args[0].__name__ for call in mock_enqueue.call_args_list}
+        self.assertIn("send_direct_message_text_alerts_if_unread", scheduled)
+
+    def test_send_does_not_schedule_when_both_toggles_off(self) -> None:
+        self._set_toggles()
+        with patch("urbanlens.dashboard.services.celery.safely_enqueue_task") as mock_enqueue:
+            create_direct_message(self.sender, self.recipient, "hi")
+        scheduled = {call.args[0].__name__ for call in mock_enqueue.call_args_list}
+        self.assertNotIn("send_direct_message_text_alerts_if_unread", scheduled)
+
+    def test_alert_dispatches_per_enabled_channel_and_sets_debounce(self) -> None:
+        from urbanlens.dashboard.services.direct_messages import is_text_alert_debounced, send_message_text_alerts_now
+
+        self._set_toggles(whatsapp=True, sms=False)
+        message = create_direct_message(self.sender, self.recipient, "hi")
+        with (
+            patch("urbanlens.dashboard.services.notification_delivery.send_whatsapp") as mock_wa,
+            patch("urbanlens.dashboard.services.notification_delivery.send_sms") as mock_sms,
+        ):
+            send_message_text_alerts_now(message)
+        mock_wa.assert_called_once()
+        mock_sms.assert_not_called()
+        self.assertTrue(is_text_alert_debounced(self.sender.pk, self.recipient.pk))
+
+    def test_alert_body_never_contains_message_content(self) -> None:
+        from urbanlens.dashboard.services.direct_messages import send_message_text_alerts_now
+
+        self._set_toggles(sms=True)
+        message = create_direct_message(self.sender, self.recipient, "secret rooftop door code 4711")
+        with patch("urbanlens.dashboard.services.notification_delivery.send_sms") as mock_sms:
+            send_message_text_alerts_now(message)
+        body = mock_sms.call_args.args[1]
+        self.assertNotIn("4711", body)
+        self.assertIn(self.sender.username, body)
+
+    def test_task_no_ops_once_the_message_is_read(self) -> None:
+        from django.utils import timezone
+
+        from urbanlens.dashboard.tasks import send_direct_message_text_alerts_if_unread
+
+        self._set_toggles(whatsapp=True)
+        message = create_direct_message(self.sender, self.recipient, "hi")
+        DirectMessage.objects.filter(pk=message.pk).update(read_at=timezone.now())
+        with patch("urbanlens.dashboard.services.notification_delivery.send_whatsapp") as mock_wa:
+            send_direct_message_text_alerts_if_unread(message.pk)
+        mock_wa.assert_not_called()
+
+
+class SelfDeletedMessageVisibilityTests(TestCase):
+    """Messages deleted-for-self stay out of the sidebar preview and unread badge.
+
+    Regression: conversation_rows/unread_conversation_count ran on the raw
+    involving() set, so a message the recipient had removed from their own
+    view could still light the navbar badge and surface as the sidebar's
+    last-message preview.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.me = _profile()
+        self.partner = _profile()
+        _set_dm_visibility(self.me, VisibilityChoice.ANYONE)
+        _set_dm_visibility(self.partner, VisibilityChoice.ANYONE)
+
+    def test_self_deleted_unread_message_does_not_count_as_unread(self) -> None:
+        from urbanlens.dashboard.services.direct_messages import delete_message_for_self
+
+        message = create_direct_message(self.partner, self.me, "hi")
+        self.assertEqual(DirectMessage.objects.unread_conversation_count(self.me), 1)
+        delete_message_for_self(message, self.me)
+        self.assertEqual(DirectMessage.objects.unread_conversation_count(self.me), 0)
+
+    def test_self_deleted_message_is_not_the_sidebar_preview(self) -> None:
+        from urbanlens.dashboard.services.direct_messages import delete_message_for_self
+
+        first = create_direct_message(self.partner, self.me, "keep me")
+        second = create_direct_message(self.partner, self.me, "hide me")
+        delete_message_for_self(second, self.me)
+        conversations = conversations_for(self.me)
+        self.assertEqual(len(conversations), 1)
+        self.assertEqual(conversations[0]["last_message"].pk, first.pk)
+
+    def test_conversation_disappears_when_every_message_is_self_deleted(self) -> None:
+        from urbanlens.dashboard.services.direct_messages import delete_message_for_self
+
+        only = create_direct_message(self.partner, self.me, "hi")
+        delete_message_for_self(only, self.me)
+        self.assertEqual(conversations_for(self.me), [])

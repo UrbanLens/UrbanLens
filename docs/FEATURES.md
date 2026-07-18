@@ -168,7 +168,7 @@ relationships, bulk edit and bulk convert between kinds, per-user color/icon cus
 - Real-time push over WebSockets (`ws/notifications/`) with desktop `Notification` API support and
   a 60s polling fallback
 - Outbound email notifications with per-role rate caps (hourly/daily/monthly) and safety controls
-- **11-event × 4-channel notification matrix** (Settings → Account): each event type (new message, friend request, check-in alert, AI task completion, etc.) can be independently configured for in-app, email, WhatsApp, and SMS delivery. WhatsApp/SMS require a phone number on the profile.
+- **11-event × 4-channel notification matrix** (Settings → Account): each event type (new message, friend request, check-in alert, AI task completion, etc.) can be independently configured for in-app, email, WhatsApp, and SMS delivery. WhatsApp/SMS require a phone number on the profile. **Delivery caveat:** WhatsApp/SMS dispatch is currently implemented only for safety check-in alerts and new direct messages — the other event types' WhatsApp toggles are stored but not yet wired to a sender (see `docs/PROBLEMS.md`).
 - Admin-only critical alerting via email + Gotify push (distinct from user-facing notifications)
 
 ## Custom Fields
@@ -233,6 +233,13 @@ DRF `ModelViewSet`s under `/dashboard/rest/`, session-authenticated:
 ## Direct Messaging
 
 - End-to-end encrypted 1:1 direct messages and named group chats
+- **Group-chat scope (deliberate, as of 2026-07-18):** group chats support text (plaintext or
+  E2EE), pin sharing (one provenance-tracked PinShare per member), rename, creator-managed
+  membership, per-member mute, and unread tracking. They intentionally do *not* yet have 1:1
+  parity for: reactions, image attachments, replies/quotes, map attachments, coordinate/address
+  detection, disappearing messages, typing indicators, read receipts, or delete-for-self (only
+  the sender's delete-for-everyone exists). A group whose creator leaves becomes permanently
+  unmanaged (no ownership transfer). Extending any of these is a product decision, not a bug fix.
 - Rich compose toolbar: image attachment, share location/map, share pin, @mention, emoji
 - Read receipts, online status indicator, typing indicator (visibility of each configurable per user)
 - Per-message emoji reactions

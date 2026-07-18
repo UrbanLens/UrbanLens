@@ -348,3 +348,130 @@ class ThreadImagePermissionSerializationTests(TestCase):
         DirectMessage.objects.filter(pk=message.pk).update(images_revealed=True)
         message.refresh_from_db()
         self.assertTrue(serialize_direct_message(message)["images_revealed"])
+
+
+class ShareCompositeAtomicityTests(TestCase):
+    """A refused message rolls back the whole share composite.
+
+    Regression: share_pin_in_message created the PinShare (with its exposure
+    record) and invite_to_trip_in_message created the TripMembership BEFORE
+    calling create_direct_message. A recipient whose DM visibility rejects
+    the sender despite the friendship (e.g. "No one") made the message raise
+    PermissionError - leaving an orphaned share offer / trip membership the
+    recipient never consented to and no message ever carried.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.sender = _profile()
+        self.recipient = _profile()
+        _make_accepted_friendship(self.sender, self.recipient)
+        # Friends, but DMs closed: the share/invite pre-checks pass while the
+        # message itself is refused.
+        _set_dm_visibility(self.recipient, VisibilityChoice.NO_ONE)
+        self.pin = baker.make(Pin, profile=self.sender, parent_pin=None)
+
+    def test_refused_pin_share_message_leaves_no_pin_share_behind(self) -> None:
+        from urbanlens.dashboard.models.pin_share.model import PinShare
+
+        with self.assertRaises(PermissionError):
+            share_pin_in_message(self.sender, self.recipient, self.pin, "check this out")
+        self.assertFalse(PinShare.objects.filter(from_profile=self.sender, to_profile=self.recipient).exists())
+        self.assertFalse(DirectMessage.objects.between(self.sender, self.recipient).exists())
+
+    def test_refused_trip_invite_message_leaves_no_membership_behind(self) -> None:
+        from urbanlens.dashboard.models.trips.model import Trip, TripMembership
+        from urbanlens.dashboard.services.direct_message_shares import invite_to_trip_in_message
+
+        trip = Trip.objects.create(name="My Trip", creator=self.sender)
+        TripMembership.objects.create(trip=trip, profile=self.sender)
+
+        with self.assertRaises(PermissionError):
+            invite_to_trip_in_message(self.sender, self.recipient, trip, "join us")
+        self.assertFalse(TripMembership.objects.filter(trip=trip, profile=self.recipient).exists())
+        self.assertFalse(DirectMessage.objects.between(self.sender, self.recipient).exists())
+
+    def test_refused_recommendation_leaves_no_grant_behind(self) -> None:
+        from urbanlens.dashboard.models.direct_messages.temporary_access import DirectMessageTemporaryAccess
+        from urbanlens.dashboard.services.direct_message_shares import recommend_friend_in_message
+
+        recommended = _profile()
+        _make_accepted_friendship(self.sender, recommended)
+        with self.assertRaises(PermissionError):
+            recommend_friend_in_message(self.sender, self.recipient, recommended, "meet my friend")
+        self.assertFalse(DirectMessageTemporaryAccess.objects.filter(profile=recommended, granted_to=self.recipient).exists())
+
+
+class RecommendationBlockTests(TestCase):
+    """A block between the recommended profile and the recipient vetoes the recommendation.
+
+    Regression: recommending X to R when X had blocked R (or vice versa)
+    still created the DirectMessageTemporaryAccess grant - handing R a
+    24-hour window of profile access the block exists to prevent.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.sender = _profile()
+        self.recipient = _profile()
+        self.recommended = _profile()
+        _make_accepted_friendship(self.sender, self.recipient)
+        _make_accepted_friendship(self.sender, self.recommended)
+        _set_dm_visibility(self.recipient, VisibilityChoice.ANYONE)
+
+    def _block(self, blocker, blocked) -> None:
+        Friendship.objects.create(
+            from_profile=blocker,
+            to_profile=blocked,
+            status=FriendshipStatus.BLOCKED,
+            relationship_type=FriendshipType.FRIEND,
+            permissions=Permission.VIEW_PROFILE,
+        )
+
+    def test_recommending_someone_who_blocked_the_recipient_is_refused(self) -> None:
+        from urbanlens.dashboard.models.direct_messages.temporary_access import DirectMessageTemporaryAccess
+        from urbanlens.dashboard.services.direct_message_shares import recommend_friend_in_message
+
+        self._block(self.recommended, self.recipient)
+        with self.assertRaises(PermissionError):
+            recommend_friend_in_message(self.sender, self.recipient, self.recommended, "meet them")
+        self.assertFalse(DirectMessageTemporaryAccess.objects.filter(profile=self.recommended, granted_to=self.recipient).exists())
+        self.assertFalse(DirectMessage.objects.between(self.sender, self.recipient).exists())
+
+    def test_block_in_the_other_direction_is_also_refused(self) -> None:
+        from urbanlens.dashboard.services.direct_message_shares import recommend_friend_in_message
+
+        self._block(self.recipient, self.recommended)
+        with self.assertRaises(PermissionError):
+            recommend_friend_in_message(self.sender, self.recipient, self.recommended, "meet them")
+
+    def test_block_refusal_is_indistinguishable_from_recommendations_disabled(self) -> None:
+        """The sender must not be able to tell "blocked" apart from "opted out"."""
+        from urbanlens.dashboard.services.direct_message_shares import recommend_friend_in_message
+
+        other = _profile()
+        _make_accepted_friendship(self.sender, other)
+        Profile.objects.filter(pk=other.pk).update(allow_friend_recommendations=False)
+        other.refresh_from_db()
+        try:
+            recommend_friend_in_message(self.sender, self.recipient, other, "meet them")
+            self.fail("expected PermissionError")
+        except PermissionError as exc:
+            opt_out_text = str(exc).replace(other.username, "{name}")
+
+        self._block(self.recommended, self.recipient)
+        try:
+            recommend_friend_in_message(self.sender, self.recipient, self.recommended, "meet them")
+            self.fail("expected PermissionError")
+        except PermissionError as exc:
+            blocked_text = str(exc).replace(self.recommended.username, "{name}")
+        self.assertEqual(opt_out_text, blocked_text)
+
+    def test_block_placed_after_the_grant_kills_access_immediately(self) -> None:
+        from urbanlens.dashboard.models.direct_messages.temporary_access import DirectMessageTemporaryAccess
+        from urbanlens.dashboard.services.direct_message_shares import recommend_friend_in_message
+
+        recommend_friend_in_message(self.sender, self.recipient, self.recommended, "meet them")
+        self.assertTrue(DirectMessageTemporaryAccess.grants_access(self.recommended.pk, self.recipient.pk))
+        self._block(self.recommended, self.recipient)
+        self.assertFalse(DirectMessageTemporaryAccess.grants_access(self.recommended.pk, self.recipient.pk))

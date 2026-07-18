@@ -84,9 +84,11 @@ class DirectMessageQuerySet(abstract.DashboardQuerySet):
             profile: The recipient profile.
 
         Returns:
-            The number of distinct senders with an unread message to `profile`.
+            The number of distinct senders with an unread message to `profile`,
+            not counting messages the profile deleted from their own view (a
+            hidden message must not keep the navbar badge lit).
         """
-        return self.unread_for(profile).values("sender_id").distinct().count()
+        return self.visible_to(profile).unread_for(profile).values("sender_id").distinct().count()
 
     def due_for_hard_delete(self) -> Self:
         """Return messages whose disappearing-message timer has fully elapsed.
