@@ -17,6 +17,7 @@ from django.db.models import (
     ImageField,
     Index,
     IntegerField,
+    JSONField,
     OneToOneField,
     SlugField,
     TextChoices,
@@ -392,6 +393,13 @@ class Profile(abstract.PublicDashboardModel):
         default="",
         help_text="Comma-separated name-provider slugs, highest priority first. Blank uses the site-wide default.",
     )
+
+    # Ordered list of enabled homepage widget keys (see services.home_widgets),
+    # e.g. ["stats", "recent_photos", ...]. Empty = never customized - the
+    # homepage falls back to every widget, in the registry's default order.
+    # Widgets omitted here are simply disabled, not deleted - re-enabling one
+    # in the customize dialog just adds its key back.
+    home_widget_layout = JSONField(default=list, blank=True)
 
     # Set when the user requests account deletion; cleared on cancel/undo.
     # A non-null value means the account is scheduled for hard deletion at

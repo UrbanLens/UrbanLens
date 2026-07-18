@@ -1,0 +1,30 @@
+{% comment %}
+Recent photos widget. Context: home_recent_photos (Image queryset, up to 8).
+Opens the shared lightbox (dashboard/partials/_photo_lightbox.html, included by
+overview.html) via homeOpenLightbox() (overview.html's script block).
+{% endcomment %}
+{% if home_recent_photos %}
+<section class="home-widget ul-section" data-widget-key="recent_photos">
+    <div class="home-widget-heading">
+        <span class="home-widget-icon"><i class="material-symbols-outlined">photo_library</i></span>
+        <div><h3>Recent photos</h3><p>Your latest uploads from Memories.</p></div>
+        <a href="{% url 'memories.photos' %}" class="home-widget-link">View all</a>
+    </div>
+    <ul class="home-photo-strip photos-grid">
+        {% for img in home_recent_photos %}
+        <li class="photo-tile" data-id="{{ img.pk }}" data-url="{{ img.image.url }}"
+            data-caption="{{ img.caption|default:'' }}"
+            data-author="{{ img.author|default:'' }}"
+            data-copyright="{{ img.copyright|default:'' }}"
+            data-source-url="{{ img.source_url|default:'' }}"
+            data-taken-at="{{ img.taken_at|date:'c'|default:'' }}">
+            <button type="button" class="photo-tile-btn" onclick="homeOpenLightbox({{ img.pk }})">
+                <img src="{{ img.image.url }}" alt="{{ img.caption|default:'Photo' }}" loading="lazy"
+                     onerror="urbanlensMediaThumbFallback(this, 'broken_image', 'photo-tile-fallback')">
+                {% if img.latitude and img.longitude %}<span class="photo-tile-badge" title="Has location"><i class="material-symbols-outlined">place</i></span>{% endif %}
+            </button>
+        </li>
+        {% endfor %}
+    </ul>
+</section>
+{% endif %}

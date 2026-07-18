@@ -182,3 +182,44 @@ trip correctly - see docs/prompts/completed.md's "Data export completeness" entr
 
 If a future session tackles this, `comments`/`photos` are the more tractable pair (fix the
 target-reference shape first, in export.py, so the importer has something reliable to match on).
+
+---
+
+## Property records: only Tier 1 (ArcGIS REST/Socrata) is implemented; Tiers 2-4 are stubs
+
+`docs/property-records-plan.md` designs a 4-tier fallback pipeline for county property/tax
+records. `dashboard/plugins/builtin/property_records.py` and
+`services/apis/property_records/orchestrator.py` implement the framework end-to-end (jurisdiction
+registry, Census-based jurisdiction resolution, generic ArcGIS/Socrata Tier 1 client with
+heuristic field-name mapping, pin-detail panel, background enrichment writing
+`OwnerSource.OFFICIAL` `WikiOwner`/`WikiPropertySale` rows, and a `discover_property_jurisdiction`
+management command for Tier 1 endpoint discovery) - but only Tier 1 actually retrieves data.
+A `PropertyJurisdiction` row whose `adapter_type` is `KNOWN_VENDOR` or `CUSTOM_SCRAPER` makes
+`orchestrator.get_property_record` raise `PropertyRecordsUnavailableError` with reason
+`tier2_not_implemented`/`tier3_not_implemented` rather than silently returning nothing - by
+design (see the orchestrator's module docstring) - but no county is actually retrievable through
+either tier yet, and the registry starts every newly-resolved county at `UNKNOWN` (adapter_type),
+which the pipeline treats identically to "unresearched."
+
+**What's left**, roughly in the plan's own suggested build order (section 5):
+
+- **Tier 2 (known vendor platforms)**: one adapter per assessor-site vendor (Tyler Technologies,
+  BS&A Software, DevNet/Patriot Properties, qPublic/Schneider Geospatial, ...) - each covers many
+  counties with near-identical HTML, so ROI per adapter is high. Needs vendor fingerprinting
+  (URL pattern / page signature) to route a `PropertyJurisdiction.vendor` value to the right
+  adapter; the model field already exists but nothing writes or reads it yet.
+- **Tier 3 (bespoke scraper + LLM-assisted recipe)**: for counties with a unique custom site.
+  `PropertyJurisdiction.scrape_recipe` (JSONField) is reserved for this - a bounded description
+  of which form fields/selectors to use, cached once solved so steady-state lookups skip the LLM
+  entirely (see the plan's compliance section on why the recipe's *data* values must stay
+  strictly allowlisted, mirroring `services/ai/link_extraction.py`'s registry pattern - never let
+  an AI-authored recipe submit arbitrary values to a form).
+- **Per-field confidence merging** (plan section 4): today confidence/source is tracked at the
+  whole-record level (`schema.PropertyRecord.source`/`confidence`) because only one tier exists to
+  disagree with another. Once Tier 2/3 exist, a real property might get, say, geometry from one
+  tier and tax-payment status from another - `normalize.py`'s module docstring flags this as the
+  reason per-field provenance isn't built yet.
+- The `discover_property_jurisdiction` command's AI-assisted fallback
+  (`services/apis/property_records/discovery.py`) has never been run against a real search
+  provider/AI backend end-to-end (only unit-tested with mocks) - worth a smoke-test pass once a
+  county is deliberately targeted.

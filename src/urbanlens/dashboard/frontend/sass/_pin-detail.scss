@@ -1498,16 +1498,20 @@
 // Secondary-to-our-core-purpose data, condensed into one card with tabs
 // instead of four standalone auto-loading cards - each tab's content is
 // fetched only once clicked (see pin.panel / _pin_plugin_tabs.html).
-.pin-plugin-tabs-nav {
+.card-tabs {
     display: flex;
     flex-wrap: wrap;
     gap: 2px;
     padding: 0 $space-md;
     border-bottom: 1px solid var(--ul-border);
-    background: rgba(0,0,0,0.04);
+    background: rgba(0,0,0,0.04);   
+    
+    &::-webkit-scrollbar {
+        display: none;
+    }
 }
 
-.pin-plugin-tab-btn {
+.card-tab {
     display: flex;
     align-items: center;
     gap: .35rem;
@@ -1520,18 +1524,23 @@
     font-weight: 600;
     cursor: pointer;
     transition: color .15s ease, border-color .15s ease;
+    border-left: 1px solid var(--ul-border);
 
-    .material-symbols-outlined {
-        font-size: 1.05rem;
+    &:first-child {
+        border-left: none;
     }
 
     &:hover {
-        color: var(--ul-grey-9);
+        background: rgba(0,0,0,0.1);
     }
 
     &.active {
-        color: var(--ul-primary-color);
+        color: #fff;
         border-bottom-color: var(--ul-primary-color);
+    }
+
+    .material-symbols-outlined {
+        font-size: 1.05rem;
     }
 }
 
@@ -4369,43 +4378,6 @@ body.page-location-details .pin-detail-grid {
         // Underline tab-bar (matches .import-photos-tab in the Import Photos
         // dialog) instead of the old pill/chip look - a row of always-visible
         // buttons reads more like navigation than a set of toggleable filters.
-        .media-tabs {
-            display: flex;
-            flex-wrap: nowrap;
-            overflow-x: auto;
-            scrollbar-width: none;
-            gap: .1rem;
-            padding: 0 .75rem;
-            border-bottom: 1px solid var(--ul-surface-raised-border);
-
-            &::-webkit-scrollbar {
-                display: none;
-            }
-        }
-        .media-tab {
-            display: flex;
-            align-items: center;
-            gap: .35rem;
-            flex-shrink: 0;
-            padding: .55rem .7rem;
-            border: none;
-            background: none;
-            font-size: .82rem;
-            font-weight: 600;
-            color: var(--ul-grey-6, #64748b);
-            border-bottom: 2px solid transparent;
-            cursor: pointer;
-            transition: color .15s ease, border-color .15s ease;
-
-            &:hover {
-                color: var(--ul-grey-9, #1e293b);
-            }
-
-            &.active {
-                color: var(--ul-primary, #2563eb);
-                border-bottom-color: var(--ul-primary, #2563eb);
-            }
-        }
         .media-tab-count {
             padding: 0 .4rem;
             font-size: .68rem;
@@ -4413,10 +4385,7 @@ body.page-location-details .pin-detail-grid {
             color: var(--ul-grey-5);
             background: var(--ul-surface-raised);
             border-radius: 999px;
-        }
-        .media-tab.active .media-tab-count {
-            color: var(--ul-primary, #2563eb);
-            background: rgba(37, 99, 235, .12);
+            background: rgba(0, 0, 0, .20);
         }
 
         // -- Header icon buttons (select / settings) --------------------------
@@ -5481,7 +5450,7 @@ body.page-location-details .pin-detail-grid {
 
 // Dark mode
 [data-theme="dark"] {
-    .pin-plugin-tabs-nav {
+    .card-tabs {
         background: rgba(255,255,255,0.04)
     }
 

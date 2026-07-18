@@ -273,3 +273,265 @@ body.page-index {
         border-color: rgba($color-indigo-500, .4);
     }
 }
+
+// -- Signed-in homepage dashboard (pages/home/overview.html) ------------------
+// A grid of independently-toggleable/reorderable widgets (see
+// services.home_widgets and partials/home/_widget_*.html) - plain "your
+// overview" framing, not walled off as a special "private" area the way the
+// profile-annotation panel is (see .profile-private-zone in _profile.scss).
+
+.home-overview-page {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+    padding: 1.5rem 0 3rem;
+}
+
+.home-widgets-toolbar {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.home-widgets-grid {
+    display: grid;
+    gap: 1rem;
+}
+
+.home-widget {
+    overflow: hidden;
+    padding: 1rem;
+    background: radial-gradient(circle at top left, color-mix(in srgb, var(--ul-color-accent-bg) 55%, transparent), transparent 44rem), rgba(0, 0, 0, .2);
+    border-radius: 20px;
+}
+
+.home-widget[hidden] {
+    display: none;
+}
+
+.home-widget--emergency {
+    border-color: color-mix(in srgb, #f44336 42%, var(--ul-surface-border));
+    background:
+        linear-gradient(135deg, rgba(244, 67, 54, .12), transparent 45%),
+        var(--ul-surface);
+}
+
+.home-widget-heading {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    margin-bottom: .85rem;
+
+    > div {
+        min-width: 0;
+        flex: 1 1 auto;
+
+        > p {
+            margin: .1rem 0 0;
+            font-size: .84rem;
+            color: var(--ul-grey-6);
+        }
+    }
+
+    h3 {
+        margin: 0;
+        font-size: 1.05rem;
+        color: var(--ul-grey-8);
+    }
+}
+
+.home-widget-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: 2.35rem;
+    height: 2.35rem;
+    border-radius: .85rem;
+    background: var(--ul-color-accent-bg);
+    color: var(--ul-color-accent-fg);
+    box-shadow: 0 8px 22px rgba(0, 0, 0, .08);
+
+    .material-symbols-outlined {
+        font-size: 1.35rem;
+    }
+}
+
+.home-widget-icon--warm {
+    background: rgba(255, 152, 0, .16);
+    color: #f57c00;
+}
+
+.home-widget-link {
+    margin-left: auto;
+    color: var(--ul-color-accent-fg);
+    font-size: .86rem;
+    font-weight: 700;
+    text-decoration: none;
+
+    &:hover {
+        text-decoration: underline;
+    }
+}
+
+.home-card-strip {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: .7rem;
+    overflow: hidden;
+    mask-image: linear-gradient(to right, #000 calc(100% - 2.5rem), transparent 100%);
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 2.5rem), transparent 100%);
+
+    > .home-mini-card,
+    > .home-widget-feature-card {
+        flex: 0 0 210px;
+    }
+}
+
+.home-mini-card,
+.home-widget-feature-card {
+    display: flex;
+    min-width: 0;
+    gap: .65rem;
+    padding: .85rem;
+    border: 1px solid var(--ul-surface-border);
+    border-radius: .95rem;
+    background: rgba(0, 0, 0, .1);
+    color: var(--ul-grey-8);
+    text-decoration: none;
+    transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease;
+
+    &:hover {
+        transform: translateY(-2px);
+        border-color: color-mix(in srgb, var(--ul-color-accent-fg) 38%, var(--ul-surface-border));
+        box-shadow: 0 12px 28px rgba(0, 0, 0, .10);
+    }
+
+    strong {
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: .94rem;
+    }
+
+    span,
+    small {
+        color: var(--ul-grey-6);
+        font-size: .8rem;
+        line-height: 1.35;
+    }
+}
+
+.home-mini-card {
+    align-items: flex-start;
+    flex-direction: column;
+
+    > .material-symbols-outlined {
+        color: var(--ul-color-accent-fg);
+        font-size: 1.25rem;
+    }
+}
+
+.home-mini-card--priority > .material-symbols-outlined {
+    color: #f57c00;
+}
+
+.home-widget-feature-card {
+    flex-direction: column;
+}
+
+.home-photo-strip.photos-grid {
+    display: flex;
+    flex-wrap: nowrap;
+    overflow: hidden;
+    mask-image: linear-gradient(to right, #000 calc(100% - 2.5rem), transparent 100%);
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 2.5rem), transparent 100%);
+    margin: 0;
+
+    > .photo-tile {
+        flex: 0 0 92px;
+    }
+}
+
+.home-stats-grid {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: .65rem;
+    overflow: hidden;
+    mask-image: linear-gradient(to right, #000 calc(100% - 2.5rem), transparent 100%);
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 2.5rem), transparent 100%);
+}
+
+.home-stat {
+    display: grid;
+    flex: 0 0 140px;
+    grid-template-columns: auto 1fr;
+    grid-template-areas:
+        "icon value"
+        "icon label";
+    align-items: center;
+    column-gap: .6rem;
+    padding: .75rem .85rem;
+    border: 1px solid var(--ul-surface-raised-border);
+    border-radius: .9rem;
+    background: var(--ul-surface-raised);
+}
+
+.home-stat-icon {
+    grid-area: icon;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    border-radius: .7rem;
+    background: var(--ul-color-accent-bg);
+    color: var(--ul-color-accent-fg);
+
+    .material-symbols-outlined {
+        font-size: 1.15rem;
+    }
+}
+
+.home-stat-value {
+    grid-area: value;
+    font-size: 1.15rem;
+    font-weight: 800;
+    line-height: 1;
+    color: var(--ul-grey-9);
+}
+
+.home-stat-label {
+    grid-area: label;
+    margin-top: .15rem;
+    color: var(--ul-grey-6);
+    font-size: .78rem;
+    line-height: 1.2;
+}
+
+.home-customize-hint {
+    margin: 0 0 1rem;
+    color: var(--ul-grey-6);
+    font-size: .88rem;
+}
+
+@media (min-width: 720px) {
+    .home-widgets-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .home-widget--emergency,
+    .home-widgets-grid .home-widget:has(.home-photo-strip) {
+        grid-column: 1 / -1;
+    }
+}
+
+@media (max-width: 640px) {
+    .home-widget-heading {
+        flex-wrap: wrap;
+    }
+
+    .home-widget-link {
+        margin-left: 0;
+    }
+}

@@ -1,0 +1,20 @@
+{% comment %}
+Upcoming trips widget. Context: home_upcoming_trips (Trip queryset, up to 6).
+{% endcomment %}
+{% if home_upcoming_trips %}
+<section class="home-widget ul-section" data-widget-key="upcoming_trips">
+    <div class="home-widget-heading">
+        <span class="home-widget-icon"><i class="material-symbols-outlined">event_upcoming</i></span>
+        <div><h3>Upcoming trips</h3><p>What's next on your calendar.</p></div>
+    </div>
+    <div class="home-card-strip">
+        {% for trip in home_upcoming_trips %}
+        <a class="home-mini-card" href="{% url 'trips.detail' trip.slug %}">
+            <i class="material-symbols-outlined">calendar_month</i>
+            <strong>{{ trip.name }}</strong>
+            <span>{% if trip.effective_start_date %}Starts {{ trip.effective_start_date|date:"M j, Y" }}{% else %}Planning{% endif %}</span>
+        </a>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}

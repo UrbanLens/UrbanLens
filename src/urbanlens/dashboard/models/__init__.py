@@ -31,8 +31,8 @@ from urbanlens.dashboard.models.flickr import FlickrAccount
 from urbanlens.dashboard.models.friendship import Friendship
 from urbanlens.dashboard.models.friendship.invitation import FriendInvitation
 from urbanlens.dashboard.models.google_photos import GooglePhotosAccount
-from urbanlens.dashboard.models.group_chats import GroupChat, GroupChatMembership, GroupMessage, GroupMessageShare
 from urbanlens.dashboard.models.google_place import GooglePlace
+from urbanlens.dashboard.models.group_chats import GroupChat, GroupChatMembership, GroupMessage, GroupMessageShare
 from urbanlens.dashboard.models.images import Image, ImageKeyword, ImageSource, MediaKind, MediaRelevance
 from urbanlens.dashboard.models.immich import ImmichAccount
 from urbanlens.dashboard.models.labels import COLOR_CHOICES, ICON_CHOICES, Label, LabelCustomization, LabelSerializer
@@ -51,6 +51,7 @@ from urbanlens.dashboard.models.profile.email import ProfileEmail
 from urbanlens.dashboard.models.profile.nickname import ProfileNickname
 from urbanlens.dashboard.models.profile.note import ProfileNote
 from urbanlens.dashboard.models.profile.trust import ProfileTrust
+from urbanlens.dashboard.models.property_jurisdiction import AdapterType, PropertyJurisdiction
 from urbanlens.dashboard.models.property_owner import OwnerSource, PinOwner, PinPropertySale, WikiOwner, WikiPropertySale
 from urbanlens.dashboard.models.reactions import Reaction
 from urbanlens.dashboard.models.reviews import Review

@@ -1,0 +1,21 @@
+{% comment %}
+Recent markup maps widget. Context: home_recent_markup_maps (MarkupMap queryset, up to 6).
+{% endcomment %}
+{% if home_recent_markup_maps %}
+<section class="home-widget ul-section" data-widget-key="recent_maps">
+    <div class="home-widget-heading">
+        <span class="home-widget-icon"><i class="material-symbols-outlined">gesture</i></span>
+        <div><h3>Recent markup maps</h3><p>Your newest annotated maps and routes.</p></div>
+        <a href="{% url 'memories.maps' %}" class="home-widget-link">All maps</a>
+    </div>
+    <div class="home-card-strip">
+        {% for map in home_recent_markup_maps %}
+        <a class="home-mini-card" href="{% url 'memories.maps' %}">
+            <i class="material-symbols-outlined">edit_location_alt</i>
+            <strong>{{ map.title|default:"Untitled map" }}</strong>
+            <span>{{ map.created|date:"M j" }} · {{ map.items.all|length }} annotation{{ map.items.all|length|pluralize }}</span>
+        </a>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}

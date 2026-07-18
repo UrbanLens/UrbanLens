@@ -1,0 +1,11 @@
+{% comment %}
+Recently-viewed-wikis widget. Populated client-side from localStorage
+(overview.html's script block) - hidden until JS fills it.
+{% endcomment %}
+<section class="home-widget ul-section" id="home-recent-wikis-strip" data-widget-key="recently_viewed_wikis" hidden>
+    <div class="home-widget-heading">
+        <span class="home-widget-icon"><i class="material-symbols-outlined">menu_book</i></span>
+        <div><h3>Recently viewed wikis</h3><p>Community pages you've opened recently.</p></div>
+    </div>
+    <div class="home-card-strip" data-recent-wikis></div>
+</section>

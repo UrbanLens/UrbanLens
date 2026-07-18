@@ -31,9 +31,9 @@ Context (all required except default_tab_key, pass explicitly via {% include ...
         <i class="material-symbols-outlined">{{ heading_icon }}</i>
         <h3>{{ heading }}</h3>
     </div>
-    <div class="pin-plugin-tabs-nav" role="tablist">
+    <div class="card-tabs" role="tablist">
         {% for tab in tabs %}
-        <button type="button" class="pin-plugin-tab-btn{% if tab.key == default_tab_key %} active{% endif %}" role="tab"
+        <button type="button" class="pin-plugin-tab-btn card-tab{% if tab.key == default_tab_key %} active{% endif %}" role="tab"
                 aria-selected="{% if tab.key == default_tab_key %}true{% else %}false{% endif %}"
                 hx-get="{% url 'pin.panel' pin.slug tab.key %}"
                 hx-target="#{{ body_id }}" hx-swap="innerHTML"

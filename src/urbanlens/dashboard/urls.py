@@ -66,7 +66,7 @@ from urbanlens.dashboard.controllers import (
     webauthn,
     wiki_create,
 )
-from urbanlens.dashboard.controllers.index import HomeOverviewView, IndexController
+from urbanlens.dashboard.controllers.index import HomeOverviewView, HomeWidgetLayoutSaveView, IndexController
 from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_STATUS, KIND_TAG, KIND_USER
 from urbanlens.dashboard.models.pin import PinViewSet
 from urbanlens.dashboard.models.reviews import ReviewViewSet
@@ -91,6 +91,7 @@ urlpatterns = [
     path("rest/", include(router.urls)),
     re_path("^$", IndexController.as_view(), name="home"),
     path("home/", HomeOverviewView.as_view(), name="home.view"),
+    path("home/widgets/", HomeWidgetLayoutSaveView.as_view(), name="home.widgets.save"),
     path(
         "about/",
         TemplateView.as_view(

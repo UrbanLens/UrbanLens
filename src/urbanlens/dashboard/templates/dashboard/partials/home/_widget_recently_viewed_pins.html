@@ -1,0 +1,12 @@
+{% comment %}
+Recently-viewed-pins widget. Populated client-side from the per-profile
+localStorage browsing history (overview.html's script block) - hidden until
+JS fills it, matching the other JS-populated strip below.
+{% endcomment %}
+<section class="home-widget ul-section" id="home-recent-pins-strip" data-widget-key="recently_viewed_pins" hidden>
+    <div class="home-widget-heading">
+        <span class="home-widget-icon"><i class="material-symbols-outlined">history</i></span>
+        <div><h3>Recently viewed pins</h3><p>Pins you've opened recently on the map.</p></div>
+    </div>
+    <div class="home-card-strip" data-recent-pins></div>
+</section>

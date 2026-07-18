@@ -13,16 +13,6 @@
     padding: 1.5rem 0 3rem;
 }
 
-// The logged-in homepage (pages/home/overview.html) hosts the private
-// activity panel that used to live on the profile page - same container
-// rhythm as the profile page body.
-.home-overview-page {
-    display: flex;
-    flex-direction: column;
-    gap: 2rem;
-    padding: 1.5rem 0 3rem;
-}
-
 // Avatar + identity, rendered inside the shared .ul-page-hero--profile banner
 // (partials/ui/_page_hero.html + partials/profile/_profile_hero_body.html) on
 // both the Profile and Edit Profile pages, so the two tabs share one fixed
@@ -2935,200 +2925,16 @@ a.profile-stat--link {
     }
 }
 
-.profile-dashboard-strips {
-    display: grid;
-    gap: 1rem;
-    margin: 1.25rem 0;
-}
-
-.profile-strip {
-    overflow: hidden;
-    padding: 1rem;
-    background: radial-gradient(circle at top left, color-mix(in srgb, var(--ul-color-accent-bg) 55%, transparent), transparent 44rem),rgba(0,0,0,0.2);
-    border-radius: 20px;
-}
-
-.profile-strip[hidden] {
-    display: none;
-}
-
-.profile-strip--emergency {
-    border-color: color-mix(in srgb, #f44336 42%, var(--ul-surface-border));
-    background:
-        linear-gradient(135deg, rgba(244, 67, 54, .12), transparent 45%),
-        var(--ul-surface);
-}
-
-.profile-strip-heading {
-    display: flex;
-    align-items: center;
-    gap: .75rem;
-    margin-bottom: .85rem;
-
-    > div > p {
-        color: var(--ul-grey-4);
-    }
-}
-
-.profile-strip-heading h3 {
-    margin: 0;
-    font-size: 1.05rem;
-    color: var(--ul-grey-8);
-}
-
-.profile-strip-heading p {
-    margin: .1rem 0 0;
-    font-size: .84rem;
-    color: var(--ul-grey-6);
-}
-
-.profile-strip-icon {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex: 0 0 auto;
-    width: 2.35rem;
-    height: 2.35rem;
-    border-radius: .85rem;
-    background: var(--ul-color-accent-bg);
-    color: var(--ul-color-accent-fg);
-    box-shadow: 0 8px 22px rgba(0, 0, 0, .08);
-}
-
-.profile-strip-icon--warm {
-    background: rgba(255, 152, 0, .16);
-    color: #f57c00;
-}
-
-.profile-strip-icon .material-symbols-outlined {
-    font-size: 1.35rem;
-}
-
-.profile-strip-link {
-    margin-left: auto;
-    color: var(--ul-color-accent-fg);
-    font-size: .86rem;
-    font-weight: 700;
-    text-decoration: none;
-}
-
-.profile-strip-link:hover {
-    text-decoration: underline;
-}
-
-.profile-card-strip {
-    display: flex;
-    flex-wrap: nowrap;
-    gap: .7rem;
-    overflow: hidden;
-    mask-image: linear-gradient(to right, #000 calc(100% - 2.5rem), transparent 100%);
-    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 2.5rem), transparent 100%);
-}
-
-.profile-card-strip > .profile-mini-card,
-.profile-card-strip > .profile-feature-card {
-    flex: 0 0 210px;
-}
-
-.profile-mini-card,
-.profile-feature-card {
-    display: flex;
-    min-width: 0;
-    gap: .65rem;
-    padding: .85rem;
-    border: 1px solid var(--ul-surface-border);
-    border-radius: .95rem;
-    background: rgba(0,0,0,0.1);
-    color: var(--ul-grey-8);
-    text-decoration: none;
-    transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease;
-}
-
-.profile-mini-card {
-    align-items: flex-start;
-    flex-direction: column;
-}
-
-.profile-mini-card:hover,
-.profile-feature-card:hover {
-    transform: translateY(-2px);
-    border-color: color-mix(in srgb, var(--ul-color-accent-fg) 38%, var(--ul-surface-border));
-    box-shadow: 0 12px 28px rgba(0, 0, 0, .10);
-}
-
-.profile-mini-card > .material-symbols-outlined {
-    color: var(--ul-color-accent-fg);
-    font-size: 1.25rem;
-}
-
-.profile-mini-card strong,
-.profile-feature-card strong {
-    max-width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-size: .94rem;
-}
-
-.profile-mini-card span,
-.profile-feature-card span,
-.profile-feature-card small {
-    color: var(--ul-grey-6);
-    font-size: .8rem;
-    line-height: 1.35;
-}
-
-.profile-mini-card--priority > .material-symbols-outlined {
-    color: #f57c00;
-}
-
-.profile-feature-card {
-    flex-direction: column;
-}
-
-.profile-photo-strip.photos-grid {
-    display: flex;
-    flex-wrap: nowrap;
-    overflow: hidden;
-    mask-image: linear-gradient(to right, #000 calc(100% - 2.5rem), transparent 100%);
-    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 2.5rem), transparent 100%);
-    margin: 0;
-
-    > .photo-tile {
-        flex: 0 0 92px;
-    }
-}
-
-@media (min-width: 720px) {
-    .profile-dashboard-strips {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .profile-strip--emergency,
-    .profile-dashboard-strips .profile-strip:has(.profile-photo-strip) {
-        grid-column: 1 / -1;
-    }
-}
-
-.profile-owner-activity-panel {
-    margin: 1.25rem 0;
-}
-
-.profile-owner-activity-panel .profile-dashboard-strips {
-    margin: 0;
-}
-
-.profile-strip-heading > div {
-    min-width: 0;
-    flex: 1 1 auto;
-}
-
-// -- Private activity zone ----------------------------------------------------
-// The owner-only dashboard is wrapped in a single amber "private" frame instead
-// of repeating an "Only visible to you" chip on every strip: chips straddle the
-// top and bottom borders, and the container carries an amber wash so everything
-// inside reads as one private area. Amber is already the privacy color on this
-// page (private-stat icons), so the frame reinforces that association.
+// -- Private annotation zone ---------------------------------------------------
+// A private note/trust-rating a user keeps about someone ELSE (see
+// partials/profile/profile_annotation_partial.html, rendered on that other
+// user's profile page) - wrapped in a single amber "private" frame with chips
+// straddling the top/bottom borders, so it reads as one private area without
+// repeating an "Only visible to you" chip per field. This is the only
+// remaining consumer of the amber-frame treatment - the logged-in homepage's
+// own dashboard used to share it too, but moved to a plain widget-grid layout
+// (see _homepage.scss) since a whole page of "this is secret" framing read as
+// unnecessarily alarming for what is, after all, just your own homepage.
 
 .profile-private-zone {
     position: relative;
@@ -3177,76 +2983,6 @@ a.profile-stat--link {
     color: color-mix(in srgb, var(--ul-accent-amber-fg) 55%, var(--ul-grey-6));
     font-size: .8rem;
     text-align: center;
-}
-
-@media (max-width: 640px) {
-    .profile-strip-heading {
-        flex-wrap: wrap;
-    }
-
-    .profile-strip-link {
-        margin-left: 0;
-    }
-}
-
-.profile-private-stats {
-    // Single row, same clip+fade treatment as .profile-card-strip/.profile-photo-strip
-    // below - up to 8 stats would otherwise wrap onto 2-4 rows depending on how many
-    // have a non-zero value, eating far more vertical space than a stat strip needs.
-    display: flex;
-    flex-wrap: nowrap;
-    gap: .65rem;
-    margin-bottom: 1rem;
-    overflow: hidden;
-    mask-image: linear-gradient(to right, #000 calc(100% - 2.5rem), transparent 100%);
-    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 2.5rem), transparent 100%);
-}
-
-.profile-private-stat {
-    display: grid;
-    flex: 0 0 140px;
-    grid-template-columns: auto 1fr;
-    grid-template-areas:
-        "icon value"
-        "icon label";
-    align-items: center;
-    column-gap: .6rem;
-    padding: .75rem .85rem;
-    border: 1px solid var(--ul-surface-raised-border);
-    border-radius: .9rem;
-    background: color-mix(in srgb, var(--ul-surface-raised) 88%, var(--ul-accent-amber) 2%);
-}
-
-.profile-private-stat-icon {
-    grid-area: icon;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 2rem;
-    height: 2rem;
-    border-radius: .7rem;
-    background: var(--ul-accent-amber);
-    color: var(--ul-black);
-}
-
-.profile-private-stat-icon .material-symbols-outlined {
-    font-size: 1.15rem;
-}
-
-.profile-private-stat-value {
-    grid-area: value;
-    font-size: 1.15rem;
-    font-weight: 800;
-    line-height: 1;
-    color: var(--ul-grey-9);
-}
-
-.profile-private-stat-label {
-    grid-area: label;
-    margin-top: .15rem;
-    color: var(--ul-grey-6);
-    font-size: .78rem;
-    line-height: 1.2;
 }
 
 // -- "Places in Common" page (mutual privacy-gated, linked from the stat above) ---

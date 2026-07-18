@@ -1,26 +1,47 @@
 {% extends 'dashboard/themes/base.html' %}
 
 {% block hero %}
-{% include "dashboard/partials/ui/_page_hero.html" with id="home-hero" icon="home" title=hero_title subtitle="Your private overview - recent activity, upcoming plans, and quick stats." eyebrow="Home" modifier="top" %}
+{% include "dashboard/partials/ui/_page_hero.html" with id="home-hero" icon="home" title=hero_title subtitle="Your overview - recent activity, upcoming plans, and quick stats." eyebrow="Home" modifier="top" %}
+{% endblock %}
+
+{% block subnav %}
+{# Empty for now - matches the background/style of every other page's subnav #}
+{# (see _page_hero.scss); ready for tabs/filters if the homepage grows them. #}
+<div class="ul-page-subnav">
+    <div class="ul-page-subnav__inner"></div>
+</div>
 {% endblock %}
 
 {% block content %}
 <div class="home-overview-page page-content">
-    {% include "dashboard/partials/profile/_private_activity_panel.html" %}
+    <div class="home-widgets-toolbar">
+        <button type="button" class="btn btn--ghost btn--sm" onclick="document.getElementById('home-customize-dialog').showModal()">
+            <i class="material-symbols-outlined">tune</i> Customize
+        </button>
+    </div>
+    <div class="home-widgets-grid">
+        {% for entry in home_widget_layout %}
+            {% if entry.enabled %}
+                {% include entry.widget.template %}
+            {% endif %}
+        {% endfor %}
+    </div>
 </div>
 
-{% if profile_recent_photos %}
+{% include "dashboard/partials/home/_widget_customize_dialog.html" %}
+
+{% if home_recent_photos %}
 {# -- Lightbox (shared component - same as Memories > Photos and the pin detail gallery) -- #}
 {% include "dashboard/partials/_photo_lightbox.html" %}
 {% endif %}
 {% endblock %}
 
 {% block scripts %}
+{% include "dashboard/partials/ui/_priority_list_script.html" %}
 <script>
 (function () {
     // -- "Recently viewed" strips, fed from the same per-profile localStorage
-    // history the map/wiki pages already record (moved here with the private
-    // activity panel from the profile page).
+    // history the map/wiki pages already record.
     function renderRecentStrip(storageKey, stripId, targetSelector, iconName, fallbackSubtitle) {
         var strip = document.getElementById(stripId);
         if (!strip) return;
@@ -36,7 +57,7 @@
             var title = item.title || item.name || 'Untitled';
             var subtitle = item.subtitle || fallbackSubtitle;
             var card = document.createElement('a');
-            card.className = 'profile-mini-card';
+            card.className = 'home-mini-card';
             card.href = href;
             card.innerHTML = '<i class="material-symbols-outlined"></i><strong></strong><span></span>';
             card.querySelector('i').textContent = iconName;
@@ -48,14 +69,14 @@
     }
 
     var recentHistoryProfileId = '{{ profile.id }}';
-    renderRecentStrip('ul_recent_pins_v1_' + recentHistoryProfileId, 'profile-recent-pins-strip', '[data-recent-pins]', 'push_pin', 'Recently viewed');
-    renderRecentStrip('ul_recent_wikis_v1_' + recentHistoryProfileId, 'profile-recent-wikis-strip', '[data-recent-wikis]', 'menu_book', 'Recently viewed');
+    renderRecentStrip('ul_recent_pins_v1_' + recentHistoryProfileId, 'home-recent-pins-strip', '[data-recent-pins]', 'push_pin', 'Recently viewed');
+    renderRecentStrip('ul_recent_wikis_v1_' + recentHistoryProfileId, 'home-recent-wikis-strip', '[data-recent-wikis]', 'menu_book', 'Recently viewed');
 }());
 
 // Opens the shared lightbox (dashboard/partials/_photo_lightbox.html,
-// included above) with the "Recent photos" strip's items.
-function profileOpenLightbox(id) {
-    var items = Array.prototype.map.call(document.querySelectorAll('.profile-photo-strip .photo-tile'), function (el) {
+// included above) with the "Recent photos" widget's items.
+function homeOpenLightbox(id) {
+    var items = Array.prototype.map.call(document.querySelectorAll('.home-photo-strip .photo-tile'), function (el) {
         return {
             url: el.dataset.url, caption: el.dataset.caption || '',
             author: el.dataset.author || '', copyright: el.dataset.copyright || '',
@@ -65,6 +86,30 @@ function profileOpenLightbox(id) {
     });
     var idx = items.findIndex(function (i) { return i.imageId === id; });
     window.galleryOpenLightboxItem(items, Math.max(idx, 0));
+}
+
+// -- Widget customize dialog: save the reorderable checklist's enabled/order
+// state (see _priority_list_script.html) then reload so every widget's real
+// data renders through the normal server-rendered path.
+var CSRF = document.querySelector('input[name=csrfmiddlewaretoken]')?.value || '{{ csrf_token }}';
+
+function homeSaveWidgetLayout(btn) {
+    var hidden = document.getElementById('home-widget-priority-hidden');
+    var enabledKeys = hidden && hidden.value ? hidden.value.split(',') : [];
+    var saved = btn.innerHTML;
+    btn.disabled = true;
+    fetch('{% url "home.widgets.save" %}', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+        body: JSON.stringify({ enabled_keys: enabledKeys }),
+    })
+    .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
+    .then(function () { window.location.reload(); })
+    .catch(function () {
+        toastr.error('Could not save your homepage layout.');
+        btn.disabled = false;
+        btn.innerHTML = saved;
+    });
 }
 </script>
 {% endblock %}
