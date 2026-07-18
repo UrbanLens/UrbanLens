@@ -611,3 +611,48 @@ class ThreadRenderingRegressionTests(TestCase):
         content = self._render()
         self.assertEqual(content.count("dm-bubble__menu-btn"), 2)
         self.assertEqual(content.count("dm-bubble__time"), 2)
+
+
+class ThreadMapAttachmentRenderingTests(TestCase):
+    """Each map-carrying message must render its own snapshot/dialog DOM ids.
+
+    Regression: `_message_items.html` built the viewer id with
+    `"dm-"|add:message.id`. Django's `add` filter returns '' when asked to
+    concatenate a str and an int, so every map message in a thread shared the
+    same empty id suffix - `getElementById` then resolved every thumbnail and
+    dialog to the *first* map's snapshot, making a second sent map display as
+    a duplicate of the first (while being stored correctly server-side).
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.me = _profile()
+        self.partner = _profile()
+        _set_dm_visibility(self.partner, VisibilityChoice.ANYONE)
+        self.me.ensure_slug()
+        self.partner.ensure_slug()
+        self.client.force_login(self.me.user)
+
+    def _render(self) -> str:
+        response = self.client.get(
+            reverse("messages.conversation", kwargs={"profile_slug": self.partner.slug}),
+            HTTP_HX_REQUEST="true",
+        )
+        self.assertEqual(response.status_code, 200)
+        return response.content.decode()
+
+    def test_two_map_messages_render_distinct_snapshot_and_dialog_ids(self) -> None:
+        first_map = MarkupMap.objects.create(profile=self.me, title="First map")
+        second_map = MarkupMap.objects.create(profile=self.me, title="Second map")
+        first_msg = create_direct_message(self.me, self.partner, "", markup_map_uuid=str(first_map.uuid))
+        second_msg = create_direct_message(self.me, self.partner, "", markup_map_uuid=str(second_map.uuid))
+
+        content = self._render()
+        self.assertIn(f'id="comment-map-data-dm-{first_msg.pk}"', content)
+        self.assertIn(f'id="comment-map-data-dm-{second_msg.pk}"', content)
+        self.assertIn(f'id="comment-map-dialog-dm-{first_msg.pk}"', content)
+        self.assertIn(f'id="comment-map-dialog-dm-{second_msg.pk}"', content)
+        # The broken `"dm-"|add:message.id` produced an empty suffix for every
+        # message - assert it never comes back.
+        self.assertNotIn('id="comment-map-data-"', content)
+        self.assertNotIn('id="comment-map-dialog-"', content)

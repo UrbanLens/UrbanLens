@@ -70,7 +70,11 @@ via infinite scroll) so the two render identically and never drift. Context:
   {% endif %}
   {% endwith %}
   {% if message.markup_map_id %}
-  {% with map_id="dm-"|add:message.id %}
+  {# stringformat first: `add` on a str + raw int returns '' (its int-coercion #}
+  {# and concat attempts both fail), which collapsed every map message onto one #}
+  {# duplicate DOM id and made each thumbnail/dialog show the thread's first map. #}
+  {% with message_id_str=message.id|stringformat:"s" %}
+  {% with map_id="dm-"|add:message_id_str %}
   {% if message.markup_map.title %}
   {# A second, explicit way to open the map besides clicking the thumbnail - #}
   {# mirrors how @pin/@trip shares above link straight to the shared thing. #}
@@ -96,6 +100,7 @@ via infinite scroll) so the two render identically and never drift. Context:
     {% endif %}
   </div>
   {% include "dashboard/partials/map/_map_view_dialog.html" with map_id=map_id map_data=message.markup_map.to_snapshot title="Shared map" map_obj=message.markup_map %}
+  {% endwith %}
   {% endwith %}
   {% elif message.map_removed %}
   <div class="dm-map-removed-indicator">

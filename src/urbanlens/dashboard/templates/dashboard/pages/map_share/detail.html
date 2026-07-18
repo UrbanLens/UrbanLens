@@ -33,8 +33,11 @@
   </div>
   <div class="location-map pin-map card">
     <div class="card-header"><i class="material-symbols-outlined">map</i><h3>Map</h3></div>
-    {% include "dashboard/partials/map/_map_view_preview.html" with map_id="share-"|add:share.id %}
-    {% include "dashboard/partials/map/_map_view_dialog.html" with map_id="share-"|add:share.id map_data=map.to_snapshot title=map.title|default:"Shared map" map_obj=map %}
+    {# stringformat first: `add` on a str + raw int returns '', emptying the viewer id. #}
+    {% with share_id_str=share.id|stringformat:"s" %}
+    {% include "dashboard/partials/map/_map_view_preview.html" with map_id="share-"|add:share_id_str %}
+    {% include "dashboard/partials/map/_map_view_dialog.html" with map_id="share-"|add:share_id_str map_data=map.to_snapshot title=map.title|default:"Shared map" map_obj=map %}
+    {% endwith %}
   </div>
 </div>
 {% endblock %}

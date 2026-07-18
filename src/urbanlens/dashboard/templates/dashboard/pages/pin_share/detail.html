@@ -57,8 +57,11 @@
     {% if share.markup_map_id %}
     <div class="pin-share-attached-map">
       <h3 class="pin-share-section-title"><i class="material-symbols-outlined">map</i> Attached map</h3>
-      {% include "dashboard/partials/map/_map_view_preview.html" with map_id="pinshare-"|add:share.id %}
-      {% include "dashboard/partials/map/_map_view_dialog.html" with map_id="pinshare-"|add:share.id map_data=share.markup_map.to_snapshot title=share.markup_map.title|default:"Attached map" map_obj=share.markup_map %}
+      {# stringformat first: `add` on a str + raw int returns '', emptying the viewer id. #}
+      {% with share_id_str=share.id|stringformat:"s" %}
+      {% include "dashboard/partials/map/_map_view_preview.html" with map_id="pinshare-"|add:share_id_str %}
+      {% include "dashboard/partials/map/_map_view_dialog.html" with map_id="pinshare-"|add:share_id_str map_data=share.markup_map.to_snapshot title=share.markup_map.title|default:"Attached map" map_obj=share.markup_map %}
+      {% endwith %}
       <form method="post" action="{% url 'markup_map.clone' share.markup_map.uuid %}">
         {% csrf_token %}
         <button type="submit" class="btn btn--ghost btn--sm">
