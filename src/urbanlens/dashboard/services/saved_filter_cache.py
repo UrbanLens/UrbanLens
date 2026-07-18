@@ -1,9 +1,9 @@
 """Backend cache for a saved filter's matching pin uuids.
 
 Mirrors the ``community_counts.py`` pattern: a plain Redis-backed
-``django.core.cache`` entry, not a DB table. The cache key embeds both the
-profile's pins ``last_updated`` fingerprint (the same aggregate the
-``map.pins.meta`` endpoint already computes) AND the saved filter's own
+``django.core.cache`` entry, not a DB table. The cache key embeds both a
+fingerprint of the profile's pins (``Max(updated)`` plus the pin count, so
+edits, creates, AND deletes all change it) AND the saved filter's own
 ``updated`` timestamp, so an entry self-invalidates the moment either the
 matching pins OR the filter's own criteria change - no manual invalidation
 signal is needed, and a stale entry can never outlive the data it describes.
@@ -27,7 +27,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from django.core.cache import cache
-from django.db.models import Max
+from django.db.models import Count, Max
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
@@ -38,11 +38,20 @@ _CACHE_KEY_TEMPLATE = "saved_filter_pins:{profile_id}:{filter_uuid}:{filter_upda
 
 
 def _pins_fingerprint(profile: Profile) -> str:
+    """Fingerprint of the profile's root pins for cache-key self-invalidation.
+
+    ``Max(updated)`` alone misses deletions - removing any pin other than the
+    most-recently-updated one leaves the max unchanged, so deleted pins'
+    uuids would keep matching from a warm cache entry until its TTL. The pin
+    count (same single aggregate query) catches that case; together they
+    change on every create, edit, and delete.
+    """
     from urbanlens.dashboard.models.pin import Pin
 
-    result = Pin.objects.filter(profile=profile).root_pins().aggregate(last_updated=Max("updated"))
+    result = Pin.objects.filter(profile=profile).root_pins().aggregate(last_updated=Max("updated"), total=Count("pk"))
     last_updated = result["last_updated"]
-    return last_updated.isoformat() if last_updated else "none"
+    stamp = last_updated.isoformat() if last_updated else "none"
+    return f"{stamp}:{result['total']}"
 
 
 def get_or_compute_matching_uuids(profile: Profile, saved_filter: SavedFilter) -> list[str]:

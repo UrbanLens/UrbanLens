@@ -76,15 +76,28 @@ class SavedFilterCacheInvalidationTests(TestCase):
     def test_unchanged_filter_is_served_from_cache(self) -> None:
         """Sanity check the cache still works at all - not just always recomputing."""
         saved_filter = SavedFilter.objects.create(profile=self.profile, name="My Filter", criteria={"name": "Tagged"})
-        get_or_compute_matching_uuids(self.profile, saved_filter)
+        first = get_or_compute_matching_uuids(self.profile, saved_filter)
+        self.assertEqual(first, [str(self.tagged_pin.uuid)])
 
-        # Delete the pin the filter matched entirely from the DB without saving
-        # the filter or the pin - if this still returns the (now-stale) cached
-        # uuid, the cache was actually used rather than recomputed.
-        deleted_uuid = str(self.tagged_pin.uuid)
-        Pin.objects.filter(pk=self.tagged_pin.pk).delete()
-        # Deleting a pin doesn't touch any surviving pin's `updated`, so the
-        # pins-fingerprint half of the key is unchanged; only an explicit
-        # re-save of a surviving pin (or the filter) should bust this.
+        # Rename the matching pin via .update(), which bypasses auto_now - so
+        # neither Max(updated) nor the pin count changes and the fingerprint
+        # stays identical. If this still returns the (now-stale) cached uuid,
+        # the cache was actually used rather than recomputed.
+        Pin.objects.filter(pk=self.tagged_pin.pk).update(name="No Longer Matches")
         cached_again = get_or_compute_matching_uuids(self.profile, saved_filter)
-        self.assertEqual(cached_again, [deleted_uuid])
+        self.assertEqual(cached_again, first)
+
+    def test_deleting_a_pin_invalidates_the_cache(self) -> None:
+        """Regression guard: the fingerprint used to be Max(updated) alone, so
+        deleting any pin other than the most-recently-updated one left the key
+        unchanged and the deleted pin's uuid kept matching (wrong toolbar
+        counts, phantom matches) until the cache TTL. The pin COUNT is now
+        part of the fingerprint, so a deletion recomputes immediately."""
+        saved_filter = SavedFilter.objects.create(profile=self.profile, name="My Filter", criteria={})
+        first = get_or_compute_matching_uuids(self.profile, saved_filter)
+        self.assertEqual(set(first), {str(self.tagged_pin.uuid), str(self.other_pin.uuid)})
+
+        Pin.objects.filter(pk=self.tagged_pin.pk).delete()
+
+        second = get_or_compute_matching_uuids(self.profile, saved_filter)
+        self.assertEqual(second, [str(self.other_pin.uuid)])
