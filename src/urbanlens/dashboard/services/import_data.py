@@ -221,6 +221,15 @@ class _ImportValidationError(Exception):
     pass
 
 
+#: Ceilings on what an uploaded archive may declare before extraction even
+#: starts. Imports only ever read the JSON data files (photos in an archive
+#: are ignored), so legitimate archives' extracted footprint is small - these
+#: exist to stop a crafted zip from filling the disk (decompression bomb) or
+#: exhausting inodes, not to constrain real exports.
+_MAX_EXTRACTED_BYTES = 2 * 1024**3
+_MAX_ARCHIVE_MEMBERS = 50_000
+
+
 def _extract_and_validate(zip_path: str, extract_dir: str, job_id: str) -> str:
     """Extract the ZIP and return the path to the data directory inside it."""
     if not os.path.exists(zip_path):
@@ -230,13 +239,22 @@ def _extract_and_validate(zip_path: str, extract_dir: str, job_id: str) -> str:
         raise _ImportValidationError("The uploaded file is not a valid ZIP archive.")
 
     os.makedirs(extract_dir, exist_ok=True)
+    extract_root = os.path.realpath(extract_dir)
     with zipfile.ZipFile(zip_path, "r") as zf:
-        # Guard against zip-slip path traversal.
-        for member in zf.namelist():
-            dest = os.path.realpath(os.path.join(extract_dir, member))
-            if not dest.startswith(os.path.realpath(extract_dir)):
+        members = zf.infolist()
+        if len(members) > _MAX_ARCHIVE_MEMBERS:
+            raise _ImportValidationError("Archive contains too many files.")
+        if sum(member.file_size for member in members) > _MAX_EXTRACTED_BYTES:
+            raise _ImportValidationError("Archive is too large to import.")
+        # Guard against zip-slip path traversal. The separator is part of the
+        # comparison on purpose: a bare prefix check would accept an entry
+        # escaping into a SIBLING directory whose name merely starts with the
+        # extract dir's (e.g. ".../job1" matching ".../job1evil/...").
+        for member in members:
+            dest = os.path.realpath(os.path.join(extract_root, member.filename))
+            if dest != extract_root and not dest.startswith(extract_root + os.sep):
                 raise _ImportValidationError("Archive contains invalid file paths.")
-        zf.extractall(extract_dir)
+        zf.extractall(extract_root)
 
     # The archive wraps everything in a top-level folder (urbanlens_export_YYYY-MM-DD/).
     # Find the data directory (the one containing manifest.json).

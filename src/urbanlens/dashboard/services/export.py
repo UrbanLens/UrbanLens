@@ -464,14 +464,43 @@ def _export_labels(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
 
 
 def _export_connections(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
-    """Export friendship connections as a list of relationship records."""
+    """Export friendship connections as a list of relationship records.
+
+    Outgoing rows the RECIPIENT hasn't accepted (requested/declined/ignored)
+    are anonymized - identity nulled and the three states collapsed into one
+    ``"pending"`` value. Until a request is accepted, the sender must not be
+    able to learn who they reached, whether an invited email belongs to a
+    registered account, or how (or whether) the recipient responded - the
+    same rule the pending-requests widget enforces (see
+    ``controllers.friendship._friend_list_ctx``); an export that included the
+    real username/uuid/status would reopen that exact enumeration channel.
+    Sender-initiated states (accepted friendships being removed, blocks,
+    mutes) keep their identity: the sender necessarily already knows who
+    they acted on.
+    """
+    from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
     from urbanlens.dashboard.models.friendship.model import Friendship
 
     friendships = Friendship.objects.filter(from_profile=profile).select_related("to_profile__user").order_by("created")
     incoming = Friendship.objects.filter(to_profile=profile).select_related("from_profile__user").order_by("created")
 
+    hidden_outgoing_statuses = {FriendshipStatus.REQUESTED, FriendshipStatus.DECLINED, FriendshipStatus.IGNORED}
+
     rows = []
     for f in friendships:
+        if f.status in hidden_outgoing_statuses:
+            rows.append(
+                {
+                    "other_user_uuid": None,
+                    "other_username": None,
+                    "status": "pending",
+                    "relationship_type": f.relationship_type,
+                    "permissions": f.permissions,
+                    "direction": "outgoing",
+                    "created": str(f.created),
+                },
+            )
+            continue
         rows.append(
             {
                 "other_user_uuid": str(f.to_profile.uuid),
