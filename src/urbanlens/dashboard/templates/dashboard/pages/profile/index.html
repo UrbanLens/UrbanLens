@@ -604,5 +604,112 @@ function panToggleEdit(noteId) {
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); startEdit(); }
     });
 }());
+
+(function () {
+    // -- Click-to-edit-in-place hero meta fields (own profile only) - same
+    // autosave endpoint and click/blur/Escape convention as the bio above.
+    var csrftoken = '{{ csrf_token }}';
+    var updateUrl = '{% url "profile.field.update" %}';
+
+    function wireMetaField(config) {
+        var el = document.querySelector(config.selector);
+        if (!el) return;
+
+        function startEdit() {
+            if (el.querySelector(config.inputTag)) return;
+            // Re-queried each time (not cached at wiring time): a successful
+            // save below replaces this node's outerHTML wholesale, so the
+            // node from a previous edit cycle would otherwise be stale and
+            // no longer attached to the DOM.
+            var textEl = el.querySelector('.profile-meta-text');
+            var rawValue = el.dataset[config.dataKey] || '';
+            var input = document.createElement(config.inputTag);
+            input.className = config.inputClass;
+            if (config.inputType) input.type = config.inputType;
+            input.value = rawValue;
+
+            var displayHTML = textEl.outerHTML;
+            textEl.replaceWith(input);
+            input.focus();
+
+            var done = false;
+            function finish(save) {
+                if (done) return;
+                done = true;
+                if (save && input.value.trim() !== rawValue.trim()) {
+                    var newValue = input.value.trim();
+                    var body = new URLSearchParams();
+                    body.set('field', config.field);
+                    body.set('value', newValue);
+                    fetch(updateUrl, {
+                        method: 'POST',
+                        headers: { 'X-CSRFToken': csrftoken },
+                        body: body,
+                    })
+                        .then(function (r) { if (!r.ok) throw new Error(); })
+                        .then(function () {
+                            el.dataset[config.dataKey] = newValue;
+                            input.outerHTML = config.renderText(newValue);
+                            if (typeof toastr !== 'undefined') toastr.success(config.successMessage);
+                        })
+                        .catch(function () {
+                            input.outerHTML = displayHTML;
+                            if (typeof toastr !== 'undefined') toastr.error(config.errorMessage);
+                        });
+                } else {
+                    input.outerHTML = displayHTML;
+                }
+            }
+
+            input.addEventListener('blur', function () { finish(true); });
+            input.addEventListener('keydown', function (e) {
+                e.stopPropagation();
+                if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+                else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+            });
+        }
+
+        el.addEventListener('click', startEdit);
+        el.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); startEdit(); }
+        });
+    }
+
+    wireMetaField({
+        selector: '.profile-area--editable',
+        dataKey: 'rawArea',
+        field: 'area',
+        inputTag: 'input',
+        inputType: 'text',
+        inputClass: 'profile-meta-input',
+        successMessage: 'Area updated.',
+        errorMessage: 'Failed to update area.',
+        renderText: function (value) {
+            return '<span class="profile-meta-text">' + (value ? htmlEscape(value) : 'Add your area...') + '</span>';
+        },
+    });
+
+    wireMetaField({
+        selector: '.profile-started-exploring--editable',
+        dataKey: 'rawStartedExploring',
+        field: 'started_exploring',
+        inputTag: 'input',
+        inputType: 'date',
+        inputClass: 'profile-meta-input',
+        successMessage: 'Updated.',
+        errorMessage: 'Failed to update.',
+        renderText: function (value) {
+            if (!value) return '<span class="profile-meta-text">Add when you started exploring...</span>';
+            var year = value.slice(0, 4);
+            return '<span class="profile-meta-text">Exploring since ' + htmlEscape(year) + '</span>';
+        },
+    });
+
+    function htmlEscape(s) {
+        var div = document.createElement('div');
+        div.textContent = s;
+        return div.innerHTML;
+    }
+}());
 </script>
 {% endblock %}
