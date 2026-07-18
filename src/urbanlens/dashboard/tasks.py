@@ -240,7 +240,10 @@ def rebuild_map_pin_cache(self, profile_id: int) -> int:
 
     logger.info("Rebuilding map pin cache for profile %s", profile_id)
     update_task_progress(self, current=0, total=1, message="Rebuilding map cache...")
-    profile = Profile.objects.get(pk=profile_id)
+    profile = Profile.objects.filter(pk=profile_id).first()
+    if profile is None:
+        logger.info("rebuild_map_pin_cache: profile %s no longer exists", profile_id)
+        return 0
     query = Pin.objects.filter(profile=profile).root_pins().select_related("location")
     cache = MapPinCache(profile)
     cache.rebuild(query)

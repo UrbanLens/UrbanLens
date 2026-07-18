@@ -229,58 +229,6 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             },
         )
 
-    def init_map(self, request: HttpRequest):
-        map_data = self.get_map_data()
-
-        # Preprocess data into strings
-        for pin in map_data:
-            if "description" in pin and pin["description"] is None:
-                pin["description"] = ""
-
-            # Turn arrays into csv
-            if pin.get("tags"):
-                pin["tags"] = ", ".join(pin["tags"])
-            else:
-                pin["tags"] = ""
-            if pin.get("categories"):
-                pin["categories"] = ", ".join(pin["categories"])
-            else:
-                pin["categories"] = ""
-
-            # Last visited = None => Never
-            if not pin["last_visited"] or pin["last_visited"] == "never":
-                pin["last_visited"] = "Never"
-            else:
-                try:
-                    # Dates look like this: 2023-01-02T00:00:00+00:00
-                    pin["last_visited"] = datetime.strptime(pin["last_visited"], "%Y-%m-%dT%H:%M:%S%z").strftime(
-                        "%Y-%m-%d",
-                    )
-                except ValueError:
-                    logger.warning("Unable to parse date: %s", pin["last_visited"])
-
-            if pin["status"]:
-                pin["status"] = pin["status"].replace("_", " ").capitalize()
-
-        return render(request, "dashboard/pages/map/data.html", {"map_data": map_data})
-
-    def get_map_data(self):
-        map_data = Pin.objects.all()
-        if not map_data:
-            # Default map data
-            map_data = [
-                {
-                    "latitude": 42.65250213448323,
-                    "longitude": -73.75791867436858,
-                    "name": "Default Pin",
-                    "description": "No pins saved yet.",
-                },
-            ]
-        else:
-            map_data = [pin.to_json() for pin in map_data]
-
-        return map_data
-
     def _debug_entry(self, request: HttpRequest, source: str, query: str, *, from_cache: bool, count: int | None = None):
         """Build a `DebugEntry` for the external-API debug overlay, admins only.
 
@@ -1496,7 +1444,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         except Pin.DoesNotExist:
             return HttpResponse("Pin does not exist", status=404)
 
-        if not pin.location.latitude or not pin.location.longitude:
+        if not pin.location or not pin.location.latitude or not pin.location.longitude:
             return HttpResponse("Pin does not have valid coordinates", status=400)
 
         forecast = None
