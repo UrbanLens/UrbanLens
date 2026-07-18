@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from urbanlens.dashboard.services.gateway import Gateway
 from urbanlens.dashboard.services.geo_filter import require_usa
+from urbanlens.dashboard.services.rate_limiter import RateLimitExceededError
 from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
@@ -199,6 +200,16 @@ class NPSGateway(Gateway):
 
         try:
             park_code = NPSMapGateway().check_coordinates_within_park(latitude, longitude)
+        except RateLimitExceededError:
+            # Expected backpressure, not a bug: NPS's calls_per_minute budget is
+            # tight (10/min) and this lookup runs unpaced on live pin-detail
+            # views (unlike the background enrichment cycle, which paces
+            # itself against the same budget) - a burst of concurrent views of
+            # un-cached pins can legitimately exceed it. logger.warning (not
+            # .exception) so it doesn't read as a crash - see GDELT's gateway
+            # for the same convention on its own expected failures.
+            logger.warning("NPS boundary lookup skipped - rate limit exceeded (lat=%r, lng=%r)", latitude, longitude)
+            return None
         except Exception:
             logger.exception("NPS boundary lookup failed (lat=%r, lng=%r)", latitude, longitude)
             return None

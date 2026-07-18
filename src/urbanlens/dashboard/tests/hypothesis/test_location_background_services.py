@@ -324,6 +324,34 @@ class OverpassGatewayTests(TestCase):
         with mock.patch.object(gateway, "elements_for_query", return_value=[{"type": "way", "id": 123}]):
             self.assertEqual(gateway.element("way", 123), {"type": "way", "id": 123})
 
+    def test_query_failure_degrades_to_empty_list_without_a_traceback(self) -> None:
+        """The public overpass-api.de instance routinely times out/429s/504s under
+        normal load (shared community infrastructure, per its own ServiceDefaults
+        note) - this must never propagate, and shouldn't log at a level that
+        makes routine external flakiness look like an UrbanLens crash."""
+        import requests
+
+        from urbanlens.dashboard.services.apis.locations.boundaries.overpass import OverpassGateway
+
+        gateway = OverpassGateway(session=mock.Mock())
+        with (
+            mock.patch.object(gateway, "query", side_effect=requests.exceptions.ReadTimeout("timed out")),
+            self.assertLogs("urbanlens.dashboard.services.apis.locations.boundaries.overpass", level="WARNING") as logs,
+        ):
+            result = gateway.elements_for_query("[out:json];node(1);out;")
+
+        self.assertEqual(result, [])
+        self.assertTrue(any("overpass query failed" in message.lower() for message in logs.output))
+
+    def test_non_json_response_also_degrades_gracefully(self) -> None:
+        from urbanlens.dashboard.services.apis.locations.boundaries.overpass import OverpassGateway
+
+        gateway = OverpassGateway(session=mock.Mock())
+        with mock.patch.object(gateway, "query", side_effect=ValueError("not json")):
+            result = gateway.elements_for_query("[out:json];node(1);out;")
+
+        self.assertEqual(result, [])
+
 
 class NominatimGatewayTests(TestCase):
     """Nominatim search and lookup normalize OSM place payloads."""

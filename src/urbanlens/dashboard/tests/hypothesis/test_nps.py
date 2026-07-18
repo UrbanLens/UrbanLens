@@ -114,6 +114,24 @@ class FindParkContainingLocationTests(TestCase):
 
         self.assertIsNone(result)
 
+    def test_returns_none_without_a_traceback_when_rate_limited(self):
+        """A live pin-detail view's unpaced lookup can legitimately exceed NPS's
+        tight (10/min) budget - this must degrade the same way any other
+        boundary-lookup failure does (empty panel, no propagated exception),
+        just logged at a level that doesn't read as a crash (see the comment
+        at the call site)."""
+        from urbanlens.dashboard.services.rate_limiter import RateLimitExceededError
+
+        gw = _parks_gateway()
+        with (
+            patch.object(NPSMapGateway, "check_coordinates_within_park", side_effect=RateLimitExceededError("nps")),
+            self.assertLogs("urbanlens.dashboard.services.apis.parks.nps.parks", level="WARNING") as logs,
+        ):
+            result = gw.find_park_containing_location(*_YELLOWSTONE)
+
+        self.assertIsNone(result)
+        self.assertTrue(any("rate limit" in message.lower() for message in logs.output))
+
 
 class GetParkTests(TestCase):
     """get_park fetches a single park's detail by park code."""

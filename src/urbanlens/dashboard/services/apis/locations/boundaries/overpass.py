@@ -109,7 +109,14 @@ class OverpassGateway(Gateway, BoundaryProvider):
         try:
             payload = self.query(query, timeout=timeout)
         except (requests.RequestException, ValueError):
-            logger.exception("Overpass query failed")
+            # Expected, not a bug: overpass-api.de is free, shared community
+            # infrastructure that routinely 429s/504s/times out under normal
+            # load regardless of how conservative our own throttling is (see
+            # its calls_per_minute=2 note in rate_limiter.SERVICE_REGISTRY).
+            # logger.warning (not .exception) so it doesn't read as a crash -
+            # matches GDELT's gateway, which treats its own routine external
+            # failures the same way.
+            logger.warning("Overpass query failed", exc_info=True)
             return []
         elements = payload.get("elements")
         return elements if isinstance(elements, list) else []
