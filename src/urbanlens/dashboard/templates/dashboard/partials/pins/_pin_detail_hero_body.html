@@ -1,21 +1,90 @@
 {% comment %}
-Hero body for the pin detail page (pages/location/index.html) - gives it the
-same shared gradient hero every other page uses. Expects `pin` in context.
-
-The title here is a read-only mirror of the pin's name - the actual
-click-to-edit surface stays in pin_overview_partial.html's Overview panel
-(unchanged, still the source of truth for renames) since it shares a flex row
-there with the community-wiki link/detach/create controls. A small script in
-that partial keeps this mirror in sync immediately after a successful rename
-(see the #pin-detail-hero-title lookup in pin_overview_partial.html).
+Hero body for the pin detail page (pages/location/index.html). Expects `pin`
+in context, plus the wiki/linking context used by the overview panel.
 {% endcomment %}
-<p class="ul-page-hero__eyebrow">
-    <i class="material-symbols-outlined">place</i> Pin
-</p>
-<h1 id="pin-detail-hero-title" class="ul-page-hero__title">{{ pin.effective_name }}</h1>
-{% if pin.location.address %}
-<p class="ul-page-hero__subtitle">
-    <i class="material-symbols-outlined">location_on</i>
-    {{ pin.location.address }}{% if pin.location.city %}, {{ pin.location.city }}{% endif %}{% if pin.location.state %}, {{ pin.location.state }}{% endif %}
-</p>
-{% endif %}
+<div class="pin-detail-hero-body">
+    <div class="pin-detail-hero-main">
+        <p class="ul-page-hero__eyebrow">
+            <i class="material-symbols-outlined">place</i> Pin
+        </p>
+        <h1 id="pin-detail-hero-title" class="ul-page-hero__title">{{ pin.effective_name }}</h1>
+        {% if pin.location.address %}
+        <p class="ul-page-hero__subtitle">
+            <i class="material-symbols-outlined">location_on</i>
+            {{ pin.location.address }}{% if pin.location.city %}, {{ pin.location.city }}{% endif %}{% if pin.location.state %}, {{ pin.location.state }}{% endif %}
+        </p>
+        {% endif %}
+    </div>
+
+    {% if user.profile.community_enabled %}
+        {% if pin.location and pin.location.slug %}
+            {% if pin.location.wiki %}
+            <aside class="pin-hero-wiki-box" id="pin-location-section">
+                <i class="material-symbols-outlined">public</i>
+                <div class="pin-hero-wiki-box-info">
+                    <span class="pin-hero-wiki-box-label">Community Wiki</span>
+                    <a href="{% url 'location.wiki' location_slug=pin.location.slug %}" class="pin-hero-wiki-box-link"
+                       data-tooltip="Shared with everyone who has this location pinned - details and photos added here are visible to the whole community.">
+                        {{ pin.location.display_name }}
+                        <i class="material-symbols-outlined">open_in_new</i>
+                    </a>
+                </div>
+                <div class="pin-hero-wiki-box-actions">
+                    {% if overlapping_location_count > 1 %}
+                    <button type="button" class="btn pin-loc-change-btn"
+                            hx-get="{% url 'pin.link' pin.slug %}"
+                            hx-target="#pin-location-picker"
+                            hx-swap="innerHTML"
+                            data-tooltip="Switch this pin to a different shared location. Other users' pins at this place will not be affected."
+                            data-tooltip-pos="left"
+                            title="Switch to a different shared location">
+                        <i class="material-symbols-outlined">swap_horiz</i>
+                    </button>
+                    {% endif %}
+                    <button type="button" class="btn pin-loc-detach-btn"
+                            hx-post="{% url 'pin.link' pin.slug %}"
+                            hx-target="#pin-overview"
+                            hx-swap="outerHTML"
+                            hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+                            hx-confirm="Detach from this location? Your pin will move to its own independent location without a community wiki."
+                            data-tooltip="Unlink this pin from the shared location. It gets its own independent location; you can create a wiki for it later."
+                            data-tooltip-pos="left"
+                            title="Detach from this shared location">
+                        <i class="material-symbols-outlined">link_off</i>
+                    </button>
+                </div>
+                <div id="pin-location-picker"></div>
+            </aside>
+            {% else %}
+            <aside class="pin-hero-wiki-box pin-hero-wiki-box--create">
+                <i class="material-symbols-outlined">public</i>
+                <div class="pin-hero-wiki-box-info">
+                    <span class="pin-hero-wiki-box-label">Community Wiki</span>
+                    <span class="pin-hero-wiki-box-help">No shared wiki yet.</span>
+                </div>
+                <button type="button" class="btn btn--primary pin-wiki-create-btn"
+                        hx-get="{% url 'pin.wiki.create' pin.slug %}"
+                        hx-target="#pin-wiki-create-dialog-body"
+                        hx-swap="innerHTML"
+                        hx-on::after-request="if(event.detail.successful){document.getElementById('pin-wiki-create-dialog').showModal()}"
+                        data-tooltip="Start a shared wiki page for this place. You choose which of your pin's details (if any) to include."
+                        title="Create a community wiki for this place">
+                    <i class="material-symbols-outlined">add_circle</i> Create Community Wiki
+                </button>
+            </aside>
+            {% endif %}
+        {% endif %}
+    {% elif pin.effective_latitude %}
+    <aside class="pin-hero-wiki-box pin-hero-wiki-box--unlinked">
+        <i class="material-symbols-outlined">link_off</i>
+        <span>Not linked to a shared location.</span>
+        <button type="button" class="btn btn--ghost btn--sm"
+                hx-get="{% url 'pin.link' pin.slug %}"
+                hx-target="#pin-location-picker"
+                hx-swap="innerHTML">
+            <i class="material-symbols-outlined">search</i> Find
+        </button>
+        <div id="pin-location-picker"></div>
+    </aside>
+    {% endif %}
+</div>

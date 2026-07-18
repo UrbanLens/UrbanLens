@@ -400,7 +400,8 @@
   padding: 0;
   margin: 0;
   min-height: 1.2rem;
-  overflow-y: scroll;
+  overflow-y: auto;
+  &:empty { min-height: 0; display: none; }
 }
 
 .lightbox-meta {
@@ -726,3 +727,5 @@
   .material-symbols-outlined,
   .material-icons { font-size: 1.4rem; }
 }
+
+.photo-label-panel-slot:empty { display: none; }
