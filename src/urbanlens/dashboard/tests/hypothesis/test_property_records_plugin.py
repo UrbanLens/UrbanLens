@@ -52,6 +52,13 @@ class PanelRenderContextTests(TestCase):
         data = {"available": False, "reason": "manual_only"}
         self.assertIsNone(self.source.render_context(self.pin, data))
 
+    def test_captcha_blocked_renders_the_manual_lookup_card(self) -> None:
+        data = {"available": False, "reason": "blocked", "message": "CAPTCHA-protected search.", "links": {"assessor_url": "https://example.gov/assessor"}}
+        ctx = self.source.render_context(self.pin, data)
+        assert ctx is not None
+        self.assertEqual(ctx["chips"], ["Manual lookup required"])
+        self.assertTrue(any(entry["href"] == "https://example.gov/assessor" for entry in ctx["meta"]))
+
     def test_available_record_shows_owner_and_chips(self) -> None:
         data = {
             "available": True,
@@ -97,8 +104,42 @@ class PanelRenderContextTests(TestCase):
     def test_debug_count_reflects_availability(self) -> None:
         self.assertEqual(self.source.debug_count({"available": True}), 1)
         self.assertEqual(self.source.debug_count({"available": False, "reason": "manual_only"}), 1)
+        self.assertEqual(self.source.debug_count({"available": False, "reason": "blocked"}), 1)
         self.assertEqual(self.source.debug_count({"available": False, "reason": "no_data_found"}), 0)
         self.assertEqual(self.source.debug_count({}), 0)
+
+
+class FetchPayloadTransientErrorTests(TestCase):
+    """A transient source outage must propagate, never be written to the cache as a durable fact."""
+
+    _PATCH_TARGET = "urbanlens.dashboard.services.apis.property_records.orchestrator.get_property_record"
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.location = baker.make("dashboard.Location")
+
+    def test_source_error_reraises_instead_of_returning_a_cacheable_payload(self) -> None:
+        from unittest import mock
+
+        from urbanlens.dashboard.plugins.builtin.property_records import _fetch_payload
+        from urbanlens.dashboard.services.apis.property_records.orchestrator import REASON_SOURCE_ERROR, PropertyRecordsUnavailableError
+
+        error = PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, "down")
+        with mock.patch(self._PATCH_TARGET, side_effect=error), self.assertRaises(PropertyRecordsUnavailableError):
+            _fetch_payload(self.location, 42.65, -73.75)
+
+    def test_permanent_reason_returns_a_cacheable_unavailable_payload_with_links(self) -> None:
+        from unittest import mock
+
+        from urbanlens.dashboard.plugins.builtin.property_records import _fetch_payload
+        from urbanlens.dashboard.services.apis.property_records.orchestrator import REASON_MANUAL_ONLY, PropertyRecordsUnavailableError
+
+        error = PropertyRecordsUnavailableError(REASON_MANUAL_ONLY, "Call the assessor.", links={"assessor_url": "https://example.gov/assessor"})
+        with mock.patch(self._PATCH_TARGET, side_effect=error):
+            payload = _fetch_payload(self.location, 42.65, -73.75)
+        self.assertEqual(payload["available"], False)
+        self.assertEqual(payload["reason"], REASON_MANUAL_ONLY)
+        self.assertEqual(payload["links"], {"assessor_url": "https://example.gov/assessor"})
 
 
 class WriteOfficialOwnersAndSalesTests(TestCase):

@@ -20,6 +20,9 @@
    with ``?f=json`` and must look like a real ArcGIS service or Socrata
    resource before it's ever written to the registry - a plausible-looking
    URL that doesn't actually respond correctly is discarded, never persisted.
+   An ArcGIS *service root* (no layer index - describable but not queryable)
+   is refined down to its parcel layer first (:func:`_refine_arcgis_url`),
+   so only URLs the Tier 1 gateway can genuinely query ever get saved.
 
 **Tier 3** (:func:`discover_tier3_recipe`) locates a jurisdiction's search
 *form* on its own ``assessor_url`` page and proposes a
@@ -55,6 +58,8 @@ import requests
 
 from urbanlens.dashboard.models.property_jurisdiction.meta import AdapterType
 from urbanlens.dashboard.services.apis.property_records.html_scrape import ScrapeRecipe, SearchField
+from urbanlens.dashboard.services.apis.property_records.meta import SCRAPE_USER_AGENT
+from urbanlens.dashboard.services.apis.property_records.pacing import pace_host
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
@@ -109,7 +114,55 @@ def _is_safe_public_url(url: str) -> bool:
     return hostname != "localhost" and not (address is not None and (address.is_private or address.is_loopback or address.is_link_local or address.is_reserved))
 
 
-def _validate_endpoint(url: str, adapter_type: str) -> bool:
+#: Layer names suggesting a service root's layer holds parcel/assessment data,
+#: for refining a bare ``.../MapServer`` candidate down to a queryable layer.
+_PARCEL_LAYER_NAME_RE = re.compile(r"parcel|cadastr|tax|assess|propert|land", re.IGNORECASE)
+#: How many parcel-ish layers of a service root to probe before giving up -
+#: each probe is a live request against a county server.
+_MAX_LAYER_PROBES = 3
+
+
+def _fetch_json(url: str, params: dict[str, Any]) -> Any | None:
+    """Politely fetch and parse one JSON validation probe, or None on any failure."""
+    pace_host(url)
+    try:
+        response = requests.get(url, params=params, timeout=15)
+        response.raise_for_status()
+        return response.json()
+    except (requests.exceptions.RequestException, ValueError):
+        return None
+
+
+def _refine_arcgis_url(url: str, body: dict[str, Any]) -> str | None:
+    """Resolve an ArcGIS service *root* down to a queryable parcel layer URL.
+
+    A bare ``.../MapServer`` (no trailing layer index) describes the whole
+    service and cannot answer ``/query`` requests - saving one to the
+    registry would validate fine yet never return data. When the service
+    description lists layers, probe the parcel-ish ones (by name) and return
+    the first that exposes queryable ``fields``.
+
+    Args:
+        url: The service-root URL that was validated.
+        body: The root's own ``?f=json`` service description.
+
+    Returns:
+        A layer-level URL confirmed to expose ``fields``, or None.
+    """
+    layers = body.get("layers")
+    if not isinstance(layers, list):
+        return None
+
+    candidates = [layer for layer in layers if isinstance(layer, dict) and layer.get("id") is not None and _PARCEL_LAYER_NAME_RE.search(str(layer.get("name") or ""))]
+    for layer in candidates[:_MAX_LAYER_PROBES]:
+        layer_url = f"{url.rstrip('/')}/{layer['id']}"
+        layer_body = _fetch_json(layer_url, {"f": "json"})
+        if isinstance(layer_body, dict) and not layer_body.get("error") and "fields" in layer_body:
+            return layer_url
+    return None
+
+
+def _validate_endpoint(url: str, adapter_type: str) -> str | None:
     """Confirm a candidate URL actually answers like the service type it claims to be.
 
     Args:
@@ -117,22 +170,23 @@ def _validate_endpoint(url: str, adapter_type: str) -> bool:
         adapter_type: ``AdapterType.ARCGIS_REST`` or ``AdapterType.SOCRATA``.
 
     Returns:
-        True when a live GET to the endpoint returns a response shaped like
-        a real ArcGIS service description or Socrata resource.
+        The confirmed *queryable* endpoint URL - usually ``url`` itself, but
+        an ArcGIS service root is refined down to its parcel layer (see
+        :func:`_refine_arcgis_url`), since only a layer-level URL can answer
+        the point queries ``ArcGisSocrataGateway`` issues. None when the
+        endpoint doesn't respond like the claimed service type.
     """
     if not _is_safe_public_url(url):
-        return False
-    try:
-        if adapter_type == AdapterType.ARCGIS_REST:
-            response = requests.get(url, params={"f": "json"}, timeout=15)
-            response.raise_for_status()
-            body = response.json()
-            return isinstance(body, dict) and not body.get("error") and ("fields" in body or "capabilities" in body or "type" in body)
-        response = requests.get(url, params={"$limit": 1}, timeout=15)
-        response.raise_for_status()
-        return isinstance(response.json(), list)
-    except (requests.exceptions.RequestException, ValueError):
-        return False
+        return None
+    if adapter_type == AdapterType.ARCGIS_REST:
+        body = _fetch_json(url, {"f": "json"})
+        if not isinstance(body, dict) or body.get("error"):
+            return None
+        if "fields" in body:
+            return url
+        return _refine_arcgis_url(url, body)
+    rows = _fetch_json(url, {"$limit": 1})
+    return url if isinstance(rows, list) else None
 
 
 def _rank_candidates(candidates: list[tuple[str, str]]) -> list[tuple[str, str]]:
@@ -237,8 +291,9 @@ def discover_tier1_endpoint(jurisdiction: PropertyJurisdiction, *, allow_ai: boo
 
     blob = "\n".join(f"{r.get('url') or r.get('link') or ''} {r.get('snippet') or r.get('description') or ''}" for r in results)
     for url, adapter_type in _rank_candidates(_extract_candidate_urls(blob)):
-        if _validate_endpoint(url, adapter_type):
-            return DiscoveryResult(url, adapter_type, via_ai=False)
+        validated_url = _validate_endpoint(url, adapter_type)
+        if validated_url:
+            return DiscoveryResult(validated_url, adapter_type, via_ai=False)
 
     if not allow_ai:
         return None
@@ -247,8 +302,9 @@ def discover_tier1_endpoint(jurisdiction: PropertyJurisdiction, *, allow_ai: boo
     if ai_pick is None:
         return None
     url, adapter_type = ai_pick
-    if _validate_endpoint(url, adapter_type):
-        return DiscoveryResult(url, adapter_type, via_ai=True)
+    validated_url = _validate_endpoint(url, adapter_type)
+    if validated_url:
+        return DiscoveryResult(validated_url, adapter_type, via_ai=True)
     return None
 
 
@@ -416,8 +472,8 @@ def discover_tier3_recipe(jurisdiction: PropertyJurisdiction) -> ScrapeRecipe | 
         logger.info("Can't discover a Tier 3 recipe for jurisdiction %s: assessor_url not set", jurisdiction.fips)
         return None
 
+    pace_host(jurisdiction.assessor_url)
     try:
-        SCRAPE_USER_AGENT = "Mozilla/5.0 (X11; CrOS x86_64 14541.0.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36"
         response = requests.get(jurisdiction.assessor_url, headers={"User-Agent": SCRAPE_USER_AGENT}, timeout=15)
         response.raise_for_status()
     except requests.exceptions.RequestException:

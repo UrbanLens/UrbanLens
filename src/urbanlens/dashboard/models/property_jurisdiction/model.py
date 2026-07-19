@@ -9,8 +9,9 @@ that grows over time as counties get researched, either by the
 ``discover_property_jurisdiction`` management command or by direct admin
 edits. A fresh row (created the first time a coordinate resolves into a new
 county - see ``services.apis.property_records.jurisdiction``) starts at
-``AdapterType.UNKNOWN`` with every URL blank; the orchestrator treats that
-identically to ``MANUAL_ONLY`` (nothing automatable yet) rather than erroring.
+``AdapterType.UNKNOWN`` with every URL blank; the orchestrator surfaces that
+as a distinct "unresearched" outcome (vs the operator-asserted
+``MANUAL_ONLY``) rather than erroring.
 """
 
 from __future__ import annotations
@@ -38,10 +39,14 @@ class PropertyJurisdiction(abstract.DashboardModel):
     ``PropertyRecord`` field names, values are the raw attribute name in that
     county's service (e.g. ``{"apn": "PARCELID", "owner_name": "OWNNAME"}``).
 
-    ``scrape_recipe`` is reserved for a future Tier 3 (custom scraper)
-    implementation - a bounded description of which form fields/selectors to
-    use, never arbitrary code (see the plan's compliance section on why AI
-    output must stay strictly non-executable). Nothing populates it yet.
+    ``scrape_recipe`` holds the Tier 3 (custom scraper) configuration - a
+    bounded ``html_scrape.ScrapeRecipe`` dict describing one search request
+    (which URL, which form field the address/APN goes into), never arbitrary
+    code or selectors-to-execute (see the plan's compliance section on why AI
+    output must stay strictly non-executable). It's populated by the
+    ``discover_property_jurisdiction --tier3`` command or by hand, and parsed
+    back through ``html_scrape.recipe_from_dict``, which treats the stored
+    JSON as untrusted.
     """
 
     fips = CharField(max_length=5, unique=True, db_index=True, help_text="5-digit Census FIPS county code (2-digit state + 3-digit county).")
@@ -72,9 +77,11 @@ class PropertyJurisdiction(abstract.DashboardModel):
     treasurer_url = URLField(max_length=500, blank=True, default="")
     recorder_url = URLField(max_length=500, blank=True, default="")
 
-    #: Tier 2 (not yet implemented - see docs/PROBLEMS.md).
-    vendor = CharField(max_length=100, blank=True, default="", help_text="Known vendor platform slug (Tyler, BS&A, qPublic, ...), once Tier 2 adapters exist.")
-    #: Tier 3 (not yet implemented - see docs/PROBLEMS.md).
+    #: Tier 2: which vendor platform runs this county's assessor site. Only
+    #: effective once a matching ``vendor_templates.VendorTemplate`` is
+    #: registered in code for the slug.
+    vendor = CharField(max_length=100, blank=True, default="", help_text="Known vendor platform slug (Tyler, BS&A, qPublic, ...) matching a registered vendor template.")
+    #: Tier 3: bounded per-county search recipe (see the class docstring).
     scrape_recipe = JSONField(default=dict, blank=True)
 
     requires_captcha = BooleanField(default=False, help_text="County site puts a CAPTCHA in front of search - never attempted programmatically (see plan compliance section).")
@@ -105,5 +112,20 @@ class PropertyJurisdiction(abstract.DashboardModel):
 
     @property
     def is_automatable(self) -> bool:
-        """Whether the orchestrator has any implemented tier to try for this jurisdiction."""
-        return self.adapter_type in (AdapterType.ARCGIS_REST, AdapterType.SOCRATA)
+        """Whether the orchestrator has any configured tier it would actually attempt for this jurisdiction.
+
+        Mirrors the orchestrator's own dispatch rules: Tier 1 needs a
+        matching adapter type plus an endpoint URL; the scraping tiers (a
+        registered Tier 2 vendor template, or a Tier 3 recipe) are vetoed
+        outright by ``requires_captcha``; ``MANUAL_ONLY`` is an operator's
+        explicit "nothing here is automatable".
+        """
+        from urbanlens.dashboard.services.apis.property_records import vendor_templates
+
+        if self.adapter_type == AdapterType.MANUAL_ONLY:
+            return False
+        if self.adapter_type in (AdapterType.ARCGIS_REST, AdapterType.SOCRATA) and self.gis_rest_url:
+            return True
+        if self.requires_captcha:
+            return False
+        return vendor_templates.get_template(self.vendor) is not None or bool(self.scrape_recipe)

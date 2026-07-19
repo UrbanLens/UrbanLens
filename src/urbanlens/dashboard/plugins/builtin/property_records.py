@@ -16,13 +16,17 @@ Location (by name, case-insensitively) - manually-entered data always wins,
 matching every other auto-population code path in this codebase (AI link
 extraction, name resolution, ...).
 
-Only Tier 1 (ArcGIS REST / Socrata) is implemented - see
-``services.apis.property_records.orchestrator``'s module docstring for what
-that means for jurisdictions on Tier 2/3/4. This plugin renders nothing for
-those (a quiet 204) except the deliberate ``MANUAL_ONLY`` case, which shows a
-small card pointing at the county's manual-lookup links instead of silently
-disappearing - the plan's explicit ask that "not automatable" surface
-clearly rather than fail silently.
+All three automated tiers run through the orchestrator (Tier 1 ArcGIS
+REST/Socrata, Tier 2 vendor templates, Tier 3 bespoke recipes - see
+``services.apis.property_records.orchestrator``). Unavailable jurisdictions
+render nothing (a quiet 204) except the deliberate "a human must do this"
+cases - ``MANUAL_ONLY`` and CAPTCHA-``blocked`` - which show a small card
+pointing at the county's manual-lookup links instead of silently
+disappearing: the plan's explicit ask that "not automatable" surface clearly
+rather than fail silently. A transient ``source_error`` (county server down)
+is never cached at all - the fetch raises so the panel framework's
+failure-skip/retry machinery handles it, instead of a days-long
+``LocationCache`` row remembering an outage as "no data".
 """
 
 from __future__ import annotations
@@ -33,7 +37,7 @@ import logging
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
-from urbanlens.dashboard.services.apis.property_records.orchestrator import REASON_MANUAL_ONLY
+from urbanlens.dashboard.services.apis.property_records.orchestrator import REASON_BLOCKED, REASON_MANUAL_ONLY, REASON_SOURCE_ERROR
 from urbanlens.dashboard.services.enrichment import LocationCacheEnrichmentSource
 from urbanlens.dashboard.services.external_data import CoordinateGatedInfoPanelSource
 from urbanlens.dashboard.services.rate_limiter import ServiceDefaults
@@ -50,7 +54,7 @@ logger = logging.getLogger(__name__)
 _CACHE_SOURCE = "property_records"
 
 
-def _fetch_payload(location: Location) -> dict[str, Any]:
+def _fetch_payload(location: Location, latitude: float, longitude: float) -> dict[str, Any]:
     """Run the orchestrator and return the shared LocationCache payload shape.
 
     Args:
@@ -60,30 +64,36 @@ def _fetch_payload(location: Location) -> dict[str, Any]:
             through as the Tier 2/3 search key; Tier 1's own GIS-derived
             situs address still takes precedence over it when both run (see
             ``orchestrator.get_property_record``'s docstring).
+        latitude: The latitude to look up - passed explicitly (rather than
+            re-read off ``location``) so the panel path can use the pin's
+            own effective marker coordinates, keeping the coordinates
+            queried and the ``query_key`` recorded on the cache row in sync.
+        longitude: The longitude to look up.
 
     Returns:
         ``{"available": True, ...PropertyRecord.to_dict()}`` on success, or
         ``{"available": False, "reason": ..., "message": ..., "links": {...}?}``
-        - ``links`` (assessor/treasurer/recorder URLs) is only present for
-        ``REASON_MANUAL_ONLY``, since that's the only unavailable case this
-        plugin renders anything for (see the module docstring).
+        - ``links`` (assessor/treasurer/recorder URLs) is present for the
+        manual-lookup reasons (``manual_only``/CAPTCHA-``blocked``), carried
+        on the orchestrator's exception so no second jurisdiction resolution
+        round-trip is needed.
+
+    Raises:
+        PropertyRecordsUnavailableError: Only for ``REASON_SOURCE_ERROR`` - a
+            transient outage must not be written to the cache as a durable
+            "no data" fact; the panel/enrichment frameworks' own failure
+            handling retries it instead.
     """
     from urbanlens.dashboard.services.apis.property_records.orchestrator import PropertyRecordsUnavailableError, get_property_record
 
-    latitude = float(location.latitude or 0)
-    longitude = float(location.longitude or 0)
     try:
         record = get_property_record(latitude, longitude, situs_address=location.address or "")
     except PropertyRecordsUnavailableError as exc:
+        if exc.reason == REASON_SOURCE_ERROR:
+            raise
         payload: dict[str, Any] = {"available": False, "reason": exc.reason, "message": str(exc)}
-        if exc.reason == REASON_MANUAL_ONLY:
-            from urbanlens.dashboard.services.apis.property_records.jurisdiction import resolve_jurisdiction
-
-            jurisdiction = resolve_jurisdiction(latitude, longitude)
-            if jurisdiction is not None:
-                links = {name: url for name, url in (("assessor_url", jurisdiction.assessor_url), ("treasurer_url", jurisdiction.treasurer_url), ("recorder_url", jurisdiction.recorder_url)) if url}
-                if links:
-                    payload["links"] = links
+        if exc.links:
+            payload["links"] = dict(exc.links)
         return payload
 
     payload = record.to_dict()
@@ -214,7 +224,7 @@ def _render_available(data: dict[str, Any]) -> dict[str, Any]:
 
 
 def _render_manual_only(data: dict[str, Any]) -> dict[str, Any] | None:
-    """Build the info-panel context for the one "unavailable" case this panel still shows."""
+    """Build the info-panel context for the "a human must look this up" cases (manual-only, CAPTCHA-blocked)."""
     links = data.get("links") or {}
     if not links and not data.get("message"):
         return None
@@ -241,24 +251,24 @@ class PropertyRecordsPanelSource(CoordinateGatedInfoPanelSource):
 
         lat = float(pin.effective_latitude or 0)
         lng = float(pin.effective_longitude or 0)
-        payload = _fetch_payload(pin.location)
+        payload = _fetch_payload(pin.location, lat, lng)
         LocationCache.set(pin.location, self.cache_source, payload, query_key=f"{lat:.5f},{lng:.5f}")
         if payload.get("available"):
             _write_official_owners_and_sales(pin.location, payload)
 
     def render_context(self, pin: Pin, data: dict) -> dict | None:
-        """Render the found record, the manual-only pointer card, or nothing (204)."""
+        """Render the found record, the manual-lookup pointer card, or nothing (204)."""
         if not data:
             return None
         if data.get("available"):
             return _render_available(data)
-        if data.get("reason") == REASON_MANUAL_ONLY:
+        if data.get("reason") in (REASON_MANUAL_ONLY, REASON_BLOCKED):
             return _render_manual_only(data)
         return None
 
     def debug_count(self, data: dict) -> int:
-        """1 when a record (or a manual-only pointer) was found, else 0."""
-        return 1 if (data or {}).get("available") or (data or {}).get("reason") == REASON_MANUAL_ONLY else 0
+        """1 when a record (or a manual-lookup pointer) was found, else 0."""
+        return 1 if (data or {}).get("available") or (data or {}).get("reason") in (REASON_MANUAL_ONLY, REASON_BLOCKED) else 0
 
 
 class PropertyRecordsEnrichmentSource(LocationCacheEnrichmentSource):
@@ -267,7 +277,7 @@ class PropertyRecordsEnrichmentSource(LocationCacheEnrichmentSource):
     key: ClassVar[str] = "property_records"
     verbose_name: ClassVar[str] = "Property Records (county GIS/tax data)"
     cache_source: ClassVar[str] = _CACHE_SOURCE
-    service_keys: ClassVar[tuple[str, ...]] = ("census_tigerweb", "property_records_gis")
+    service_keys: ClassVar[tuple[str, ...]] = ("census_tigerweb", "property_records_gis", "property_records_scrape")
     usa_only: ClassVar[bool] = True
 
     def fetch(self, location: Location) -> tuple[dict | None, str]:
@@ -279,10 +289,15 @@ class PropertyRecordsEnrichmentSource(LocationCacheEnrichmentSource):
         Returns:
             Tuple of (payload, coordinate query key) - the base class persists
             ``payload`` to the shared ``LocationCache`` row.
+
+        Raises:
+            PropertyRecordsUnavailableError: For a transient source outage -
+                the enrichment runner logs it and retries the location on a
+                later cycle instead of marking it done.
         """
         lat = float(location.latitude or 0)
         lng = float(location.longitude or 0)
-        payload = _fetch_payload(location)
+        payload = _fetch_payload(location, lat, lng)
         if payload.get("available"):
             _write_official_owners_and_sales(location, payload)
         return payload, f"{lat:.5f},{lng:.5f}"
@@ -318,6 +333,13 @@ class PropertyRecordsPlugin(UrbanLensPlugin):
                 calls_per_day=2000,
                 usa_only=True,
                 notes="Free county GIS/open-data endpoints, one per jurisdiction (see the property jurisdiction registry). Each host is separately paced regardless of this overall budget.",
+            ),
+            "property_records_scrape": ServiceDefaults(
+                display_name="County Property Records (Tier 2/3 site search)",
+                calls_per_minute=10,
+                calls_per_day=500,
+                usa_only=True,
+                notes="Vendor-platform and bespoke county assessor-site searches (see the property jurisdiction registry). Kept well below the GIS budget - these hit ordinary county websites, not data APIs. Each host is separately paced regardless of this overall budget.",
             ),
         }
 

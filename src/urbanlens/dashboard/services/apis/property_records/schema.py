@@ -18,8 +18,13 @@ single-tier record.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from typing import Any
+
+
+def _utc_now() -> datetime:
+    """Timezone-aware UTC now - records travel through JSON caches and must never be naive local time."""
+    return datetime.now(UTC)
 
 
 def _date_iso(value: date | None) -> str | None:
@@ -87,7 +92,7 @@ class RecordSource:
     tier: int
     provider: str
     url: str = ""
-    retrieved_at: datetime = field(default_factory=datetime.now)
+    retrieved_at: datetime = field(default_factory=_utc_now)
 
     def to_dict(self) -> dict[str, Any]:
         return {"tier": self.tier, "provider": self.provider, "url": self.url, "retrieved_at": self.retrieved_at.isoformat()}

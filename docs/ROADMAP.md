@@ -19,7 +19,7 @@ appropriate) — this is a living document.
 
 ### 1.1 What UrbanLens is, and its central tension
 
-UrbanLens helps photographers and urban explorers document, organize, and *responsibly* share
+UrbanLens helps photographers and urban explorers document, organize, and responsibly share
 fragile locations. Nearly every design decision flows from one tension:
 
 > **Locations are the product, and locations are the thing being protected.**
@@ -55,7 +55,7 @@ user-specific data → Pin; shared factual data → Location; shared editorial/c
 
 These are the load-bearing rules. Any change that touches these areas needs a test proving the
 invariant still holds. Most of these were each, at some point, the subject of a real security or
-privacy bug — the list is written in blood.
+privacy bug.
 
 1. **Wiki visibility is pinned-gated, and non-visibility is indistinguishable from
    non-existence.** All wiki-scoped controllers resolve through
@@ -159,17 +159,17 @@ this section for X and check each listed interaction.
   the user's private custom title).
 - **Pin status vs. "visited" tag vs. visit history** are three overlapping representations of the
   same concept (UL-329) — features reading "has the user been here" must decide which is
-  authoritative; a consolidation design is overdue.
+  authoritative; a consolidation design is overdue. NOTE from user: Pin status is an outdated concept, and should be considered deprecated. The Visited label indicates a visit independent of specific visit history data. Visit history data should add the visited badge. Therefore, the visited badge and visit history provide redundant indicators of "has the user been here", and I believe that is likely unavoidable.
 
-### 2.2 Labels are one model wearing four hats
+### 2.2 Labels are one model wearing five hats
 
-`Label` (kind ∈ tag/category/status/person) backs four UIs plus: map filter sidebar, saved
+`Label` (kind ∈ tag/category/status/person/media) backs four UIs plus: map filter sidebar, saved
 filters (criteria JSON), smart lists (auto-resync on `m2m_changed` — a previously-missed signal
 path), bulk edit, import (auto-created badges + AI styling), per-user `LabelCustomization`
 (never mutate the shared label for one user's color change), and the organize page. A change to
 label merge/convert/delete must consider: saved-filter criteria referencing the label ID, smart
 lists built on it, foreign-label-ID attach validation on import (was a real bug), and pin-cache
-invalidation for marker badges (UL-279).
+invalidation for marker badges (UL-279). These were previously called "badges", but are now labels.
 
 ### 2.3 Filters/lists/smart-lists are one system, three UIs
 

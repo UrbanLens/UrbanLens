@@ -14,20 +14,27 @@ gateway can be pointed at are ~3,000 *different* domains sharing one
 the normal way - see ``ApiCallLog``), but each individual county server also
 needs its own, much gentler politeness pacing so one pin's fetch never
 hammers a specific small-county server that happens to be slow - see
-``_pace_host``
+``pacing.pace_host``.
+
+Error discipline: "the server couldn't answer" (transport failure, 5xx,
+retries exhausted on 429/503) raises :class:`~meta.SourceUnreachableError`,
+while "the server answered and this parcel isn't there" returns an empty
+list - the orchestrator records the two differently (transient
+``REASON_SOURCE_ERROR`` vs cacheable ``REASON_NO_DATA_FOUND``) so a county
+outage is never mistaken for a permanent no-data fact about a parcel.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 import logging
-import time
 from typing import TYPE_CHECKING, Any, ClassVar
 from urllib.parse import urlsplit
 
-from django.core.cache import cache
 import requests
 
+from urbanlens.dashboard.services.apis.property_records.meta import SourceUnreachableError
+from urbanlens.dashboard.services.apis.property_records.pacing import request_with_backoff
 from urbanlens.dashboard.services.gateway import Gateway, GatewayRequestError
 
 if TYPE_CHECKING:
@@ -35,38 +42,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-#: Minimum seconds between two requests to the same county server host -
-#: "1 req/2-3 sec"; kept at the low end
-#: since this also has to survive the central service-level rate limit.
-_MIN_HOST_INTERVAL_SECONDS = 2.0
-_HOST_PACE_CACHE_PREFIX = "proprec:hostpace:"
-_HOST_PACE_TTL_SECONDS = 60
-
-#: Exponential backoff on 429/503 - a handful of small county ArcGIS/Socrata
-#: instances are genuinely under-provisioned and return these under any load.
-_MAX_RETRIES = 3
-_BACKOFF_BASE_SECONDS = 2.0
-
 _DEFAULT_TIMEOUT = 20
-
-
-def _pace_host(url: str) -> None:
-    """Sleep just long enough to keep requests to this URL's host politely spaced.
-
-    Args:
-        url: The URL about to be requested.
-    """
-    host = urlsplit(url).netloc
-    if not host:
-        return
-    key = f"{_HOST_PACE_CACHE_PREFIX}{host}"
-    last = cache.get(key)
-    now = time.monotonic()
-    if last is not None:
-        wait = _MIN_HOST_INTERVAL_SECONDS - (now - last)
-        if wait > 0:
-            time.sleep(wait)
-    cache.set(key, time.monotonic(), _HOST_PACE_TTL_SECONDS)
 
 
 @dataclass(slots=True, kw_only=True)
@@ -76,36 +52,37 @@ class ArcGisSocrataGateway(Gateway):
     service_key: ClassVar[str] = "property_records_gis"  # pyright: ignore[reportIncompatibleVariableOverride]
     paid_service: ClassVar[bool] = False
 
-    def _get_with_backoff(self, url: str, params: dict[str, Any]) -> requests.Response | None:
-        """GET with per-host pacing and exponential backoff on 429/503.
+    def _get(self, url: str, params: dict[str, Any]) -> requests.Response | None:
+        """GET with per-host pacing and backoff, classifying failures.
 
         Args:
             url: Full request URL (a county's ArcGIS/Socrata endpoint).
             params: Query parameters.
 
         Returns:
-            The response, or None after retries are exhausted or the request
-            failed outright - callers treat both as "no data available",
-            never as a hard error (a single bad county server must not break
-            the pipeline for every other jurisdiction).
+            The response for any answered, non-server-error status (including
+            4xx - callers treat those as "no data", since a client error
+            against a configured endpoint is a configuration fact, not an
+            outage), or None for a non-ok status worth treating as no data.
+
+        Raises:
+            SourceUnreachableError: Transport failure, 5xx, or 429/503 after
+                retries - transient conditions the caller must not record as
+                "this parcel has no data".
         """
-        for attempt in range(_MAX_RETRIES):
-            _pace_host(url)
-            try:
-                response = self.session.get(url, params=params, timeout=_DEFAULT_TIMEOUT)
-            except requests.exceptions.RequestException:
-                logger.warning("Property-records GIS request failed for host %s", urlsplit(url).netloc, exc_info=True)
-                return None
+        host = urlsplit(url).netloc
+        try:
+            response = request_with_backoff(self.session, "GET", url, params=params, timeout=_DEFAULT_TIMEOUT)
+        except requests.exceptions.RequestException as exc:
+            logger.warning("Property-records GIS request failed for host %s", host, exc_info=True)
+            raise SourceUnreachableError(f"County GIS host {host} could not be reached.") from exc
 
-            if response.status_code in (429, 503):
-                backoff = _BACKOFF_BASE_SECONDS * (2**attempt)
-                logger.debug("Property-records GIS host %s returned %s, backing off %.1fs", urlsplit(url).netloc, response.status_code, backoff)
-                time.sleep(backoff)
-                continue
-
-            return response
-
-        return None
+        if response.status_code == 429 or response.status_code >= 500:
+            raise SourceUnreachableError(f"County GIS host {host} answered {response.status_code} after retries.")
+        if not response.ok:
+            logger.debug("Property-records GIS host %s returned %s; treating as no data", host, response.status_code)
+            return None
+        return response
 
     def query_arcgis_by_point(self, service_url: str, latitude: float, longitude: float) -> list[dict[str, Any]]:
         """Query an ArcGIS MapServer/FeatureServer layer for features intersecting a point.
@@ -117,6 +94,9 @@ class ArcGisSocrataGateway(Gateway):
 
         Returns:
             List of raw ``attributes`` dicts (may be empty).
+
+        Raises:
+            SourceUnreachableError: When the county server can't be reached.
         """
         params = {
             "geometry": f"{longitude},{latitude}",
@@ -127,8 +107,8 @@ class ArcGisSocrataGateway(Gateway):
             "returnGeometry": "false",
             "f": "json",
         }
-        response = self._get_with_backoff(f"{service_url.rstrip('/')}/query", params)
-        if response is None or not response.ok:
+        response = self._get(f"{service_url.rstrip('/')}/query", params)
+        if response is None:
             return []
         try:
             body = response.json()
@@ -154,6 +134,12 @@ class ArcGisSocrataGateway(Gateway):
 
         Returns:
             List of raw row dicts (may be empty).
+
+        Raises:
+            GatewayRequestError: When ``geo_field`` is blank (caller bug /
+                registry misconfiguration - ``query_by_point`` pre-checks
+                this so the orchestrator never trips it).
+            SourceUnreachableError: When the county server can't be reached.
         """
         if not geo_field:
             raise GatewayRequestError("Socrata point query requires PropertyJurisdiction.gis_geo_field to be configured.")
@@ -162,8 +148,8 @@ class ArcGisSocrataGateway(Gateway):
             "$order": f"distance_in_meters({geo_field}, {latitude}, {longitude})",
             "$limit": 5,
         }
-        response = self._get_with_backoff(resource_url, params)
-        if response is None or not response.ok:
+        response = self._get(resource_url, params)
+        if response is None:
             return []
         try:
             rows = response.json()
@@ -182,7 +168,12 @@ class ArcGisSocrataGateway(Gateway):
 
         Returns:
             List of raw attribute dicts from whichever adapter applies (empty
-            when the jurisdiction has no usable endpoint configured yet).
+            when the jurisdiction has no usable endpoint configured yet - a
+            misconfigured row degrades to "no data" with a warning rather
+            than breaking the whole pipeline for this coordinate).
+
+        Raises:
+            SourceUnreachableError: When the county server can't be reached.
         """
         from urbanlens.dashboard.models.property_jurisdiction.meta import AdapterType
 
@@ -191,5 +182,8 @@ class ArcGisSocrataGateway(Gateway):
         if jurisdiction.adapter_type == AdapterType.ARCGIS_REST:
             return self.query_arcgis_by_point(jurisdiction.gis_rest_url, latitude, longitude)
         if jurisdiction.adapter_type == AdapterType.SOCRATA:
+            if not jurisdiction.gis_geo_field:
+                logger.warning("Jurisdiction %s is marked Socrata but has no gis_geo_field configured; skipping its Tier 1 query", jurisdiction.fips)
+                return []
             return self.query_socrata_by_point(jurisdiction.gis_rest_url, jurisdiction.gis_geo_field, latitude, longitude)
         return []

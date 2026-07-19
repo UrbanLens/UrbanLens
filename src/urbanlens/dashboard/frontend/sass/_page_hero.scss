@@ -371,26 +371,64 @@
     align-self: stretch;
 }
 
+// Single centered vertical stack (back link -> eyebrow -> title -> subtitle
+// -> wiki box), matching every other page hero's layout (.ul-page-hero__inner
+// above) - the wiki box used to be position:absolute, pinned to the hero's
+// top-right corner independent of the rest of the content; on anything but
+// the widest viewports that put it right next to (often overlapping) the
+// back link and title, which is exactly the "clustered together" complaint.
+// It's now just the last item in the same centered flex column instead.
 .pin-detail-hero-body {
     display: flex;
+    flex-direction: column;
     align-items: center;
-    justify-content: space-between;
-    gap: clamp(1rem, 3vw, 2rem);
+    justify-content: center;
+    text-align: center;
+    gap: .6rem;
     width: min(100%, 76rem);
 }
 
 .pin-detail-hero-main {
     min-width: 0;
-    flex: 1 1 auto;
+}
+
+// Click-to-rename hero title - same interaction/markup shape as the trip
+// hero's .trip-title-editable (_trips.scss), adapted for the pin.edit
+// endpoint. See location/index.html's inline script for the JS.
+.pin-name-editable {
+    display: inline-block;
+    cursor: pointer;
+    border-radius: 6px;
+    padding: .1rem .4rem;
+    transition: background .15s;
+
+    &:hover,
+    &:focus-visible {
+        background: var(--ul-grey-0a);
+        outline: none;
+    }
+}
+
+.pin-name-input {
+    font: inherit;
+    font-weight: inherit;
+    color: inherit;
+    background: var(--ul-control-bg);
+    border: 1px solid var(--ul-color-accent);
+    border-radius: 6px;
+    padding: .1rem .4rem;
+    outline: none;
+    min-width: 10rem;
+    text-align: center;
 }
 
 .pin-hero-wiki-box {
     display: flex;
     align-items: center;
     gap: .75rem;
-    flex: 0 1 24rem;
-    max-width: 100%;
-    padding: .75rem .9rem;
+    width: 100%;
+    max-width: min(100%, 30rem);
+    padding: .6rem .85rem;
     border: 1px solid rgba(255, 255, 255, .32);
     border-radius: 16px;
     background: rgba(255, 255, 255, .18);
@@ -398,10 +436,11 @@
     text-align: left;
     backdrop-filter: blur(7px);
     -webkit-backdrop-filter: blur(7px);
-    position: absolute;
-    top: 3rem;
-    right: 1rem;
-    flex-direction: column;
+    // Normal-flow now (was position:absolute), but still the positioning
+    // context for its own #pin-location-picker dropdown below - without
+    // this, that dropdown would anchor to the whole .ul-page-hero section
+    // (the next positioned ancestor) instead of this box specifically.
+    position: relative;
 }
 
 .pin-hero-wiki-box > .material-symbols-outlined {
@@ -458,20 +497,19 @@
     width: min(28rem, 90vw);
 }
 
-@include down($breakpoint-sm) {
-    .pin-detail-hero-body {
-        flex-direction: column;
-        justify-content: center;
-        text-align: center;
-    }
-
-    .pin-hero-wiki-box {
-        flex-basis: auto;
-        width: min(100%, 24rem);
-    }
-}
-
 #pin-detail-hero .ul-page-hero__inner {
     width: min(100%, 82rem);
     max-width: 82rem;
+}
+
+// The wiki box below the subtitle makes this hero's content taller than the
+// title+subtitle-only heroes the shared fixed height (.ul-page-hero above)
+// is sized for - grow instead of risking the wiki box overflowing/clipping.
+#pin-detail-hero.ul-page-hero {
+    height: auto;
+    min-height: 13.2rem;
+
+    @include up($breakpoint-sm) {
+        min-height: 14.5rem;
+    }
 }

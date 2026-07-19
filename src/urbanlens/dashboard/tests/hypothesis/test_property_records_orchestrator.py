@@ -17,10 +17,13 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.property_jurisdiction.meta import AdapterType
 from urbanlens.dashboard.models.property_jurisdiction.model import PropertyJurisdiction
 from urbanlens.dashboard.services.apis.property_records import jurisdiction as jurisdiction_module, orchestrator
+from urbanlens.dashboard.services.apis.property_records.meta import SourceUnreachableError
 from urbanlens.dashboard.services.apis.property_records.orchestrator import (
+    REASON_BLOCKED,
     REASON_MANUAL_ONLY,
     REASON_NO_DATA_FOUND,
     REASON_OUTSIDE_COVERAGE,
+    REASON_SOURCE_ERROR,
     REASON_TIER2_NOT_IMPLEMENTED,
     REASON_TIER3_NOT_IMPLEMENTED,
     REASON_UNRESEARCHED,
@@ -111,6 +114,37 @@ class GetPropertyRecordDispatchTests(TestCase):
             get_property_record(42.65, -73.75)
         self.assertEqual(ctx.exception.reason, REASON_MANUAL_ONLY)
         self.assertIn("555-1234", str(ctx.exception))
+
+    def test_manual_only_carries_the_jurisdictions_reference_links(self) -> None:
+        """Callers render the manual-lookup card straight from the exception - no second jurisdiction resolution."""
+        row = self._make_jurisdiction(adapter_type=AdapterType.MANUAL_ONLY, assessor_url="https://example.gov/assessor", treasurer_url="https://example.gov/treasurer")
+        with mock.patch.object(orchestrator, "resolve_jurisdiction", return_value=row), self.assertRaises(PropertyRecordsUnavailableError) as ctx:
+            get_property_record(42.65, -73.75)
+        self.assertEqual(ctx.exception.links, {"assessor_url": "https://example.gov/assessor", "treasurer_url": "https://example.gov/treasurer"})
+
+    def test_socrata_without_geo_field_is_treated_as_not_configured(self) -> None:
+        """A half-configured Socrata row must degrade cleanly, not crash the pipeline with a gateway error."""
+        row = self._make_jurisdiction(adapter_type=AdapterType.SOCRATA, gis_rest_url="https://data.example.gov/resource/abcd-1234.json", gis_geo_field="")
+        with (
+            mock.patch.object(orchestrator, "resolve_jurisdiction", return_value=row),
+            mock.patch("urbanlens.dashboard.services.apis.property_records.orchestrator.ArcGisSocrataGateway") as gw_cls,
+        ):
+            with self.assertRaises(PropertyRecordsUnavailableError) as ctx:
+                get_property_record(42.65, -73.75)
+        self.assertEqual(ctx.exception.reason, REASON_UNRESEARCHED)
+        gw_cls.assert_not_called()
+
+    def test_tier1_outage_raises_transient_source_error_not_no_data(self) -> None:
+        """A county-server outage must map to the retryable reason, never the cacheable 'no data' one."""
+        row = self._make_jurisdiction(adapter_type=AdapterType.ARCGIS_REST, gis_rest_url="https://example.gov/MapServer/1")
+        with (
+            mock.patch.object(orchestrator, "resolve_jurisdiction", return_value=row),
+            mock.patch("urbanlens.dashboard.services.apis.property_records.orchestrator.ArcGisSocrataGateway") as gw_cls,
+        ):
+            gw_cls.return_value.query_by_point.side_effect = SourceUnreachableError("down")
+            with self.assertRaises(PropertyRecordsUnavailableError) as ctx:
+                get_property_record(42.65, -73.75)
+        self.assertEqual(ctx.exception.reason, REASON_SOURCE_ERROR)
 
     def test_tier1_success_returns_a_normalized_record(self) -> None:
         row = self._make_jurisdiction(adapter_type=AdapterType.ARCGIS_REST, gis_rest_url="https://example.gov/MapServer/1")
@@ -221,6 +255,63 @@ class Tier3DispatchTests(TestCase):
             record = get_property_record(42.65, -73.75, situs_address="123 Main St")
         self.assertEqual(record.apn, "1-2-3")
         self.assertEqual(record.source.tier, 3)
+
+class CaptchaBlockingTests(TestCase):
+    """requires_captcha vetoes the scraping tiers outright - the plan's compliance rule."""
+
+    def _make_jurisdiction(self, **overrides) -> PropertyJurisdiction:
+        defaults = {"fips": "36001", "county_name": "Albany County", "state": "NY", "requires_captcha": True}
+        defaults.update(overrides)
+        return PropertyJurisdiction.objects.create(**defaults)
+
+    def test_captcha_blocks_tier3_without_any_request(self) -> None:
+        row = self._make_jurisdiction(
+            adapter_type=AdapterType.CUSTOM_SCRAPER,
+            scrape_recipe={"base_url": "https://example.gov/search", "search_field": "situs_address", "param_name": "addr", "method": "GET"},
+            assessor_url="https://example.gov/assessor",
+        )
+        with (
+            mock.patch.object(orchestrator, "resolve_jurisdiction", return_value=row),
+            mock.patch.object(orchestrator, "execute_scrape_recipe") as execute_mock,
+        ):
+            with self.assertRaises(PropertyRecordsUnavailableError) as ctx:
+                get_property_record(42.65, -73.75, situs_address="123 Main St")
+        self.assertEqual(ctx.exception.reason, REASON_BLOCKED)
+        self.assertEqual(ctx.exception.links, {"assessor_url": "https://example.gov/assessor"})
+        execute_mock.assert_not_called()
+
+    def test_captcha_does_not_block_tier1(self) -> None:
+        """CAPTCHA sits in front of the human search site, not the GIS REST endpoint."""
+        row = self._make_jurisdiction(adapter_type=AdapterType.ARCGIS_REST, gis_rest_url="https://example.gov/MapServer/1")
+        with (
+            mock.patch.object(orchestrator, "resolve_jurisdiction", return_value=row),
+            mock.patch("urbanlens.dashboard.services.apis.property_records.orchestrator.ArcGisSocrataGateway") as gw_cls,
+        ):
+            gw_cls.return_value.query_by_point.return_value = [{"PARCELID": "1-2-3"}]
+            record = get_property_record(42.65, -73.75)
+        self.assertEqual(record.apn, "1-2-3")
+
+
+class RegistryBackfillTests(TestCase):
+    """get_or_create_for_fips backfills blank names without ever overwriting real ones."""
+
+    def test_blank_names_are_backfilled_on_a_later_resolution(self) -> None:
+        row, _ = PropertyJurisdiction.objects.get_or_create_for_fips("36001")
+        self.assertEqual(row.county_name, "")
+
+        row, created = PropertyJurisdiction.objects.get_or_create_for_fips("36001", county_name="Albany County", state="NY")
+        self.assertFalse(created)
+        self.assertEqual(row.county_name, "Albany County")
+        self.assertEqual(row.state, "NY")
+        row.refresh_from_db()
+        self.assertEqual(row.county_name, "Albany County")
+
+    def test_existing_names_are_never_overwritten(self) -> None:
+        PropertyJurisdiction.objects.create(fips="36001", county_name="Albany County", state="NY")
+        row, _ = PropertyJurisdiction.objects.get_or_create_for_fips("36001", county_name="Wrong Name", state="XX")
+        self.assertEqual(row.county_name, "Albany County")
+        self.assertEqual(row.state, "NY")
+
 
 class MultiTierMergeIntegrationTests(TestCase):
     """Tier 1 + Tier 3 both configured on the same jurisdiction merge into one record."""

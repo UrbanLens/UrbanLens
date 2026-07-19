@@ -19,6 +19,7 @@ from urbanlens.dashboard.services.apis.property_records.discovery import (
     _rank_candidates,
     _select_ai_candidate,
     _select_ai_form_recipe,
+    _validate_endpoint,
     apply_tier3_discovery,
     discover_tier3_recipe,
 )
@@ -76,6 +77,62 @@ class IsSafePublicUrlTests(TestCase):
 
     def test_non_http_scheme_is_rejected(self) -> None:
         self.assertFalse(_is_safe_public_url("ftp://example.gov/MapServer/1"))
+
+
+class ValidateEndpointTests(TestCase):
+    """Only URLs the Tier 1 gateway can genuinely query may ever reach the registry."""
+
+    _FETCH_JSON = "urbanlens.dashboard.services.apis.property_records.discovery._fetch_json"
+
+    def test_arcgis_layer_with_fields_validates_as_itself(self) -> None:
+        with mock.patch(self._FETCH_JSON, return_value={"fields": [{"name": "APN"}], "type": "Feature Layer"}):
+            result = _validate_endpoint("https://gis.example.gov/rest/services/Parcels/MapServer/2", AdapterType.ARCGIS_REST)
+        self.assertEqual(result, "https://gis.example.gov/rest/services/Parcels/MapServer/2")
+
+    def test_arcgis_service_root_is_refined_to_its_parcel_layer(self) -> None:
+        """A bare .../MapServer describes the service but can't answer /query - saving it as-is
+        would validate fine yet never return data. It must be refined to a queryable layer."""
+        root_body = {"capabilities": "Map,Query", "layers": [{"id": 0, "name": "Roads"}, {"id": 2, "name": "Tax Parcels"}]}
+        layer_body = {"fields": [{"name": "APN"}], "type": "Feature Layer"}
+
+        def fake_fetch(url, params):
+            if url.endswith("/MapServer"):
+                return root_body
+            if url.endswith("/MapServer/2"):
+                return layer_body
+            return {"error": {"code": 400}}
+
+        with mock.patch(self._FETCH_JSON, side_effect=fake_fetch):
+            result = _validate_endpoint("https://gis.example.gov/rest/services/Parcels/MapServer", AdapterType.ARCGIS_REST)
+        self.assertEqual(result, "https://gis.example.gov/rest/services/Parcels/MapServer/2")
+
+    def test_arcgis_service_root_with_no_parcel_layer_is_rejected(self) -> None:
+        root_body = {"capabilities": "Map,Query", "layers": [{"id": 0, "name": "Roads"}, {"id": 1, "name": "Hydrology"}]}
+        with mock.patch(self._FETCH_JSON, return_value=root_body):
+            result = _validate_endpoint("https://gis.example.gov/rest/services/Base/MapServer", AdapterType.ARCGIS_REST)
+        self.assertIsNone(result)
+
+    def test_arcgis_error_body_is_rejected(self) -> None:
+        with mock.patch(self._FETCH_JSON, return_value={"error": {"code": 400}}):
+            self.assertIsNone(_validate_endpoint("https://gis.example.gov/rest/services/Parcels/MapServer/2", AdapterType.ARCGIS_REST))
+
+    def test_unreachable_endpoint_is_rejected(self) -> None:
+        with mock.patch(self._FETCH_JSON, return_value=None):
+            self.assertIsNone(_validate_endpoint("https://gis.example.gov/rest/services/Parcels/MapServer/2", AdapterType.ARCGIS_REST))
+
+    def test_socrata_list_response_validates(self) -> None:
+        with mock.patch(self._FETCH_JSON, return_value=[{"apn": "1"}]):
+            result = _validate_endpoint("https://data.example.gov/resource/ab12-cd34.json", AdapterType.SOCRATA)
+        self.assertEqual(result, "https://data.example.gov/resource/ab12-cd34.json")
+
+    def test_socrata_non_list_response_is_rejected(self) -> None:
+        with mock.patch(self._FETCH_JSON, return_value={"error": True}):
+            self.assertIsNone(_validate_endpoint("https://data.example.gov/resource/ab12-cd34.json", AdapterType.SOCRATA))
+
+    def test_unsafe_url_is_rejected_without_any_request(self) -> None:
+        with mock.patch(self._FETCH_JSON) as fetch:
+            self.assertIsNone(_validate_endpoint("http://127.0.0.1/MapServer/1", AdapterType.ARCGIS_REST))
+        fetch.assert_not_called()
 
 
 class SelectAiCandidateTests(TestCase):

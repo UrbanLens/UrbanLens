@@ -1753,5 +1753,81 @@
             if (window.galleryOpenLightboxItem) window.galleryOpenLightboxItem(list, idx < 0 ? 0 : idx);
         };
     }());
+
+    // -- Click-to-edit-in-place hero title (see .pin-name-editable, _page_hero.scss) --
+    // Mirrors trips/detail.html's identical trip-title pattern. Listeners are
+    // delegated on document.body (not attached directly to the hero span)
+    // because the hero can be replaced wholesale via an out-of-band swap
+    // (cover-photo changes, etc.) - direct listeners would silently die after
+    // that swap.
+    (function () {
+        var csrftoken = '{{ csrf_token }}';
+        var editUrl = '{% url "pin.edit" pin.slug %}';
+
+        function startEdit(el) {
+            if (el.querySelector('input')) return;
+            var rawValue = el.dataset.rawName || '';
+            var input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'pin-name-input';
+            input.value = rawValue;
+            input.maxLength = 255;
+
+            var displayText = el.textContent;
+            el.textContent = '';
+            el.appendChild(input);
+            input.focus();
+            input.select();
+
+            var done = false;
+            function finish(save) {
+                if (done) return;
+                done = true;
+                var newValue = input.value.trim();
+                if (save && newValue && newValue !== rawValue.trim()) {
+                    var body = new URLSearchParams();
+                    body.set('name', newValue);
+                    fetch(editUrl, { method: 'POST', headers: { 'X-CSRFToken': csrftoken }, body: body })
+                        .then(function (r) { if (!r.ok) throw new Error(); })
+                        .then(function () {
+                            el.dataset.rawName = newValue;
+                            el.textContent = newValue;
+                            // The Details card (#pin-overview) shows this same
+                            // name too - refresh it via the same live-refresh
+                            // event external-data panels use (see pin.py's
+                            // _notify_panel_ready / index.html's #pin-overview
+                            // hx-trigger).
+                            document.body.dispatchEvent(new Event('pinOverviewChanged'));
+                            if (window.toastr) toastr.success('Pin renamed.');
+                        })
+                        .catch(function () {
+                            el.textContent = displayText;
+                            if (window.toastr) toastr.error('Failed to rename pin.');
+                        });
+                } else {
+                    el.textContent = displayText;
+                }
+            }
+            input.addEventListener('blur', function () { finish(true); });
+            input.addEventListener('keydown', function (e) {
+                e.stopPropagation();
+                if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+                else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+            });
+        }
+
+        document.body.addEventListener('click', function (e) {
+            var nameEl = e.target.closest('.pin-name-editable');
+            if (nameEl) startEdit(nameEl);
+        });
+        document.body.addEventListener('keydown', function (e) {
+            if (e.key !== 'Enter' && e.key !== ' ') return;
+            var el = e.target.closest('.pin-name-editable');
+            if (el && el === e.target) {
+                e.preventDefault();
+                startEdit(el);
+            }
+        });
+    }());
 </script>
 {% endblock %}

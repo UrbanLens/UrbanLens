@@ -14,7 +14,10 @@ whichever one happens to be marked as the jurisdiction's "primary" tier.
 ``AdapterType.MANUAL_ONLY`` is the one explicit short-circuit: an operator
 who has flagged a jurisdiction that way is stating "nothing here is
 automatable," which is trusted outright rather than second-guessed by trying
-a possibly-stale leftover ``scrape_recipe``.
+a possibly-stale leftover ``scrape_recipe``. ``requires_captcha`` similarly
+vetoes the scraping tiers (2/3) - the plan's compliance rule that a
+CAPTCHA-fronted search is never attempted programmatically - but not Tier 1,
+whose REST/open-data endpoints sit behind no such gate.
 
 Tier 2/3 need a search key (situs address or APN) that Tier 1's point query
 doesn't - callers may pass one in (``situs_address``/``apn``, e.g. a pin's
@@ -22,14 +25,18 @@ doesn't - callers may pass one in (``situs_address``/``apn``, e.g. a pin's
 GIS-derived) situs address, that takes precedence for any Tier 2/3 attempts
 made in the same call.
 
-Each tier attempt reports one of four outcomes, tracked so the final "why
+Each tier attempt reports one of five outcomes, tracked so the final "why
 nothing" error picks the most informative reason once every tier has been
 tried and none produced a record:
 
 - ``"not_configured"`` - nothing on the jurisdiction row points at this tier
   at all (no vendor set / no template for it, no scrape_recipe, no Tier 1
   endpoint).
+- ``"blocked"`` - configured, but deliberately never attempted
+  (``requires_captcha`` vetoes Tier 2/3).
 - ``"no_data"`` - configured and fetched/queried, but nothing usable came back.
+- ``"error"`` - configured, attempted, and the source couldn't be reached
+  (transient - see ``meta.SourceUnreachableError``).
 - ``"ok"`` - produced a record.
 """
 
@@ -44,6 +51,7 @@ from urbanlens.dashboard.services.apis.property_records.arcgis_socrata import Ar
 from urbanlens.dashboard.services.apis.property_records.html_scrape import execute_scrape_recipe, recipe_from_dict
 from urbanlens.dashboard.services.apis.property_records.jurisdiction import resolve_jurisdiction
 from urbanlens.dashboard.services.apis.property_records.merge import merge_records
+from urbanlens.dashboard.services.apis.property_records.meta import SourceUnreachableError
 from urbanlens.dashboard.services.apis.property_records.normalize import TIER1_CONFIDENCE, TIER2_CONFIDENCE, TIER3_CONFIDENCE, build_property_record
 
 if TYPE_CHECKING:
@@ -59,19 +67,24 @@ REASON_UNRESEARCHED = "unresearched"
 REASON_TIER2_NOT_IMPLEMENTED = "tier2_not_implemented"
 REASON_TIER3_NOT_IMPLEMENTED = "tier3_not_implemented"
 REASON_MANUAL_ONLY = "manual_only"
+REASON_BLOCKED = "blocked"
 REASON_NO_DATA_FOUND = "no_data_found"
+REASON_SOURCE_ERROR = "source_error"
 
 #: Reasons that mean "will never be automatable without new adapter code or
-#: registry data" - as opposed to REASON_NO_DATA_FOUND, which is "every
-#: configured tier ran but this particular parcel wasn't in any of their
-#: results" and is worth retrying later (a new pin, a data refresh, ...).
+#: registry data" - as opposed to REASON_NO_DATA_FOUND ("every configured
+#: tier ran but this parcel wasn't in any of their results" - worth retrying
+#: once the cache naturally expires) and REASON_SOURCE_ERROR ("a configured
+#: source is down right now" - transient, must not be negative-cached at all;
+#: see ``plugins.builtin.property_records._fetch_payload``).
 PERMANENT_REASONS = frozenset(
-    {REASON_OUTSIDE_COVERAGE, REASON_UNRESEARCHED, REASON_TIER2_NOT_IMPLEMENTED, REASON_TIER3_NOT_IMPLEMENTED, REASON_MANUAL_ONLY},
+    {REASON_OUTSIDE_COVERAGE, REASON_UNRESEARCHED, REASON_TIER2_NOT_IMPLEMENTED, REASON_TIER3_NOT_IMPLEMENTED, REASON_MANUAL_ONLY, REASON_BLOCKED},
 )
 
 _NOT_CONFIGURED = "not_configured"
 _BLOCKED = "blocked"
 _NO_DATA = "no_data"
+_ERROR = "error"
 _OK = "ok"
 
 
@@ -82,12 +95,25 @@ class PropertyRecordsUnavailableError(Exception):
         reason: One of the ``REASON_*`` constants above.
         jurisdiction_label: Human-readable jurisdiction name, when known, for
             the caller's own messaging.
+        links: The jurisdiction's manual-lookup reference URLs
+            (``assessor_url``/``treasurer_url``/``recorder_url``), populated
+            for the reasons where pointing a human at the county's own site
+            is the only remaining path (``manual_only``/``blocked``) - so
+            callers never need a second jurisdiction resolution round-trip
+            just to render those links.
     """
 
-    def __init__(self, reason: str, message: str, *, jurisdiction_label: str = "") -> None:
+    def __init__(self, reason: str, message: str, *, jurisdiction_label: str = "", links: dict[str, str] | None = None) -> None:
         self.reason = reason
         self.jurisdiction_label = jurisdiction_label
+        self.links = links or {}
         super().__init__(message)
+
+
+def _manual_links(jurisdiction: PropertyJurisdiction) -> dict[str, str]:
+    """The jurisdiction's non-empty human-facing reference URLs, keyed by field name."""
+    candidates = (("assessor_url", jurisdiction.assessor_url), ("treasurer_url", jurisdiction.treasurer_url), ("recorder_url", jurisdiction.recorder_url))
+    return {name: url for name, url in candidates if url}
 
 
 def get_property_record(latitude: float, longitude: float, *, situs_address: str = "", apn: str = "") -> PropertyRecord:
@@ -111,8 +137,9 @@ def get_property_record(latitude: float, longitude: float, *, situs_address: str
     Raises:
         PropertyRecordsUnavailableError: When the coordinate is outside
             coverage, the jurisdiction is unresearched/manual-only, every
-            configured tier is blocked or unimplemented, or every tier that
-            did run found nothing for this specific point.
+            configured tier is blocked or unimplemented, every tier that did
+            run found nothing for this specific point, or (transiently -
+            ``REASON_SOURCE_ERROR``) a configured source couldn't be reached.
     """
     jurisdiction = resolve_jurisdiction(latitude, longitude)
     if jurisdiction is None:
@@ -122,7 +149,7 @@ def get_property_record(latitude: float, longitude: float, *, situs_address: str
 
     if jurisdiction.adapter_type == AdapterType.MANUAL_ONLY:
         message = jurisdiction.manual_instructions or f"{label} has no digital property records - this requires a phone call, mail, or in-person request."
-        raise PropertyRecordsUnavailableError(REASON_MANUAL_ONLY, message, jurisdiction_label=label)
+        raise PropertyRecordsUnavailableError(REASON_MANUAL_ONLY, message, jurisdiction_label=label, links=_manual_links(jurisdiction))
 
     tier1_status, tier1_record = _try_tier1(jurisdiction, latitude, longitude)
 
@@ -141,14 +168,22 @@ def get_property_record(latitude: float, longitude: float, *, situs_address: str
 
 def _build_unavailable_error(jurisdiction: PropertyJurisdiction, label: str, statuses: list[str]) -> PropertyRecordsUnavailableError:
     """Pick the most informative reason once every tier attempt has come up empty."""
-    attempted = [status for status in statuses if status != _NOT_CONFIGURED]
+    attempted = [status for status in statuses if status in (_NO_DATA, _ERROR)]
 
     if not attempted:
+        if _BLOCKED in statuses:
+            message = f"{label}'s property search site uses a CAPTCHA, so automated lookups are disabled for it."
+            return PropertyRecordsUnavailableError(REASON_BLOCKED, message, jurisdiction_label=label, links=_manual_links(jurisdiction))
         if jurisdiction.vendor:
             return PropertyRecordsUnavailableError(REASON_TIER2_NOT_IMPLEMENTED, f"{label} uses vendor {jurisdiction.vendor!r}, which has no Tier 2 template yet.", jurisdiction_label=label)
         if jurisdiction.adapter_type == AdapterType.CUSTOM_SCRAPER:
             return PropertyRecordsUnavailableError(REASON_TIER3_NOT_IMPLEMENTED, f"{label} is flagged for a bespoke scraper, but no recipe has been written for it yet.", jurisdiction_label=label)
         return PropertyRecordsUnavailableError(REASON_UNRESEARCHED, f"No property-record source has been configured for {label} yet.", jurisdiction_label=label)
+
+    # A source outage outranks "no data": until every configured source has
+    # genuinely answered, "this parcel has no data" isn't a fact worth caching.
+    if _ERROR in attempted:
+        return PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, f"A property-record source for {label} couldn't be reached - try again later.", jurisdiction_label=label)
 
     return PropertyRecordsUnavailableError(REASON_NO_DATA_FOUND, f"Every configured source for {label} returned nothing for this property.", jurisdiction_label=label)
 
@@ -157,8 +192,15 @@ def _try_tier1(jurisdiction: PropertyJurisdiction, latitude: float, longitude: f
     """Run the Tier 1 ArcGIS/Socrata adapter, if configured."""
     if jurisdiction.adapter_type not in (AdapterType.ARCGIS_REST, AdapterType.SOCRATA) or not jurisdiction.gis_rest_url:
         return _NOT_CONFIGURED, None
+    if jurisdiction.adapter_type == AdapterType.SOCRATA and not jurisdiction.gis_geo_field:
+        logger.warning("Jurisdiction %s is marked Socrata but has no gis_geo_field configured; treating Tier 1 as not configured", jurisdiction.fips)
+        return _NOT_CONFIGURED, None
 
-    raw_results = ArcGisSocrataGateway().query_by_point(jurisdiction, latitude, longitude)
+    try:
+        raw_results = ArcGisSocrataGateway().query_by_point(jurisdiction, latitude, longitude)
+    except SourceUnreachableError:
+        logger.info("Tier 1 source unreachable for jurisdiction %s", jurisdiction.fips)
+        return _ERROR, None
     if not raw_results:
         return _NO_DATA, None
 
@@ -172,6 +214,8 @@ def _try_tier2(jurisdiction: PropertyJurisdiction, situs_address: str, apn: str)
     template = vendor_templates.get_template(jurisdiction.vendor)
     if template is None:
         return _NOT_CONFIGURED, None
+    if jurisdiction.requires_captcha:
+        return _BLOCKED, None
 
     recipe = template.build_recipe(jurisdiction)
     return _run_recipe(recipe, situs_address, apn, tier=2, confidence=TIER2_CONFIDENCE, provider=template.display_name, jurisdiction=jurisdiction, field_map=template.field_map)
@@ -182,6 +226,8 @@ def _try_tier3(jurisdiction: PropertyJurisdiction, situs_address: str, apn: str)
     recipe = recipe_from_dict(jurisdiction.scrape_recipe)
     if recipe is None:
         return _NOT_CONFIGURED, None
+    if jurisdiction.requires_captcha:
+        return _BLOCKED, None
 
     return _run_recipe(recipe, situs_address, apn, tier=3, confidence=TIER3_CONFIDENCE, provider=f"{jurisdiction.county_name} custom scraper", jurisdiction=jurisdiction, field_map=None)
 
@@ -199,7 +245,11 @@ def _run_recipe(
 ) -> tuple[str, PropertyRecord | None]:
     """Shared Tier 2/3 execution: fetch+extract, normalize."""
 
-    raw = execute_scrape_recipe(recipe, situs_address=situs_address, apn=apn)
+    try:
+        raw = execute_scrape_recipe(recipe, situs_address=situs_address, apn=apn)
+    except SourceUnreachableError:
+        logger.info("Tier %s source unreachable for jurisdiction %s", tier, jurisdiction.fips)
+        return _ERROR, None
     if not raw:
         return _NO_DATA, None
 

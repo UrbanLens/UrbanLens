@@ -78,6 +78,49 @@ class Migration(migrations.Migration):
                 "abstract": False,
             },
         ),
+        # Existing data can already have case-insensitive duplicates (e.g. "Aloha
+        # Stadium" and "aloha stadium" on the same pin) predating this constraint -
+        # the new case-insensitive unique index below fails to create otherwise
+        # (IntegrityError: could not create unique index "db_pin_alias_unique").
+        # Per group, keep one row - preferring an `official`-kind alias if one
+        # exists (more likely the canonical spelling from an external source),
+        # otherwise the lowest id (oldest) - and delete the rest. These are true
+        # duplicates (same name, different case, same pin/wiki), so nothing
+        # meaningful is lost; irreversible, hence reverse_sql=noop.
+        migrations.RunSQL(
+            sql="""
+                DELETE FROM dashboard_pin_aliases
+                WHERE id IN (
+                    SELECT id FROM (
+                        SELECT id,
+                               ROW_NUMBER() OVER (
+                                   PARTITION BY pin_id, LOWER(name)
+                                   ORDER BY (kind = 'official') DESC, id ASC
+                               ) AS rn
+                        FROM dashboard_pin_aliases
+                    ) ranked
+                    WHERE rn > 1
+                );
+            """,
+            reverse_sql=migrations.RunSQL.noop,
+        ),
+        migrations.RunSQL(
+            sql="""
+                DELETE FROM dashboard_wiki_aliases
+                WHERE id IN (
+                    SELECT id FROM (
+                        SELECT id,
+                               ROW_NUMBER() OVER (
+                                   PARTITION BY wiki_id, LOWER(name)
+                                   ORDER BY (kind = 'official') DESC, id ASC
+                               ) AS rn
+                        FROM dashboard_wiki_aliases
+                    ) ranked
+                    WHERE rn > 1
+                );
+            """,
+            reverse_sql=migrations.RunSQL.noop,
+        ),
         migrations.RemoveConstraint(
             model_name="pinalias",
             name="db_pin_alias_unique",

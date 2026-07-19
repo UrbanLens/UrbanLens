@@ -28,7 +28,8 @@ from typing import Any, ClassVar
 
 from requests.exceptions import RequestException
 
-from urbanlens.dashboard.services.apis.property_records.meta import SCRAPE_USER_AGENT
+from urbanlens.dashboard.services.apis.property_records.meta import SCRAPE_USER_AGENT, SourceUnreachableError
+from urbanlens.dashboard.services.apis.property_records.pacing import request_with_backoff
 from urbanlens.dashboard.services.gateway import Gateway
 
 logger = logging.getLogger(__name__)
@@ -144,32 +145,52 @@ def execute_scrape_recipe(recipe: ScrapeRecipe, *, situs_address: str = "", apn:
     Returns:
         A raw label -> value dict extracted from the response HTML (run this
         through ``field_mapping.map_fields`` to normalize), or None when the
-        search value is missing, the request fails, or nothing extractable was found.
+        search value is missing, the site answered with a client error (a
+        stale recipe, not an outage), or nothing extractable was found.
+
+    Raises:
+        SourceUnreachableError: Transport failure, 5xx, or 429/503 after
+            retries - transient conditions that must not be recorded (or
+            cached) as "no data for this property".
     """
     value = situs_address if recipe.search_field == SearchField.SITUS_ADDRESS else apn
     if not value:
         return None
 
-    params = {**recipe.extra_params, recipe.param_name: value}
+    query_params = {**recipe.extra_params, recipe.param_name: value} if recipe.method == "GET" else None
+    form_params = {**recipe.extra_params, recipe.param_name: value} if recipe.method == "POST" else None
 
     gateway = _ScrapeGateway()
     headers = {"User-Agent": SCRAPE_USER_AGENT}
     try:
-        import requests.exceptions
-
-        if recipe.method == "POST":
-            response = gateway.session.post(recipe.base_url, data=params, headers=headers, timeout=_REQUEST_TIMEOUT_SECONDS, stream=True)
-        else:
-            response = gateway.session.get(recipe.base_url, params=params, headers=headers, timeout=_REQUEST_TIMEOUT_SECONDS, stream=True)
-        response.raise_for_status()
+        response = request_with_backoff(
+            gateway.session,
+            recipe.method,
+            recipe.base_url,
+            params=query_params,
+            data=form_params,
+            headers=headers,
+            timeout=_REQUEST_TIMEOUT_SECONDS,
+            stream=True,
+        )
+        if response.status_code == 429 or response.status_code >= 500:
+            raise SourceUnreachableError(f"Property-records site {recipe.base_url} answered {response.status_code} after retries.")
+        if not response.ok:
+            logger.debug("Tier 2/3 property-records scrape got %s from %s; treating as no data", response.status_code, recipe.base_url)
+            return None
         body = b""
+        truncated = False
         for chunk in response.iter_content(chunk_size=65536):
             body += chunk
             if len(body) > _MAX_RESPONSE_BYTES:
+                truncated = True
                 break
-    except RequestException:
+        if truncated:
+            # Drop the connection rather than draining an arbitrarily large body.
+            response.close()
+    except RequestException as exc:
         logger.debug("Tier 2/3 property-records scrape request failed for %s", recipe.base_url, exc_info=True)
-        return None
+        raise SourceUnreachableError(f"Property-records site {recipe.base_url} could not be reached.") from exc
 
     html = body.decode(response.encoding or "utf-8", errors="replace")
     return extract_label_value_pairs(html) or None

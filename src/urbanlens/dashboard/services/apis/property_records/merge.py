@@ -33,6 +33,22 @@ def _has_value(value: object) -> bool:
     return True
 
 
+def _comparable(value: object) -> object:
+    """Normalize a field value for mismatch detection.
+
+    Different tiers routinely format the *same* fact differently - ``"123
+    MAIN ST"`` from a GIS layer vs ``"123 Main St"`` from a scraped page - so
+    strings are compared casefolded with whitespace collapsed; only a
+    difference that survives that normalization counts as a genuine
+    disagreement worth flagging to the user.
+    """
+    if isinstance(value, str):
+        return " ".join(value.split()).casefold()
+    if isinstance(value, tuple):
+        return tuple(_comparable(item) for item in value)
+    return value
+
+
 def merge_records(records: list[PropertyRecord]) -> PropertyRecord:
     """Merge one or more tiers' successful results for one jurisdiction into a single record.
 
@@ -64,7 +80,7 @@ def merge_records(records: list[PropertyRecord]) -> PropertyRecord:
         winning_tier, winning_value = contributors[0]
         winners[name] = winning_value
         field_sources[name] = winning_tier
-        if len({value for _, value in contributors}) > 1:
+        if len({_comparable(value) for _, value in contributors}) > 1:
             mismatches.append(name)
 
     # winners is built generically from dataclasses.fields(PropertyRecord) above,

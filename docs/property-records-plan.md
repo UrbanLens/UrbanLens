@@ -112,6 +112,8 @@ silently.
   backoff on 429/503).
 - Cache aggressively (parcel data changes rarely — annual reassessment
   cycles) to minimize repeat hits on county infrastructure.
+- For the time being, do not implement anything with robots.txt. We need to
+  consider some things there and will take care of that later, before release.
 
 ## 4. Data Quality / Confidence Scoring
 

@@ -44,8 +44,13 @@ _HEURISTIC_CANDIDATES: dict[str, tuple[str, ...]] = {
     "sale_date": ("SALEDATE", "SALE_DATE", "LASTSALEDATE", "LSALEDATE"),
 }
 
-#: Lot-size fields recorded directly in square feet.
-_LOT_SQFT_CANDIDATES = ("LOTSIZE", "LOT_SIZE", "LOTSQFT", "LOT_SQFT", "SHAPE_AREA", "SHAPEAREA")
+#: Lot-size fields recorded directly in square feet. Deliberately excludes
+#: ``SHAPE_AREA``/``SHAPEAREA``: Esri's auto-generated geometry area is in the
+#: layer's *projection* units (square meters, or square degrees for WGS-84 -
+#: almost never square feet), so treating it as sqft silently reports garbage
+#: lot sizes. A county whose layer genuinely stores sqft there can opt in via
+#: its ``field_map`` override.
+_LOT_SQFT_CANDIDATES = ("LOTSIZE", "LOT_SIZE", "LOTSQFT", "LOT_SQFT")
 #: Lot-size fields recorded in acres - converted to square feet by the caller.
 _LOT_ACRE_CANDIDATES = ("GISACRE", "ACREAGE", "ACRES", "TOTALACRES", "CALCACRES")
 

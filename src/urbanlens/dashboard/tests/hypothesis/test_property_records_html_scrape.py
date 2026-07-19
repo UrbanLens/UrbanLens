@@ -101,6 +101,16 @@ class ExtractLabelValuePairsTests(TestCase):
         self.assertEqual(extract_label_value_pairs(html), {})
 
 
+def _mock_response(content: bytes, *, status_code: int = 200) -> mock.Mock:
+    """A requests.Response stand-in with a real integer status_code (the engine compares/orders it)."""
+    response = mock.Mock()
+    response.status_code = status_code
+    response.ok = status_code < 400
+    response.encoding = "utf-8"
+    response.iter_content.return_value = [content]
+    return response
+
+
 class ExecuteScrapeRecipeTests(TestCase):
     def _recipe(self, **overrides) -> ScrapeRecipe:
         defaults = {"base_url": "https://example.gov/search", "search_field": SearchField.SITUS_ADDRESS, "param_name": "addr"}
@@ -108,12 +118,8 @@ class ExecuteScrapeRecipeTests(TestCase):
         return ScrapeRecipe(**defaults)
 
     def test_successful_get_extracts_fields(self) -> None:
-        response = mock.Mock()
-        response.raise_for_status = mock.Mock()
-        response.encoding = "utf-8"
-        response.iter_content.return_value = [b"<table><tr><td>Owner</td><td>Jane Smith</td></tr></table>"]
         gateway = mock.Mock()
-        gateway.session.get.return_value = response
+        gateway.session.get.return_value = _mock_response(b"<table><tr><td>Owner</td><td>Jane Smith</td></tr></table>")
 
         with (
             mock.patch("urbanlens.dashboard.services.apis.property_records.html_scrape._ScrapeGateway", return_value=gateway),
@@ -125,12 +131,8 @@ class ExecuteScrapeRecipeTests(TestCase):
         self.assertEqual(called_params["addr"], "123 Main St")
 
     def test_post_method_sends_data_not_params(self) -> None:
-        response = mock.Mock()
-        response.raise_for_status = mock.Mock()
-        response.encoding = "utf-8"
-        response.iter_content.return_value = [b"<table><tr><td>APN</td><td>1-2-3</td></tr></table>"]
         gateway = mock.Mock()
-        gateway.session.post.return_value = response
+        gateway.session.post.return_value = _mock_response(b"<table><tr><td>APN</td><td>1-2-3</td></tr></table>")
 
         with (
             mock.patch("urbanlens.dashboard.services.apis.property_records.html_scrape._ScrapeGateway", return_value=gateway),
@@ -140,12 +142,37 @@ class ExecuteScrapeRecipeTests(TestCase):
         self.assertEqual(result["APN"], "1-2-3")
         gateway.session.post.assert_called_once()
         gateway.session.get.assert_not_called()
+        self.assertEqual(gateway.session.post.call_args.kwargs["data"]["apn"], "1-2-3")
 
-    def test_request_failure_returns_none(self) -> None:
+    def test_transport_failure_raises_source_unreachable_not_no_data(self) -> None:
+        """An outage must be distinguishable from 'no data' so callers never negative-cache it."""
         import requests.exceptions
+
+        from urbanlens.dashboard.services.apis.property_records.meta import SourceUnreachableError
 
         gateway = mock.Mock()
         gateway.session.get.side_effect = requests.exceptions.RequestException
+        with (
+            mock.patch("urbanlens.dashboard.services.apis.property_records.html_scrape._ScrapeGateway", return_value=gateway),
+            self.assertRaises(SourceUnreachableError),
+        ):
+            execute_scrape_recipe(self._recipe(), situs_address="123 Main St")
+
+    def test_server_error_raises_source_unreachable(self) -> None:
+        from urbanlens.dashboard.services.apis.property_records.meta import SourceUnreachableError
+
+        gateway = mock.Mock()
+        gateway.session.get.return_value = _mock_response(b"", status_code=500)
+        with (
+            mock.patch("urbanlens.dashboard.services.apis.property_records.html_scrape._ScrapeGateway", return_value=gateway),
+            self.assertRaises(SourceUnreachableError),
+        ):
+            execute_scrape_recipe(self._recipe(), situs_address="123 Main St")
+
+    def test_client_error_is_no_data_not_an_outage(self) -> None:
+        """A 404 means the recipe/page is wrong (cacheable), not that the county is down."""
+        gateway = mock.Mock()
+        gateway.session.get.return_value = _mock_response(b"", status_code=404)
         with (
             mock.patch("urbanlens.dashboard.services.apis.property_records.html_scrape._ScrapeGateway", return_value=gateway),
         ):
@@ -153,12 +180,8 @@ class ExecuteScrapeRecipeTests(TestCase):
         self.assertIsNone(result)
 
     def test_response_with_no_extractable_fields_returns_none(self) -> None:
-        response = mock.Mock()
-        response.raise_for_status = mock.Mock()
-        response.encoding = "utf-8"
-        response.iter_content.return_value = [b"<html><body>no data here</body></html>"]
         gateway = mock.Mock()
-        gateway.session.get.return_value = response
+        gateway.session.get.return_value = _mock_response(b"<html><body>no data here</body></html>")
         with (
             mock.patch("urbanlens.dashboard.services.apis.property_records.html_scrape._ScrapeGateway", return_value=gateway),
         ):
@@ -166,12 +189,8 @@ class ExecuteScrapeRecipeTests(TestCase):
         self.assertIsNone(result)
 
     def test_extra_params_are_included_in_the_request(self) -> None:
-        response = mock.Mock()
-        response.raise_for_status = mock.Mock()
-        response.encoding = "utf-8"
-        response.iter_content.return_value = [b"<table><tr><td>Owner</td><td>Jane Smith</td></tr></table>"]
         gateway = mock.Mock()
-        gateway.session.get.return_value = response
+        gateway.session.get.return_value = _mock_response(b"<table><tr><td>Owner</td><td>Jane Smith</td></tr></table>")
         with (
             mock.patch("urbanlens.dashboard.services.apis.property_records.html_scrape._ScrapeGateway", return_value=gateway),
         ):

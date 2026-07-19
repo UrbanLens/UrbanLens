@@ -219,3 +219,33 @@ with a specific machine-readable reason rather than a silent gap.
 - The `discover_property_jurisdiction` command (both `--tier1` default and `--tier3` modes) has
   never been run against a real search provider/AI backend end-to-end in this session (only
   unit-tested with mocks) - worth a smoke-test pass once a specific county is targeted.
+
+---
+
+## Pre-existing stale test debt: `PinOverviewEditableTitleTests` (4 tests, all failing)
+
+`src/urbanlens/dashboard/tests/hypothesis/test_pin_edit_controller.py:241-277` - a test class describing
+an editable pin-title element (`pin-title--editable`, `data-raw-name`, `data-location-name`) inside
+the pin detail page's **Details card** (`partials/pins/pin_overview_partial.html`, rendered by
+`PinOverviewView`/`pin.overview`), wired to the `pin.quick_edit` endpoint (which genuinely exists -
+`urls.py:171-173`, used by the main map popup's star-rating quick-edit today). All 4 tests currently
+fail: `pin_overview_partial.html` has no title/name element of any kind - only the stats grid,
+`deduplicated_identity_fields` rows, and the description row.
+
+**Found while working on a related-but-distinct feature** (2026-07-18): "ensure the pin name (in the
+hero) is edit in place" was implemented this session as a click-to-rename `<h1>` span in the page
+**hero** (`.pin-name-editable`, `_pin_detail_hero_body.html`, wired to `pin.edit`) - a separate
+element in a separate template from what these 4 tests describe. This looks like the same class of
+issue as the `PinDetailsPageLinksCardTests` bug fixed the same session (a test written for a planned
+or since-refactored piece of markup that was never built, or was removed without the test being
+updated) - **not** something the hero-title change broke.
+
+**Why not fixed now**: unlike the Links-card case (a clear "test points at the wrong template" bug
+with one obvious correct answer), this one has a real product-design ambiguity: does the Details card
+still need its *own* separate editable title now that the hero has one (redundant two-places-to-edit-
+the-same-field UX), or were these tests written for an earlier design that the hero-based approach
+superseded? That's a call for whoever's driving product decisions, not something to guess at while
+mid-batch on an unrelated hero-layout task. If the Details-card title is wanted, `pin.quick_edit`
+(single-field PATCH, already used for the map popup's star ratings) is the natural endpoint to wire
+it to, matching the pre-written tests' `data-raw-name`/`data-location-name` contract. If it's not
+wanted, delete `PinOverviewEditableTitleTests` instead.

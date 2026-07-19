@@ -67,6 +67,20 @@ class MergeRecordsTests(TestCase):
         # The lower tier still wins the actual value despite the mismatch flag.
         self.assertEqual(merged.apn, "1-2-3")
 
+    def test_case_and_whitespace_differences_are_not_a_mismatch(self) -> None:
+        """A GIS layer's '123 MAIN ST' vs a scraped page's '123 Main St' is formatting, not disagreement."""
+        tier1 = _record(1, situs_address="123  MAIN ST")
+        tier3 = _record(3, situs_address="123 Main St")
+        merged = merge_records([tier1, tier3])
+        self.assertEqual(merged.field_mismatches, ())
+        self.assertEqual(merged.situs_address, "123  MAIN ST")
+
+    def test_owner_name_tuples_are_compared_normalized(self) -> None:
+        tier1 = _record(1, owner_name=("JANE SMITH",))
+        tier3 = _record(3, owner_name=("Jane Smith",))
+        merged = merge_records([tier1, tier3])
+        self.assertEqual(merged.field_mismatches, ())
+
     def test_zero_value_counts_as_present_not_missing(self) -> None:
         tier1 = _record(1, market_value=0.0)
         tier2 = _record(2, market_value=500000.0)
