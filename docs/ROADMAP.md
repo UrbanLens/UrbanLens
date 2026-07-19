@@ -103,16 +103,18 @@ privacy bug.
     `dispatch_uid`. Write signal-handler guards so they're structurally redundant (the linter has
     stripped "redundant-looking" guards before).
 
-#### 1.3.1 In-flight: boundary-mate wiki visibility
+#### 1.3.1 RESOLVED 2026-07-18: boundary-mate wiki visibility
 
 Commit `15e6e2e2` widened wiki visibility from "pin at this exact Location" to "pin at any
-Location within the same boundary" (a campus-scale place has many Locations). There is
-uncommitted work in `services/wiki_access.py` plus a new hypothesis test
-(`tests/hypothesis/test_wiki_access_boundary_mates.py`). Agents touching wiki access should:
-finish/verify this work first; re-verify invariant #1 (the 404-indistinguishability contract must
-hold for boundary-mates too); and re-verify invariant #6 (boundary-mate matching must use
-`generated_polygon` only, or a user could draw a giant polygon and see every wiki inside it —
-that would be a critical privacy hole).
+Location within the same boundary" (a campus-scale place has many Locations), with
+`tests/hypothesis/test_wiki_access_boundary_mates.py` covering it. This is fully committed, not
+in-flight — re-checked 2026-07-18: invariant #1 holds (`location_visible_to` still returns a
+plain bool feeding the same single `raise Http404`, so a boundary-mate match and a true 404 are
+indistinguishable to the client either way); invariant #6 holds (the boundary query filters to
+`pin__isnull=True, wiki__isnull=True, profile__isnull=True` location-default rows and excludes a
+null `generated_polygon`, never touching the user-drawn `polygon` field). §4.1 item 3 is done;
+`custom_field_references.py`'s wiki-reference picker still duplicates the *old*, pre-fix check
+(documented in `docs/PROBLEMS.md`, not yet fixed — low severity, under-permissive only).
 
 ### 1.4 Product philosophy for feature decisions
 
@@ -365,11 +367,13 @@ Ordering within each tier is roughly by (user impact × risk × leverage). IDs r
    the inconsistency obvious once looked for. Fixed with a profile id/uuid suffix on each key
    plus a one-time `removeItem` of the stale unscoped entry so already-leaked history doesn't
    linger. Verified with `test_search_history_cache_scoping.py`.
-2. **Map cache at 8k+ pins** (UL-355) — `QuotaExceededError` makes the map effectively
-   cacheless for power users (worst case: every load refetches 8.5k pins). See §3.1.
-3. **Finish/verify boundary-mate wiki access** (in-flight, §1.3.1) — uncommitted changes in
-   `wiki_access.py` + new hypothesis test must land with the 404-oracle and
-   generated-polygon-only invariants proven.
+2. **Map cache at 8k+ pins** (UL-355) — DOWNGRADED 2026-07-18 per Jess's own note in `TODO.md`:
+   the observed `QuotaExceededError` may have been a stale-cache symptom, not a true 8.5k-pin
+   quota problem (clearing the cache fixed it for the reporting user). Don't build an
+   eviction/IndexedDB migration off this alone — reproduce with a fresh cache at genuine scale
+   first, per §3.1's own over-engineering warning.
+3. ~~**Finish/verify boundary-mate wiki access**~~ RESOLVED — see §1.3.1, fully committed and
+   re-verified 2026-07-18.
 4. **Settings persistence bugs** (UL-34, UL-255, plus prompts-backlog: "remember last map
    position" broken; theme page allows selecting two default map layers at once) — likely one
    shared root cause in settings save/load; fix as a cluster.
@@ -580,7 +584,7 @@ non-obvious behavior → `docs/NOTES.md`; TODO strikes with evidence.
 - Branch `@features/v0.5.0`; migrations through 0071; ~4850 tests, ~70% line coverage. (migrations will 
   be compacted before merging to main, which will impact the 0071 number)
 - 37 builtin plugins; remaining unconverted services listed in UL-294.
-- Uncommitted work: `services/wiki_access.py` boundary-mate follow-up + hypothesis test (§1.3.1).
+- §1.3.1 boundary-mate wiki visibility: RESOLVED, fully committed (see §1.3.1 for detail).
 - Recent themes (last ~20 commits): trust/security audit of export/import, blocking enforcement,
   calendar-sync revocation, account-deletion file cleanup, dead-unscoped-view removal, SSO/passkey
   coverage, full-suite coverage run + triage.
