@@ -107,6 +107,12 @@ class PinSuggestionQueueView(LoginRequiredMixin, View):
                 "pin_suggestions_count": page_obj.paginator.count,
                 "bulk_actions": _BULK_ACTIONS,
                 "available_labels": _available_labels(profile),
+                # The map (and its attribution) only renders when there are
+                # suggestions to plot - see locations.html's {% if pin_suggestions_count %}.
+                # pin-select-map.js disables Leaflet's own on-map attribution
+                # control for every map it creates, so whichever page embeds
+                # it must enable the footer's live attribution slot instead.
+                "show_map_footer": bool(page_obj.paginator.count),
             },
         )
 

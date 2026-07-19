@@ -741,6 +741,26 @@ _SETTINGS_DECIMAL_FIELDS: tuple[str, ...] = (
 #: of the same name (each group mirrors one settings-page section).
 _SETTINGS_GROUPS: tuple[str, ...] = ("ai", "keyword_tagging", "photos", "places_layers", "tracking", "community")
 
+#: Explicit allowlist of field names per group, mirroring exactly what
+#: ``_export_settings`` writes into each group. The archive is user-supplied
+#: input, so a plain ``hasattr(Profile, key)`` check is not safe here: it
+#: would also be true for fields never meant to be settable this way -
+#: including ``user`` (the OneToOneField to auth.User) and internal
+#: bookkeeping fields such as ``deletion_requested_at``/``tos_accepted_at``/
+#: ``profile_setup_complete``/``slug``/``primary_email_normalized``. A
+#: hand-crafted export file smuggling e.g. ``{"community": {"user": 1}}``
+#: must not be able to repoint identity/bookkeeping columns via this path.
+#: ``sync_aliases`` is deliberately omitted from ``community`` - it's a
+#: choice field, validated separately via ``_safe_set`` below.
+_SETTINGS_GROUP_FIELDS: dict[str, frozenset[str]] = {
+    "ai": frozenset({"ai_enabled", "ai_label_tags", "ai_label_categories", "ai_label_statuses"}),
+    "keyword_tagging": frozenset({"keyword_tagging_enabled", "keyword_label_tags", "keyword_label_categories", "keyword_label_statuses"}),
+    "photos": frozenset({"generate_photo_keywords", "image_downscale_max_dimension", "video_downscale_max_height"}),
+    "places_layers": frozenset({"places_google_enabled", "places_nps_enabled", "places_wikipedia_enabled"}),
+    "tracking": frozenset({"track_pin_visits", "track_routes", "track_geolocation"}),
+    "community": frozenset({"community_enabled", "sync_rating_to_wiki", "sync_vulnerability_to_wiki", "sync_priority_to_wiki", "sync_danger_to_wiki"}),
+}
+
 #: Choice fields validated against the model's own choices before being applied.
 _SETTINGS_CHOICE_FIELDS: tuple[str, ...] = (
     "theme_mode",
@@ -807,7 +827,8 @@ def _import_settings(
 
     for group_name in _SETTINGS_GROUPS:
         group = data.get(group_name) or {}
-        update_fields.update({field_name: value for field_name, value in group.items() if hasattr(Profile, field_name)})
+        allowed_fields = _SETTINGS_GROUP_FIELDS.get(group_name, frozenset())
+        update_fields.update({field_name: value for field_name, value in group.items() if field_name in allowed_fields})
 
     if "sync_aliases" in (data.get("community") or {}):
         _safe_set(update_fields, "sync_aliases", data["community"], Profile, "sync_aliases")

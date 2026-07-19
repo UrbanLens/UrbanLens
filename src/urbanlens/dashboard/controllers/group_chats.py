@@ -419,7 +419,7 @@ class GroupRemoveMemberView(LoginRequiredMixin, View):
         """Remove the posted member and return the refreshed thread.
 
         Args:
-            request: The incoming request. Reads ``profile_slug``.
+            request: The incoming request. Reads ``profile_id``.
             group_uuid: UUID of the group chat.
 
         Returns:
@@ -427,7 +427,15 @@ class GroupRemoveMemberView(LoginRequiredMixin, View):
         """
         profile = _get_profile(request)
         group, membership = _get_group(profile, group_uuid)
-        target = get_object_or_404(Profile.objects.select_related("user"), slug=request.POST.get("profile_slug", ""))
+        # Looked up by numeric id, not slug: the member being removed may have
+        # a masked identity toward the requester (see resolve_visible_identities
+        # in GroupMembersDialogView.get), and a profile's slug is derived from
+        # their username (see Profile._slugify_base) - putting it in the DOM/
+        # request body would leak the very identity the mask is hiding.
+        profile_id_raw = request.POST.get("profile_id", "")
+        if not profile_id_raw.isdigit():
+            return HttpResponseBadRequest("A valid profile_id is required.")
+        target = get_object_or_404(Profile.objects.select_related("user"), pk=profile_id_raw)
         try:
             remove_group_member(group, profile, target)
         except ValueError as exc:

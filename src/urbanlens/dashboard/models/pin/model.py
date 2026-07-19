@@ -10,7 +10,7 @@ from django.contrib.gis.db.models import PointField
 from django.contrib.gis.geos import Point
 from django.core.exceptions import ObjectDoesNotExist
 from django.core.validators import MaxLengthValidator
-from django.db import DatabaseError
+from django.db import DatabaseError, transaction
 from django.db.models import (
     CASCADE,
     RESTRICT,
@@ -389,10 +389,18 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
         The rest of the hierarchy is preserved - this pin takes over the
         former parent's own parent slot (grandparent, or top-level if none),
         and the former parent moves one level down to become this pin's
-        child. Three ordered saves keep every intermediate state cycle-free
-        (this pin is detached first, then the old parent is attached under
-        it, then this pin is reattached under the grandparent) - at no point
-        do two pins ever point at each other simultaneously.
+        child. This pin is reattached directly to the grandparent slot in a
+        single save (skipping past the old parent) rather than detaching to
+        None first: a detach-first step would transiently make this pin a
+        second root pin at its own Location, which can spuriously trip
+        ``db_pin_unique_location_per_profile`` even when the final state (a
+        child of the grandparent) is perfectly valid. Only when there is no
+        grandparent - i.e. this pin's final state really is a new top-level
+        pin - does it get a bare ``parent_pin = None``, and that's exactly
+        the case the conflict check below guards. The two saves are wrapped
+        in a transaction so a failure between them can't leave the hierarchy
+        half-swapped, and at no point do this pin and the old parent ever
+        point at each other simultaneously.
 
         Returns:
             The former parent pin, now this pin's child.
@@ -409,17 +417,18 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
         if old_parent is None:
             raise ValueError("This pin has no parent to swap with.")
         grandparent_id = old_parent.parent_pin_id
-        if grandparent_id is None and Pin.objects.filter(profile_id=self.profile_id, location_id=self.location_id, parent_pin__isnull=True).exclude(pk=self.pk).exists():
-            raise ValueError("Can't complete the swap - you already have a top-level pin at this pin's own location.")
 
-        self.parent_pin = None
-        self.save(update_fields=["parent_pin", "updated"])
+        if grandparent_id is None:
+            if Pin.objects.filter(profile_id=self.profile_id, location_id=self.location_id, parent_pin__isnull=True).exclude(pk=self.pk).exists():
+                raise ValueError("Can't complete the swap - you already have a top-level pin at this pin's own location.")
+            self.parent_pin = None
+        else:
+            self.parent_pin_id = grandparent_id
 
-        old_parent.parent_pin = self
-        old_parent.save(update_fields=["parent_pin", "updated"])
-
-        self.parent_pin_id = grandparent_id
-        self.save(update_fields=["parent_pin", "updated"])
+        with transaction.atomic():
+            self.save(update_fields=["parent_pin", "updated"])
+            old_parent.parent_pin = self
+            old_parent.save(update_fields=["parent_pin", "updated"])
 
         return old_parent
 

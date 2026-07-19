@@ -11,7 +11,7 @@ Context: `thread_messages`, `group`, `viewer_id`, `my_slug`.
 {% endifchanged %}
 {% with tombstone=message|tombstone_text:viewer_id %}
 <li class="dm-bubble {% if message.sender_id == viewer_id %}dm-bubble--own{% else %}dm-bubble--them{% endif %}{% if tombstone %} dm-bubble--tombstone{% endif %}"
-    id="dm-msg-{{ message.id }}" data-message-id="{{ message.id }}" data-created-at="{{ message.created|date:'c' }}" data-sender-slug="{{ message.sender.slug }}">
+    id="dm-msg-{{ message.id }}" data-message-id="{{ message.id }}" data-created-at="{{ message.created|date:'c' }}">
   {% if message.sender_id == viewer_id and not tombstone and not message.deleted_at %}
   <button type="button" class="dm-bubble__menu-btn" data-message-id="{{ message.id }}" aria-label="Message actions">
     <i class="material-symbols-outlined">more_vert</i>

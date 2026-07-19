@@ -44,13 +44,13 @@ just doesn't say "(optional)" instead of saying so explicitly.
 
     <div class="form-row form-row--two-col">
         <div>
-            <label for="visited_date_{{ pin.slug }}">Date <span class="required">*</span></label>
-            <input type="date" name="visited_date" id="visited_date_{{ pin.slug }}" required
+            <label for="visited_date_{{ dialog_id }}">Date <span class="required">*</span></label>
+            <input type="date" name="visited_date" id="visited_date_{{ dialog_id }}" required
                    value="{{ visit.visited_at|date:'Y-m-d'|default:default_date }}">
         </div>
         <div>
-            <label for="visited_time_{{ pin.slug }}">Time</label>
-            <input type="time" name="visited_time" id="visited_time_{{ pin.slug }}"
+            <label for="visited_time_{{ dialog_id }}">Time</label>
+            <input type="time" name="visited_time" id="visited_time_{{ dialog_id }}"
                    value="{% if visit and visit.visited_at|time:'H:i' != '00:00' %}{{ visit.visited_at|time:'H:i' }}{% endif %}">
         </div>
     </div>
@@ -90,7 +90,7 @@ just doesn't say "(optional)" instead of saying so explicitly.
     <div class="form-row visit-attachment-row">
         <div class="visit-attachment-buttons" role="group" aria-label="Add more to this visit">
             <button type="button" class="btn btn--ghost visit-attachment-toggle"
-                    onclick="var p=document.getElementById('visit-photos-panel-{{ pin.slug }}');p.hidden=!p.hidden;this.classList.toggle('is-open',!p.hidden)">
+                    onclick="var p=document.getElementById('visit-photos-panel-{{ dialog_id }}');p.hidden=!p.hidden;this.classList.toggle('is-open',!p.hidden)">
                 <i class="material-symbols-outlined">add_photo_alternate</i> Photos
             </button>
             <button type="button" class="btn btn--ghost visit-attachment-toggle"
@@ -98,7 +98,7 @@ just doesn't say "(optional)" instead of saying so explicitly.
                 <i class="material-symbols-outlined">add_location_alt</i> {% if visit.map_data %}Edit Map{% else %}Map{% endif %}
             </button>
             <button type="button" class="btn btn--ghost visit-attachment-toggle{% if visit_participants or visit_externals %} is-open{% endif %}"
-                    onclick="var p=document.getElementById('visit-participants-panel-{{ pin.slug }}');p.hidden=!p.hidden;this.classList.toggle('is-open',!p.hidden)">
+                    onclick="var p=document.getElementById('visit-participants-panel-{{ dialog_id }}');p.hidden=!p.hidden;this.classList.toggle('is-open',!p.hidden)">
                 <i class="material-symbols-outlined">group_add</i> Participants{% if visit_participants or visit_externals %} ({{ visit_participants|length|add:visit_externals.count }}){% endif %}
             </button>
         </div>
@@ -117,7 +117,7 @@ just doesn't say "(optional)" instead of saying so explicitly.
         </div>
 
         {# -- Photos panel: select existing pin photos and/or upload new ones -- #}
-        <div id="visit-photos-panel-{{ pin.slug }}" class="visit-attachment-panel" hidden>
+        <div id="visit-photos-panel-{{ dialog_id }}" class="visit-attachment-panel" hidden>
             {% if pin_images %}
             <div class="visit-photo-existing" role="group" aria-label="Select existing photos">
                 {% for img in pin_images %}
@@ -139,7 +139,7 @@ just doesn't say "(optional)" instead of saying so explicitly.
         </div>
 
         {# -- Participants panel: existing friends (checked = tagged & invited) plus people not on UrbanLens -- #}
-        <div id="visit-participants-panel-{{ pin.slug }}" class="visit-attachment-panel" {% if not visit_participants and not visit_externals %}hidden{% endif %}>
+        <div id="visit-participants-panel-{{ dialog_id }}" class="visit-attachment-panel" {% if not visit_participants and not visit_externals %}hidden{% endif %}>
             {% if connections %}
             <div class="visit-participant-picker">
                 {% for friend in connections %}

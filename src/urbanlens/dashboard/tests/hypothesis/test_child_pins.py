@@ -348,6 +348,19 @@ class PinSwapWithParentModelTests(TestCase):
         sub.refresh_from_db()
         self.assertEqual(sub.parent_pin_id, conflicting_root.pk)
 
+    def test_succeeds_despite_unrelated_root_conflict_at_own_location_when_grandparent_exists(self) -> None:
+        """A conflicting root pin at this pin's own Location must not block the swap
+        when a grandparent exists - this pin never actually needs to become a root
+        pin in that case, so the one-root-per-Location constraint doesn't apply."""
+        other_root = _make_pin(self.profile, name="Other Root", location=self.child.location)
+        self.child.swap_with_parent()
+        self.child.refresh_from_db()
+        self.parent.refresh_from_db()
+        other_root.refresh_from_db()
+        self.assertEqual(self.child.parent_pin_id, self.grandparent.pk)
+        self.assertEqual(self.parent.parent_pin_id, self.child.pk)
+        self.assertIsNone(other_root.parent_pin_id)
+
     def test_no_cycle_after_swap(self) -> None:
         """The former parent's ancestor chain must never loop back to itself."""
         self.child.swap_with_parent()
