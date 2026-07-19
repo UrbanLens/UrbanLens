@@ -419,9 +419,8 @@ Ordering within each tier is roughly by (user impact × risk × leverage). IDs r
 
 ### 4.2 Tier 2: Verification backlog (cheap to check, unknown risk)
 
-Each of these is "confirm, then either close or convert to a bug": wiki section missing on one pin
-(UL-385), Wikipedia missing for some HRSH buildings (UL-354). Closing these shrinks `TODO.md`
-noise cheaply — batch several per session, with a repro test per confirmed bug.
+The one remaining item: Wikipedia missing for some HRSH buildings (UL-354) - "confirm, then either
+close or convert to a bug."
 
 11. ~~**Password reset for SSO users** (UL-257)~~ RESOLVED 2026-07-19 (`def2c4d6`) — SSO-only
     accounts were silently dropped by Django's stock `PasswordResetForm.get_users()`, while the
@@ -491,6 +490,15 @@ noise cheaply — batch several per session, with a repro test per confirmed bug
     parsing with the identical unfixed bug. Note: the "Parking location" header name is based on
     the known Takeout export format, not a sample file from the report - re-open if a real
     Parking.csv still fails.
+20. ~~**Wiki section missing on one pin** (UL-385)~~ RESOLVED 2026-07-19 (`f45ba6b3`) — real bug,
+    and a pre-written (but not yet passing) test named the exact mechanism:
+    `PinOverviewView.get()` backfills a legacy Location's missing slug, but the "Create Community
+    Wiki" button lives in the page hero, outside `#pin-overview`, so an already-loaded page kept
+    showing "no wiki" until a full reload even right after the backfill. Fixed by having the
+    overview response also carry an out-of-band hero re-render, matching the existing
+    `_trip_hero_oob()` pattern in `controllers/trip.py`. Also bounded the Celery result backend's
+    reconnect retry loop to 5s (`e38ddd93`) after it turned out to be adding minutes to every test
+    touching this code path (and would do the same to any request in a real broker outage).
 
 ### 4.3 Tier 3: High-leverage features (composable from existing infrastructure)
 

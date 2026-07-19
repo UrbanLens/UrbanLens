@@ -200,7 +200,7 @@ Features planned for future releases.
 * Allow exporting data as other formats: KML, GPX, GeoJSON, CSV. [UL-382]
 * "Promote child pin to parent pin" feature. [UL-383]
 * Pin Details page > Edit dialog - The Pin type dropdown should probably go away. [UL-384]
-* One time: I'm not seeing the community wiki section appear on a particular pin details page. (4143533n-7355362w) [UL-385]
+* ~~One time: I'm not seeing the community wiki section appear on a particular pin details page. (4143533n-7355362w)~~ RESOLVED 2026-07-19 (`f45ba6b3`): real bug, and an existing pre-written (but not yet fixed) test named the exact mechanism - `PinOverviewView.get()` backfills a legacy Location's missing slug, but the "Create Community Wiki" button lives in the page hero, outside `#pin-overview`, so an already-loaded page kept showing "no wiki" until a full reload even right after the backfill. Fixed by having the overview response also carry an out-of-band hero re-render, matching the existing `_trip_hero_oob()` pattern. This pin was very likely hitting a legacy Location row that predated slug generation. [UL-385]
 * Import pins is a little clunky. [UL-386]
 * "Import my instagram" feature to port over photos you've posted. [UL-387]
 * Find a way to make it easy to identify and/or fix situations where you have other pins on the main map which fall within the boundaries of another one of your pins. [UL-388]
