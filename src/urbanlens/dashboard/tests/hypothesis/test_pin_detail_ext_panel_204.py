@@ -205,7 +205,7 @@ class ConsistentLoadingPlaceholderTests(TestCase):
 
 
 class LocationDataTabsTests(TestCase):
-    """OpenStreetMap (Nominatim), Photon, and Building Characteristics used to be
+    """Nominatim, Photon, and Building Characteristics used to be
     three separate standalone cards with no explanation of how they related to
     one another - merged into one "Location Data" card with tabs (see
     _pin_location_data_tabs.html and PinController.view's location_data_tabs)."""

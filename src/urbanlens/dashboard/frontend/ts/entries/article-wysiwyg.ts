@@ -29,6 +29,7 @@ import { TableKit } from "@tiptap/extension-table";
 import StarterKit from "@tiptap/starter-kit";
 import { Markdown } from "tiptap-markdown";
 import { nextReferenceNumber, referenceDefinitionStub } from "../shared/article-footnotes";
+import { getCsrfToken } from "../shared/csrf";
 
 interface MarkdownStorage {
     getMarkdown(): string;
@@ -121,6 +122,59 @@ function insertReference(root: HTMLElement, editor: Editor): void {
     if (window.toastr) window.toastr.info(`Reference [${n}] added - fill in the source at the bottom of the article.`);
 }
 
+interface UploadResponse {
+    url?: string;
+    error?: string;
+}
+
+/**
+ * Upload a picked file to the article's image endpoint (see
+ * ArticleImageUploadView/`data-image-upload-url`) and insert it into the
+ * document at the current cursor once stored - the same size/content-type/
+ * malware-scan/quota checks as every other gallery upload run server-side
+ * before this ever resolves.
+ */
+async function uploadAndInsertImage(root: HTMLElement, editor: Editor, file: File): Promise<void> {
+    const uploadUrl = root.dataset.imageUploadUrl;
+    if (!uploadUrl) return;
+
+    const formData = new FormData();
+    formData.append("image", file);
+
+    let data: UploadResponse = {};
+    let ok = false;
+    try {
+        const response = await fetch(uploadUrl, { method: "POST", body: formData, headers: { "X-CSRFToken": getCsrfToken() } });
+        ok = response.ok;
+        data = (await response.json().catch(() => ({}))) as UploadResponse;
+    } catch {
+        if (window.toastr) window.toastr.error("Image upload failed - check your connection and try again.");
+        return;
+    }
+
+    if (!ok || !data.url) {
+        if (window.toastr) window.toastr.error(data.error || "Image upload failed.");
+        return;
+    }
+    editor.chain().focus().setImage({ src: data.url, alt: file.name }).run();
+}
+
+/** Opens the browser's file picker and hands the chosen image off to uploadAndInsertImage. */
+function pickAndUploadImage(root: HTMLElement, editor: Editor): void {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+    input.addEventListener(
+        "change",
+        () => {
+            const file = input.files?.[0];
+            if (file) void uploadAndInsertImage(root, editor, file);
+        },
+        { once: true },
+    );
+    input.click();
+}
+
 type ToolbarAction = (editor: Editor, root: HTMLElement) => void;
 
 const TOOLBAR_ACTIONS: Record<string, ToolbarAction> = {
@@ -152,12 +206,7 @@ const TOOLBAR_ACTIONS: Record<string, ToolbarAction> = {
         }
         editor.chain().focus().extendMarkRange("link").setLink({ href: url }).run();
     },
-    image: (editor) => {
-        const url = window.prompt("Image URL", "https://");
-        if (!url) return;
-        const alt = window.prompt("Alt text (for accessibility)", "") ?? "";
-        editor.chain().focus().setImage({ src: url, alt }).run();
-    },
+    image: (editor, root) => pickAndUploadImage(root, editor),
     reference: (editor, root) => insertReference(root, editor),
 };
 

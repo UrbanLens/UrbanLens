@@ -455,7 +455,6 @@
 }
 
 .pin-hero-wiki-box-link,
-.pin-hero-wiki-box-help,
 .pin-hero-wiki-box--unlinked > span {
     color: #fff;
     font-size: .9rem;
@@ -486,6 +485,58 @@
     right: 0;
     z-index: 5;
     width: min(28rem, 90vw);
+}
+
+// "Create a wiki" state - the whole box IS the button (not an icon+label
+// card with a separate nested button), same footprint as the populated
+// card above so nothing shifts position once a wiki exists.
+.pin-hero-wiki-box--create {
+    justify-content: center;
+    cursor: pointer;
+    border-style: dashed;
+    font: inherit;
+    font-weight: 700;
+    font-size: .85rem;
+    color: #fff;
+    transition: background-color .15s ease, border-color .15s ease, transform .1s ease;
+
+    .material-symbols-outlined {
+        color: #fff;
+    }
+
+    &:hover,
+    &:focus-visible {
+        background: rgba(255, 255, 255, .28);
+        border-color: rgba(255, 255, 255, .6);
+    }
+
+    &:active {
+        transform: scale(.98);
+    }
+
+    &:focus-visible {
+        outline: 2px solid var(--ul-color-accent-ring);
+        outline-offset: 2px;
+    }
+}
+
+// The glass-white treatment above assumes a photo backdrop (--cover) where
+// it needs to read over an arbitrary image. Without a cover photo the hero
+// is just the pastel gradient wash, and that same bright white glass reads
+// as a glaring patch against the rest of a dark-themed page - tint it dark
+// instead there, same as --cover's own overlay already does over photos.
+[data-theme="dark"] {
+    .ul-page-hero:not(.ul-page-hero--cover) .pin-hero-wiki-box {
+        background: rgba(0, 0, 0, .38);
+        border-color: rgba(255, 255, 255, .14);
+        box-shadow: 0 14px 32px rgba(0, 0, 0, .5);
+    }
+
+    .ul-page-hero:not(.ul-page-hero--cover) .pin-hero-wiki-box--create:hover,
+    .ul-page-hero:not(.ul-page-hero--cover) .pin-hero-wiki-box--create:focus-visible {
+        background: rgba(0, 0, 0, .55);
+        border-color: rgba(255, 255, 255, .3);
+    }
 }
 
 @include down($breakpoint-sm) {

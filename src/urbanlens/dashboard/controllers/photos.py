@@ -18,7 +18,7 @@ from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion, VisitSuggestionStatus
-from urbanlens.dashboard.services.images import compute_checksum, image_to_gallery_json
+from urbanlens.dashboard.services.images import compute_checksum, image_to_gallery_json, image_upload_error
 from urbanlens.dashboard.services.memories.photos import classify_photo, create_pin_and_log_visit, log_visit_on_pin
 from urbanlens.dashboard.services.memories.unlogged import unlogged_visited_pins
 from urbanlens.dashboard.services.pagination import get_page
@@ -139,6 +139,8 @@ class MemoriesPhotosView(LoginRequiredMixin, View):
         Returns:
             The rendered Photos page.
         """
+        from urbanlens.dashboard.services.storage import get_quota_bytes, get_storage_used_bytes, max_upload_file_size_bytes
+
         profile, _ = Profile.objects.get_or_create(user=request.user)
         gallery = Image.objects.uploaded_by(profile).select_related("pin", "wiki")
         page_obj = get_page(request, gallery, _GALLERY_PAGE_SIZE)
@@ -153,6 +155,9 @@ class MemoriesPhotosView(LoginRequiredMixin, View):
                 "profile": profile,
                 "photo_count": gallery.count(),
                 "unlogged_visits_count": len(unlogged_visited_pins(profile)),
+                "storage_used_bytes": get_storage_used_bytes(profile),
+                "storage_quota_bytes": get_quota_bytes(profile),
+                "max_upload_file_size_bytes": max_upload_file_size_bytes(),
             },
         )
 
@@ -246,11 +251,10 @@ class PhotoUploadView(LoginRequiredMixin, View):
         else:
             return JsonResponse({"error": "That file is not an image, video, or supported document type."}, status=400)
 
-        from urbanlens.dashboard.services.storage import file_size_error_for_upload
-
-        size_error = file_size_error_for_upload(image_file.size)
-        if size_error:
-            return JsonResponse({"error": size_error}, status=413)
+        upload_error = image_upload_error(image_file, media_type)
+        if upload_error:
+            message, status = upload_error
+            return JsonResponse({"error": message}, status=status)
 
         checksum = compute_checksum(image_file)
         if Image.objects.filter(profile=profile, checksum=checksum).exists():

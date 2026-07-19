@@ -597,6 +597,11 @@ def _activities_panel_html(request: HttpRequest, trip: Trip, profile: Profile, *
         for act in activities
     ]
     all_activities_completed = bool(activities) and all(act.status == TripActivity.STATUS_COMPLETED for act in activities)
+    # Empty-tab greying - the Upcoming tab always has something to say (even
+    # "no upcoming activities"), so only these 3 status-filtered tabs need it.
+    proposed_count = sum(1 for act in activities if act.status == TripActivity.STATUS_PROPOSED)
+    confirmed_count = sum(1 for act in activities if act.status == TripActivity.STATUS_CONFIRMED)
+    completed_count = sum(1 for act in activities if act.status == TripActivity.STATUS_COMPLETED)
     return render_to_string(
         request=request,
         template_name="dashboard/partials/trips/trip_activities_panel.html",
@@ -605,6 +610,9 @@ def _activities_panel_html(request: HttpRequest, trip: Trip, profile: Profile, *
             "activities_with_index": activities_with_index,
             "profile": profile,
             "all_activities_completed": all_activities_completed,
+            "proposed_count": proposed_count,
+            "confirmed_count": confirmed_count,
+            "completed_count": completed_count,
             "viewer_has_joined": viewer_has_joined,
             "oob": oob,
         },
@@ -1293,7 +1301,7 @@ class TripCommentsView(LoginRequiredMixin, View):
         return _render_trip_comments(request, result, profile)
 
     def post(self, request, trip_slug):
-        from urbanlens.dashboard.controllers.comments import _notify_reply
+        from urbanlens.dashboard.controllers.comments import _notify_reply, comment_image_error
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
         result = _trip_or_403(request, trip_slug, profile)
@@ -1315,6 +1323,8 @@ class TripCommentsView(LoginRequiredMixin, View):
         length_error = text_length_error(text, MAX_COMMENT_TEXT_LENGTH, "Comment")
         if length_error:
             return HttpResponse(length_error, status=400)
+        if image and (image_error := comment_image_error(image)):
+            return HttpResponse(image_error, status=400)
 
         parent_id = request.POST.get("parent_id")
         parent = None

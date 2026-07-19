@@ -317,6 +317,30 @@ services:
         max-size: "200k"
         max-file: "10"
 
+  # clamd daemon every upload (photos/videos/documents, article images,
+  # avatars, custom icons, comment/DM attachments) is scanned through before
+  # it's ever written to permanent storage - see services/malware_scan.py.
+  # The image's own baked-in HEALTHCHECK (pings clamd on its TCP port) is
+  # used as-is rather than reimplemented here - deliberately not overriding
+  # it with a guessed script name. The app fails uploads closed (rejects
+  # them, see MalwareScanUnavailableError) if this container is unreachable,
+  # so keep it running in every environment that accepts uploads.
+  clamav:
+    container_name: urbanlens_${UL_ENVIRONMENT:-production}_clamav
+    image: clamav/clamav-debian:stable
+    restart: unless-stopped
+    volumes:
+      - clamav-db:/var/lib/clamav
+    networks:
+      app_network:
+        aliases:
+          - urbanlens_clamav
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "10"
+
   valkey:
     container_name: urbanlens_${UL_ENVIRONMENT:-production}_valkey
     image: valkey/valkey:7-alpine
@@ -351,6 +375,7 @@ volumes:
   static_volume:
   media_volume:
   backups:
+  clamav-db:
 
 networks:
   app_network:

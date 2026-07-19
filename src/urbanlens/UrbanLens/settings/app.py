@@ -102,6 +102,18 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     backup_enabled: bool = Field(default=True, description="Whether scheduled database backups are enabled")
     backup_frequency_hours: int = Field(default=24, description="How often scheduled database backups should run, in hours")
     backup_retention: int = Field(default=30, description="The number of backup files to retain")
+    clamav_enabled: bool = Field(
+        default=True,
+        description=(
+            "Whether every user-uploaded file (photo/video/document, article images) is scanned for "
+            "malware via a clamd daemon before it's stored. Uploads are rejected if the scanner is "
+            "enabled but unreachable (fail closed). Set UL_CLAMAV_ENABLED=false for local development, "
+            "where no clamd container is running."
+        ),
+    )
+    clamav_host: str = Field(default="urbanlens_clamav", description="Hostname of the clamd daemon (see the clamav service in docker-compose.yml)")
+    clamav_port: int = Field(default=3310, description="Port of the clamd daemon")
+    clamav_timeout_seconds: float = Field(default=15.0, description="Socket timeout for a single clamd scan request")
     allow_dev_toolbar_for_non_admins: bool = Field(
         default=False,
         description=(

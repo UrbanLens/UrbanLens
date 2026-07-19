@@ -45,6 +45,27 @@ def _profile(request) -> Profile:
     return profile
 
 
+def comment_image_error(image_file) -> str | None:
+    """Validate an image attached to a comment (pin, wiki, or trip).
+
+    Shared by all three comment POST handlers - comments don't go through
+    the ``Image`` model, so they can't reuse ``services.images.image_upload_error``
+    directly, but every upload still gets the same size/content-type/malware
+    checks before it's ever saved.
+
+    Args:
+        image_file: The uploaded file from ``request.FILES.get("image")``.
+
+    Returns:
+        A user-facing error message if the file should be rejected, or None.
+    """
+    from urbanlens.dashboard.models.images.model import MediaKind
+    from urbanlens.dashboard.services.images import image_upload_error
+
+    upload_error = image_upload_error(image_file, MediaKind.PHOTO)
+    return upload_error[0] if upload_error else None
+
+
 def _render_comments(request, context: dict) -> HttpResponse:
     return render(request, "dashboard/partials/comments/comment_panel.html", context)
 
@@ -149,6 +170,8 @@ class PinCommentsView(LoginRequiredMixin, View):
         length_error = text_length_error(text, MAX_COMMENT_TEXT_LENGTH, "Comment")
         if length_error:
             return HttpResponse(length_error, status=400)
+        if image and (image_error := comment_image_error(image)):
+            return HttpResponse(image_error, status=400)
         parent_id = request.POST.get("parent_id")
         parent = None
         if parent_id:
@@ -207,6 +230,8 @@ class WikiCommentsView(LoginRequiredMixin, View):
         length_error = text_length_error(text, MAX_COMMENT_TEXT_LENGTH, "Comment")
         if length_error:
             return HttpResponse(length_error, status=400)
+        if image and (image_error := comment_image_error(image)):
+            return HttpResponse(image_error, status=400)
         parent_id = request.POST.get("parent_id")
         parent = None
         if parent_id:

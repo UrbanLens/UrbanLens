@@ -442,13 +442,26 @@ def _uploaded_custom_icon(request: HttpRequest) -> UploadedFile | None:
     return None
 
 
-def _apply_custom_icon_from_post(label: Label, request: HttpRequest) -> None:
-    """Update label custom_icon from POST (upload or clear)."""
+def _apply_custom_icon_from_post(label: Label, request: HttpRequest) -> str | None:
+    """Update label custom_icon from POST (upload or clear).
+
+    Returns:
+        A user-facing error message if the uploaded icon failed a
+        size/content-type/malware check (the icon is left unchanged), or
+        None on success.
+    """
     custom_icon = _uploaded_custom_icon(request)
     if custom_icon:
+        from urbanlens.dashboard.models.images.model import MediaKind
+        from urbanlens.dashboard.services.images import image_upload_error
+
+        upload_error = image_upload_error(custom_icon, MediaKind.PHOTO)
+        if upload_error:
+            return upload_error[0]
         label.custom_icon = _resize_custom_icon(custom_icon)
     elif request.POST.get("clear_custom_icon"):
         label.custom_icon = None
+    return None
 
 
 def _apply_kind_conversion(label: Label, new_kind: str, profile: Profile) -> bool:
@@ -672,7 +685,9 @@ class LabelEditView(_LabelKindMixin, LoginRequiredMixin, View):
                 label.allow_auto_tag = "allow_auto_tag" in request.POST
             label.keywords = request.POST.get("keywords", "").strip() or None
 
-        _apply_custom_icon_from_post(label, request)
+        icon_error = _apply_custom_icon_from_post(label, request)
+        if icon_error:
+            return HttpResponse(icon_error, status=400)
 
         kind_changed = _apply_kind_conversion(label, new_kind, profile)
         label.save()

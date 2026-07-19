@@ -9,7 +9,7 @@
         "sass": "sass --style=compressed --no-source-map src/urbanlens/dashboard/frontend/sass/style.scss src/urbanlens/dashboard/frontend/static/dashboard/style.css",
         "sass:dev": "sass --style=expanded src/urbanlens/dashboard/frontend/sass/style.scss src/urbanlens/dashboard/frontend/static/dashboard/style.css",
         "sass:watch": "sass --watch --style=expanded src/urbanlens/dashboard/frontend/sass/style.scss src/urbanlens/dashboard/frontend/static/dashboard/style.css",
-        "clean:js": "rm -rf src/urbanlens/dashboard/frontend/static/dashboard/js/*.js",
+        "clean:js": "rm -rf src/urbanlens/dashboard/frontend/static/dashboard/js",
         "build": "npm run clean:js && bun build src/urbanlens/dashboard/frontend/ts/entries/*.ts --outdir src/urbanlens/dashboard/frontend/static/dashboard/js --target browser --splitting --format esm && bun build src/urbanlens/dashboard/frontend/ts/entries-classic/*.ts --outdir src/urbanlens/dashboard/frontend/static/dashboard/js --target browser --format iife --define \"import.meta.url='about:blank'\"",
         "deploy": "npm run clean:js && bun build src/urbanlens/dashboard/frontend/ts/entries/*.ts --outdir src/urbanlens/dashboard/frontend/static/dashboard/js --target browser --splitting --format esm --minify && bun build src/urbanlens/dashboard/frontend/ts/entries-classic/*.ts --outdir src/urbanlens/dashboard/frontend/static/dashboard/js --target browser --format iife --minify --define \"import.meta.url='about:blank'\"",
         "typecheck": "tsc --noEmit -p tsconfig.json",

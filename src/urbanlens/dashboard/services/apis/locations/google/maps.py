@@ -399,7 +399,11 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         Event shapes:
 
         - ``{type: "start", total: N}``
-        - ``{type: "progress", current, total, percent, created, exists, skipped, name}``
+        - ``{type: "progress", current, total, percent, created, exists, skipped, outcome, name}``
+          (``outcome`` is this specific item's own result - "created"/"exists"/
+          "skipped" - the other counts are running totals across the whole
+          import, not this item's; a per-item log needs ``outcome`` to label
+          each row correctly)
         - ``{type: "complete", total, created, exists, skipped}``
         - ``{type: "error", message}``
 
@@ -535,6 +539,12 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                 for pin_data in pin_iter:
                     current += 1
                     pin_name = ""
+                    # Per-item outcome for this exact pin, reported alongside the
+                    # running totals below - the frontend log needs to know what
+                    # happened to *this* pin, not just the cumulative counts, to
+                    # label each streamed row correctly (see the "outcome" field
+                    # on the yielded progress event).
+                    outcome = "skipped"
 
                     if pin_data is None:
                         skipped_count += 1
@@ -567,10 +577,12 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                             if pin:
                                 if created:
                                     created_count += 1
+                                    outcome = "created"
                                     if image_urls or link_urls:
                                         _attach_description_extras(pin, image_urls, link_urls, user_profile)
                                 else:
                                     exists_count += 1
+                                    outcome = "exists"
                                 if tags:
                                     pin.labels.add(*tags)
                                 if file_pins is not None:
@@ -600,6 +612,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                             "created": created_count,
                             "exists": exists_count,
                             "skipped": skipped_count,
+                            "outcome": outcome,
                             "name": pin_name,
                         },
                     )
@@ -836,6 +849,10 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                 for pin_dict in lst.get("pins", []):
                     current += 1
                     pin_name = (pin_dict.get("name") or "")[:255]
+                    # Per-item outcome for this exact pin - see the matching comment
+                    # in import_pins_streaming above for why this is needed alongside
+                    # the running totals.
+                    outcome = "skipped"
                     lat = pin_dict.get("lat")
                     lng = pin_dict.get("lng")
                     description = pin_dict.get("description") or ""
@@ -874,6 +891,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                         if pin:
                             if created:
                                 created_count += 1
+                                outcome = "created"
                                 if image_urls or link_urls:
                                     _attach_description_extras(pin, image_urls, link_urls, user_profile)
                                 if auto_tag:
@@ -883,6 +901,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                                     safely_enqueue_task(suggest_pin_category, pin.pk)
                             else:
                                 exists_count += 1
+                                outcome = "exists"
                                 # Fill in a still-blank, non-user-provided name from
                                 # this later import (UL-207: pins imported without
                                 # names, then re-imported from a source - e.g.
@@ -929,6 +948,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                             "created": created_count,
                             "exists": exists_count,
                             "skipped": skipped_count,
+                            "outcome": outcome,
                             "name": pin_name,
                         },
                     )

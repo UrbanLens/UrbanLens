@@ -138,7 +138,7 @@ Additional:
 - **Show Wiki Cover Photos** toggle
 - **History toggles**: Visit History, GPS Routes, Live Location, Photo Keywords
 - **External Services** toggle
-- **Name source priority**: draggable reorder list with 8 geocoding sources (Wikipedia, Google Places, NPS, Photon, OpenStreetMap, EPA ECHO, Azure Maps, OpenStreetMap former name)
+- **Name source priority**: draggable reorder list with 8 geocoding sources (Wikipedia, Google Places, NPS, Photon, OpenStreetMap, EPA ECHO, Azure Maps, OpenStreetMap)
 
 ### Connections tab
 - **Immich** (self-hosted photo server): Server URL + API key fields, "Connect Immich" button

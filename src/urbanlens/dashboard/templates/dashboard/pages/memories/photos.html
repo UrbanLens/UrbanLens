@@ -26,7 +26,10 @@
 {% block content %}
 <div id="photos-page" class="memories-tab-page"
      data-upload-url="{% url 'memories.photos.upload' %}"
-     data-action-base="{% url 'memories.photos' %}">
+     data-action-base="{% url 'memories.photos' %}"
+     data-storage-used="{{ storage_used_bytes }}"
+     data-storage-quota="{{ storage_quota_bytes|default_if_none:'' }}"
+     data-max-file-size="{{ max_upload_file_size_bytes }}">
 
     <div class="page-inner">
         <input type="file" id="photos-file-input" accept="image/*" multiple hidden
@@ -236,6 +239,37 @@
     var ACTION_BASE = root.dataset.actionBase;
     var CSRF = window.csrftoken || '{{ csrf_token }}';
 
+    // -- Client-side size/quota pre-check ---------------------------------------
+    // Mirrors the server's file_size_error_for_upload/quota_error_for_upload
+    // (services/storage.py) so an obviously-doomed upload is rejected instantly
+    // instead of only after a full round-trip - the server checks are still the
+    // real enforcement (this is a UX nicety, not a security boundary).
+    var MAX_FILE_SIZE = Number.parseInt(root.dataset.maxFileSize, 10) || 0;
+    var STORAGE_USED = Number.parseInt(root.dataset.storageUsed, 10) || 0;
+    var STORAGE_QUOTA = root.dataset.storageQuota ? Number.parseInt(root.dataset.storageQuota, 10) : null; // null = unlimited
+
+    function _formatBytes(bytes) {
+        var units = ['bytes', 'KB', 'MB', 'GB', 'TB'];
+        var i = 0;
+        var n = bytes;
+        while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
+        return (i === 0 ? n : n.toFixed(1)) + ' ' + units[i];
+    }
+
+    // Returns null if the file is fine to upload, or a user-facing error
+    // string. `committed` is how much of the batch-in-flight has already been
+    // provisionally counted against quota, so a multi-file drop can't blow
+    // past the limit just because each check ran against the same starting total.
+    function _precheckError(file, committed) {
+        if (MAX_FILE_SIZE && file.size > MAX_FILE_SIZE) {
+            return 'That file is too large (' + _formatBytes(file.size) + '). The maximum upload size is ' + _formatBytes(MAX_FILE_SIZE) + '.';
+        }
+        if (STORAGE_QUOTA !== null && STORAGE_USED + committed + file.size > STORAGE_QUOTA) {
+            return 'This upload would exceed your storage quota (' + _formatBytes(STORAGE_USED + committed) + ' of ' + _formatBytes(STORAGE_QUOTA) + ' used). Delete some photos or lower your image size in Settings → Storage.';
+        }
+        return null;
+    }
+
     // -- Drag-to-upload detection (depth-counted, page-wide) --------------------
     var _dragDepth = 0;
     var _overlay = document.getElementById('photos-drop-overlay');
@@ -256,6 +290,24 @@
     window.photosHandleFiles = function (files) {
         files = Array.from(files || []).filter(function (f) { return f.type.indexOf('image/') === 0; });
         if (!files.length) return;
+
+        // Reject what we can up-front, and only count the rest against quota -
+        // a batch that's part valid/part oversized shouldn't have the oversized
+        // files eat into the budget the valid ones actually need.
+        var committed = 0;
+        var accepted = [];
+        files.forEach(function (file) {
+            var error = _precheckError(file, committed);
+            if (error) {
+                if (window.toastr) toastr.error(file.name + ': ' + error);
+                return;
+            }
+            committed += file.size;
+            accepted.push(file);
+        });
+        files = accepted;
+        if (!files.length) return;
+
         var progress = document.getElementById('photos-upload-progress');
         var bar = document.getElementById('photos-upload-bar');
         if (progress) progress.hidden = false;
@@ -273,7 +325,7 @@
                         return data;
                     });
                 })
-                .then(function (img) { ok++; _prependTile(img); })
+                .then(function (img) { ok++; STORAGE_USED += file.size; _prependTile(img); })
                 .catch(function (err) {
                     if (window.toastr) toastr.error(file.name + ': ' + (err.message || 'upload failed'));
                 })

@@ -409,8 +409,8 @@ class DirectMessageImageUploadView(LoginRequiredMixin, View):
         Returns:
             JSON with the new image's ``id`` and ``url``, or a 400/413 error.
         """
-        from urbanlens.dashboard.models.images.model import Image
-        from urbanlens.dashboard.services.images import compute_checksum
+        from urbanlens.dashboard.models.images.model import Image, MediaKind
+        from urbanlens.dashboard.services.images import compute_checksum, image_upload_error
         from urbanlens.dashboard.services.storage import quota_error_for_upload
 
         profile = _get_profile(request)
@@ -419,6 +419,11 @@ class DirectMessageImageUploadView(LoginRequiredMixin, View):
             return JsonResponse({"error": "No image provided."}, status=400)
         if not (image_file.content_type or "").startswith("image/"):
             return JsonResponse({"error": "That file is not an image."}, status=400)
+
+        upload_error = image_upload_error(image_file, MediaKind.PHOTO)
+        if upload_error:
+            message, status = upload_error
+            return JsonResponse({"error": message}, status=status)
 
         quota_error = quota_error_for_upload(profile, image_file.size)
         if quota_error:

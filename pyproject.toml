@@ -71,6 +71,8 @@ dependencies = [
     "whitenoise~=6.12.0",
     "esprima~=4.0.1",
     "overturemaps>=1.0.1",
+    "filetype~=1.2.0",
+    "clamd~=1.0.2",
 ]
 
 [project.scripts]

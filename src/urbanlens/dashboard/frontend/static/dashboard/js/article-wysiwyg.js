@@ -1,4 +1,7 @@
 import {
+  getCsrfToken
+} from "./article-wysiwyg-y9qpab7g.js";
+import {
   __commonJS,
   __export,
   __toESM
@@ -31861,6 +31864,41 @@ function insertReference(root, editor) {
   if (window.toastr)
     window.toastr.info(`Reference [${n}] added - fill in the source at the bottom of the article.`);
 }
+async function uploadAndInsertImage(root, editor, file) {
+  const uploadUrl = root.dataset.imageUploadUrl;
+  if (!uploadUrl)
+    return;
+  const formData = new FormData;
+  formData.append("image", file);
+  let data = {};
+  let ok = false;
+  try {
+    const response = await fetch(uploadUrl, { method: "POST", body: formData, headers: { "X-CSRFToken": getCsrfToken() } });
+    ok = response.ok;
+    data = await response.json().catch(() => ({}));
+  } catch {
+    if (window.toastr)
+      window.toastr.error("Image upload failed - check your connection and try again.");
+    return;
+  }
+  if (!ok || !data.url) {
+    if (window.toastr)
+      window.toastr.error(data.error || "Image upload failed.");
+    return;
+  }
+  editor.chain().focus().setImage({ src: data.url, alt: file.name }).run();
+}
+function pickAndUploadImage(root, editor) {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = "image/*";
+  input.addEventListener("change", () => {
+    const file = input.files?.[0];
+    if (file)
+      uploadAndInsertImage(root, editor, file);
+  }, { once: true });
+  input.click();
+}
 var TOOLBAR_ACTIONS = {
   bold: (editor) => editor.chain().focus().toggleBold().run(),
   italic: (editor) => editor.chain().focus().toggleItalic().run(),
@@ -31893,13 +31931,7 @@ var TOOLBAR_ACTIONS = {
     }
     editor.chain().focus().extendMarkRange("link").setLink({ href: url }).run();
   },
-  image: (editor) => {
-    const url = window.prompt("Image URL", "https://");
-    if (!url)
-      return;
-    const alt = window.prompt("Alt text (for accessibility)", "") ?? "";
-    editor.chain().focus().setImage({ src: url, alt }).run();
-  },
+  image: (editor, root) => pickAndUploadImage(root, editor),
   reference: (editor, root) => insertReference(root, editor)
 };
 function mountEditor(root) {

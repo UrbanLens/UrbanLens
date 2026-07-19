@@ -65,7 +65,7 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
 - **Wiki** — opt-in, community-editable page for a Location: description, aliases, community
   danger/vulnerability/rating stat voting (`WikiStatVote`, fuzzed community counts for privacy),
   edit history with revert (`WikiEdit`)
-- Place-name resolution across multiple sources (Google Places, OSM/Nominatim, NPS, Photon, EPA ECHO, **Azure Maps**, Wikipedia, OpenStreetMap former name) with agreement-based priority ordering and a **user-configurable drag-to-reorder name source priority list** in Settings → Privacy
+- Place-name resolution across multiple sources (Google Places, OSM/Nominatim, NPS, Photon, EPA ECHO, **Azure Maps**, Wikipedia, OpenStreetMap) with agreement-based priority ordering and a **user-configurable drag-to-reorder name source priority list** in Settings → Privacy
 - Boundary drawing — property/building polygons per pin, generated automatically from external
   building-footprint data where available, editable by the user
 - Standalone reusable **MarkupMaps** with freehand drawing/annotation tools (point, line, arrow, text, box, circle, polygon), attachable to pins, wikis, safety check-ins, or kept independent; also embedded in the **safety check-in creation form** for drawing routes and destinations

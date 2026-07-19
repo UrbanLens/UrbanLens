@@ -1,9 +1,8 @@
 /*
  * Wikipedia-style page tabs (Overview / Article / Comments / Edit History).
  *
- * Markup contract (attribute-driven - the classnames are cosmetic and vary by
- * page; pin details reuses the shared .ul-subnav-tabs/.ul-subnav-tab look,
- * wiki still uses its own .page-tabs/.page-tab):
+ * Markup contract (attribute-driven - the classnames are cosmetic; pin
+ * details and wiki both use the shared .ul-subnav-tabs/.ul-subnav-tab look):
  *   <nav data-page-tabs>
  *     <button type="button" data-tab="overview">...</button>
  *     ...

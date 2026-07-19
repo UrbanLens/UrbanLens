@@ -1,7 +1,8 @@
 {# Article editor: toolbar + Markdown textarea + live preview + edit summary. #}
 {# Replaces the read-mode #article-panel; Cancel swaps the read mode back in. #}
 <div id="article-panel" class="article-panel article-panel--editing" data-article-editor
-     data-preview-url="{{ scope.urls.preview }}">
+     data-preview-url="{{ scope.urls.preview }}"
+     data-image-upload-url="{{ scope.urls.image }}">
 
     <form class="article-editor-form"
           hx-post="{{ scope.urls.save }}"

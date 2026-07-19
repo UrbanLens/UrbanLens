@@ -51,7 +51,7 @@ class NominatimPanelSource(LocationCachePanelSource):
     # services (Nominatim vs. Komoot's Photon), by design, for cross-checking
     # - not a duplicate query against one provider. A bare "OpenStreetMap"
     # title here was ambiguous next to Photon's own title.
-    title = "OpenStreetMap (Nominatim)"
+    title = "Nominatim"
 
     def fetch(self, pin: Pin) -> None:
         """Reverse-geocode the pin's coordinates and cache the place metadata.
@@ -113,7 +113,7 @@ class NominatimEnrichmentSource(LocationCacheEnrichmentSource):
     """Background-fills the OSM reverse-geocode cache (a name/alias source) per Location."""
 
     key: ClassVar[str] = "nominatim"
-    verbose_name: ClassVar[str] = "OpenStreetMap (Nominatim)"
+    verbose_name: ClassVar[str] = "Nominatim"
     cache_source: ClassVar[str] = "nominatim"
     service_keys: ClassVar[tuple[str, ...]] = ("nominatim",)
 
@@ -138,7 +138,7 @@ class NominatimPlugin(UrbanLensPlugin):
     """OpenStreetMap place metadata for pinned locations."""
 
     name: ClassVar[str] = "nominatim"
-    verbose_name: ClassVar[str] = "OpenStreetMap (Nominatim)"
+    verbose_name: ClassVar[str] = "Nominatim"
     description: ClassVar[str] = "Reverse-geocodes pins via Nominatim and shows OpenStreetMap place metadata on the pin detail page."
     author: ClassVar[str] = "UrbanLens"
 
@@ -161,7 +161,7 @@ class NominatimPlugin(UrbanLensPlugin):
         """Contribute the reverse-geocoded OSM place name, and its former name(s), as candidates."""
         return [
             LocationCacheNameProvider(source="nominatim", cache_source="nominatim", keys=("name",), verbose_name="OpenStreetMap"),
-            _SemicolonSplitNameProvider(source="nominatim_old_name", cache_source="nominatim", keys=("old_name",), verbose_name="OpenStreetMap (former name)"),
+            _SemicolonSplitNameProvider(source="nominatim_old_name", cache_source="nominatim", keys=("old_name",), verbose_name="OpenStreetMap"),
         ]
 
     def get_enrichment_sources(self) -> list[EnrichmentSource]:

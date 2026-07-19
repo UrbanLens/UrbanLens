@@ -584,6 +584,14 @@ class PhotoLocationScanPhotoUploadView(LoginRequiredMixin, View):
         if Image.objects.filter(pin_suggestion=suggestion).count() >= MAX_SUGGESTION_PHOTOS:
             return JsonResponse({"error": f"You can attach up to {MAX_SUGGESTION_PHOTOS} photos per location."}, status=400)
 
+        from urbanlens.dashboard.models.images.model import MediaKind
+        from urbanlens.dashboard.services.images import image_upload_error
+
+        upload_error = image_upload_error(image_file, MediaKind.PHOTO)
+        if upload_error:
+            message, status = upload_error
+            return JsonResponse({"error": message}, status=status)
+
         checksum = compute_checksum(image_file)
         if Image.objects.filter(profile=profile, checksum=checksum).exists():
             return JsonResponse({"error": "You already uploaded this photo."}, status=409)

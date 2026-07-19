@@ -18,9 +18,10 @@ from PIL import Image as PILImage
 from PIL.ExifTags import GPSTAGS, TAGS
 
 if TYPE_CHECKING:
+    from django.core.files.uploadedfile import UploadedFile
     from django.http import HttpRequest
 
-    from urbanlens.dashboard.models.images.model import Image
+    from urbanlens.dashboard.models.images.model import Image, MediaKind
     from urbanlens.dashboard.models.profile.model import Profile
 
 logger = logging.getLogger(__name__)
@@ -474,6 +475,49 @@ def compute_checksum(image_file: IO[bytes]) -> str:
         digest.update(chunk)
     image_file.seek(0)
     return digest.hexdigest()
+
+
+def image_upload_error(file_obj: UploadedFile, declared_media_type: MediaKind) -> tuple[str, int] | None:
+    """Run every pre-storage safety check an uploaded file must pass, in order.
+
+    Every endpoint that creates an ``Image`` row from a user-uploaded file
+    should call this immediately before ``Image.objects.create(...)`` -
+    checks, in order: the site-wide max file size, magic-byte content-type
+    sniffing (catching a mislabeled/spoofed upload before it's trusted as
+    whatever ``declared_media_type`` claims), and antivirus scanning. Quota
+    is deliberately NOT checked here - it's scope-dependent (per-pin,
+    per-wiki, per-profile) and each call site already checks it separately
+    against the right queryset.
+
+    Args:
+        file_obj: The uploaded file.
+        declared_media_type: The ``MediaKind`` the caller expects/classified
+            this upload as.
+
+    Returns:
+        ``(message, status_code)`` for the first failing check, or ``None``
+        if the file passes every check and is safe to store.
+    """
+    from urbanlens.dashboard.services.content_sniffing import content_type_mismatch_error
+    from urbanlens.dashboard.services.malware_scan import MalwareScanUnavailableError, malware_error_for_upload
+    from urbanlens.dashboard.services.storage import file_size_error_for_upload
+
+    size_error = file_size_error_for_upload(file_obj.size)
+    if size_error:
+        return size_error, 413
+
+    sniff_error = content_type_mismatch_error(file_obj, declared_media_type)
+    if sniff_error:
+        return sniff_error, 400
+
+    try:
+        malware_error = malware_error_for_upload(file_obj)
+    except MalwareScanUnavailableError:
+        return "Our antivirus scanner is temporarily unavailable. Please try again shortly.", 503
+    if malware_error:
+        return malware_error, 422
+
+    return None
 
 
 def image_to_gallery_json(img: Image, request: HttpRequest, viewer_profile: Profile | None = None) -> dict:

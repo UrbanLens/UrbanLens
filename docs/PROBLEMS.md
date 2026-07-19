@@ -6,6 +6,34 @@ to pick up without re-discovering the problem from scratch.
 
 ---
 
+## User data-export ZIP re-import is never malware-scanned or magic-byte-sniffed
+
+Found 2026-07-19 while rolling out `services/malware_scan.py` (ClamAV) and `services/
+content_sniffing.py` (magic-byte content-type validation) across every upload endpoint that
+creates an `Image` row or a raw `ImageField` (Memories photos/videos/documents, pin/wiki
+galleries, avatars, custom pin/label icons, comment and DM image attachments, article inline
+images - see `services/images.image_upload_error`, the shared entry point all of those now call).
+
+`ImportStartView.post` (`controllers/tools.py`, ~line 262) is the one upload surface deliberately
+left out of that rollout: it accepts an arbitrary `.zip` (`import_file`, size-capped at 500 MB),
+writes it straight to disk (`zip_path`), and hands it to the `run_user_data_import` Celery task
+(`tasks.py`) for extraction/processing. Neither the ZIP itself nor its extracted contents (which
+can include arbitrary photos/videos/documents reconstructed from a prior export) are scanned or
+content-sniffed anywhere in that path - it's a different mechanism (whole-file-to-disk + Celery
+extraction) than the `request.FILES` → `Image.objects.create()` pattern `image_upload_error`
+targets, so wiring it in would need either scanning the zip stream before it's written, or scanning
+each extracted member inside `run_user_data_import` before it's turned into an `Image` row.
+
+**Not fixed**: add a `malware_error_for_upload`/`content_type_mismatch_error` pass over either the
+whole ZIP (fast, one scan, but can't magic-byte-check individual members which are usually a
+custom JSON+media archive format from this app's own exporter) or every extracted media file
+inside `run_user_data_import` before it's persisted (slower per-import, but catches anything smuggled
+in a hand-edited/malicious ZIP that only pretends to be an UrbanLens export). The per-member
+approach is the more thorough one and should reuse the same two services rather than a bespoke
+check.
+
+---
+
 ## Cloudflare Workers AI cost tracking only covers the one default model
 
 Found 2026-07-19 while investigating a production log line ("Model not recognized. Using

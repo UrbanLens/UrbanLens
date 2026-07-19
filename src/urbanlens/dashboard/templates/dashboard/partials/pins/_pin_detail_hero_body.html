@@ -73,22 +73,16 @@ in context, plus the wiki/linking context used by the overview panel.
                 <div id="pin-location-picker"></div>
             </aside>
             {% else %}
-            <aside class="pin-hero-wiki-box pin-hero-wiki-box--create">
-                <i class="material-symbols-outlined">public</i>
-                <div class="pin-hero-wiki-box-info">
-                    <span class="pin-hero-wiki-box-label">Community Wiki</span>
-                    <span class="pin-hero-wiki-box-help">No shared wiki yet.</span>
-                </div>
-                <button type="button" class="btn btn--primary pin-wiki-create-btn"
-                        hx-get="{% url 'pin.wiki.create' pin.slug %}"
-                        hx-target="#pin-wiki-create-dialog-body"
-                        hx-swap="innerHTML"
-                        hx-on::after-request="if(event.detail.successful){document.getElementById('pin-wiki-create-dialog').showModal()}"
-                        data-tooltip="Start a shared wiki page for this place. You choose which of your pin's details (if any) to include."
-                        title="Create a community wiki for this place">
-                    <i class="material-symbols-outlined">add_circle</i> Create Community Wiki
-                </button>
-            </aside>
+            <button type="button" class="pin-hero-wiki-box pin-hero-wiki-box--create"
+                    hx-get="{% url 'pin.wiki.create' pin.slug %}"
+                    hx-target="#pin-wiki-create-dialog-body"
+                    hx-swap="innerHTML"
+                    hx-on::after-request="if(event.detail.successful){document.getElementById('pin-wiki-create-dialog').showModal()}"
+                    data-tooltip="Start a shared wiki page for this place. You choose which of your pin's details (if any) to include."
+                    title="Create a community wiki for this place">
+                <i class="material-symbols-outlined">add_circle</i>
+                <span>Create Community Wiki</span>
+            </button>
             {% endif %}
         {% endif %}
     {% elif pin.effective_latitude %}

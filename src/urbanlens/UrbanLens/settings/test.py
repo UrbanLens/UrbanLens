@@ -1,7 +1,15 @@
 from urbanlens.UrbanLens.settings._gdal_windows import local_windows_gdal_overrides
+from urbanlens.UrbanLens.settings.app import settings as _app_settings
 from urbanlens.UrbanLens.settings.base import *  # noqa: F403
 
 TESTING = True
+
+# No clamd daemon runs in the test environment - tests that exercise the
+# malware-rejection path (services.malware_scan) mock it explicitly; every
+# other upload test should hit the "clean" no-op path instead of a 503 from
+# an unreachable scanner (see AppSettings.clamav_enabled's fail-closed
+# behavior).
+_app_settings.clamav_enabled = False
 
 # model_bakery's default related-object generation collides with the
 # create_user_profile post_save signal (see urbanlens.core.tests.baker).

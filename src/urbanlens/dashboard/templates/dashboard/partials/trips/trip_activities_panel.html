@@ -35,11 +35,11 @@
         <button type="button" class="activity-tab activity-tab--active" data-tab="upcoming"
                 onclick="tripSetTab('upcoming')">Upcoming</button>
         <button type="button" class="activity-tab" data-tab="proposed"
-                onclick="tripSetTab('proposed')">Proposed</button>
+                {% if not proposed_count %}disabled title="No proposed activities"{% endif %} onclick="tripSetTab('proposed')">Proposed</button>
         <button type="button" class="activity-tab" data-tab="confirmed"
-                onclick="tripSetTab('confirmed')">Confirmed</button>
+                {% if not confirmed_count %}disabled title="No confirmed activities"{% endif %} onclick="tripSetTab('confirmed')">Confirmed</button>
         <button type="button" class="activity-tab" data-tab="completed"
-                onclick="tripSetTab('completed')">Completed</button>
+                {% if not completed_count %}disabled title="No completed activities"{% endif %} onclick="tripSetTab('completed')">Completed</button>
     </div>
 
     {# -- List view -------------------------------------------------------- #}

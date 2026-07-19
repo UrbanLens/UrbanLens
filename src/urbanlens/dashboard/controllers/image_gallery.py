@@ -12,11 +12,11 @@ from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
 
-from urbanlens.dashboard.models.images.model import Image
+from urbanlens.dashboard.models.images.model import Image, MediaKind
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
-from urbanlens.dashboard.services.images import compute_checksum, image_to_gallery_json, parse_reposition_payload
+from urbanlens.dashboard.services.images import compute_checksum, image_to_gallery_json, image_upload_error, parse_reposition_payload
 from urbanlens.dashboard.services.pagination import get_page
 from urbanlens.dashboard.services.storage import quota_error_for_upload
 from urbanlens.dashboard.services.wiki_access import resolve_visible_wiki
@@ -98,6 +98,11 @@ class PinGalleryView(LoginRequiredMixin, View):
         image_file = request.FILES.get("image")
         if not image_file:
             return JsonResponse({"error": "No image provided."}, status=400)
+
+        upload_error = image_upload_error(image_file, MediaKind.PHOTO)
+        if upload_error:
+            message, status = upload_error
+            return JsonResponse({"error": message}, status=status)
 
         checksum = compute_checksum(image_file)
         if Image.objects.filter(pin=pin, profile=profile, checksum=checksum).exists():
@@ -277,6 +282,11 @@ class WikiGalleryView(LoginRequiredMixin, View):
         image_file = request.FILES.get("image")
         if not image_file:
             return JsonResponse({"error": "No image provided."}, status=400)
+
+        upload_error = image_upload_error(image_file, MediaKind.PHOTO)
+        if upload_error:
+            message, status = upload_error
+            return JsonResponse({"error": message}, status=status)
 
         checksum = compute_checksum(image_file)
         if Image.objects.filter(wiki=wiki, profile=profile, checksum=checksum).exists():

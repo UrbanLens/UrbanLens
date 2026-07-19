@@ -1,58 +1,9 @@
 // Wikipedia-style page tabs (Overview / Article / Comments / Edit History)
 // used on the pin detail and community wiki pages. See js/page-tabs.js.
+// The tab strip itself is the shared .ul-subnav-tabs/.ul-subnav-tab look
+// (_page_hero.scss); this file only holds the bits that stay page-tabs-
+// specific (the badge and the hidden-panel rule).
 @use 'variables' as *;
-
-.page-tabs {
-    display: flex;
-    align-items: flex-end;
-    gap: .25rem;
-    margin: .25rem 0 1rem;
-    border-bottom: 2px solid var(--ul-grey-1b);
-    overflow-x: auto;
-    scrollbar-width: thin;
-}
-
-.page-tab {
-    display: inline-flex;
-    align-items: center;
-    gap: .4rem;
-    padding: .55rem .95rem;
-    margin-bottom: -2px; // sit on top of the bar's border
-    background: transparent;
-    border: none;
-    border-bottom: 2px solid transparent;
-    border-radius: $radius-sm $radius-sm 0 0;
-    color: var(--ul-grey-6);
-    font-size: .95rem;
-    font-weight: 500;
-    white-space: nowrap;
-    cursor: pointer;
-    transition: color .15s ease, background-color .15s ease, border-color .15s ease;
-
-    .material-symbols-outlined {
-        font-size: 1.15rem;
-    }
-
-    &:hover {
-        color: var(--ul-grey-8);
-        background: var(--ul-hover-bg);
-    }
-
-    &.is-active {
-        color: var(--ul-grey-9);
-        border-bottom-color: var(--ul-primary-color);
-        font-weight: 600;
-
-        .material-symbols-outlined {
-            color: var(--ul-primary-color);
-        }
-    }
-
-    &:focus-visible {
-        outline: 2px solid var(--ul-color-accent-ring);
-        outline-offset: -2px;
-    }
-}
 
 .page-tab-badge {
     display: inline-flex;
@@ -69,7 +20,7 @@
     line-height: 1;
 }
 
-.page-tab.is-active .page-tab-badge {
+.ul-subnav-tab.is-active .page-tab-badge {
     background: var(--ul-primary-color);
     color: #fff;
 }
@@ -79,11 +30,14 @@
 }
 
 @media (max-width: $breakpoint-xs) {
-    .page-tab span:not(.page-tab-badge) {
-        display: none; // icons only on tiny screens
-    }
-
-    .page-tab {
+    // Scoped to [data-page-tabs] (pin detail + wiki only) rather than every
+    // .ul-subnav-tab consumer (Memories, Settings, Organize also use the
+    // shared look but shouldn't lose their labels on small screens).
+    [data-page-tabs] .ul-subnav-tab {
         padding: .55rem .75rem;
+
+        span:not(.page-tab-badge) {
+            display: none; // icons only on tiny screens
+        }
     }
 }

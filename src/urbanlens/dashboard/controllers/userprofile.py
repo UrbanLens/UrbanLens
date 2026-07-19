@@ -92,8 +92,19 @@ class ViewProfileView(LoginRequiredMixin, View):
     def post(self, request: HttpRequest, **kwargs) -> HttpResponse:
         """Handle avatar upload from the profile hero card."""
         profile = Profile.objects.get(user=request.user)
-        if "avatar" in request.FILES:
-            profile.avatar = request.FILES["avatar"]
+        avatar_file = request.FILES.get("avatar")
+        if avatar_file:
+            from django.contrib import messages
+
+            from urbanlens.dashboard.models.images.model import MediaKind
+            from urbanlens.dashboard.services.images import image_upload_error
+
+            upload_error = image_upload_error(avatar_file, MediaKind.PHOTO)
+            if upload_error:
+                message, _status = upload_error
+                messages.error(request, message)
+                return redirect("profile.view")
+            profile.avatar = avatar_file
             profile.save(update_fields=["avatar"])
         return redirect("profile.view")
 

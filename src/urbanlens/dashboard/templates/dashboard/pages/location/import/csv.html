@@ -1156,9 +1156,6 @@ $('iw-btn-confirm').addEventListener('click', async function () {
 /* -- Progress event handler -------------------------------------------- */
 var logRows = [];
 var MAX_LOG = 40;
-/* Cumulative created/exists totals as of the previously-finalised row, so
-   finaliseLogRow can diff each row's contribution correctly (see below). */
-var _importPrevTotals = { created: 0, exists: 0 };
 
 function handleProgressEvent(evt) {
     switch (evt.type) {
@@ -1174,10 +1171,13 @@ function handleProgressEvent(evt) {
             $('iw-n-created').textContent = evt.created;
             $('iw-n-exists').textContent = evt.exists;
             $('iw-n-skipped').textContent = evt.skipped;
-            addLogRow(evt.name, 'spin', '');
+            /* This event's own outcome is stashed on its row now (not read back
+               later from cumulative totals - see finaliseLogRow) so the previous
+               row, finalised below, is never misattributed by a *different*
+               item's outcome landing in the same delta. */
+            addLogRow(evt.name, 'spin', '', evt.outcome);
             if (logRows.length > 1) {
-                var prev = logRows[logRows.length - 2];
-                finaliseLogRow(prev, evt);
+                finaliseLogRow(logRows[logRows.length - 2]);
             }
             break;
 
@@ -1189,7 +1189,7 @@ function handleProgressEvent(evt) {
             $('iw-n-created').textContent = evt.created;
             $('iw-n-exists').textContent = evt.exists;
             $('iw-n-skipped').textContent = evt.skipped;
-            if (logRows.length > 0) finaliseLogRow(logRows[logRows.length - 1], evt);
+            if (logRows.length > 0) finaliseLogRow(logRows[logRows.length - 1]);
             $('iw-progress-header').textContent = 'Import complete';
             $('iw-progress-header').style.color = '#43a047';
             importing = false;
@@ -1211,10 +1211,11 @@ function handleProgressEvent(evt) {
     }
 }
 
-function addLogRow(name, iconClass, statusLabel) {
+function addLogRow(name, iconClass, statusLabel, outcome) {
     var log = $('iw-item-log');
     var row = document.createElement('div');
     row.className = 'iw-log-row';
+    row.dataset.outcome = outcome || '';
     row.innerHTML =
         '<i class="material-icons iw-log-icon ' + iconClass + '">' + iconForClass(iconClass) + '</i>' +
         '<span class="iw-log-name">' + escHtml(name || '...') + '</span>' +
@@ -1228,28 +1229,22 @@ function addLogRow(name, iconClass, statusLabel) {
     log.scrollTop = log.scrollHeight;
 }
 
-function finaliseLogRow(row, evt) {
-    /* The event carries cumulative totals across the whole import, not which
-       outcome this specific pin had - diff against the totals as of the
-       previously-finalised row (_importPrevTotals), not the row's own
-       dataset (each row is finalised exactly once, so it never has a prior
-       value of its own to diff against). */
+function finaliseLogRow(row) {
+    /* outcome was stashed on the row itself when it was added (see addLogRow),
+       from that same progress event's own "outcome" field - each pin's own
+       result, not a diff against running totals, which could be thrown off by
+       a *different*, immediately-adjacent pin's outcome. */
     var icon = row.querySelector('.iw-log-icon');
     var statusEl = row.querySelector('.iw-log-status');
-    var curCreated = parseInt(evt.created || 0);
-    var curExists  = parseInt(evt.exists  || 0);
 
     var cls, mat, lbl;
-    if (curCreated > _importPrevTotals.created) { cls = 'created'; mat = 'check_circle'; lbl = 'new'; }
-    else if (curExists > _importPrevTotals.exists) { cls = 'existed'; mat = 'remove_circle_outline'; lbl = 'existed'; }
+    if (row.dataset.outcome === 'created') { cls = 'created'; mat = 'check_circle'; lbl = 'new'; }
+    else if (row.dataset.outcome === 'exists') { cls = 'existed'; mat = 'remove_circle_outline'; lbl = 'existed'; }
     else { cls = 'skipped'; mat = 'cancel'; lbl = 'skipped'; }
 
     icon.className = 'material-icons iw-log-icon ' + cls;
     icon.textContent = mat;
     if (statusEl) statusEl.textContent = lbl;
-
-    _importPrevTotals.created = curCreated;
-    _importPrevTotals.exists = curExists;
 }
 
 function iconForClass(cls) {

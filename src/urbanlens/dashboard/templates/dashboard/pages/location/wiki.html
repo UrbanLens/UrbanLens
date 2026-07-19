@@ -19,6 +19,29 @@
 {% include "dashboard/partials/ui/_page_hero.html" with id="wiki-hero" body_template="dashboard/partials/wiki/_wiki_detail_hero_body.html" modifier="top" %}
 {% endblock %}
 
+{% block subnav %}
+<div class="ul-page-subnav">
+    <div class="ul-page-subnav__inner">
+        {# -- Page tabs: Overview / Article / Comments / Edit History -- #}
+        <nav class="ul-subnav-tabs" data-page-tabs aria-label="Wiki sections">
+            <button type="button" class="ul-subnav-tab is-active" data-tab="overview">
+                <i class="material-symbols-outlined">dashboard</i><span>Overview</span>
+            </button>
+            <button type="button" class="ul-subnav-tab" data-tab="article">
+                <i class="material-symbols-outlined">article</i><span>Article</span>
+            </button>
+            <button type="button" class="ul-subnav-tab" data-tab="comments">
+                <i class="material-symbols-outlined">chat</i><span>Comments</span>
+                {% if wiki_comment_count %}<span class="page-tab-badge">{{ wiki_comment_count }}</span>{% endif %}
+            </button>
+            <button type="button" class="ul-subnav-tab" data-tab="history">
+                <i class="material-symbols-outlined">history</i><span>Edit History</span>
+            </button>
+        </nav>
+    </div>
+</div>
+{% endblock %}
+
 {% block content %}
 <div class="wiki-page page-content">
     <div id="wiki-onboarding" class="page-onboarding page-onboarding--wiki" aria-live="polite"></div>
@@ -86,23 +109,6 @@
         </button>
     </div>
     {% endif %}
-
-    {# -- Page tabs: Overview / Article / Comments / Edit History ----------- #}
-    <nav class="page-tabs" data-page-tabs aria-label="Wiki sections">
-        <button type="button" class="page-tab is-active" data-tab="overview">
-            <i class="material-symbols-outlined">dashboard</i><span>Overview</span>
-        </button>
-        <button type="button" class="page-tab" data-tab="article">
-            <i class="material-symbols-outlined">article</i><span>Article</span>
-        </button>
-        <button type="button" class="page-tab" data-tab="comments">
-            <i class="material-symbols-outlined">chat</i><span>Comments</span>
-            {% if wiki_comment_count %}<span class="page-tab-badge">{{ wiki_comment_count }}</span>{% endif %}
-        </button>
-        <button type="button" class="page-tab" data-tab="history">
-            <i class="material-symbols-outlined">history</i><span>Edit History</span>
-        </button>
-    </nav>
 
     <section class="page-tab-panel" data-tab-panel="overview">
     {# -- Body grid --------------------------------------------------------- #}

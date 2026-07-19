@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ValidationError
-from django.http import Http404, HttpResponse
+from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.views import View
@@ -78,6 +78,7 @@ def _wiki_urls(location_slug: str) -> dict[str, str]:
         "edit": reverse("location.wiki.article.edit", kwargs={"location_slug": location_slug}),
         "save": reverse("location.wiki.article.save", kwargs={"location_slug": location_slug}),
         "preview": reverse("location.wiki.article.preview", kwargs={"location_slug": location_slug}),
+        "image": reverse("location.wiki.article.image", kwargs={"location_slug": location_slug}),
         "history": reverse("location.wiki.article.history", kwargs={"location_slug": location_slug}),
     }
 
@@ -89,6 +90,7 @@ def _pin_urls(pin_slug: str) -> dict[str, str]:
         "edit": reverse("pin.article.edit", kwargs={"pin_slug": pin_slug}),
         "save": reverse("pin.article.save", kwargs={"pin_slug": pin_slug}),
         "preview": reverse("pin.article.preview", kwargs={"pin_slug": pin_slug}),
+        "image": reverse("pin.article.image", kwargs={"pin_slug": pin_slug}),
         "history": reverse("pin.article.history", kwargs={"pin_slug": pin_slug}),
     }
 
@@ -274,6 +276,56 @@ class ArticlePreviewView(ArticleViewBase):
             "dashboard/partials/articles/_article_preview.html",
             {"rendered_html": rendered.html},
         )
+
+
+class ArticleImageUploadView(ArticleViewBase):
+    """Upload an image to embed inline in an article, from the WYSIWYG editor.
+
+    POST .../article/image/  with an ``image`` file.
+
+    Images are stored as ordinary ``Image`` rows against the article's host
+    (pin or wiki) - the same model and validation (size/content-type
+    sniffing/malware scan/quota) every other gallery upload goes through -
+    so a pasted-in article image is never a lower-scrutiny upload path than
+    the Memories or pin/wiki gallery.
+    """
+
+    def post(self, request: HttpRequest, **kwargs) -> JsonResponse:
+        scope = self.resolve(request, **kwargs)
+        image_file = request.FILES.get("image")
+        if not image_file:
+            return JsonResponse({"error": "No image provided."}, status=400)
+
+        from urbanlens.dashboard.models.images.model import Image, MediaKind
+        from urbanlens.dashboard.services.images import compute_checksum, image_upload_error
+        from urbanlens.dashboard.services.storage import quota_error_for_upload
+
+        upload_error = image_upload_error(image_file, MediaKind.PHOTO)
+        if upload_error:
+            message, status = upload_error
+            return JsonResponse({"error": message}, status=status)
+
+        quota_error = quota_error_for_upload(scope.profile, image_file.size)
+        if quota_error:
+            return JsonResponse({"error": quota_error}, status=413)
+
+        checksum = compute_checksum(image_file)
+        location = scope.location or (scope.pin.location if scope.pin else None)
+        img = Image.objects.create(
+            image=image_file,
+            pin=scope.pin,
+            wiki=scope.wiki,
+            location=location,
+            profile=scope.profile,
+            checksum=checksum,
+            file_size=image_file.size,
+        )
+
+        from urbanlens.dashboard.services.celery import safely_enqueue_task
+        from urbanlens.dashboard.tasks import process_image_upload
+
+        safely_enqueue_task(process_image_upload, img.pk)
+        return JsonResponse({"url": request.build_absolute_uri(img.image.url)}, status=201)
 
 
 def _annotate_deltas(revisions: list[ArticleRevision]) -> list[dict]:

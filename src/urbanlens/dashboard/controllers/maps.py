@@ -243,6 +243,14 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             icon = request.POST.get("icon") or None
             color = request.POST.get("color") or None
             custom_icon = request.FILES.get("custom_icon") or None
+            if custom_icon:
+                from urbanlens.dashboard.models.images.model import MediaKind
+                from urbanlens.dashboard.services.images import image_upload_error
+
+                upload_error = image_upload_error(custom_icon, MediaKind.PHOTO)
+                if upload_error:
+                    message, status = upload_error
+                    return HttpResponse(f"Error: {message}", status=status)
             label_ids = request.POST.getlist("label_ids")
             tag_ids = request.POST.getlist("tag_ids")
             category_ids = request.POST.getlist("category_ids")
@@ -519,8 +527,9 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             uploader already has this exact file on the pin, or 413 if the
             upload would exceed the uploader's storage quota.
         """
+        from urbanlens.dashboard.models.images.model import MediaKind
         from urbanlens.dashboard.services.celery import safely_enqueue_task
-        from urbanlens.dashboard.services.images import compute_checksum
+        from urbanlens.dashboard.services.images import compute_checksum, image_upload_error
         from urbanlens.dashboard.services.storage import quota_error_for_upload
         from urbanlens.dashboard.tasks import process_image_upload
 
@@ -529,6 +538,10 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             return HttpResponse("No image provided.", status=400)
         pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         profile, _ = Profile.objects.get_or_create(user=request.user)
+        upload_error = image_upload_error(image, MediaKind.PHOTO)
+        if upload_error:
+            message, status = upload_error
+            return HttpResponse(message, status=status)
         checksum = compute_checksum(image)
         if Image.objects.filter(pin=pin, profile=profile, checksum=checksum).exists():
             return HttpResponse("You already uploaded this photo to this pin.", status=409)
@@ -707,6 +720,14 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         icon = request.POST.get("icon")
         color = request.POST.get("color")
         custom_icon = request.FILES.get("custom_icon") or None
+        if custom_icon:
+            from urbanlens.dashboard.models.images.model import MediaKind
+            from urbanlens.dashboard.services.images import image_upload_error
+
+            upload_error = image_upload_error(custom_icon, MediaKind.PHOTO)
+            if upload_error:
+                message, status = upload_error
+                return JsonResponse({"error": message}, status=status)
         label_ids = [bid for bid in request.POST.getlist("label_ids") if bid]
 
         import contextlib
