@@ -90,7 +90,8 @@ On-demand, cached lookups shown as panels on the pin detail page:
 - **Regional Data** — US Census, Wildlife, Seismic, and EPA data loaded on demand per sub-tab
 - **Building Characteristics** — structured property/building data (appears for commercial and historic properties)
 - **News** — web news results scoped to the location (appears for notable locations)
-- **OpenWeatherMap** — weather forecast; appears on Trip detail pages (keyed to activity location) and on the pin detail page when weather data is available
+- **OpenWeatherMap** — weather forecast; appears on Trip detail pages (keyed to activity location) and on the pin detail page when weather data is available. Falls back to the free, keyless Open-Meteo API when OpenWeatherMap isn't configured or fails
+- **Sunrise/sunset & golden hour** — always via Open-Meteo (its 5-day/3-hour OpenWeatherMap counterpart has no sunrise/sunset field), shown alongside the pin detail page's weather panel; golden hour is approximated as the hour after sunrise / before sunset
 - Satellite imagery carousel: Google Maps, Esri (incl. Wayback historical imagery), NASA GIBS,
   Mapbox, Bing Maps, OpenAerialMap
 - Street-view carousel: Google Street View, Mapillary, KartaView
