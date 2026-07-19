@@ -536,8 +536,14 @@ These have most of their machinery already built:
    creates a same-day `PinVisit(source=GEOLOCATION)` for every pin whose boundary contains the
    device's point, wired end-to-end from a `MapController` endpoint through to the live GPS
    success callback in `map/index.html`, with full existing test coverage. No code change needed.
-5. **Targeted exports + more formats** (UL-377, UL-382) — filtered export via the existing
-   criteria engine; KML/GPX/GeoJSON/CSV writers mirror existing readers.
+5. ~~**Targeted exports + more formats** (UL-377, UL-382)~~ RESOLVED 2026-07-19 (`56c2113e`,
+   `de3394f2`) — `services/export_formats.py` adds GeoJSON/KML/GPX/CSV writers (typed against a
+   small `_ExportablePin` Protocol, not the concrete `Pin` model, so tests don't need a DB) mirroring
+   the existing import-side readers. Reachable two ways: the main map's multi-select toolbar
+   (`PinBulkExportView`, `/map/pins/bulk-export/`) for an ad-hoc/search-scoped selection, and a new
+   "Export list" action in a PinList's "more actions" menu (`PinListExportView`,
+   `/lists/<slug>/export/`) for a saved list's full membership - there was no map-filter-by-list or
+   select-all affordance to chain the first path into the second, so it needed its own entry point.
 6. ~~**Sunrise/sunset & golden hour** (UL-345)~~ RESOLVED 2026-07-19 (`034eec89`) — used Open-Meteo
    (`timezone=auto`, no separate timezone-lookup library needed) rather than `astral`, since the
    app already calls it as a weather fallback and this avoids a new dependency; fetched

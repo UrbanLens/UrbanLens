@@ -29,8 +29,10 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   plain Markdown either way
 - Pin sharing — share a single pin with one friend, including re-share chains; every share
   records a provenance chain (`LocationExposure`) of how a location reached each user
-- Import/export: Google Takeout (Saved Places, Location History, My Activity), GPX, GPX tracks,
-  OSM XML, Shapefile, WKT/WKB, KML/KMZ; AI-assisted import from freeform documents/notes
+- Import: Google Takeout (Saved Places, Location History, My Activity), GPX, GPX tracks, OSM XML,
+  Shapefile, WKT/WKB, KML/KMZ; AI-assisted import from freeform documents/notes
+- Targeted export of a pin selection (main map's multi-select toolbar) or a whole saved list
+  (a list's "more actions" menu) as GeoJSON, KML, GPX, or CSV
 - Data export/import of a user's full dataset, plus scheduled/on-demand backups
 
 ## Search & Navigation
