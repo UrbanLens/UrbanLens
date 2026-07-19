@@ -356,9 +356,15 @@ Ordering within each tier is roughly by (user impact × risk × leverage). IDs r
 
 ### 4.1 Tier 1: Correctness & privacy bugs (do these first)
 
-1. **Per-user client cache isolation** (UL-239) — cache reused across logins on the same
-   browser: cross-user data exposure. Key all client caches (pin cache, filters, map position)
-   by user ID and clear on logout.
+1. ~~**Per-user client cache isolation** (UL-239)~~ RESOLVED 2026-07-18 (`7f612479`) — the pin
+   (`ul_pins_v5_<uuid>`) and layer (`ul_layers_v1_<uuid>`) caches were already profile-scoped by
+   key. The actual leak was three `LocationSearchEngine.attach()` `historyKey` values (main map
+   address search, comment-map composer search, safety check-in destination search) that were
+   hardcoded, unscoped localStorage keys - a hardcoded `'ul_addr_history_v1'` sat directly next
+   to a correctly-scoped `recentPinsKey` sibling in the same object literal, which is what made
+   the inconsistency obvious once looked for. Fixed with a profile id/uuid suffix on each key
+   plus a one-time `removeItem` of the stale unscoped entry so already-leaked history doesn't
+   linger. Verified with `test_search_history_cache_scoping.py`.
 2. **Map cache at 8k+ pins** (UL-355) — `QuotaExceededError` makes the map effectively
    cacheless for power users (worst case: every load refetches 8.5k pins). See §3.1.
 3. **Finish/verify boundary-mate wiki access** (in-flight, §1.3.1) — uncommitted changes in
