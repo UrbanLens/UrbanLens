@@ -4,8 +4,13 @@
 {% block title %}Sign in - UrbanLens{% endblock %}
 
 {% block auth_header %}
+{% if is_first_run %}
+<h1 class="auth-title">Welcome to UrbanLens</h1>
+<p class="auth-subtitle">Sign in to set up your account</p>
+{% else %}
 <h1 class="auth-title">Welcome back</h1>
 <p class="auth-subtitle">Sign in to your account</p>
+{% endif %}
 {% endblock %}
 
 {% block content %}

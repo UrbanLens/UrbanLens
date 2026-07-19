@@ -428,6 +428,27 @@ class CustomLoginView(LoginView):
             return redirect("map.view")
         return super().dispatch(request, *args, **kwargs)
 
+    def get_context_data(self, **kwargs):
+        """Add ``is_first_run`` so the template can drop "Welcome back" on a fresh install.
+
+        "Welcome back" makes no sense on the very first login form anyone
+        ever sees on a brand-new instance - there is no possible "back" to
+        refer to (UL-179). ``User.objects.exists()`` would already be True
+        by the time this page is reached (registration creates the account
+        *before* the user logs in), so this uses
+        ``bootstrap_admin_onboarding_complete`` instead - it defaults False
+        for a genuinely empty site and stays False through the whole
+        registration -> login -> setup-wizard journey, only flipping True
+        once the bootstrap admin finishes onboarding (see
+        ``services.site_admin``), which is the actual window this copy
+        should stay off for.
+        """
+        from urbanlens.dashboard.models.site_settings import SiteSettings
+
+        context = super().get_context_data(**kwargs)
+        context["is_first_run"] = not SiteSettings.get_current().bootstrap_admin_onboarding_complete
+        return context
+
     def post(self, request, *args, **kwargs):
         username = request.POST.get("username", "").strip()
         if username and _is_locked_out(username):
