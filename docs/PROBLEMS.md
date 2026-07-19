@@ -6,6 +6,40 @@ to pick up without re-discovering the problem from scratch.
 
 ---
 
+## UL-277: pin-detail external-data freshness window is one global knob, not per-source
+
+Original wording (`TODO.md:28`): "Cache time needs adjustments for some pin details data. Load
+page, wait 10 minutes, reload page, some items are marked as 'fresh'."
+
+Verified the mechanism itself is technically correct, not buggy: `LocationCache.set()`
+(`models/cache/location_cache.py:72-91`) upserts via `update_or_create`, which correctly bumps
+`updated` (an `auto_now` field) on every write - no stale-timestamp defect. `LocationCache.is_stale`
+compares `timezone.now() - self.updated` against a single value: `SiteSettings.get_current().
+external_data_cache_days` - a **site-wide, multi-day, one-size-fits-all** setting applied
+identically to every external-data source cached through `LocationCache` (Wikipedia, LoopNet,
+NPS, EPA, satellite/street-view providers, etc.).
+
+That's the actual gap: 10 minutes can never cross a days-scale threshold, so *any* source cached
+this way is - by design - still "fresh" after only 10 minutes, regardless of whether that
+specific source's real-world data changes fast enough to warrant a shorter window. This is a
+genuine product/policy question, not a code defect: which specific sources need a shorter TTL
+than the current global default, and what should each be? (Weather isn't cached via
+`LocationCache` at all, so it isn't the culprit here - whatever "pin details data" the reporter
+means is some other `PanelSource`.)
+
+**Why not fixed**: implementing this properly means adding a per-source TTL (a new field on
+`PanelSource`/`InfoPanelSource`, or a source→days mapping in `SiteSettings`) - a real feature
+addition, not a bug fix - and I don't know which sources the reporter considers too slow to
+refresh. Guessing at specific TTL values per source without that input risks either not fixing
+the actual complaint or breaking the deliberate multi-day caching that protects rate-limited
+upstream APIs for sources that genuinely don't need to refresh often.
+
+**Suggested next step**: ask which specific pin-detail panel(s) felt stale after 10 minutes, then
+add a per-source override (defaulting to the existing global `external_data_cache_days`) rather
+than lowering the global value for everything.
+
+---
+
 ## UL-255: "Remember last map position" - server side verified correct; likely real cause is unrelated URL-view-sync precedence, needs browser verification
 
 Investigated the whole chain: `MapCenterForm.save()` (`forms/settings_form.py:380`), the profile
