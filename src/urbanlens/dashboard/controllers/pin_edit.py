@@ -8,6 +8,8 @@ import logging
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
+from django.template.loader import render_to_string
+from django.urls import reverse
 from django.views import View
 
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
@@ -131,6 +133,35 @@ def _overview_context(pin: Pin) -> dict:
     }
 
 
+def _pin_hero_oob(request, pin: Pin, *, overlapping_location_count: int) -> str:
+    """Render the pin detail page hero as an out-of-band HTMX swap.
+
+    The hero (with its Community Wiki box) lives in base.html's
+    ``{% block hero %}`` (see ``pages/location/index.html``), outside
+    ``#pin-overview`` - so ``PinOverviewView``'s slug backfill (see below)
+    would otherwise leave an already-loaded page's hero permanently stuck
+    showing "no wiki" until a full reload, even though the location now has
+    a slug and could show the create-wiki button.
+    """
+    cover_image = pin.cover_photo.image if pin.cover_photo and pin.cover_photo.image else None
+    return render_to_string(
+        request=request,
+        template_name="dashboard/partials/ui/_page_hero.html",
+        context={
+            "pin": pin,
+            "id": "pin-detail-hero",
+            "oob": True,
+            "body_template": "dashboard/partials/pins/_pin_detail_hero_body.html",
+            "back_url": reverse("map.view"),
+            "back_label": "Map",
+            "modifier": "top",
+            "hero_image_url": cover_image.url if cover_image else None,
+            "hero_cover_key": "pin",
+            "overlapping_location_count": overlapping_location_count,
+        },
+    )
+
+
 class PinOverviewView(LoginRequiredMixin, View):
     """Render the swappable pin overview partial (title + details card).
 
@@ -159,7 +190,10 @@ class PinOverviewView(LoginRequiredMixin, View):
                 safely_enqueue_task(backfill_location_address, pin.location_id)
             if not pin.location.cached_place_name:
                 safely_enqueue_task(resolve_location_place_name, pin.location_id)
-        return render(request, "dashboard/partials/pins/pin_overview_partial.html", _overview_context(pin))
+        overview_context = _overview_context(pin)
+        overview_html = render_to_string(request=request, template_name="dashboard/partials/pins/pin_overview_partial.html", context=overview_context)
+        hero_html = _pin_hero_oob(request, pin, overlapping_location_count=overview_context["overlapping_location_count"])
+        return HttpResponse(overview_html + hero_html)
 
 
 class PinEditView(LoginRequiredMixin, View):
