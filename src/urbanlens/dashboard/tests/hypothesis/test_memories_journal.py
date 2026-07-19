@@ -1,8 +1,8 @@
 """Tests for the Memories "Journal" subpage.
 
 Covers ``get_journal_entries`` (the service that merges a profile's own
-visit notes, pin ratings, and comments into one newest-first feed) and
-``MemoriesJournalView`` (the page that renders it).
+visit notes, pin ratings, comments, and article edits into one newest-first
+feed) and ``MemoriesJournalView`` (the page that renders it).
 """
 
 from __future__ import annotations
@@ -91,7 +91,7 @@ class GetJournalEntriesTests(TestCase):
         self.assertEqual(len(entries), 1)
         self.assertEqual(entries[0].kind, "comment")
         self.assertEqual(entries[0].body, "Watch the third floor.")
-        self.assertEqual(entries[0].url, reverse("pin.details", kwargs={"pin_slug": pin.slug}) + "#comments")
+        self.assertEqual(entries[0].url, reverse("pin.details", kwargs={"pin_slug": pin.slug}) + "#tab-comments")
 
     def test_wiki_comment_links_to_wiki(self) -> None:
         location = baker.make("dashboard.Location", latitude=42.0, longitude=-75.0)
@@ -102,7 +102,7 @@ class GetJournalEntriesTests(TestCase):
 
         self.assertEqual(len(entries), 1)
         self.assertEqual(entries[0].title, "Old Factory Wiki")
-        self.assertEqual(entries[0].url, reverse("location.wiki", kwargs={"location_slug": location.slug}) + "#comments")
+        self.assertEqual(entries[0].url, reverse("location.wiki", kwargs={"location_slug": location.slug}) + "#tab-comments")
 
     def test_trip_comment_links_to_trip(self) -> None:
         trip = baker.make("dashboard.Trip", creator=self.profile, name="Fall Roadtrip")
@@ -112,7 +112,56 @@ class GetJournalEntriesTests(TestCase):
 
         self.assertEqual(len(entries), 1)
         self.assertEqual(entries[0].title, "Fall Roadtrip")
-        self.assertEqual(entries[0].url, reverse("trips.detail", kwargs={"trip_slug": trip.slug}) + "#trip-comments")
+        self.assertEqual(entries[0].url, reverse("trips.detail", kwargs={"trip_slug": trip.slug}) + "#trip-comments-panel")
+
+    def test_pin_article_edit_links_to_pin_detail(self) -> None:
+        pin = _make_pin(self.profile, name="Old Factory")
+        article = baker.make("dashboard.Article", pin=pin)
+        baker.make("dashboard.ArticleRevision", article=article, editor=self.profile, content="Built in 1912.")
+
+        entries = get_journal_entries(self.profile)
+
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0].kind, "article")
+        self.assertEqual(entries[0].title, "Old Factory")
+        self.assertEqual(entries[0].subtitle, "Article edit")
+        self.assertEqual(entries[0].body, "Built in 1912.")
+        self.assertEqual(entries[0].url, reverse("pin.details", kwargs={"pin_slug": pin.slug}) + "#tab-article")
+
+    def test_wiki_article_edit_links_to_wiki(self) -> None:
+        location = baker.make("dashboard.Location", latitude=44.0, longitude=-77.0)
+        wiki = baker.make("dashboard.Wiki", location=location, name="Old Factory Wiki", slug="old-factory-wiki")
+        article = baker.make("dashboard.Article", wiki=wiki)
+        baker.make("dashboard.ArticleRevision", article=article, editor=self.profile, content="Community history.")
+
+        entries = get_journal_entries(self.profile)
+
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0].title, "Old Factory Wiki")
+        self.assertEqual(entries[0].subtitle, "Wiki article edit")
+        self.assertEqual(entries[0].url, reverse("location.wiki", kwargs={"location_slug": location.slug}) + "#tab-article")
+
+    def test_article_edit_prefers_edit_summary_for_body(self) -> None:
+        pin = _make_pin(self.profile, name="Old Factory")
+        article = baker.make("dashboard.Article", pin=pin)
+        baker.make(
+            "dashboard.ArticleRevision",
+            article=article,
+            editor=self.profile,
+            content="Built in 1912.",
+            edit_summary="Added construction date",
+        )
+
+        entries = get_journal_entries(self.profile)
+
+        self.assertEqual(entries[0].body, "Added construction date")
+
+    def test_article_edit_by_other_profile_is_excluded(self) -> None:
+        pin = _make_pin(self.other, name="Theirs")
+        article = baker.make("dashboard.Article", pin=pin)
+        baker.make("dashboard.ArticleRevision", article=article, editor=self.other, content="Not mine.")
+
+        self.assertEqual(get_journal_entries(self.profile), [])
 
     def test_only_returns_owning_profiles_entries(self) -> None:
         mine = _make_pin(self.profile, name="Mine")

@@ -231,6 +231,23 @@ defensively):
   "Parcel", so the portal-item-plausibility filter above correctly let it through; only a
   narrow-subset marker could catch it, so `consent.?decree` joined the existing
   delinquency/easement/agricultural list.
+- **Bounding-box overlap is too loose for adjacent jurisdictions**: a New Castle County, DE
+  search accepted a real, comprehensive, but wholly wrong dataset - *Chester County, PA's* actual
+  194K-row parcels layer - because Chester's own extent happens to reach down near the PA/DE
+  border, giving the two neighboring counties' bounding boxes a sliver of rectangle overlap
+  despite Chester's data never covering Delaware at all. `extent_overlaps_county` originally
+  tested plain bbox-intersection (built for the Nicholas County, WV incident above, where the two
+  states are nowhere near each other); redefined to test whether the *target county's own
+  centroid* falls inside the candidate's extent instead - still passes every legitimate match
+  (a real county's own layer obviously contains its own centroid) and every legitimate statewide/
+  regional layer (which contains every in-state county's centroid too), but correctly rejects a
+  neighbor whose extent merely brushes the border.
+- **Narrow-subset markers keep growing, round 2**: a Mecklenburg County, NC search accepted a
+  2,701-row "Park Parcels" layer (parks-department-owned land only, fields
+  `park_type`/`park_distr`/`bondsource`) - one coincidentally-matching field (`parcelid`) cleared
+  the tier-1 corroboration bar. `park.?parcels`/`parks.?parcels` joined the marker list as a
+  *phrase*, not a bare `park` token - deliberately, since "Park County" is a real jurisdiction
+  (CO/MT/WY) whose own genuine parcels dataset must not collide with the rule.
 - **Known residual gap** (deliberate): a sub-floor-clearing partial can still slip through
   (Franklin County, OH's 9K-row `Parcels_2022_01` likely is one) - the durable answer is the
   human-review workflow around `discovered_by`/`last_verified`, not an ever-taller heuristic

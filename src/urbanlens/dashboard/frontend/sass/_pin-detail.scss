@@ -733,10 +733,67 @@
         }
     }
 
+    // form-row--two-col is a global grid layout (see _components.scss); this
+    // dialog's own .form-row rule above sets display:flex at equal selector
+    // specificity, so it has to be re-overridden here (source order wins the
+    // tie) - the label/input typography from the .form-row rule above still
+    // applies to these nested fields regardless, since the element keeps both
+    // classes.
+    .form-row--two-col {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: .75rem;
+
+        > div {
+            display: flex;
+            flex-direction: column;
+            gap: .35rem;
+        }
+    }
+
+    // Notes grows with its content instead of scrolling internally - resize
+    // handle is redundant (and fights the auto-height) once that's true.
+    .visit-notes-autogrow {
+        resize: none;
+        overflow-y: hidden;
+    }
+
     .form-actions {
         display: flex;
         gap: .5rem;
         padding-top: .25rem;
+    }
+
+    // -- Photos / Map / Participants: three buttons instead of three
+    // separate always-visible "(optional)" field rows -----------------------
+    .visit-attachment-row {
+        gap: .5rem;
+    }
+
+    .visit-attachment-buttons {
+        display: flex;
+        gap: .5rem;
+        flex-wrap: wrap;
+    }
+
+    .visit-attachment-toggle {
+        &.is-open {
+            background: var(--ul-surface-raised);
+            border-color: var(--ul-primary-color);
+            color: var(--ul-primary-color);
+        }
+    }
+
+    .visit-attachment-panel {
+        display: flex;
+        flex-direction: column;
+        gap: .5rem;
+        padding: .65rem;
+        border: 1px solid var(--ul-surface-raised-border);
+        border-radius: $radius-sm;
+        background: var(--ul-surface-raised);
+
+        &[hidden] { display: none; }
     }
 
     .visit-participant-picker {
@@ -750,36 +807,17 @@
     .visit-participant-option {
         display: inline-flex;
         align-items: center;
-        gap: .35rem;
+        gap: .4rem;
         font-size: .85rem;
         font-weight: 400;
     }
 
-    .visit-participant-row {
-        display: inline-flex;
-        align-items: center;
-        gap: .25rem;
-    }
-
-    // Per-participant "send them a visit suggestion" bell toggle.
-    .visit-participant-suggest {
-        display: inline-flex;
-        align-items: center;
-        cursor: pointer;
-        color: var(--ul-grey-5);
-
-        input[type="checkbox"] {
-            position: absolute;
-            opacity: 0;
-            pointer-events: none;
-        }
-
-        .material-symbols-outlined { font-size: 1rem; }
-
-        &:has(input:checked) { color: $color-indigo-500; }
-    }
-
     // -- External (non-member) participants ---------------------------------
+    .visit-external-existing-list {
+        display: flex;
+        flex-direction: column;
+        gap: .2rem;
+    }
     .visit-external-existing {
         display: flex;
         align-items: center;
@@ -927,15 +965,10 @@
         }
     }
 
-    // -- Attached-map chip / draw button ------------------------------------
+    // -- Attached-map chip (shown whenever a map is attached, regardless of
+    // which panel is open - editing/removing it doesn't require a click first)
     .visit-map-attached-chip {
-        margin-bottom: .4rem;
-    }
-
-    .visit-map-attach-btn {
-        display: inline-flex;
-        align-items: center;
-        gap: .3rem;
+        align-self: flex-start;
     }
 }
 

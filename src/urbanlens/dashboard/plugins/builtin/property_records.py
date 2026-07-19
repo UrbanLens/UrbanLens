@@ -183,13 +183,33 @@ def _write_official_owners_and_sales(location: Location, payload: dict[str, Any]
             new_sale.new_owners.add(grantee)
 
 
+#: Human-readable labels for BuildingCharacteristics fields, in display order.
+_BUILDING_CHARACTERISTIC_LABELS: tuple[tuple[str, str], ...] = (
+    ("stories", "Stories"),
+    ("roof_material", "Roof"),
+    ("wall_material", "Exterior walls"),
+    ("garage", "Garage"),
+    ("heating_type", "Heating"),
+    ("quality", "Building quality"),
+    ("condition", "Building condition"),
+)
+
+
 def _render_available(data: dict[str, Any]) -> dict[str, Any]:
     """Build the info-panel context for a successful record."""
     meta = [{"label": "Situs address", "value": data["situs_address"]}] if data.get("situs_address") else []
     if data.get("apn"):
         meta.append({"label": "APN / Parcel ID", "value": data["apn"]})
+    if data.get("prior_parcel_ids"):
+        meta.append({"label": "Prior parcel ID", "value": ", ".join(data["prior_parcel_ids"])})
     if data.get("land_use_code"):
         meta.append({"label": "Land use", "value": data["land_use_code"]})
+    if data.get("zoning_code"):
+        meta.append({"label": "Zoning", "value": data["zoning_code"]})
+    if data.get("subdivision_name"):
+        meta.append({"label": "Subdivision", "value": data["subdivision_name"]})
+    if data.get("neighborhood"):
+        meta.append({"label": "Neighborhood", "value": data["neighborhood"]})
     if data.get("lot_size_sqft"):
         meta.append({"label": "Lot size", "value": f"{data['lot_size_sqft']:,.0f} sq ft"})
     if data.get("building_sqft"):
@@ -197,12 +217,29 @@ def _render_available(data: dict[str, Any]) -> dict[str, Any]:
     if data.get("year_built"):
         meta.append({"label": "Year built", "value": data["year_built"]})
 
+    building = data.get("building_characteristics") or {}
+    for field_name, label in _BUILDING_CHARACTERISTIC_LABELS:
+        value = building.get(field_name)
+        if value:
+            meta.append({"label": label, "value": f"{value:g}" if field_name == "stories" else value})
+    if building.get("building_count") and building["building_count"] > 1:
+        meta.append({"label": "Buildings on parcel", "value": building["building_count"]})
+
     assessed = data.get("assessed_value") or {}
     if assessed.get("total"):
         year_suffix = f" ({assessed['year']})" if assessed.get("year") else ""
         meta.append({"label": f"Assessed value{year_suffix}", "value": f"${assessed['total']:,.0f}"})
     if data.get("market_value"):
         meta.append({"label": "Market value", "value": f"${data['market_value']:,.0f}"})
+    if building.get("outbuilding_value"):
+        meta.append({"label": "Outbuilding value", "value": f"${building['outbuilding_value']:,.0f}"})
+    if data.get("exemption_type"):
+        exempt_suffix = f" (${data['deferred_value']:,.0f} deferred)" if data.get("deferred_value") else ""
+        meta.append({"label": "Exemption", "value": f"{data['exemption_type']}{exempt_suffix}"})
+    if data.get("tax_district"):
+        meta.append({"label": "Tax district", "value": data["tax_district"]})
+    if data.get("school_district"):
+        meta.append({"label": "School district", "value": data["school_district"]})
 
     field_sources = data.get("field_sources") or {}
     distinct_tiers = {data["source"]["tier"], *field_sources.values()}
@@ -212,6 +249,8 @@ def _render_available(data: dict[str, Any]) -> dict[str, Any]:
         chips.append("Sources disagree")
     if any(entry.get("delinquent") for entry in data.get("tax_history") or []):
         chips.append("Delinquent taxes")
+    if data.get("parcel_geometry"):
+        chips.append("Boundary available")
 
     footer_link = {"url": data["source"]["url"], "label": f"View on {data['source']['provider']}"} if data["source"].get("url") else None
 

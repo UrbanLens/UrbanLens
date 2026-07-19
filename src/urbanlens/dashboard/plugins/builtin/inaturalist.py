@@ -21,6 +21,10 @@ class INaturalistPanelSource(CoordinateGatedInfoPanelSource):
     section_id = "inaturalist-section"
     icon = "forest"
     title = "iNaturalist"
+    # Shared by fetch() (the actual API search radius) and render_context()
+    # (the footer link's radius param) so the "View nearby" link always
+    # matches what was actually searched.
+    radius_km: ClassVar[float] = 2
 
     def fetch(self, pin: Pin) -> None:
         """Search iNaturalist for nearby observations and cache the results."""
@@ -29,7 +33,7 @@ class INaturalistPanelSource(CoordinateGatedInfoPanelSource):
 
         lat = float(pin.effective_latitude or 0)
         lng = float(pin.effective_longitude or 0)
-        observations = INaturalistGateway().get_nearby_observations(lat, lng, radius_km=2, limit=10)
+        observations = INaturalistGateway().get_nearby_observations(lat, lng, radius_km=self.radius_km, limit=10)
         LocationCache.set(pin.location, self.cache_source, {"observations": observations}, query_key=f"{lat:.5f},{lng:.5f}")
 
     def render_context(self, pin: Pin, data: dict) -> dict | None:
@@ -39,14 +43,25 @@ class INaturalistPanelSource(CoordinateGatedInfoPanelSource):
             return None
 
         meta = [
-            {"label": obs.get("common_name") or obs.get("scientific_name") or "Unknown species", "value": obs.get("observed_on") or "Date unknown"}
+            {
+                "label": obs.get("common_name") or obs.get("scientific_name") or "Unknown species",
+                "value": obs.get("observed_on") or "Date unknown",
+                # Links straight to this specific sighting, not iNaturalist's homepage.
+                "href": obs.get("uri") or "",
+            }
             for obs in observations[:8]
         ]
+
+        footer_url = "https://www.inaturalist.org/observations"
+        lat = pin.effective_latitude
+        lng = pin.effective_longitude
+        if lat is not None and lng is not None:
+            footer_url += f"?lat={lat}&lng={lng}&radius={self.radius_km}"
 
         return {
             "chips": [f"{len(observations)} nearby"],
             "meta": meta,
-            "footer_link": {"url": "https://www.inaturalist.org/observations", "label": "View on iNaturalist"},
+            "footer_link": {"url": footer_url, "label": "View nearby observations on iNaturalist"},
             "nested": True,
         }
 

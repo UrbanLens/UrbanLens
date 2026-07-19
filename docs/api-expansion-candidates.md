@@ -502,6 +502,81 @@ Add new services to `SERVICE_REGISTRY` in `dashboard/services/rate_limiter.py` w
 
 ---
 
+## Sibling Services Found During Property-Records Live Testing (2026-07-19)
+
+Unlike the rest of this document (a general survey), everything below was a *specific, real
+endpoint or dataset* that turned up as a sibling item while live-testing the county property-
+records discovery pipeline (`services/apis/property_records/`) against ~70 real counties'
+ArcGIS Online item-search and portal results. Recorded here rather than acted on, per the plan's
+"note candidates, don't build speculatively" approach - these are concrete leads, not the general
+aspirational entries above.
+
+### State GIS clearinghouses, encountered as statewide-parcels fallbacks but hosting far more
+
+The discovery pipeline's portal-search fallback (`discover_via_portal_search`) already treats
+these as acceptable *statewide parcels* sources for a county with no county-level GIS. Each one's
+own AGOL item-search or ArcGIS REST catalog was visibly full of non-parcels layers too, all
+reachable through the exact same generic ArcGIS REST client (`arcgis_socrata.ArcGisSocrataGateway`)
+already built for this feature - no new gateway class needed to try one, just a new
+`PropertyJurisdiction`-style registry row or a one-off query.
+
+| State clearinghouse | Base URL | What else it hosts (observed, not exhaustive) |
+|---|---|---|
+| Minnesota MnGeo | `enterprise.gisdata.mn.gov` | Statewide parcels (`plan_parcels_open`) plus MnGeo's much broader environmental/infrastructure catalog |
+| Colorado | `gis.colorado.gov` | Statewide `Address_and_Parcel/Colorado_Public_Parcels`; likely wildfire/hazard layers under the same portal (not itself explored) |
+| Idaho Dept. of Water Resources | `gis.idwr.idaho.gov` | Statewide `Reference/Parcels` layer hosted by the *water* agency - water-rights/well data is presumably adjacent on the same server |
+| Missouri Spatial Data Information Service (MSDIS) | `data-msdis.opendata.arcgis.com` | Primary MO geospatial layer clearinghouse; surfaced in Boone County's search results but not explored beyond that |
+| Florida | `services9.arcgis.com/.../Florida_Statewide_Cadastral` | Statewide cadastral; likely paired with other FL statewide environmental layers under the same publisher |
+| Tennessee | `services1.arcgis.com/.../Tennessee_Property_Boundaries_Public_Use` | Statewide property boundaries; same publisher pattern as above |
+
+### Environmental/hazard layers - directly on-theme for an urbex app
+
+Several turned up as *false positives* to reject during discovery (see `docs/NOTES.md`'s
+"Property-records discovery heuristics" section for the specific incidents), but the underlying
+datasets are genuinely relevant to this app's actual audience:
+
+- **Groundwater contamination / consent-decree tracking** - Kent County, MI's "Parcel Status from
+  February 2020 Consent Decree" layer (`services1.arcgis.com/FNjlrOFR0aGJ71Tg/.../FeatureServer/0`).
+  A real litigation-driven environmental tracker over specific parcels - close cousin to the
+  already-implemented `epa_echo` plugin, but county/city-published rather than federal.
+- **Mine waste tracking** - a West Virginia layer (`Mine_Waste_WFL1`, owner `Davis_lnkinder`)
+  surfaced incidentally in a Boone County, MO portal search. Suggests per-state mine-hazard
+  layers exist beyond the federal USGS MRDS/OSMRE AML entries already listed above.
+- **Flood zones** - `FLD_ZONE` turned up as a raw field/sub-layer name inside more than one
+  county's GIS service (alongside Parcels, County_Boundary, etc.) - already listed generically
+  as FEMA NFHL above, but confirms individual counties often republish their own flood-zone
+  layer on the same ArcGIS server as their parcels, which would be a cheap "already querying
+  this host" addition per-county rather than a new national integration.
+
+### Wildlife/conservation corridor data
+
+- Arizona Game & Fish Dept's **"Pima County Wildlife Linkages: Stakeholder Input"** Web Map
+  (owner `DPokrajac_AZGFD`) - stakeholder-workshop wildlife-corridor data, state agency-published.
+  Not in the existing candidate list above; worth a line item if wildlife-corridor context near a
+  pin is ever wanted (adjacent to the existing iNaturalist/GBIF-style entries).
+
+### Trail and outdoor POI layers
+
+- **"Pima County Trailheads"** (`trailheads_east_pima`, owner `AGONRPRpblsh`) - county-published
+  trailhead points, same ArcGIS Online pattern as parcels.
+- **University tree-survey data** - "Pima County Tree Survey Final", an ASU capstone project
+  (owner `fshenk_asu`) hosted publicly on AGOL. Illustrates that academic/capstone GIS projects
+  routinely publish real municipal survey data on ArcGIS Online under student accounts - a
+  low-reliability but occasionally rich source worth being aware of, not necessarily worth
+  integrating (no stable publisher, could disappear without notice).
+
+### Standalone address-point layers
+
+Several county GIS services carried a **separate `AddressPoints` sub-layer** alongside their
+Parcels layer (e.g. the Nicholas County, WV service structure encountered while chasing a
+discovery bug: `AddressPoints`, `ParcelHooks`, `Roads`, `County_Boundary`, `Surrounding_Counties`,
+`TAX_DISTRICTS` all as sibling layers under one service). A free, often more-authoritative
+alternative/supplement to the Census geocoder already in use (`services/apis/locations/census_geocoder.py`)
+for any county whose Tier 1 parcels endpoint is already configured - same host, zero new
+discovery/registry work, just a second query against an already-known server.
+
+---
+
 ## Related Code
 
 | Area | Path |

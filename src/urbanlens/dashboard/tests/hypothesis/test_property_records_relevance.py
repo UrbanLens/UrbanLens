@@ -85,6 +85,17 @@ class UrlIsDisqualifiedTests(SimpleTestCase):
         (real parcels, but a sliver of the county's ~220k total) passed every other check."""
         self.assertTrue(relevance.url_is_disqualified("https://services1.arcgis.com/x/arcgis/rest/services/Parcel_Status_from_February_2020_Consent_Decree/FeatureServer/0"))
 
+    def test_park_parcels_subset_is_disqualified(self) -> None:
+        """Regression guard: a 2,701-row Mecklenburg County, NC "Park Parcels" layer (parks
+        department land only, fields park_type/park_distr/bondsource) had exactly one
+        coincidentally-matching field (parcelid), clearing the tier-1 field-corroboration bar."""
+        self.assertTrue(relevance.url_is_disqualified("https://meckgis.mecklenburgcountync.gov/server/rest/services/ParkParcels/FeatureServer/0"))
+
+    def test_real_park_county_jurisdiction_is_not_disqualified(self) -> None:
+        """The phrase-based park.?parcels marker must not collide with a genuine "Park County"
+        jurisdiction's (CO/MT/WY all have one) own real, comprehensive parcels dataset."""
+        self.assertFalse(relevance.url_is_disqualified("https://gis.example.gov/arcgis/rest/services/Park_County_Parcels/MapServer/0"))
+
 
 class LayerIsAcceptableTests(SimpleTestCase):
     def test_empty_fields_list_is_rejected_despite_canonical_name(self) -> None:
@@ -183,11 +194,29 @@ class ExtentOverlapsCountyTests(SimpleTestCase):
     def test_unknown_county_extent_is_permissive(self) -> None:
         self.assertTrue(relevance.extent_overlaps_county((0, 0, 1, 1), None))
 
-    def test_overlapping_boxes_are_confirmed(self) -> None:
-        self.assertTrue(relevance.extent_overlaps_county((0, 0, 2, 2), (1, 1, 3, 3)))
+    def test_county_centroid_inside_layer_extent_is_confirmed(self) -> None:
+        """County (1, 1, 3, 3) has centroid (2, 2), which falls inside layer (0, 0, 4, 4)."""
+        self.assertTrue(relevance.extent_overlaps_county((0, 0, 4, 4), (1, 1, 3, 3)))
 
     def test_disjoint_boxes_are_rejected(self) -> None:
         """Regression guard: Nicholas County, WV and Boone County, MO don't overlap at all."""
         west_virginia_extent = (-81.5, 38.2, -80.9, 38.6)
         missouri_extent = (-92.57, 38.64, -92.10, 39.25)
         self.assertFalse(relevance.extent_overlaps_county(west_virginia_extent, missouri_extent))
+
+    def test_sliver_bbox_overlap_without_centroid_containment_is_rejected(self) -> None:
+        """Regression guard: a New Castle County, DE search accepted a real, comprehensive, but
+        wholly wrong dataset - Chester County, PA's actual parcels - because Chester's own extent
+        reaches down near the PA/DE border, giving the two counties' bounding boxes a sliver of
+        rectangle overlap despite Chester's data never actually covering Delaware. Plain
+        bbox-overlap (the original implementation) would wrongly confirm this pair; requiring the
+        target's centroid to fall inside the candidate's box correctly rejects it."""
+        chester_pa_layer_extent = (2422331.67, 145429.06, 2637072.46, 338865.57)
+        new_castle_de_extent = (2519140.76, -9520.80, 2632145.94, 193135.68)
+        self.assertFalse(relevance.extent_overlaps_county(chester_pa_layer_extent, new_castle_de_extent))
+
+    def test_large_statewide_layer_containing_county_centroid_is_confirmed(self) -> None:
+        """A legitimate statewide parcels layer must still pass for any in-state county."""
+        florida_statewide_extent = (-87.6, 24.4, -80.0, 31.0)
+        hillsborough_county_centroid_area = (-82.6, 27.8, -82.2, 28.2)
+        self.assertTrue(relevance.extent_overlaps_county(florida_statewide_extent, hillsborough_county_centroid_area))

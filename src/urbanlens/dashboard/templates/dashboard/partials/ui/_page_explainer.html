@@ -19,7 +19,8 @@ Usage:
 <div class="ul-page-explainer{% if modifier %} ul-page-explainer--{{ modifier }}{% endif %}{% if not visual_template %} ul-page-explainer--text-only{% endif %}"
      id="{{ explainer_id }}"
      data-explainer-id="{{ explainer_id }}"
-     data-explainer-anchor="#{{ anchor_id|default:explainer_id }}-anchor">
+     data-explainer-anchor="#{{ anchor_id|default:explainer_id }}-anchor"
+     hidden>
     <button type="button" class="ul-explainer-collapse" aria-label="Hide explanation" title="Hide explanation">
         <i class="material-icons" aria-hidden="true">expand_less</i>
     </button>

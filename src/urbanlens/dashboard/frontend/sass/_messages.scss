@@ -22,6 +22,15 @@
         width: 42px;
         height: 42px;
     }
+
+    &--sm {
+        width: 24px;
+        height: 24px;
+
+        .msg-avatar-initial {
+            font-size: .68rem;
+        }
+    }
 }
 
 .msg-avatar-img {

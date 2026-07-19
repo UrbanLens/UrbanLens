@@ -14,8 +14,9 @@ from datetime import UTC, date, datetime
 import logging
 from typing import TYPE_CHECKING, Any
 
+from urbanlens.dashboard.services.apis.property_records.arcgis_socrata import GEOMETRY_KEY
 from urbanlens.dashboard.services.apis.property_records.field_mapping import map_fields
-from urbanlens.dashboard.services.apis.property_records.schema import AssessedValue, PropertyRecord, RecordSource, SaleHistoryEntry
+from urbanlens.dashboard.services.apis.property_records.schema import AssessedValue, BuildingCharacteristics, PropertyRecord, RecordSource, SaleHistoryEntry
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.property_jurisdiction.model import PropertyJurisdiction
@@ -98,6 +99,57 @@ def _split_owner_names(raw: Any) -> tuple[str, ...]:
     return (text,)
 
 
+def _build_owner_names(mapped: dict[str, Any]) -> tuple[str, ...]:
+    """Split the primary owner field, then append a separately-reported co-owner (deduplicated)."""
+    names = list(_split_owner_names(mapped.get("owner_name")))
+    co_owner = _clean_str(mapped.get("co_owner_name"))
+    if co_owner and co_owner.casefold() not in {name.casefold() for name in names}:
+        names.append(co_owner)
+    return tuple(names)
+
+
+def _build_owner_mailing_address(mapped: dict[str, Any]) -> str | None:
+    """Use the source's own combined mailing address, or compose one from separate city/state/zip fields."""
+    combined = _clean_str(mapped.get("owner_mailing_address"))
+    if combined:
+        return combined
+    city = _clean_str(mapped.get("owner_mailing_city"))
+    state = _clean_str(mapped.get("owner_mailing_state"))
+    zip_code = _clean_str(mapped.get("owner_mailing_zip"))
+    city_state_zip = " ".join(part for part in (f"{city}," if city and (state or zip_code) else city, state, zip_code) if part)
+    return city_state_zip or None
+
+
+def _build_building_characteristics(mapped: dict[str, Any]) -> BuildingCharacteristics | None:
+    stories = _to_float(mapped.get("building_stories"))
+    roof_material = _clean_str(mapped.get("roof_material")) or None
+    wall_material = _clean_str(mapped.get("wall_material")) or None
+    garage = _clean_str(mapped.get("garage")) or None
+    heating_type = _clean_str(mapped.get("heating_type")) or None
+    quality = _clean_str(mapped.get("building_quality")) or None
+    condition = _clean_str(mapped.get("building_condition")) or None
+    building_count = _to_int(mapped.get("building_count"))
+    outbuilding_value = _to_float(mapped.get("outbuilding_value"))
+    if not any((stories is not None, roof_material, wall_material, garage, heating_type, quality, condition, building_count is not None, outbuilding_value is not None)):
+        return None
+    return BuildingCharacteristics(
+        stories=stories,
+        roof_material=roof_material,
+        wall_material=wall_material,
+        garage=garage,
+        heating_type=heating_type,
+        quality=quality,
+        condition=condition,
+        building_count=building_count,
+        outbuilding_value=outbuilding_value,
+    )
+
+
+def _build_prior_parcel_ids(mapped: dict[str, Any]) -> tuple[str, ...]:
+    prior_id = _clean_str(mapped.get("prior_parcel_id"))
+    return (prior_id,) if prior_id else ()
+
+
 def _build_assessed_value(mapped: dict[str, Any]) -> AssessedValue | None:
     land = _to_float(mapped.get("assessed_land"))
     improvement = _to_float(mapped.get("assessed_improvement"))
@@ -150,7 +202,13 @@ def build_property_record(
     Returns:
         A normalized ``PropertyRecord`` for this one tier's data.
     """
-    mapped = map_fields(raw, field_map if field_map is not None else jurisdiction.field_map)
+    # __parcel_geometry__ (see arcgis_socrata.GEOMETRY_KEY) carries a Tier 1
+    # ArcGIS feature's own boundary alongside its flat attribute dict - never
+    # a real county field, and map_fields has no business seeing it.
+    geometry = raw.get(GEOMETRY_KEY)
+    raw_attributes = {key: value for key, value in raw.items() if key != GEOMETRY_KEY} if GEOMETRY_KEY in raw else raw
+
+    mapped = map_fields(raw_attributes, field_map if field_map is not None else jurisdiction.field_map)
     apn = _clean_str(mapped.get("apn"))
 
     return PropertyRecord(
@@ -162,8 +220,8 @@ def build_property_record(
         confidence=confidence,
         parcel_id=apn,
         apn=apn,
-        owner_name=_split_owner_names(mapped.get("owner_name")),
-        owner_mailing_address=_clean_str(mapped.get("owner_mailing_address")) or None,
+        owner_name=_build_owner_names(mapped),
+        owner_mailing_address=_build_owner_mailing_address(mapped),
         legal_description=_clean_str(mapped.get("legal_description")) or None,
         land_use_code=_clean_str(mapped.get("land_use_code")) or None,
         lot_size_sqft=_to_float(mapped.get("lot_size_sqft")),
@@ -172,4 +230,14 @@ def build_property_record(
         assessed_value=_build_assessed_value(mapped),
         market_value=_to_float(mapped.get("market_value")),
         sales_history=_build_sales_history(mapped),
+        zoning_code=_clean_str(mapped.get("zoning_code")) or None,
+        tax_district=_clean_str(mapped.get("tax_district")) or None,
+        school_district=_clean_str(mapped.get("school_district")) or None,
+        exemption_type=_clean_str(mapped.get("exemption_type")) or None,
+        deferred_value=_to_float(mapped.get("deferred_value")),
+        subdivision_name=_clean_str(mapped.get("subdivision_name")) or None,
+        neighborhood=_clean_str(mapped.get("neighborhood")) or None,
+        building_characteristics=_build_building_characteristics(mapped),
+        prior_parcel_ids=_build_prior_parcel_ids(mapped),
+        parcel_geometry=geometry if isinstance(geometry, dict) else None,
     )

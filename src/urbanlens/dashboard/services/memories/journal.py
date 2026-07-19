@@ -24,7 +24,7 @@ class JournalEntry:
     """One row in a profile's Journal feed - a visit note, a rating, or a comment.
 
     Attributes:
-        kind: One of "visit", "review", "comment".
+        kind: One of "visit", "review", "comment", "article".
         occurred_at: When this entry was posted (tz-aware).
         icon: Material icon name for the entry's card.
         title: The pin/wiki/trip this entry is about.
@@ -95,16 +95,16 @@ def _comment_entries(profile: Profile) -> Iterator[JournalEntry]:
         if getattr(comment, "pin_id", None):
             title = comment.pin.effective_name
             subtitle = "Comment"
-            url = reverse("pin.details", kwargs={"pin_slug": comment.pin.slug}) + "#comments"
+            url = reverse("pin.details", kwargs={"pin_slug": comment.pin.slug}) + "#tab-comments"
         elif getattr(comment, "wiki_id", None):
             title = comment.wiki.name
             subtitle = "Wiki comment"
-            url = reverse("location.wiki", kwargs={"location_slug": comment.wiki.location.slug}) + "#comments"
+            url = reverse("location.wiki", kwargs={"location_slug": comment.wiki.location.slug}) + "#tab-comments"
         else:
             trip = comment.trip
             title = trip.name
             subtitle = "Trip comment"
-            url = reverse("trips.detail", kwargs={"trip_slug": trip.slug}) + "#trip-comments"
+            url = reverse("trips.detail", kwargs={"trip_slug": trip.slug}) + "#trip-comments-panel"
 
         yield JournalEntry(
             kind="comment",
@@ -117,10 +117,42 @@ def _comment_entries(profile: Profile) -> Iterator[JournalEntry]:
         )
 
 
+def _article_entries(profile: Profile) -> Iterator[JournalEntry]:
+    """Yield a JournalEntry for each article edit (pin or wiki) the profile has made."""
+    from urbanlens.dashboard.models.article.model import ArticleRevision
+
+    revisions = (
+        ArticleRevision.objects.filter(editor=profile)
+        .select_related("article", "article__pin", "article__wiki", "article__wiki__location")
+        .order_by("-created")
+    )
+    for revision in revisions:
+        article = revision.article
+        if article.pin_id:
+            title = article.pin.effective_name
+            subtitle = "Article edit"
+            url = reverse("pin.details", kwargs={"pin_slug": article.pin.slug}) + "#tab-article"
+        else:
+            title = article.wiki.name
+            subtitle = "Wiki article edit"
+            url = reverse("location.wiki", kwargs={"location_slug": article.wiki.location.slug}) + "#tab-article"
+
+        yield JournalEntry(
+            kind="article",
+            occurred_at=revision.created,
+            icon="article",
+            title=title,
+            subtitle=subtitle,
+            body=revision.edit_summary or revision.content,
+            url=url,
+        )
+
+
 _JOURNAL_SOURCES: tuple[Callable[[Profile], Iterator[JournalEntry]], ...] = (
     _visit_entries,
     _review_entries,
     _comment_entries,
+    _article_entries,
 )
 
 

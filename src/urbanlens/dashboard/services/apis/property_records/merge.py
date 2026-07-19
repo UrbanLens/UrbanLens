@@ -12,6 +12,7 @@ that actually populated it wins.
 from __future__ import annotations
 
 import dataclasses
+import json
 
 from urbanlens.dashboard.services.apis.property_records.schema import PropertyRecord
 
@@ -41,11 +42,20 @@ def _comparable(value: object) -> object:
     strings are compared casefolded with whitespace collapsed; only a
     difference that survives that normalization counts as a genuine
     disagreement worth flagging to the user.
+
+    Dict-valued fields (currently only ``parcel_geometry``) are converted to
+    a canonical JSON string - the caller collects these into a ``set()`` to
+    count distinct values, and a plain ``dict`` isn't hashable. Only Tier 1
+    ever populates ``parcel_geometry`` today so this never actually triggers
+    in practice, but a latent crash on a future dict-valued field is worse
+    than a few extra bytes of string conversion here.
     """
     if isinstance(value, str):
         return " ".join(value.split()).casefold()
     if isinstance(value, tuple):
         return tuple(_comparable(item) for item in value)
+    if isinstance(value, dict):
+        return json.dumps(value, sort_keys=True, default=str)
     return value
 
 

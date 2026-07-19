@@ -14,9 +14,10 @@ from __future__ import annotations
 from hypothesis import given, strategies as st
 
 from urbanlens.core.tests.testcase import SimpleTestCase
-from urbanlens.dashboard.services.apis.property_records.field_mapping import SQFT_PER_ACRE, map_fields
+from urbanlens.dashboard.services.apis.property_records.arcgis_socrata import GEOMETRY_KEY
+from urbanlens.dashboard.services.apis.property_records.field_mapping import _HEURISTIC_CANDIDATES, _SUPPLEMENTARY_CANDIDATES, SQFT_PER_ACRE, map_fields
 from urbanlens.dashboard.services.apis.property_records.normalize import TIER1_CONFIDENCE, _split_owner_names, _to_date, _to_float, build_property_record
-from urbanlens.dashboard.services.apis.property_records.schema import AssessedValue, PropertyRecord, RecordSource
+from urbanlens.dashboard.services.apis.property_records.schema import AssessedValue, BuildingCharacteristics, PropertyRecord, RecordSource
 
 
 class MapFieldsHeuristicTests(SimpleTestCase):
@@ -63,6 +64,101 @@ class MapFieldsHeuristicTests(SimpleTestCase):
     def test_acre_to_sqft_conversion_is_linear(self, acres: float) -> None:
         mapped = map_fields({"ACREAGE": acres})
         self.assertAlmostEqual(mapped["lot_size_sqft"], acres * SQFT_PER_ACRE)
+
+
+class SupplementaryFieldMappingTests(SimpleTestCase):
+    """The new retrieval-only fields resolve, and never leak into discovery's candidate pool."""
+
+    def test_core_candidates_exclude_every_supplementary_key(self) -> None:
+        """Regression guard: relevance.PARCEL_FIELD_CANDIDATES is built from _HEURISTIC_CANDIDATES
+        only. A live discovery false positive (Pima County, AZ's single-family-only subset) had
+        STORIES/ROOF/GARAGE/ZONING-shaped fields - folding those into the same pool discovery uses
+        to judge "is this comprehensive parcel data" would make that exact false positive pass
+        again, so the two candidate pools must stay disjoint."""
+        self.assertEqual(set(_HEURISTIC_CANDIDATES) & set(_SUPPLEMENTARY_CANDIDATES), set())
+
+    def test_zoning_code_resolves(self) -> None:
+        self.assertEqual(map_fields({"ZONING": "R-1"})["zoning_code"], "R-1")
+
+    def test_tax_district_resolves(self) -> None:
+        self.assertEqual(map_fields({"TAX_DIST": "12"})["tax_district"], "12")
+
+    def test_school_district_resolves(self) -> None:
+        self.assertEqual(map_fields({"SCHOOL_DIST": "Unified 5"})["school_district"], "Unified 5")
+
+    def test_exemption_type_resolves(self) -> None:
+        self.assertEqual(map_fields({"EXEMPT_CODE": "HOMESTEAD"})["exemption_type"], "HOMESTEAD")
+
+    def test_deferred_value_resolves(self) -> None:
+        self.assertEqual(map_fields({"DEFERRED_VALUE": 15000})["deferred_value"], 15000)
+
+    def test_subdivision_name_resolves(self) -> None:
+        self.assertEqual(map_fields({"SUBDIV_NAME": "Oak Hills"})["subdivision_name"], "Oak Hills")
+
+    def test_neighborhood_resolves(self) -> None:
+        self.assertEqual(map_fields({"NBH_NAME": "Downtown"})["neighborhood"], "Downtown")
+
+    def test_prior_parcel_id_resolves(self) -> None:
+        self.assertEqual(map_fields({"OLDPIN": "OLD-123"})["prior_parcel_id"], "OLD-123")
+
+    def test_co_owner_name_resolves(self) -> None:
+        self.assertEqual(map_fields({"COOWNER": "John Smith"})["co_owner_name"], "John Smith")
+
+    def test_owner_mailing_city_state_zip_resolve(self) -> None:
+        mapped = map_fields({"OWNER_CITY": "Springfield", "OWNER_STAT": "IL", "OWNER_ZIP": "62701"})
+        self.assertEqual(mapped["owner_mailing_city"], "Springfield")
+        self.assertEqual(mapped["owner_mailing_state"], "IL")
+        self.assertEqual(mapped["owner_mailing_zip"], "62701")
+
+    def test_building_characteristic_fields_resolve(self) -> None:
+        mapped = map_fields(
+            {
+                "STORIES": 2,
+                "ROOF": "Asphalt Shingle",
+                "WALLS": "Brick",
+                "GARAGE": "Attached 2-car",
+                "HEAT": "Forced Air",
+                "QUALITY": "Average",
+                "CONDITION": "Good",
+                "NUMBLDGS": 1,
+                "OBXF_VALUE": 5000,
+            },
+        )
+        self.assertEqual(mapped["building_stories"], 2)
+        self.assertEqual(mapped["roof_material"], "Asphalt Shingle")
+        self.assertEqual(mapped["wall_material"], "Brick")
+        self.assertEqual(mapped["garage"], "Attached 2-car")
+        self.assertEqual(mapped["heating_type"], "Forced Air")
+        self.assertEqual(mapped["building_quality"], "Average")
+        self.assertEqual(mapped["building_condition"], "Good")
+        self.assertEqual(mapped["building_count"], 1)
+        self.assertEqual(mapped["outbuilding_value"], 5000)
+
+
+class RealCountyFieldSpellingTests(SimpleTestCase):
+    """Regression guard: Chester County, PA - a jurisdiction the discovery pipeline had
+    specifically confirmed as genuinely comprehensive parcel data - used UPI/OWN1/OWN2/
+    LOC_ADDRESS/TOT_ASSESS/TAXYR, none of which matched any candidate before this fix, so every
+    core field (owner, address, APN, assessed value) silently came back empty for it. Found live
+    while verifying this module's own geometry-capture code against real data."""
+
+    def test_upi_resolves_to_apn(self) -> None:
+        self.assertEqual(map_fields({"UPI": "12-3-45"})["apn"], "12-3-45")
+
+    def test_own1_resolves_to_owner_name(self) -> None:
+        self.assertEqual(map_fields({"OWN1": "Jane Smith"})["owner_name"], "Jane Smith")
+
+    def test_own2_resolves_to_co_owner_name(self) -> None:
+        self.assertEqual(map_fields({"OWN2": "John Smith"})["co_owner_name"], "John Smith")
+
+    def test_loc_address_resolves_to_situs_address(self) -> None:
+        self.assertEqual(map_fields({"LOC_ADDRESS": "123 Main St"})["situs_address"], "123 Main St")
+
+    def test_tot_assess_resolves_to_assessed_total(self) -> None:
+        self.assertEqual(map_fields({"TOT_ASSESS": 250000})["assessed_total"], 250000)
+
+    def test_taxyr_resolves_to_assessed_year(self) -> None:
+        self.assertEqual(map_fields({"TAXYR": 2024})["assessed_year"], 2024)
 
 
 class SplitOwnerNamesTests(SimpleTestCase):
@@ -157,6 +253,72 @@ class BuildPropertyRecordTests(SimpleTestCase):
         record = build_property_record({"CUSTOM_OWNER_FIELD": "Bob Jones"}, jurisdiction=self._jurisdiction(field_map={"owner_name": "CUSTOM_OWNER_FIELD"}), tier=1, confidence=TIER1_CONFIDENCE, provider="ArcGIS REST")
         self.assertEqual(record.owner_name, ("Bob Jones",))
 
+    def test_co_owner_is_appended_to_owner_name(self) -> None:
+        record = build_property_record({"OWNER": "Jane Smith", "COOWNER": "John Smith"}, jurisdiction=self._jurisdiction(), tier=1, confidence=TIER1_CONFIDENCE, provider="ArcGIS REST")
+        self.assertEqual(record.owner_name, ("Jane Smith", "John Smith"))
+
+    def test_co_owner_duplicate_of_primary_owner_is_not_appended_twice(self) -> None:
+        record = build_property_record({"OWNER": "Jane Smith", "COOWNER": "jane smith"}, jurisdiction=self._jurisdiction(), tier=1, confidence=TIER1_CONFIDENCE, provider="ArcGIS REST")
+        self.assertEqual(record.owner_name, ("Jane Smith",))
+
+    def test_mailing_address_prefers_combined_field_over_composed_parts(self) -> None:
+        raw = {"MAILADDR": "123 Elm St, Anytown, CA 90210", "OWNER_CITY": "Wrongtown"}
+        record = build_property_record(raw, jurisdiction=self._jurisdiction(), tier=1, confidence=TIER1_CONFIDENCE, provider="ArcGIS REST")
+        self.assertEqual(record.owner_mailing_address, "123 Elm St, Anytown, CA 90210")
+
+    def test_mailing_address_is_composed_from_separate_city_state_zip(self) -> None:
+        raw = {"OWNER_CITY": "Springfield", "OWNER_STAT": "IL", "OWNER_ZIP": "62701"}
+        record = build_property_record(raw, jurisdiction=self._jurisdiction(), tier=1, confidence=TIER1_CONFIDENCE, provider="ArcGIS REST")
+        self.assertEqual(record.owner_mailing_address, "Springfield, IL 62701")
+
+    def test_no_mailing_fields_at_all_is_none(self) -> None:
+        record = build_property_record({}, jurisdiction=self._jurisdiction(), tier=1, confidence=TIER1_CONFIDENCE, provider="ArcGIS REST")
+        self.assertIsNone(record.owner_mailing_address)
+
+    def test_building_characteristics_built_when_any_field_present(self) -> None:
+        raw = {"STORIES": 2, "ROOF": "Metal", "GARAGE": "Detached", "NUMBLDGS": 2, "OBXF_VALUE": 3000}
+        record = build_property_record(raw, jurisdiction=self._jurisdiction(), tier=1, confidence=TIER1_CONFIDENCE, provider="ArcGIS REST")
+        assert record.building_characteristics is not None
+        self.assertEqual(record.building_characteristics.stories, 2.0)
+        self.assertEqual(record.building_characteristics.roof_material, "Metal")
+        self.assertEqual(record.building_characteristics.garage, "Detached")
+        self.assertEqual(record.building_characteristics.building_count, 2)
+        self.assertEqual(record.building_characteristics.outbuilding_value, 3000.0)
+
+    def test_building_characteristics_absent_when_no_field_present(self) -> None:
+        record = build_property_record({}, jurisdiction=self._jurisdiction(), tier=1, confidence=TIER1_CONFIDENCE, provider="ArcGIS REST")
+        self.assertIsNone(record.building_characteristics)
+
+    def test_prior_parcel_id_becomes_a_one_item_tuple(self) -> None:
+        record = build_property_record({"OLDPIN": "OLD-1"}, jurisdiction=self._jurisdiction(), tier=1, confidence=TIER1_CONFIDENCE, provider="ArcGIS REST")
+        self.assertEqual(record.prior_parcel_ids, ("OLD-1",))
+
+    def test_no_prior_parcel_id_is_empty_tuple(self) -> None:
+        record = build_property_record({}, jurisdiction=self._jurisdiction(), tier=1, confidence=TIER1_CONFIDENCE, provider="ArcGIS REST")
+        self.assertEqual(record.prior_parcel_ids, ())
+
+    def test_zoning_district_exemption_fields_are_mapped(self) -> None:
+        raw = {"ZONING": "R-1", "TAX_DIST": "12", "SCHOOL_DIST": "Unified 5", "EXEMPT_CODE": "HOMESTEAD", "DEFERRED_VALUE": 5000, "SUBDIV_NAME": "Oak Hills", "NBH_NAME": "Downtown"}
+        record = build_property_record(raw, jurisdiction=self._jurisdiction(), tier=1, confidence=TIER1_CONFIDENCE, provider="ArcGIS REST")
+        self.assertEqual(record.zoning_code, "R-1")
+        self.assertEqual(record.tax_district, "12")
+        self.assertEqual(record.school_district, "Unified 5")
+        self.assertEqual(record.exemption_type, "HOMESTEAD")
+        self.assertEqual(record.deferred_value, 5000.0)
+        self.assertEqual(record.subdivision_name, "Oak Hills")
+        self.assertEqual(record.neighborhood, "Downtown")
+
+    def test_geometry_sentinel_key_becomes_parcel_geometry_and_is_excluded_from_field_mapping(self) -> None:
+        geometry = {"format": "esri_rings", "spatial_reference": "EPSG:4326", "rings": [[[-82.0, 39.0], [-82.0, 39.1], [-81.9, 39.1], [-82.0, 39.0]]]}
+        raw = {"OWNER": "Jane Smith", GEOMETRY_KEY: geometry}
+        record = build_property_record(raw, jurisdiction=self._jurisdiction(), tier=1, confidence=TIER1_CONFIDENCE, provider="ArcGIS REST")
+        self.assertEqual(record.parcel_geometry, geometry)
+        self.assertEqual(record.owner_name, ("Jane Smith",))
+
+    def test_no_geometry_key_is_none(self) -> None:
+        record = build_property_record({"OWNER": "Jane Smith"}, jurisdiction=self._jurisdiction(), tier=1, confidence=TIER1_CONFIDENCE, provider="ArcGIS REST")
+        self.assertIsNone(record.parcel_geometry)
+
 
 class PropertyRecordToDictTests(SimpleTestCase):
     def test_to_dict_is_json_serializable_shape(self) -> None:
@@ -193,3 +355,41 @@ class PropertyRecordToDictTests(SimpleTestCase):
         self.assertIsNone(payload["assessed_value"])
         self.assertEqual(payload["owner_name"], [])
         self.assertEqual(payload["sales_history"], [])
+        self.assertIsNone(payload["building_characteristics"])
+        self.assertIsNone(payload["parcel_geometry"])
+        self.assertEqual(payload["prior_parcel_ids"], [])
+
+    def test_new_fields_round_trip_through_to_dict(self) -> None:
+        import json
+
+        geometry = {"format": "esri_rings", "spatial_reference": "EPSG:4326", "rings": [[[-82.0, 39.0], [-82.0, 39.1], [-81.9, 39.1], [-82.0, 39.0]]]}
+        record = PropertyRecord(
+            situs_address="123 Main St",
+            county="Albany County",
+            state="NY",
+            fips="36001",
+            source=RecordSource(tier=1, provider="ArcGIS REST"),
+            confidence=0.7,
+            zoning_code="R-1",
+            tax_district="12",
+            school_district="Unified 5",
+            exemption_type="HOMESTEAD",
+            deferred_value=5000.0,
+            subdivision_name="Oak Hills",
+            neighborhood="Downtown",
+            building_characteristics=BuildingCharacteristics(stories=2.0, roof_material="Metal", building_count=1),
+            prior_parcel_ids=("OLD-1",),
+            parcel_geometry=geometry,
+        )
+        payload = json.loads(json.dumps(record.to_dict()))
+        self.assertEqual(payload["zoning_code"], "R-1")
+        self.assertEqual(payload["tax_district"], "12")
+        self.assertEqual(payload["school_district"], "Unified 5")
+        self.assertEqual(payload["exemption_type"], "HOMESTEAD")
+        self.assertEqual(payload["deferred_value"], 5000.0)
+        self.assertEqual(payload["subdivision_name"], "Oak Hills")
+        self.assertEqual(payload["neighborhood"], "Downtown")
+        self.assertEqual(payload["building_characteristics"]["stories"], 2.0)
+        self.assertEqual(payload["building_characteristics"]["roof_material"], "Metal")
+        self.assertEqual(payload["prior_parcel_ids"], ["OLD-1"])
+        self.assertEqual(payload["parcel_geometry"], geometry)

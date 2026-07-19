@@ -44,6 +44,52 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_TIMEOUT = 20
 
+#: Sentinel attribute key ``normalize.build_property_record`` looks for and
+#: strips before field-mapping - never a real ArcGIS attribute name, so it
+#: can't collide with a county's own field. Carries a parcel's boundary
+#: geometry alongside its flat attribute dict without changing the "list of
+#: flat attribute dicts" shape every other caller (map_fields, Tier 2/3's
+#: identically-shaped raw dicts) already expects.
+GEOMETRY_KEY = "__parcel_geometry__"
+
+
+def _esri_rings_to_dict(geometry: Any) -> dict[str, Any] | None:
+    """Convert an ArcGIS query response's polygon geometry into the schema's storable shape.
+
+    Args:
+        geometry: The raw ``feature["geometry"]`` value from a query response
+            issued with ``outSR=4326`` (so coordinates are already plain
+            WGS-84 lon/lat) - anything else (missing, non-polygon, malformed).
+
+    Returns:
+        ``{"format": "esri_rings", "spatial_reference": "EPSG:4326", "rings": [...]}``
+        (see ``schema.PropertyRecord.parcel_geometry``'s docstring for why
+        this isn't converted to strict GeoJSON), or None when there's no
+        usable ring data.
+    """
+    if not isinstance(geometry, dict):
+        return None
+    rings = geometry.get("rings")
+    if not isinstance(rings, list) or not rings:
+        return None
+    cleaned: list[list[list[float]]] = []
+    for ring in rings:
+        if not isinstance(ring, list):
+            continue
+        points: list[list[float]] = []
+        for point in ring:
+            if not isinstance(point, list) or len(point) < 2:
+                continue
+            try:
+                points.append([float(point[0]), float(point[1])])
+            except (TypeError, ValueError):
+                continue
+        if len(points) >= 3:
+            cleaned.append(points)
+    if not cleaned:
+        return None
+    return {"format": "esri_rings", "spatial_reference": "EPSG:4326", "rings": cleaned}
+
 
 @dataclass(slots=True, kw_only=True)
 class ArcGisSocrataGateway(Gateway):
@@ -93,7 +139,9 @@ class ArcGisSocrataGateway(Gateway):
             longitude: WGS-84 longitude.
 
         Returns:
-            List of raw ``attributes`` dicts (may be empty).
+            List of raw ``attributes`` dicts (may be empty), each carrying
+            its own boundary geometry (when the response included usable
+            ring data) under :data:`GEOMETRY_KEY`.
 
         Raises:
             SourceUnreachableError: When the county server can't be reached.
@@ -104,7 +152,8 @@ class ArcGisSocrataGateway(Gateway):
             "inSR": 4326,
             "spatialRel": "esriSpatialRelIntersects",
             "outFields": "*",
-            "returnGeometry": "false",
+            "returnGeometry": "true",
+            "outSR": 4326,
             "f": "json",
         }
         response = self._get(f"{service_url.rstrip('/')}/query", params)
@@ -118,10 +167,27 @@ class ArcGisSocrataGateway(Gateway):
         if body.get("error"):
             logger.debug("Property-records ArcGIS query error from %s: %s", urlsplit(service_url).netloc, body["error"])
             return []
-        return [feature["attributes"] for feature in body.get("features") or [] if "attributes" in feature]
+        results: list[dict[str, Any]] = []
+        for feature in body.get("features") or []:
+            if "attributes" not in feature:
+                continue
+            attributes = dict(feature["attributes"])
+            geometry = _esri_rings_to_dict(feature.get("geometry"))
+            if geometry is not None:
+                attributes[GEOMETRY_KEY] = geometry
+            results.append(attributes)
+        return results
 
     def query_socrata_by_point(self, resource_url: str, geo_field: str, latitude: float, longitude: float, *, radius_meters: float = 60) -> list[dict[str, Any]]:
         """Query a Socrata SODA resource for rows near a point via ``within_circle``.
+
+        Unlike :meth:`query_arcgis_by_point`, never populates a parcel
+        boundary (``schema.PropertyRecord.parcel_geometry`` stays None for
+        every Socrata-sourced record) - ``PropertyJurisdiction`` has no
+        configured boundary-column name for Socrata sources (only
+        ``gis_geo_field``, the point/centroid column used for this query),
+        and no live-tested Socrata county was found with one worth adding
+        that config for.
 
         Args:
             resource_url: The dataset's ``.json`` SODA endpoint.

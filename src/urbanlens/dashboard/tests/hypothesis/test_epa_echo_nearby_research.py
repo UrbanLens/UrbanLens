@@ -221,6 +221,27 @@ class EpaEchoNearbyPanelSourceTests(TestCase):
         }
         self.assertIsNone(self.source.render_context(self.pin, data))
 
+    def test_each_facility_links_to_its_own_compliance_report(self) -> None:
+        """Regression guard: this list used to have one generic footer_link to EPA
+        ECHO's homepage instead of linking each entry to its own report."""
+        data = {
+            "facilities": [{"name": "Facility A", "address": "1 A St", "registry_id": "RA", "compliance_status": "In compliance"}],
+            "exact_site": None,
+        }
+        ctx = self.source.render_context(self.pin, data)
+        assert ctx is not None
+        self.assertEqual(ctx["meta"][0]["href"], "https://echo.epa.gov/detailed-facility-report?fid=RA")
+        self.assertNotIn("footer_link", ctx)
+
+    def test_facility_with_no_registry_id_has_no_href(self) -> None:
+        data = {
+            "facilities": [{"name": "Facility A", "address": "1 A St", "registry_id": "", "compliance_status": "In compliance"}],
+            "exact_site": None,
+        }
+        ctx = self.source.render_context(self.pin, data)
+        assert ctx is not None
+        self.assertEqual(ctx["meta"][0]["href"], "")
+
 
 class EpaFacilityNameProviderTests(TestCase):
     def setUp(self) -> None:

@@ -55,15 +55,20 @@ TITLE_SEPARATOR_RE = re.compile(r"[\s_-]+")
 
 #: Slugs marking a narrow, non-comprehensive slice of parcels (delinquency
 #: trackers, easement/agricultural-program registries, environmental-
-#: litigation trackers) - rejected outright, unlike staleness: these cover a
-#: tiny unrepresentative fraction of real properties, which is worse than
-#: finding nothing. ``consent.?decree`` added live: a Kent County, MI search
-#: accepted a 3,793-row "Parcel Status from February 2020 Consent Decree"
-#: layer (a groundwater-contamination litigation tracker, real Kent County
-#: parcels but a sliver of its ~220k total) - its own title says "Parcel",
-#: so :func:`portal_item_is_plausible` correctly let it through; only a
-#: narrow-subset marker could catch it.
-NON_COMPREHENSIVE_SUBSET_RE = re.compile(r"delinquen|forfeit|tax.?sale|foreclos|easement|agricultural|conservation|consent.?decree", re.IGNORECASE)
+#: litigation trackers, a parks department's own land inventory) - rejected
+#: outright, unlike staleness: these cover a tiny unrepresentative fraction
+#: of real properties, which is worse than finding nothing. ``consent.?decree``
+#: added live: a Kent County, MI search accepted a 3,793-row "Parcel Status
+#: from February 2020 Consent Decree" layer (a groundwater-contamination
+#: litigation tracker, real Kent County parcels but a sliver of its ~220k
+#: total) - its own title says "Parcel", so :func:`portal_item_is_plausible`
+#: correctly let it through; only a narrow-subset marker could catch it.
+#: ``park.?parcels``/``parks.?parcels`` added live: a Mecklenburg County, NC
+#: search accepted a 2,701-row "Park Parcels" layer (parks-department-owned
+#: land only, fields ``park_type``/``park_distr``/``bondsource``) - the
+#: phrase (not a bare "park") deliberately avoids colliding with a real
+#: "Park County" jurisdiction's own genuine parcels dataset.
+NON_COMPREHENSIVE_SUBSET_RE = re.compile(r"delinquen|forfeit|tax.?sale|foreclos|easement|agricultural|conservation|consent.?decree|parks?.?parcels", re.IGNORECASE)
 
 #: Non-production markers, word-bounded and matched against separator-
 #: normalized text (an underscore is a word character, so ``\btest\b`` never
@@ -364,7 +369,7 @@ def arcgis_extent_and_wkid(extent: object) -> tuple[tuple[float, float, float, f
 
 
 def extent_overlaps_county(layer_extent: tuple[float, float, float, float] | None, county_extent: tuple[float, float, float, float] | None) -> bool:
-    """Whether a candidate layer's own geographic extent overlaps the target county's.
+    """Whether a candidate layer's own geographic extent plausibly contains the target county.
 
     Built from a live-confirmed failure the name-based checks structurally
     can't catch: a Boone County, MO search's portal-search fallback accepted
@@ -378,10 +383,24 @@ def extent_overlaps_county(layer_extent: tuple[float, float, float, float] | Non
     had anything to match against. A layer's actual geographic extent has no
     such blind spot - it can't be obfuscated by an uninformative name.
 
+    Deliberately tests whether the county's own *centroid* (the extent
+    box's own center point - no separate lookup needed) falls inside the
+    layer's extent, not whether the two boxes merely touch. A live second
+    incident showed plain bbox-overlap is too permissive: a New Castle
+    County, DE search accepted a real, comprehensive, but wholly wrong
+    dataset - *Chester County, PA's* actual parcels - because Chester's own
+    extent happens to reach down near the PA/DE border, giving the two
+    counties' bounding boxes a sliver of rectangle overlap despite Chester's
+    data never actually covering Delaware. Requiring the target's centroid
+    to fall inside the candidate's box rejects that sliver-overlap case
+    while still accepting every legitimate match (a real county's own layer
+    obviously contains its own centroid) and every legitimate statewide/
+    regional layer (which contains every in-state county's centroid too).
+
     Either extent being unknown is permissive (True) - an undetermined
     location must never sink an otherwise-good candidate, matching every
     other probe in this module's "unknown never rejects" convention. Only a
-    *confirmed* non-overlap (both extents known, and they don't intersect)
+    *confirmed* miss (both extents known, and the centroid falls outside)
     rejects.
 
     Args:
@@ -393,10 +412,12 @@ def extent_overlaps_county(layer_extent: tuple[float, float, float, float] | Non
             comparable when they share units.
 
     Returns:
-        True when either extent is unknown, or the two boxes intersect.
+        True when either extent is unknown, or the county's centroid falls
+        within the layer's extent.
     """
     if layer_extent is None or county_extent is None:
         return True
     l_xmin, l_ymin, l_xmax, l_ymax = layer_extent
     c_xmin, c_ymin, c_xmax, c_ymax = county_extent
-    return l_xmin <= c_xmax and l_xmax >= c_xmin and l_ymin <= c_ymax and l_ymax >= c_ymin
+    centroid_x, centroid_y = (c_xmin + c_xmax) / 2, (c_ymin + c_ymax) / 2
+    return l_xmin <= centroid_x <= l_xmax and l_ymin <= centroid_y <= l_ymax

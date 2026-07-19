@@ -101,6 +101,116 @@ class PanelRenderContextTests(SimpleTestCase):
         assert ctx is not None
         self.assertIn("Delinquent taxes", ctx["chips"])
 
+    def _base_available_data(self, **overrides) -> dict:
+        data = {
+            "available": True,
+            "situs_address": "",
+            "apn": "",
+            "owner_name": [],
+            "land_use_code": None,
+            "lot_size_sqft": None,
+            "building_sqft": None,
+            "year_built": None,
+            "assessed_value": None,
+            "market_value": None,
+            "tax_history": [],
+            "source": {"tier": 1, "provider": "ArcGIS REST", "url": ""},
+            "confidence": 0.7,
+        }
+        data.update(overrides)
+        return data
+
+    def test_zoning_tax_district_school_district_are_shown(self) -> None:
+        data = self._base_available_data(zoning_code="R-1", tax_district="12", school_district="Unified 5")
+        ctx = self.source.render_context(self.pin, data)
+        assert ctx is not None
+        labels_values = {entry["label"]: entry["value"] for entry in ctx["meta"]}
+        self.assertEqual(labels_values["Zoning"], "R-1")
+        self.assertEqual(labels_values["Tax district"], "12")
+        self.assertEqual(labels_values["School district"], "Unified 5")
+
+    def test_subdivision_and_neighborhood_are_shown(self) -> None:
+        data = self._base_available_data(subdivision_name="Oak Hills", neighborhood="Downtown")
+        ctx = self.source.render_context(self.pin, data)
+        assert ctx is not None
+        labels_values = {entry["label"]: entry["value"] for entry in ctx["meta"]}
+        self.assertEqual(labels_values["Subdivision"], "Oak Hills")
+        self.assertEqual(labels_values["Neighborhood"], "Downtown")
+
+    def test_prior_parcel_ids_are_shown(self) -> None:
+        data = self._base_available_data(prior_parcel_ids=["OLD-1", "OLD-2"])
+        ctx = self.source.render_context(self.pin, data)
+        assert ctx is not None
+        labels_values = {entry["label"]: entry["value"] for entry in ctx["meta"]}
+        self.assertEqual(labels_values["Prior parcel ID"], "OLD-1, OLD-2")
+
+    def test_exemption_type_with_deferred_value_combines_into_one_line(self) -> None:
+        data = self._base_available_data(exemption_type="Agricultural", deferred_value=15000.0)
+        ctx = self.source.render_context(self.pin, data)
+        assert ctx is not None
+        labels_values = {entry["label"]: entry["value"] for entry in ctx["meta"]}
+        self.assertEqual(labels_values["Exemption"], "Agricultural ($15,000 deferred)")
+
+    def test_exemption_type_without_deferred_value_shows_alone(self) -> None:
+        data = self._base_available_data(exemption_type="Homestead")
+        ctx = self.source.render_context(self.pin, data)
+        assert ctx is not None
+        labels_values = {entry["label"]: entry["value"] for entry in ctx["meta"]}
+        self.assertEqual(labels_values["Exemption"], "Homestead")
+
+    def test_building_characteristics_are_shown(self) -> None:
+        data = self._base_available_data(
+            building_characteristics={
+                "stories": 2.0,
+                "roof_material": "Metal",
+                "wall_material": "Brick",
+                "garage": "Attached 2-car",
+                "heating_type": "Forced Air",
+                "quality": "Average",
+                "condition": "Good",
+                "building_count": 2,
+                "outbuilding_value": 5000.0,
+            },
+        )
+        ctx = self.source.render_context(self.pin, data)
+        assert ctx is not None
+        labels_values = {entry["label"]: entry["value"] for entry in ctx["meta"]}
+        self.assertEqual(labels_values["Stories"], "2")
+        self.assertEqual(labels_values["Roof"], "Metal")
+        self.assertEqual(labels_values["Exterior walls"], "Brick")
+        self.assertEqual(labels_values["Garage"], "Attached 2-car")
+        self.assertEqual(labels_values["Heating"], "Forced Air")
+        self.assertEqual(labels_values["Building quality"], "Average")
+        self.assertEqual(labels_values["Building condition"], "Good")
+        self.assertEqual(labels_values["Buildings on parcel"], 2)
+        self.assertEqual(labels_values["Outbuilding value"], "$5,000")
+
+    def test_single_building_count_is_not_shown_as_a_redundant_fact(self) -> None:
+        data = self._base_available_data(building_characteristics={"building_count": 1})
+        ctx = self.source.render_context(self.pin, data)
+        assert ctx is not None
+        labels = {entry["label"] for entry in ctx["meta"]}
+        self.assertNotIn("Buildings on parcel", labels)
+
+    def test_no_building_characteristics_adds_no_meta_entries(self) -> None:
+        data = self._base_available_data(building_characteristics=None)
+        ctx = self.source.render_context(self.pin, data)
+        assert ctx is not None
+        labels = {entry["label"] for entry in ctx["meta"]}
+        self.assertNotIn("Stories", labels)
+
+    def test_parcel_geometry_adds_a_boundary_available_chip(self) -> None:
+        data = self._base_available_data(parcel_geometry={"format": "esri_rings", "rings": [[[1, 2], [3, 4], [5, 6]]]})
+        ctx = self.source.render_context(self.pin, data)
+        assert ctx is not None
+        self.assertIn("Boundary available", ctx["chips"])
+
+    def test_no_parcel_geometry_does_not_add_the_chip(self) -> None:
+        data = self._base_available_data(parcel_geometry=None)
+        ctx = self.source.render_context(self.pin, data)
+        assert ctx is not None
+        self.assertNotIn("Boundary available", ctx["chips"])
+
     def test_debug_count_reflects_availability(self) -> None:
         self.assertEqual(self.source.debug_count({"available": True}), 1)
         self.assertEqual(self.source.debug_count({"available": False, "reason": "manual_only"}), 1)

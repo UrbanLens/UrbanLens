@@ -198,8 +198,20 @@ function destroyEditor(root: HTMLElement): void {
     editors.delete(root);
 }
 
+const EDITOR_SELECTOR = "[data-article-editor]";
+
+// container itself may be the swapped-in editor root (htmx outerHTML swaps
+// hand us the new element directly, not a wrapper around it), and
+// querySelectorAll only matches descendants - never the container itself -
+// so that case has to be checked separately or the editor never mounts.
+function allMatching(container: ParentNode): HTMLElement[] {
+    const matches = Array.from(container.querySelectorAll<HTMLElement>(EDITOR_SELECTOR));
+    if (container instanceof HTMLElement && container.matches(EDITOR_SELECTOR)) matches.push(container);
+    return matches;
+}
+
 function initAll(container: ParentNode): void {
-    container.querySelectorAll<HTMLElement>("[data-article-editor]").forEach(mountEditor);
+    allMatching(container).forEach(mountEditor);
 }
 
 // Capture phase, so this always runs before article-editor.js's own
@@ -242,7 +254,7 @@ document.body.addEventListener("htmx:afterSwap", (event) => {
 document.body.addEventListener("htmx:beforeSwap", (event) => {
     const target = (event as CustomEvent<{ target?: unknown }>).detail?.target;
     if (!(target instanceof Element)) return;
-    target.querySelectorAll<HTMLElement>("[data-article-editor]").forEach(destroyEditor);
+    allMatching(target).forEach(destroyEditor);
 });
 
 initAll(document);

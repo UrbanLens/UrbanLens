@@ -22,19 +22,41 @@ Target output per property (standardize to one schema regardless of source):
   "owner_mailing_address": str | None,
   "legal_description": str | None,
   "land_use_code": str | None,
+  "zoning_code": str | None,
+  "tax_district": str | None,
+  "school_district": str | None,
+  "subdivision_name": str | None,
+  "neighborhood": str | None,
   "lot_size_sqft": float | None,
   "building_sqft": float | None,
   "year_built": int | None,
+  "building_characteristics": {"stories": float, "roof_material": str, "wall_material": str, "garage": str, "heating_type": str, "quality": str, "condition": str, "building_count": int, "outbuilding_value": float} | None,
   "assessed_value": {"land": float, "improvement": float, "total": float, "year": int},
   "market_value": float | None,
+  "exemption_type": str | None,
+  "deferred_value": float | None,
   "tax_history": [{"year": int, "amount": float, "paid": bool, "paid_date": date | None, "delinquent": bool}],
   "sales_history": [{"date": date, "price": float | None, "grantor": str, "grantee": str, "doc_type": str, "doc_number": str}],
   "deed_document_links": [str],
-  "gis_geometry": geojson | None,
+  "prior_parcel_ids": [str],
+  "parcel_geometry": {"format": "esri_rings", "spatial_reference": "EPSG:4326", "rings": [[[lon, lat], ...], ...]} | None,
   "source": {"tier": int, "provider": str, "url": str, "retrieved_at": datetime},
   "confidence": float
 }
 ```
+
+`parcel_geometry` (originally sketched above as plain `geojson`) is deliberately stored in Esri's
+own ring-list shape instead: correctly regrouping Esri's flat `rings` array into GeoJSON's nested
+exterior/hole Polygon structure needs real per-ring signed-area winding-order logic this schema
+has no other reason to carry, and the stored shape is already trivial for a Leaflet-based consumer
+to draw directly. Only populated for Tier 1 ArcGIS sources (queried with
+`returnGeometry=true`/`outSR=4326` so coordinates arrive pre-reprojected to WGS-84) - Socrata
+sources and Tier 2/3 scrapes never populate it. `zoning_code`/`tax_district`/`school_district`/
+`exemption_type`/`deferred_value`/`subdivision_name`/`neighborhood`/`building_characteristics`/
+`prior_parcel_ids` are retrieval-only additions - deliberately excluded from the field-name pool
+Tier 1 discovery's `relevance.py` uses to judge "does this look like comprehensive parcel data"
+(see `field_mapping._SUPPLEMENTARY_CANDIDATES`'s docstring: a live discovery false positive had
+exactly this class of field on a narrow, non-comprehensive subset).
 
 ## 1. Jurisdiction Resolution (must happen before anything else)
 

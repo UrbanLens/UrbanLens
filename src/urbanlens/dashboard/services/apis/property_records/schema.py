@@ -86,6 +86,43 @@ class SaleHistoryEntry:
 
 
 @dataclass(frozen=True, slots=True)
+class BuildingCharacteristics:
+    """Physical-building details, when a source's Tier 1 layer reports them.
+
+    Deliberately a separate nested object rather than flat ``PropertyRecord``
+    fields - mirrors ``AssessedValue``'s grouping, and keeps these
+    building-specific fields out of ``relevance.PARCEL_FIELD_CANDIDATES``'s
+    "does this look like comprehensive parcel data" signal (see
+    ``field_mapping._SUPPLEMENTARY_CANDIDATES``'s docstring for why: a real
+    discovery false positive had exactly these fields on a narrow,
+    non-comprehensive subset).
+    """
+
+    stories: float | None = None
+    roof_material: str | None = None
+    wall_material: str | None = None
+    garage: str | None = None
+    heating_type: str | None = None
+    quality: str | None = None
+    condition: str | None = None
+    building_count: int | None = None
+    outbuilding_value: float | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "stories": self.stories,
+            "roof_material": self.roof_material,
+            "wall_material": self.wall_material,
+            "garage": self.garage,
+            "heating_type": self.heating_type,
+            "quality": self.quality,
+            "condition": self.condition,
+            "building_count": self.building_count,
+            "outbuilding_value": self.outbuilding_value,
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class RecordSource:
     """Provenance for a ``PropertyRecord`` - which tier/provider answered, and when."""
 
@@ -129,6 +166,40 @@ class PropertyRecord:
     tax_history: tuple[TaxHistoryEntry, ...] = ()
     sales_history: tuple[SaleHistoryEntry, ...] = ()
     deed_document_links: tuple[str, ...] = ()
+    #: Legal zoning district (e.g. "R-1") - distinct from ``land_use_code``
+    #: (the assessor's current-use classification); a parcel's zoning and its
+    #: actual current use routinely differ.
+    zoning_code: str | None = None
+    tax_district: str | None = None
+    school_district: str | None = None
+    #: Exemption/abatement category (homestead, agricultural, veteran, ...),
+    #: when the source reports one - not whether taxes are current (see
+    #: ``tax_history``'s ``delinquent`` flag for that).
+    exemption_type: str | None = None
+    #: Present-use-value / agricultural-deferral amount - the gap between a
+    #: parcel's market value and its (lower) taxed value under a
+    #: conservation/agricultural program, when the source reports one.
+    deferred_value: float | None = None
+    subdivision_name: str | None = None
+    neighborhood: str | None = None
+    #: Physical-building details, when the source reports any (see
+    #: :class:`BuildingCharacteristics`).
+    building_characteristics: BuildingCharacteristics | None = None
+    #: Earlier parcel/PIN identifiers this record was renumbered from -
+    #: county GIS systems that migrate platforms often carry a "previous ID"
+    #: field so historical references still resolve.
+    prior_parcel_ids: tuple[str, ...] = ()
+    #: The parcel's own boundary, when the source is a Tier 1 ArcGIS layer
+    #: queried with ``returnGeometry=true``/``outSR=4326`` (Socrata sources
+    #: and Tier 2/3 scrapes never populate this). Deliberately stored as
+    #: Esri's own ring-list shape - ``{"format": "esri_rings",
+    #: "spatial_reference": "EPSG:4326", "rings": [[[lon, lat], ...], ...]}`` -
+    #: rather than converted to strict GeoJSON: correctly regrouping Esri's
+    #: flat ring list into GeoJSON's nested exterior/hole Polygon structure
+    #: needs real per-ring signed-area winding-order logic this schema has no
+    #: other reason to carry, and the stored shape is already trivial for a
+    #: future Leaflet-based consumer to draw directly.
+    parcel_geometry: dict[str, Any] | None = None
     #: Field name -> tier number that supplied it. Only non-empty when
     #: ``merge.merge_records`` combined more than one tier's results.
     field_sources: dict[str, int] = field(default_factory=dict)
@@ -154,6 +225,16 @@ class PropertyRecord:
             "year_built": self.year_built,
             "assessed_value": self.assessed_value.to_dict() if self.assessed_value else None,
             "market_value": self.market_value,
+            "zoning_code": self.zoning_code,
+            "tax_district": self.tax_district,
+            "school_district": self.school_district,
+            "exemption_type": self.exemption_type,
+            "deferred_value": self.deferred_value,
+            "subdivision_name": self.subdivision_name,
+            "neighborhood": self.neighborhood,
+            "building_characteristics": self.building_characteristics.to_dict() if self.building_characteristics else None,
+            "prior_parcel_ids": list(self.prior_parcel_ids),
+            "parcel_geometry": self.parcel_geometry,
             "field_sources": dict(self.field_sources),
             "field_mismatches": list(self.field_mismatches),
             "tax_history": [entry.to_dict() for entry in self.tax_history],

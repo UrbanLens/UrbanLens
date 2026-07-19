@@ -371,25 +371,17 @@
     align-self: stretch;
 }
 
-// Single centered vertical stack (back link -> eyebrow -> title -> subtitle
-// -> wiki box), matching every other page hero's layout (.ul-page-hero__inner
-// above) - the wiki box used to be position:absolute, pinned to the hero's
-// top-right corner independent of the rest of the content; on anything but
-// the widest viewports that put it right next to (often overlapping) the
-// back link and title, which is exactly the "clustered together" complaint.
-// It's now just the last item in the same centered flex column instead.
 .pin-detail-hero-body {
     display: flex;
-    flex-direction: column;
     align-items: center;
-    justify-content: center;
-    text-align: center;
-    gap: .6rem;
+    justify-content: space-between;
+    gap: clamp(1rem, 3vw, 2rem);
     width: min(100%, 76rem);
 }
 
 .pin-detail-hero-main {
     min-width: 0;
+    flex: 1 1 auto;
 }
 
 // Click-to-rename hero title - same interaction/markup shape as the trip
@@ -426,9 +418,10 @@
     display: flex;
     align-items: center;
     gap: .75rem;
-    width: 100%;
-    max-width: min(100%, 30rem);
-    padding: .6rem .85rem;
+    flex: 0 1 24rem;
+    flex-direction: column;
+    max-width: 100%;
+    padding: .75rem .9rem;
     border: 1px solid rgba(255, 255, 255, .32);
     border-radius: 16px;
     background: rgba(255, 255, 255, .18);
@@ -436,11 +429,9 @@
     text-align: left;
     backdrop-filter: blur(7px);
     -webkit-backdrop-filter: blur(7px);
-    // Normal-flow now (was position:absolute), but still the positioning
-    // context for its own #pin-location-picker dropdown below - without
-    // this, that dropdown would anchor to the whole .ul-page-hero section
-    // (the next positioned ancestor) instead of this box specifically.
-    position: relative;
+    position: absolute;
+    top: 3rem;
+    right: 1rem;
 }
 
 .pin-hero-wiki-box > .material-symbols-outlined {
@@ -495,6 +486,19 @@
     right: 0;
     z-index: 5;
     width: min(28rem, 90vw);
+}
+
+@include down($breakpoint-sm) {
+    .pin-detail-hero-body {
+        flex-direction: column;
+        justify-content: center;
+        text-align: center;
+    }
+
+    .pin-hero-wiki-box {
+        flex-basis: auto;
+        width: min(100%, 24rem);
+    }
 }
 
 #pin-detail-hero .ul-page-hero__inner {

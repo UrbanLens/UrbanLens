@@ -14,6 +14,7 @@ from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
 from urbanlens.dashboard.models.visits.model import PinVisit
 
 
@@ -91,3 +92,45 @@ class VisitHistoryViewTests(TestCase):
         response = self.client.get(reverse("pin.visits", args=[self.pin.slug]))
 
         self.assertContains(response, f'<span class="visit-count badge">{total}</span>')
+
+    def test_add_dialog_shows_three_attachment_buttons(self):
+        """Photos/Map/Participants collapse behind one button each instead of
+        three always-visible "(optional)" field rows - see docs/prompts/completed.md."""
+        response = self.client.get(reverse("pin.visits", args=[self.pin.slug]))
+
+        self.assertContains(response, "visit-attachment-toggle", count=3)
+
+    def test_only_the_date_field_is_marked_required(self):
+        response = self.client.get(reverse("pin.visits", args=[self.pin.slug]))
+
+        content = response.content.decode()
+        date_label_start = content.index('for="visited_date_')
+        time_label_start = content.index('for="visited_time_')
+        self.assertIn("required", content[date_label_start:time_label_start])
+        # Every other field used to say "<small>(optional)</small>" next to its
+        # label - the JS-built external-participant row's "Email (optional)"
+        # placeholder is a distinct, legitimate use of the phrase and stays.
+        self.assertNotIn("<small>(optional)</small>", content)
+
+    def test_friend_checkbox_shows_avatar_and_defaults_to_inviting(self):
+        """The friend picker used to have a separate opt-in bell-icon checkbox
+        for "also invite this person" - tagging a friend now invites them by
+        default, with no separate toggle to opt into."""
+        friend = baker.make("auth.User").profile
+        Friendship.objects.create(from_profile=self.profile, to_profile=friend, status=FriendshipStatus.ACCEPTED)
+
+        response = self.client.get(reverse("pin.visits", args=[self.pin.slug]))
+
+        self.assertContains(response, "msg-avatar")
+        self.assertContains(response, f'<input type="hidden" name="suggest_participant_ids" value="{friend.id}">')
+        self.assertNotContains(response, "visit-participant-suggest")
+
+    def test_edit_form_does_not_auto_invite_existing_friends(self):
+        """Editing a visit must never silently re-send invitations."""
+        friend = baker.make("auth.User").profile
+        Friendship.objects.create(from_profile=self.profile, to_profile=friend, status=FriendshipStatus.ACCEPTED)
+        visit = baker.make(PinVisit, pin=self.pin)
+
+        response = self.client.get(reverse("pin.visit.edit", args=[self.pin.slug, visit.id]))
+
+        self.assertNotContains(response, "suggest_participant_ids")

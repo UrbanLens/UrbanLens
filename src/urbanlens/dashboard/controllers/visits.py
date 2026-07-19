@@ -16,6 +16,7 @@ from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
+from urbanlens.dashboard.services.avatar_colors import assign_avatar_colors
 from urbanlens.dashboard.services.connections import get_connections
 from urbanlens.dashboard.services.map_snapshot import materialize_markup_map, parse_map_data
 from urbanlens.dashboard.services.pagination import get_page
@@ -59,10 +60,15 @@ def _visit_dialog_context(pin: Pin, visit: PinVisit | None = None) -> dict[str, 
     # already documenting a different visit are not offered.
     pin_images = Image.objects.filter(pin=pin, profile=pin.profile)
     pin_images = pin_images.filter(Q(visit__isnull=True) | Q(visit=visit)) if visit else pin_images.filter(visit__isnull=True)
+    connections = get_connections(pin.profile)
+    # The participant picker shows each friend's avatar - a distinct fallback
+    # color per person (see assign_avatar_colors) keeps them visually
+    # distinguishable when several in a row have no uploaded photo.
+    assign_avatar_colors(connections, identity=lambda p: p.slug or str(p.pk))
     return {
         "pin": pin,
         "pin_images": list(pin_images.order_by("-created")[:60]),
-        "connections": get_connections(pin.profile),
+        "connections": connections,
     }
 
 

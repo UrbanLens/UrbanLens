@@ -219,6 +219,7 @@ Features planned for future releases.
 * Discord Bot (for known demolition updates? "note: the location you're discussing recently had security updates"? actions: "@bot plan trip")
 * API for CRIS
 * Integrate with instagram (instagram makes this extremely annoying). This would allow, for instance, importing all your instagram photos to jumpstart documenting the places you've been. [UL-390]
+* Flaresolver (and similar), plus Tor for retrieving some API data (such as county tax records, etc). I'm not currently aware of anywhere this is needed yet, but surely there is somewhere it would be helpful and improve data quality or access.
 
 ### Native Mobile App
 * Automatically check off visit logs [UL-82]

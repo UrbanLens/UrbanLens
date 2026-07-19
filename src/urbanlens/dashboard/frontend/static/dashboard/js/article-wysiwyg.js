@@ -31934,8 +31934,15 @@ function destroyEditor(root) {
   editors.get(root)?.destroy();
   editors.delete(root);
 }
+var EDITOR_SELECTOR = "[data-article-editor]";
+function allMatching(container) {
+  const matches2 = Array.from(container.querySelectorAll(EDITOR_SELECTOR));
+  if (container instanceof HTMLElement && container.matches(EDITOR_SELECTOR))
+    matches2.push(container);
+  return matches2;
+}
 function initAll(container) {
-  container.querySelectorAll("[data-article-editor]").forEach(mountEditor);
+  allMatching(container).forEach(mountEditor);
 }
 document.addEventListener("click", (event) => {
   const target = event.target instanceof Element ? event.target : null;
@@ -31970,6 +31977,6 @@ document.body.addEventListener("htmx:beforeSwap", (event) => {
   const target = event.detail?.target;
   if (!(target instanceof Element))
     return;
-  target.querySelectorAll("[data-article-editor]").forEach(destroyEditor);
+  allMatching(target).forEach(destroyEditor);
 });
 initAll(document);

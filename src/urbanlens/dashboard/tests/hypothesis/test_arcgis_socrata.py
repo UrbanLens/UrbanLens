@@ -16,7 +16,7 @@ from pathlib import Path
 from unittest import mock
 
 from urbanlens.core.tests.testcase import SimpleTestCase
-from urbanlens.dashboard.services.apis.property_records.arcgis_socrata import ArcGisSocrataGateway
+from urbanlens.dashboard.services.apis.property_records.arcgis_socrata import GEOMETRY_KEY, ArcGisSocrataGateway, _esri_rings_to_dict
 from urbanlens.dashboard.services.gateway import GatewayRequestError
 
 _FIXTURES_DIR = Path(__file__).parent / "fixtures" / "property_records"
@@ -80,6 +80,96 @@ class QuerySocrataByPointTests(SimpleTestCase):
 
         rows = gateway.query_socrata_by_point("https://data.example.gov/resource/abcd-1234.json", "the_geom", 42.0, -73.0)
         self.assertEqual(rows, [])
+
+
+class QueryArcgisByPointTests(SimpleTestCase):
+    def test_requests_geometry_reprojected_to_wgs84(self) -> None:
+        """Requesting outSR=4326 lets the ArcGIS server do the reprojection - the layer's own
+        native spatial reference (often a local state plane or Web Mercator) is never our
+        problem to invert."""
+        gateway = ArcGisSocrataGateway()
+        gateway.session = mock.Mock()
+        gateway.session.get.return_value = _mock_response({"features": []})
+
+        gateway.query_arcgis_by_point("https://gis.example.gov/arcgis/rest/services/Parcels/MapServer/0", 39.0, -82.0)
+
+        called_params = gateway.session.get.call_args.kwargs["params"]
+        self.assertEqual(called_params["returnGeometry"], "true")
+        self.assertEqual(called_params["outSR"], 4326)
+
+    def test_geometry_is_attached_under_the_sentinel_key(self) -> None:
+        body = {
+            "features": [
+                {
+                    "attributes": {"OWNER": "Jane Smith"},
+                    "geometry": {"rings": [[[-82.0, 39.0], [-82.0, 39.1], [-81.9, 39.1], [-82.0, 39.0]]], "spatialReference": {"wkid": 4326}},
+                },
+            ],
+        }
+        gateway = ArcGisSocrataGateway()
+        gateway.session = mock.Mock()
+        gateway.session.get.return_value = _mock_response(body)
+
+        rows = gateway.query_arcgis_by_point("https://gis.example.gov/arcgis/rest/services/Parcels/MapServer/0", 39.0, -82.0)
+
+        self.assertEqual(rows[0]["OWNER"], "Jane Smith")
+        self.assertEqual(rows[0][GEOMETRY_KEY]["format"], "esri_rings")
+
+    def test_missing_geometry_does_not_add_the_sentinel_key(self) -> None:
+        body = {"features": [{"attributes": {"OWNER": "Jane Smith"}, "geometry": None}]}
+        gateway = ArcGisSocrataGateway()
+        gateway.session = mock.Mock()
+        gateway.session.get.return_value = _mock_response(body)
+
+        rows = gateway.query_arcgis_by_point("https://gis.example.gov/arcgis/rest/services/Parcels/MapServer/0", 39.0, -82.0)
+
+        self.assertNotIn(GEOMETRY_KEY, rows[0])
+
+    def test_error_response_is_treated_as_no_data(self) -> None:
+        gateway = ArcGisSocrataGateway()
+        gateway.session = mock.Mock()
+        gateway.session.get.return_value = _mock_response({"error": {"code": 400, "message": "bad request"}})
+
+        rows = gateway.query_arcgis_by_point("https://gis.example.gov/arcgis/rest/services/Parcels/MapServer/0", 39.0, -82.0)
+        self.assertEqual(rows, [])
+
+
+class EsriRingsToDictTests(SimpleTestCase):
+    def test_valid_polygon_geometry_is_converted(self) -> None:
+        geometry = {"rings": [[[-82.0, 39.0], [-82.0, 39.1], [-81.9, 39.1], [-82.0, 39.0]]], "spatialReference": {"wkid": 4326}}
+        result = _esri_rings_to_dict(geometry)
+        assert result is not None
+        self.assertEqual(result["format"], "esri_rings")
+        self.assertEqual(result["spatial_reference"], "EPSG:4326")
+        self.assertEqual(result["rings"], [[[-82.0, 39.0], [-82.0, 39.1], [-81.9, 39.1], [-82.0, 39.0]]])
+
+    def test_none_geometry_returns_none(self) -> None:
+        self.assertIsNone(_esri_rings_to_dict(None))
+
+    def test_non_dict_geometry_returns_none(self) -> None:
+        self.assertIsNone(_esri_rings_to_dict("not a dict"))
+
+    def test_missing_rings_key_returns_none(self) -> None:
+        self.assertIsNone(_esri_rings_to_dict({"spatialReference": {"wkid": 4326}}))
+
+    def test_empty_rings_list_returns_none(self) -> None:
+        self.assertIsNone(_esri_rings_to_dict({"rings": []}))
+
+    def test_ring_with_fewer_than_three_points_is_dropped(self) -> None:
+        geometry = {"rings": [[[-82.0, 39.0], [-82.0, 39.1]]]}
+        self.assertIsNone(_esri_rings_to_dict(geometry))
+
+    def test_non_numeric_coordinates_do_not_raise(self) -> None:
+        geometry = {"rings": [[["not-a-number", 39.0], [-82.0, 39.1], [-81.9, 39.1]]]}
+        result = _esri_rings_to_dict(geometry)
+        # The malformed point is dropped, leaving too few points for a valid ring.
+        self.assertIsNone(result)
+
+    def test_multiple_rings_are_all_kept(self) -> None:
+        geometry = {"rings": [[[-82.0, 39.0], [-82.0, 39.1], [-81.9, 39.1]], [[-80.0, 38.0], [-80.0, 38.1], [-79.9, 38.1]]]}
+        result = _esri_rings_to_dict(geometry)
+        assert result is not None
+        self.assertEqual(len(result["rings"]), 2)
 
 
 class RealCapturedFixtureTests(SimpleTestCase):

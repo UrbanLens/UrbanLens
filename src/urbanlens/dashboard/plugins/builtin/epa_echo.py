@@ -290,7 +290,16 @@ class EpaEchoNearbyPanelSource(CoordinateGatedInfoPanelSource):
             status = facility.get("compliance_status") or "Unknown"
             if facility.get("significant_violator"):
                 status = f"{status} (significant violator)"
-            meta.append({"label": facility.get("name") or "Unnamed facility", "value": f"{facility.get('address') or ''} - {status}".strip(" -")})
+            registry_id = facility.get("registry_id") or ""
+            meta.append(
+                {
+                    "label": facility.get("name") or "Unnamed facility",
+                    "value": f"{facility.get('address') or ''} - {status}".strip(" -"),
+                    # Links straight to this specific facility's compliance report,
+                    # not EPA ECHO's homepage.
+                    "href": f"https://echo.epa.gov/detailed-facility-report?fid={registry_id}" if registry_id else "",
+                },
+            )
 
         if not meta:
             return None
@@ -298,7 +307,6 @@ class EpaEchoNearbyPanelSource(CoordinateGatedInfoPanelSource):
         return {
             "chips": [f"{len(meta)} nearby"],
             "meta": meta,
-            "footer_link": {"url": "https://echo.epa.gov/", "label": "View on EPA ECHO"},
             "nested": True,
         }
 

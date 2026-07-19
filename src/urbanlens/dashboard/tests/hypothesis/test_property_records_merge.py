@@ -112,3 +112,38 @@ class MergeRecordsTests(SimpleTestCase):
         merged = merge_records([tier1, tier2])
         self.assertEqual(merged.source.tier, 1)
         self.assertEqual(merged.confidence, tier1.confidence)
+
+    def test_matching_parcel_geometry_dicts_do_not_raise_and_are_not_a_mismatch(self) -> None:
+        """Regression guard: a dict-valued field (parcel_geometry) must never be shoved into a
+        set() unconverted - a plain dict isn't hashable and would crash the whole merge."""
+        geometry = {"format": "esri_rings", "spatial_reference": "EPSG:4326", "rings": [[[-82.0, 39.0], [-82.0, 39.1], [-81.9, 39.1]]]}
+        tier1 = _record(1, parcel_geometry=geometry)
+        tier2 = _record(2, parcel_geometry=dict(geometry))
+        merged = merge_records([tier1, tier2])
+        self.assertEqual(merged.field_mismatches, ())
+        self.assertEqual(merged.parcel_geometry, geometry)
+
+    def test_differing_parcel_geometry_dicts_are_flagged_as_a_mismatch_without_raising(self) -> None:
+        geometry_a = {"format": "esri_rings", "spatial_reference": "EPSG:4326", "rings": [[[-82.0, 39.0], [-82.0, 39.1], [-81.9, 39.1]]]}
+        geometry_b = {"format": "esri_rings", "spatial_reference": "EPSG:4326", "rings": [[[-80.0, 38.0], [-80.0, 38.1], [-79.9, 38.1]]]}
+        tier1 = _record(1, parcel_geometry=geometry_a)
+        tier2 = _record(2, parcel_geometry=geometry_b)
+        merged = merge_records([tier1, tier2])
+        self.assertIn("parcel_geometry", merged.field_mismatches)
+        self.assertEqual(merged.parcel_geometry, geometry_a)
+
+    def test_building_characteristics_from_the_lower_tier_wins(self) -> None:
+        from urbanlens.dashboard.services.apis.property_records.schema import BuildingCharacteristics
+
+        tier1 = _record(1, building_characteristics=BuildingCharacteristics(stories=2.0))
+        tier2 = _record(2, building_characteristics=BuildingCharacteristics(stories=1.0))
+        merged = merge_records([tier1, tier2])
+        self.assertEqual(merged.building_characteristics.stories, 2.0)
+        self.assertEqual(merged.field_sources["building_characteristics"], 1)
+
+    def test_prior_parcel_ids_merge_like_any_other_tuple_field(self) -> None:
+        tier1 = _record(1, prior_parcel_ids=())
+        tier2 = _record(2, prior_parcel_ids=("OLD-1",))
+        merged = merge_records([tier1, tier2])
+        self.assertEqual(merged.prior_parcel_ids, ("OLD-1",))
+        self.assertEqual(merged.field_sources["prior_parcel_ids"], 2)
