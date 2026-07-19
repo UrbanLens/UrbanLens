@@ -421,8 +421,8 @@ Ordering within each tier is roughly by (user impact × risk × leverage). IDs r
 
 Each of these is "confirm, then either close or convert to a bug": wiki section missing on one pin
 (UL-385), Wikipedia missing for some HRSH buildings (UL-354), takeout Parking.csv unreadable
-(UL-203), import-updates-names flow (UL-207). Closing these shrinks
-`TODO.md` noise cheaply — batch several per session, with a repro test per confirmed bug.
+(UL-203). Closing these shrinks `TODO.md` noise cheaply — batch several per session, with a repro
+test per confirmed bug.
 
 11. ~~**Password reset for SSO users** (UL-257)~~ RESOLVED 2026-07-19 (`def2c4d6`) — SSO-only
     accounts were silently dropped by Django's stock `PasswordResetForm.get_users()`, while the
@@ -477,6 +477,12 @@ Each of these is "confirm, then either close or convert to a bug": wiki section 
     search endpoint which was already correctly scoped), and the ghost-marker loop never checked
     the child activity's `location_hidden` flag, unlike the identical check a few lines above it
     for the parent trip's own activities. Both fixed.
+18. ~~**Import-updates-names flow** (UL-207)~~ RESOLVED 2026-07-19 (`e8eaf227`) — real bug:
+    `get_nearby_or_create`'s `defaults` are only ever applied when creating a new pin, never to an
+    existing one it merges into, so a pin imported without a name never picked one up from a later
+    import of the same coordinates (e.g. Google Takeout's Labelled Places). Fixed to fill in a
+    blank, non-user-provided name on merge, gated on `name_is_user_provided` - already documented
+    for exactly this purpose but never actually wired up on the merge path.
 
 ### 4.3 Tier 3: High-leverage features (composable from existing infrastructure)
 

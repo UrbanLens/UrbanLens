@@ -128,7 +128,7 @@ Features planned for future releases.
 * BUG: Not able to read all takeout files. For example: Parking.csv [UL-203]
 * Create task to ensure vestigial assets are deleted (e.g. if they were supposed to be deleted already, but there was an error - such as for pin imports, exports, etc). [UL-205]
 * BUG: Map import dialog, existing pins still show "new" in the row. [UL-206]
-* Verify: User imports pins without names, then imports "Labelled Places.json" with the same pins, the names of the originally created pins are updated. [UL-207]
+* ~~Verify: User imports pins without names, then imports "Labelled Places.json" with the same pins, the names of the originally created pins are updated.~~ RESOLVED 2026-07-19 (`e8eaf227`): real bug - `get_nearby_or_create`'s `defaults` only apply when creating a new pin, never to an existing one it merges into, so a nameless pin never picked up a name from a later import. Fixed to fill in a blank, non-user-provided name on merge, gated on `name_is_user_provided` (already documented for exactly this: "external API naming refreshes may replace placeholder/auto-generated labels only while this is False"). [UL-207]
 * Main map: add pin dialog -> tags and categories picker has them in 2 sections, instead of standardized picker with other badge kinds and a search. Icon section is empty (no options). No option to make it private. Overall: This dialog should reuse existing components instead of redefining the dialog features. [UL-210]
 * BUG: Something I did caused a new pin to be created with a badge named "Unknown". My workflow started with the creation of a new pin by right-clicking on the main map. [UL-212]
 * Export Feature: Additional method of delivery in case the page is reloaded or closed. [UL-218]
