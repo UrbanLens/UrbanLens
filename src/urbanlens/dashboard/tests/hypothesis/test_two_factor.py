@@ -149,6 +149,35 @@ class VerifyTotpCodeTests(TestCase):
         spaced = f"{code[:3]} {code[3:]}"
         self.assertTrue(two_factor.verify_totp_code(self.user, spaced))
 
+    def test_undecryptable_secret_fails_instead_of_raising(self) -> None:
+        """Regression test: a field_encryption_key rotation must not crash login.
+
+        Before this fix, an ``InvalidToken`` raised while fetching the device
+        (see ``models.fields.EncryptedTextField``) propagated straight out of
+        this function uncaught - and since ``verify_login_code`` combines this
+        with the backup-code fallback via ``or``, an exception here skips that
+        fallback entirely (Python's ``or`` only short-circuits on a falsy
+        return, not an exception), so a user with a working backup code would
+        still have been locked out of login by their own broken TOTP device.
+        """
+        from django.db import connection
+
+        with connection.cursor() as cursor:
+            cursor.execute(f"UPDATE {TOTPDevice._meta.db_table} SET secret = %s WHERE user_id = %s", ["not-a-valid-fernet-token", self.user.pk])  # noqa: S608 - table name from Django _meta, not user input
+
+        self.assertFalse(two_factor.verify_totp_code(self.user, "000000"))
+
+    def test_undecryptable_secret_still_falls_back_to_a_backup_code(self) -> None:
+        """The exact scenario the fix restores: TOTP broken, backup code still works."""
+        from django.db import connection
+
+        codes = two_factor.generate_backup_codes(self.user)
+
+        with connection.cursor() as cursor:
+            cursor.execute(f"UPDATE {TOTPDevice._meta.db_table} SET secret = %s WHERE user_id = %s", ["not-a-valid-fernet-token", self.user.pk])  # noqa: S608 - table name from Django _meta, not user input
+
+        self.assertTrue(two_factor.verify_login_code(self.user, codes[0]))
+
 
 class BackupCodeTests(TestCase):
     def test_generates_the_configured_count(self) -> None:

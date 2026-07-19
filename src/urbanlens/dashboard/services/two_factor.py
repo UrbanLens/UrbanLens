@@ -10,10 +10,12 @@ once an account no longer has any (see ``maybe_clear_backup_codes``).
 
 from __future__ import annotations
 
+import logging
 import secrets
 import time
 from typing import TYPE_CHECKING
 
+from cryptography.fernet import InvalidToken
 from django.contrib.auth.hashers import check_password, make_password
 from django.utils import timezone
 import pyotp
@@ -24,6 +26,8 @@ from urbanlens.dashboard.services.webauthn import has_passkeys
 if TYPE_CHECKING:
     from django.contrib.auth.models import User
     from django.http import HttpRequest
+
+logger = logging.getLogger(__name__)
 
 TOTP_ISSUER = "UrbanLens"
 BACKUP_CODE_COUNT = 10
@@ -163,9 +167,29 @@ def verify_totp_code(user: User, code: str) -> bool:
 
     Returns:
         True if the code is valid and freshly-used; False otherwise (including
-        when the account has no TOTP device).
+        when the account has no TOTP device, or its secret can no longer be
+        decrypted - see the ``InvalidToken`` handling below).
     """
-    device = TOTPDevice.objects.for_user(user).first()
+    try:
+        device = TOTPDevice.objects.for_user(user).first()
+    except InvalidToken:
+        # A field_encryption_key rotation (see models.fields.EncryptedTextField)
+        # leaves this device's secret permanently undecryptable - this used to
+        # raise straight out of verify_login_code(), which `or`-chains this
+        # function with the backup-code fallback: an uncaught exception here
+        # skips that fallback entirely (Python's `or` only short-circuits on a
+        # falsy return, not an exception), locking every TOTP-enrolled user out
+        # of login completely, even those who still have working backup codes
+        # or a passkey. Treating it as "no device" - same self-healing verdict
+        # ImmichAccountManager/GoogleCalendarAccountManager/etc. reach for their
+        # own encrypted credentials - restores the fallback instead of crashing.
+        # Deliberately NOT deleting the row the way those managers do: silently
+        # dropping a user's own 2FA factor is a bigger security-posture change
+        # than dropping a stale third-party API connection, so it's left for
+        # the user to notice (their code stops working) and re-enroll via
+        # Settings > Security themselves.
+        logger.warning("TOTPDevice for user %s is undecryptable (stale field_encryption_key) - treating as no match", user.pk)
+        return False
     if device is None or not code:
         return False
 
