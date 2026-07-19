@@ -323,7 +323,7 @@ Items previously listed in README.md that are not already tracked elsewhere in t
 * Reply button beneath replies.
 
 ### APIs
-* Sunrise / sunset for weather. [UL-345]
+* ~~Sunrise / sunset for weather.~~ RESOLVED 2026-07-19 (`034eec89`): added to the pin weather panel, plus an approximated golden-hour window (hour after sunrise / before sunset - the common photography-app convention). Always fetched via Open-Meteo (`timezone=auto` resolves local time server-side) independent of whether OpenWeatherMap serves the rest of the forecast, since OWM's 5-day endpoint has no sunrise/sunset field. [UL-345]
 * Address is often incorrect Smithsonian results (AI filtering? Only names >= certain length?). [UL-389]
 
 ### Misc

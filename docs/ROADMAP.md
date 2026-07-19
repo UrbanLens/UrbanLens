@@ -521,8 +521,12 @@ These have most of their machinery already built:
 4. **Geolocation visit creation** (UL-312) — one endpoint + the shared visit dialog.
 5. **Targeted exports + more formats** (UL-377, UL-382) — filtered export via the existing
    criteria engine; KML/GPX/GeoJSON/CSV writers mirror existing readers.
-6. **Sunrise/sunset & golden hour** (UL-345) — `astral` locally or Open-Meteo; no key needed;
-   photographers are a core audience. Feeds trip planning and the weather panel.
+6. ~~**Sunrise/sunset & golden hour** (UL-345)~~ RESOLVED 2026-07-19 (`034eec89`) — used Open-Meteo
+   (`timezone=auto`, no separate timezone-lookup library needed) rather than `astral`, since the
+   app already calls it as a weather fallback and this avoids a new dependency; fetched
+   independently of whichever provider serves the temperature/condition forecast, since
+   OpenWeatherMap's 5-day endpoint has no sunrise/sunset field. Landed on the pin detail page's
+   weather panel only - trip planning integration is still open, tracked as follow-up.
 7. **Trip page pin-add parity** (UL-342) — map-click/coordinate/place-search add exists on the
    main map; port to trip context.
 8. **Notification UX debt** (UL-348 mark-read-on-view; UL-237 friend-request pipeline flow) —
