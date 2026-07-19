@@ -874,6 +874,21 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                                     safely_enqueue_task(suggest_pin_category, pin.pk)
                             else:
                                 exists_count += 1
+                                # Fill in a still-blank, non-user-provided name from
+                                # this later import (UL-207: pins imported without
+                                # names, then re-imported from a source - e.g.
+                                # Google Takeout's Labelled Places - that does have
+                                # them). get_nearby_or_create's `defaults` are only
+                                # ever applied when creating a new row, never to an
+                                # existing one it merges into, so without this the
+                                # name stays blank forever. Matches
+                                # name_is_user_provided's documented contract:
+                                # "external API naming refreshes may replace
+                                # placeholder/auto-generated labels only while this
+                                # is False."
+                                if pin_name and not pin.name and not pin.name_is_user_provided:
+                                    pin.name = pin_name
+                                    pin.save(update_fields=["name"])
 
                             if list_labels:
                                 pin.labels.add(*list_labels)

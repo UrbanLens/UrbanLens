@@ -181,3 +181,59 @@ class ImportPreviewDescriptionExtrasTests(TestCase):
         existing.refresh_from_db()
         self.assertEqual(existing.links.count(), 0)
         self.assertEqual(existing.name, "Existing Pin")
+
+
+class ImportPreviewNamesBlankPinOnReimportTests(TestCase):
+    """UL-207: a pin imported without a name should pick one up from a later
+    re-import of the same coordinates (e.g. Google Takeout's Labelled Places),
+    since get_nearby_or_create's `defaults` are only ever applied when
+    creating a brand-new row, never to an existing one it merges into."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.profile = baker.make("auth.User").profile
+        self.gateway = GoogleMapsGateway(api_key="test-key")
+
+    def _import(self, name: str) -> list[dict]:
+        return list(
+            self.gateway.import_preview_streaming(
+                [{"stem": "", "create_category": False, "label_ids": [], "pins": [{"name": name, "lat": 40.0, "lng": -74.0, "description": ""}]}],
+                self.profile,
+                auto_tag=False,
+            ),
+        )
+
+    def test_a_nameless_pin_picks_up_a_name_from_a_later_import(self) -> None:
+        self._import("")  # first import: no name available for this coordinate
+
+        pin = Pin.objects.get(profile=self.profile)
+        self.assertEqual(pin.name, "")
+
+        self._import("Old Steel Mill")  # second import: Labelled Places has one
+
+        pin.refresh_from_db()
+        self.assertEqual(pin.name, "Old Steel Mill")
+        self.assertFalse(pin.name_is_user_provided)
+
+    def test_a_user_provided_name_is_never_overwritten_by_a_later_import(self) -> None:
+        pin, _created = Pin.objects.get_nearby_or_create(
+            40.0,
+            -74.0,
+            self.profile,
+            defaults={"name": "My Own Name", "name_is_user_provided": True},
+        )
+
+        self._import("Old Steel Mill")
+
+        pin.refresh_from_db()
+        self.assertEqual(pin.name, "My Own Name")
+
+    def test_an_existing_non_blank_auto_name_is_left_alone(self) -> None:
+        """Only a genuinely blank name is filled in - a later import doesn't
+        churn a pin's display name just because it wasn't user-typed."""
+        self._import("First Import Name")
+
+        self._import("Second Import Name")
+
+        pin = Pin.objects.get(profile=self.profile)
+        self.assertEqual(pin.name, "First Import Name")
