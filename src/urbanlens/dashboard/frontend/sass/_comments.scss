@@ -22,6 +22,49 @@
     min-height: 12rem;
 }
 
+// -- Empty state: matches the icon-in-circle/title/text pattern used by     --
+// -- other empty landing pages (e.g. .trips-empty) instead of rendering     --
+// -- nothing but the compose form, which gave no sense of what this section --
+// -- is for.
+.comment-panel-empty {
+    text-align: center;
+    padding: 3rem 1.5rem 2rem;
+    color: var(--ul-grey-6);
+    max-width: 26rem;
+    margin: 0 auto;
+
+    .comment-panel-empty-icon-wrap {
+        width: 64px;
+        height: 64px;
+        margin: 0 auto 1.1rem;
+        border-radius: 50%;
+        background: var(--ul-surface-raised);
+        border: 1px solid var(--ul-surface-raised-border);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .comment-panel-empty-icon {
+        font-size: 2rem;
+        color: $color-blue-500;
+    }
+
+    .comment-panel-empty-title {
+        margin: 0 0 .35rem;
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: var(--ul-grey-8);
+    }
+
+    .comment-panel-empty-text {
+        margin: 0;
+        font-size: .9rem;
+        line-height: 1.5;
+        color: var(--ul-grey-7);
+    }
+}
+
 .comment-item {
     display: flex;
     gap: .65rem;

@@ -532,12 +532,23 @@
         gap: 2px;
     }
 
+    // Rendered from Markdown (see PinVisit.notes_html) via the same .article-body
+    // typography as the article/wiki editor - no white-space:pre-wrap here,
+    // since paragraph/list breaks are now real HTML elements, not literal
+    // newlines in escaped plain text.
     .visit-notes {
         font-size: .86rem;
         line-height: 1.4;
         color: var(--ul-grey-8);
-        white-space: pre-wrap;
         word-break: break-word;
+
+        p:first-child {
+            margin-top: 0;
+        }
+
+        p:last-child {
+            margin-bottom: 0;
+        }
     }
 
     .visit-participants {
@@ -751,11 +762,15 @@
         }
     }
 
-    // Notes grows with its content instead of scrolling internally - resize
-    // handle is redundant (and fights the auto-height) once that's true.
-    .visit-notes-autogrow {
-        resize: none;
-        overflow-y: hidden;
+    // Same WYSIWYG editor as the article/wiki editor (see _article.scss and
+    // frontend/ts/entries/article-wysiwyg.ts), sized for a short note inside
+    // a dialog rather than a full-length article.
+    .visit-notes-editor {
+        .article-editor-canvas,
+        .article-editor-textarea,
+        .article-editor-canvas .ProseMirror {
+            min-height: 5rem;
+        }
     }
 
     .form-actions {

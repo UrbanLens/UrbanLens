@@ -38,6 +38,17 @@ class GoogleOAuthNotConfiguredError(RuntimeError):
     """Raised when the site has no Google OAuth client configured."""
 
 
+class GoogleAuthExpiredError(GatewayRequestError):
+    """Raised when Google has rejected the stored grant entirely (not a transient failure).
+
+    Covers a refused token refresh (revoked/expired refresh token) and a
+    missing refresh token. Distinct from the generic ``GatewayRequestError``
+    so callers can tell "this connection is dead, prompt the user to
+    reconnect" apart from a transient or unrelated API failure that doesn't
+    warrant discarding the stored credentials.
+    """
+
+
 def build_authorization_url(
     client_id: str,
     redirect_uri: str,
@@ -118,7 +129,7 @@ def refresh_access_token(client_id: str, client_secret: str, refresh_token: str)
         Token response payload (``access_token``, ``expires_in``, ...).
 
     Raises:
-        GatewayRequestError: When the refresh fails (e.g. access revoked).
+        GoogleAuthExpiredError: When the refresh fails (e.g. access revoked).
     """
     response = requests.post(
         GOOGLE_TOKEN_URL,
@@ -132,7 +143,7 @@ def refresh_access_token(client_id: str, client_secret: str, refresh_token: str)
     )
     if response.status_code != 200:
         logger.warning("Google token refresh failed (%s): %s", response.status_code, response.text[:500])
-        raise GatewayRequestError("Google access has expired or been revoked. Please reconnect.")
+        raise GoogleAuthExpiredError("Google access has expired or been revoked. Please reconnect.")
     return response.json()
 
 

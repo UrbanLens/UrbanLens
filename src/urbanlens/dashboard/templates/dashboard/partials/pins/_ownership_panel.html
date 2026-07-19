@@ -10,16 +10,16 @@
         </button>
     </div>
 
-    <div class="po-tabs" role="tablist">
-        <button type="button" class="po-tab is-active" data-po-tab="owners"
-                onclick="var p=this.closest('.ownership-panel'); p.querySelectorAll('.po-tab').forEach(function(b){b.classList.remove('is-active');}); this.classList.add('is-active'); p.querySelectorAll('.po-tab-body').forEach(function(b){b.hidden=true;}); p.querySelector('[data-po-body=owners]').hidden=false;">
+    <div class="card-tabs" role="tablist">
+        <button type="button" class="card-tab active" role="tab" aria-selected="true" data-po-tab="owners"
+                onclick="var p=this.closest('.ownership-panel'); p.querySelectorAll('.card-tab').forEach(function(b){b.classList.remove('active');b.setAttribute('aria-selected','false');}); this.classList.add('active'); this.setAttribute('aria-selected','true'); p.querySelectorAll('.po-tab-body').forEach(function(b){b.hidden=true;}); p.querySelector('[data-po-body=owners]').hidden=false;">
             Owners
         </button>
-        <button type="button" class="po-tab" data-po-tab="sales"
+        <button type="button" class="card-tab" role="tab" aria-selected="false" data-po-tab="sales"
                 hx-get="{% url url_sales obj_slug %}"
                 hx-target="#po-sales-body-{{ panel_id }}"
                 hx-trigger="click once"
-                onclick="var p=this.closest('.ownership-panel'); p.querySelectorAll('.po-tab').forEach(function(b){b.classList.remove('is-active');}); this.classList.add('is-active'); p.querySelectorAll('.po-tab-body').forEach(function(b){b.hidden=true;}); p.querySelector('[data-po-body=sales]').hidden=false;">
+                onclick="var p=this.closest('.ownership-panel'); p.querySelectorAll('.card-tab').forEach(function(b){b.classList.remove('active');b.setAttribute('aria-selected','false');}); this.classList.add('active'); this.setAttribute('aria-selected','true'); p.querySelectorAll('.po-tab-body').forEach(function(b){b.hidden=true;}); p.querySelector('[data-po-body=sales]').hidden=false;">
             Sale History
         </button>
     </div>

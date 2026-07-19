@@ -1,6 +1,5 @@
 {% load dashboard_tags %}
-<div class="visit-history card" id="visit-history-panel"
-     data-collapse-scope="pin" data-collapse-section="visits">
+<div class="visit-history card" id="visit-history-panel">
     <div class="card-header">
         <i class="material-symbols-outlined">history</i>
         <h3>Visit History</h3>
@@ -82,8 +81,8 @@
                     </a>
                     {% endif %}
                 </div>
-                {% if visit.notes %}
-                <div class="visit-notes">{{ visit.notes }}</div>
+                {% if visit.notes_html %}
+                <div class="visit-notes article-body">{{ visit.notes_html|safe }}</div>
                 {% endif %}
                 {% with visit_participants=visit.participants.all %}
                 {% if visit_participants %}

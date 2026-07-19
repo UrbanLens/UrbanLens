@@ -58,7 +58,7 @@ def _visit_entries(profile: Profile) -> Iterator[JournalEntry]:
             title=pin.effective_name,
             subtitle="Visit note",
             body=visit.notes or "",
-            url=reverse("pin.details", kwargs={"pin_slug": pin.slug}) + "#visit-history-panel",
+            url=reverse("pin.details", kwargs={"pin_slug": pin.slug}) + "#tab-visits",
         )
 
 

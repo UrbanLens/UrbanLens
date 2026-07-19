@@ -79,6 +79,17 @@ _NEARBY_RESEARCH_TABS = {
     "epa_echo": "EPA",
 }
 
+# InfoPanelSource keys condensed into the "Location Data" tab strip alongside
+# the (bespoke, non-InfoPanelSource) Nominatim/OpenStreetMap panel - see
+# _pin_location_data_tabs.html. These used to be separate standalone cards
+# with no explanation of how they differ from one another or from OpenStreetMap;
+# grouping them as tabs of one card makes clear they're independent geocoding/
+# data providers rather than duplicated data.
+_LOCATION_DATA_PLUGIN_TABS = {
+    "photon": "Photon",
+    "overture_building_attributes": "Building Characteristics",
+}
+
 
 class PinController(LoginRequiredMixin, GenericViewSet):
     """
@@ -158,7 +169,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         all_info_panels = {source.key: source for source in panel_sources().values() if isinstance(source, InfoPanelSource)}
         condensed_panel_tabs = [{"key": key, "label": label, "icon": all_info_panels[key].icon} for key, label in _CONDENSED_PLUGIN_TABS.items() if key in all_info_panels]
         nearby_research_tabs = [{"key": key, "label": label, "icon": all_info_panels[key].icon} for key, label in _NEARBY_RESEARCH_TABS.items() if key in all_info_panels]
-        _tabbed_panel_keys = _CONDENSED_PLUGIN_TABS.keys() | _NEARBY_RESEARCH_TABS.keys()
+        location_data_tabs = [{"key": key, "label": label, "icon": all_info_panels[key].icon} for key, label in _LOCATION_DATA_PLUGIN_TABS.items() if key in all_info_panels]
+        _tabbed_panel_keys = _CONDENSED_PLUGIN_TABS.keys() | _NEARBY_RESEARCH_TABS.keys() | _LOCATION_DATA_PLUGIN_TABS.keys()
         simple_info_panels = [source for key, source in all_info_panels.items() if key not in _tabbed_panel_keys]
 
         # Regional Data and Nearby Research used to be two separate cards, each
@@ -208,8 +220,10 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 "simple_info_panels": simple_info_panels,
                 "panel_tabs": panel_tabs,
                 "default_panel_tab_key": default_panel_tab_key,
+                "location_data_tabs": location_data_tabs,
                 "has_ever_used_aliases": has_ever_used_aliases,
                 "pin_comment_count": pin.comments.count(),
+                "pin_visit_count": pin.visit_history.count(),
                 "media_bulk_actions": [
                     {"action": "relevant", "icon": "thumb_up", "label": "Mark relevant"},
                     {"action": "not_relevant", "icon": "thumb_down", "label": "Mark not relevant"},

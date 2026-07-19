@@ -56,17 +56,34 @@ just doesn't say "(optional)" instead of saying so explicitly.
     </div>
 
     <div class="form-row">
-        <label for="visit_notes_{{ pin.slug }}">Notes</label>
-        <textarea name="notes" id="visit_notes_{{ pin.slug }}" rows="2" placeholder="What did you see?"
-                  class="visit-notes-autogrow"
-                  oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'">{{ visit.notes|default:'' }}</textarea>
+        <label for="visit_notes_{{ dialog_id }}">Notes</label>
+        {# Same TipTap/Markdown WYSIWYG editor as the pin/wiki article (see #}
+        {# frontend/ts/entries/article-wysiwyg.ts) - it mounts on any element  #}
+        {# matching this data-article-editor/-canvas/-textarea contract, no   #}
+        {# extra JS needed here. Scoped to .visit-notes-editor (see           #}
+        {# _pin-detail.scss) for a note-sized height instead of a full        #}
+        {# article's; the toolbar only offers the marks a short note needs -  #}
+        {# no headings/tables/images, which have their own attach buttons     #}
+        {# below - and there's no Source/Preview toggle, so it's WYSIWYG-only.#}
+        <div class="visit-notes-editor" data-article-editor>
+            <div class="article-editor-toolbar" role="toolbar" aria-label="Note formatting">
+                <button type="button" class="article-tool" data-md-action="bold" title="Bold (Ctrl+B)"><i class="material-symbols-outlined">format_bold</i></button>
+                <button type="button" class="article-tool" data-md-action="italic" title="Italic (Ctrl+I)"><i class="material-symbols-outlined">format_italic</i></button>
+                <button type="button" class="article-tool" data-md-action="strike" title="Strikethrough"><i class="material-symbols-outlined">strikethrough_s</i></button>
+                <span class="article-tool-sep"></span>
+                <button type="button" class="article-tool" data-md-action="link" title="Link (Ctrl+K)"><i class="material-symbols-outlined">link</i></button>
+                <button type="button" class="article-tool" data-md-action="ul" title="Bulleted list"><i class="material-symbols-outlined">format_list_bulleted</i></button>
+                <button type="button" class="article-tool" data-md-action="ol" title="Numbered list"><i class="material-symbols-outlined">format_list_numbered</i></button>
+                <button type="button" class="article-tool" data-md-action="quote" title="Quote"><i class="material-symbols-outlined">format_quote</i></button>
+                <button type="button" class="article-tool" data-md-action="code" title="Code"><i class="material-symbols-outlined">code</i></button>
+            </div>
+            <div class="article-editor-split">
+                <div class="article-editor-canvas" data-article-canvas hidden></div>
+                <textarea name="notes" id="visit_notes_{{ dialog_id }}" class="article-editor-textarea" data-article-textarea
+                          rows="3" placeholder="What did you see? Use **bold**, [links](https://url), and lists...">{{ visit.notes|default:'' }}</textarea>
+            </div>
+        </div>
     </div>
-    <script>
-    (function () {
-        var ta = document.getElementById('visit_notes_{{ pin.slug }}');
-        if (ta) { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; }
-    }());
-    </script>
 
     {# -- Photos / Map / Participants: three buttons instead of three optional field rows -- #}
     {% with visit_participants=visit.participants.all visit_externals=visit.external_participants.all %}

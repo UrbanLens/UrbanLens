@@ -26,7 +26,7 @@ from django.utils import timezone
 
 from urbanlens.dashboard.services import google_oauth
 from urbanlens.dashboard.services.gateway import Gateway, GatewayRequestError
-from urbanlens.dashboard.services.google_oauth import extract_email_from_id_token
+from urbanlens.dashboard.services.google_oauth import GoogleAuthExpiredError, extract_email_from_id_token
 from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
@@ -183,11 +183,11 @@ class GoogleCalendarGateway(Gateway):
         """Refresh and persist the account's access token.
 
         Raises:
-            GatewayRequestError: When no refresh token is stored or the
+            GoogleAuthExpiredError: When no refresh token is stored or the
                 refresh is rejected by Google.
         """
         if not self.account.refresh_token:
-            raise GatewayRequestError("Google Calendar connection is missing a refresh token. Please reconnect.")
+            raise GoogleAuthExpiredError("Google Calendar connection is missing a refresh token. Please reconnect.")
         payload = refresh_access_token(self.account.refresh_token)
         self.account.access_token = payload["access_token"]
         expires_in = int(payload.get("expires_in") or 3600)
@@ -219,7 +219,8 @@ class GoogleCalendarGateway(Gateway):
             Decoded JSON body, or None for empty (204) responses.
 
         Raises:
-            GatewayRequestError: On any non-success response.
+            GoogleAuthExpiredError: When Google rejects the current credentials (401/403).
+            GatewayRequestError: On any other non-success response.
         """
         response = self.session.request(
             method,
@@ -241,7 +242,7 @@ class GoogleCalendarGateway(Gateway):
             response.text[:500],
         )
         if response.status_code in (401, 403):
-            raise GatewayRequestError("Google Calendar access was denied. Try reconnecting your account.")
+            raise GoogleAuthExpiredError("Google Calendar access was denied. Please reconnect your account.")
         if response.status_code == 404:
             raise CalendarEventNotFoundError("Calendar event not found.")
         raise GatewayRequestError(f"Google Calendar API request failed with status {response.status_code}.")

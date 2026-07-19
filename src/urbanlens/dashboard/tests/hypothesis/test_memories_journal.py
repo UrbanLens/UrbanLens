@@ -54,6 +54,18 @@ class GetJournalEntriesTests(TestCase):
         self.assertEqual(entries[0].title, "Old Factory")
         self.assertEqual(entries[0].body, "Rusty catwalks everywhere.")
 
+    def test_visit_links_to_the_visit_history_tab(self) -> None:
+        """Visit History moved from the (always-visible) Overview tab to its own
+        subnav tab, which starts `hidden` - a bare #visit-history-panel anchor
+        would silently do nothing now, so this must use the #tab-visits hash
+        page-tabs.js recognizes to actually switch to and reveal that tab."""
+        pin = _make_pin(self.profile, name="Old Factory")
+        PinVisit.objects.create(pin=pin, visited_at=_aware(2024, 6, 1), notes="Rusty catwalks everywhere.")
+
+        entries = get_journal_entries(self.profile)
+
+        self.assertEqual(entries[0].url, reverse("pin.details", kwargs={"pin_slug": pin.slug}) + "#tab-visits")
+
     def test_visit_without_notes_is_excluded(self) -> None:
         pin = _make_pin(self.profile)
         PinVisit.objects.create(pin=pin, visited_at=_aware(2024, 6, 1), notes=None)

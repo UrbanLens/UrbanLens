@@ -24,29 +24,9 @@
   resize: vertical;
 }
 
-.po-tabs {
-  display: flex;
-  gap: .25rem;
-  padding: 0 .85rem;
-  border-bottom: 1px solid var(--ul-control-border);
-}
-
-.po-tab {
-  background: none;
-  border: none;
-  border-bottom: 2px solid transparent;
-  color: var(--ul-grey-6);
-  cursor: pointer;
-  font-size: .82rem;
-  padding: .5rem .25rem;
-
-  &.is-active {
-    border-bottom-color: var(--ul-color-accent);
-    color: var(--ul-color-accent);
-    font-weight: 600;
-  }
-}
-
+// Tab strip itself now uses the shared .card-tabs/.card-tab styling (see
+// _pin-detail.scss) instead of these bespoke lookalikes, so every tabbed
+// section on the pin/wiki pages looks the same.
 .po-tab-body {
   padding: .6rem .85rem .75rem;
 

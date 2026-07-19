@@ -481,6 +481,15 @@
         color: var(--ul-grey-7);
     }
 
+    .comment-panel-empty .comment-panel-empty-icon-wrap {
+        background: linear-gradient(135deg, rgba(255, 255, 255, .04), rgba(255, 255, 255, .02));
+        border-color: var(--ul-grey-2);
+    }
+
+    .comment-panel-empty .comment-panel-empty-title {
+        color: var(--ul-grey-7);
+    }
+
     .trip-card:hover {
         box-shadow: 0 10px 28px rgba(0, 0, 0, .35);
     }

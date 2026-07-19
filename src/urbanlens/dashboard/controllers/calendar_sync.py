@@ -39,6 +39,7 @@ from urbanlens.dashboard.services.calendar_sync import (
     remove_trip_from_calendar,
 )
 from urbanlens.dashboard.services.gateway import GatewayRequestError
+from urbanlens.dashboard.services.google_oauth import GoogleAuthExpiredError
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +83,25 @@ def calendar_context(profile: Profile, trip=None) -> dict:
     if trip is not None:
         context["calendar_link"] = TripCalendarLink.objects.trip_level_link(trip, profile) if account else None
     return context
+
+
+_RECONNECT_MESSAGE = "Your Google Calendar connection has expired. Please reconnect below to keep importing and exporting."
+
+
+def _drop_expired_account(account: GoogleCalendarAccount) -> None:
+    """Delete a connection Google has already rejected.
+
+    Called when a gateway call raises ``GoogleAuthExpiredError`` - the stored
+    tokens are dead, so keeping the row around would just repeat the same
+    failure on every next attempt. No revoke call is made: an already-invalid
+    token has nothing left to revoke. Deleting it also makes every template
+    that branches on ``calendar_account``/``account`` fall back to its
+    existing "not connected" state, which already offers a reconnect link.
+
+    Args:
+        account: The connection to discard.
+    """
+    account.delete()
 
 
 class GoogleCalendarConnectView(LoginRequiredMixin, View):
@@ -220,6 +240,10 @@ class CalendarImportView(LoginRequiredMixin, View):
         entries: list[dict] = []
         try:
             entries = list_importable_events(account)
+        except GoogleAuthExpiredError:
+            _drop_expired_account(account)
+            account = None
+            error = _RECONNECT_MESSAGE
         except GatewayRequestError as exc:
             error = str(exc)
 
@@ -257,6 +281,9 @@ class CalendarImportView(LoginRequiredMixin, View):
 
         try:
             created, skipped, invited = import_events_as_trips(account, selections)
+        except GoogleAuthExpiredError:
+            _drop_expired_account(account)
+            return HttpResponse(_RECONNECT_MESSAGE, status=502)
         except GatewayRequestError as exc:
             return HttpResponse(str(exc), status=502)
 
@@ -296,6 +323,9 @@ class CalendarImportPreviewView(LoginRequiredMixin, View):
 
         try:
             previews = build_import_preview(account, event_ids)
+        except GoogleAuthExpiredError:
+            _drop_expired_account(account)
+            return HttpResponse(_RECONNECT_MESSAGE, status=502)
         except GatewayRequestError as exc:
             return HttpResponse(str(exc), status=502)
 
@@ -355,6 +385,9 @@ class TripCalendarExportView(LoginRequiredMixin, View):
             link, activity_count = export_trip_to_calendar(account, trip, trip_url=trip_url)
         except ValueError as exc:
             return self._render_button(request, trip, profile, toast=("warning", str(exc)))
+        except GoogleAuthExpiredError:
+            _drop_expired_account(account)
+            return self._render_button(request, trip, profile, toast=("warning", _RECONNECT_MESSAGE))
         except GatewayRequestError as exc:
             return self._render_button(request, trip, profile, toast=("error", str(exc)))
 
@@ -381,6 +414,9 @@ class TripCalendarExportView(LoginRequiredMixin, View):
 
         try:
             removed = remove_trip_from_calendar(account, trip)
+        except GoogleAuthExpiredError:
+            _drop_expired_account(account)
+            return self._render_button(request, trip, profile, toast=("warning", _RECONNECT_MESSAGE))
         except GatewayRequestError as exc:
             return self._render_button(request, trip, profile, toast=("error", str(exc)))
 

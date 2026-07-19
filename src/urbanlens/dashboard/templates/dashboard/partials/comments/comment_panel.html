@@ -1,9 +1,19 @@
 {% load dashboard_tags %}
+{# "Notes" here is pin-only wording (context_type == "pin") - a pin's comments  #}
+{# are private to its owner, so "Comments" implied a shared conversation that   #}
+{# doesn't exist. Wiki/trip comments are genuinely shared between users and    #}
+{# keep the "Comments" label - they're a different model instance of the same  #}
+{# Comment model/template, not a different feature. #}
 <div class="comment-panel card" id="comment-panel"
      data-collapse-scope="{{ context_type }}" data-collapse-section="comments">
   <div class="card-header">
+    {% if context_type == "pin" %}
+    <i class="material-symbols-outlined">sticky_note_2</i>
+    <span>Notes</span>
+    {% else %}
     <i class="material-symbols-outlined">chat</i>
     <span>Comments</span>
+    {% endif %}
     {% if total_comment_count %}<span class="badge">{{ total_comment_count }}</span>{% endif %}
   </div>
 
@@ -18,6 +28,19 @@
     {% endwith %}
     {% endfor %}
   </ul>
+  {% else %}
+  <div class="comment-panel-empty">
+    <div class="comment-panel-empty-icon-wrap">
+      <i class="material-icons comment-panel-empty-icon">{% if context_type == "pin" %}sticky_note_2{% else %}forum{% endif %}</i>
+    </div>
+    {% if context_type == "pin" %}
+    <h3 class="comment-panel-empty-title">No notes yet</h3>
+    <p class="comment-panel-empty-text">This space is private to you - jot down anything worth remembering about this place below.</p>
+    {% else %}
+    <h3 class="comment-panel-empty-title">No comments yet</h3>
+    <p class="comment-panel-empty-text">Be the first to share something about this place below.</p>
+    {% endif %}
+  </div>
   {% endif %}
   {% include "dashboard/partials/ui/_pagination_controls.html" %}
 

@@ -134,3 +134,54 @@ class VisitHistoryViewTests(TestCase):
         response = self.client.get(reverse("pin.visit.edit", args=[self.pin.slug, visit.id]))
 
         self.assertNotContains(response, "suggest_participant_ids")
+
+    def test_notes_field_uses_the_article_wysiwyg_editor(self):
+        """The notes field must mount the same TipTap/Markdown editor as the
+        pin/wiki article (frontend/ts/entries/article-wysiwyg.ts) - it mounts
+        on any element matching this data attribute contract, so no new JS is
+        needed, only this markup."""
+        response = self.client.get(reverse("pin.visits", args=[self.pin.slug]))
+
+        self.assertContains(response, "data-article-editor")
+        self.assertContains(response, "data-article-canvas")
+        self.assertContains(response, "data-article-textarea")
+        self.assertContains(response, 'name="notes"')
+
+    def test_add_and_edit_dialogs_do_not_share_a_notes_textarea_id(self):
+        """Regression guard: the notes textarea id used to be keyed only by
+        pin.slug, so the add-dialog and edit-dialog copies of _visit_form.html
+        (both present in the DOM at once) rendered a duplicate id - the
+        edit dialog's autogrow script would then find and resize the wrong
+        (add-dialog's) textarea via getElementById. Keying by dialog_id instead
+        keeps them unique."""
+        visit = baker.make(PinVisit, pin=self.pin)
+
+        response = self.client.get(reverse("pin.visits", args=[self.pin.slug]))
+        add_dialog_content = response.content.decode()
+
+        edit_response = self.client.get(reverse("pin.visit.edit", args=[self.pin.slug, visit.id]))
+        edit_content = edit_response.content.decode()
+
+        self.assertIn('id="visit_notes_visit-add-dialog-', add_dialog_content)
+        self.assertIn(f'id="visit_notes_visit-edit-dialog-{self.pin.slug}"', edit_content)
+
+
+class PinVisitNotesHtmlTests(TestCase):
+    """PinVisit.notes_html renders the same sanitized Markdown as an article."""
+
+    def test_markdown_is_rendered_to_sanitized_html(self):
+        visit = PinVisit(notes="**bold** and a [link](https://example.com)")
+
+        html = visit.notes_html
+
+        self.assertIn("<strong>bold</strong>", html)
+        self.assertIn('<a href="https://example.com"', html)
+
+    def test_empty_notes_render_as_empty_string(self):
+        self.assertEqual(PinVisit(notes=None).notes_html, "")
+        self.assertEqual(PinVisit(notes="").notes_html, "")
+
+    def test_script_tags_are_stripped(self):
+        visit = PinVisit(notes="<script>alert(1)</script>ok")
+
+        self.assertNotIn("<script>", visit.notes_html)

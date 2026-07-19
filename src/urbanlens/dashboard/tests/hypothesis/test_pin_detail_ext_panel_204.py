@@ -48,11 +48,15 @@ class ExtPanel204MarkerTests(TestCase):
         return response.content.decode()
 
     def test_bespoke_cards_carry_the_marker(self) -> None:
-        """Cards with their own dedicated controller/route (not the generic simple_info_panels loop)."""
+        """Cards with their own dedicated controller/route (not the generic simple_info_panels loop).
+
+        Nominatim is deliberately excluded here - it moved into the "Location
+        Data" tab strip (see LocationDataTabsTests) and is no longer a
+        standalone auto-loading card, so it no longer carries this marker.
+        """
         content = self._content()
         for section_id in (
             "wikipedia-section",
-            "nominatim-section",
             "azure-maps-section",
             "yelp-section",
             "nps-section",
@@ -87,14 +91,21 @@ class ExtPanel204MarkerTests(TestCase):
         self.assertIn("data-ext-panel-204", content[max(0, idx - 200) : idx + 200])
 
     def test_generic_loop_panels_carry_the_marker(self) -> None:
-        """photon/gdelt/epa_echo_detail/overture_building_attributes - the panels this
-        bug report caught stuck on "Loading..." forever - all come from the same
-        simple_info_panels loop, which now carries the marker unconditionally."""
+        """gdelt/epa_echo_detail - panels from the same bug report stuck on "Loading..."
+        forever - come from the same simple_info_panels loop, which now carries the
+        marker unconditionally.
+
+        photon/overture_building_attributes are deliberately excluded here - they
+        moved into the "Location Data" tab strip (see LocationDataTabsTests) and
+        are no longer part of simple_info_panels.
+        """
         content = self._content()
         response = self.client.get(reverse("pin.details", args=[self.pin.slug]))
         panel_keys = [panel.key for panel in response.context["simple_info_panels"]]
         self.assertTrue(panel_keys, "simple_info_panels was empty - can't verify the marker on it")
-        for key in ("photon", "gdelt", "epa_echo_detail", "overture_building_attributes"):
+        self.assertNotIn("photon", panel_keys, "photon should be excluded to simple_info_panels - it belongs to location_data_tabs now")
+        self.assertNotIn("overture_building_attributes", panel_keys, "overture_building_attributes should be excluded from simple_info_panels - it belongs to location_data_tabs now")
+        for key in ("gdelt", "epa_echo_detail"):
             self.assertIn(key, panel_keys, f"{key} is no longer part of simple_info_panels - update this test")
 
         # Every div opened by the simple_info_panels loop shares one hx-get pattern;
@@ -191,3 +202,41 @@ class ConsistentLoadingPlaceholderTests(TestCase):
         content = self._content()
         idx = content.index('id="pin-overview"')
         self.assertIn("view-loading", content[idx : idx + 600])
+
+
+class LocationDataTabsTests(TestCase):
+    """OpenStreetMap (Nominatim), Photon, and Building Characteristics used to be
+    three separate standalone cards with no explanation of how they related to
+    one another - merged into one "Location Data" card with tabs (see
+    _pin_location_data_tabs.html and PinController.view's location_data_tabs)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+        self.client.force_login(self.user)
+        self.pin: Pin = baker.make_recipe("dashboard.pin", profile=self.profile)
+
+    def _content(self) -> str:
+        response = self.client.get(reverse("pin.details", args=[self.pin.slug]))
+        self.assertEqual(response.status_code, 200)
+        return response.content.decode()
+
+    def test_renders_one_card_with_all_three_tabs(self) -> None:
+        content = self._content()
+        self.assertIn('id="location-data-section"', content)
+        self.assertIn(f'hx-get="{reverse("pin.nominatim", args=[self.pin.slug])}"', content)
+        self.assertIn(f'hx-get="{reverse("pin.panel", args=[self.pin.slug, "photon"])}"', content)
+        self.assertIn(f'hx-get="{reverse("pin.panel", args=[self.pin.slug, "overture_building_attributes"])}"', content)
+
+    def test_no_longer_renders_as_separate_standalone_cards(self) -> None:
+        content = self._content()
+        self.assertNotIn('id="nominatim-section"', content)
+
+    def test_tab_204_handler_present_to_avoid_a_stuck_spinner(self) -> None:
+        """Regression guard: a tab button's hx-target is a shared body div, not
+        itself, so the generic data-ext-panel-204 handler (which just removes
+        the element carrying the marker) can't apply here - there must be a
+        dedicated handler keyed off .pin-plugin-tab-btn instead."""
+        content = self._content()
+        self.assertIn("isPluginTabBtn", content)

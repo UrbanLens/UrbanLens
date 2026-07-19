@@ -22,17 +22,22 @@
 {% block subnav %}
 <div class="ul-page-subnav">
     <div class="ul-page-subnav__inner">
-        {# -- Page tabs: Overview / Article / Comments / Edit History -------- #}
+        {# -- Page tabs: Overview / Visit History / Article / Comments / Edit History -- #}
         <nav class="ul-subnav-tabs" data-page-tabs aria-label="Pin sections">
             <button type="button" class="ul-subnav-tab is-active" data-tab="overview">
                 <i class="material-symbols-outlined">dashboard</i><span>Overview</span>
+            </button>
+            <button type="button" class="ul-subnav-tab" data-tab="visits">
+                <i class="material-symbols-outlined">directions_walk</i><span>Visit History</span>
+                {% if pin_visit_count %}<span class="page-tab-badge">{{ pin_visit_count }}</span>{% endif %}
             </button>
             <button type="button" class="ul-subnav-tab" data-tab="article"
                     title="Your private article about this place - only you can see it">
                 <i class="material-symbols-outlined">article</i><span>Article</span>
             </button>
-            <button type="button" class="ul-subnav-tab" data-tab="comments">
-                <i class="material-symbols-outlined">chat</i><span>Comments</span>
+            <button type="button" class="ul-subnav-tab" data-tab="comments"
+                    title="Private notes only you can see - not shared with anyone else">
+                <i class="material-symbols-outlined">sticky_note_2</i><span>Notes</span>
                 {% if pin_comment_count %}<span class="page-tab-badge">{{ pin_comment_count }}</span>{% endif %}
             </button>
             <button type="button" class="ul-subnav-tab" data-tab="history">
@@ -215,20 +220,10 @@
         </div>
     </div>{# end .pin-media-row #}
 
-    {# -- Visits / categories / aliases: same fill-the-gap behavior as above -- #}
+    {# -- Categories / aliases: same fill-the-gap behavior as above -- #}
+    {# Visit History moved to its own subnav tab (data-tab="visits") - see    #}
+    {# the page-tab-panel below - it no longer shares this masonry row.      #}
     <div class="pin-lists-row">
-        <div hx-get="{% url 'pin.visits' pin.slug %}{% if include_children %}?children=1{% endif %}"
-            hx-trigger="load[!window.ulSectionCollapsed('pin','visits')], ul:unhide"
-            hx-swap="outerHTML"
-            class="visit-history card card--secondary"
-            data-collapse-scope="pin" data-collapse-section="visits">
-            <div class="card-header">
-                <i class="material-symbols-outlined">history</i>
-                <span>Visit History</span>
-            </div>
-            <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
-        </div>
-
         <div class="organization-card card card--secondary"
              data-collapse-scope="pin" data-collapse-section="categories">
             <div class="card-header">
@@ -465,18 +460,7 @@
             <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
         </div>
 
-        <div id="nominatim-section" class="card card--secondary" data-ext-panel-204
-            hx-get="{% url 'pin.nominatim' pin.slug %}"
-            hx-trigger="load[!window.ulSectionCollapsed('pin','nominatim')], ul:unhide"
-            hx-swap="outerHTML"
-            hx-timeout="25000"
-            data-collapse-scope="pin" data-collapse-section="nominatim">
-            <div class="card-header">
-                <i class="material-symbols-outlined">map</i>
-                <h3>OpenStreetMap</h3>
-            </div>
-            <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
-        </div>
+        {% include "dashboard/partials/pins/_pin_location_data_tabs.html" with pin=pin location_data_tabs=location_data_tabs %}
 
         <div id="azure-maps-section" class="card card--secondary" data-ext-panel-204
             hx-get="{% url 'pin.azure_maps' pin.slug %}"
@@ -564,6 +548,22 @@
 </div>{# end .pin-detail-grid #}
 </section>{# end overview tab #}
 
+{# -- Visit History tab: previously crammed into Overview alongside a dozen  #}
+{# other cards - promoted to its own subnav tab so it reads as its own page. #}
+<section class="page-tab-panel" data-tab-panel="visits" hidden>
+    <div id="visit-history-panel"
+        hx-get="{% url 'pin.visits' pin.slug %}{% if include_children %}?children=1{% endif %}"
+        hx-trigger="load"
+        hx-swap="outerHTML"
+        class="visit-history card">
+        <div class="card-header">
+            <i class="material-symbols-outlined">directions_walk</i>
+            <span>Visit History</span>
+        </div>
+        <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
+    </div>
+</section>
+
 {# -- Article tab: the user's private, Wikipedia-style article ------------- #}
 <section class="page-tab-panel" data-tab-panel="article" hidden>
     <div class="card article-card">
@@ -578,15 +578,15 @@
     </div>
 </section>
 
-{# -- Comments tab ---------------------------------------------------------- #}
+{# -- Notes tab (backend: pin comments, private to the pin's owner) --------- #}
 <section class="page-tab-panel" data-tab-panel="comments" hidden>
     <div id="comment-panel" class="card"
          hx-get="{% url 'pin.comments' pin.slug %}"
          hx-trigger="load"
          hx-swap="outerHTML">
         <div class="card-header">
-            <i class="material-symbols-outlined">chat</i>
-            <span>Comments</span>
+            <i class="material-symbols-outlined">sticky_note_2</i>
+            <span>Notes</span>
         </div>
         <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
     </div>
@@ -1246,6 +1246,53 @@
             if (isExtPanel204(el)) {
                 evt.stopImmediatePropagation();
                 el.remove();
+            }
+        }, true);
+    }());
+
+    // -- Plugin-panel tab strips (Regional Data, Location Data): handle -------
+    // 204/errors. Unlike the auto-loading cards above, a tab button's hx-target
+    // is a *shared* body div (not the button itself), so there's nothing to
+    // el.remove() - htmx also performs no swap at all on a 204, so without this
+    // the "Loading..." placeholder in the tab body is left stuck forever.
+    (function () {
+        function isPluginTabBtn(el) {
+            return !!(el && el.classList && el.classList.contains('pin-plugin-tab-btn'));
+        }
+        function tabBodyOf(el) {
+            var selector = el.getAttribute('hx-target');
+            return selector ? document.querySelector(selector) : null;
+        }
+        function showPlaceholder(el, message) {
+            var body = tabBodyOf(el);
+            if (body) {
+                body.innerHTML = '<p class="pin-plugin-tab-placeholder">' + message + '</p>';
+            }
+        }
+        document.body.addEventListener('htmx:afterOnLoad', function (evt) {
+            var el = evt.detail && evt.detail.elt;
+            if (isPluginTabBtn(el) && evt.detail.xhr.status === 204) {
+                showPlaceholder(el, 'No data available.');
+            }
+        });
+        document.body.addEventListener('htmx:responseError', function (evt) {
+            var el = evt.detail && evt.detail.elt;
+            if (!isPluginTabBtn(el)) return;
+            evt.stopImmediatePropagation();
+            showPlaceholder(el, 'This data is temporarily unavailable.');
+        }, true);
+        document.body.addEventListener('htmx:sendError', function (evt) {
+            var el = evt.detail && evt.detail.elt;
+            if (isPluginTabBtn(el)) {
+                evt.stopImmediatePropagation();
+                showPlaceholder(el, 'This data is temporarily unavailable.');
+            }
+        }, true);
+        document.body.addEventListener('htmx:timeout', function (evt) {
+            var el = evt.detail && evt.detail.elt;
+            if (isPluginTabBtn(el)) {
+                evt.stopImmediatePropagation();
+                showPlaceholder(el, 'This data is temporarily unavailable.');
             }
         }, true);
     }());
