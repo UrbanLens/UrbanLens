@@ -417,11 +417,11 @@ Ordering within each tier is roughly by (user impact × risk × leverage). IDs r
 
 ### 4.2 Tier 2: Verification backlog (cheap to check, unknown risk)
 
-Each of these is "confirm, then either close or convert to a bug": search-query disambiguation
-keywords (UL-117), child trips (UL-228), badge-kind-change UX (UL-155), wiki section missing on
-one pin (UL-385), Wikipedia missing for some HRSH buildings (UL-354), takeout Parking.csv
-unreadable (UL-203), import-updates-names flow (UL-207). Closing these shrinks `TODO.md` noise
-cheaply — batch several per session, with a repro test per confirmed bug.
+Each of these is "confirm, then either close or convert to a bug": child trips (UL-228),
+badge-kind-change UX (UL-155), wiki section missing on one pin (UL-385), Wikipedia missing for
+some HRSH buildings (UL-354), takeout Parking.csv unreadable (UL-203), import-updates-names flow
+(UL-207). Closing these shrinks `TODO.md` noise cheaply — batch several per session, with a repro
+test per confirmed bug.
 
 11. ~~**Password reset for SSO users** (UL-257)~~ RESOLVED 2026-07-19 (`def2c4d6`) — SSO-only
     accounts were silently dropped by Django's stock `PasswordResetForm.get_users()`, while the
@@ -456,6 +456,12 @@ cheaply — batch several per session, with a repro test per confirmed bug.
     fixed an unrelated pre-existing bug in the same test file, found while touching it: a
     pagination-markup test asserted on `data-adaptive-pagination-controls` with only one visit
     created, but that markup only renders once there's more than one page.
+15. ~~**Search-query disambiguation keywords** (UL-117)~~ VERIFIED-ALREADY-IMPLEMENTED 2026-07-19
+    — the Web Search panel already builds its query via `Pin.get_unique_search_name(quote_name=
+    True, quote_locality=True)`, appending street address, city/county, and state, with the
+    locality wrapped as one exact-phrase term specifically so a generic street address can't match
+    the same address in an unrelated city. Already has dedicated test coverage naming this exact
+    caller. No code change needed.
 
 ### 4.3 Tier 3: High-leverage features (composable from existing infrastructure)
 
