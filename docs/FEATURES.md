@@ -98,7 +98,11 @@ On-demand, cached lookups shown as panels on the pin detail page:
 - Debug overlay (admin-only) to inspect raw external-API responses per panel
 
 All external integrations are cached (DB-backed, per-Location) and rate-limited per service, with
-usage tracked in `ApiCallLog`/`ApiRateLimit` and toggled at `/site-admin/api-limits/`.
+usage tracked in `ApiCallLog`/`ApiRateLimit` and toggled at `/site-admin/api-limits/`. A per-call
+cost estimate (`ApiCallLog.cost_estimate`, from `ServiceDefaults.cost_per_call`) is logged for
+services with a known published rate - `null` means "not priced," not "confirmed free," since
+most services don't have a rate configured yet. Aggregated into a 30-day cost breakdown on the
+site-admin API usage report and the public `/costs/` transparency page.
 
 Beyond on-demand fetches, an hourly **background enrichment** task drips high-value lookups
 (official names, aliases, street addresses, building boundaries) into whatever rate-limit budget
