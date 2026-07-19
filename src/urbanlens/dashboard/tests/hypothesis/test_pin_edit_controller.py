@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import date
 import json
+from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
@@ -15,6 +16,9 @@ from urbanlens.dashboard.controllers.pin_edit import PinEditView, PinOverviewVie
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.services.rate_limiter import RateLimitExceededError
+
+if TYPE_CHECKING:
+    from django.http import HttpResponseBase
 
 
 class PinEditCategoryUpdateTests(TestCase):
@@ -30,7 +34,7 @@ class PinEditCategoryUpdateTests(TestCase):
         )
         self.pin.labels.add(self.existing_cat)
 
-    def _post(self, body: dict) -> object:
+    def _post(self, body: dict) -> HttpResponseBase:
         req = self.factory.post(
             f"/map/pin/{self.pin.slug}/edit/",
             data=json.dumps(body),
@@ -96,7 +100,7 @@ class PinEditNameAliasTests(TestCase):
         self.user = self.profile.user
         self.pin = baker.make(Pin, profile=self.profile, name="Old Factory", name_is_user_provided=True)
 
-    def _post(self, body: dict) -> object:
+    def _post(self, body: dict) -> HttpResponseBase:
         req = self.factory.post(
             f"/map/pin/{self.pin.slug}/edit/",
             data=json.dumps(body),
@@ -142,7 +146,7 @@ class PinEditDateFieldsTests(TestCase):
         self.user = self.profile.user
         self.pin = baker.make(Pin, profile=self.profile, name="Old Factory", name_is_user_provided=True)
 
-    def _post(self, body: dict) -> object:
+    def _post(self, body: dict) -> HttpResponseBase:
         req = self.factory.post(
             f"/map/pin/{self.pin.slug}/edit/",
             data=json.dumps(body),
@@ -317,3 +321,59 @@ class PinOverviewEditableDescriptionTests(TestCase):
     def test_populated_description_does_not_carry_the_empty_modifier(self) -> None:
         content = self._get().content.decode()
         self.assertNotIn("pin-description--empty", content)
+
+
+class PinEditRatingClearTests(TestCase):
+    """Rating lives on Review, not Pin - regression coverage for the "clear
+    rating" (x) button, which submits rating=0.
+
+    A prior reassignment (rating=0 -> rating=None) meant the downstream
+    `elif rating == 0` delete branch could never actually match, so clicking
+    "clear" silently left the underlying Review row (and thus the displayed
+    rating) untouched.
+    """
+
+    def setUp(self) -> None:
+        self.factory = RequestFactory()
+        self.profile = baker.make(User).profile
+        self.user = self.profile.user
+        self.pin = baker.make(Pin, profile=self.profile)
+
+    def _post(self, body: dict) -> HttpResponseBase:
+        req = self.factory.post(
+            f"/map/pin/{self.pin.slug}/edit/",
+            data=json.dumps(body),
+            content_type="application/json",
+        )
+        req.user = self.user
+        with patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None):
+            return PinEditView.as_view()(req, pin_slug=self.pin.slug)
+
+    def test_setting_a_rating_creates_a_review(self) -> None:
+        from urbanlens.dashboard.models.reviews.model import Review
+
+        self._post({"rating": 4})
+
+        self.assertEqual(Review.objects.for_pair(self.profile, self.pin).first().rating, 4)
+
+    def test_clearing_an_existing_rating_deletes_the_review(self) -> None:
+        from urbanlens.dashboard.models.reviews.model import Review
+
+        Review.objects.update_or_create(profile=self.profile, pin=self.pin, defaults={"rating": 3})
+
+        self._post({"rating": 0})
+
+        self.assertFalse(Review.objects.for_pair(self.profile, self.pin).exists())
+        self.pin.refresh_from_db()
+        self.assertEqual(self.pin.rating, 0)
+
+    def test_editing_an_unrelated_field_does_not_touch_a_nonexistent_review(self) -> None:
+        """rating defaults to 0 (Pin.rating property) when no Review exists -
+        an unrelated field edit must not misinterpret that default as an
+        explicit clear request and issue a pointless delete every time."""
+        from urbanlens.dashboard.models.reviews.queryset import QuerySet as ReviewQuerySet
+
+        with patch.object(ReviewQuerySet, "delete") as mock_delete:
+            self._post({"priority": 2})
+
+        mock_delete.assert_not_called()

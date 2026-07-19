@@ -246,13 +246,19 @@ class PinEditView(LoginRequiredMixin, View):
         except (TypeError, ValueError):
             priority = pin.priority
 
+        # clear_rating distinguishes "explicitly submitted 0" (delete the
+        # Review row) from "field untouched, pin.rating just defaults to 0
+        # because no Review exists yet" (nothing to do) - collapsing both
+        # into rating=0 would either silently no-op a real clear request, or
+        # issue a pointless delete query on every unrelated quick-edit.
+        clear_rating = False
         try:
             if rating_raw is not None and str(rating_raw).strip():
                 rating = int(rating_raw)
                 if not (0 <= rating <= 5):
                     rating = pin.rating
                 elif rating == 0:
-                    rating = None
+                    clear_rating = True
             else:
                 rating = pin.rating
         except (TypeError, ValueError):
@@ -368,7 +374,7 @@ class PinEditView(LoginRequiredMixin, View):
                 pin=pin,
                 defaults={"rating": rating},
             )
-        elif rating == 0:
+        elif clear_rating:
             Review.objects.for_pair(request.user.profile, pin).delete()
 
         # Category update: only runs when the field was explicitly submitted (partial requests preserve existing)
