@@ -352,3 +352,33 @@ fix depends on a product call the same way the sentinel-vs-null design already m
 falsiness check as `panel_info` (probably yes, for consistency), or is there a reason imagery
 providers should still be queried at (0, 0)? If falsiness is the right call, mirror `panel_info`'s
 existing gate rather than reinventing it.
+
+---
+
+## UL-354: Wikipedia missing for some HRSH buildings - likely geosearch radius, not a bug
+
+Original wording (`TODO.md:30`): "Wikipedia not showing up for some HRSH buildings." HRSH (Harlem
+Valley/Hudson River State Hospital-style abandoned psychiatric campuses) are exactly the kind of
+site this app's urbex audience pins: a single historic complex sprawling across many acres, with
+dozens of individual pins for separate buildings scattered around the same campus.
+
+`WikipediaGateway._geo_search()` (`services/apis/assets/wikipedia.py:282-298`) queries Wikipedia's
+`geosearch` API with a **500m radius** (`_RADIUS_METERS`) and takes the closest 5 candidates
+(`_MAX_CANDIDATES`). A large historic hospital campus typically has exactly one Wikipedia article,
+geotagged at a single point (usually the main/administrative building). Individual building pins
+within 500m of that point would find the article; pins for outbuildings further out on the same
+campus (which for a site like this can easily span 500-1000+ meters) would get zero geosearch
+candidates and correctly render "no article found" - matching the reported symptom exactly
+(*some* buildings show it, others on the same campus don't).
+
+**Why not fixed now**: this is a plausible, well-reasoned hypothesis based on how the mechanism
+works, not a confirmed diagnosis - there's no specific pin/coordinate attached to the report to
+verify it against directly (unlike UL-385, where a pre-written failing test proved the exact
+mechanism). It's also not obviously a "bug" to fix by just widening the radius: 500m is presumably
+tuned to avoid false-positive matches (an ordinary pin picking up a nearby-but-unrelated article),
+and blindly increasing it site-wide risks introducing exactly that regression for every other pin
+in the app. The real fix is a product call: widen the radius specifically for large-campus cases,
+add a "same complex, different building" special case, or accept the limitation and let users
+manually confirm/link an article via whatever manual-override path already exists (if any -
+check `pin.wiki.create`/`_pin_detail_hero_body.html` for a manual Wikipedia-link mechanism before
+assuming a code-only fix is even the right first step).
