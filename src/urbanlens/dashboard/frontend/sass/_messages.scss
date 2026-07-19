@@ -1524,12 +1524,22 @@
     transition: opacity .12s ease;
 }
 
+// Anchored to the OPPOSITE horizontal corner from .dm-bubble__time (which
+// floats at left/right: .35rem on this same side, see &__time above) rather
+// than the same corner - both elements are only ever revealed together (see
+// the :hover rule below and __time's own :hover rule), and previously both
+// floated at left/right: 0 on the *same* side, guaranteeing an overlap
+// between the timestamp text and this button on every hover. Opposite
+// corners of the bubble's own width give real, guaranteed clearance without
+// depending on either element's exact rendered width (narrow enough bubbles -
+// a one-character message - could still bring them close; not otherwise
+// addressed here).
 .dm-bubble--them .dm-reaction-add-wrap {
-    left: 0;
+    right: 0;
 }
 
 .dm-bubble--own .dm-reaction-add-wrap {
-    right: 0;
+    left: 0;
 }
 
 .dm-bubble:hover .dm-reaction-add-wrap,
