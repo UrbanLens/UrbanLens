@@ -189,7 +189,9 @@ A trip is a *sharing surface*: adding a member exposes activity pins → must re
 mirrors trips externally → revocation on leave/removal (§1.3-4), and attendees-as-invites on
 import interacts with the email-invite pipeline (UL-235/236: invite email ≠ signup email).
 "Hidden" activities have unresolved visibility rules (UL-231: the hider must still see their own
-pin). Child trips (UL-228) and trip variations remain unverified/undesigned.
+pin). Child trips (UL-228) turned out to be fully built (not unverified/undesigned as this section
+previously claimed) - see §4.2's strike for the two membership/location_hidden leaks found and
+fixed there. Trip variations remain unverified/undesigned.
 
 ### 2.5 Safety check-ins bridge the authenticated and unauthenticated worlds
 
@@ -417,9 +419,9 @@ Ordering within each tier is roughly by (user impact × risk × leverage). IDs r
 
 ### 4.2 Tier 2: Verification backlog (cheap to check, unknown risk)
 
-Each of these is "confirm, then either close or convert to a bug": child trips (UL-228), wiki
-section missing on one pin (UL-385), Wikipedia missing for some HRSH buildings (UL-354), takeout
-Parking.csv unreadable (UL-203), import-updates-names flow (UL-207). Closing these shrinks
+Each of these is "confirm, then either close or convert to a bug": wiki section missing on one pin
+(UL-385), Wikipedia missing for some HRSH buildings (UL-354), takeout Parking.csv unreadable
+(UL-203), import-updates-names flow (UL-207). Closing these shrinks
 `TODO.md` noise cheaply — batch several per session, with a repro test per confirmed bug.
 
 11. ~~**Password reset for SSO users** (UL-257)~~ RESOLVED 2026-07-19 (`def2c4d6`) — SSO-only
@@ -467,6 +469,14 @@ Parking.csv unreadable (UL-203), import-updates-names flow (UL-207). Closing the
     labels are blocked), but it wasn't clear beforehand: the edit form's hint only mentioned
     memberships, not hierarchy loss. Added a conditional warning shown only when the label
     actually has a parent or child.
+17. ~~**Child trips** (UL-228)~~ RESOLVED 2026-07-19 (`9b376efd`) — contrary to §2.4's prior
+    "unverified/undesigned" claim, the feature is fully built (link picker with autocomplete
+    search, ghost markers rendered on the parent trip's map). Found two privacy leaks instead:
+    `child_trip_uuid` resolution in the create/edit endpoints had no membership scoping at all
+    (any trip could be linked, not just ones the acting user belongs to, unlike the picker's own
+    search endpoint which was already correctly scoped), and the ghost-marker loop never checked
+    the child activity's `location_hidden` flag, unlike the identical check a few lines above it
+    for the parent trip's own activities. Both fixed.
 
 ### 4.3 Tier 3: High-leverage features (composable from existing infrastructure)
 
