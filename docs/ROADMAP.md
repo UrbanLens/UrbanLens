@@ -374,9 +374,18 @@ Ordering within each tier is roughly by (user impact × risk × leverage). IDs r
    first, per §3.1's own over-engineering warning.
 3. ~~**Finish/verify boundary-mate wiki access**~~ RESOLVED — see §1.3.1, fully committed and
    re-verified 2026-07-18.
-4. **Settings persistence bugs** (UL-34, UL-255, plus prompts-backlog: "remember last map
-   position" broken; theme page allows selecting two default map layers at once) — likely one
-   shared root cause in settings save/load; fix as a cluster.
+4. **Settings persistence bugs** — UPDATED 2026-07-18: this was NOT one shared root cause.
+   "Theme page allows selecting two default map layers at once" was already fixed (a JS
+   comment in `settings/index.html` around line 1830 describes and fixes exactly this symptom,
+   mirroring `map_center_mode`'s `selectMapMode()`) — server-side rendering is also provably
+   single-value-exclusive by construction (a straight `==` comparison per radio tile). UL-255
+   ("remember last map position") is server-side sound (see `test_save_map_position_view.py`
+   / `test_profile_map_center.py::GetMapCenterRememberModeTests`); `docs/PROBLEMS.md` has the
+   likely actual (client-side URL-precedence) cause — not a settings-save bug. UL-34 ("user
+   settings don't seem to properly save") remains genuinely unverified: it's
+   too vague to reproduce without asking Jess which specific setting/page - do that before
+   spending more time on it, rather than guessing at a shared cause that these two related
+   items turned out not to have.
 5. **Filter-view page defects cluster** (prompts backlog): page overflows footer; deleted
    include/exclude polygons resurrect on next draw; map preview doesn't refresh on criteria
    change; icon picker dead; badge picker lacks the map-sidebar's features. One agent should own
