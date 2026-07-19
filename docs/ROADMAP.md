@@ -392,8 +392,14 @@ Ordering within each tier is roughly by (user impact × risk × leverage). IDs r
    the whole page against the map sidebar as reference implementation (§2.3).
 6. **Pin-detail cache freshness** (UL-277) — items marked "fresh" after 10+ minutes;
    audit the freshness-window computation in `external_data.py`.
-7. **Filter correctness**: unrated pin passing a rating filter (UL-270); un-identifiable active
-   filter state (UL-271); sliders ignoring 0/"unrated" (UL-296).
+7. ~~**Filter correctness**: unrated pin passing a rating filter (UL-270); sliders ignoring
+   0/"unrated" (UL-296)~~ RESOLVED 2026-07-18 (`18d03c3d`) — `filter_by_criteria`'s min/max
+   rating and danger criteria used walrus-truthiness (`if x := ...:`), silently skipping the
+   filter whenever a slider was set to exactly 0; sibling filters (priority, vulnerability,
+   detail_pins) had already been correctly fixed to `is not None` at some earlier point, only
+   rating/danger were missed. Rating additionally needed 0 special-cased as "unrated" since the
+   app never persists a real `Review.rating=0` row (`pin_edit.py` deletes the review instead).
+   **Still open**: un-identifiable active filter state (UL-271) — unrelated, not investigated.
 8. **Bulk edit shared-properties display** (UL-353) and organize badge-edit cache staleness
    (UL-279).
 9. **Comment thread integrity** (UL-219) — replies to a deleted comment; define and test the

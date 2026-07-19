@@ -22,7 +22,7 @@ Features planned for this release.
 
 ## Bug Fixes
 * Starting map option: Remember doesn't appear to work. [UL-255]
-* When filtering the map by rating, I saw a single pin without a rating. [UL-270]
+* ~~When filtering the map by rating, I saw a single pin without a rating.~~ RESOLVED 2026-07-18 (`18d03c3d`): `filter_by_criteria`'s min/max_rating used `if x := ...:`, so a slider at 0 was silently ignored - min_rating=0 previously matched everything unfiltered (which reads as "I filtered by rating and saw an unrated pin"). Now min_rating=0 correctly matches every pin including unrated ones (0 is the floor, not a threshold, since there's no such thing as a stored rating=0 - see UL-296), and min_rating=1+ correctly excludes unrated pins. [UL-270]
 * I somehow got myself into a filter being active that I couldn't identify? [UL-271]
 * Quickly switching between map layers sometimes is weird. Foggy sat view, etc. (Foggy may have just been loading indicator??) [UL-273]
 * Cache time needs adjustments for some pin details data. Load page, wait 10 minutes, reload page, some items are marked as "fresh" [UL-277]
@@ -158,7 +158,7 @@ Features planned for future releases.
 * AI chat assistant to find, organize (add/remove badges), pin, etc. e.g. "Plan a trip to Washington DC" -> find 5 pins in DC that aren't visited, create trip, etc. Perhaps ask questions about invitees, visited/not visited, etc. [UL-293]
 * Convert remaining external services to plugins (weather, geocoding, search providers, routexl, wayback, overpass, datagov, digital commonwealth, apple maps, google earth, openhistoricalmap) [UL-294]
 * Automatically mark nearby PD, public parking, etc. [UL-295]
-* On the main map > filter sidepanel, sliders don't account for 0 (e.g. "unrated") [UL-296]
+* ~~On the main map > filter sidepanel, sliders don't account for 0 (e.g. "unrated")~~ RESOLVED 2026-07-18 (`18d03c3d`): `filter_by_criteria`'s min/max_rating AND min/max_danger used walrus-truthiness (`if x := criteria.get(...):`), which treats 0 as "not set" and skips the filter entirely. Fixed to `is not None`; rating additionally needed 0 special-cased as "unrated" (`reviews__isnull=True` for max_rating=0) since the app never persists an actual `Review.rating=0` row - `pin_edit.py` deletes the review instead. Danger needed only the simple fix, since it's a plain always-populated field where 0 is a real value. [UL-296]
 * Enable file watch in docker compose for development -> https://docs.docker.com/compose/how-tos/file-watch/ [UL-297]
 * "max members per trip" is not really the problem... "max pin shares per time period" is. We need to track and cap that instead, including through trips. [UL-299]
 * After invite -> Edit profile doesn't visually look very good. [UL-300]
