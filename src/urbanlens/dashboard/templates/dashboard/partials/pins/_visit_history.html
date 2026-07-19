@@ -4,7 +4,7 @@
     <div class="card-header">
         <i class="material-symbols-outlined">history</i>
         <h3>Visit History</h3>
-        {% if visits %}<span class="visit-count badge">{{ visits|length }}</span>{% endif %}
+        {% if page_obj.paginator.count %}<span class="visit-count badge">{{ page_obj.paginator.count }}</span>{% endif %}
         <button type="button" class="btn btn--icon-sm"
                 onclick="document.getElementById('visit-add-dialog-{{ pin.slug }}').showModal()"
                 title="Log a visit">

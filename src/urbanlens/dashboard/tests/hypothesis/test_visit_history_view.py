@@ -51,6 +51,19 @@ class VisitHistoryViewTests(TestCase):
 
         self.assertContains(response, "data-adaptive-pagination-list")
         self.assertContains(response, "data-adaptive-pagination-item")
+
+    def test_pagination_controls_appear_once_there_is_more_than_one_page(self):
+        """The pagination-bar itself (data-adaptive-pagination-controls) only
+        renders when page_obj.paginator.num_pages > 1 (_pagination_controls.html)
+        - a single-page visit list has nothing to paginate. Needs more than
+        _VISITS_PAGE_SIZE visits to actually exercise that markup."""
+        from urbanlens.dashboard.controllers.visits import _VISITS_PAGE_SIZE
+
+        for _ in range(_VISITS_PAGE_SIZE + 1):
+            baker.make(PinVisit, pin=self.pin)
+
+        response = self.client.get(reverse("pin.visits", args=[self.pin.slug]))
+
         self.assertContains(response, "data-adaptive-pagination-controls")
 
     def test_visit_list_batch_size_exceeds_typical_client_page_size(self):
@@ -60,3 +73,21 @@ class VisitHistoryViewTests(TestCase):
         from urbanlens.dashboard.controllers.visits import _VISITS_CLIENT_PAGE_SIZE, _VISITS_PAGE_SIZE
 
         self.assertGreater(_VISITS_PAGE_SIZE, _VISITS_CLIENT_PAGE_SIZE)
+
+    def test_visit_count_badge_shows_the_true_total_not_just_the_current_page(self):
+        """UL-114: the header badge used to render {{ visits|length }} - the
+        current server-side page's slice, not the true total - so once a pin
+        had more visits than one page holds, the badge understated the real
+        count (and changed misleadingly as you paged/toggled children),
+        matching the "issue with ... displaying visit history entries"
+        report. Matches _photo_gallery.html's sibling badge, which already
+        correctly uses page_obj.paginator.count."""
+        from urbanlens.dashboard.controllers.visits import _VISITS_PAGE_SIZE
+
+        total = _VISITS_PAGE_SIZE + 3
+        for _ in range(total):
+            baker.make(PinVisit, pin=self.pin)
+
+        response = self.client.get(reverse("pin.visits", args=[self.pin.slug]))
+
+        self.assertContains(response, f'<span class="visit-count badge">{total}</span>')
