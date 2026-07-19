@@ -195,6 +195,18 @@
     .material-symbols-outlined { font-size: 1rem; }
 }
 
+.comment-parent-deleted-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    margin: 0 0 .5rem;
+    font-size: .8rem;
+    font-style: italic;
+    color: var(--ul-grey-6);
+
+    .material-symbols-outlined { font-size: 1rem; }
+}
+
 // -- Reply button --------------------------------------------------------------
 
 .comment-reply-btn {

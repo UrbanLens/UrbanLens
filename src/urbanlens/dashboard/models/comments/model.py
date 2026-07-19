@@ -60,6 +60,14 @@ class Comment(abstract.FrontendDashboardModel):
     # deleted, so the comment can keep showing "map removed" instead of
     # silently losing all trace that one was ever here.
     map_removed = models.BooleanField(default=False)
+    # Set by this model's own pre_delete signal (see signals.py) on every
+    # reply of a comment that's about to be deleted, before `parent` is
+    # nulled out by SET_NULL below. Without this, a reply to a deleted
+    # comment silently becomes an unexplained top-level comment - UL-219.
+    # With it, the reply keeps rendering in place with a "[Original comment
+    # deleted]" placeholder standing in for the parent, instead of losing
+    # its thread context entirely.
+    parent_deleted = models.BooleanField(default=False)
 
     if TYPE_CHECKING:
         pin_id: int | None

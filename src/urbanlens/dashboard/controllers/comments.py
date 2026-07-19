@@ -102,6 +102,13 @@ def _build_context(comments_qs, profile: Profile, request: HttpRequest, **extra)
                 "rendered_text": html,
                 "reactions": _aggregate_reactions(c.reactions.all()),
                 "replies": replies_rendered,
+                # A reply whose parent was deleted also has parent=None, so it
+                # queries identically to a genuine top-level comment (see
+                # top_level_qs above) - this distinguishes the two so the
+                # template can render a "[Original comment deleted]"
+                # placeholder above it instead of showing it as if it had
+                # always stood on its own (UL-219).
+                "parent_was_deleted": c.parent_deleted,
             },
         )
     return {

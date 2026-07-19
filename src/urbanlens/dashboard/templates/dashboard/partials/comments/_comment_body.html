@@ -8,6 +8,11 @@
 </div>
 
 <div class="comment-body">
+  {% if parent_was_deleted %}
+  <p class="comment-parent-deleted-indicator">
+    <i class="material-symbols-outlined">forum</i> Replying to a comment that was deleted
+  </p>
+  {% endif %}
   <div class="comment-meta">
     <a href="{% url 'profile.view_user' comment.profile.slug %}" class="comment-author comment-author--link">{{ comment.profile.username }}</a>
     <span class="comment-date">{{ comment.created|human_timesince }}</span>
