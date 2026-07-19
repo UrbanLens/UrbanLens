@@ -417,12 +417,11 @@ Ordering within each tier is roughly by (user impact × risk × leverage). IDs r
 
 ### 4.2 Tier 2: Verification backlog (cheap to check, unknown risk)
 
-Each of these is "confirm, then either close or convert to a bug": visit-history display
-(UL-114), search-query disambiguation keywords (UL-117), child trips (UL-228), badge-kind-change
-UX (UL-155), wiki section missing on one pin (UL-385), Wikipedia missing for some HRSH buildings
-(UL-354), takeout Parking.csv unreadable (UL-203), import-updates-names flow (UL-207). Closing
-these shrinks `TODO.md` noise cheaply — batch several per session, with a repro test per
-confirmed bug.
+Each of these is "confirm, then either close or convert to a bug": search-query disambiguation
+keywords (UL-117), child trips (UL-228), badge-kind-change UX (UL-155), wiki section missing on
+one pin (UL-385), Wikipedia missing for some HRSH buildings (UL-354), takeout Parking.csv
+unreadable (UL-203), import-updates-names flow (UL-207). Closing these shrinks `TODO.md` noise
+cheaply — batch several per session, with a repro test per confirmed bug.
 
 11. ~~**Password reset for SSO users** (UL-257)~~ RESOLVED 2026-07-19 (`def2c4d6`) — SSO-only
     accounts were silently dropped by Django's stock `PasswordResetForm.get_users()`, while the
@@ -450,6 +449,13 @@ confirmed bug.
     near-identical ~50-line methods, consolidated into a shared `_render_media_carousel()` helper
     generic over the slide type. Surfaced an out-of-scope dead-code finding along the way (both
     methods' "no coordinates" branch is unreachable - logged in `docs/PROBLEMS.md`).
+14. ~~**Visit-history display** (UL-114)~~ RESOLVED 2026-07-19 (`0fc51d40`) — the header badge
+    rendered the current server-side page's item count, not the true total, so it understated the
+    count (and shifted around while paging/toggling children) on any pin with more than one page
+    of visits. Matched `_photo_gallery.html`'s sibling badge (`page_obj.paginator.count`). Also
+    fixed an unrelated pre-existing bug in the same test file, found while touching it: a
+    pagination-markup test asserted on `data-adaptive-pagination-controls` with only one visit
+    created, but that markup only renders once there's more than one page.
 
 ### 4.3 Tier 3: High-leverage features (composable from existing infrastructure)
 

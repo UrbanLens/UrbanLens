@@ -50,7 +50,7 @@ Features planned for this release.
 * Provide secondary safeguards for permissions. [UL-39]
 
 ## Features that need verification
-* Verify Feature: Possible issue with then pulling or displaying visit history entries. [UL-114]
+* ~~Verify Feature: Possible issue with then pulling or displaying visit history entries.~~ RESOLVED 2026-07-19 (`0fc51d40`): the "Visit History" header badge rendered the current server-side page's slice length, not the true total - understated the count (and shifted around while paging/toggling children) for any pin with more than one page of visits. Fixed to match `_photo_gallery.html`'s sibling badge (`page_obj.paginator.count`). [UL-114]
 * Verify Feature: When performing google or brave searches, add the street name, city, and state to the search query as optional keywords, to help disambiguate with unrelated results. [UL-117]
 * Add metadata for emojis (i.e. icons) to aid in searching for them. [UL-12]
 * ~~Clicking outside of a dialog closes it, which is great. But clicking in the dialog and dragging outside unexpectedly closes it.~~ VERIFIED-ALREADY-FIXED 2026-07-19 (`19b8baec`): a site-wide drag-guard in `themes/base.html` (mousedown/click backdrop tracking) already prevents this for every dialog; the add-pin dialog additionally carried a redundant duplicate copy of the same algorithm (removed, wired into the shared `data-closefn` mechanism instead). No dialog reproduces the bug. [UL-32]
