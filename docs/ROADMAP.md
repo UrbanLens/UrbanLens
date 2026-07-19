@@ -408,8 +408,12 @@ Ordering within each tier is roughly by (user impact × risk × leverage). IDs r
    panel now renders a "Replying to a comment that was deleted" tombstone placeholder instead of
    the reply silently reappearing as an unexplained top-level comment. Shared across pin and
    wiki comment panels (`_build_context`/`_comment_body.html`).
-10. **First-install "welcome back" login copy** (UL-179) and map initial-position flash
-    (UL-221) — small, but they're first-impression bugs.
+10. ~~**First-install "welcome back" login copy** (UL-179)~~ RESOLVED 2026-07-18 (`e9d374c5`).
+    ~~**Map initial-position flash** (UL-221)~~ RESOLVED-PENDING-BROWSER-VERIFICATION 2026-07-18
+    (`82f11178`) — a returning GPS-mode user's map silently jumped once a fresh geolocation fix
+    superseded the cached position it loaded at, contradicting the code's own comment that
+    already promised no jump; fixed to match that comment. Client-side JS - only verified the
+    fix renders, not actual browser behavior.
 
 ### 4.2 Tier 2: Verification backlog (cheap to check, unknown risk)
 
