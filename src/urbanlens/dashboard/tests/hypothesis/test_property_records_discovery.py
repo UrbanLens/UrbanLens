@@ -14,10 +14,15 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.property_jurisdiction.meta import AdapterType
 from urbanlens.dashboard.services.apis.property_records.discovery import (
     _extract_candidate_urls,
+    _extract_forms,
     _is_safe_public_url,
     _rank_candidates,
     _select_ai_candidate,
+    _select_ai_form_recipe,
+    apply_tier3_discovery,
+    discover_tier3_recipe,
 )
+from urbanlens.dashboard.services.apis.property_records.html_scrape import SearchField
 
 
 class ExtractCandidateUrlsTests(TestCase):
@@ -128,3 +133,140 @@ class SelectAiCandidateTests(TestCase):
         with mock.patch("urbanlens.dashboard.services.ai.factory.get_gateway", return_value=gateway):
             result = _select_ai_candidate(results)
         self.assertEqual(result, ("https://data.example.gov/resource/ab12-cd34.json", AdapterType.SOCRATA))
+
+
+class ExtractFormsTests(TestCase):
+    def test_extracts_action_method_and_input_names(self) -> None:
+        html = '<html><body><form action="/search" method="post"><input name="addr"><input name="apn"></form></body></html>'
+        forms = _extract_forms(html, "https://example.gov/page")
+        self.assertEqual(len(forms), 1)
+        self.assertEqual(forms[0]["action"], "https://example.gov/search")
+        self.assertEqual(forms[0]["method"], "POST")
+        self.assertEqual(forms[0]["inputs"], ["addr", "apn"])
+
+    def test_form_with_no_named_inputs_is_skipped(self) -> None:
+        html = '<html><body><form action="/search"><input type="submit"></form></body></html>'
+        self.assertEqual(_extract_forms(html, "https://example.gov/page"), [])
+
+    def test_relative_action_resolved_against_base_url(self) -> None:
+        html = '<html><body><form action="search.aspx"><input name="q"></form></body></html>'
+        forms = _extract_forms(html, "https://example.gov/parcels/index.aspx")
+        self.assertEqual(forms[0]["action"], "https://example.gov/parcels/search.aspx")
+
+    def test_missing_method_defaults_to_get(self) -> None:
+        html = '<html><body><form action="/search"><input name="q"></form></body></html>'
+        self.assertEqual(_extract_forms(html, "https://example.gov")[0]["method"], "GET")
+
+    def test_select_elements_count_as_named_inputs(self) -> None:
+        html = '<html><body><form action="/search"><select name="kind"></select></form></body></html>'
+        self.assertEqual(_extract_forms(html, "https://example.gov")[0]["inputs"], ["kind"])
+
+    def test_garbage_html_does_not_raise(self) -> None:
+        self.assertEqual(_extract_forms("<<<not html>>>", "https://example.gov"), [])
+
+    def test_no_forms_yields_empty_list(self) -> None:
+        self.assertEqual(_extract_forms("<html><body>no forms here</body></html>", "https://example.gov"), [])
+
+
+class SelectAiFormRecipeTests(TestCase):
+    """The model may only pick a form by index and a field name that genuinely exists on it."""
+
+    def _forms(self):
+        return [
+            {"action": "https://example.gov/search", "method": "GET", "inputs": ["addr", "submit"], "html": '<form action="/search"><input name="addr"><input name="submit" type="submit"></form>'},
+        ]
+
+    def test_no_forms_returns_none_without_calling_ai(self) -> None:
+        with mock.patch("urbanlens.dashboard.services.ai.factory.get_gateway") as get_gateway:
+            result = _select_ai_form_recipe([], "https://example.gov")
+        self.assertIsNone(result)
+        get_gateway.assert_not_called()
+
+    def test_ai_disabled_returns_none(self) -> None:
+        with mock.patch("urbanlens.dashboard.services.ai.factory.get_gateway", return_value=None):
+            result = _select_ai_form_recipe(self._forms(), "https://example.gov")
+        self.assertIsNone(result)
+
+    def test_valid_proposal_builds_a_recipe(self) -> None:
+        gateway = mock.Mock()
+        gateway.send_prompt.return_value = '{"form_index": 0, "search_field": "situs_address", "param_name": "addr"}'
+        with mock.patch("urbanlens.dashboard.services.ai.factory.get_gateway", return_value=gateway):
+            recipe = _select_ai_form_recipe(self._forms(), "https://example.gov")
+        assert recipe is not None
+        self.assertEqual(recipe.base_url, "https://example.gov/search")
+        self.assertEqual(recipe.search_field, SearchField.SITUS_ADDRESS)
+        self.assertEqual(recipe.param_name, "addr")
+
+    def test_hallucinated_field_name_not_on_the_real_form_is_rejected(self) -> None:
+        """Regression guard: the model must be cross-checked against the form's
+        real input names, not trusted outright - this is the core compliance
+        guarantee this discovery path relies on."""
+        gateway = mock.Mock()
+        gateway.send_prompt.return_value = '{"form_index": 0, "search_field": "situs_address", "param_name": "made_up_field_name"}'
+        with mock.patch("urbanlens.dashboard.services.ai.factory.get_gateway", return_value=gateway):
+            result = _select_ai_form_recipe(self._forms(), "https://example.gov")
+        self.assertIsNone(result)
+
+    def test_out_of_range_form_index_is_rejected(self) -> None:
+        gateway = mock.Mock()
+        gateway.send_prompt.return_value = '{"form_index": 5, "search_field": "situs_address", "param_name": "addr"}'
+        with mock.patch("urbanlens.dashboard.services.ai.factory.get_gateway", return_value=gateway):
+            result = _select_ai_form_recipe(self._forms(), "https://example.gov")
+        self.assertIsNone(result)
+
+    def test_invalid_search_field_is_rejected(self) -> None:
+        gateway = mock.Mock()
+        gateway.send_prompt.return_value = '{"form_index": 0, "search_field": "owner_name", "param_name": "addr"}'
+        with mock.patch("urbanlens.dashboard.services.ai.factory.get_gateway", return_value=gateway):
+            result = _select_ai_form_recipe(self._forms(), "https://example.gov")
+        self.assertIsNone(result)
+
+    def test_null_form_index_is_rejected(self) -> None:
+        gateway = mock.Mock()
+        gateway.send_prompt.return_value = '{"form_index": null}'
+        with mock.patch("urbanlens.dashboard.services.ai.factory.get_gateway", return_value=gateway):
+            result = _select_ai_form_recipe(self._forms(), "https://example.gov")
+        self.assertIsNone(result)
+
+    def test_action_on_a_different_host_is_rejected(self) -> None:
+        """A form action pointing at a different domain must never be trusted -
+        even if the model didn't invent it, cross-host redirection is exactly
+        the kind of thing this discovery path must not silently follow."""
+        forms = [{"action": "https://attacker.example.com/search", "method": "GET", "inputs": ["addr"], "html": ""}]
+        gateway = mock.Mock()
+        gateway.send_prompt.return_value = '{"form_index": 0, "search_field": "situs_address", "param_name": "addr"}'
+        with mock.patch("urbanlens.dashboard.services.ai.factory.get_gateway", return_value=gateway):
+            result = _select_ai_form_recipe(forms, "https://example.gov/page")
+        self.assertIsNone(result)
+
+
+class DiscoverTier3RecipeTests(TestCase):
+    def _jurisdiction(self, **overrides):
+        from urbanlens.dashboard.models.property_jurisdiction.model import PropertyJurisdiction
+
+        defaults = {"fips": "36001", "county_name": "Albany County", "state": "NY"}
+        defaults.update(overrides)
+        return PropertyJurisdiction(**defaults)
+
+    def test_no_assessor_url_returns_none_without_any_request(self) -> None:
+        with mock.patch("requests.get") as get:
+            result = discover_tier3_recipe(self._jurisdiction(assessor_url=""))
+        self.assertIsNone(result)
+        get.assert_not_called()
+
+
+class ApplyTier3DiscoveryTests(TestCase):
+    def test_saves_recipe_and_never_sets_last_verified(self) -> None:
+        from urbanlens.dashboard.models.property_jurisdiction.model import PropertyJurisdiction
+        from urbanlens.dashboard.services.apis.property_records.html_scrape import ScrapeRecipe
+
+        jurisdiction = PropertyJurisdiction.objects.create(fips="36001", county_name="Albany County", state="NY")
+        recipe = ScrapeRecipe(base_url="https://example.gov/search", search_field=SearchField.SITUS_ADDRESS, param_name="addr")
+
+        apply_tier3_discovery(jurisdiction, recipe)
+        jurisdiction.refresh_from_db()
+
+        self.assertEqual(jurisdiction.scrape_recipe["base_url"], "https://example.gov/search")
+        self.assertEqual(jurisdiction.adapter_type, AdapterType.CUSTOM_SCRAPER)
+        self.assertIsNone(jurisdiction.last_verified)
+        self.assertIn("NOT yet confirmed", jurisdiction.notes)

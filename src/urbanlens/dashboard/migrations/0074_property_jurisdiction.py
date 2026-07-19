@@ -101,7 +101,7 @@ class Migration(migrations.Migration):
                     "requires_captcha",
                     models.BooleanField(
                         default=False,
-                        help_text="County site puts a CAPTCHA in front of search - never attempted programmatically (see plan compliance section).",
+                        help_text="County site puts a CAPTCHA in front of search - never attempted programmatically.",
                     ),
                 ),
                 (

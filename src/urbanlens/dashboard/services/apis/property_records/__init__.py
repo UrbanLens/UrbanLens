@@ -13,3 +13,4 @@ Module map:
 * ``arcgis_socrata`` - the Tier 1 (free structured REST) gateway.
 * ``orchestrator`` - tries tiers in order for one jurisdiction and returns a ``PropertyRecord``.
 """
+from urbanlens.dashboard.services.apis.property_records.meta import SCRAPE_USER_AGENT

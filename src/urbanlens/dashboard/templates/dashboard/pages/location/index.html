@@ -11,6 +11,7 @@
     integrity="sha384-JP5UPxIO2Tm2o79Fb0tGYMa44jkWar53aBoCbd8ah0+LcCDoohTIYr+zIXyfGIJN" crossorigin="anonymous"></script>
 <script src="{% static 'js/page-tabs.js' %}" defer></script>
 <script src="{% static 'js/article-editor.js' %}" defer></script>
+<script type="module" src="{% static 'dashboard/js/article-wysiwyg.js' %}"></script>
 {% endblock %}
 
 {% block hero %}
@@ -142,7 +143,7 @@
     {# -- Title + details (swappable) ------------------------------------ #}
     <div id="pin-overview"
          hx-get="{% url 'pin.overview' pin.slug %}"
-         hx-trigger="load"
+         hx-trigger="load, pinOverviewChanged from:body"
          hx-swap="outerHTML">
         <div class="pin-details location-details card">
             <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
@@ -263,13 +264,16 @@
                     <i class="material-symbols-outlined">add_link</i>
                 </button>
             </div>
-            <div class="card__body">
+            <div class="card__body"
+                 hx-get="{% url 'pin.links' pin.slug %}"
+                 hx-trigger="pinLinksChanged from:body"
+                 hx-swap="innerHTML">
                 {% include "dashboard/partials/pins/_pin_links_row.html" with pin=pin links=pin.links.all add_url="pin.links" delete_url_name="pin.link.delete" row_id="pin-links-row" owner_slug=pin.slug use_dialog=True %}
             </div>
         </div>
 
         <div hx-get="{% url 'pin.aliases' pin.slug %}"
-            hx-trigger="load[!window.ulSectionCollapsed('pin','aliases')], ul:unhide"
+            hx-trigger="load[!window.ulSectionCollapsed('pin','aliases')], ul:unhide, pinAliasesChanged from:body"
             hx-swap="outerHTML"
             id="pin-aliases-panel"
             class="aliases-panel card card--secondary"

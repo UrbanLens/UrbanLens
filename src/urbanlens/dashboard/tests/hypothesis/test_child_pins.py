@@ -12,15 +12,14 @@ from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
 from urbanlens.dashboard.models.labels.meta import KIND_STATUS, KIND_TAG
 from urbanlens.dashboard.models.labels.model import Label
-from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_share import PinShare, PinShareStatus
 from urbanlens.dashboard.models.visits.model import PinVisit
 from urbanlens.dashboard.services.map_pins.autocomplete import search_local
-
 
 _coord_counter = 0
 
@@ -296,6 +295,117 @@ class PinPromoteChildrenViewTests(TestCase):
         self._promote(root)
         colliding_child.refresh_from_db()
         self.assertEqual(colliding_child.parent_pin_id, self.grandparent.pk)
+
+
+class PinSwapWithParentModelTests(TestCase):
+    """Pin.swap_with_parent() - the model-level hierarchy swap."""
+
+    def setUp(self) -> None:
+        self.profile = baker.make(User).profile
+        self.grandparent = _make_pin(self.profile, name="Grandparent")
+        self.parent = _make_pin(self.profile, name="Parent", parent_pin=self.grandparent)
+        self.child = _make_pin(self.profile, name="Child", parent_pin=self.parent)
+        self.sibling = _make_pin(self.profile, name="Sibling", parent_pin=self.parent)
+
+    def test_child_becomes_parent_of_former_parent(self) -> None:
+        old_parent = self.child.swap_with_parent()
+        self.assertEqual(old_parent.pk, self.parent.pk)
+        old_parent.refresh_from_db()
+        self.child.refresh_from_db()
+        self.assertEqual(old_parent.parent_pin_id, self.child.pk)
+
+    def test_child_takes_over_grandparent_slot(self) -> None:
+        self.child.swap_with_parent()
+        self.child.refresh_from_db()
+        self.assertEqual(self.child.parent_pin_id, self.grandparent.pk)
+
+    def test_child_becomes_top_level_when_parent_had_no_parent(self) -> None:
+        root = _make_pin(self.profile, name="Root")
+        sub = _make_pin(self.profile, name="Sub", parent_pin=root)
+        sub.swap_with_parent()
+        sub.refresh_from_db()
+        root.refresh_from_db()
+        self.assertIsNone(sub.parent_pin_id)
+        self.assertEqual(root.parent_pin_id, sub.pk)
+
+    def test_siblings_of_the_promoted_child_are_unaffected(self) -> None:
+        self.child.swap_with_parent()
+        self.sibling.refresh_from_db()
+        self.assertEqual(self.sibling.parent_pin_id, self.parent.pk)
+
+    def test_raises_when_pin_has_no_parent(self) -> None:
+        with self.assertRaises(ValueError):
+            self.grandparent.swap_with_parent()
+
+    def test_raises_on_location_conflict_at_grandparent_slot(self) -> None:
+        """Swapping a pin one level under a root pin would leave the old
+        parent as a second root pin at a Location that already has one."""
+        root = _make_pin(self.profile, name="Root")
+        conflicting_root = _make_pin(self.profile, name="Conflicting Root")
+        sub = _make_pin(self.profile, name="Sub", parent_pin=conflicting_root, location=root.location)
+        with self.assertRaises(ValueError):
+            sub.swap_with_parent()
+        sub.refresh_from_db()
+        self.assertEqual(sub.parent_pin_id, conflicting_root.pk)
+
+    def test_no_cycle_after_swap(self) -> None:
+        """The former parent's ancestor chain must never loop back to itself."""
+        self.child.swap_with_parent()
+        self.child.refresh_from_db()
+        self.parent.refresh_from_db()
+        chain = self.parent.ancestor_chain()
+        self.assertEqual([p.pk for p in chain], [self.child.pk, self.grandparent.pk])
+
+
+class PinSwapParentViewTests(TestCase):
+    """POST /map/pin/<slug>/swap-parent/ - the child-pin popup's promote-to-parent action."""
+
+    def setUp(self) -> None:
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+        self.client.force_login(self.user)
+        self.parent = _make_pin(self.profile, name="Parent")
+        self.parent.slug = self.parent.ensure_slug()
+        self.child = _make_pin(self.profile, name="Child", parent_pin=self.parent)
+        self.child.slug = self.child.ensure_slug()
+
+    def _swap(self, pin: Pin):
+        return self.client.post(reverse("pin.swap_parent", kwargs={"pin_slug": pin.slug or str(pin.uuid)}))
+
+    def test_swap_succeeds_and_reassigns_parent_pin(self) -> None:
+        response = self._swap(self.child)
+        self.assertEqual(response.status_code, 200)
+        self.parent.refresh_from_db()
+        self.assertEqual(self.parent.parent_pin_id, self.child.pk)
+
+    def test_response_reports_both_slugs(self) -> None:
+        response = self._swap(self.child)
+        data = response.json()
+        self.assertEqual(data["new_parent_slug"], self.child.slug)
+        self.assertEqual(data["new_child_slug"], self.parent.slug)
+
+    def test_rejects_root_pin_with_no_parent(self) -> None:
+        response = self._swap(self.parent)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("error", response.json())
+
+    def test_rejects_other_users_pin(self) -> None:
+        other = baker.make(User)
+        self.client.force_login(other)
+        response = self._swap(self.child)
+        self.assertEqual(response.status_code, 404)
+        self.parent.refresh_from_db()
+        self.assertIsNone(self.parent.parent_pin_id)
+
+    def test_location_conflict_returns_400_with_message(self) -> None:
+        root = _make_pin(self.profile, name="Root")
+        root.slug = root.ensure_slug()
+        conflicting_root = _make_pin(self.profile, name="Conflicting Root")
+        sub = _make_pin(self.profile, name="Sub", parent_pin=conflicting_root, location=root.location)
+        sub.slug = sub.ensure_slug()
+        response = self._swap(sub)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("location", response.json()["error"].lower())
 
 
 class DetailPinJsonChildrenTests(TestCase):

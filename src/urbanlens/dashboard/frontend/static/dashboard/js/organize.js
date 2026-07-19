@@ -3,13 +3,13 @@ import {
   getCsrfToken,
   htmxProcess,
   toast
-} from "./map-annotations-5jnnp4sj.js";
+} from "./article-wysiwyg-5jnnp4sj.js";
 import {
   IconPicker,
   renderIconGlyphHtml,
   resetIconPicker
-} from "./map-annotations-ee3vhq76.js";
-import"./map-annotations-6j5pq722.js";
+} from "./article-wysiwyg-ee3vhq76.js";
+import"./article-wysiwyg-2vd5xdaq.js";
 
 // src/urbanlens/dashboard/frontend/ts/shared/organize-icon-picker.ts
 var bulkStateUpdaters = new Map;

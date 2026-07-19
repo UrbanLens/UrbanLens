@@ -188,6 +188,41 @@ img.leaflet-marker-icon.is-selected {
     border-radius: 40% !important;
 }
 
+// Merge dialog map<->list sync (see map/index.html's "Merge" section) - same
+// UX as the trip page's map<->list hover-sync (.trip-map-marker--highlighted
+// in _trips.scss): the pin everything merges into is enlarged with a green
+// halo (matches .cat-merge-mini-card--target's green in the dialog list, see
+// _tags.scss) so it's unmistakable on the map; hovering either the marker or
+// its mini-card in the dialog highlights the other in amber. Both classes
+// coexist with .is-selected (every merge participant is also selected) -
+// declared after it so they win the cascade on the same element.
+.map-pin-icon-wrap.is-merge-target,
+.leaflet-marker-icon.is-merge-target {
+    transform: scale(1.35);
+    border-radius: 50% !important;
+    background: rgba($color-green-700, .25) !important;
+    box-shadow:
+        0 0 0 3px $color-green-700,
+        0 0 0 7px rgba($color-green-700, .35),
+        0 2px 10px rgba(0, 0, 0, .45) !important;
+    z-index: 1000 !important;
+}
+
+.map-pin-icon-wrap.is-merge-hover,
+.leaflet-marker-icon.is-merge-hover {
+    transform: scale(1.2);
+    box-shadow:
+        0 0 0 3px #f57c00,
+        0 0 0 6px rgba(245, 124, 0, .35),
+        0 2px 10px rgba(0, 0, 0, .45) !important;
+    z-index: 999 !important;
+}
+
+.cat-merge-mini-card--hover {
+    border-color: #f57c00;
+    box-shadow: 0 0 0 2px rgba(245, 124, 0, .35);
+}
+
 .map-pin-custom-img {
     width: 26px;
     height: 26px;
@@ -2887,6 +2922,21 @@ div.container .addr-search-bar {
 }
 
 .popup-actions .add-to-list-button {
+    @include icon-btn(24px);
+    color: rgba(255, 255, 255, .45);
+    margin-left: auto;
+
+    &:hover {
+        color: rgba(255, 255, 255, .9);
+        background: rgba(255, 255, 255, .1);
+    }
+}
+
+// Child pin popup only (see map-annotations.ts's detailPinPopupContent) -
+// margin-left:auto here (rather than on .edit-pin-button, which this popup
+// also has) pushes both it and the edit button after it to the popup's
+// bottom-right corner as a pair, matching .add-to-list-button's pattern above.
+.popup-actions .promote-pin-button {
     @include icon-btn(24px);
     color: rgba(255, 255, 255, .45);
     margin-left: auto;

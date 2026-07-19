@@ -411,6 +411,11 @@ urlpatterns = [
                                 name="pin.promote_children",
                             ),
                             path(
+                                "<slug:pin_slug>/swap-parent/",
+                                pin_edit.PinSwapParentView.as_view(),
+                                name="pin.swap_parent",
+                            ),
+                            path(
                                 "<slug:pin_slug>/link/",
                                 pin_edit.PinRelinkView.as_view(),
                                 name="pin.link",

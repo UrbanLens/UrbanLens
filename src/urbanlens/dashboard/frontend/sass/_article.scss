@@ -344,6 +344,56 @@ $article-serif: Georgia, 'Times New Roman', Times, serif;
     border-radius: 0 0 0 $radius-sm;
 }
 
+// -- WYSIWYG canvas (see frontend/ts/entries/article-wysiwyg.ts) -------------
+// TipTap mounts its own contenteditable `.ProseMirror` element as a child of
+// `[data-article-canvas]` - box-matches .article-editor-textarea above so
+// swapping between Source and visual mode doesn't shift layout. The
+// contenteditable itself gets the shared `.article-body` class (editorProps
+// in the TS entry), so headings/lists/tables/quotes/code all render with the
+// exact same typography as read mode and the preview pane - no separate
+// typography rules needed here, only editor chrome.
+.article-editor-canvas {
+    min-height: 24rem;
+    border: 1px solid var(--ul-grey-1b);
+    border-radius: 0 0 $radius-sm $radius-sm;
+    background: var(--ul-control-bg);
+    overflow-y: auto;
+
+    &[hidden] { display: none; }
+}
+
+.article-panel--preview-open .article-editor-canvas {
+    border-radius: 0 0 0 $radius-sm;
+}
+
+.article-editor-canvas .ProseMirror {
+    min-height: 24rem;
+    padding: .85rem 1rem;
+    outline: none;
+
+    p.is-editor-empty:first-child::before {
+        content: attr(data-placeholder);
+        float: left;
+        height: 0;
+        color: var(--ul-grey-4);
+        pointer-events: none;
+    }
+
+    img {
+        max-width: 100%;
+        border-radius: $radius-xs;
+    }
+
+    table .selectedCell {
+        background: color-mix(in srgb, var(--ul-color-accent-bg) 55%, transparent);
+    }
+}
+
+.article-mode-toggle.is-active {
+    background: var(--ul-color-accent-bg);
+    color: var(--ul-color-accent-fg);
+}
+
 .article-editor-preview {
     border: 1px solid var(--ul-grey-1b);
     border-left: none;

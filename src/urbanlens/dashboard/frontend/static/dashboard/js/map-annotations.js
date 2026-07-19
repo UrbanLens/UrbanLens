@@ -2,8 +2,8 @@ import {
   confirmAction,
   getCsrfToken,
   toast
-} from "./map-annotations-5jnnp4sj.js";
-import"./map-annotations-6j5pq722.js";
+} from "./article-wysiwyg-5jnnp4sj.js";
+import"./article-wysiwyg-2vd5xdaq.js";
 
 // src/urbanlens/dashboard/frontend/ts/shared/map-layers.ts
 var TILE_DEFS = {
@@ -978,6 +978,24 @@ function init() {
     _svShow(_svIdx + 1);
   };
   window._svShow = _svShow;
+  async function promotePinToParent(entry) {
+    if (!entry.slug || !entry.url)
+      return;
+    if (!await confirmAction({ title: "Make this the parent pin?", message: `"${entry.name || "This pin"}" will become the parent, and the current pin will become its child. Everything else - name, notes, reviews, photos, visit history - stays with each pin.`, confirmLabel: "Swap" })) {
+      return;
+    }
+    fetch(`/dashboard/map/pin/${encodeURIComponent(entry.slug)}/swap-parent/`, {
+      method: "POST",
+      headers: { "X-CSRFToken": getCsrfToken() }
+    }).then((r) => r.json().then((data) => ({ ok: r.ok, data }))).then(({ ok, data }) => {
+      if (!ok) {
+        toast.error(data.error || "Could not swap these pins.");
+        return;
+      }
+      toast.success("Pins swapped - taking you to the new parent pin.");
+      window.location.href = entry.url;
+    }).catch(() => toast.error("Could not swap these pins."));
+  }
   function detailPinPopupContent(entry) {
     const el = document.createElement("div");
     el.className = "pin-popup child-pin-popup";
@@ -990,6 +1008,17 @@ function init() {
                 ${entry.url ? `<a href="${escHtml(entry.url)}" class="view-full-pin">View Details</a>` : ""}
             </div>`;
     if (!entry.owner_name) {
+      const actions = el.querySelector(".popup-actions");
+      const promoteBtn = document.createElement("button");
+      promoteBtn.type = "button";
+      promoteBtn.className = "promote-pin-button";
+      promoteBtn.title = "Make this the parent pin";
+      promoteBtn.innerHTML = '<i class="material-symbols-outlined">swap_vert</i>';
+      promoteBtn.addEventListener("click", () => {
+        map.closePopup();
+        promotePinToParent(entry);
+      });
+      actions.appendChild(promoteBtn);
       const editBtn = document.createElement("button");
       editBtn.type = "button";
       editBtn.className = "edit-pin-button";
@@ -999,7 +1028,7 @@ function init() {
         map.closePopup();
         openDetailPinEditDialog(entry);
       });
-      el.querySelector(".popup-actions").appendChild(editBtn);
+      actions.appendChild(editBtn);
     }
     return el;
   }
@@ -1032,9 +1061,6 @@ function init() {
           marker: null
         };
         const marker = L.marker([dp.latitude, dp.longitude], { icon: detailIcon(entry), draggable: !entry.owner_name });
-        const tooltip = entry.owner_name && dp.name ? `${dp.name} — inside ${entry.owner_name}` : dp.name;
-        if (tooltip)
-          marker.bindTooltip(tooltip, { permanent: false, direction: "top", className: "detail-pin-tooltip" });
         if (entry.url) {
           marker.bindPopup(detailPinPopupContent(entry));
         } else {

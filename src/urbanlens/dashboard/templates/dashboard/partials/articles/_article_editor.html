@@ -37,12 +37,19 @@
             <button type="button" class="article-tool" data-md-action="table" title="Table"><i class="material-symbols-outlined">table</i></button>
             <button type="button" class="article-tool" data-md-action="hr" title="Horizontal rule"><i class="material-symbols-outlined">horizontal_rule</i></button>
             <span class="article-toolbar-spacer"></span>
+            <button type="button" class="article-tool article-mode-toggle" data-article-mode-toggle title="View/edit Markdown source">
+                <i class="material-symbols-outlined">code_blocks</i><span>Source</span>
+            </button>
             <button type="button" class="article-tool article-preview-toggle" data-article-preview-toggle title="Toggle live preview">
                 <i class="material-symbols-outlined">visibility</i><span>Preview</span>
             </button>
         </div>
 
         <div class="article-editor-split">
+            {# WYSIWYG canvas (frontend/ts/entries/article-wysiwyg.ts) - mounts here and #}
+            {# takes over as the primary editing surface once it loads; the textarea below #}
+            {# stays the actual form field and source of truth either way. #}
+            <div class="article-editor-canvas" data-article-canvas hidden></div>
             <textarea name="content" class="article-editor-textarea" data-article-textarea
                       rows="22" maxlength="{{ max_length }}"
                       placeholder="Write in Markdown - use ## for section headings, [text](url) for links, and [^1] for numbered references...">{{ article.content|default:"" }}</textarea>
@@ -54,7 +61,7 @@
         </div>
 
         <details class="article-editor-help">
-            <summary><i class="material-symbols-outlined">help</i> Formatting cheat sheet</summary>
+            <summary><i class="material-symbols-outlined">help</i> Markdown cheat sheet (for Source mode)</summary>
             <div class="article-editor-help-grid">
                 <div><code>## Heading</code> section heading</div>
                 <div><code>**bold**</code> <strong>bold</strong></div>

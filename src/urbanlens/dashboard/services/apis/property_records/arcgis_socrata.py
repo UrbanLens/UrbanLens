@@ -14,8 +14,7 @@ gateway can be pointed at are ~3,000 *different* domains sharing one
 the normal way - see ``ApiCallLog``), but each individual county server also
 needs its own, much gentler politeness pacing so one pin's fetch never
 hammers a specific small-county server that happens to be slow - see
-``_pace_host`` and the plan's compliance section ("rate-limit aggressively
-per-domain").
+``_pace_host``
 """
 
 from __future__ import annotations
@@ -37,7 +36,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 #: Minimum seconds between two requests to the same county server host -
-#: "1 req/2-3 sec" per the plan's compliance section; kept at the low end
+#: "1 req/2-3 sec"; kept at the low end
 #: since this also has to survive the central service-level rate limit.
 _MIN_HOST_INTERVAL_SECONDS = 2.0
 _HOST_PACE_CACHE_PREFIX = "proprec:hostpace:"
@@ -74,7 +73,7 @@ def _pace_host(url: str) -> None:
 class ArcGisSocrataGateway(Gateway):
     """Generic Tier 1 client for ArcGIS REST and Socrata SODA parcel layers."""
 
-    service_key: ClassVar[str] = "property_records_gis"
+    service_key: ClassVar[str] = "property_records_gis"  # pyright: ignore[reportIncompatibleVariableOverride]
     paid_service: ClassVar[bool] = False
 
     def _get_with_backoff(self, url: str, params: dict[str, Any]) -> requests.Response | None:

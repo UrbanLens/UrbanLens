@@ -167,6 +167,22 @@ class PinCustomFieldPanelTests(CustomFieldTestsBase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "cf-add-form")
 
+    def test_empty_state_renders_as_a_collapsible_explainer(self) -> None:
+        """The plain "Track anything extra..." paragraph became a collapsible
+        explainer (see _page_explainer.html), matching the Aliases section."""
+        response = self.client.get(reverse("pin.custom_fields", args=[self.pin.slug]))
+        content = response.content.decode()
+        self.assertIn("ul-page-explainer", content)
+        self.assertIn("ul-explainer-anchor", content)
+        self.assertIn("What are custom fields?", content)
+        self.assertIn("Track anything extra about your pins", content)
+        self.assertNotIn("cf-panel-empty", content)
+
+    def test_explainer_is_not_shown_once_a_field_exists(self) -> None:
+        self._field(name="Floors", field_type=CustomFieldType.NUMBER)
+        response = self.client.get(reverse("pin.custom_fields", args=[self.pin.slug]))
+        self.assertNotContains(response, "What are custom fields?")
+
     def test_panel_requires_pin_ownership(self) -> None:
         other_pin = baker.make(Pin, profile=baker.make("auth.User").profile, name="Not Yours")
         response = self.client.get(reverse("pin.custom_fields", args=[other_pin.slug]))

@@ -697,9 +697,38 @@ function init(): void {
     };
     window._svShow = _svShow;
 
+    // Promotes a direct child pin to take this pin's place as the parent -
+    // the child becomes the parent, and this pin becomes its child. Only
+    // ever offered for Pin-backed direct children (entry.slug set, no
+    // owner_name), same gating as the Edit button below.
+    async function promotePinToParent(entry: DetailPinEntry): Promise<void> {
+        if (!entry.slug || !entry.url) return;
+        if (!(await confirmAction({ title: "Make this the parent pin?", message: `"${entry.name || "This pin"}" will become the parent, and the current pin will become its child. Everything else - name, notes, reviews, photos, visit history - stays with each pin.`, confirmLabel: "Swap" }))) {
+            return;
+        }
+        fetch(`/dashboard/map/pin/${encodeURIComponent(entry.slug)}/swap-parent/`, {
+            method: "POST",
+            headers: { "X-CSRFToken": getCsrfToken() },
+        })
+            .then((r) => r.json().then((data) => ({ ok: r.ok, data })))
+            .then(({ ok, data }) => {
+                if (!ok) {
+                    toast.error(data.error || "Could not swap these pins.");
+                    return;
+                }
+                toast.success("Pins swapped - taking you to the new parent pin.");
+                // The pin this popup was on is no longer the top of this
+                // hierarchy - land on the new parent's own detail page.
+                window.location.href = entry.url as string;
+            })
+            .catch(() => toast.error("Could not swap these pins."));
+    }
+
     // Popup shown when a child pin's marker is clicked: name, which sub pin it
     // belongs to (for nested entries), and a link to that pin's own detail
-    // page - plus an Edit shortcut for this pin's own direct children.
+    // page - plus Edit/promote-to-parent shortcuts for this pin's own direct
+    // children (no hover tooltip - the click popup already covers this, and a
+    // separate hover tooltip here was previously unreadable in dark mode).
     function detailPinPopupContent(entry: DetailPinEntry): HTMLElement {
         const el = document.createElement("div");
         el.className = "pin-popup child-pin-popup";
@@ -712,6 +741,18 @@ function init(): void {
                 ${entry.url ? `<a href="${escHtml(entry.url)}" class="view-full-pin">View Details</a>` : ""}
             </div>`;
         if (!entry.owner_name) {
+            const actions = el.querySelector(".popup-actions")!;
+            const promoteBtn = document.createElement("button");
+            promoteBtn.type = "button";
+            promoteBtn.className = "promote-pin-button";
+            promoteBtn.title = "Make this the parent pin";
+            promoteBtn.innerHTML = '<i class="material-symbols-outlined">swap_vert</i>';
+            promoteBtn.addEventListener("click", () => {
+                map.closePopup();
+                void promotePinToParent(entry);
+            });
+            actions.appendChild(promoteBtn);
+
             const editBtn = document.createElement("button");
             editBtn.type = "button";
             editBtn.className = "edit-pin-button";
@@ -721,7 +762,7 @@ function init(): void {
                 map.closePopup();
                 openDetailPinEditDialog(entry);
             });
-            el.querySelector(".popup-actions")!.appendChild(editBtn);
+            actions.appendChild(editBtn);
         }
         return el;
     }
@@ -757,9 +798,10 @@ function init(): void {
                     };
                     // Nested entries (owner_name set) belong to a child pin and are
                     // display-only here - not draggable, edited on their own page.
+                    // No hover tooltip - the click popup below already covers name/
+                    // owner/actions, and a separate hover tooltip here was previously
+                    // unreadable in dark mode (dark text on a dark background).
                     const marker = L.marker([dp.latitude, dp.longitude], { icon: detailIcon(entry), draggable: !entry.owner_name });
-                    const tooltip = entry.owner_name && dp.name ? `${dp.name} — inside ${entry.owner_name}` : dp.name;
-                    if (tooltip) marker.bindTooltip(tooltip, { permanent: false, direction: "top", className: "detail-pin-tooltip" });
                     if (entry.url) {
                         marker.bindPopup(detailPinPopupContent(entry));
                     } else {

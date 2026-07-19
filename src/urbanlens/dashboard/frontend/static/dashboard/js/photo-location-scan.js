@@ -1,10 +1,10 @@
 import {
   getCsrfToken,
   toast
-} from "./map-annotations-5jnnp4sj.js";
+} from "./article-wysiwyg-5jnnp4sj.js";
 import {
   __require
-} from "./map-annotations-6j5pq722.js";
+} from "./article-wysiwyg-2vd5xdaq.js";
 
 // node_modules/exifr/dist/full.esm.mjs
 var e = typeof self != "undefined" ? self : global;

@@ -1,17 +1,18 @@
 """The standardized property-record schema every source tier normalizes into.
 
 Mirrors the target shape in ``docs/property-records-plan.md`` section 0.
-Every retrieval tier (only Tier 1 exists so far - see ``orchestrator.py``)
-builds one ``PropertyRecord`` regardless of which upstream service answered,
-so the pin-detail panel and the enrichment writer never need to know which
-tier or provider produced the data they're rendering.
+Every retrieval tier builds one ``PropertyRecord`` regardless of which
+upstream service answered, so the pin-detail panel and the enrichment writer
+never need to know which tier or provider produced the data they're
+rendering.
 
-Confidence/source provenance is tracked at the *record* level (``source``,
-``confidence``) rather than per-field, because only one tier is implemented
-today - there is nothing yet to disagree with. The plan's per-field
-authority-merging (section 4) is real follow-up work for once Tier 2/3 exist
-and a single property might combine data from more than one tier; adding it
-now would be speculative. See ``docs/PROBLEMS.md``.
+``source``/``confidence`` describe the record as a whole - for the common
+case where only one tier answered for a jurisdiction, that's the complete
+picture. When more than one tier contributed (``merge.merge_records``, per
+the plan's section 4), ``field_sources`` records which tier's data won for
+each individual field, and ``field_mismatches`` flags fields where tiers
+disagreed outright rather than one simply being blank - both are empty for a
+single-tier record.
 """
 
 from __future__ import annotations
@@ -123,6 +124,12 @@ class PropertyRecord:
     tax_history: tuple[TaxHistoryEntry, ...] = ()
     sales_history: tuple[SaleHistoryEntry, ...] = ()
     deed_document_links: tuple[str, ...] = ()
+    #: Field name -> tier number that supplied it. Only non-empty when
+    #: ``merge.merge_records`` combined more than one tier's results.
+    field_sources: dict[str, int] = field(default_factory=dict)
+    #: Field names where multiple tiers returned different non-empty values -
+    #: the plan's "flag mismatches rather than silently picking one."
+    field_mismatches: tuple[str, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-serializable dict, suitable for a ``LocationCache`` row."""
@@ -142,6 +149,8 @@ class PropertyRecord:
             "year_built": self.year_built,
             "assessed_value": self.assessed_value.to_dict() if self.assessed_value else None,
             "market_value": self.market_value,
+            "field_sources": dict(self.field_sources),
+            "field_mismatches": list(self.field_mismatches),
             "tax_history": [entry.to_dict() for entry in self.tax_history],
             "sales_history": [entry.to_dict() for entry in self.sales_history],
             "deed_document_links": list(self.deed_document_links),

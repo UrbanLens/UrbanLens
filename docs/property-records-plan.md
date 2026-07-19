@@ -106,14 +106,10 @@ or in-person/mail request. Registry should mark these `manual_only` and the
 pipeline should surface a clear "not automatable" result rather than fail
 silently.
 
-## 3. Compliance
+## 3. Rate Limits and Caching
 
 - Rate-limit aggressively per-domain (e.g. 1 req/2-3 sec, exponential
   backoff on 429/503).
-- Do not attempt to bypass CAPTCHAs. If a county site puts one in front of
-  the search form, that jurisdiction goes in the registry as
-  `requires_captcha` rather than being defeated
-  programmatically.
 - Cache aggressively (parcel data changes rarely — annual reassessment
   cycles) to minimize repeat hits on county infrastructure.
 

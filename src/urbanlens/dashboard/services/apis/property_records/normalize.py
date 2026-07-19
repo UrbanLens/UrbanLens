@@ -22,10 +22,17 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-#: Confidence assigned to a Tier 1 (structured government REST API) record.
-#: No competing tier exists yet to weigh against, so this is a flat constant -
-#: see schema.py's module docstring on why per-field confidence isn't built yet.
+#: Per-tier confidence constants, reflecting how structured/trustworthy each
+#: tier's data shape is - a free structured government REST API (Tier 1) is
+#: more reliable than an HTML page scrape (Tier 2/3), and a shared vendor
+#: template (Tier 2, battle-tested across many counties) is a bit more
+#: reliable than a bespoke per-county recipe (Tier 3, more likely to have an
+#: edge case the recipe author didn't anticipate). Used both as the record's
+#: own `confidence` for a single-tier result and as the tie-break ranking in
+#: `merge.merge_records` when more than one tier answers for the same field.
 TIER1_CONFIDENCE = 0.7
+TIER2_CONFIDENCE = 0.55
+TIER3_CONFIDENCE = 0.45
 
 _OWNER_SPLIT_MARKERS = (" & ", " AND ")
 
@@ -108,22 +115,42 @@ def _build_sales_history(mapped: dict[str, Any]) -> tuple[SaleHistoryEntry, ...]
     return (SaleHistoryEntry(sale_date=sale_date, price=sale_price),)
 
 
-def build_property_record(raw: dict[str, Any], *, jurisdiction: PropertyJurisdiction, provider: str, source_url: str = "") -> PropertyRecord:
-    """Normalize one Tier 1 raw attribute dict into a standardized ``PropertyRecord``.
+def build_property_record(
+    raw: dict[str, Any],
+    *,
+    jurisdiction: PropertyJurisdiction,
+    tier: int,
+    confidence: float,
+    provider: str,
+    source_url: str = "",
+    field_map: dict[str, str] | None = None,
+) -> PropertyRecord:
+    """Normalize one tier's raw label/attribute dict into a standardized ``PropertyRecord``.
+
+    Shared by every tier: Tier 1's raw ArcGIS/Socrata attribute dict and Tier
+    2/3's raw scraped label/value dict (``html_scrape.extract_label_value_pairs``)
+    are both just "some external system's names for these fields" - the same
+    heuristic ``field_mapping.map_fields`` resolution handles both, since
+    human-readable page labels ("Owner Name", "Total Assessed Value") survive
+    its normalize-then-match logic exactly as well as GIS attribute codes do.
 
     Args:
-        raw: The raw attribute dict from an ArcGIS/Socrata query result.
+        raw: The raw attribute/label dict from the tier's own source.
         jurisdiction: The county registry row this record came from (supplies
-            county/state/FIPS and any field-name override).
+            county/state/FIPS and, for Tier 1, the field-name override).
+        tier: Which tier produced this data (1, 2, or 3) - becomes ``source.tier``.
+        confidence: This tier's confidence constant (e.g. :data:`TIER1_CONFIDENCE`).
         provider: Human-readable provider label for ``source.provider``.
-        source_url: The exact endpoint queried, for ``source.url``.
+        source_url: The exact endpoint/page queried, for ``source.url``.
+        field_map: Field-name override to use instead of
+            ``jurisdiction.field_map`` - Tier 2 vendor templates and Tier 3
+            recipes don't necessarily share Tier 1's per-jurisdiction mapping.
+            Defaults to ``jurisdiction.field_map`` when not given.
 
     Returns:
-        A ``PropertyRecord`` with ``source.tier`` fixed at 1 and
-        ``confidence`` at :data:`TIER1_CONFIDENCE` - the only tier this
-        builder supports (see the module docstring).
+        A normalized ``PropertyRecord`` for this one tier's data.
     """
-    mapped = map_fields(raw, jurisdiction.field_map)
+    mapped = map_fields(raw, field_map if field_map is not None else jurisdiction.field_map)
     apn = _clean_str(mapped.get("apn"))
 
     return PropertyRecord(
@@ -131,8 +158,8 @@ def build_property_record(raw: dict[str, Any], *, jurisdiction: PropertyJurisdic
         county=jurisdiction.county_name,
         state=jurisdiction.state,
         fips=jurisdiction.fips,
-        source=RecordSource(tier=1, provider=provider, url=source_url),
-        confidence=TIER1_CONFIDENCE,
+        source=RecordSource(tier=tier, provider=provider, url=source_url),
+        confidence=confidence,
         parcel_id=apn,
         apn=apn,
         owner_name=_split_owner_names(mapped.get("owner_name")),

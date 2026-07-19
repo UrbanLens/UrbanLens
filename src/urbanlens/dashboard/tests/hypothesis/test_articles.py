@@ -231,6 +231,22 @@ class PinArticleViewTests(TestCase):
         self.assertContains(response, "article-edit-btn")
         self.assertContains(response, reverse("pin.article.edit", args=[self.pin.slug]))
 
+    def test_editor_renders_wysiwyg_canvas_and_source_toggle(self) -> None:
+        """The Markdown textarea is still the real form field (article-wysiwyg.ts
+        mirrors into it), but a WYSIWYG canvas mount point and a Source-mode
+        toggle should now also be present - see frontend/ts/entries/article-wysiwyg.ts."""
+        response = self.client.get(reverse("pin.article.edit", args=[self.pin.slug]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "data-article-canvas")
+        self.assertContains(response, "data-article-mode-toggle")
+        self.assertContains(response, "data-article-textarea")
+        self.assertContains(response, 'name="content"')
+
+    def test_pin_detail_page_loads_the_wysiwyg_editor_script(self) -> None:
+        response = self.client.get(reverse("pin.details", args=[self.pin.slug]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "dashboard/js/article-wysiwyg.js")
+
 
 class WikiArticleViewTests(TestCase):
     """Wiki article endpoints follow the standard wiki visibility gate."""
@@ -258,6 +274,11 @@ class WikiArticleViewTests(TestCase):
         self.client.force_login(self.outsider)
         response = self.client.get(reverse("location.wiki.article", args=[self.location.slug]))
         self.assertEqual(response.status_code, 404)
+
+    def test_wiki_page_loads_the_wysiwyg_editor_script(self) -> None:
+        response = self.client.get(reverse("location.wiki", args=[self.location.slug]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "dashboard/js/article-wysiwyg.js")
 
     def test_second_pinned_user_can_edit_community_article(self) -> None:
         save_article(editor=self.profile, content="v1", wiki=self.wiki)

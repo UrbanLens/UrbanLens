@@ -127,7 +127,7 @@ class BuildPropertyRecordTests(TestCase):
             "IMPVAL": "200000",
             "YEARBUILT": "1985",
         }
-        record = build_property_record(raw, jurisdiction=self._jurisdiction(), provider="ArcGIS REST", source_url="https://example.gov/MapServer/1")
+        record = build_property_record(raw, jurisdiction=self._jurisdiction(), tier=1, confidence=TIER1_CONFIDENCE, provider="ArcGIS REST", source_url="https://example.gov/MapServer/1")
 
         self.assertEqual(record.apn, "12.34-5-6")
         self.assertEqual(record.owner_name, ("Jane Smith",))
@@ -142,19 +142,19 @@ class BuildPropertyRecordTests(TestCase):
         self.assertEqual(record.confidence, TIER1_CONFIDENCE)
 
     def test_sparse_attributes_still_build_a_record(self) -> None:
-        record = build_property_record({}, jurisdiction=self._jurisdiction(), provider="ArcGIS REST")
+        record = build_property_record({}, jurisdiction=self._jurisdiction(), tier=1, confidence=TIER1_CONFIDENCE, provider="ArcGIS REST")
         self.assertEqual(record.situs_address, "")
         self.assertEqual(record.owner_name, ())
         self.assertIsNone(record.assessed_value)
 
     def test_malformed_values_are_dropped_not_raised(self) -> None:
         raw = {"YEARBUILT": "not-a-year", "TOTALVAL": "N/A"}
-        record = build_property_record(raw, jurisdiction=self._jurisdiction(), provider="ArcGIS REST")
+        record = build_property_record(raw, jurisdiction=self._jurisdiction(), tier=1, confidence=TIER1_CONFIDENCE, provider="ArcGIS REST")
         self.assertIsNone(record.year_built)
         self.assertIsNone(record.assessed_value)
 
     def test_field_map_override_is_applied(self) -> None:
-        record = build_property_record({"CUSTOM_OWNER_FIELD": "Bob Jones"}, jurisdiction=self._jurisdiction(field_map={"owner_name": "CUSTOM_OWNER_FIELD"}), provider="ArcGIS REST")
+        record = build_property_record({"CUSTOM_OWNER_FIELD": "Bob Jones"}, jurisdiction=self._jurisdiction(field_map={"owner_name": "CUSTOM_OWNER_FIELD"}), tier=1, confidence=TIER1_CONFIDENCE, provider="ArcGIS REST")
         self.assertEqual(record.owner_name, ("Bob Jones",))
 
 

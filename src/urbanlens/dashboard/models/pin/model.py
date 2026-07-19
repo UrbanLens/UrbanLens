@@ -383,6 +383,46 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
             promoted += 1
         return promoted
 
+    def swap_with_parent(self) -> Pin:
+        """Swap places with this pin's parent: this pin becomes the parent, the parent becomes its child.
+
+        The rest of the hierarchy is preserved - this pin takes over the
+        former parent's own parent slot (grandparent, or top-level if none),
+        and the former parent moves one level down to become this pin's
+        child. Three ordered saves keep every intermediate state cycle-free
+        (this pin is detached first, then the old parent is attached under
+        it, then this pin is reattached under the grandparent) - at no point
+        do two pins ever point at each other simultaneously.
+
+        Returns:
+            The former parent pin, now this pin's child.
+
+        Raises:
+            ValueError: This pin has no parent, or (only when the former
+                parent had no parent of its own, i.e. this pin would become
+                a new top-level pin) this pin's own Location already has a
+                top-level pin for this profile - the one-root-pin-per-
+                Location constraint (see ``promote_children`` for the same
+                check).
+        """
+        old_parent = self.parent_pin
+        if old_parent is None:
+            raise ValueError("This pin has no parent to swap with.")
+        grandparent_id = old_parent.parent_pin_id
+        if grandparent_id is None and Pin.objects.filter(profile_id=self.profile_id, location_id=self.location_id, parent_pin__isnull=True).exclude(pk=self.pk).exists():
+            raise ValueError("Can't complete the swap - you already have a top-level pin at this pin's own location.")
+
+        self.parent_pin = None
+        self.save(update_fields=["parent_pin", "updated"])
+
+        old_parent.parent_pin = self
+        old_parent.save(update_fields=["parent_pin", "updated"])
+
+        self.parent_pin_id = grandparent_id
+        self.save(update_fields=["parent_pin", "updated"])
+
+        return old_parent
+
     def backfill_wiki_link_slugs(self) -> None:
         """Ensure this pin, its location, and its wiki (if any) all have slugs.
 

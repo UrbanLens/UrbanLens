@@ -22,7 +22,11 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   property owner is permanent - automatic sources (external name lookups, AI extraction,
   keyword/AI auto-tagging) won't silently recreate something you removed
 - Private per-pin notes (`PinNote`), independent of public comments
-- **Private per-pin Article** — Wikipedia-style long-form private notes per pin (sections, links, references) with full **revision history** (every saved version stored, restorable from the Edit History tab)
+- **Articles** — Wikipedia-style long-form write-ups (sections, links, references) with full
+  **revision history** (every saved version stored, restorable from the Edit History tab); private
+  per-pin, or shared/community-editable per-wiki. Edited via a WYSIWYG canvas (click-to-format,
+  no Markdown syntax required) with a Markdown "Source" mode for power users/footnotes - saved as
+  plain Markdown either way
 - Pin sharing — share a single pin with one friend, including re-share chains; every share
   records a provenance chain (`LocationExposure`) of how a location reached each user
 - Import/export: Google Takeout (Saved Places, Location History, My Activity), GPX, GPX tracks,
@@ -74,13 +78,13 @@ On-demand, cached lookups shown as panels on the pin detail page:
 - **Wikimedia Commons**, **Smithsonian Open Access**, **Library of Congress** — archival photos/media
 - **National Park Service** (USA) — nearby park info
 - **LoopNet** (USA) — commercial real-estate listings
-- **Property Records** (USA) — automated county parcel ownership/tax/sale-history lookup via free
-  ArcGIS REST/Socrata county GIS endpoints, with US Census-based jurisdiction resolution; populates
-  the wiki's Ownership and Sale History cards with `OFFICIAL`-sourced records in addition to a
-  details card. Coverage depends on the county-by-county `PropertyJurisdiction` registry
-  (site-admin) — see `docs/property-records-plan.md` and `docs/PROBLEMS.md` for the tiered
-  fallback design and what's not automated yet (Tiers 2/3: vendor-platform and bespoke-scraper
-  counties)
+- **Property Records** (USA) — automated county parcel ownership/tax/sale-history lookup with a
+  4-tier fallback pipeline (free ArcGIS REST/Socrata county GIS, vendor-platform scraping,
+  bespoke per-county recipes, explicit manual-only), US Census-based jurisdiction resolution, and
+  per-field merging across whichever tiers a county has configured; populates the wiki's Ownership
+  and Sale History cards with `OFFICIAL`-sourced records in addition to a details card. Coverage
+  depends on the county-by-county `PropertyJurisdiction` registry (site-admin) — see
+  `docs/property-records-plan.md` and `docs/PROBLEMS.md` for the tiered design
 - **USGS Historical Topo Maps** (USA) — historical topographic maps
 - **Nominatim/OpenStreetMap** — reverse geocoding and place metadata (two panels: Nominatim structured data and Photon nearest-feature lookup)
 - **Regional Data** — US Census, Wildlife, Seismic, and EPA data loaded on demand per sub-tab

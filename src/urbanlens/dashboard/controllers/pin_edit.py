@@ -482,6 +482,30 @@ class PinPromoteChildrenView(LoginRequiredMixin, View):
         return JsonResponse({"ok": True, "promoted": promoted})
 
 
+class PinSwapParentView(LoginRequiredMixin, View):
+    """Swap a child pin with its parent - the child becomes the parent, and vice versa.
+
+    POST /map/pin/<pin_slug>/swap-parent/
+
+    ``pin_slug`` is the child pin being promoted. Returns JSON with both
+    pins' slugs so the caller can redirect/re-render appropriately (the
+    detail page a user is currently viewing may no longer be the "top-level"
+    one after this).
+    """
+
+    def post(self, request, pin_slug):
+        result = _pin_for_user(pin_slug, request)
+        if isinstance(result, HttpResponse):
+            return result
+        pin = result
+        try:
+            old_parent = pin.swap_with_parent()
+        except ValueError as exc:
+            return JsonResponse({"error": str(exc)}, status=400)
+        logger.info("User %s swapped pin %s with its parent %s", request.user.id, pin.id, old_parent.id)
+        return JsonResponse({"ok": True, "new_parent_slug": pin.slug, "new_child_slug": old_parent.slug})
+
+
 class PinRelinkView(LoginRequiredMixin, View):
     """Link a pin to a different Location, or detach it to its own bare Location.
 

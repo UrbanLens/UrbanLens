@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 from datetime import datetime, timedelta
+import json
 import logging
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
@@ -299,6 +300,41 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 "poll_interval": POLL_INTERVAL_SECONDS,
             },
         )
+
+    @staticmethod
+    def _notify_panel_ready(request: HttpRequest, response: HttpResponse, *events: str) -> HttpResponse:
+        """Tell other panels on the page to refresh themselves via HX-Trigger.
+
+        Some external-data fetches have side effects beyond their own panel -
+        an alias/link auto-added, or the pin's displayed name changed (see
+        services.locations.naming.update_location_name_from_external_sources,
+        called from NominatimPanelSource.fetch()). Those mutations happen
+        inside a Celery task with no HTTP response to attach a client event
+        to; this attaches it instead the next time the panel that triggered
+        them is rendered from the now-fresh cache - which is exactly the poll
+        request that follows the fetch completing - so sibling panels (e.g.
+        Aliases, Links, the title card) that finished loading first don't
+        stay stale until a manual page reload.
+
+        Only fires on an actual poll (``attempt`` >= 1): the very first,
+        synchronous request for a panel that turns out to already be cached
+        from a previous page view has nothing new to announce, and firing on
+        every one of those would trigger everyone else to needlessly refetch.
+
+        Args:
+            request: The current request (its ``?attempt=`` query param
+                signals a poll cycle - see ``_poll_attempt``).
+            response: The response to annotate.
+            *events: Client event names (e.g. ``"pinAliasesChanged"``) other
+                panels on the page listen for via ``hx-trigger="... from:body"``.
+
+        Returns:
+            The same response, for chaining.
+        """
+        if PinController._poll_attempt(request) < 1:
+            return response
+        response["HX-Trigger"] = json.dumps(dict.fromkeys(events, True))
+        return response
 
     def _pending_media(self, request: HttpRequest, pin: Pin, source_key: str):
         """Schedule a media provider's fetch and return its polling loader.
@@ -1032,7 +1068,12 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             **self._ai_extract_context(request, pin),
             "debug": self._debug_entry(request, "wikipedia", cached.query_key, from_cache=True, count=1),
         }
-        return render(request, "dashboard/partials/pins/pin_wikipedia.html", context)
+        response = render(request, "dashboard/partials/pins/pin_wikipedia.html", context)
+        # Wikipedia's own fetch never writes an alias itself, but it feeds the
+        # NameProvider pool the Aliases panel's own backfill (and Nominatim's
+        # fetch) read from - if that panel already rendered before this data
+        # became available, it needs telling to check again.
+        return self._notify_panel_ready(request, response, "pinAliasesChanged")
 
     def loopnet_info(self, request: HttpRequest, pin_slug: str):
         """
@@ -1198,7 +1239,11 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             return HttpResponse(status=204)
 
         context = {"place": data, "debug": self._debug_entry(request, "nominatim", cached.query_key, from_cache=True, count=1)}
-        return render(request, "dashboard/partials/pins/pin_nominatim.html", context)
+        response = render(request, "dashboard/partials/pins/pin_nominatim.html", context)
+        # NominatimPanelSource.fetch() can auto-add an OSM link and, via
+        # update_location_name_from_external_sources, an alias and/or the
+        # pin's own displayed name - tell every panel that could show that.
+        return self._notify_panel_ready(request, response, "pinAliasesChanged", "pinLinksChanged", "pinOverviewChanged")
 
     def azure_maps_info(self, request: HttpRequest, pin_slug: str):
         """
@@ -1309,7 +1354,11 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         context["pin"] = pin
         context.update(self._ai_extract_context(request, pin))
 
-        return render(request, "dashboard/partials/pins/_simple_info_panel.html", context)
+        response = render(request, "dashboard/partials/pins/_simple_info_panel.html", context)
+        if panel_key == "epa_echo_detail":
+            # EpaEchoDetailPanelSource.fetch() can auto-add a compliance-report link.
+            response = self._notify_panel_ready(request, response, "pinLinksChanged")
+        return response
 
     def usgs_topo_info(self, request: HttpRequest, pin_slug: str):
         """HTMX partial: USGS Historical Topographic Map Collection maps near the pin.

@@ -39,6 +39,11 @@
         "typescript": "^6.0.3"
     },
     "dependencies": {
+        "@tiptap/core": "^3.28.0",
+        "@tiptap/extension-image": "^3.28.0",
+        "@tiptap/extension-placeholder": "^3.28.0",
+        "@tiptap/extension-table": "^3.28.0",
+        "@tiptap/starter-kit": "^3.28.0",
         "bun": "^1.0.15",
         "dotenv": "^17.4.2",
         "dotenv-expand": "^13.0.0",
@@ -47,6 +52,7 @@
         "sass": "^1.101.0",
         "sass-loader": "^17.0.0",
         "semver": "^7.3.5",
+        "tiptap-markdown": "^0.9.0",
         "typescript": "^6.0.3",
         "yarn": "^1.22.19"
     },

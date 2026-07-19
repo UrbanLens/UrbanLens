@@ -50,12 +50,16 @@ logger = logging.getLogger(__name__)
 _CACHE_SOURCE = "property_records"
 
 
-def _fetch_payload(latitude: float, longitude: float) -> dict[str, Any]:
+def _fetch_payload(location: Location) -> dict[str, Any]:
     """Run the orchestrator and return the shared LocationCache payload shape.
 
     Args:
-        latitude: WGS-84 latitude.
-        longitude: WGS-84 longitude.
+        location: The Location to fetch a property record for. Its own
+            geocoded ``address`` (when already resolved - see
+            ``services.enrichment.AddressEnrichmentSource``) is passed
+            through as the Tier 2/3 search key; Tier 1's own GIS-derived
+            situs address still takes precedence over it when both run (see
+            ``orchestrator.get_property_record``'s docstring).
 
     Returns:
         ``{"available": True, ...PropertyRecord.to_dict()}`` on success, or
@@ -66,8 +70,10 @@ def _fetch_payload(latitude: float, longitude: float) -> dict[str, Any]:
     """
     from urbanlens.dashboard.services.apis.property_records.orchestrator import PropertyRecordsUnavailableError, get_property_record
 
+    latitude = float(location.latitude or 0)
+    longitude = float(location.longitude or 0)
     try:
-        record = get_property_record(latitude, longitude)
+        record = get_property_record(latitude, longitude, situs_address=location.address or "")
     except PropertyRecordsUnavailableError as exc:
         payload: dict[str, Any] = {"available": False, "reason": exc.reason, "message": str(exc)}
         if exc.reason == REASON_MANUAL_ONLY:
@@ -188,7 +194,12 @@ def _render_available(data: dict[str, Any]) -> dict[str, Any]:
     if data.get("market_value"):
         meta.append({"label": "Market value", "value": f"${data['market_value']:,.0f}"})
 
-    chips = [f"Tier {data['source']['tier']}", f"{data['confidence']:.0%} confidence"]
+    field_sources = data.get("field_sources") or {}
+    distinct_tiers = {data["source"]["tier"], *field_sources.values()}
+    chips = [f"Tier {data['source']['tier']}"] if len(distinct_tiers) <= 1 else [f"Tiers {', '.join(str(t) for t in sorted(distinct_tiers))}"]
+    chips.append(f"{data['confidence']:.0%} confidence")
+    if data.get("field_mismatches"):
+        chips.append("Sources disagree")
     if any(entry.get("delinquent") for entry in data.get("tax_history") or []):
         chips.append("Delinquent taxes")
 
@@ -230,7 +241,7 @@ class PropertyRecordsPanelSource(CoordinateGatedInfoPanelSource):
 
         lat = float(pin.effective_latitude or 0)
         lng = float(pin.effective_longitude or 0)
-        payload = _fetch_payload(lat, lng)
+        payload = _fetch_payload(pin.location)
         LocationCache.set(pin.location, self.cache_source, payload, query_key=f"{lat:.5f},{lng:.5f}")
         if payload.get("available"):
             _write_official_owners_and_sales(pin.location, payload)
@@ -271,7 +282,7 @@ class PropertyRecordsEnrichmentSource(LocationCacheEnrichmentSource):
         """
         lat = float(location.latitude or 0)
         lng = float(location.longitude or 0)
-        payload = _fetch_payload(lat, lng)
+        payload = _fetch_payload(location)
         if payload.get("available"):
             _write_official_owners_and_sales(location, payload)
         return payload, f"{lat:.5f},{lng:.5f}"

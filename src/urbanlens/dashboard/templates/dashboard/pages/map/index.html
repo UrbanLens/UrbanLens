@@ -1445,6 +1445,16 @@
             marker.openPopup();
         });
 
+        // Merge dialog map->list hover sync (see "-- Merge --" below) - a
+        // no-op whenever the dialog isn't open, so this costs nothing on the
+        // vast majority of markers/hovers.
+        marker.on('mouseover', function () {
+            if (_mergeDialogIsOpen()) _mergeHoverMiniCard(pin.uuid, true);
+        });
+        marker.on('mouseout', function () {
+            if (_mergeDialogIsOpen()) _mergeHoverMiniCard(pin.uuid, false);
+        });
+
         if (pin.id) {
             let _savedLat = parseFloat(pin.latitude);
             let _savedLng = parseFloat(pin.longitude);
@@ -3016,7 +3026,60 @@
             confirmBtn.innerHTML = '<i class="material-symbols-outlined">merge</i> Merge';
             confirmBtn.disabled = true;
         }
+        _setMergeTargetHighlight(_bulkMergeTargetUuid);
     }
+
+    // -- Merge target/hover highlight sync (map <-> list) ----------------------
+    // Same UX as the trip page's map<->list hover-sync (window.tripHighlightMarker
+    // / tripHighlightActivity in trips/detail.html): the target pin is enlarged
+    // and highlighted on the map so it's unmistakable, and hovering either a
+    // marker or its mini-card in the dialog highlights the other, both ways.
+    let _mergeTargetHighlightUuid = null;
+
+    function _mergeDialogIsOpen() {
+        const dlg = document.getElementById('bulk-merge-dialog');
+        return !!(dlg && dlg.open);
+    }
+
+    function _setMergeTargetHighlight(uuid) {
+        if (_mergeTargetHighlightUuid === uuid) return;
+        if (_mergeTargetHighlightUuid) _anyMarker(_mergeTargetHighlightUuid)?.getElement()?.classList.remove('is-merge-target');
+        _mergeTargetHighlightUuid = uuid || null;
+        if (uuid) _anyMarker(uuid)?.getElement()?.classList.add('is-merge-target');
+    }
+
+    function _mergeHoverMiniCard(uuid, on) {
+        document.querySelector(`.cat-merge-mini-card[data-merge-uuid="${uuid}"]`)?.classList.toggle('cat-merge-mini-card--hover', on);
+    }
+
+    // List (mini-card) -> map: hovering a card in the merge dialog highlights its marker.
+    document.getElementById('bulk-merge-dialog').addEventListener('mouseover', function (e) {
+        const card = e.target.closest('.cat-merge-mini-card');
+        if (card) _anyMarker(card.dataset.mergeUuid)?.getElement()?.classList.add('is-merge-hover');
+    });
+    document.getElementById('bulk-merge-dialog').addEventListener('mouseout', function (e) {
+        const card = e.target.closest('.cat-merge-mini-card');
+        if (card) _anyMarker(card.dataset.mergeUuid)?.getElement()?.classList.remove('is-merge-hover');
+    });
+
+    // Clear all highlight state on close (Cancel, backdrop/Esc, or a
+    // successful merge) - the mouse may have left a marker/card without a
+    // mouseout firing (e.g. the dialog closing programmatically), so sweep
+    // every selected pin's marker rather than relying on paired on/off events.
+    document.getElementById('bulk-merge-dialog').addEventListener('close', function () {
+        _setMergeTargetHighlight(null);
+        _selectedPinUuids.forEach(function (uuid) { _anyMarker(uuid)?.getElement()?.classList.remove('is-merge-hover'); });
+    });
+
+    // Marker DOM elements are recreated whenever the cluster layer regroups
+    // (zoom, spiderfy), dropping the .is-merge-target class - re-stamp it,
+    // same treatment _syncSelectionClasses gives .is-selected above.
+    function _syncMergeTargetClass() {
+        if (!_mergeTargetHighlightUuid || !_mergeDialogIsOpen()) return;
+        _anyMarker(_mergeTargetHighlightUuid)?.getElement()?.classList.add('is-merge-target');
+    }
+    clusterGroup.on('animationend spiderfied unspiderfied layeradd', _syncMergeTargetClass);
+    map.on('zoomend moveend', function () { requestAnimationFrame(_syncMergeTargetClass); });
 
     // Keep the open merge dialog mirrored to the map selection - in docked
     // (side) mode the map stays interactive, so users can keep clicking pins
