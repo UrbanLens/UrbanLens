@@ -419,11 +419,25 @@ Ordering within each tier is roughly by (user impact × risk × leverage). IDs r
 
 Each of these is "confirm, then either close or convert to a bug": visit-history display
 (UL-114), search-query disambiguation keywords (UL-117), child trips (UL-228), badge-kind-change
-UX (UL-155), password reset for SSO users (UL-257), dialog drag-outside-closes (UL-32),
-duplicate code between `location/index.html` and `satellite_view.html` (UL-288), wiki section
-missing on one pin (UL-385), Wikipedia missing for some HRSH buildings (UL-354), takeout
-Parking.csv unreadable (UL-203), import-updates-names flow (UL-207). Closing these shrinks
-`TODO.md` noise cheaply — batch several per session, with a repro test per confirmed bug.
+UX (UL-155), dialog drag-outside-closes (UL-32), duplicate code between `location/index.html`
+and `satellite_view.html` (UL-288), wiki section missing on one pin (UL-385), Wikipedia missing
+for some HRSH buildings (UL-354), takeout Parking.csv unreadable (UL-203), import-updates-names
+flow (UL-207). Closing these shrinks `TODO.md` noise cheaply — batch several per session, with a
+repro test per confirmed bug.
+
+11. ~~**Password reset for SSO users** (UL-257)~~ RESOLVED 2026-07-19 (`def2c4d6`) — SSO-only
+    accounts were silently dropped by Django's stock `PasswordResetForm.get_users()`, while the
+    view showed the same "check your email" success page regardless, so those users were told it
+    worked and got nothing. Added `SsoAwarePasswordResetForm` (matches SSO-only accounts too,
+    routes them to a distinct email naming their sign-in provider) while preserving
+    anti-enumeration. Also found and fixed the real reason none of this app's branded
+    `registration/*` templates (reset form/done/confirm/complete, the reset email subject, the
+    HTML email, even `logged_out.html`) were ever rendering: `TEMPLATES["DIRS"]` was empty, so
+    `django.contrib.admin`/`auth`'s own bundled templates of the same name silently won the
+    `app_directories` lookup (both registered ahead of `dashboard` in `INSTALLED_APPS`). Verified
+    directly via `get_template().origin.name` for every `registration/*` template - a class of
+    bug the existing test suite couldn't have caught, since tests use `assertContains` against
+    whatever template rendered without checking *which* template that was.
 
 ### 4.3 Tier 3: High-leverage features (composable from existing infrastructure)
 

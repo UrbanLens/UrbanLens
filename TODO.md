@@ -61,7 +61,7 @@ Features planned for this release.
 * User settings don't seem to properly save. [UL-34]
 * Verify the UX for changing the kind of a badge (do other properties get updated too, and is that clear?) [UL-155]
 * Verify: Child trips work as expected. [UL-228]
-* Password reset should work elegantly with SSO users. [UL-257]
+* ~~Password reset should work elegantly with SSO users.~~ RESOLVED 2026-07-19 (`def2c4d6`): SSO-only accounts (no usable password) were silently dropped by Django's stock `PasswordResetForm.get_users()` while the view showed the same "check your email" success page either way - so they were told it worked and got nothing. Added `SsoAwarePasswordResetForm` (includes SSO-only accounts, routes them to a distinct email naming their sign-in provider) while preserving anti-enumeration. Also fixed the actual reason none of the app's branded `registration/*` templates were rendering at all: `TEMPLATES["DIRS"]` was empty, so `django.contrib.admin`/`auth`'s bundled templates of the same name silently won (they're registered ahead of `dashboard` in `INSTALLED_APPS`). [UL-257]
 * Celery / async tasks: Move slow operations (API calls, geocoding, import jobs) to Celery tasks; all non-instant UI operations must show a progress indicator and use toast notifications on completion or failure [UL-119]
 
 # Future Features
