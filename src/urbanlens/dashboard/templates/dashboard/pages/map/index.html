@@ -4459,8 +4459,14 @@
         }
     }
 
+    // One-time cleanup: 'ul_addr_history_v1' used to be unscoped, so a shared
+    // browser leaked one user's typed search queries to the next user who
+    // logged in (UL-239). Drop the stale global entry; going forward the key
+    // carries the profile id, matching recentPinsKey below.
+    try { localStorage.removeItem('ul_addr_history_v1'); } catch (e) {}
+
     const _addrSearch = window.LocationSearchEngine.attach('addr', {
-        historyKey: 'ul_addr_history_v1',
+        historyKey: 'ul_addr_history_v1_{{ request.user.profile.id }}',
         recentPinsKey: 'ul_recent_pins_v1_{{ request.user.profile.id }}',
         sources: {
             localPins: { url: '{% url "map.autocomplete.local" %}' },

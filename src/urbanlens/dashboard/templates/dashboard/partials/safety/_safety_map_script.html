@@ -218,8 +218,13 @@ so it's always available by the time this script runs - no typeof guard needed.
                 setDestination(lat, lng);
             }
 
+            // One-time cleanup: this key used to be unscoped, leaking one
+            // user's typed safety-destination searches to the next user on a
+            // shared browser (UL-239) - especially sensitive here, since
+            // these are the exact places a user was planning to explore.
+            try { localStorage.removeItem('ul_safety_dest_history_v1'); } catch (e) {}
             window.LocationSearchEngine.attach('safety-map', {
-                historyKey: 'ul_safety_dest_history_v1',
+                historyKey: 'ul_safety_dest_history_v1_{{ request.user.profile.uuid|default:"" }}',
                 sources: {
                     localPins: { url: '{% url "map.autocomplete.local" %}' },
                     osmNominatim: true,

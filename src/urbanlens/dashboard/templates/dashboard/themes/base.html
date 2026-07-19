@@ -1326,8 +1326,12 @@
         // without Leaflet never touch it.
         function _ensureComposerSearch() {
             if (_composerSearch || typeof window.LocationSearchEngine === 'undefined') return;
+            // One-time cleanup: this key used to be unscoped, leaking one
+            // user's typed search queries to the next user on a shared
+            // browser (UL-239). See map/index.html's identical cleanup.
+            try { localStorage.removeItem('ul_composer_search_history_v1'); } catch (e) {}
             _composerSearch = window.LocationSearchEngine.attach('cmcc', {
-                historyKey: 'ul_composer_search_history_v1',
+                historyKey: 'ul_composer_search_history_v1_{{ request.user.profile.uuid|default:"" }}',
                 sources: {
                     localPins: { url: '{% url "map.autocomplete.local" %}' },
                     osmNominatim: true,
