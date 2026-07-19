@@ -16,7 +16,7 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
 - Pin types: location, building, entrance, POI, danger, other
 - Add pins by map click, coordinate entry, or place search/autocomplete; drag to reposition
 - Pin list view alongside the map (particularly useful while searching/filtering); "Add these pins to a list" bulk action from the pin list panel adds all currently-visible/filtered pins to a trip or saved collection at once
-- Bulk pin operations: multi-select, bulk edit, bulk merge, bulk delete (with undo)
+- Bulk pin operations: multi-select, bulk edit (description, rating, labels, parent pin), bulk merge, bulk delete (with undo)
 - Per-pin alternate names (**aliases**) — private aliases on a Pin vs. shared aliases on a Wiki;
   names are unique per pin/wiki case-insensitively. Deleting an auto-added alias, link, label, or
   property owner is permanent - automatic sources (external name lookups, AI extraction,
