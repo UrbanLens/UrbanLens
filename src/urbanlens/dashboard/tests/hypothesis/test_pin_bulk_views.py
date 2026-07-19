@@ -415,3 +415,71 @@ class PinParentSearchViewTests(TestCase):
     def test_short_query_returns_no_results(self) -> None:
         response = self._search({"q": "O"})
         self.assertEqual(response.json()["results"], [])
+
+
+class PinBulkExportViewTests(TestCase):
+    """POST /map/pins/bulk-export/ downloads the selected pins in the chosen format."""
+
+    def setUp(self) -> None:
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+        self.client.force_login(self.user)
+        self.pin_a = baker.make(Pin, profile=self.profile, name="Pin A")
+        self.pin_b = baker.make(Pin, profile=self.profile, name="Pin B")
+
+    def _export(self, fmt: str, uuids: list[str]):
+        return self.client.post(
+            reverse("pin.bulk_export"),
+            data={"format": fmt, "uuids": uuids},
+        )
+
+    def test_geojson_export_contains_selected_pins(self) -> None:
+        response = self._export("geojson", [str(self.pin_a.uuid), str(self.pin_b.uuid)])
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        names = {f["properties"]["name"] for f in data["features"]}
+        self.assertEqual(names, {"Pin A", "Pin B"})
+
+    def test_sets_content_disposition_with_matching_extension(self) -> None:
+        response = self._export("kml", [str(self.pin_a.uuid)])
+        self.assertIn('filename="pins.kml"', response["Content-Disposition"])
+        self.assertEqual(response["Content-Type"], "application/vnd.google-earth.kml+xml")
+
+    def test_csv_export_contains_selected_pins(self) -> None:
+        response = self._export("csv", [str(self.pin_a.uuid)])
+        text = response.content.decode()
+        self.assertIn("Pin A", text)
+        self.assertNotIn("Pin B", text)
+
+    def test_gpx_export_contains_selected_pins(self) -> None:
+        response = self._export("gpx", [str(self.pin_a.uuid)])
+        self.assertIn(b"Pin A", response.content)
+
+    def test_unknown_format_returns_400(self) -> None:
+        response = self._export("shapefile", [str(self.pin_a.uuid)])
+        self.assertEqual(response.status_code, 400)
+
+    def test_missing_uuids_returns_400(self) -> None:
+        response = self._export("csv", [])
+        self.assertEqual(response.status_code, 400)
+
+    def test_excludes_other_users_pins(self) -> None:
+        other_user = baker.make(User)
+        other_pin = baker.make(Pin, profile=other_user.profile, name="Not Mine")
+        response = self._export("csv", [str(other_pin.uuid)])
+        self.assertEqual(response.status_code, 404)
+
+    def test_only_exports_pins_owned_by_the_requester(self) -> None:
+        other_user = baker.make(User)
+        other_pin = baker.make(Pin, profile=other_user.profile, name="Not Mine")
+        response = self._export("csv", [str(self.pin_a.uuid), str(other_pin.uuid)])
+        text = response.content.decode()
+        self.assertIn("Pin A", text)
+        self.assertNotIn("Not Mine", text)
+
+    def test_a_child_pin_can_be_exported(self) -> None:
+        """The multi-select tool can select child pins now, so export must accept them."""
+        child = baker.make(Pin, profile=self.profile, parent_pin=self.pin_a, name="Child")
+        response = self._export("csv", [str(child.uuid)])
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Child", response.content.decode())

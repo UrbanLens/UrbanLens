@@ -44,6 +44,7 @@
     {% include "dashboard/partials/pins/_bulk_delete_dialog.html" %}
     {% include "dashboard/partials/pins/_bulk_merge_dialog.html" %}
     {% include "dashboard/partials/pins/_bulk_edit_dialog.html" %}
+    {% include "dashboard/partials/pins/_bulk_export_dialog.html" %}
     {% include "dashboard/partials/pin_lists/_add_to_list_dialog.html" %}
 
     {# -- Floating address search bar (shared component) -------------------- #}
@@ -2870,10 +2871,32 @@
         const editBtn = document.getElementById('bulk-select-edit-btn');
         const delBtn = document.getElementById('bulk-select-delete-btn');
         const listBtn = document.getElementById('bulk-select-list-btn');
+        const exportBtn = document.getElementById('bulk-select-export-btn');
         if (mergeBtn) mergeBtn.disabled = n < 2;
         if (editBtn) editBtn.disabled = n < 1;
         if (delBtn) delBtn.disabled = n < 1;
         if (listBtn) listBtn.disabled = n < 1;
+        if (exportBtn) exportBtn.disabled = n < 1;
+    }
+
+    // Submit the hidden bulk-export form for the current selection in the
+    // chosen format - a real form POST (not fetch) so the browser downloads
+    // the response via its own Content-Disposition handling.
+    function _exportSelection(format) {
+        const uuids = Array.from(_selectedPinUuids);
+        if (!uuids.length) return;
+        document.getElementById('bulk-export-format-field').value = format;
+        const uuidFieldsContainer = document.getElementById('bulk-export-uuid-fields');
+        uuidFieldsContainer.innerHTML = '';
+        uuids.forEach(function (u) {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'uuids';
+            input.value = u;
+            uuidFieldsContainer.appendChild(input);
+        });
+        document.getElementById('bulk-export-form').submit();
+        document.getElementById('bulk-export-dialog').close();
     }
 
     // Add every currently-selected pin to a list, via the same "Add to a List"

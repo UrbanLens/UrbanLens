@@ -163,6 +163,7 @@ urlpatterns = [
                     name="pin.bulk_edit.label_options",
                 ),
                 path("pins/parent-search/", pin_bulk.PinParentSearchView.as_view(), name="pin.parent_search"),
+                path("pins/bulk-export/", pin_bulk.PinBulkExportView.as_view(), name="pin.bulk_export"),
                 path("pins/<slug:pin_slug>/", maps.MapController.as_view({"get": "map_pin_json"}), name="map.pin.json"),
                 path(
                     "boundaries/",

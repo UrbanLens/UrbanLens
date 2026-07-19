@@ -285,3 +285,35 @@ class PinParentSearchView(LoginRequiredMixin, View):
                 ],
             },
         )
+
+
+class PinBulkExportView(LoginRequiredMixin, View):
+    """Download selected pins as GeoJSON/KML/GPX/CSV (UL-377/UL-382, plain form POST).
+
+    A plain (non-JSON) form POST, not fetch/JSON like the other bulk views -
+    submitted via a throwaway <form target="_blank"> so the browser handles
+    the file download itself from the Content-Disposition header, with no
+    URL-length limit on the pin count and no client-side blob handling.
+    """
+
+    def post(self, request: HttpRequest, *args, **kwargs) -> HttpResponse:
+        from urbanlens.dashboard.services.export_formats import EXPORT_FORMATS
+
+        fmt = request.POST.get("format", "")
+        if fmt not in EXPORT_FORMATS:
+            return HttpResponse("Unknown export format.", status=400)
+
+        uuids = [str(x) for x in request.POST.getlist("uuids")]
+        if not uuids:
+            return HttpResponse("No pins specified.", status=400)
+
+        profile = _request_profile(request)
+        pins = _owned_pins(profile, uuids).select_related("location")
+        if not pins.exists():
+            return HttpResponse("No matching pins.", status=404)
+
+        writer, extension, content_type = EXPORT_FORMATS[fmt]
+        content = writer(pins)
+        response = HttpResponse(content, content_type=content_type)
+        response["Content-Disposition"] = f'attachment; filename="pins.{extension}"'
+        return response
