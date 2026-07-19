@@ -504,9 +504,17 @@ close or convert to a bug."
 
 These have most of their machinery already built:
 
-1. **API cost tracking + reporting** (UL-52/53) — `ApiCallLog` already records calls; add
-   per-call cost estimates in gateways, an aggregation model, a site-admin report, and the
-   public combined-costs page. Unblocks informed decisions about every future integration.
+1. ~~**API cost tracking + reporting** (UL-52/53)~~ RESOLVED 2026-07-19 (`87ae885a`) — added
+   `ApiCallLog.cost_estimate` + `ServiceDefaults.cost_per_call`, wired through the single
+   already-centralized `log_api_call()`/`_do_request()` choke point (no per-gateway changes
+   needed), a `total_cost` aggregate on `summary_by_service()`, a cost column + 30-day total on
+   the site-admin API usage report, and a public `/costs/` transparency page. Also fixed a real
+   gap found while touching the admin report: it only ever iterated `SERVICE_REGISTRY`, silently
+   omitting all 46 plugin-declared services - switched to `all_service_defaults()`. Deliberately
+   seeded only one real `cost_per_call` value (`google_geocoding`, derived from its own existing
+   note) rather than fabricating pricing for the other 50+ paid services without a verifiable
+   published rate - populating the rest is real follow-up work, not a blocker on the
+   infrastructure landing.
 2. **Bulk rating + remaining bulk ops** (UL-193 rump) — `PinBulk*` framework exists.
 3. **Auto-visits from photo timestamps + Immich/Google Photos** (UL-361) — composes photo
    matching (§2.7) with the existing visit-suggestion confirm flow.
