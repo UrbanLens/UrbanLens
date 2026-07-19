@@ -518,7 +518,11 @@ These have most of their machinery already built:
 2. **Bulk rating + remaining bulk ops** (UL-193 rump) — `PinBulk*` framework exists.
 3. **Auto-visits from photo timestamps + Immich/Google Photos** (UL-361) — composes photo
    matching (§2.7) with the existing visit-suggestion confirm flow.
-4. **Geolocation visit creation** (UL-312) — one endpoint + the shared visit dialog.
+4. ~~**Geolocation visit creation** (UL-312)~~ VERIFIED-ALREADY-IMPLEMENTED 2026-07-19 — contrary
+   to this list treating it as unbuilt, `services.visits.record_geolocation_pin_visits()` already
+   creates a same-day `PinVisit(source=GEOLOCATION)` for every pin whose boundary contains the
+   device's point, wired end-to-end from a `MapController` endpoint through to the live GPS
+   success callback in `map/index.html`, with full existing test coverage. No code change needed.
 5. **Targeted exports + more formats** (UL-377, UL-382) — filtered export via the existing
    criteria engine; KML/GPX/GeoJSON/CSV writers mirror existing readers.
 6. ~~**Sunrise/sunset & golden hour** (UL-345)~~ RESOLVED 2026-07-19 (`034eec89`) — used Open-Meteo

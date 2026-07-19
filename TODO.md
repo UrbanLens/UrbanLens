@@ -168,7 +168,7 @@ Features planned for future releases.
 * Allow searching by social media handle (maybe? We definitely need a user preference to allow this) [UL-305]
 * Consider: "anonymize me" setting. [UL-309]
 * User setting for "make pins always private" - unless they manually attach to a location. [UL-310]
-* Create visit entry by geolocation. [UL-312]
+* ~~Create visit entry by geolocation.~~ VERIFIED-ALREADY-IMPLEMENTED 2026-07-19: `services.visits.record_geolocation_pin_visits()` already creates a `PinVisit(source=GEOLOCATION)` for every one of the profile's pins whose property boundary contains the device's current point (one per pin per calendar day), wired end-to-end from `MapController`'s geolocation endpoint through to `map/index.html`'s live GPS success callback (`_recordGeolocationVisit`, gated on the user's geolocation-tracking privacy setting). Already has full test coverage (`test_geolocation_visits.py`, 4/4 passing). No code change needed. [UL-312]
 * Specify / change API keys in admin settings (e.g. api key rotated, but we don't want to reboot to load new env) [UL-313]
 * In the pin import dialog, allow unselect all / select all for each section, and "make all private" type functionality. Also allow applying badges to every section at once (maybe). [UL-356]
 * Pin Details Page: Google Image Search [UL-357]
