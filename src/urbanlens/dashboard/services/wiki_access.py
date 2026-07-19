@@ -78,6 +78,61 @@ def location_visible_to(location: Location, profile: Profile) -> bool:
     return False
 
 
+def visible_wiki_location_ids(profile: Profile) -> set[int]:
+    """Location ids of every Wiki visible to *profile* - the queryset-shaped
+    counterpart to :func:`location_visible_to`, for callers that need the
+    whole visible set at once rather than a single yes/no check (e.g. the
+    custom-field REFERENCE picker's wiki queryset, ``custom_field_references
+    .referenceable_queryset``).
+
+    Includes every Location the profile has pinned directly, plus every
+    OTHER Location whose own boundary polygon contains one of the profile's
+    pinned points (see ``location_visible_to``'s docstring for why that
+    second case exists - nearly-identical coordinates can resolve to
+    distinct Location rows that are still the same real-world place).
+
+    Scoped to only consider boundaries for Locations that actually have a
+    Wiki - a naive version checking every location-default Boundary row in
+    the database against every point the profile has ever pinned would be an
+    unbounded N*M scan as the site grows; restricting the boundary side to
+    "locations with a wiki" keeps it proportional to how many wikis exist,
+    which is the only thing this check is ever used to find.
+
+    Args:
+        profile: The viewing profile.
+
+    Returns:
+        Set of Location primary keys whose Wiki is visible to *profile*.
+    """
+    from urbanlens.dashboard.models.boundary.model import Boundary
+    from urbanlens.dashboard.models.pin.model import Pin
+
+    direct_ids = set(Pin.objects.filter(profile=profile).values_list("location_id", flat=True))
+
+    # Same "location-default" boundary restriction as location_visible_to:
+    # only generated_polygon on a Boundary with no owning pin/wiki/profile is
+    # ever consulted here - never a user-editable one.
+    boundary_candidates = list(
+        Boundary.objects.filter(location__wiki__isnull=False, pin__isnull=True, wiki__isnull=True, profile__isnull=True)
+        .exclude(generated_polygon__isnull=True)
+        .exclude(location_id__in=direct_ids)
+        .values_list("location_id", "generated_polygon"),
+    )
+    if not boundary_candidates:
+        return direct_ids
+
+    points = []
+    seen_location_ids: set[int] = set()
+    for candidate_id, point in Pin.objects.filter(profile=profile).values_list("location_id", "location__point"):
+        if point is None or candidate_id in seen_location_ids:
+            continue
+        seen_location_ids.add(candidate_id)
+        points.append(point)
+
+    matched_ids = {location_id for location_id, polygon in boundary_candidates if any(polygon.contains(point) for point in points)}
+    return direct_ids | matched_ids
+
+
 def resolve_visible_wiki(request: HttpRequest, location_slug: str) -> tuple[Location, Wiki, Profile]:
     """Resolve a Location and its Wiki, 404ing unless the requester has pinned that Location.
 

@@ -96,6 +96,22 @@ def _build_context(comments_qs, profile: Profile, request: HttpRequest, **extra)
     # Set of profile IDs whose images should be blurred for this viewer.
     blurred_profiles: set[int] = {p.pk for p in all_commenters if p != profile and not profile.can_view_photos_from(p)}
 
+    # A comment's content is already all-or-nothing gated below by
+    # can_view_comments_from (comment_visibility) - but once it passes that
+    # gate, the author's own name/avatar weren't separately masked per their
+    # profile_visibility (docs/PROBLEMS.md gap). Wiki/trip comments can have
+    # many different authors a viewer might not otherwise have standing to
+    # see; pin comments are always self-authored (the pin owner is the only
+    # possible viewer), so this is a no-op there (resolve_visible_identity
+    # never masks a profile from itself).
+    from urbanlens.dashboard.services.identity_visibility import mask_profile_references
+
+    author_refs: list[Profile] = []
+    for c in top_level:
+        author_refs.append(c.profile)
+        author_refs.extend(r.profile for r in c.replies.all())
+    mask_profile_references(profile, author_refs)
+
     rendered = []
     for c in top_level:
         if not profile.can_view_comments_from(c.profile):

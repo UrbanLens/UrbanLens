@@ -9,7 +9,6 @@ from unittest.mock import patch
 
 from django.contrib.auth.models import User
 from django.test import RequestFactory
-from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
@@ -241,53 +240,6 @@ class PinOverviewAddressBackfillDispatchTests(TestCase):
             response = PinOverviewView.as_view()(req, pin_slug=self.pin.slug)
         self.assertEqual(response.status_code, 200)
         mock_geocode.assert_not_called()
-
-
-class PinOverviewEditableTitleTests(TestCase):
-    """The pin title renders as a click-to-edit-in-place element, wired to pin.edit.
-
-    The title itself lives in the page hero (``_pin_detail_hero_body.html``,
-    ``.pin-name-editable``), which ``PinOverviewView`` renders as an OOB swap
-    alongside the overview partial - see ``PinHeroEditableNameTests`` in
-    ``test_pin_hero_editable_name.py`` for the full-page-render coverage of
-    the same markup.
-    """
-
-    def setUp(self) -> None:
-        self.factory = RequestFactory()
-        self.profile = baker.make(User).profile
-        self.user = self.profile.user
-        self.pin = baker.make(Pin, profile=self.profile, name="Old Factory")
-
-    def _get(self, pin=None):
-        pin = pin or self.pin
-        req = self.factory.get(f"/map/pin/{pin.slug}/overview/")
-        req.user = self.user
-        with (
-            patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None),
-            # pin.location.cached_place_name is falsy for a fresh baker Location (no
-            # GooglePlace stub relation), so PinOverviewView.get() tries to enqueue a
-            # real Celery task here - mock it so the test never touches a broker.
-            patch("urbanlens.dashboard.services.celery.safely_enqueue_task"),
-        ):
-            return PinOverviewView.as_view()(req, pin_slug=pin.slug)
-
-    def test_title_is_marked_editable(self) -> None:
-        content = self._get().content.decode()
-        self.assertIn("pin-name-editable", content)
-
-    def test_title_carries_the_raw_name_for_the_edit_input(self) -> None:
-        content = self._get().content.decode()
-        self.assertIn('data-raw-name="Old Factory"', content)
-
-    def test_title_falls_back_to_the_location_derived_name(self) -> None:
-        unnamed_pin = baker.make(Pin, profile=self.profile, name=None)
-        content = self._get(unnamed_pin).content.decode()
-        self.assertIn(f'data-raw-name="{unnamed_pin.effective_name}"', content)
-
-    def test_title_wiring_posts_to_pin_edit(self) -> None:
-        content = self._get().content.decode()
-        self.assertIn(reverse("pin.edit", args=[self.pin.slug]), content)
 
 
 class PinOverviewEditableDescriptionTests(TestCase):

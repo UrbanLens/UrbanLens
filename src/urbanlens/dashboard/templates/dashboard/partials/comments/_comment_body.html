@@ -1,9 +1,9 @@
 {% load dashboard_tags %}
 <div class="comment-avatar {% if is_reply %}comment-avatar--sm{% endif %}">
-  {% if comment.profile.avatar %}
-  <img src="{{ comment.profile.avatar.url }}" alt="" class="comment-avatar-img">
+  {% if comment.profile.display_avatar_url %}
+  <img src="{{ comment.profile.display_avatar_url }}" alt="" class="comment-avatar-img">
   {% else %}
-  <span class="comment-avatar-initial">{{ comment.profile.username|first|upper }}</span>
+  <span class="comment-avatar-initial {{ comment.profile.avatar_color_class }}">{{ comment.profile.display_name|first|upper }}</span>
   {% endif %}
 </div>
 
@@ -14,7 +14,11 @@
   </p>
   {% endif %}
   <div class="comment-meta">
-    <a href="{% url 'profile.view_user' comment.profile.slug %}" class="comment-author comment-author--link">{{ comment.profile.username }}</a>
+    {% if comment.profile.is_masked %}
+    <span class="comment-author">{{ comment.profile.display_name }}</span>
+    {% else %}
+    <a href="{{ comment.profile.display_profile_url }}" class="comment-author comment-author--link">{{ comment.profile.display_name }}</a>
+    {% endif %}
     <span class="comment-date">{{ comment.created|human_timesince }}</span>
     {% if comment.profile == profile %}
     <button type="button" class="comment-delete-btn" title="Delete"

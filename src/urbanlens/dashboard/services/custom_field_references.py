@@ -63,11 +63,18 @@ def referenceable_queryset(kind: str, profile: Profile) -> QuerySet:
     from urbanlens.dashboard.models.profile.model import Profile as ProfileModel
     from urbanlens.dashboard.models.trips.model import Trip
     from urbanlens.dashboard.models.wiki.model import Wiki
+    from urbanlens.dashboard.services.wiki_access import visible_wiki_location_ids
 
     if kind == "pin":
         return Pin.objects.filter(profile=profile)
     if kind == "wiki":
-        return Wiki.objects.filter(location__pins__profile=profile).select_related("location").distinct()
+        # location__pins__profile=profile alone missed boundary-mate wikis -
+        # a pin can sit on the same real-world place as an existing wiki but
+        # at a different Location row (nearly-identical coordinates can
+        # resolve to distinct rows) - see visible_wiki_location_ids, the same
+        # boundary-matching wiki_access.location_visible_to already uses for
+        # whether a wiki page itself is reachable at all.
+        return Wiki.objects.filter(location_id__in=visible_wiki_location_ids(profile)).select_related("location")
     if kind == "markup_map":
         return MarkupMap.objects.filter(profile=profile)
     if kind == "trip":

@@ -386,6 +386,10 @@ class ConversationOlderMessagesView(LoginRequiredMixin, View):
                 "image_permission_status": _image_permission_status(profile, partner),
                 "has_more_older": has_more_older,
                 "oldest_message_id": messages[0].pk if messages else None,
+                # _message_items.html's quoted-reply header needs display_name
+                # to mask the partner's identity the same way the initial
+                # page (_thread_context) already does.
+                **display_identity_for(profile, partner),
             },
         )
 

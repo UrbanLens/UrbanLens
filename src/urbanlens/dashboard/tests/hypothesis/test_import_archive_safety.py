@@ -31,6 +31,7 @@ from urbanlens.dashboard.services.import_data import (
     _import_pins,
     _ImportValidationError,
 )
+from urbanlens.dashboard.services.malware_scan import MalwareScanUnavailableError
 
 
 def _write_zip(zip_path: str, entries: dict[str, bytes]) -> None:
@@ -129,6 +130,63 @@ class ExtractAndValidateSafetyTests(SimpleTestCase):
     def test_missing_upload_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as workdir, self.assertRaises(_ImportValidationError):
             _extract_and_validate(os.path.join(workdir, "gone.zip"), os.path.join(workdir, "out"), job_id="test-job")
+
+
+class ExtractedFileScanningTests(SimpleTestCase):
+    """Every non-JSON file extracted from the archive is malware-scanned and
+    content-sniffed before any importer (present or future) ever opens it -
+    see _scan_extracted_files. clamav_enabled is forced False in the test
+    settings (no real clamd daemon available here), so malware_error_for_upload
+    is mocked directly to exercise the infected/unavailable branches; the
+    content-type mismatch checks below run for real, against actual magic
+    bytes, since that check needs no external service."""
+
+    def _run(self, entries: dict[str, bytes]) -> str:
+        with tempfile.TemporaryDirectory() as workdir:
+            zip_path = os.path.join(workdir, "upload.zip")
+            _write_zip(zip_path, entries)
+            extract_dir = os.path.join(workdir, "out")
+            return _extract_and_validate(zip_path, extract_dir, job_id="test-job")
+
+    def test_clean_archive_with_a_real_photo_passes(self) -> None:
+        entries = _valid_entries()
+        # Real JPEG magic bytes (FF D8 FF) under a matching .jpg extension.
+        entries["urbanlens_export_2026-07-18/photos/cover.jpg"] = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00" + b"\x00" * 32
+        self.assertTrue(self._run(entries))
+
+    def test_content_type_mismatch_is_rejected(self) -> None:
+        """A file claiming to be a photo (.jpg extension) whose real bytes are
+        a PDF (magic bytes %PDF) must be rejected - the same check that
+        catches a spoofed direct upload via images.image_upload_error."""
+        entries = _valid_entries()
+        entries["urbanlens_export_2026-07-18/photos/cover.jpg"] = b"%PDF-1.4\n" + b"\x00" * 32
+        with self.assertRaises(_ImportValidationError) as ctx:
+            self._run(entries)
+        self.assertIn("cover.jpg", str(ctx.exception))
+        self.assertIn("doesn't match its file type", str(ctx.exception))
+
+    def test_json_files_are_never_scanned_or_sniffed(self) -> None:
+        """manifest.json/pins.json are the export's own structured data, not a
+        user media upload - even with malware_error_for_upload mocked to flag
+        everything, a JSON-only archive must still pass."""
+        with mock.patch("urbanlens.dashboard.services.malware_scan.malware_error_for_upload", return_value="infected"):
+            self.assertTrue(self._run(_valid_entries()))
+
+    def test_infected_file_is_rejected(self) -> None:
+        entries = _valid_entries()
+        entries["urbanlens_export_2026-07-18/photos/cover.jpg"] = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00" + b"\x00" * 32
+        with mock.patch("urbanlens.dashboard.services.malware_scan.malware_error_for_upload", return_value="This file was flagged as malicious"), self.assertRaises(_ImportValidationError) as ctx:
+            self._run(entries)
+        self.assertIn("cover.jpg", str(ctx.exception))
+        self.assertIn("malicious", str(ctx.exception))
+
+    def test_scanner_unavailable_is_a_retryable_error_not_a_permanent_rejection(self) -> None:
+        entries = _valid_entries()
+        entries["urbanlens_export_2026-07-18/photos/cover.jpg"] = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00" + b"\x00" * 32
+        with mock.patch("urbanlens.dashboard.services.malware_scan.malware_error_for_upload", side_effect=MalwareScanUnavailableError("down")), self.assertRaises(_ImportValidationError) as ctx:
+            self._run(entries)
+        self.assertIn("temporarily unavailable", str(ctx.exception))
+        self.assertNotIn("malicious", str(ctx.exception))
 
 
 class ImportConnectionsTrustTests(TestCase):

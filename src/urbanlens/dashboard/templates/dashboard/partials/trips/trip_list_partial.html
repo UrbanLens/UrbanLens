@@ -61,11 +61,11 @@
             <div class="trip-card-footer">
                 <div class="trip-card-members" aria-label="{{ t.member_count }} member{{ t.member_count|pluralize }}">
                     {% for membership in t.memberships.all|slice:":4" %}
-                    <span class="trip-card-member-avatar" title="@{{ membership.profile.user.username }}">
-                        {% if membership.profile.avatar %}
-                        <img src="{{ membership.profile.avatar.url }}" alt="" class="trip-card-member-avatar-img">
+                    <span class="trip-card-member-avatar" title="{% if membership.profile.is_masked %}{{ membership.profile.display_name }}{% else %}@{{ membership.profile.user.username }}{% endif %}">
+                        {% if membership.profile.display_avatar_url %}
+                        <img src="{{ membership.profile.display_avatar_url }}" alt="" class="trip-card-member-avatar-img">
                         {% else %}
-                        <span class="trip-card-member-avatar-initial">{{ membership.profile.user.username|first|upper }}</span>
+                        <span class="trip-card-member-avatar-initial">{{ membership.profile.display_name|first|upper }}</span>
                         {% endif %}
                     </span>
                     {% endfor %}
@@ -83,7 +83,7 @@
                     {% elif t.creator %}
                     <span class="trip-card-creator">
                         <i class="material-icons" aria-hidden="true">person</i>
-                        @{{ t.creator.user.username }}
+                        {% if t.creator.is_masked %}{{ t.creator.display_name }}{% else %}@{{ t.creator.user.username }}{% endif %}
                     </span>
                     {% endif %}
                 </div>

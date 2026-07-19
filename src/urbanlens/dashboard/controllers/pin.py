@@ -767,7 +767,11 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         lat = pin.effective_latitude
         lng = pin.effective_longitude
-        if lat is None or lng is None:
+        if not lat or not lng:
+            # effective_latitude/longitude are typed float and never actually
+            # None (Location.latitude/longitude are non-nullable) - falsiness
+            # is the real "never geocoded" sentinel here, matching every other
+            # coordinate gate in this file (e.g. nominatim_info, panel_info).
             return render(request, template_name, {"error": "No coordinates available."})
 
         # First visit for these coordinates: warm every provider's slide cache

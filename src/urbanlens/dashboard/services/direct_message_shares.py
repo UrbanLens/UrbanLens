@@ -112,6 +112,13 @@ def invite_to_trip_in_message(sender: Profile, recipient: Profile, trip: Trip, b
     if pref != DeliveryPreference.NONE:
         from django.urls import reverse
 
+        from urbanlens.dashboard.services.identity_visibility import resolve_visible_identity
+
+        # profile_visibility permits NO_ONE even for accepted friends (see
+        # VisibilityChoice's docstring) - being connected doesn't guarantee
+        # sender is visible to recipient, so this must still be resolved
+        # (and masked if needed) before formatting the stored message text.
+        sender_name = resolve_visible_identity(recipient, sender)["display_name"]
         NotificationLog.objects.create(
             profile=recipient,
             source_profile=sender,
@@ -119,7 +126,7 @@ def invite_to_trip_in_message(sender: Profile, recipient: Profile, trip: Trip, b
             importance=Importance.MEDIUM,
             notification_type=NotificationType.ADDED_TO_TRIP,
             title="Trip invitation",
-            message=f'{sender.username} invited you to join "{trip.name}".',
+            message=f'{sender_name} invited you to join "{trip.name}".',
             url=reverse("trips.detail", kwargs={"trip_slug": trip.slug}),
         )
     return message

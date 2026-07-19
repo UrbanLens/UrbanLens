@@ -4,7 +4,8 @@ conversation's timeline. Included by both `_thread.html` (the initial, most
 recent page) and `_thread_messages_page.html` (older-history pages fetched
 via infinite scroll) so the two render identically and never drift. Context:
 `timeline`, `partner`, `viewer_id`, `my_slug`, `reaction_picker_emojis`,
-`image_permission_status`.
+`image_permission_status`, `display_name` (partner's masked-if-needed
+display name, from `display_identity_for` - used by the quoted-reply header).
 {% endcomment %}
 {% load dashboard_tags %}
 {% for item in timeline %}
@@ -29,7 +30,11 @@ via infinite scroll) so the two render identically and never drift. Context:
   {% else %}
   {% if message.reply_to_id %}
   <div class="dm-quote-box">
-    <span class="dm-quote-box__author">{{ message.reply_to.sender.username }}</span>
+    {# A 1:1 thread only ever has two participants - the quoted sender is #}
+    {# either the partner (masked the same as everywhere else in this      #}
+    {# thread, via the display_name context var) or the viewer's own past  #}
+    {# message. #}
+    <span class="dm-quote-box__author">{% if message.reply_to.sender_id == partner.pk %}{{ display_name }}{% else %}You{% endif %}</span>
     <span class="dm-quote-box__snippet"{% if message.reply_to.is_encrypted %} data-e2ee-ct="{{ message.reply_to.ciphertext }}" data-e2ee-nonce="{{ message.reply_to.nonce }}" data-e2ee-kv="{{ message.reply_to.key_version }}" data-e2ee-truncate="80"{% endif %}>{{ message.reply_to|message_preview:viewer_id }}</span>
   </div>
   {% endif %}

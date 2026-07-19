@@ -27,6 +27,32 @@ _VIDEO_EXTENSIONS = {"mp4", "mov", "avi", "mkv", "webm", "m4v", "flv", "wmv"}
 _DOCUMENT_EXTENSIONS = {"pdf"}
 
 
+def guess_media_kind_from_extension(filename: str) -> MediaKind | None:
+    """Guess a file's claimed MediaKind from its filename extension alone.
+
+    For places with no client-supplied Content-Type to trust at all - e.g. a
+    file extracted from a data-export archive during re-import - the
+    extension is the only signal available for what the file *claims* to be,
+    to then cross-check against :func:`sniff_media_kind`'s magic-byte read of
+    what it *actually* is via :func:`content_type_mismatch_error`.
+
+    Args:
+        filename: The file's name (path or bare name; only the extension is used).
+
+    Returns:
+        The guessed ``MediaKind``, or ``None`` if the extension isn't one of
+        the recognized image/video/document extensions.
+    """
+    extension = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    if extension in _IMAGE_EXTENSIONS:
+        return MediaKind.PHOTO
+    if extension in _VIDEO_EXTENSIONS:
+        return MediaKind.VIDEO
+    if extension in _DOCUMENT_EXTENSIONS:
+        return MediaKind.DOCUMENT
+    return None
+
+
 def sniff_media_kind(file_obj: IO[bytes]) -> MediaKind | None:
     """Detect the real media kind of an uploaded file from its magic bytes.
 

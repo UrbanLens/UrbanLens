@@ -29,9 +29,21 @@ Response = TypeVar("Response", bound=dict[str, Any], default=dict[str, Any])
 
 class CloudflareGateway(LLMGateway[Response]):
     #: Cost per thousand (sent, received) tokens, in USD, per Cloudflare's
-    #: published Workers AI per-model pricing (developers.cloudflare.com/workers-ai/platform/pricing).
+    #: published Workers AI per-model pricing (developers.cloudflare.com/workers-ai/platform/pricing,
+    #: verified 2026-07-19). SiteSettings.cloudflare_model is free text (no
+    #: dropdown constraint), so an admin can point it at any Workers AI model;
+    #: only the default previously had a real entry here, so every other
+    #: choice silently fell back to LLMGateway.DEFAULT_COST_PER_THOUSAND's
+    #: generic estimate. This covers the other mainstream chat models most
+    #: likely to actually get picked - not Cloudflare's entire catalog.
     MODEL_COSTS: ClassVar[dict[str, tuple[Decimal, Decimal]]] = {
         DEFAULT_MODEL: (Decimal("0.00011"), Decimal("0.00019")),
+        "@cf/meta/llama-3.1-8b-instruct": (Decimal("0.000282"), Decimal("0.000827")),
+        "@cf/meta/llama-3.2-1b-instruct": (Decimal("0.000027"), Decimal("0.000201")),
+        "@cf/meta/llama-3.2-3b-instruct": (Decimal("0.000051"), Decimal("0.000335")),
+        "@cf/meta/llama-3.3-70b-instruct-fp8-fast": (Decimal("0.000293"), Decimal("0.002253")),
+        "@cf/google/gemma-3-12b-it": (Decimal("0.000345"), Decimal("0.000556")),
+        "@cf/qwen/qwen3-30b-a3b-fp8": (Decimal("0.000051"), Decimal("0.000335")),
     }
 
     def setup(self, **kwargs):

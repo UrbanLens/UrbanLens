@@ -29,6 +29,7 @@ from django.utils import timezone
 
 from urbanlens.dashboard.models.group_chats.model import MAX_GROUP_NAME_LENGTH, GroupChat, GroupChatMembership, GroupMessage, GroupMessageShare
 from urbanlens.dashboard.services.direct_messages import can_direct_message, direct_message_group_name
+from urbanlens.dashboard.services.identity_visibility import resolve_visible_identity
 from urbanlens.dashboard.services.text_limits import MAX_DIRECT_MESSAGE_LENGTH
 
 if TYPE_CHECKING:
@@ -129,7 +130,11 @@ def create_group_chat(creator: Profile, name: str, members: list[Profile]) -> Gr
             GroupChatMembership.objects.create(group=group, profile=member)
 
     for member in unique_members.values():
-        _notify_group_event(group, member, f"{creator.username} added you to the group “{group.name}”.")
+        # Resolved (and masked if needed) toward this specific recipient before
+        # formatting - the message is stored as plain text, so it must be
+        # masked here, not at render time (see identity_visibility.py).
+        creator_name = resolve_visible_identity(member, creator)["display_name"]
+        _notify_group_event(group, member, f"{creator_name} added you to the group “{group.name}”.")
     _broadcast_group_event(group, {"type": "group_updated", "group_uuid": str(group.uuid)})
     logger.info("Group chat %s created by profile %s with %d members", group.pk, creator.pk, len(unique_members) + 1)
 
@@ -242,7 +247,8 @@ def add_group_members(group: GroupChat, actor: Profile, members: list[Profile]) 
     existing_members = list(ProfileModel.objects.filter(pk__in=active_ids))
     created = [GroupChatMembership.objects.create(group=group, profile=member) for member in to_add.values()]
     for member in to_add.values():
-        _notify_group_event(group, member, f"{actor.username} added you to the group “{group.name}”.")
+        actor_name = resolve_visible_identity(member, actor)["display_name"]
+        _notify_group_event(group, member, f"{actor_name} added you to the group “{group.name}”.")
     _broadcast_group_event(group, {"type": "group_updated", "group_uuid": str(group.uuid)})
     logger.info("Profile %s added %d members to group %s", actor.pk, len(created), group.pk)
 

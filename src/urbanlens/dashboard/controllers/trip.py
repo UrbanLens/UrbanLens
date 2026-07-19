@@ -70,6 +70,33 @@ def _trips_for_list(profile: Profile, sort: str = "updated", direction: str = "d
     return Trip.objects.for_list_page(profile, sort=sort, direction=direction)
 
 
+def _apply_trip_list_identity_masking(viewer: Profile, trips: Iterable[Trip]) -> None:
+    """Mask each listed trip's member/creator identities the viewer may not see.
+
+    docs/PROBLEMS.md gap: ``services/identity_visibility.py`` masked the
+    single-trip render sites (member panel, activity/comment attribution) but
+    not the trips list, which is more diffuse - every card shows its own
+    member avatars and creator badge, across however many trips are listed at
+    once. Mutates each ``TripMembership.profile``/``Trip.creator`` object in
+    place (see ``identity_visibility.mask_profile_references``) so
+    ``trip_list_partial.html`` can render ``display_name``/``display_avatar_url``
+    instead of the raw username/avatar.
+
+    Args:
+        viewer: The profile viewing the list.
+        trips: Trips about to be rendered via ``trip_list_partial.html``.
+    """
+    from urbanlens.dashboard.services.identity_visibility import mask_profile_references
+
+    all_refs: list[Profile] = []
+    for trip in trips:
+        if trip.creator is not None:
+            all_refs.append(trip.creator)
+        all_refs.extend(membership.profile for membership in trip.memberships.all())
+
+    mask_profile_references(viewer, all_refs)
+
+
 def _trip_list_sort_params(request: HttpRequest) -> tuple[str, str]:
     """Read and validate the `sort`/`dir` query params for the trips list page.
 
@@ -454,6 +481,7 @@ def _notify_added_to_trip(inviter: Profile, invitee: Profile, trip: Trip) -> Non
 
     from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, Importance, NotificationType, Status
     from urbanlens.dashboard.models.notifications.model import NotificationLog
+    from urbanlens.dashboard.services.identity_visibility import resolve_visible_identity
 
     try:
         pref = invitee.notification_preferences.added_to_trip
@@ -461,6 +489,10 @@ def _notify_added_to_trip(inviter: Profile, invitee: Profile, trip: Trip) -> Non
         pref = DeliveryPreference.SITE
     if pref == DeliveryPreference.NONE:
         return
+    # Resolved (and masked if needed) toward the specific recipient before
+    # formatting - the message string is stored as plain text, so it must be
+    # masked here, not at render time (see identity_visibility.py's docstring).
+    inviter_name = resolve_visible_identity(invitee, inviter)["display_name"]
     NotificationLog.objects.create(
         profile=invitee,
         source_profile=inviter,
@@ -468,7 +500,7 @@ def _notify_added_to_trip(inviter: Profile, invitee: Profile, trip: Trip) -> Non
         importance=Importance.MEDIUM,
         notification_type=NotificationType.ADDED_TO_TRIP,
         title="Trip invitation",
-        message=f'{inviter.username} invited you to join "{trip.name}".',
+        message=f'{inviter_name} invited you to join "{trip.name}".',
         url=reverse("trips.detail", kwargs={"trip_slug": trip.slug}),
     )
 
@@ -722,6 +754,7 @@ class TripListView(LoginRequiredMixin, View):
         profile, _ = Profile.objects.get_or_create(user=request.user)
         sort, direction = _trip_list_sort_params(request)
         trips = list(_trips_for_list(profile, sort=sort, direction=direction))
+        _apply_trip_list_identity_masking(profile, trips)
         friends = get_connections(profile)
         calendar_account = GoogleCalendarAccount.objects.get_for_profile(profile)
         return render(
@@ -822,6 +855,7 @@ class TripCreateView(LoginRequiredMixin, View):
 
         sort, direction = _trip_list_sort_params(request)
         trips = list(_trips_for_list(profile, sort=sort, direction=direction))
+        _apply_trip_list_identity_masking(profile, trips)
         return render(
             request,
             "dashboard/partials/trips/trip_list_partial.html",

@@ -1246,6 +1246,27 @@
     {# ======================================================================= #}
     <div class="settings-tab-panel" data-tab-panel="account" id="tab-panel-account">
 
+    {# -- Account Info ------------------------------------------------------------ #}
+    <section class="settings-section ul-section" id="account-info-settings-section">
+        <div class="settings-section-header">
+            <i class="material-symbols-outlined">badge</i>
+            <div>
+                <h2 class="settings-section-title">Account Info</h2>
+                <p class="settings-section-desc">Basic facts about your account.</p>
+            </div>
+        </div>
+
+        <div class="settings-section-body">
+            <p class="settings-help">
+                {% if request.user.profile.tos_accepted_at %}
+                Terms of Service accepted on {{ request.user.profile.tos_accepted_at|date:"N j, Y" }}.
+                {% else %}
+                No Terms of Service acceptance on record.
+                {% endif %}
+            </p>
+        </div>
+    </section>
+
     {# -- Storage --------------------------------------------------------------- #}
     <section class="settings-section ul-section" id="storage-settings-section">
         <div class="settings-section-header">

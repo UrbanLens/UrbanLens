@@ -288,6 +288,8 @@ def _extract_and_validate(zip_path: str, extract_dir: str, job_id: str, profile:
                 raise _ImportValidationError("Archive contains invalid file paths.")
         zf.extractall(extract_root)
 
+    _scan_extracted_files(extract_root)
+
     # The archive wraps everything in a top-level folder (urbanlens_export_YYYY-MM-DD/).
     # Find the data directory (the one containing manifest.json).
     data_dir = _find_data_dir(extract_dir)
@@ -302,6 +304,52 @@ def _extract_and_validate(zip_path: str, extract_dir: str, job_id: str, profile:
         )
 
     return data_dir
+
+
+def _scan_extracted_files(extract_root: str) -> None:
+    """Malware-scan and content-sniff every non-JSON file extracted from the archive.
+
+    Every extracted file is written to local disk (even if only temporarily -
+    ``run_import``'s ``finally`` block removes ``extract_dir`` once the job
+    ends) and the "photos/" export folder specifically will be turned into
+    permanent ``Image`` rows once a photos importer exists - so scanning has
+    to happen here, right after extraction and before any importer (present
+    or future) ever opens these files, not deferred to whichever importer
+    eventually persists them. Reuses the exact same two checks every direct
+    upload endpoint already goes through (see ``images.image_upload_error``)
+    rather than a bespoke check: magic-byte content-type sniffing (catching a
+    file whose bytes don't match what its own extension claims) and antivirus
+    scanning. JSON files are the export's own structured data (manifest,
+    labels, pins, ...), not a user media upload, so they're skipped entirely.
+
+    Args:
+        extract_root: Root directory the archive was extracted into.
+
+    Raises:
+        _ImportValidationError: On the first infected file, a content/
+            extension mismatch, or the antivirus scanner being unavailable.
+    """
+    from urbanlens.dashboard.services.content_sniffing import content_type_mismatch_error, guess_media_kind_from_extension
+    from urbanlens.dashboard.services.malware_scan import MalwareScanUnavailableError, malware_error_for_upload
+
+    for dirpath, _dirnames, filenames in os.walk(extract_root):
+        for filename in filenames:
+            if filename.lower().endswith(".json"):
+                continue
+            path = os.path.join(dirpath, filename)
+            with open(path, "rb") as file_obj:
+                declared_kind = guess_media_kind_from_extension(filename)
+                if declared_kind is not None:
+                    mismatch_error = content_type_mismatch_error(file_obj, declared_kind)
+                    if mismatch_error:
+                        raise _ImportValidationError(f"'{filename}' in the import archive doesn't match its file type and the import was rejected.")
+
+                try:
+                    malware_error = malware_error_for_upload(file_obj)
+                except MalwareScanUnavailableError as exc:
+                    raise _ImportValidationError("Our antivirus scanner is temporarily unavailable. Please try again shortly.") from exc
+                if malware_error:
+                    raise _ImportValidationError(f"'{filename}' in the import archive was flagged as malicious and the import was rejected.")
 
 
 def _find_data_dir(root: str) -> str | None:

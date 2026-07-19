@@ -15,7 +15,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Iterable, Sequence
 
     from urbanlens.dashboard.models.profile.model import Profile
 
@@ -107,3 +107,37 @@ def resolve_visible_identities(viewer: Profile | None, subjects: Sequence[Profil
         for key, value in identity.items():
             setattr(subject, key, value)
     return results
+
+
+def mask_profile_references(viewer: Profile | None, refs: Iterable[Profile]) -> None:
+    """Resolve and apply masked identity across EVERY reference to the same profiles.
+
+    The same real profile routinely shows up as more than one distinct
+    Python object instance when it's reached via different query paths in
+    the same render - a Trip's ``creator`` FK vs. a ``TripMembership.profile``
+    FK for that same person on another trip, or a top-level Comment's
+    ``profile`` vs. one of their own replies' ``profile``.
+    ``resolve_visible_identities``'s in-place mutation only reaches whichever
+    instance is actually passed to it, so every occurrence has to be visited
+    directly - deduplicating first (by pk, for a stable/consistent masked
+    ordinal and to avoid resolving the same profile twice) and then applying
+    the result back to every instance in ``refs``, not just the deduplicated
+    ones.
+
+    Args:
+        viewer: The profile viewing the shared space.
+        refs: Every Profile reference about to be rendered together -
+            duplicates (by real identity, not object identity) expected.
+    """
+    refs = list(refs)
+    unique_by_pk: dict[int, Profile] = {}
+    for subject in refs:
+        unique_by_pk.setdefault(subject.pk, subject)
+
+    resolved = resolve_visible_identities(viewer, list(unique_by_pk.values()))
+    for subject in refs:
+        identity = resolved.get(subject.pk)
+        if identity is None:
+            continue
+        for key, value in identity.items():
+            setattr(subject, key, value)

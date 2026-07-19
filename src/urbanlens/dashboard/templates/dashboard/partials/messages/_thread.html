@@ -60,7 +60,7 @@ live messages and fall back to the plain POST endpoint when the socket is down.
           {% if image_permission_status == 'rejected' %}Allow images{% else %}Block images{% endif %}
         </button>
         <form method="post" action="{% url 'friend.block' partner.id %}"
-              onsubmit="return confirm('Block {{ partner.username }}? They will not be able to see your profile or message you.')">
+              onsubmit="return confirm('Block {{ display_name }}? They will not be able to see your profile or message you.')">
           {% csrf_token %}
           <button type="submit" class="dm-bubble-menu__item dm-bubble-menu__item--danger">
             <i class="material-symbols-outlined">block</i> Block
@@ -116,7 +116,7 @@ live messages and fall back to the plain POST endpoint when the socket is down.
     <button type="button" id="dm-reply-preview-cancel" aria-label="Cancel reply">&times;</button>
   </div>
   <p class="dm-thread-empty" id="dm-thread-empty" {% if thread_messages %}hidden{% endif %}>
-    This is the beginning of your conversation with {{ partner.username }}.
+    This is the beginning of your conversation with {{ display_name }}.
   </p>
 
   {% if can_message_partner %}
@@ -139,7 +139,7 @@ live messages and fall back to the plain POST endpoint when the socket is down.
     <input type="hidden" name="reply_to" id="dm-reply-to-id" value="">
     <div class="dm-composer__input-row">
       <textarea name="body" id="dm-composer-input" autocomplete="off" rows="1"
-                placeholder="Message {{ partner.username }}..." maxlength="{{ max_message_length }}"></textarea>
+                placeholder="Message {{ display_name }}..." maxlength="{{ max_message_length }}"></textarea>
       <button type="submit" class="btn btn--primary dm-composer__send" aria-label="Send message">
         <i class="material-symbols-outlined">send</i>
       </button>
@@ -163,7 +163,7 @@ live messages and fall back to the plain POST endpoint when the socket is down.
   {% else %}
   <p class="dm-composer-locked">
     <i class="material-symbols-outlined" aria-hidden="true">lock</i>
-    {{ partner.username }} isn't accepting messages from you right now.
+    {{ display_name }} isn't accepting messages from you right now.
   </p>
   {% endif %}
 </div>

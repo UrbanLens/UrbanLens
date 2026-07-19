@@ -21,7 +21,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views import View
 
-from urbanlens.dashboard.controllers.trip import _trip_or_403, _trips_for_list
+from urbanlens.dashboard.controllers.trip import _apply_trip_list_identity_masking, _trip_or_403, _trips_for_list
 from urbanlens.dashboard.models.calendar_sync.model import GoogleCalendarAccount, TripCalendarLink
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.apis.calendar.google import (
@@ -287,7 +287,8 @@ class CalendarImportView(LoginRequiredMixin, View):
         except GatewayRequestError as exc:
             return HttpResponse(str(exc), status=502)
 
-        trips = _trips_for_list(profile)
+        trips = list(_trips_for_list(profile))
+        _apply_trip_list_identity_masking(profile, trips)
         response = render(request, "dashboard/partials/trips/trip_list_partial.html", {"trips": trips, "profile": profile})
         if created:
             message = f"Imported {len(created)} event{'s' if len(created) != 1 else ''} as trips."

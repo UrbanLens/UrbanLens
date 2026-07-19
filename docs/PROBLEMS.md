@@ -6,113 +6,6 @@ to pick up without re-discovering the problem from scratch.
 
 ---
 
-## User data-export ZIP re-import is never malware-scanned or magic-byte-sniffed
-
-Found 2026-07-19 while rolling out `services/malware_scan.py` (ClamAV) and `services/
-content_sniffing.py` (magic-byte content-type validation) across every upload endpoint that
-creates an `Image` row or a raw `ImageField` (Memories photos/videos/documents, pin/wiki
-galleries, avatars, custom pin/label icons, comment and DM image attachments, article inline
-images - see `services/images.image_upload_error`, the shared entry point all of those now call).
-
-`ImportStartView.post` (`controllers/tools.py`, ~line 262) is the one upload surface deliberately
-left out of that rollout: it accepts an arbitrary `.zip` (`import_file`, size-capped at 500 MB),
-writes it straight to disk (`zip_path`), and hands it to the `run_user_data_import` Celery task
-(`tasks.py`) for extraction/processing. Neither the ZIP itself nor its extracted contents (which
-can include arbitrary photos/videos/documents reconstructed from a prior export) are scanned or
-content-sniffed anywhere in that path - it's a different mechanism (whole-file-to-disk + Celery
-extraction) than the `request.FILES` → `Image.objects.create()` pattern `image_upload_error`
-targets, so wiring it in would need either scanning the zip stream before it's written, or scanning
-each extracted member inside `run_user_data_import` before it's turned into an `Image` row.
-
-**Not fixed**: add a `malware_error_for_upload`/`content_type_mismatch_error` pass over either the
-whole ZIP (fast, one scan, but can't magic-byte-check individual members which are usually a
-custom JSON+media archive format from this app's own exporter) or every extracted media file
-inside `run_user_data_import` before it's persisted (slower per-import, but catches anything smuggled
-in a hand-edited/malicious ZIP that only pretends to be an UrbanLens export). The per-member
-approach is the more thorough one and should reuse the same two services rather than a bespoke
-check.
-
----
-
-## Cloudflare Workers AI cost tracking only covers the one default model
-
-Found 2026-07-19 while investigating a production log line ("Model not recognized. Using
-default costs.") from `services/ai/cloudflare.py`. `CloudflareGateway.MODEL_COSTS` has exactly
-one entry, for the site's default model (`@cf/mistral/mistral-7b-instruct-v0.1`). `SiteSettings.
-cloudflare_model` is free text with no dropdown constraint, so an admin can point it at any
-other Cloudflare Workers AI model - at which point every request through that gateway silently
-falls back to a generic $0.01/$0.03-per-thousand-token estimate (`LLMGateway.DEFAULT_COST_PER_
-THOUSAND`) instead of that model's real published price, with only a WARNING-level log to notice
-it happened. `services/ai/openai.py`'s equivalent table covers 3 real models by comparison, so
-this is a genuine coverage gap, not the norm for this codebase.
-
-Already fixed as part of the same investigation: the default-model string was duplicated as two
-independent literals (`cloudflare.py`'s own `DEFAULT_MODEL` and `models/site_settings/meta.py`'s
-`DEFAULT_CLOUDFLARE_MODEL`) that happened to match - `cloudflare.py` now imports the constant
-instead of re-declaring it, so they can't silently drift apart again.
-
-**Not fixed**: adding real cost data for other Cloudflare Workers AI models to `MODEL_COSTS`.
-Needs verified, current per-model pricing from developers.cloudflare.com/workers-ai/platform/
-pricing (pricing changes over time) - deliberately not fabricated. If a future session sees this
-warning firing in production, check `SiteSettings.cloudflare_model` for what's actually
-configured and add a real `MODEL_COSTS` entry for it, following the existing tuple format
-(cost-per-1k-sent-tokens, cost-per-1k-received-tokens).
-
----
-
-## `Profile.tos_accepted_at` is stored but never shown to the user anywhere
-
-Found 2026-07-19 while auditing the FAQ's "any data we store about you is visible on your own
-profile page" claim (`docs/prompts/completed.md`). Cross-referenced every field on `Profile`
-(`models/profile/model.py`) against `profile/index.html`, `profile/edit.html`, and
-`settings/*.html` - nearly everything has a home (identity/contact/bio on the profile page with
-`_privacy_hint.html` icons already covering privacy transparency there; the large block of
-map/AI/notification/sync preferences lives on the separate Settings page instead, which the FAQ
-wording underclaimed - fixed as part of this same pass by broadening "your own profile page" to
-"your own profile page or your account Settings"). One field came up genuinely nowhere in any
-template: `tos_accepted_at` (when the user accepted the Terms of Service) has no UI at all.
-
-**Not fixed**: deciding where this belongs (Settings > Security/Account is the natural home) and
-adding a single read-only "Terms accepted on {date}" line is a small, well-scoped follow-up, but
-touching the Settings page template/section layout felt like it deserved its own focused pass
-rather than a drive-by addition here. `primary_email_normalized` was also checked and is *not* a
-gap - it's a derived, normalized copy of `user.email` (already shown) kept only for indexed
-lookups, not separate user-facing data.
-
----
-
-## Property-records log entry describes a `compliance.py` robots.txt gate that no longer exists
-
-Found 2026-07-19 while reviewing `docs/prompts/completed.md`'s "Built the full 4-tier framework..."
-entry for property records Tier 2/3 (the property-records-plan.md section 4 rollout). That entry
-describes a new `compliance.py` module - a robots.txt gate (including an AI-crawler-specific check
-naming ClaudeBot/GPTBot) that every Tier 2/3 fetch was supposed to go through, plus a
-`blocked_by_robots` reason in the orchestrator.
-
-None of that exists in the current codebase: `services/apis/property_records/compliance.py` has
-no source file (only a stale `__pycache__/compliance.cpython-312.pyc` and a stale
-`test_property_records_compliance.cpython-312-pytest-9.1.1.pyc` remain on disk - orphaned
-bytecode with no matching `.py`, harmless but worth cleaning up). `git log --follow` on that path
-returns nothing, meaning it was never committed. Current `orchestrator.py` gates Tier 2/3 purely
-via `PropertyJurisdiction.requires_captcha` (a manually-set boolean, help text: "never attempted
-programmatically") and a `REASON_BLOCKED` constant - not `blocked_by_robots`, and not automated
-robots.txt parsing. `docs/property-records-plan.md:137-138` explicitly says "do not implement
-anything with robots.txt... will take care of that later," consistent with the current code, not
-the log entry.
-
-Likely explanation: the session that wrote the log entry built `compliance.py` but never
-committed it, and a later pass (maybe the same session, maybe the user) reconsidered the
-automated-robots.txt-parsing approach in favor of the simpler manual `requires_captcha` flag,
-deleting the file before it was ever committed - without updating the completed.md entry to match.
-Current code is internally consistent and not broken by this; it's a documentation-accuracy gap,
-not a functional one. Not fixed here since building (or re-building) `compliance.py` would be a
-real feature decision, not a surgical correction, and would contradict the plan doc's own
-documented postponement. Worth deleting the two orphaned `.pyc` files next time someone's in there,
-and worth a human decision on whether automated robots.txt gating is still wanted before any
-future session revives it.
-
----
-
 ## UL-277: pin-detail external-data freshness window is one global knob, not per-source
 
 Original wording (`TODO.md:28`): "Cache time needs adjustments for some pin details data. Load
@@ -188,31 +81,6 @@ params" - the former should win, the latter probably shouldn't.
 
 ---
 
-## Wiki-reference custom field picker doesn't recognize boundary-mate Locations
-
-`src/urbanlens/dashboard/services/custom_field_references.py`, `referenceable_queryset()`'s
-`"wiki"` branch (currently `Wiki.objects.filter(location__pins__profile=profile)`) duplicates
-the exact-Location-row-only wiki-visibility check that
-`services/wiki_access.location_visible_to` had until it was fixed in commit `15e6e2e2`
-(2026-07-18) to also recognize a pin at a *different* Location whose point falls inside the
-wiki's own generated boundary polygon (nearly-identical coordinates routinely resolve to
-distinct Location rows - see that commit's message for the full rationale).
-
-This second copy in `custom_field_references.py` was never updated, so a user whose pin sits on
-the same building as an existing wiki - but at a boundary-mate Location row, not the wiki's own
-exact Location - can now see and open that wiki (round 13 fixed that), but still cannot select it
-as a target for a REFERENCE-type custom field pointing at "Wiki". Under-permissive, not a
-security leak (the reverse - a bug that *grants* extra access - would be far more urgent).
-
-**Why not fixed immediately**: `location_visible_to` is a per-object point-in-polygon check
-(Python-side GEOS `.contains()`), not queryset-composable. A naive fix (loop over every other
-Wiki in the DB calling `location_visible_to` per row) would be a real N+1/scalability risk on a
-site with many wikis. The right fix is a shared, queryset-level "locations visible to this
-profile via boundary-matching" helper that both `wiki_access.py` and
-`custom_field_references.py` can call - worth building deliberately rather than bolting on.
-
----
-
 ## Most per-event WhatsApp/SMS notification toggles are stored but never delivered (found 2026-07-18)
 
 `NotificationPreference` has `*_whatsapp` opt-in booleans for ~10 event types (trip_updated,
@@ -252,56 +120,64 @@ Both tests pass again; nothing in production code needed changing.
 
 ---
 
-## Identity-masking for hidden profiles: remaining render sites not yet covered (found 2026-07-18)
+## Identity-masking for hidden profiles: two remaining render sites need a product decision (found 2026-07-18, narrowed 2026-07-19)
 
-While building `services/identity_visibility.py` (masks a person's name/username/avatar when
-their `profile_visibility` doesn't permit the viewer to see them - wired into the trip member
-panel, trip activity attribution, trip comments, and both group-chat member/message surfaces),
-a full-codebase audit turned up several more genuine leaks of the same shape, deliberately left
-unfixed this round to keep that change reviewable. All of them show a person's raw
-`username`/avatar/profile link even when that person's `profile_visibility` should hide it from
-the current viewer:
+`services/identity_visibility.py` masks a person's name/username/avatar when their
+`profile_visibility` doesn't permit the viewer to see them. Of the six gaps originally found in
+a full-codebase audit, four are now fixed (trip list cards, notification text baked in at
+creation time for trip-invite/group-add, 1:1 DM template inconsistencies, pin/wiki comment
+author - see `docs/prompts/completed.md`'s 2026-07-19 entry for the fix details, and the new
+`mask_profile_references` helper in `identity_visibility.py` that both the trip-list and
+comment-author fixes now share). Two remain, both explicitly needing a human product call rather
+than an autonomous fix:
 
-1. **Trip list cards** - `templates/dashboard/partials/trips/trip_list_partial.html:64-68,86`
-   (`membership.profile.user.username` in a tooltip + avatar image, `t.creator.user.username` in
-   the creator badge). Whatever view renders the trip list (`TripListView` or similar) would need
-   to resolve identities across every listed trip's members, not just one trip's - more diffuse
-   than the single-trip render sites already fixed.
-2. **Notification text bakes in the raw username at creation time**, so a template-side fix can't
-   reach it: `controllers/trip.py:471` (`f'{inviter.username} invited you to join...'`),
-   `services/group_chats.py:132,203` (`f"{creator.username} added you to the group..."`,
-   `f"{actor.username} added you to the group..."`), `services/direct_message_shares.py:122`
-   (trip-invite-via-DM). Each of these would need to resolve the inviter/actor's identity toward
-   the *specific recipient* before formatting the stored `NotificationLog.message` string - the
-   `suggest_mutual_connection` fix earlier in this same session (`services/connections.py`) is a
-   worked example of doing this correctly (mask *before* string-formatting, not after).
-3. **1:1 DM template inconsistencies** - `_thread.html` demonstrates the correct pattern for the
-   thread header (`display_name`/`display_avatar_url` from `display_identity_for`) but still uses
-   raw `partner.username` in four other spots in the same file: the block-confirm text (line 63),
-   empty-state text (119), composer placeholder (142), and locked-composer text (166).
-   `_message_items.html:32`'s quoted-reply header (`message.reply_to.sender.username`) has the
-   same gap. Even the reference implementation isn't fully consistent.
-4. **Pin/wiki comment author** - `templates/dashboard/partials/comments/_comment_body.html:3-12`
-   renders `comment.profile.avatar`/`.username` raw. The comment *content* is correctly gated by
-   `Profile.can_view_comments_from` (`controllers/comments.py:80,87,265`, an all-or-nothing
-   "can see this comment at all" check using `comment_visibility`, a different field from
-   `profile_visibility`) - but once a comment passes that gate, its author's name/avatar aren't
-   separately masked the way `profile_visibility` would call for. Photo attachments already have
-   a masking treatment for a related concern (`blurred_profiles`, same controller) showing the
-   pattern exists but wasn't extended to the author identity itself.
-5. **Group member-add search results** - `_group_member_results.html` /
+1. **Group member-add search results** - `_group_member_results.html` /
    `GroupMemberSearchView` (`controllers/group_chats.py`) shows found profiles' real
    username/avatar unconditionally once they pass `can_direct_message`, without a
    `profile_visibility` check. Arguably lower priority (the searcher typed the exact username
    they're looking for), but worth a deliberate product decision rather than leaving it as an
    unreviewed gap.
-6. **Trip comments have no `can_view_comments_from` gate at all** - unlike pin/wiki comments
+2. **Trip comments have no `can_view_comments_from` gate at all** - unlike pin/wiki comments
    (`controllers/comments.py`), `_render_trip_comments` (`controllers/trip.py`) never checks the
    author's `comment_visibility` before including a comment. This is a different, more aggressive
    control (hides the whole comment, not just the author's identity) - deliberately not added as
    part of the identity-masking work, since the original ask was specifically about hiding
    name/avatar while keeping content visible, and changing content visibility is a separate
-   product decision. Flagging since it's adjacent and was noticed in the same audit.
+   product decision. (Note: trip comment AUTHOR identity was already correctly masked before this
+   round even started - `_render_trip_comments` resolves and re-points `c.author`/`r.author` via
+   `resolve_visible_identities`, rendered through `trip_comments_panel.html`'s own
+   `display_name`/`display_avatar_url` markup, a separate template from pin/wiki's
+   `_comment_body.html`. Only the content-visibility gate itself is the remaining gap here.)
+
+---
+
+## Pin description click-to-edit-in-place has no JS wiring anywhere (found 2026-07-19)
+
+While investigating `PinOverviewEditableTitleTests` (see completed.md - that class was deleted as
+redundant test debt, not a missing feature), found a genuinely separate, real gap in its sibling
+class `PinOverviewEditableDescriptionTests`. `pin_overview_partial.html`'s description field
+renders a `<span class="pin-description--editable" tabindex="0" role="button"
+data-raw-description="...">` - styled and marked up exactly like the hero's title
+(`.pin-name-editable`, confirmed working, wired in `pages/location/index.html`'s own inline
+`<script>` block, lines ~1805-1879) - but grepping the entire codebase for
+`pin-description--editable` only turns up the SCSS styling and the template itself. There is no
+click handler anywhere (not in `index.html`, not in any shared JS file, not inline in the partial
+itself - `pin_overview_partial.html` has no `<script>` tag at all). Clicking the description does
+nothing.
+
+This also means `PinOverviewEditableDescriptionTests.test_description_wiring_posts_to_pin_edit`
+(`test_pin_edit_controller.py`, checks for the literal `/map/pin/<slug>/edit/` path substring in
+`PinOverviewView`'s bare-partial response) almost certainly fails for the same structural reason
+`PinOverviewEditableTitleTests`'s equivalent test did: even if wiring existed, it would live in
+the full page's own script (like the title's `editUrl` closure variable), never in the partial-only
+response this test renders directly via `PinOverviewView.as_view()`.
+
+**Not fixed**: two separate things would need doing - (1) write the missing click-to-edit-in-place
+JS for the description (mirroring the hero title's pattern: delegated listener on
+`document.body`, textarea swap-in, submit-on-blur/Enter, POST to `pin.edit`), and (2) fix or
+rewrite the one wrongly-scoped test the same way the title's redundant test class was resolved.
+Out of scope for the stale-test-debt pass this was found during (a real feature build, not a test
+correction) - worth a focused follow-up.
 
 ---
 
@@ -401,64 +277,6 @@ with a specific machine-readable reason rather than a silent gap.
 - The `discover_property_jurisdiction` command (both `--tier1` default and `--tier3` modes) has
   never been run against a real search provider/AI backend end-to-end in this session (only
   unit-tested with mocks) - worth a smoke-test pass once a specific county is targeted.
-
----
-
-## Pre-existing stale test debt: `PinOverviewEditableTitleTests` (4 tests, all failing)
-
-`src/urbanlens/dashboard/tests/hypothesis/test_pin_edit_controller.py:241-277` - a test class describing
-an editable pin-title element (`pin-title--editable`, `data-raw-name`, `data-location-name`) inside
-the pin detail page's **Details card** (`partials/pins/pin_overview_partial.html`, rendered by
-`PinOverviewView`/`pin.overview`), wired to the `pin.quick_edit` endpoint (which genuinely exists -
-`urls.py:171-173`, used by the main map popup's star-rating quick-edit today). All 4 tests currently
-fail: `pin_overview_partial.html` has no title/name element of any kind - only the stats grid,
-`deduplicated_identity_fields` rows, and the description row.
-
-**Found while working on a related-but-distinct feature** (2026-07-18): "ensure the pin name (in the
-hero) is edit in place" was implemented this session as a click-to-rename `<h1>` span in the page
-**hero** (`.pin-name-editable`, `_pin_detail_hero_body.html`, wired to `pin.edit`) - a separate
-element in a separate template from what these 4 tests describe. This looks like the same class of
-issue as the `PinDetailsPageLinksCardTests` bug fixed the same session (a test written for a planned
-or since-refactored piece of markup that was never built, or was removed without the test being
-updated) - **not** something the hero-title change broke.
-
-**Why not fixed now**: unlike the Links-card case (a clear "test points at the wrong template" bug
-with one obvious correct answer), this one has a real product-design ambiguity: does the Details card
-still need its *own* separate editable title now that the hero has one (redundant two-places-to-edit-
-the-same-field UX), or were these tests written for an earlier design that the hero-based approach
-superseded? That's a call for whoever's driving product decisions, not something to guess at while
-mid-batch on an unrelated hero-layout task. If the Details-card title is wanted, `pin.quick_edit`
-(single-field PATCH, already used for the map popup's star ratings) is the natural endpoint to wire
-it to, matching the pre-written tests' `data-raw-name`/`data-location-name` contract. If it's not
-wanted, delete `PinOverviewEditableTitleTests` instead.
-
----
-
-## Satellite/street-view carousels: coordinate-null check is dead code
-
-Found 2026-07-19 while deduplicating `PinController.satellite_view_carousell`/`street_view`
-(UL-288) into a shared `_render_media_carousel` helper (preserved verbatim, not introduced by
-the refactor). Both methods gate on `if lat is None or lng is None: return render(..., {"error":
-"No coordinates available."})`, but `Pin.effective_latitude`/`effective_longitude`
-(`models/pin/model.py:653-662`) are typed `-> float` and always `return float(self.location.
-latitude)` - `Location.latitude`/`longitude` are non-nullable and immutable once set (see
-CLAUDE.md's Location/Pin split), so these properties can never actually return `None`. The
-null-coordinate branch in both carousel methods is unreachable.
-
-This differs from the "null island" (0, 0) sentinel-coordinate gate used by the generic
-`panel_info` dispatch elsewhere in the same file, which correctly checks falsiness (`not lat or
-not lng`) rather than `is None` - that gate *is* reachable and correctly treats (0, 0) as "never
-geocoded". The carousel methods' `is None` check looks like it was written assuming the same
-sentinel-via-None convention, but as written it never fires, so a genuinely un-geocoded pin
-(coordinates at (0, 0)) falls through to the readiness/collector path instead of the friendly
-"No coordinates available." message.
-
-**Why not fixed now**: out of scope for the dedup refactor it was found during, and the correct
-fix depends on a product call the same way the sentinel-vs-null design already made once for
-`panel_info` (checked in as `0, 0` = "never geocoded"): should the carousels adopt the same
-falsiness check as `panel_info` (probably yes, for consistency), or is there a reason imagery
-providers should still be queried at (0, 0)? If falsiness is the right call, mirror `panel_info`'s
-existing gate rather than reinventing it.
 
 ---
 
