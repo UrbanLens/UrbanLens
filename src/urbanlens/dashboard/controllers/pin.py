@@ -4,7 +4,7 @@ import base64
 from datetime import datetime, timedelta
 import json
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeVar
 from urllib.parse import urlparse
 
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -32,12 +32,15 @@ from urbanlens.dashboard.services.search import format_search_date, search_web
 from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from rest_framework.request import Request
 
-    from urbanlens.dashboard.services.apis.locations.base import SatelliteSlide, StreetViewSlide
     from urbanlens.dashboard.services.external_data import ProviderFetchResult
 
 logger = logging.getLogger(__name__)
+
+_SlideT = TypeVar("_SlideT")
 
 _WEB_SEARCH_CLIENT_PAGE_SIZE = 5
 _ADAPTIVE_PAGE_BATCH_MULTIPLIER = 2
@@ -708,6 +711,81 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             },
         )
 
+    def _render_media_carousel(
+        self,
+        request: HttpRequest,
+        pin_slug: str,
+        *,
+        service_key: str,
+        collector: Callable[[float, float], tuple[list[_SlideT], list[ProviderFetchResult]]],
+        template_name: str,
+        deadline_name: str,
+        extra_context: dict[str, object] | None = None,
+    ) -> HttpResponse:
+        """Shared flow behind the satellite and street-view multi-source carousels.
+
+        Both carousels merge several external providers into one slide list
+        behind the same warm-cache-then-render-with-a-deadline flow; this is
+        the one piece of that flow the generic single-source ``panel_info``
+        dispatch doesn't already cover, since a carousel combines multiple
+        providers' slides rather than rendering one source's own template.
+
+        Args:
+            request: The current request.
+            pin_slug: The pin's slug, from the URL kwargs.
+            service_key: The ``external_data.panel_sources()`` key gating readiness.
+            collector: Fetches this carousel's slides for a given (lat, lng).
+            template_name: The fragment template to render.
+            deadline_name: Label for the deadline-guarded collector call.
+            extra_context: Extra template context beyond slides/pin/debug_entries.
+
+        Returns:
+            The rendered carousel fragment, a pending-panel placeholder, or a
+            404 if the pin doesn't belong to the requesting user.
+        """
+        from urbanlens.dashboard.services.external_data import panel_sources
+        from urbanlens.dashboard.services.timeout_utils import EXTERNAL_CALL_DEADLINE, call_with_deadline
+
+        try:
+            pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)
+        except Pin.DoesNotExist:
+            return HttpResponse("Pin does not exist", status=404)
+
+        lat = pin.effective_latitude
+        lng = pin.effective_longitude
+        if lat is None or lng is None:
+            return render(request, template_name, {"error": "No coordinates available."})
+
+        # First visit for these coordinates: warm every provider's slide cache
+        # in a Celery task and let the placeholder poll -- the provider chain
+        # is several sequential upstreams and must never run on the request path.
+        if not panel_sources()[service_key].is_ready(pin):
+            return self._pending_panel(request, pin, service_key)
+
+        # Ready: the same collector now runs against warm per-provider caches,
+        # so this is normally instant. The deadline guards the rare gap where
+        # an individual provider's entry was evicted before the ready marker
+        # expired -- bounded staleness beats an unbounded inline refetch.
+        coord_query = f"{lat:.5f}, {lng:.5f}"
+        default: tuple[list[_SlideT], list[ProviderFetchResult]] = ([], [])
+        slides, provider_results = call_with_deadline(
+            lambda: collector(float(lat), float(lng)),
+            timeout=EXTERNAL_CALL_DEADLINE,
+            default=default,
+            name=deadline_name,
+        )
+        # Failures surface as count=0 entries, matching the old inline behaviour.
+        debug_entries = []
+        for result in provider_results:
+            if entry := self._debug_entry(request, result.service, coord_query, from_cache=result.from_cache, count=result.count):
+                debug_entries.append(entry)
+
+        return render(
+            request,
+            template_name,
+            {"slides": slides, "pin": pin, "debug_entries": debug_entries, **(extra_context or {})},
+        )
+
     def satellite_view_carousell(self, request: HttpRequest, **kwargs):
         """Returns an HTML fragment with a multi-source satellite imagery carousel.
 
@@ -721,51 +799,15 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         - Bing Maps Aerial (current, high-res) - fetched server-side
         - OpenAerialMap community imagery - browser-loaded thumbnails
         """
-        from urbanlens.dashboard.services.external_data import collect_satellite_slides, panel_sources
-        from urbanlens.dashboard.services.timeout_utils import EXTERNAL_CALL_DEADLINE, call_with_deadline
+        from urbanlens.dashboard.services.external_data import collect_satellite_slides
 
-        try:
-            pin = Pin.objects.select_related("location").get(slug=kwargs["pin_slug"], profile__user=request.user)
-        except Pin.DoesNotExist:
-            return HttpResponse("Pin does not exist", status=404)
-
-        lat = pin.effective_latitude
-        lng = pin.effective_longitude
-        if lat is None or lng is None:
-            return render(
-                request,
-                "dashboard/pages/location/satellite_view.html",
-                {"error": "No coordinates available."},
-            )
-
-        # First visit for these coordinates: warm every provider's slide cache
-        # in a Celery task and let the placeholder poll -- the provider chain
-        # is six sequential upstreams and must never run on the request path.
-        if not panel_sources()["satellite"].is_ready(pin):
-            return self._pending_panel(request, pin, "satellite")
-
-        # Ready: the same collector now runs against warm per-provider caches,
-        # so this is normally instant. The deadline guards the rare gap where
-        # an individual provider's entry was evicted before the ready marker
-        # expired -- bounded staleness beats an unbounded inline refetch.
-        coord_query = f"{lat:.5f}, {lng:.5f}"
-        satellite_default: tuple[list[SatelliteSlide], list[ProviderFetchResult]] = ([], [])
-        slides, provider_results = call_with_deadline(
-            lambda: collect_satellite_slides(float(lat), float(lng)),
-            timeout=EXTERNAL_CALL_DEADLINE,
-            default=satellite_default,
-            name="satellite-replay",
-        )
-        # Failures surface as count=0 entries, matching the old inline behaviour.
-        debug_entries = []
-        for result in provider_results:
-            if entry := self._debug_entry(request, result.service, coord_query, from_cache=result.from_cache, count=result.count):
-                debug_entries.append(entry)
-
-        return render(
+        return self._render_media_carousel(
             request,
-            "dashboard/pages/location/satellite_view.html",
-            {"slides": slides, "lat": lat, "lng": lng, "pin": pin, "debug_entries": debug_entries},
+            kwargs["pin_slug"],
+            service_key="satellite",
+            collector=collect_satellite_slides,
+            template_name="dashboard/pages/location/satellite_view.html",
+            deadline_name="satellite-replay",
         )
 
     def street_view(self, request: HttpRequest, **kwargs):
@@ -776,46 +818,16 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         - Mapillary crowdsourced imagery (browser-loaded URLs, cached 24 h)
         - KartaView open imagery (browser-loaded URLs, cached 24 h)
         """
-        from urbanlens.dashboard.services.external_data import collect_street_view_slides, panel_sources
-        from urbanlens.dashboard.services.timeout_utils import EXTERNAL_CALL_DEADLINE, call_with_deadline
+        from urbanlens.dashboard.services.external_data import collect_street_view_slides
 
-        try:
-            pin = Pin.objects.select_related("location").get(slug=kwargs["pin_slug"], profile__user=request.user)
-        except Pin.DoesNotExist:
-            return HttpResponse("Pin does not exist", status=404)
-
-        lat = pin.effective_latitude
-        lng = pin.effective_longitude
-        if lat is None or lng is None:
-            return render(request, "dashboard/pages/location/street_view.html", {"error": "No coordinates available."})
-
-        # See satellite_view_carousell: warm provider caches in Celery on first
-        # visit, then render from those caches with a deadline safety net.
-        if not panel_sources()["street_view"].is_ready(pin):
-            return self._pending_panel(request, pin, "street_view")
-
-        coord_query = f"{lat:.5f}, {lng:.5f}"
-        street_view_default: tuple[list[StreetViewSlide], list[ProviderFetchResult]] = ([], [])
-        slides, provider_results = call_with_deadline(
-            lambda: collect_street_view_slides(float(lat), float(lng)),
-            timeout=EXTERNAL_CALL_DEADLINE,
-            default=street_view_default,
-            name="street-view-replay",
-        )
-        debug_entries = []
-        for result in provider_results:
-            if entry := self._debug_entry(request, result.service, coord_query, from_cache=result.from_cache, count=result.count):
-                debug_entries.append(entry)
-
-        return render(
+        return self._render_media_carousel(
             request,
-            "dashboard/pages/location/street_view.html",
-            {
-                "slides": slides,
-                "pin": pin,
-                "google_maps_api_key": settings.google_public_api_key,
-                "debug_entries": debug_entries,
-            },
+            kwargs["pin_slug"],
+            service_key="street_view",
+            collector=collect_street_view_slides,
+            template_name="dashboard/pages/location/street_view.html",
+            deadline_name="street-view-replay",
+            extra_context={"google_maps_api_key": settings.google_public_api_key},
         )
 
     @action(detail=True, methods=["get"])

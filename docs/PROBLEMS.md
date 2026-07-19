@@ -324,3 +324,31 @@ mid-batch on an unrelated hero-layout task. If the Details-card title is wanted,
 (single-field PATCH, already used for the map popup's star ratings) is the natural endpoint to wire
 it to, matching the pre-written tests' `data-raw-name`/`data-location-name` contract. If it's not
 wanted, delete `PinOverviewEditableTitleTests` instead.
+
+---
+
+## Satellite/street-view carousels: coordinate-null check is dead code
+
+Found 2026-07-19 while deduplicating `PinController.satellite_view_carousell`/`street_view`
+(UL-288) into a shared `_render_media_carousel` helper (preserved verbatim, not introduced by
+the refactor). Both methods gate on `if lat is None or lng is None: return render(..., {"error":
+"No coordinates available."})`, but `Pin.effective_latitude`/`effective_longitude`
+(`models/pin/model.py:653-662`) are typed `-> float` and always `return float(self.location.
+latitude)` - `Location.latitude`/`longitude` are non-nullable and immutable once set (see
+CLAUDE.md's Location/Pin split), so these properties can never actually return `None`. The
+null-coordinate branch in both carousel methods is unreachable.
+
+This differs from the "null island" (0, 0) sentinel-coordinate gate used by the generic
+`panel_info` dispatch elsewhere in the same file, which correctly checks falsiness (`not lat or
+not lng`) rather than `is None` - that gate *is* reachable and correctly treats (0, 0) as "never
+geocoded". The carousel methods' `is None` check looks like it was written assuming the same
+sentinel-via-None convention, but as written it never fires, so a genuinely un-geocoded pin
+(coordinates at (0, 0)) falls through to the readiness/collector path instead of the friendly
+"No coordinates available." message.
+
+**Why not fixed now**: out of scope for the dedup refactor it was found during, and the correct
+fix depends on a product call the same way the sentinel-vs-null design already made once for
+`panel_info` (checked in as `0, 0` = "never geocoded"): should the carousels adopt the same
+falsiness check as `panel_info` (probably yes, for consistency), or is there a reason imagery
+providers should still be queried at (0, 0)? If falsiness is the right call, mirror `panel_info`'s
+existing gate rather than reinventing it.
