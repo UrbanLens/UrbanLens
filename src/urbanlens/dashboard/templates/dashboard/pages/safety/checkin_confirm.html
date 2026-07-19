@@ -1,7 +1,10 @@
 {% extends 'dashboard/themes/base.html' %}
 
+{% block hero %}
+{% include "dashboard/partials/ui/_page_hero.html" with body_template="dashboard/partials/safety/_checkin_confirm_hero_body.html" modifier="top" %}
+{% endblock %}
+
 {% block content %}
-{% include "dashboard/partials/ui/_page_hero.html" with body_template="dashboard/partials/safety/_checkin_confirm_hero_body.html" %}
 <div class="safety-page page-content safety-checkin-confirm">
     <p>Confirm you're safe and this check-in is complete.</p>
     <form method="post" action="{% url 'safety.checkin.checkin' checkin.slug|default:checkin.uuid %}">

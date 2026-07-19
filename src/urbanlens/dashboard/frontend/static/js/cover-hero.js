@@ -19,7 +19,12 @@
 
     function ensure(key) {
         if (state[key]) return state[key];
-        var heroEl = document.getElementById(key + '-cover-hero');
+        // Wiki's cover hero is its own standalone div (id="<key>-cover-hero").
+        // The pin detail page reuses the shared _page_hero.html hero section
+        // instead, under its own pre-existing id - _photo_lightbox.html's
+        // _applyCoverHeroUpdate already special-cases key "pin" the same way
+        // for its live-update path, so this mirrors that convention.
+        var heroEl = key === 'pin' ? document.getElementById('pin-detail-hero') : document.getElementById(key + '-cover-hero');
         if (!heroEl) return null;
         var dataEl = document.getElementById(key + '-cover-candidates');
         var candidates = [];

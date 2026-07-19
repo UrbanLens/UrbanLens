@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 import requests
 from typing_extensions import TypeVar
 
+from urbanlens.dashboard.models.site_settings.meta import DEFAULT_CLOUDFLARE_MODEL
 from urbanlens.dashboard.services.ai.gateway import LLMGateway
 from urbanlens.UrbanLens.settings.app import settings
 
@@ -15,7 +16,13 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL = "@cf/mistral/mistral-7b-instruct-v0.1"
+# Single source of truth shared with SiteSettings.cloudflare_model's own
+# default - these were previously two separate string literals that happened
+# to match; keeping them as one import means a future change to the site's
+# default Cloudflare model can't silently desync from MODEL_COSTS below,
+# which would otherwise make every request quietly fall back to the generic
+# default-cost estimate instead of this model's real published pricing.
+DEFAULT_MODEL = DEFAULT_CLOUDFLARE_MODEL
 
 Response = TypeVar("Response", bound=dict[str, Any], default=dict[str, Any])
 

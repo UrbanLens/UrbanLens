@@ -7,8 +7,11 @@
     integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
 {% endblock %}
 
+{% block hero %}
+{% include "dashboard/partials/ui/_page_hero.html" with body_template="dashboard/partials/safety/_contact_portal_hero_body.html" modifier="top" %}
+{% endblock %}
+
 {% block content %}
-{% include "dashboard/partials/ui/_page_hero.html" with body_template="dashboard/partials/safety/_contact_portal_hero_body.html" %}
 <div class="safety-page page-content">
 
     <div class="safety-toolbar" id="safety-resolve-actions" {% if checkin.is_resolved %}hidden{% endif %}>

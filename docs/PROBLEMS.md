@@ -6,6 +6,53 @@ to pick up without re-discovering the problem from scratch.
 
 ---
 
+## Cloudflare Workers AI cost tracking only covers the one default model
+
+Found 2026-07-19 while investigating a production log line ("Model not recognized. Using
+default costs.") from `services/ai/cloudflare.py`. `CloudflareGateway.MODEL_COSTS` has exactly
+one entry, for the site's default model (`@cf/mistral/mistral-7b-instruct-v0.1`). `SiteSettings.
+cloudflare_model` is free text with no dropdown constraint, so an admin can point it at any
+other Cloudflare Workers AI model - at which point every request through that gateway silently
+falls back to a generic $0.01/$0.03-per-thousand-token estimate (`LLMGateway.DEFAULT_COST_PER_
+THOUSAND`) instead of that model's real published price, with only a WARNING-level log to notice
+it happened. `services/ai/openai.py`'s equivalent table covers 3 real models by comparison, so
+this is a genuine coverage gap, not the norm for this codebase.
+
+Already fixed as part of the same investigation: the default-model string was duplicated as two
+independent literals (`cloudflare.py`'s own `DEFAULT_MODEL` and `models/site_settings/meta.py`'s
+`DEFAULT_CLOUDFLARE_MODEL`) that happened to match - `cloudflare.py` now imports the constant
+instead of re-declaring it, so they can't silently drift apart again.
+
+**Not fixed**: adding real cost data for other Cloudflare Workers AI models to `MODEL_COSTS`.
+Needs verified, current per-model pricing from developers.cloudflare.com/workers-ai/platform/
+pricing (pricing changes over time) - deliberately not fabricated. If a future session sees this
+warning firing in production, check `SiteSettings.cloudflare_model` for what's actually
+configured and add a real `MODEL_COSTS` entry for it, following the existing tuple format
+(cost-per-1k-sent-tokens, cost-per-1k-received-tokens).
+
+---
+
+## `Profile.tos_accepted_at` is stored but never shown to the user anywhere
+
+Found 2026-07-19 while auditing the FAQ's "any data we store about you is visible on your own
+profile page" claim (`docs/prompts/completed.md`). Cross-referenced every field on `Profile`
+(`models/profile/model.py`) against `profile/index.html`, `profile/edit.html`, and
+`settings/*.html` - nearly everything has a home (identity/contact/bio on the profile page with
+`_privacy_hint.html` icons already covering privacy transparency there; the large block of
+map/AI/notification/sync preferences lives on the separate Settings page instead, which the FAQ
+wording underclaimed - fixed as part of this same pass by broadening "your own profile page" to
+"your own profile page or your account Settings"). One field came up genuinely nowhere in any
+template: `tos_accepted_at` (when the user accepted the Terms of Service) has no UI at all.
+
+**Not fixed**: deciding where this belongs (Settings > Security/Account is the natural home) and
+adding a single read-only "Terms accepted on {date}" line is a small, well-scoped follow-up, but
+touching the Settings page template/section layout felt like it deserved its own focused pass
+rather than a drive-by addition here. `primary_email_normalized` was also checked and is *not* a
+gap - it's a derived, normalized copy of `user.email` (already shown) kept only for indexed
+lookups, not separate user-facing data.
+
+---
+
 ## Property-records log entry describes a `compliance.py` robots.txt gate that no longer exists
 
 Found 2026-07-19 while reviewing `docs/prompts/completed.md`'s "Built the full 4-tier framework..."
