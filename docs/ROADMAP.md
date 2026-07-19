@@ -521,8 +521,16 @@ These have most of their machinery already built:
    (`616215c6`): the single-pin "clear rating" button never actually deleted the Review row,
    because a `rating=0 -> rating=None` reassignment broke the downstream `elif rating == 0` check
    that was supposed to trigger the delete - built the bulk version on the corrected semantics.
-3. **Auto-visits from photo timestamps + Immich/Google Photos** (UL-361) — composes photo
-   matching (§2.7) with the existing visit-suggestion confirm flow.
+3. ~~**Auto-visits from photo timestamps + Immich/Google Photos** (UL-361)~~
+   VERIFIED-ALREADY-IMPLEMENTED 2026-07-19 (with one platform-blocked exception) — every import
+   path (Immich, Google Photos, Flickr, local uploads) already calls `log_visit_on_pin()`,
+   auto-creating a photo-sourced `PinVisit` from the capture timestamp. Coordinate-metadata
+   clustering into new-pin suggestions from a whole library also already exists
+   (`tasks.sweep_immich_library_locations`, 70 existing tests) for Immich and local uploads. A
+   Google Photos equivalent isn't an engineering gap: Google's Picker API (the only third-party
+   access Google currently offers) has no library-wide listing capability at all - the user must
+   manually pick photos in Google's own hosted UI, confirmed directly in
+   `controllers/google_photos.py`'s own docstring.
 4. ~~**Geolocation visit creation** (UL-312)~~ VERIFIED-ALREADY-IMPLEMENTED 2026-07-19 — contrary
    to this list treating it as unbuilt, `services.visits.record_geolocation_pin_visits()` already
    creates a same-day `PinVisit(source=GEOLOCATION)` for every pin whose boundary contains the
