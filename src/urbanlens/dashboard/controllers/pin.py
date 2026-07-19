@@ -1520,11 +1520,16 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             if raw_forecast:
                 forecast = [slot for item in raw_forecast if (slot := owm_item_to_slot(item)) is not None]
 
-        if not forecast:
-            from urbanlens.dashboard.services.apis.weather.open_meteo import OpenMeteoGateway
+        from urbanlens.dashboard.services.apis.weather.open_meteo import OpenMeteoGateway
 
+        if not forecast:
             forecast = OpenMeteoGateway().get_weather_forecast(float(pin.location.latitude), float(pin.location.longitude))
 
         logger.debug("forecast_data: %s", forecast)
 
-        return render(request, "dashboard/pages/location/weather.html", {"forecast": forecast})
+        # Always via Open-Meteo (UL-345), independent of which provider
+        # served the temperature/condition forecast above - OpenWeatherMap's
+        # 5-day/3-hour endpoint doesn't carry sunrise/sunset.
+        sun_times = OpenMeteoGateway().get_sun_times(float(pin.location.latitude), float(pin.location.longitude))
+
+        return render(request, "dashboard/pages/location/weather.html", {"forecast": forecast, "sun_times": sun_times})

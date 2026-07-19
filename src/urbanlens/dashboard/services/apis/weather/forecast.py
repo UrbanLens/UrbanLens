@@ -23,6 +23,22 @@ class ForecastSlot(TypedDict):
     wind_speed: float | None
 
 
+class SunTimes(TypedDict):
+    """Sunrise/sunset and golden-hour windows for one local calendar day.
+
+    Golden hour is approximated as the hour immediately after sunrise and
+    the hour immediately before sunset - the common photography-app
+    convention, rather than a precise solar-elevation calculation (which
+    would need a separate astronomy library); good enough for planning
+    purposes.
+    """
+
+    sunrise: datetime
+    sunset: datetime
+    golden_hour_morning_end: datetime
+    golden_hour_evening_start: datetime
+
+
 #: OpenWeatherMap's coarse ``weather[0].main`` categories, mapped to the same
 #: Material Symbols icon names Open-Meteo's WMO-code mapping uses.
 _OWM_CONDITION_ICONS: dict[str, str] = {

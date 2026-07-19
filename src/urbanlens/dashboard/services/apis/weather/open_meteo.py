@@ -10,11 +10,11 @@ gateway also produces (see ``ForecastSlot``).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 from typing import Any, ClassVar
 
-from urbanlens.dashboard.services.apis.weather.forecast import ForecastSlot
+from urbanlens.dashboard.services.apis.weather.forecast import ForecastSlot, SunTimes
 from urbanlens.dashboard.services.gateway import Gateway
 from urbanlens.dashboard.services.redact import redact_coordinate
 
@@ -123,3 +123,50 @@ class OpenMeteoGateway(Gateway):
                 ),
             )
         return slots
+
+    def get_sun_times(self, latitude: float, longitude: float) -> SunTimes | None:
+        """Return today's sunrise/sunset and approximate golden-hour windows.
+
+        Fetched independently of ``get_weather_forecast`` (UL-345): the main
+        forecast strip may come from OpenWeatherMap instead, but its 5-day/
+        3-hour endpoint doesn't carry sunrise/sunset, so this always goes
+        through Open-Meteo regardless of which provider serves the
+        temperature/condition forecast. ``timezone=auto`` resolves the
+        correct local timezone for the coordinates server-side, so the
+        returned datetimes are already in local time with no separate
+        timezone lookup needed on our end.
+
+        Args:
+            latitude: WGS-84 latitude.
+            longitude: WGS-84 longitude.
+
+        Returns:
+            Today's sun times, or None on failure.
+        """
+        params: dict[str, Any] = {
+            "latitude": latitude,
+            "longitude": longitude,
+            "daily": "sunrise,sunset",
+            "forecast_days": 1,
+            "timezone": "auto",
+        }
+        try:
+            response = self.session.get(_FORECAST_URL, params=params, timeout=15)
+            response.raise_for_status()
+            daily = response.json().get("daily") or {}
+            sunrise_list = daily.get("sunrise") or []
+            sunset_list = daily.get("sunset") or []
+            if not sunrise_list or not sunset_list:
+                return None
+            sunrise = datetime.fromisoformat(sunrise_list[0])
+            sunset = datetime.fromisoformat(sunset_list[0])
+        except Exception:
+            logger.warning("Open-Meteo sun times unavailable for %s, %s", redact_coordinate(latitude), redact_coordinate(longitude), exc_info=True)
+            return None
+
+        return SunTimes(
+            sunrise=sunrise,
+            sunset=sunset,
+            golden_hour_morning_end=sunrise + timedelta(hours=1),
+            golden_hour_evening_start=sunset - timedelta(hours=1),
+        )

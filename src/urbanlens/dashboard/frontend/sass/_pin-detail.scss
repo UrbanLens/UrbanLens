@@ -100,6 +100,34 @@
             font-size: .65rem;
         }
     }
+
+    .wx-sun-times {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .5rem .9rem;
+        padding: .5rem .75rem 0;
+        font-size: .72rem;
+        color: var(--ul-grey-7);
+    }
+
+    .wx-sun-time {
+        display: inline-flex;
+        align-items: center;
+        gap: .25rem;
+
+        .material-symbols-outlined {
+            font-size: .9rem;
+            color: var(--ul-grey-6);
+        }
+    }
+
+    .wx-sun-time--golden {
+        color: #92400e;
+
+        .material-symbols-outlined {
+            color: #d97706;
+        }
+    }
 }
 
 // -- Small icon button (used in card headers) --------------------------------

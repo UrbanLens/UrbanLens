@@ -3,6 +3,22 @@
         <i class="material-symbols-outlined">wb_sunny</i>
         <h3>Weather Forecast</h3>
     </div>
+    {% if sun_times %}
+    <div class="wx-sun-times">
+        <span class="wx-sun-time" title="Sunrise">
+            <i class="material-symbols-outlined">wb_twilight</i>{{ sun_times.sunrise|date:"g:i A" }}
+        </span>
+        <span class="wx-sun-time wx-sun-time--golden" title="Morning golden hour ends">
+            <i class="material-symbols-outlined">wb_sunny</i>Golden hour&nbsp;until&nbsp;{{ sun_times.golden_hour_morning_end|date:"g:i A" }}
+        </span>
+        <span class="wx-sun-time wx-sun-time--golden" title="Evening golden hour begins">
+            <i class="material-symbols-outlined">wb_sunny</i>Golden hour&nbsp;from&nbsp;{{ sun_times.golden_hour_evening_start|date:"g:i A" }}
+        </span>
+        <span class="wx-sun-time" title="Sunset">
+            <i class="material-symbols-outlined">bedtime</i>{{ sun_times.sunset|date:"g:i A" }}
+        </span>
+    </div>
+    {% endif %}
     {% if forecast %}
     <div class="weather-strip-scroll">
         <div class="weather-strip">
