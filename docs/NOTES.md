@@ -136,6 +136,141 @@ toggle). This is required groundwork for the still-unbuilt cost-reporting featur
 UL-52/UL-53) — new integrations should track a running cost estimate per call even before that
 reporting UI exists.
 
+## Property-records discovery heuristics — the live incidents behind each rule
+
+`services/apis/property_records/relevance.py` holds the pure accept/reject/ordering rules for
+Tier 1 endpoint discovery; each carries a condensed rationale in code. The full incidents that
+calibrated them (all confirmed against live county infrastructure, July 2026 — none invented
+defensively):
+
+- **Bare `land` excluded from the parcel-name pattern**: California's statewide `i15_LandUse_*`
+  agricultural land-use/crop-classification layers (fields `CLASS1-3`, `CROPTYP1-3`,
+  `WATERSOURC` — nothing about ownership or tax) matched on "landuse" containing "land" for two
+  unrelated counties (San Francisco, Sacramento). "Land Records"/"Land Ownership" remain matched
+  as exact phrases.
+- **Canonical titles vs. loose matches**: Athens County, OH publishes both "Parcels"
+  (address/owner/assessed-value fields) and "Mineral_Parcels" (subsurface mineral-rights
+  boundaries with none of those fields) side by side — both match the loose pattern equally, so
+  which won was API response ordering until canonical-title preference existed. In the other
+  direction, a real layer whose service name was `Statewide_CoastalZoneBoundary_Cadastral`
+  (coastal regulatory boundary, zero parcel fields) matched purely on "cadastr" — hence a loose
+  name match now also needs at least one corroborating field. The rule that *any* name match
+  suffices was itself a fix for Loudoun County, VA's public-schools sites layer (`LCPSSITES`,
+  fields `SCH_CODE`/`CLASS`) validating purely because it responded like a real ArcGIS layer.
+- **Stale-title deprioritization**: Washington State's statewide publisher (WAGeoservices)
+  maintains both "Previous Parcels" (last year's snapshot) and a fresher "Current Parcels";
+  nothing structural distinguishes them, so without the marker the winner was list-order luck.
+  Deprioritized, never rejected — a whole-county snapshot from last year still beats nothing.
+- **Narrow-subset URL slugs rejected outright**: Cook County, IL's only ArcGIS-discoverable
+  "parcels" layer was a regional sub-agency's tax-delinquency tracker (36K of the county's 1.8M+
+  parcels, no owner/address fields); Guilford County, NC's was an agricultural-preservation
+  program's enrollment list (21K of ~200K+, slug `..._Agricultural_Districts_VAD_Parcels`).
+  Unlike staleness these are worse than nothing: a tiny, unrepresentative slice.
+- **Non-production markers (`test`/`staging`/`demo`/`sample`), word-bounded against
+  separator-normalized text**: Carver County, MN's only discoverable candidate lived under a
+  service literally named `..._Public_Parcel_App_Test`, with genuinely flaky schema (fields
+  present on some fetches, `null` on others). Underscores are word characters to Python's regex
+  engine, so `\btest\b` never fires inside `..._Test/` without normalizing separators first.
+- **Feature-count floor (2,000)**: calibrated upward twice from live false accepts — a
+  one-feature "Property Boundary" layer with genuine assessor fields; a 121-row stray upload
+  literally named "Parcels" for a major metro county; the 1,153-row Williamson Act
+  agricultural-contract registry (Santa Clara, CA); a 588-row highway-widening project extract
+  (`U2524_Final_Parcels`) with real owner/address/value fields.
+- **Wrong-jurisdiction title checks**: a Skagit County, WA search surfaced someone's personal
+  `..._thurston_county` export of the statewide dataset, and "Florida Statewide Parcels" tied
+  with the correct Washington item (neither names a county, so only a state-level check can
+  separate them). County-level stays a ranking signal only (too noisy to reject on — a same-named
+  county can genuinely exist in-state, or a metro-area page can mention a neighbor in passing); a
+  match immediately followed by "County" is ignored because 30+ states' names are also county
+  names elsewhere ("Washington County Parcels, Minnesota" is not about Washington state).
+  Originally applied only to the portal-search path; a later live round found the *original*
+  web-search+regex step (`_rank_candidates`) had no jurisdiction check at all - a "Douglas County,
+  NE" search validated Douglas County, *Oregon*'s real, working endpoint, because Oregon's own
+  site (whose own page title literally says "Douglas County, OR") is simply better-indexed for the
+  query text than Nebraska's. Fixed by extracting candidates per search result (not from one
+  merged blob) so each URL keeps its own result's title/snippet text for the same check - but the
+  bug *recurred* even after that fix: the fixed query still returned zero Nebraska candidates for
+  the regex step to extract at all (Nebraska's real results were ArcGIS Hub landing pages, not raw
+  pasted REST URLs), so demoting Oregon behind a nonexistent rival didn't help. State-level
+  mismatches (unlike county-level) are precise enough - full state name or the "City/County, ST"
+  comma-abbreviation convention, case-sensitive so the literal word "or" is never misread as
+  Oregon - that a confirmed one is now a hard rejection, not just a demotion. Root cause of the
+  Douglas NE/OR incident itself: the deterministic query template used the literal word "OR" as a
+  plain-English "either/or" connector (`"...ArcGIS REST OR Socrata..."`), but every provider here
+  does keyword matching, not boolean search, so "OR" was just another term to match - and it
+  collides with Oregon's own postal abbreviation, which appears throughout every Oregon county
+  government page's own title/URL. Rewritten to avoid the literal word entirely.
+- **Wrong-jurisdiction data with no informative name, caught by geography instead**: a Boone
+  County, MO search's portal-search fallback accepted a layer plainly named "Parcels" (canonical,
+  trusted alone) living inside a service named `NicholasWV_AGOL`, owned by `nicholas_assessor` -
+  Nicholas County, *West Virginia*'s own data, surfaced by AGOL's item-search for an unrelated
+  "Boone County Missouri parcels" query. Nothing in that service's own title says "County" or
+  spells out a full state name, so the title-based checks above had nothing to match against - the
+  same class of gap once documented as a deliberate, unaddressed residual limitation. Closed not
+  by chasing name-text further but by cross-checking the candidate's own ArcGIS `extent` against
+  the target county's real extent (Census TIGERweb, free/keyless, already used elsewhere in this
+  codebase) - a check no misleading or uninformative name can evade. The two boxes are compared in
+  whatever spatial reference the *candidate* reports (a live one used NAD83 Missouri state plane,
+  wkid 26854, not the WGS-84/Web-Mercator pair that would've been tempting to hardcode) by asking
+  TIGERweb to reproject the county's extent into that same wkid server-side, rather than this
+  codebase inverting an arbitrary projection itself.
+- **Portal search results aren't guaranteed relevant at all**: the same Boone County, MO query
+  also surfaced (among only three total results) a one-off watershed-analysis dataset (item title
+  `GBFW_data_20240926`, snippet "Data for the Greater Bonne Femme Watershed analysis 2024") that
+  happened to contain a sub-layer plainly named "Parcels" - genuinely within Boone County's extent
+  (so the geography check above didn't catch it) and just over the feature-count floor (2,452
+  rows, a small study-area extract, not the whole county). AGOL's item search is a fuzzy free-text
+  match across title/tags/description, not a relevance guarantee. Fixed with a pre-probe filter:
+  the portal item's own title or snippet must itself mention parcels/assessment data before any
+  live request is spent on it - unlike a leaf layer's name (trusted alone when canonical; a real
+  county's actual parcel layer is routinely just named "Parcels" with nothing else distinguishing
+  it), the *container item* surfaced by search has no such excuse.
+- **Narrow-subset markers keep growing**: Kent County, MI's search accepted a 3,793-row "Parcel
+  Status from February 2020 Consent Decree" layer (a groundwater-contamination litigation
+  tracker - real Kent County parcels, but a sliver of its ~220K total). Its own title says
+  "Parcel", so the portal-item-plausibility filter above correctly let it through; only a
+  narrow-subset marker could catch it, so `consent.?decree` joined the existing
+  delinquency/easement/agricultural list.
+- **Known residual gap** (deliberate): a sub-floor-clearing partial can still slip through
+  (Franklin County, OH's 9K-row `Parcels_2022_01` likely is one) - the durable answer is the
+  human-review workflow around `discovered_by`/`last_verified`, not an ever-taller heuristic
+  stack. Socrata resources have no comparably cheap `extent` to geography-check, so they still
+  rely on title-text checks alone.
+
+Related, same package: Socrata's `distance_in_meters()` SoQL function is not supported on every
+backend and fails the *entire* query with a 400 (observed on New Orleans' parcels resource) —
+the Tier 1 gateway's point query deliberately has no `$order` clause. ArcGIS Online item-search
+matches the spelled-out state name far better than the USPS abbreviation ("Athens County Ohio
+parcels" vs. zero results for "...OH parcels"), and quoted phrases in the web-search discovery
+query returned zero results from Brave — both query templates are deliberately un-"cleaned". The
+web-search query template also deliberately avoids the literal word "OR" (see the Douglas
+County, NE/OR incident above) - every provider here does plain keyword matching, so a
+boolean-style "REST OR Socrata" connector is read as just another term, and it collides with
+Oregon's own postal abbreviation.
+
+## External API keys (dashboard/external_api/)
+
+Inbound-facing, unlike everything else in "Rate limiting and cost tracking" above (which covers
+*outbound* calls to third-party APIs). A few deliberate choices worth knowing before touching it:
+
+- `ApiKey.prefix` is stored in plaintext specifically so `authenticate_api_key` can look up the
+  owning row before hashing - Django's password hasher is intentionally slow, and unlike backup
+  codes (bounded at ~10/user), a user can accumulate arbitrarily many keys over time. Never make
+  `authenticate_api_key` iterate every active key's hash to find a match.
+- Every key currently gets the same fixed `scopes` grant (`ApiKeyScope.PROFILE_READ` +
+  `ApiKeyScope.PINS_WRITE` - see `models/account/model.py`). There's no scope-picker UI yet; the
+  field exists as a real per-row value (not an implicit "any valid key can do everything"
+  assumption) so a future picker only has to change what gets written at creation time, not the
+  verification path in `external_api/permissions.py`.
+- Pin creation from the external API goes through the exact same
+  `services.pin_creation.create_pin_for_profile` call as the map UI's "Add pin" form (see
+  `controllers/maps.py`) - this is intentional, not incidental reuse. Any validation/sanitization
+  added to one caller must go in that shared function so it automatically covers the other.
+- `external_api/` never imports from - or gets imported by - the internal viewsets under
+  `models/*/viewset.py`. It has its own auth (`ApiKeyAuthentication`, bearer token, never added to
+  `DEFAULT_AUTHENTICATION_CLASSES`) and its own throttle scope (`external_api_key`, per-key rather
+  than per-user).
+
 ## Windows development environment quirks
 
 - The venv is `.venv_windows\` (not `.venv`) because it was created on Windows — always invoke

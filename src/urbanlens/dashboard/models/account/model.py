@@ -11,8 +11,11 @@ from django.db import models
 from django.utils import timezone
 
 from urbanlens.dashboard.models.abstract import DashboardModel
+from urbanlens.dashboard.models.abstract.choices import TextChoices
 from urbanlens.dashboard.models.account.queryset import (
     AccountKdfManager,
+    ApiKeyManager,
+    ApiKeyUsageLogManager,
     BackupCodeManager,
     EmailVerificationManager,
     TOTPDeviceManager,
@@ -158,6 +161,105 @@ class BackupCode(DashboardModel):
     def __str__(self) -> str:
         status = "used" if self.used_at else "unused"
         return f"BackupCode(user={self.user_id}, {status})"
+
+
+class ApiKeyScope(TextChoices):
+    """Capabilities an ``ApiKey`` can grant to the external application holding it."""
+
+    PROFILE_READ = "profile:read", "Read your profile UUID"
+    PINS_WRITE = "pins:write", "Create pins on your behalf"
+
+
+def _default_api_key_scopes() -> list[str]:
+    """The fixed grant every new key gets - there is no scope picker yet.
+
+    Kept as a real per-row field (rather than an implicit "all keys can do
+    everything" assumption) so a future scope-picker UI only has to change
+    what gets written here; ``external_api.permissions`` already checks
+    per-key scopes rather than trusting the mere existence of a valid key.
+    """
+    return [ApiKeyScope.PROFILE_READ.value, ApiKeyScope.PINS_WRITE.value]
+
+
+class ApiKey(DashboardModel):
+    """A user-issued credential letting an external application act on their behalf.
+
+    Grants only what's listed in ``scopes`` - currently always both members of
+    :class:`ApiKeyScope`, since there's no scope picker yet (every key can
+    read the owner's uuid and create pins as them, and nothing else). Verified
+    by ``services.api_keys.authenticate_api_key`` via
+    ``external_api.authentication.ApiKeyAuthentication``, which is wired into
+    the external API's viewsets only - it is never added to
+    ``DEFAULT_AUTHENTICATION_CLASSES``, so it has no bearing on the internal,
+    session-authenticated REST surface.
+
+    Only a salted hash of the key's secret half is stored (``key_hash``, via
+    ``django.contrib.auth.hashers`` - the same hash-never-store-plaintext
+    pattern as :class:`BackupCode`). ``prefix`` is the *public* half, stored
+    in plaintext so ``authenticate_api_key`` can look up the owning row in
+    O(1) before hashing, rather than iterating every active key on every
+    request - unlike backup codes (bounded at ~10/user), a user may
+    accumulate many keys over time, and Django's password hasher is
+    deliberately slow.
+    """
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="api_keys")
+    name = models.CharField(max_length=100, help_text='User-facing label, e.g. "Zapier".')
+    prefix = models.CharField(max_length=12, unique=True, editable=False)
+    key_hash = models.CharField(max_length=128, editable=False)
+    scopes = models.JSONField(default=_default_api_key_scopes, editable=False)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+
+    if TYPE_CHECKING:
+        id: int
+        user_id: int
+
+    objects = ApiKeyManager()
+
+    class Meta(DashboardModel.Meta):
+        db_table = "dashboard_api_key"
+        ordering = ["-created"]
+
+    def __str__(self) -> str:
+        status = "revoked" if self.revoked_at else "active"
+        return f"ApiKey(user={self.user_id}, prefix={self.prefix}, {status})"
+
+    @property
+    def is_revoked(self) -> bool:
+        """True once this key has been revoked and can no longer authenticate."""
+        return self.revoked_at is not None
+
+
+class ApiKeyUsageLog(DashboardModel):
+    """A recent-activity trail for one ``ApiKey`` - what it's actually been used for.
+
+    Written once per successfully authenticated external-API request (see
+    ``services.api_keys.record_api_key_usage``, called from
+    ``external_api.authentication.ApiKeyAuthentication``) - never for a
+    failed/unauthenticated attempt, so this can't be used to fingerprint
+    guessing attacks. Deliberately bounded rather than an unbounded audit
+    log: each write trims the same key's rows back down to
+    ``services.api_keys.USAGE_LOG_LIMIT``, since this exists for a user to
+    sanity-check "what has this app been doing" in the settings UI, not as a
+    compliance-grade record.
+    """
+
+    api_key = models.ForeignKey(ApiKey, on_delete=models.CASCADE, related_name="usage_log")
+    endpoint = models.CharField(max_length=255)
+
+    if TYPE_CHECKING:
+        id: int
+        api_key_id: int
+
+    objects = ApiKeyUsageLogManager()
+
+    class Meta(DashboardModel.Meta):
+        db_table = "dashboard_api_key_usage_log"
+        ordering = ["-created"]
+
+    def __str__(self) -> str:
+        return f"ApiKeyUsageLog(api_key={self.api_key_id}, endpoint={self.endpoint})"
 
 
 class EmailVerification(DashboardModel):

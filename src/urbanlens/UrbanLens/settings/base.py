@@ -501,6 +501,10 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_RATES": {
         "anon": "60/minute",
         "user": "600/minute",
+        # external_api.throttling.ApiKeyRateThrottle - per API key, not per user,
+        # so one connected app's misbehavior can't burn through a budget shared
+        # with a user's other keys.
+        "external_api_key": "120/hour",
     },
 }
 

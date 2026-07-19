@@ -14,6 +14,7 @@ from urbanlens.dashboard.controllers import (
     account_deletion,
     ai_extraction,
     aliases,
+    api_keys,
     article,
     boundary,
     calendar_sync,
@@ -89,6 +90,10 @@ urlpatterns = [
         name="review-create-or-update",
     ),
     path("rest/", include(router.urls)),
+    # API-key-authenticated surface for third-party applications - see
+    # external_api/__init__.py for why this is deliberately not part of the
+    # session-authenticated router above.
+    path("api/external/v1/", include("urbanlens.dashboard.external_api.urls")),
     re_path("^$", IndexController.as_view(), name="home"),
     path("home/", HomeOverviewView.as_view(), name="home.view"),
     path("home/widgets/", HomeWidgetLayoutSaveView.as_view(), name="home.widgets.save"),
@@ -787,6 +792,8 @@ urlpatterns = [
     path("settings/security/totp/cancel/", two_factor.TOTPSetupCancelView.as_view(), name="settings.security.totp.cancel"),
     path("settings/security/totp/disable/", two_factor.TOTPDisableView.as_view(), name="settings.security.totp.disable"),
     path("settings/security/backup-codes/generate/", two_factor.BackupCodesGenerateView.as_view(), name="settings.security.backup_codes.generate"),
+    path("settings/security/api-keys/", api_keys.ApiKeyCreateView.as_view(), name="settings.security.api_keys.create"),
+    path("settings/security/api-keys/<int:api_key_id>/revoke/", api_keys.ApiKeyRevokeView.as_view(), name="settings.security.api_keys.revoke"),
     path("settings/immich/", immich.ImmichSettingsView.as_view(), name="settings.immich"),
     path("settings/immich/disconnect/", immich.ImmichDisconnectView.as_view(), name="settings.immich.disconnect"),
     path("settings/immich/scan/", immich.ImmichLibraryScanStartView.as_view(), name="settings.immich.scan"),

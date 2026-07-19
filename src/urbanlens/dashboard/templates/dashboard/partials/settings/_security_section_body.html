@@ -145,4 +145,104 @@
         <p class="settings-help">Set up a passkey or authenticator app first to enable backup codes.</p>
         {% endif %}
     </div>
+
+    {# -- API keys subsection ------------------------------------------------ #}
+    <div class="settings-subsection" id="api-keys-settings-section">
+        <h3 class="settings-subsection-title">
+            <i class="material-symbols-outlined">vpn_key</i>
+            API keys
+        </h3>
+        <p class="settings-section-desc">
+            Let another application create pins on your behalf. A key can only read your
+            account's UUID and create pins - nothing else.
+        </p>
+
+        <details class="settings-help-details">
+            <summary>How to use an API key</summary>
+            <p class="settings-help">
+                Send requests with an <code>Authorization: Bearer &lt;key&gt;</code> header.
+            </p>
+            <ul class="settings-help">
+                <li><code>GET {{ external_api_whoami_url }}</code> - returns <code>{"uuid": "..."}</code></li>
+                <li>
+                    <code>POST {{ external_api_pins_url }}</code> - create a pin. Body:
+                    <code>{"name": "...", "latitude": 42.5, "longitude": -73.5}</code>
+                    (or <code>"address"</code> instead of latitude/longitude)
+                </li>
+            </ul>
+            <pre class="settings-help-example"><code>curl -X POST {{ external_api_pins_url }} \
+  -H "Authorization: Bearer ulk_..." \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Old Mill", "latitude": 42.5, "longitude": -73.5}'</code></pre>
+        </details>
+
+        {% if new_api_key %}
+        <div class="backup-codes-reveal">
+            <p class="settings-help">
+                <strong>Copy this key now.</strong> You won't be able to see it again - if you
+                lose it, revoke it below and create a new one.
+            </p>
+            <p><code class="totp-manual-key">{{ new_api_key }}</code></p>
+        </div>
+        {% endif %}
+
+        {% if api_keys %}
+        <ul class="passkey-list" id="api-key-list">
+            {% for key in api_keys %}
+            <li class="passkey-list-item">
+                <div class="passkey-list-item-info">
+                    <i class="material-symbols-outlined">vpn_key</i>
+                    <div>
+                        <strong>{{ key.name }}</strong>
+                        <span class="settings-help">
+                            Added {{ key.created|date:"M j, Y" }}
+                            {% if key.revoked_at %} - revoked {{ key.revoked_at|date:"M j, Y" }}
+                            {% elif key.last_used_at %} - last used {{ key.last_used_at|date:"M j, Y" }}
+                            {% else %} - never used yet
+                            {% endif %}
+                        </span>
+                        {% with recent_activity=key.usage_log.all|slice:":5" %}
+                        {% if recent_activity %}
+                        <details class="api-key-activity">
+                            <summary>Recent activity</summary>
+                            <ul class="settings-help">
+                                {% for entry in recent_activity %}
+                                <li>{{ entry.endpoint }} - {{ entry.created|date:"M j, Y H:i" }}</li>
+                                {% endfor %}
+                            </ul>
+                        </details>
+                        {% endif %}
+                        {% endwith %}
+                    </div>
+                </div>
+                {% if not key.revoked_at %}
+                <form method="post" action="{% url 'settings.security.api_keys.revoke' key.pk %}"
+                      hx-post="{% url 'settings.security.api_keys.revoke' key.pk %}" hx-target="#security-settings-section-body" hx-swap="outerHTML"
+                      onsubmit="return confirm('Revoke this API key? Any application using it will immediately lose access.');">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn--danger btn--sm" title="Revoke this API key" aria-label="Revoke this API key">
+                        <i class="material-symbols-outlined">delete</i>
+                    </button>
+                </form>
+                {% endif %}
+            </li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+
+        <form method="post" action="{% url 'settings.security.api_keys.create' %}"
+              hx-post="{% url 'settings.security.api_keys.create' %}" hx-target="#security-settings-section-body" hx-swap="outerHTML">
+            {% csrf_token %}
+            <div class="settings-field">
+                <label class="settings-label" for="api-key-name">Name</label>
+                <input type="text" name="name" id="api-key-name" maxlength="100" placeholder="e.g. Zapier" required>
+            </div>
+            <div class="settings-actions">
+                <button type="submit" class="settings-save-btn">
+                    <i class="material-symbols-outlined">add</i>
+                    Create API key
+                </button>
+            </div>
+        </form>
+    </div>
 </div>

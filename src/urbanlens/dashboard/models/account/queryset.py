@@ -11,7 +11,7 @@ from urbanlens.dashboard.models import abstract
 if TYPE_CHECKING:
     from django.contrib.auth.models import User
 
-    from urbanlens.dashboard.models.account.model import AccountKdf
+    from urbanlens.dashboard.models.account.model import AccountKdf, ApiKey
 
 
 class EmailVerificationQuerySet(abstract.DashboardQuerySet):
@@ -119,3 +119,45 @@ class BackupCodeQuerySet(abstract.DashboardQuerySet):
 
 class BackupCodeManager(abstract.DashboardManager.from_queryset(BackupCodeQuerySet)):
     """Manager for BackupCode records."""
+
+
+class ApiKeyQuerySet(abstract.DashboardQuerySet):
+    """QuerySet for ApiKey rows."""
+
+    def for_user(self, user: User) -> ApiKeyQuerySet:
+        """All of this user's API keys, revoked or not.
+
+        Args:
+            user: The account to look up.
+
+        Returns:
+            Matching rows.
+        """
+        return self.filter(user=user)
+
+    def active(self) -> ApiKeyQuerySet:
+        """Keys that have not been revoked - the only ones a request may authenticate with."""
+        return self.filter(revoked_at__isnull=True)
+
+
+class ApiKeyManager(abstract.DashboardManager.from_queryset(ApiKeyQuerySet)):
+    """Manager for ApiKey records."""
+
+
+class ApiKeyUsageLogQuerySet(abstract.DashboardQuerySet):
+    """QuerySet for ApiKeyUsageLog rows."""
+
+    def for_api_key(self, api_key: ApiKey) -> ApiKeyUsageLogQuerySet:
+        """This key's logged activity, newest first (see model ``Meta.ordering``).
+
+        Args:
+            api_key: The key whose activity to look up.
+
+        Returns:
+            Matching rows.
+        """
+        return self.filter(api_key=api_key)
+
+
+class ApiKeyUsageLogManager(abstract.DashboardManager.from_queryset(ApiKeyUsageLogQuerySet)):
+    """Manager for ApiKeyUsageLog records."""

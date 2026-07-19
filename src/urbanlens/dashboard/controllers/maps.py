@@ -15,8 +15,6 @@ from django.db.models.functions import Coalesce, Lower
 from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
-from geopy.exc import GeocoderTimedOut, GeocoderUnavailable
-from geopy.geocoders import Nominatim
 from rest_framework.viewsets import GenericViewSet
 
 from urbanlens.dashboard.forms.search import SearchForm
@@ -34,6 +32,7 @@ from urbanlens.dashboard.models.site_settings.model import SiteSettings
 from urbanlens.dashboard.services.json_safety import safe_json_for_script
 from urbanlens.dashboard.services.map_pins import MapPinCache, MapPinPayloadService
 from urbanlens.dashboard.services.pagination import get_page
+from urbanlens.dashboard.services.pin_creation import PinCreationError, PinCreationForbiddenError, create_pin_for_profile
 from urbanlens.dashboard.services.redact import redact_secret
 from urbanlens.dashboard.services.saved_filter_cache import get_or_compute_matching_uuids
 from urbanlens.UrbanLens.settings.app import settings
@@ -253,114 +252,35 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             # creating a new Location.
             place_canonical_name = request.POST.get("place_canonical_name") or None
 
-            if not latitude or not longitude:
-                if not address:
-                    return HttpResponse("Error: No address or lat/lon provided.", status=400)
-                if not request.user.profile.external_apis_enabled:
-                    return HttpResponse("Error: External lookups are turned off in your settings - drop a pin on the map instead.", status=403)
-                latitude, longitude = get_pin_by_address(address)
-                if not latitude or not longitude:
-                    return HttpResponse("Error: Unable to convert address to lat/lng.", status=400)
-
-            lat_f = float(latitude)
-            lon_f = float(longitude)
-
-            location, _ = Location.objects.get_or_create(latitude=lat_f, longitude=lon_f, defaults={"official_name": place_canonical_name})
-
-            # Locations whose bounding box also covers this point - when more than
-            # one matches, the client offers the user a choice (see below).
-            all_locations = list(Location.objects.get_all_for_point(lat_f, lon_f))
-
-            from urbanlens.dashboard.models.wiki.model import Wiki
-
-            pin = Pin.objects.create(
-                name=name,
-                name_is_user_provided=bool((name or "").strip()),
-                location=location,
-                # Link to the place's community wiki when one already exists;
-                # wikis are only ever created explicitly from the pin page.
-                wiki=Wiki.objects.get_for_location(location),
-                icon=icon,
-                custom_icon=custom_icon,
-                color=color,
-                profile=request.user.profile,
-            )
-
-            # visible_to keeps the id__in lookups from resolving another
-            # user's private labels - a guessed foreign label id would
-            # otherwise attach (and render the name of) someone else's label.
-            if label_ids:
-                pin.labels.set(Label.objects.location_labels().visible_to(request.user.profile).filter(id__in=label_ids))
-            else:
-                if tag_ids:
-                    pin.labels.remove(*pin.labels.filter(kind="tag"))
-                    pin.labels.add(*Label.objects.tags().visible_to(request.user.profile).filter(id__in=tag_ids))
-                if category_ids:
-                    pin.labels.remove(*pin.labels.filter(kind="category"))
-                    pin.labels.add(*Label.objects.categories().visible_to(request.user.profile).filter(id__in=category_ids))
-
-            # Generate slug immediately so the "View Details" URL resolves without a
-            # separate lookup - Pin.slug is nullable and is not auto-populated by create().
-            pin.slug = pin.ensure_slug()
-
-            # When adding from a Places layer marker, pre-populate the GooglePlace
-            # link on both the pin and its location so subsequent views avoid an
-            # extra Places Details API call.
-            if google_place_id:
-                try:
-                    from urbanlens.dashboard.services.apis.locations.google.place_info import (
-                        GooglePlaceService,
-                    )
-                    from urbanlens.dashboard.services.locations.naming import (
-                        update_location_name_from_external_sources,
-                    )
-
-                    gp_service = GooglePlaceService()
-                    gp_service.ensure_linked_by_place_id(pin.location, google_place_id)
-                    if location:
-                        gp_service.ensure_linked_by_place_id(location, google_place_id)
-                    update_location_name_from_external_sources(location, profile=request.user.profile)
-                except Exception as gp_exc:
-                    logger.warning("Failed to link Google Place %s: %s", google_place_id, gp_exc)
-
-            # Pre-warm LocationCache for Wikipedia, NPS, and Google Places, plus the
-            # web-search results cache, so the pin detail page doesn't need to hit
-            # the APIs on first load.
-            if location and request.user.profile.external_apis_enabled:
-                from urbanlens.dashboard.services.celery import safely_enqueue_task
-                from urbanlens.dashboard.tasks import (
-                    prefetch_location_external_data,
-                    refresh_pin_web_search,
+            try:
+                result = create_pin_for_profile(
+                    request.user.profile,
+                    name=name,
+                    latitude=latitude,
+                    longitude=longitude,
+                    address=address,
+                    icon=icon,
+                    color=color,
+                    custom_icon=custom_icon,
+                    label_ids=label_ids,
+                    tag_ids=tag_ids,
+                    category_ids=category_ids,
+                    google_place_id=google_place_id,
+                    place_canonical_name=place_canonical_name,
                 )
+            except PinCreationForbiddenError as e:
+                return HttpResponse(f"Error: {e}", status=403)
+            except PinCreationError as e:
+                return HttpResponse(f"Error: {e}", status=400)
 
-                safely_enqueue_task(prefetch_location_external_data, location.pk, google_place_id=google_place_id, profile_id=request.user.profile.pk)
-
-            from urbanlens.dashboard.models.subscriptions import (
-                SiteFeature,
-                user_has_feature,
-            )
-
-            if location and request.user.profile.external_apis_enabled and user_has_feature(request.user, SiteFeature.SEARCH):
-                from urbanlens.dashboard.services.celery import safely_enqueue_task
-                from urbanlens.dashboard.tasks import refresh_pin_web_search
-
-                safely_enqueue_task(refresh_pin_web_search, pin.pk)
-
-            if user_has_feature(request.user, SiteFeature.AI):
-                from urbanlens.dashboard.services.celery import safely_enqueue_task
-                from urbanlens.dashboard.tasks import suggest_pin_category
-
-                safely_enqueue_task(suggest_pin_category, pin.pk)
-
+            pin = result.pin
             response = {"ok": True, "pin_slug": pin.slug or str(pin.uuid), "pin_uuid": str(pin.uuid)}
             # When a coordinate falls inside multiple bounding boxes, tell the
             # client so it can offer the user a choice of which location to use.
-            if len(all_locations) > 1:
-                from django.urls import reverse
-
+            if len(result.all_locations) > 1:
                 conflicting_locations = []
-                for loc in all_locations:
-                    is_current = loc.pk == location.pk
+                for loc in result.all_locations:
+                    is_current = loc.pk == pin.location_id
                     entry = {
                         "uuid": str(loc.uuid),
                         "slug": loc.slug or str(loc.uuid),
@@ -379,7 +299,6 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                             entry["existing_pin_name"] = existing_pin.effective_name
                     conflicting_locations.append(entry)
                 response["conflicting_locations"] = conflicting_locations
-            from django.http import JsonResponse
 
             return JsonResponse(response)
         except (ValueError, KeyError, DatabaseError) as e:
@@ -1190,19 +1109,3 @@ def _create_location_with_canonical_name(lat: float, lon: float, *, place_name: 
         longitude=lon,
         google_place=google_place,
     )
-
-
-def get_pin_by_address(address: str) -> tuple[float | None, float | None]:
-    try:
-        geolocator = Nominatim(user_agent="geoapiExercises")
-        pin = geolocator.geocode(address)
-        if pin:
-            return (pin.latitude, pin.longitude)
-
-    except GeocoderTimedOut:
-        logger.exception("Geocoder service timed out.")
-        raise
-    except GeocoderUnavailable:
-        logger.exception("Geocoder service unavailable.")
-        raise
-    return (None, None)

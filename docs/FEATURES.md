@@ -214,6 +214,12 @@ User-defined private fields for **pins**, **photos**, **people**, and **maps**. 
   in-product help tooltips on first visit to key sections (e.g. trip permissions, itinerary),
   with "Don't show again" opt-out per tooltip
 - Login lockout after repeated failed attempts
+- **External API keys** (Settings → Security → API keys): create/revoke/view API keys that let a
+  third-party application act on the user's behalf with an extremely limited, scoped grant -
+  currently reading only the owner's uuid and creating pins through the exact same
+  `services.pin_creation.create_pin_for_profile` path the map UI uses. Keys are hashed
+  (never stored in plaintext, like backup codes) and revocation takes effect immediately.
+  See `dashboard/external_api/` and the REST API section above.
 
 ## Undo / Data Safety
 
@@ -246,12 +252,17 @@ User-defined private fields for **pins**, **photos**, **people**, and **maps**. 
 
 ## REST API
 
-DRF `ModelViewSet`s under `/dashboard/rest/`, session-authenticated:
+Two separate DRF surfaces - see `dashboard/urls.py` and `dashboard/external_api/__init__.py`
+for the boundary rationale:
 
-- `pins` — full CRUD on the requesting user's pins
-- `reviews` — full CRUD plus a `create_or_update` action for star ratings
-- `profiles` — profile data (read-only)
-- Notification access via a matching viewset
+- **Internal, session-authenticated**, under `/dashboard/rest/`. Deliberately minimal - only what
+  the app's own frontend uses: `pins` (PATCH/DELETE only - pin creation goes through
+  `MapController.post_add_pin` instead, not this router) and a `reviews`
+  `create_or_update` action for the star-rating widget.
+- **External, API-key-authenticated**, under `/dashboard/api/external/v1/`. Lets a third-party
+  application act on a user's behalf with an extremely limited, scoped grant - see "External API
+  keys" under Account & Auth below. Independently versioned and never shares serializers/viewsets
+  with the internal surface.
 
 ## Direct Messaging
 
