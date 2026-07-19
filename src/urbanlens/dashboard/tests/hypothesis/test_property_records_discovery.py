@@ -85,9 +85,31 @@ class ValidateEndpointTests(TestCase):
     _FETCH_JSON = "urbanlens.dashboard.services.apis.property_records.discovery._fetch_json"
 
     def test_arcgis_layer_with_fields_validates_as_itself(self) -> None:
-        with mock.patch(self._FETCH_JSON, return_value={"fields": [{"name": "APN"}], "type": "Feature Layer"}):
+        with mock.patch(self._FETCH_JSON, return_value={"name": "Parcels", "fields": [{"name": "APN"}], "type": "Feature Layer"}):
             result = _validate_endpoint("https://gis.example.gov/rest/services/Parcels/MapServer/2", AdapterType.ARCGIS_REST)
         self.assertEqual(result, "https://gis.example.gov/rest/services/Parcels/MapServer/2")
+
+    def test_arcgis_layer_with_a_generic_name_but_enough_parcel_fields_validates(self) -> None:
+        """No parcel-ish layer name, but the fields themselves are unambiguous (matches real Douglas County OR data: TAXID + LEGAL)."""
+        body = {"name": "Layer7", "fields": [{"name": "TAXID"}, {"name": "LEGAL"}]}
+        with mock.patch(self._FETCH_JSON, return_value=body):
+            result = _validate_endpoint("https://gis.example.gov/rest/services/Common/MapServer/7", AdapterType.ARCGIS_REST)
+        self.assertEqual(result, "https://gis.example.gov/rest/services/Common/MapServer/7")
+
+    def test_arcgis_layer_with_unrelated_name_and_fields_is_rejected(self) -> None:
+        """Regression guard: a real, responsive, well-formed ArcGIS layer that isn't parcel data
+        (observed live: a Virginia county's public-schools sites layer) must not validate."""
+        body = {"name": "LCPSSITES", "fields": [{"name": "SCH_CODE"}, {"name": "CLASS"}, {"name": "JURISDICTION"}]}
+        with mock.patch(self._FETCH_JSON, return_value=body):
+            result = _validate_endpoint("https://gis.example.gov/rest/services/Cloud/LCPSSITES/FeatureServer/50", AdapterType.ARCGIS_REST)
+        self.assertIsNone(result)
+
+    def test_arcgis_layer_with_only_one_matching_field_is_rejected(self) -> None:
+        """A single coincidentally-matching field name isn't enough signal on its own."""
+        body = {"name": "Layer7", "fields": [{"name": "NAME"}, {"name": "TAXID"}]}
+        with mock.patch(self._FETCH_JSON, return_value=body):
+            result = _validate_endpoint("https://gis.example.gov/rest/services/Common/MapServer/7", AdapterType.ARCGIS_REST)
+        self.assertIsNone(result)
 
     def test_arcgis_service_root_is_refined_to_its_parcel_layer(self) -> None:
         """A bare .../MapServer describes the service but can't answer /query - saving it as-is
@@ -121,12 +143,21 @@ class ValidateEndpointTests(TestCase):
             self.assertIsNone(_validate_endpoint("https://gis.example.gov/rest/services/Parcels/MapServer/2", AdapterType.ARCGIS_REST))
 
     def test_socrata_list_response_validates(self) -> None:
-        with mock.patch(self._FETCH_JSON, return_value=[{"apn": "1"}]):
+        with mock.patch(self._FETCH_JSON, return_value=[{"apn": "1", "owner_name": "Jane Smith"}]):
             result = _validate_endpoint("https://data.example.gov/resource/ab12-cd34.json", AdapterType.SOCRATA)
         self.assertEqual(result, "https://data.example.gov/resource/ab12-cd34.json")
 
     def test_socrata_non_list_response_is_rejected(self) -> None:
         with mock.patch(self._FETCH_JSON, return_value={"error": True}):
+            self.assertIsNone(_validate_endpoint("https://data.example.gov/resource/ab12-cd34.json", AdapterType.SOCRATA))
+
+    def test_socrata_empty_result_set_is_rejected(self) -> None:
+        """An empty list (dataset exists but nothing came back for this probe) isn't confirmation of anything."""
+        with mock.patch(self._FETCH_JSON, return_value=[]):
+            self.assertIsNone(_validate_endpoint("https://data.example.gov/resource/ab12-cd34.json", AdapterType.SOCRATA))
+
+    def test_socrata_unrelated_dataset_is_rejected(self) -> None:
+        with mock.patch(self._FETCH_JSON, return_value=[{"restaurant_name": "Joe's Diner", "grade": "A"}]):
             self.assertIsNone(_validate_endpoint("https://data.example.gov/resource/ab12-cd34.json", AdapterType.SOCRATA))
 
     def test_unsafe_url_is_rejected_without_any_request(self) -> None:

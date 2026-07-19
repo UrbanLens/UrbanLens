@@ -289,12 +289,27 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
                 for label in exclude_tags:
                     label_ids = _Label.get_label_and_descendants(label.id)
                     qs = qs.exclude(labels__id__in=label_ids)
-        if min_rating := criteria.get("min_rating"):
+        if (min_rating := criteria.get("min_rating")) is not None:
             with contextlib.suppress(ValueError, TypeError):
-                qs = qs.filter(reviews__rating__gte=int(min_rating))
-        if max_rating := criteria.get("max_rating"):
+                min_rating = int(min_rating)
+                # 0 on the rating slider means "unrated" (there is no stored
+                # Review with rating=0 - pin_edit.py deletes the review
+                # instead of ever writing one), not a real floor to compare
+                # against. Every pin, rated or not, already satisfies "0 or
+                # unrated", so this is a no-op; only a real minimum (1-5)
+                # actually restricts the result.
+                if min_rating > 0:
+                    qs = qs.filter(reviews__rating__gte=min_rating)
+        if (max_rating := criteria.get("max_rating")) is not None:
             with contextlib.suppress(ValueError, TypeError):
-                qs = qs.filter(reviews__rating__lte=int(max_rating))
+                max_rating = int(max_rating)
+                # max_rating=0 asks for "unrated only" - reviews__rating__lte=0
+                # would silently match nothing (no Review row ever has
+                # rating=0), so that specific case needs isnull instead.
+                if max_rating <= 0:
+                    qs = qs.filter(reviews__isnull=True)
+                else:
+                    qs = qs.filter(reviews__rating__lte=max_rating)
         if has_visits := criteria.get("has_visits"):
             visited_q = Q(last_visited__isnull=False) | Q(labels__name="Visited", labels__kind="status")
             if has_visits == "yes":
@@ -311,10 +326,10 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
         if (max_priority := criteria.get("max_priority")) is not None:
             with contextlib.suppress(ValueError, TypeError):
                 qs = qs.filter(priority__lte=int(max_priority))
-        if min_danger := criteria.get("min_danger"):
+        if (min_danger := criteria.get("min_danger")) is not None:
             with contextlib.suppress(ValueError, TypeError):
                 qs = qs.filter(danger__gte=int(min_danger))
-        if max_danger := criteria.get("max_danger"):
+        if (max_danger := criteria.get("max_danger")) is not None:
             with contextlib.suppress(ValueError, TypeError):
                 qs = qs.filter(danger__lte=int(max_danger))
         if (min_vulnerability := criteria.get("min_vulnerability")) is not None:

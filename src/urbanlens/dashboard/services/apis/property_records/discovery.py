@@ -57,6 +57,7 @@ from urllib.parse import urljoin, urlsplit
 import requests
 
 from urbanlens.dashboard.models.property_jurisdiction.meta import AdapterType
+from urbanlens.dashboard.services.apis.property_records.field_mapping import _HEURISTIC_CANDIDATES, _normalize_key
 from urbanlens.dashboard.services.apis.property_records.html_scrape import ScrapeRecipe, SearchField
 from urbanlens.dashboard.services.apis.property_records.meta import SCRAPE_USER_AGENT
 from urbanlens.dashboard.services.apis.property_records.pacing import pace_host
@@ -70,7 +71,15 @@ logger = logging.getLogger(__name__)
 _ARCGIS_URL_RE = re.compile(r"https?://[^\s\"'<>]+?/(?:MapServer|FeatureServer)(?:/\d+)?", re.IGNORECASE)
 _SOCRATA_URL_RE = re.compile(r"https?://[^\s\"'<>]+?/resource/[A-Za-z0-9]{4}-[A-Za-z0-9]{4}\.json", re.IGNORECASE)
 
-_SEARCH_QUERY_TEMPLATE = '"{county}" "{state}" county parcel GIS ArcGIS REST OR Socrata open data'
+#: Deliberately unquoted. Wrapping ``county``/``state`` in literal phrase
+#: quotes (the original form here) reproducibly returned zero results from
+#: Brave Search against five real counties, several with a real, findable
+#: ArcGIS parcel layer - dropping the quotes alone flips those to 4-8
+#: results each. Confirmed against Brave specifically (SearXNG, this
+#: deployment's configured primary provider, wasn't independently
+#: reachable to compare at the time - if it tolerates the quoted form fine,
+#: this unquoted one should be at least as permissive for it too, not less).
+_SEARCH_QUERY_TEMPLATE = "{county} {state} parcel GIS ArcGIS REST OR Socrata open data"
 _MAX_SEARCH_RESULTS = 8
 
 
@@ -121,6 +130,16 @@ _PARCEL_LAYER_NAME_RE = re.compile(r"parcel|cadastr|tax|assess|propert|land", re
 #: each probe is a live request against a county server.
 _MAX_LAYER_PROBES = 3
 
+#: Every raw field-name candidate field_mapping already knows to associate
+#: with a parcel/tax record, normalized once - reused here (rather than a
+#: second hand-maintained list) so "does this look like parcel data" and
+#: "can we actually map its fields" stay the same definition.
+_PARCEL_FIELD_CANDIDATES: frozenset[str] = frozenset(_normalize_key(candidate) for candidates in _HEURISTIC_CANDIDATES.values() for candidate in candidates)
+#: How many of a candidate's own field names must resemble a known parcel/tax
+#: field before its data is trusted as genuinely parcel-related, when its
+#: name alone doesn't already say so (see _looks_like_parcel_data).
+_MIN_PARCEL_FIELD_MATCHES = 2
+
 
 def _fetch_json(url: str, params: dict[str, Any]) -> Any | None:
     """Politely fetch and parse one JSON validation probe, or None on any failure."""
@@ -133,6 +152,44 @@ def _fetch_json(url: str, params: dict[str, Any]) -> Any | None:
         return None
 
 
+def _looks_like_parcel_data(name: str, fields: list[Any] | None) -> bool:
+    """Whether a candidate layer/resource's own name or field names indicate parcel/tax data.
+
+    Confirmed live: without this check, discovery "validated" a real,
+    responsive ArcGIS layer for a Virginia county that was named
+    ``LCPSSITES`` and had fields like ``SCH_CODE``/``CLASS`` - it was the
+    county's *public schools* site layer, not parcels. "Responds like a real
+    queryable ArcGIS layer" was the only check in place, and plenty of
+    non-parcel county GIS layers pass that.
+
+    Args:
+        name: The candidate's own name, if any (an ArcGIS layer's ``name``;
+            empty for a Socrata resource, which has no equivalent in the row
+            data itself).
+        fields: Raw field-name strings (ArcGIS ``fields[].name``, or a
+            Socrata row's keys), or None when unavailable.
+
+    Returns:
+        True when the name itself reads as parcel/tax/assessment data, or
+        when at least :data:`_MIN_PARCEL_FIELD_MATCHES` of its own fields
+        resemble a known parcel/tax field name - the same names
+        ``field_mapping.map_fields`` would need to normalize its data into
+        anything useful anyway, so a layer with too few of them wouldn't
+        produce a usable record even if it were the right one.
+    """
+    if _PARCEL_LAYER_NAME_RE.search(name or ""):
+        return True
+    if not fields:
+        return False
+    matches = sum(1 for value in fields if isinstance(value, str) and _normalize_key(value) in _PARCEL_FIELD_CANDIDATES)
+    return matches >= _MIN_PARCEL_FIELD_MATCHES
+
+
+def _arcgis_field_names(body: dict[str, Any]) -> list[str]:
+    """Extract field-name strings from an ArcGIS layer's ``?f=json`` body."""
+    return [f["name"] for f in body.get("fields") or [] if isinstance(f, dict) and isinstance(f.get("name"), str)]
+
+
 def _refine_arcgis_url(url: str, body: dict[str, Any]) -> str | None:
     """Resolve an ArcGIS service *root* down to a queryable parcel layer URL.
 
@@ -140,14 +197,15 @@ def _refine_arcgis_url(url: str, body: dict[str, Any]) -> str | None:
     service and cannot answer ``/query`` requests - saving one to the
     registry would validate fine yet never return data. When the service
     description lists layers, probe the parcel-ish ones (by name) and return
-    the first that exposes queryable ``fields``.
+    the first that both exposes queryable ``fields`` and looks like genuine
+    parcel data (see :func:`_looks_like_parcel_data`).
 
     Args:
         url: The service-root URL that was validated.
         body: The root's own ``?f=json`` service description.
 
     Returns:
-        A layer-level URL confirmed to expose ``fields``, or None.
+        A layer-level URL confirmed to expose parcel-like fields, or None.
     """
     layers = body.get("layers")
     if not isinstance(layers, list):
@@ -157,7 +215,9 @@ def _refine_arcgis_url(url: str, body: dict[str, Any]) -> str | None:
     for layer in candidates[:_MAX_LAYER_PROBES]:
         layer_url = f"{url.rstrip('/')}/{layer['id']}"
         layer_body = _fetch_json(layer_url, {"f": "json"})
-        if isinstance(layer_body, dict) and not layer_body.get("error") and "fields" in layer_body:
+        if not isinstance(layer_body, dict) or layer_body.get("error") or "fields" not in layer_body:
+            continue
+        if _looks_like_parcel_data(str(layer_body.get("name") or layer.get("name") or ""), _arcgis_field_names(layer_body)):
             return layer_url
     return None
 
@@ -174,7 +234,11 @@ def _validate_endpoint(url: str, adapter_type: str) -> str | None:
         an ArcGIS service root is refined down to its parcel layer (see
         :func:`_refine_arcgis_url`), since only a layer-level URL can answer
         the point queries ``ArcGisSocrataGateway`` issues. None when the
-        endpoint doesn't respond like the claimed service type.
+        endpoint doesn't respond like the claimed service type, or responds
+        but doesn't look like parcel/tax data (see :func:`_looks_like_parcel_data`) -
+        a same-named layer for an unrelated county dataset (schools, roads,
+        zoning, ...) is a real, observed failure mode of a name/keyword-based
+        web search, not a hypothetical one.
     """
     if not _is_safe_public_url(url):
         return None
@@ -183,10 +247,17 @@ def _validate_endpoint(url: str, adapter_type: str) -> str | None:
         if not isinstance(body, dict) or body.get("error"):
             return None
         if "fields" in body:
+            if not _looks_like_parcel_data(str(body.get("name") or ""), _arcgis_field_names(body)):
+                return None
             return url
         return _refine_arcgis_url(url, body)
+
     rows = _fetch_json(url, {"$limit": 1})
-    return url if isinstance(rows, list) else None
+    if not isinstance(rows, list) or not rows or not isinstance(rows[0], dict):
+        return None
+    if not _looks_like_parcel_data("", list(rows[0].keys())):
+        return None
+    return url
 
 
 def _rank_candidates(candidates: list[tuple[str, str]]) -> list[tuple[str, str]]:
