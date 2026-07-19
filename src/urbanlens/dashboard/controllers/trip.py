@@ -972,7 +972,11 @@ class TripActivitiesView(LoginRequiredMixin, View):
         location, pin = _resolve_activity_place(body, profile)
 
         child_trip_uuid = (body.get("child_trip_uuid") or "").strip()
-        child_trip = Trip.objects.filter(uuid=child_trip_uuid).first() if child_trip_uuid else None
+        # Scoped to the linking user's own trips, matching TripChildTripSearchView -
+        # without this, any authenticated user could link an arbitrary trip they
+        # have no access to and its activities (titles, coordinates, schedule)
+        # would render as "ghost markers" on this trip's map for every member.
+        child_trip = Trip.objects.filter(uuid=child_trip_uuid, profiles=profile).first() if child_trip_uuid else None
 
         status = (body.get("status") or "proposed").strip()
         if status not in {"proposed", "confirmed"}:
@@ -1045,7 +1049,8 @@ class TripActivityEditView(LoginRequiredMixin, View):
 
         child_trip_uuid = (body.get("child_trip_uuid") or "").strip()
         if child_trip_uuid:
-            activity.child_trip = Trip.objects.filter(uuid=child_trip_uuid).first()
+            # See TripActivitiesView.post: scoped to the linking user's own trips.
+            activity.child_trip = Trip.objects.filter(uuid=child_trip_uuid, profiles=profile).first()
         elif "child_trip_uuid" in body:
             activity.child_trip = None
 
@@ -1533,6 +1538,8 @@ class TripMapDataView(LoginRequiredMixin, View):
                 seen_child_acts.add(act.child_trip_id)
                 child_acts = list(_activity_qs(act.child_trip))
                 for child_act in child_acts:
+                    if child_act.location_hidden:
+                        continue
                     child_coords = _activity_coords(child_act)
                     if not child_coords:
                         continue
