@@ -419,11 +419,10 @@ Ordering within each tier is roughly by (user impact × risk × leverage). IDs r
 
 Each of these is "confirm, then either close or convert to a bug": visit-history display
 (UL-114), search-query disambiguation keywords (UL-117), child trips (UL-228), badge-kind-change
-UX (UL-155), dialog drag-outside-closes (UL-32), duplicate code between `location/index.html`
-and `satellite_view.html` (UL-288), wiki section missing on one pin (UL-385), Wikipedia missing
-for some HRSH buildings (UL-354), takeout Parking.csv unreadable (UL-203), import-updates-names
-flow (UL-207). Closing these shrinks `TODO.md` noise cheaply — batch several per session, with a
-repro test per confirmed bug.
+UX (UL-155), duplicate code between `location/index.html` and `satellite_view.html` (UL-288),
+wiki section missing on one pin (UL-385), Wikipedia missing for some HRSH buildings (UL-354),
+takeout Parking.csv unreadable (UL-203), import-updates-names flow (UL-207). Closing these
+shrinks `TODO.md` noise cheaply — batch several per session, with a repro test per confirmed bug.
 
 11. ~~**Password reset for SSO users** (UL-257)~~ RESOLVED 2026-07-19 (`def2c4d6`) — SSO-only
     accounts were silently dropped by Django's stock `PasswordResetForm.get_users()`, while the
@@ -438,6 +437,12 @@ repro test per confirmed bug.
     directly via `get_template().origin.name` for every `registration/*` template - a class of
     bug the existing test suite couldn't have caught, since tests use `assertContains` against
     whatever template rendered without checking *which* template that was.
+12. ~~**Dialog drag-outside-closes** (UL-32)~~ VERIFIED-ALREADY-FIXED 2026-07-19 (`19b8baec`) —
+    a site-wide `themes/base.html` handler already guards every `<dialog>` against this (tracks
+    mousedown vs. click backdrop-vs-inside separately, only closes when both land on the
+    backdrop). The add-pin dialog had its own redundant duplicate of the identical algorithm;
+    removed and wired into the shared handler's `data-closefn` mechanism instead, which until now
+    had zero callers.
 
 ### 4.3 Tier 3: High-leverage features (composable from existing infrastructure)
 

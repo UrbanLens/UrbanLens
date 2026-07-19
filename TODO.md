@@ -53,7 +53,7 @@ Features planned for this release.
 * Verify Feature: Possible issue with then pulling or displaying visit history entries. [UL-114]
 * Verify Feature: When performing google or brave searches, add the street name, city, and state to the search query as optional keywords, to help disambiguate with unrelated results. [UL-117]
 * Add metadata for emojis (i.e. icons) to aid in searching for them. [UL-12]
-* Clicking outside of a dialog closes it, which is great. But clicking in the dialog and dragging outside unexpectedly closes it. [UL-32]
+* ~~Clicking outside of a dialog closes it, which is great. But clicking in the dialog and dragging outside unexpectedly closes it.~~ VERIFIED-ALREADY-FIXED 2026-07-19 (`19b8baec`): a site-wide drag-guard in `themes/base.html` (mousedown/click backdrop tracking) already prevents this for every dialog; the add-pin dialog additionally carried a redundant duplicate copy of the same algorithm (removed, wired into the shared `data-closefn` mechanism instead). No dialog reproduces the bug. [UL-32]
 * When in the main map and the trip details page, drag/drop of a pin shouldn't be as easy at higher zoom levels. Not sure what I want here. Confirmation dialog? Disable at higher zoom? [UL-33]
 * When creating the community wiki entry for a pin, ensure we're not leaking user data to it that the user expects to be private. For instance, the community wiki entry should probably be titled based on the google place name, not the user's custom title. Perhaps we can offer a choice between the two when the user is creating only a single pin? [UL-26]
 * Ensure non-anonymized urls do not exist at all. Users should not be able to access urls we don't want them to access, (like .../profile/2/, instead of the uuid). [UL-40]
