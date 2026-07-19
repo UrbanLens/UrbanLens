@@ -115,6 +115,68 @@ class PinListMarkupMapErrorIsJsonTests(TestCase):
         self.assertIn("disabled", content[tag_start:tag_end])
 
 
+class PinListExportViewTests(TestCase):
+    """POST /lists/<slug>/export/ downloads every pin on the list (UL-377)."""
+
+    def setUp(self) -> None:
+        self.user = baker.make(User)
+        self.client.force_login(self.user)
+        self.profile = self.user.profile
+        self.pin_list = baker.make(PinList, profile=self.profile, name="My List")
+
+    def _export(self, fmt: str):
+        return self.client.post(reverse("lists.export", kwargs={"list_slug": self.pin_list.slug}), data={"format": fmt})
+
+    def test_geojson_export_contains_the_lists_pins(self) -> None:
+        pin = _make_pin(self.profile, name="Listed Pin")
+        PinListItem.objects.create(pin_list=self.pin_list, pin=pin, added_via=PinListItem.ADDED_MANUAL)
+        response = self._export("geojson")
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)
+        names = {f["properties"]["name"] for f in data["features"]}
+        self.assertEqual(names, {"Listed Pin"})
+
+    def test_excludes_pins_not_on_the_list(self) -> None:
+        listed = _make_pin(self.profile, name="Listed Pin")
+        PinListItem.objects.create(pin_list=self.pin_list, pin=listed, added_via=PinListItem.ADDED_MANUAL)
+        _make_pin(self.profile, name="Unlisted Pin")
+        response = self._export("csv")
+        text = response.content.decode()
+        self.assertIn("Listed Pin", text)
+        self.assertNotIn("Unlisted Pin", text)
+
+    def test_sets_content_disposition_with_matching_extension(self) -> None:
+        pin = _make_pin(self.profile)
+        PinListItem.objects.create(pin_list=self.pin_list, pin=pin, added_via=PinListItem.ADDED_MANUAL)
+        response = self._export("kml")
+        self.assertIn(f'filename="{self.pin_list.slug}.kml"', response["Content-Disposition"])
+        self.assertEqual(response["Content-Type"], "application/vnd.google-earth.kml+xml")
+
+    def test_unknown_format_returns_400(self) -> None:
+        pin = _make_pin(self.profile)
+        PinListItem.objects.create(pin_list=self.pin_list, pin=pin, added_via=PinListItem.ADDED_MANUAL)
+        response = self._export("shapefile")
+        self.assertEqual(response.status_code, 400)
+
+    def test_empty_list_returns_404(self) -> None:
+        response = self._export("csv")
+        self.assertEqual(response.status_code, 404)
+
+    def test_another_users_list_is_not_reachable(self) -> None:
+        other_user = baker.make(User)
+        other_list = baker.make(PinList, profile=other_user.profile, name="Not Mine")
+        PinListItem.objects.create(pin_list=other_list, pin=_make_pin(other_user.profile), added_via=PinListItem.ADDED_MANUAL)
+        response = self.client.post(reverse("lists.export", kwargs={"list_slug": other_list.slug}), data={"format": "csv"})
+        self.assertEqual(response.status_code, 404)
+
+    def test_detail_page_has_an_export_button(self) -> None:
+        pin = _make_pin(self.profile)
+        PinListItem.objects.create(pin_list=self.pin_list, pin=pin, added_via=PinListItem.ADDED_MANUAL)
+        response = self.client.get(reverse("lists.detail", kwargs={"list_slug": self.pin_list.slug}))
+        self.assertContains(response, "pinListExport(")
+        self.assertContains(response, "Export list")
+
+
 class PinListDetailInlineEditableTests(TestCase):
     """Click-to-edit-in-place title/description on the list detail hero.
 

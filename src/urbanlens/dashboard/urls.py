@@ -714,6 +714,7 @@ urlpatterns = [
                 path("<slug:list_slug>/create-trip/", pin_lists.PinListCreateTripView.as_view(), name="lists.create_trip"),
                 path("<slug:list_slug>/add-to-trip/", pin_lists.PinListAddToTripView.as_view(), name="lists.add_to_trip"),
                 path("<slug:list_slug>/markup-map/", pin_lists.PinListMarkupMapView.as_view(), name="lists.markup_map"),
+                path("<slug:list_slug>/export/", pin_lists.PinListExportView.as_view(), name="lists.export"),
             ],
         ),
     ),

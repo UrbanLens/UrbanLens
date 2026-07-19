@@ -556,3 +556,32 @@ class PinListMarkupMapView(LoginRequiredMixin, View):
             pin_list.save(update_fields=["markup_map", "updated"])
 
         return JsonResponse({"ok": True, "redirect": reverse("markup_map.markup", kwargs={"map_uuid": markup_map.uuid})})
+
+
+class PinListExportView(LoginRequiredMixin, View):
+    """Download every pin on a list as GeoJSON/KML/GPX/CSV (UL-377).
+
+    POST /lists/<slug>/export/  body: ``format=...`` (plain form POST, not
+    JSON - matches ``PinBulkExportView``, see ``controllers/pin_bulk.py``,
+    which this reuses for the actual file writers).
+    """
+
+    def post(self, request: HttpRequest, list_slug: str) -> HttpResponse:
+        from urbanlens.dashboard.services.export_formats import EXPORT_FORMATS
+
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        pin_list = _get_pin_list_or_404(list_slug, profile)
+
+        fmt = request.POST.get("format", "")
+        if fmt not in EXPORT_FORMATS:
+            return HttpResponse("Unknown export format.", status=400)
+
+        pins = Pin.objects.filter(pk__in=pin_list.items.values_list("pin_id", flat=True)).select_related("location")
+        if not pins.exists():
+            return HttpResponse("This list has no pins.", status=404)
+
+        writer, extension, content_type = EXPORT_FORMATS[fmt]
+        content = writer(pins)
+        response = HttpResponse(content, content_type=content_type)
+        response["Content-Disposition"] = f'attachment; filename="{pin_list.slug or "pins"}.{extension}"'
+        return response
