@@ -402,8 +402,12 @@ Ordering within each tier is roughly by (user impact × risk × leverage). IDs r
    **Still open**: un-identifiable active filter state (UL-271) — unrelated, not investigated.
 8. **Bulk edit shared-properties display** (UL-353) and organize badge-edit cache staleness
    (UL-279).
-9. **Comment thread integrity** (UL-219) — replies to a deleted comment; define and test the
-   tombstone behavior.
+9. ~~**Comment thread integrity** (UL-219)~~ RESOLVED 2026-07-18 (`ce4b6af1`) — added
+   `Comment.parent_deleted` (migration 0076) + a `pre_delete` signal (mirroring the existing
+   `map_removed` pattern) flagging replies before `parent` is nulled by `SET_NULL`; the comment
+   panel now renders a "Replying to a comment that was deleted" tombstone placeholder instead of
+   the reply silently reappearing as an unexplained top-level comment. Shared across pin and
+   wiki comment panels (`_build_context`/`_comment_body.html`).
 10. **First-install "welcome back" login copy** (UL-179) and map initial-position flash
     (UL-221) — small, but they're first-impression bugs.
 
