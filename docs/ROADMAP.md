@@ -420,9 +420,8 @@ Ordering within each tier is roughly by (user impact × risk × leverage). IDs r
 ### 4.2 Tier 2: Verification backlog (cheap to check, unknown risk)
 
 Each of these is "confirm, then either close or convert to a bug": wiki section missing on one pin
-(UL-385), Wikipedia missing for some HRSH buildings (UL-354), takeout Parking.csv unreadable
-(UL-203). Closing these shrinks `TODO.md` noise cheaply — batch several per session, with a repro
-test per confirmed bug.
+(UL-385), Wikipedia missing for some HRSH buildings (UL-354). Closing these shrinks `TODO.md`
+noise cheaply — batch several per session, with a repro test per confirmed bug.
 
 11. ~~**Password reset for SSO users** (UL-257)~~ RESOLVED 2026-07-19 (`def2c4d6`) — SSO-only
     accounts were silently dropped by Django's stock `PasswordResetForm.get_users()`, while the
@@ -483,6 +482,15 @@ test per confirmed bug.
     import of the same coordinates (e.g. Google Takeout's Labelled Places). Fixed to fill in a
     blank, non-user-provided name on merge, gated on `name_is_user_provided` - already documented
     for exactly this purpose but never actually wired up on the merge path.
+19. ~~**Takeout Parking.csv unreadable** (UL-203)~~ RESOLVED 2026-07-19 (`d6a677a9`) — the CSV
+    importer only recognized a column literally named "URL"; Google Takeout's Parking.csv export
+    uses "Parking location" instead and has no latitude/longitude columns for the fallback to
+    catch, so every row silently failed and the file produced zero pins. Broadened the check to a
+    candidate-column list (matching `heuristics.py`'s existing pattern for column-name variance
+    across export sources). Also deleted `takeout_csv_to_dict()`, a dead duplicate of the same
+    parsing with the identical unfixed bug. Note: the "Parking location" header name is based on
+    the known Takeout export format, not a sample file from the report - re-open if a real
+    Parking.csv still fails.
 
 ### 4.3 Tier 3: High-leverage features (composable from existing infrastructure)
 
