@@ -205,6 +205,16 @@ DATABASE_ROUTERS = ["urbanlens.dashboard.dbrouters.DBRouter"]
 # endpoint when available, otherwise local Redis for development.
 CELERY_BROKER_URL = os.getenv("UL_CELERY_BROKER_URL") or VALKEY_URL or "redis://localhost:6379/0"
 CELERY_RESULT_BACKEND = os.getenv("UL_CELERY_RESULT_BACKEND") or CELERY_BROKER_URL
+# Bounds the result backend's connection-recovery retry loop
+# (RedisBackend.ensure(), used by its pub/sub result-tracking reconnect) to a
+# few seconds instead of Celery's default near-unbounded exponential backoff
+# (interval_start=2s, interval_max=30s, no timeout/max_retries set) - without
+# this, any request-path call to safely_enqueue_task() blocks for several
+# minutes before failing whenever the broker is unreachable (it does catch
+# the eventual RuntimeError, but only after the retry storm completes).
+# Matches the fail-fast philosophy already applied to the plain Django
+# cache's own Redis connection above (socket_connect_timeout/socket_timeout).
+CELERY_RESULT_BACKEND_TRANSPORT_OPTIONS = {"retry_policy": {"timeout": 5.0}}
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
