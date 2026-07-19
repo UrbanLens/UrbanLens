@@ -12,7 +12,7 @@ import re
 
 from django.template.loader import render_to_string
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase
 
 
 class _FakeProfile:
@@ -32,7 +32,7 @@ class _FakeProfile:
             setattr(self, key, value)
 
 
-class PrivacyHintEditableTests(TestCase):
+class PrivacyHintEditableTests(SimpleTestCase):
     def test_eye_icon_when_visible_to_anyone(self) -> None:
         owner = _FakeProfile(profile_visibility="anyone")
         html = render_to_string(

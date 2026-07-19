@@ -16,14 +16,14 @@ from django.urls import reverse
 from hypothesis import given, settings, strategies as st
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.controllers.safety import SafetySettingsView, _contact_display_label
 from urbanlens.dashboard.models.friendship import Friendship, FriendshipStatus
 from urbanlens.dashboard.models.safety.model import EmergencyContactDefault
 from urbanlens.dashboard.services.safety import get_or_create_preference
 
 
-class ContactDisplayLabelTests(TestCase):
+class ContactDisplayLabelTests(SimpleTestCase):
     """_contact_display_label's fallback ordering: profile > label > email."""
 
     def test_linked_profile_wins_even_with_label_and_email(self) -> None:

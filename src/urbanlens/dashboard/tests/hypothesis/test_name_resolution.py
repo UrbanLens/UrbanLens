@@ -12,7 +12,7 @@ from unittest.mock import patch
 from hypothesis import given, settings as hyp_settings, strategies as st
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.site_settings.model import SiteSettings
@@ -64,7 +64,7 @@ def _patch_providers(*providers: NameProvider):
 # -- Address-derived quality gate --------------------------------------------------
 
 
-class IsAddressDerivedNameTests(TestCase):
+class IsAddressDerivedNameTests(SimpleTestCase):
     """Street/city/state fragments must not be promoted to official names."""
 
     def test_street_name_reported_as_place_name_is_rejected(self) -> None:
@@ -113,7 +113,7 @@ class IsAddressDerivedNameTests(TestCase):
         self.assertFalse(is_address_derived_name(transform("Kenwood") + pad, keep_loc))
 
 
-class IsAddressDerivedNameFuzzyVariantsTests(TestCase):
+class IsAddressDerivedNameFuzzyVariantsTests(SimpleTestCase):
     """Real-world address variants (off-by-one house numbers, ranged/block addresses,
     abbreviated vs. full street suffixes and state names) must still be recognized
     as address-derived, not just an exact/near-exact match of the stored fields."""
@@ -167,7 +167,7 @@ class IsAddressDerivedNameFuzzyVariantsTests(TestCase):
 # -- RuleBasedNameResolver ----------------------------------------------------------
 
 
-class RuleBasedNameResolverTests(TestCase):
+class RuleBasedNameResolverTests(SimpleTestCase):
     """Two-source agreement beats priority; priority beats arrival order."""
 
     def _resolve(self, candidates, priority=()):
@@ -222,7 +222,7 @@ class RuleBasedNameResolverTests(TestCase):
         self.assertIn(self._resolve(candidates, ["src0"]), candidates)
 
 
-class NameSourcePriorityListTests(TestCase):
+class NameSourcePriorityListTests(SimpleTestCase):
     """SiteSettings parses the comma-separated priority into a clean slug list."""
 
     def test_parses_and_strips_slugs(self) -> None:

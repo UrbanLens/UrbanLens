@@ -16,7 +16,7 @@ from __future__ import annotations
 from django.urls import reverse
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.controllers.trip import _apply_trip_visibility_filter
 from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
 from urbanlens.dashboard.models.images.model import Image
@@ -65,7 +65,7 @@ def _share_friend(a: Profile, b: Profile) -> Profile:
     return mutual
 
 
-class VisibilityChoiceEnumTests(TestCase):
+class VisibilityChoiceEnumTests(SimpleTestCase):
     """The enum contains the new option and lists choices least → most restrictive."""
 
     def test_anything_in_common_exists(self) -> None:

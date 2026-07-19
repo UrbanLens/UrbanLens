@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from django.db.models import BooleanField, CharField, Index, IntegerField, TextField
+from django.db.models import BooleanField, CharField, DecimalField, Index, IntegerField, TextField
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.api_call_log.queryset import ApiCallLogManager
@@ -45,6 +45,15 @@ class ApiCallLog(abstract.DashboardModel):
     was_service_disabled = BooleanField(
         default=False,
         help_text="True if this entry records a call that was skipped due to service being disabled.",
+    )
+    cost_estimate = DecimalField(
+        max_digits=10,
+        decimal_places=6,
+        null=True,
+        blank=True,
+        help_text="Estimated USD cost of this call, from the service's ServiceDefaults.cost_per_call "
+        "at call time. Null means no per-call cost is configured for this service (free, or not yet "
+        "priced) - not necessarily that the call was free.",
     )
 
     objects = ApiCallLogManager()

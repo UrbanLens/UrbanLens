@@ -9,7 +9,7 @@ from django.contrib.auth.models import User
 from hypothesis import given, settings, strategies as st
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.services.social_auth.pipeline import (
     _sanitize_sso_username,
     generate_sso_username,
@@ -17,7 +17,7 @@ from urbanlens.dashboard.services.social_auth.pipeline import (
 from urbanlens.dashboard.services.username import USERNAME_RE
 
 
-class SanitizeSsoUsernameTests(TestCase):
+class SanitizeSsoUsernameTests(SimpleTestCase):
     """Provider handles are normalized to UrbanLens username rules."""
 
     def test_email_local_part_uses_prefix_before_at(self) -> None:

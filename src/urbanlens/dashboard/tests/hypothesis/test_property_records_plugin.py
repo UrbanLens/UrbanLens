@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.property_owner.meta import OwnerSource
 from urbanlens.dashboard.models.property_owner.model import WikiOwner, WikiPropertySale
 from urbanlens.dashboard.plugins.builtin.property_records import (
@@ -21,7 +21,7 @@ from urbanlens.dashboard.plugins.builtin.property_records import (
 )
 
 
-class PanelRenderContextTests(TestCase):
+class PanelRenderContextTests(SimpleTestCase):
     def setUp(self) -> None:
         super().setUp()
         self.source = PropertyRecordsPanelSource()

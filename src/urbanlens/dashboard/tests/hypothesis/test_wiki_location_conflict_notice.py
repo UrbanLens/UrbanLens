@@ -12,7 +12,7 @@ import types
 from django.template.loader import render_to_string
 from django.utils.html import escape
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase
 
 
 def _fake_location(**overrides: object) -> types.SimpleNamespace:
@@ -21,7 +21,7 @@ def _fake_location(**overrides: object) -> types.SimpleNamespace:
     return types.SimpleNamespace(**defaults)
 
 
-class WikiLocationConflictNoticeTests(TestCase):
+class WikiLocationConflictNoticeTests(SimpleTestCase):
     def _render(self, other_locations, user_pin=None):
         return render_to_string(
             "dashboard/pages/location/wiki.html",

@@ -16,7 +16,7 @@ from django.contrib.auth.models import User
 from hypothesis import given, settings as hyp_settings, strategies as st
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.site_settings.model import SiteSettings
 from urbanlens.dashboard.models.subscriptions.model import SubscriptionRole, grant_subscription
 from urbanlens.dashboard.services.storage import (
@@ -187,7 +187,7 @@ class DownscalePolicyTests(TestCase):
         self.assertEqual(allowed_user_dimension_values(profile), {dim for dim, _ in DOWNSCALE_DIMENSION_CHOICES})
 
 
-class EstimateTests(TestCase):
+class EstimateTests(SimpleTestCase):
     """Photo-count estimates behave sensibly."""
 
     @given(dimension=st.integers(min_value=256, max_value=8000))

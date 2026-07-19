@@ -5,11 +5,11 @@ from datetime import timedelta
 
 from django.utils import timezone
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.templatetags.dashboard_tags import human_timesince
 
 
-class HumanTimesinceTests(TestCase):
+class HumanTimesinceTests(SimpleTestCase):
     def test_just_now_for_sub_minute_timestamps(self) -> None:
         self.assertEqual(human_timesince(timezone.now() - timedelta(seconds=5)), "just now")
 

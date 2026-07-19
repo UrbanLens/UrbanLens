@@ -20,7 +20,7 @@ from django.urls import reverse
 from django.utils import timezone
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.controllers.site_admin import (
     _app_uptime,
     _dir_size_mb,
@@ -86,7 +86,7 @@ class MonthlySeriesLabelTests(TestCase):
 # -- _server_uptime ------------------------------------------------------------
 
 
-class ServerUptimeTests(TestCase):
+class ServerUptimeTests(SimpleTestCase):
     """_app_uptime reports app process uptime via the monotonic clock."""
 
     def _uptime_at(self, elapsed_seconds: float) -> str:
@@ -120,7 +120,7 @@ class ServerUptimeTests(TestCase):
 # -- _dir_size_mb --------------------------------------------------------------
 
 
-class DirSizeMbTests(TestCase):
+class DirSizeMbTests(SimpleTestCase):
     """_dir_size_mb returns megabytes and handles missing paths gracefully."""
 
     def test_nonexistent_path_returns_zero(self) -> None:

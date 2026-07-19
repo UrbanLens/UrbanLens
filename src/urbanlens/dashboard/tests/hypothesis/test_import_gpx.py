@@ -11,7 +11,7 @@ from pathlib import Path
 
 from hypothesis import given, settings as hyp_settings, strategies as st
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.import_formats.gpx import gpx_to_dict
 
 _hyp = hyp_settings(max_examples=40, deadline=None)
@@ -48,7 +48,7 @@ def _gpx_bytes(body: str) -> bytes:
     return _GPX_TEMPLATE.format(body=body).encode("utf-8")
 
 
-class GpxToDictTests(TestCase):
+class GpxToDictTests(SimpleTestCase):
     """gpx_to_dict() extracts only waypoints, never track/route points."""
 
     def setUp(self):

@@ -12,13 +12,13 @@ from __future__ import annotations
 
 from unittest import mock
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.apis.assets.wikipedia import WikipediaGateway
 
 _COMPONENTS = {"locality": "Poughkeepsie", "route": "Main St", "street_number": "103", "administrative_area_level_1": "NY"}
 
 
-class AddressMatchesTests(TestCase):
+class AddressMatchesTests(SimpleTestCase):
     """WikipediaGateway._address_matches()."""
 
     def test_title_matching_the_place_name_is_accepted(self) -> None:
@@ -60,7 +60,7 @@ class AddressMatchesTests(TestCase):
         self.assertFalse(WikipediaGateway._address_matches(summary, {}, name=""))
 
 
-class GetArticleForLocationTests(TestCase):
+class GetArticleForLocationTests(SimpleTestCase):
     """WikipediaGateway.get_article_for_location() end-to-end candidate selection."""
 
     def setUp(self) -> None:

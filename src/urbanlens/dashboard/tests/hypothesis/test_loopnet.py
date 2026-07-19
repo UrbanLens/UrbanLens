@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 
 from hypothesis import given, settings, strategies as st
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.apis.real_estate.loopnet import (
     LoopNetGateway,
     _find_property_listing,
@@ -61,7 +61,7 @@ _PROPERTY_PAGE_HTML = """
 # _listing_group_key
 # ---------------------------------------------------------------------------
 
-class ListingGroupKeyTests(TestCase):
+class ListingGroupKeyTests(SimpleTestCase):
     """_listing_group_key groups /Listing/ and /property/ URLs for the same address."""
 
     def test_listing_and_property_urls_for_same_address_share_a_key(self):
@@ -95,7 +95,7 @@ class ListingGroupKeyTests(TestCase):
 # _listing_rank / _listing_label
 # ---------------------------------------------------------------------------
 
-class ListingRankTests(TestCase):
+class ListingRankTests(SimpleTestCase):
     """_listing_rank scores active listings best, then property pages, then expired listings."""
 
     def test_active_listing_ranks_best(self):
@@ -115,7 +115,7 @@ class ListingRankTests(TestCase):
         self.assertEqual(_listing_rank(listing), 2)
 
 
-class ListingLabelTests(TestCase):
+class ListingLabelTests(SimpleTestCase):
     """_listing_label gives each secondary link a short, semantic name."""
 
     def test_expired_listing_labeled_archived(self):
@@ -135,7 +135,7 @@ class ListingLabelTests(TestCase):
 # _group_listings / _select_primary / _find_property_listing
 # ---------------------------------------------------------------------------
 
-class GroupListingsTests(TestCase):
+class GroupListingsTests(SimpleTestCase):
     """_group_listings clusters same-property URLs while preserving order."""
 
     def test_four_hits_for_same_property_form_one_group(self):
@@ -182,7 +182,7 @@ class GroupListingsTests(TestCase):
         self.assertEqual(total_grouped, len(listings))
 
 
-class SelectPrimaryTests(TestCase):
+class SelectPrimaryTests(SimpleTestCase):
     """_select_primary picks the most useful listing, ties going to the first-seen."""
 
     def test_prefers_active_listing_over_property_page(self):
@@ -207,7 +207,7 @@ class SelectPrimaryTests(TestCase):
         self.assertEqual(_select_primary(group)["title"], "first")
 
 
-class FindPropertyListingTests(TestCase):
+class FindPropertyListingTests(SimpleTestCase):
     """_find_property_listing returns the group's /property/ entry, if any."""
 
     def test_returns_property_entry_when_present(self):
@@ -226,7 +226,7 @@ class FindPropertyListingTests(TestCase):
 # _parse_property_page
 # ---------------------------------------------------------------------------
 
-class ParsePropertyPageTests(TestCase):
+class ParsePropertyPageTests(SimpleTestCase):
     """_parse_property_page extracts the assessment key/value grid."""
 
     def test_extracts_expected_fields(self):
@@ -246,7 +246,7 @@ class ParsePropertyPageTests(TestCase):
 # LoopNetGateway._dedupe_and_enrich
 # ---------------------------------------------------------------------------
 
-class DedupeAndEnrichTests(TestCase):
+class DedupeAndEnrichTests(SimpleTestCase):
     """_dedupe_and_enrich collapses duplicate URLs and attaches scraped property data."""
 
     def setUp(self):
@@ -312,7 +312,7 @@ class DedupeAndEnrichTests(TestCase):
 # LoopNetGateway._fetch_property_details
 # ---------------------------------------------------------------------------
 
-class FetchPropertyDetailsTests(TestCase):
+class FetchPropertyDetailsTests(SimpleTestCase):
     """_fetch_property_details fetches and parses a property-record page."""
 
     def setUp(self):

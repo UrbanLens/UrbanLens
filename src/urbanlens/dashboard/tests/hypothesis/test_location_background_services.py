@@ -7,7 +7,7 @@ from unittest import mock
 
 from hypothesis import given, settings as hyp_settings, strategies as st
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.services.apis.locations.base import default_bbox
 from urbanlens.dashboard.services.locations.google import PlaceNameResolverChain
 from urbanlens.dashboard.services.locations.naming import is_meaningful_name
@@ -35,7 +35,7 @@ class _StubBoundaryProvider:
         return self.typed
 
 
-class DefaultBoundingBoxTests(TestCase):
+class DefaultBoundingBoxTests(SimpleTestCase):
     """Default generated bounding boxes contain the source coordinate."""
 
     @given(
@@ -52,7 +52,7 @@ class DefaultBoundingBoxTests(TestCase):
         self.assertGreater(max_y, latitude)
 
 
-class PlaceNameResolverChainTests(TestCase):
+class PlaceNameResolverChainTests(SimpleTestCase):
     """Resolver chains skip empty/sentinel names and stop at the first useful name."""
 
     @given(name=st.text(min_size=1, max_size=80).filter(is_meaningful_name))
@@ -165,7 +165,7 @@ class PlaceNameResolverChainTests(TestCase):
 
 
 
-class BoundaryProviderChainTests(TestCase):
+class BoundaryProviderChainTests(SimpleTestCase):
     """Typed boundary resolution fills property/building slots independently, with no bbox fallback."""
 
     def test_chain_returns_first_provider_boundary(self) -> None:
@@ -275,7 +275,7 @@ class BoundaryProviderChainTests(TestCase):
         self.assertLess(typed["building"].area, typed["property"].area)
 
 
-class OverpassGatewayTests(TestCase):
+class OverpassGatewayTests(SimpleTestCase):
     """Overpass helpers build bounded, reusable API requests."""
 
     def test_nearby_features_query_can_include_nodes_without_geometry(self) -> None:
@@ -353,7 +353,7 @@ class OverpassGatewayTests(TestCase):
         self.assertEqual(result, [])
 
 
-class NominatimGatewayTests(TestCase):
+class NominatimGatewayTests(SimpleTestCase):
     """Nominatim search and lookup normalize OSM place payloads."""
 
     def test_search_normalizes_results(self) -> None:

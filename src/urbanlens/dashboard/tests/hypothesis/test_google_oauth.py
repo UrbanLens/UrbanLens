@@ -15,7 +15,7 @@ from urllib.parse import parse_qs, urlparse
 
 import requests
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.gateway import GatewayRequestError
 from urbanlens.dashboard.services.google_oauth import (
     GOOGLE_AUTH_URL,
@@ -32,7 +32,7 @@ def _id_token(claims: dict) -> str:
     return f"header.{payload}.signature"
 
 
-class BuildAuthorizationUrlTests(TestCase):
+class BuildAuthorizationUrlTests(SimpleTestCase):
     def test_url_carries_all_flow_parameters(self) -> None:
         url = build_authorization_url("client-123", "https://app.example/callback", ["scope.a", "scope.b"], "signed-state")
         parsed = urlparse(url)
@@ -47,7 +47,7 @@ class BuildAuthorizationUrlTests(TestCase):
         self.assertEqual(params["state"], ["signed-state"])
 
 
-class TokenExchangeTests(TestCase):
+class TokenExchangeTests(SimpleTestCase):
     def test_successful_exchange_returns_the_payload(self) -> None:
         response = Mock(status_code=200, json=Mock(return_value={"access_token": "at", "refresh_token": "rt"}))
         with patch("urbanlens.dashboard.services.google_oauth.requests.post", return_value=response) as mock_post:
@@ -86,7 +86,7 @@ class TokenExchangeTests(TestCase):
             self.assertFalse(revoke_token("token"))
 
 
-class ExtractEmailFromIdTokenTests(TestCase):
+class ExtractEmailFromIdTokenTests(SimpleTestCase):
     """Display-only claim extraction must never raise on malformed input."""
 
     def test_extracts_the_email_claim(self) -> None:

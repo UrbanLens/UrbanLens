@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from unittest import mock
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard import tasks
 
 
@@ -53,7 +53,7 @@ class PushTripToCalendarTaskTests(TestCase):
         push.assert_called_once_with(trip)
 
 
-class DatabaseBackupTaskTests(TestCase):
+class DatabaseBackupTaskTests(SimpleTestCase):
     """Database backup tasks use site settings and scheduled due checks."""
 
     def test_run_database_backup_uses_site_settings_retention(self) -> None:

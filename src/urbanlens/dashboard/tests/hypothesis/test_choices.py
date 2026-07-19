@@ -7,7 +7,7 @@ from __future__ import annotations
 from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel, TextChoices
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType
 from urbanlens.dashboard.models.pin.model import PinType
@@ -18,7 +18,7 @@ from urbanlens.dashboard.tests.hypothesis.strategies import (
 )
 
 
-class SecurityLevelValidTests(TestCase):
+class SecurityLevelValidTests(SimpleTestCase):
     """SecurityLevel.valid() and .invalid() are complementary predicates."""
 
     @given(security_level)
@@ -60,7 +60,7 @@ class SecurityLevelValidTests(TestCase):
         self.assertFalse(SecurityLevel.valid(value))
 
 
-class TextChoicesGetNameTests(TestCase):
+class TextChoicesGetNameTests(SimpleTestCase):
     """TextChoices.get_name() returns the attribute name for any known value."""
 
     @given(security_level)
@@ -106,7 +106,7 @@ class TextChoicesGetNameTests(TestCase):
 
 
 
-class PinTypeTests(TestCase):
+class PinTypeTests(SimpleTestCase):
     """PinType covers the structural vocabulary of a pin."""
 
     @given(st.sampled_from(list(PinType.values)))
@@ -124,7 +124,7 @@ class PinTypeTests(TestCase):
         self.assertEqual(PinType.LOCATION_MARKER.value, "location")
 
 
-class FriendshipStatusPredicateTests(TestCase):
+class FriendshipStatusPredicateTests(SimpleTestCase):
     """State-predicate methods on FriendshipStatus."""
 
     def test_is_friend_only_true_for_accepted(self) -> None:
@@ -201,7 +201,7 @@ class FriendshipStatusPredicateTests(TestCase):
             self.assertFalse(FriendshipStatus.can_request(status))
 
 
-class FriendshipTypeTests(TestCase):
+class FriendshipTypeTests(SimpleTestCase):
     """Smoke tests for FriendshipType values."""
 
     def test_all_types_present(self) -> None:

@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 from hypothesis import given, settings, strategies as st
 
 from urbanlens.core.cache_keys import make_cache_key
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.apis.assets.smithsonian import SmithsonianGateway
 
 _hyp = settings(max_examples=50, deadline=None)
@@ -50,7 +50,7 @@ def _make_row(title: str = "Test Image", content_url: str = "http://example.com/
 # parse_response
 # ---------------------------------------------------------------------------
 
-class SmithsonianParseResponseTests(TestCase):
+class SmithsonianParseResponseTests(SimpleTestCase):
     """parse_response extracts title, url, and thumbnail from API data."""
 
     def setUp(self):
@@ -126,7 +126,7 @@ class SmithsonianParseResponseTests(TestCase):
 # get_data - cache miss path
 # ---------------------------------------------------------------------------
 
-class SmithsonianGetDataCacheMissTests(TestCase):
+class SmithsonianGetDataCacheMissTests(SimpleTestCase):
     """get_data fetches from the API when the cache is empty."""
 
     def setUp(self):
@@ -183,7 +183,7 @@ class SmithsonianGetDataCacheMissTests(TestCase):
 # get_data - cache hit path
 # ---------------------------------------------------------------------------
 
-class SmithsonianGetDataCacheHitTests(TestCase):
+class SmithsonianGetDataCacheHitTests(SimpleTestCase):
     """get_data returns the cached value and skips the HTTP call."""
 
     def setUp(self):
@@ -221,7 +221,7 @@ class SmithsonianGetDataCacheHitTests(TestCase):
 # get_images_by_coordinates
 # ---------------------------------------------------------------------------
 
-class SmithsonianGetImagesByCoordinatesTests(TestCase):
+class SmithsonianGetImagesByCoordinatesTests(SimpleTestCase):
     """get_images_by_coordinates resolves coords to a place name then calls get_data."""
 
     def setUp(self):

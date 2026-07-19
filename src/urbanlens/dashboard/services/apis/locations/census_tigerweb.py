@@ -105,3 +105,54 @@ class CensusTigerwebGateway(Gateway):
         if not attributes:
             return None
         return {"name": attributes.get("NAME"), "geoid": attributes.get("GEOID")}
+
+    def get_county_extent(self, fips: str, out_wkid: int = 4326) -> tuple[float, float, float, float] | None:
+        """Return a county's bounding-box extent by its 5-digit GEOID, reprojected to ``out_wkid``.
+
+        Used by property-record discovery as a jurisdiction-identity ground
+        truth that doesn't depend on a candidate's own (sometimes
+        uninformative or actively misleading, e.g. an unrelated county's
+        service literally named for its own county) title text - see
+        ``property_records.discovery``'s extent-overlap check.
+
+        ``out_wkid`` should normally be the *candidate* layer's own spatial
+        reference (from its ``extent.spatialReference``), not a fixed
+        WGS-84/Web Mercator assumption: real ArcGIS Online-hosted layers turn
+        up in all sorts of projections (a live one used NAD83 Missouri state
+        plane, wkid 26854) that this module has no business trying to invert
+        itself. Letting the ArcGIS server on the other end do the
+        reprojection - which every standard ``/query`` endpoint supports
+        natively for any registered wkid - means both boxes end up in the
+        exact same coordinate system, and a bare rectangle-overlap test
+        (:func:`~.relevance.extent_overlaps_county`) is valid regardless of
+        what that system's units actually are.
+
+        Args:
+            fips: 5-digit Census county GEOID (2-digit state + 3-digit county).
+            out_wkid: The spatial-reference WKID to reproject the extent into.
+
+        Returns:
+            ``(xmin, ymin, xmax, ymax)`` in ``out_wkid``'s units, or None when
+            the GEOID doesn't resolve to a county, ``out_wkid`` isn't a
+            reference TIGERweb recognizes, or the request fails.
+        """
+        params: dict[str, str | int] = {
+            "where": f"GEOID='{fips}'",
+            "returnExtentOnly": "true",
+            "outSR": out_wkid,
+            "f": "json",
+        }
+        try:
+            response = self.session.get(f"{self.base_url}/{_LAYER_COUNTY}/query", params=params, timeout=15)
+            response.raise_for_status()
+            body = response.json()
+        except (requests.exceptions.RequestException, ValueError):
+            logger.warning("TIGERweb county-extent query failed for FIPS %s", fips, exc_info=True)
+            return None
+        extent = body.get("extent")
+        if not isinstance(extent, dict):
+            return None
+        try:
+            return float(extent["xmin"]), float(extent["ymin"]), float(extent["xmax"]), float(extent["ymax"])
+        except (KeyError, TypeError, ValueError):
+            return None

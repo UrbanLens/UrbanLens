@@ -1,0 +1,75 @@
+{
+  "total": 24,
+  "results": [
+    {
+      "type": "Map Service",
+      "title": "Lorain_County_Parcels",
+      "url": "https://tiles.arcgis.com/tiles/i0P1AizjIwwAZiAU/arcgis/rest/services/Lorain_County_Parcels/MapServer",
+      "owner": "OTIC.Robert.Erickson",
+      "snippet": "Lorain County Original Right-of-Way Maps"
+    },
+    {
+      "type": "Web Mapping Application",
+      "title": "2021 Lorain County Triennial Update Value Changes",
+      "url": "https://loraingis.maps.arcgis.com/apps/webappviewer/index.html?id=6c125ef54e734c818c86a7ad23cd6993",
+      "owner": "LorainCoGIS",
+      "snippet": "Search and view value changes for parcels in Lorain County, Ohio"
+    },
+    {
+      "type": "Web Mapping Application",
+      "title": "ControlBook Table",
+      "url": "https://loraingis.maps.arcgis.com/apps/webappviewer/index.html?id=adcefa87dc6f4d44b16e455db08c2443",
+      "owner": "LorainCoGIS",
+      "snippet": "ControlBook that shows the history/genealogy of parcels within Lorain County Ohio.  The Controlbook App is updated on a weekly basis."
+    },
+    {
+      "type": "Web Mapping Application",
+      "title": "2024 Reval Values",
+      "url": "https://loraingis.maps.arcgis.com/apps/webappviewer/index.html?id=e9247090533d4c8592467d357e5c6732",
+      "owner": "LorainCoGIS",
+      "snippet": "2024 Reval values of Lorain County Ohio parcels comparing 2023 vs 2024 total values."
+    },
+    {
+      "type": "Web Mapping Application",
+      "title": "2021 Forfeited Land Sale-Web App",
+      "url": "https://loraingis.maps.arcgis.com/apps/webappviewer/index.html?id=8cbfaa87e73441cf924e613bb311af1c",
+      "owner": "dadelsberg",
+      "snippet": "Web App of the 2021 Forfeited Land Sale parcels within Lorain County Ohio."
+    },
+    {
+      "type": "Feature Service",
+      "title": "Forfeited_Land_Sale_2021",
+      "url": "https://services1.arcgis.com/vGBb7WYV10mOJRNM/arcgis/rest/services/Forfeited_Land_Sale_2021/FeatureServer",
+      "owner": "dadelsberg",
+      "snippet": "Web App showing parcels being auctioned off for the 2021 Lorain County, Ohio Forfeited Land Sale."
+    },
+    {
+      "type": "Feature Service",
+      "title": "GLCWRA_study_areas_pro_WFL",
+      "url": "https://services.arcgis.com/v01gqwM5QqNysAAi/arcgis/rest/services/GLCWRA_study_areas_pro_WFL/FeatureServer",
+      "owner": "msliu@usgs.gov_USGS",
+      "snippet": "GLCWRA study areas, from ArcGIS Pro"
+    },
+    {
+      "type": "Web Mapping Application",
+      "title": "CAUV Landuse Web App",
+      "url": "https://loraingis.maps.arcgis.com/apps/webappviewer/index.html?id=5666feee46e843329a43b018a5673330",
+      "owner": "LorainCoGIS",
+      "snippet": "Web app showing CAUV Land-use parcels within Lorain County Ohio."
+    },
+    {
+      "type": "Feature Service",
+      "title": "ControlBook Table",
+      "url": "https://services1.arcgis.com/vGBb7WYV10mOJRNM/arcgis/rest/services/ControlBook_Table/FeatureServer",
+      "owner": "LorainCoGIS",
+      "snippet": "Controlbook that shows history of all parcels within Lorain County, Ohio"
+    },
+    {
+      "type": "Web Map",
+      "title": "GLCWRA Study Areas",
+      "url": "",
+      "owner": "msliu@usgs.gov_USGS",
+      "snippet": "GLCWRA study areas"
+    }
+  ]
+}

@@ -6,11 +6,11 @@ from datetime import date
 
 from hypothesis import given, settings, strategies as st
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.global_search.parser import parse_query
 
 
-class ParseQueryStructureTests(TestCase):
+class ParseQueryStructureTests(SimpleTestCase):
     """Structured extraction: types, dates, and places."""
 
     def test_photos_from_last_summer(self):
@@ -151,7 +151,7 @@ class ParseQueryStructureTests(TestCase):
         self.assertIn("from Alice", parse_query("messages from alice").describe_filters())
 
 
-class ParseQueryPropertyTests(TestCase):
+class ParseQueryPropertyTests(SimpleTestCase):
     """Property-based robustness: the parser never raises and keeps invariants."""
 
     @settings(max_examples=60, deadline=None)

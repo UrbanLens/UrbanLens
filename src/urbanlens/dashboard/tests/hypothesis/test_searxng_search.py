@@ -9,7 +9,7 @@ from unittest.mock import MagicMock
 from hypothesis import given, settings as hyp_settings, strategies as st
 from requests import HTTPError
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.apis.search.searxng import SearxngError, SearxngGateway
 
 _hyp = hyp_settings(max_examples=50, deadline=None)
@@ -22,7 +22,7 @@ def _make_gw(base_url: str | None = "https://searx.example.com") -> SearxngGatew
     return gw
 
 
-class SearxngValidateTests(TestCase):
+class SearxngValidateTests(SimpleTestCase):
     """search() raises SearxngError when no instance is configured."""
 
     def test_none_base_url_raises(self):
@@ -39,7 +39,7 @@ class SearxngValidateTests(TestCase):
         self.assertIn("UL_SEARXNG_BASE_URL", str(ctx.exception))
 
 
-class SearxngParseTests(TestCase):
+class SearxngParseTests(SimpleTestCase):
     """_parse converts the SearXNG JSON structure to normalised dicts."""
 
     def setUp(self):
@@ -70,7 +70,7 @@ class SearxngParseTests(TestCase):
         self.assertEqual(len(result), len(titles))
 
 
-class SearxngHTTPTests(TestCase):
+class SearxngHTTPTests(SimpleTestCase):
     """search() sends the correct request, honours max_results, and handles HTTP errors."""
 
     def _gw_with_response(self, status: int = 200, body: dict | None = None) -> tuple[SearxngGateway, MagicMock]:
@@ -122,7 +122,7 @@ class SearxngHTTPTests(TestCase):
         self.assertEqual(len(result), 1)
 
 
-class SearxngRateLimitDefaultsTests(TestCase):
+class SearxngRateLimitDefaultsTests(SimpleTestCase):
     """SearXNG is self-hosted infrastructure, not a metered third-party quota."""
 
     def test_no_daily_cap(self):

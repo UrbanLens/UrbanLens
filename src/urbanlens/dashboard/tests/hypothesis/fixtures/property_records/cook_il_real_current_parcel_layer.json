@@ -1,0 +1,876 @@
+{
+  "currentVersion": 11.5,
+  "cimVersion": "3.5.0",
+  "id": 44,
+  "name": "Current Parcel",
+  "type": "Feature Layer",
+  "description": "",
+  "geometryType": "esriGeometryPolygon",
+  "sourceSpatialReference": {
+    "wkid": 102671,
+    "latestWkid": 3435,
+    "xyTolerance": 0.002,
+    "zTolerance": 0.001,
+    "mTolerance": 0.001,
+    "falseX": -17463800,
+    "falseY": -46132600,
+    "xyUnits": 4000,
+    "falseZ": 0,
+    "zUnits": 1,
+    "falseM": 0,
+    "mUnits": 1
+  },
+  "spatialReference": {
+    "wkid": 102671,
+    "latestWkid": 3435,
+    "xyTolerance": 0.003280833333333333,
+    "zTolerance": 0.001,
+    "mTolerance": 0.001,
+    "falseX": -17463800,
+    "falseY": -46132600,
+    "xyUnits": 3048.0060960121928,
+    "falseZ": -100000,
+    "zUnits": 10000,
+    "falseM": -100000,
+    "mUnits": 10000
+  },
+  "copyrightText": "",
+  "parentLayer": null,
+  "subLayers": [],
+  "minScale": 6001,
+  "maxScale": 0,
+  "referenceScale": 0.0,
+  "drawingInfo": {
+    "renderer": {
+      "type": "uniqueValue",
+      "field1": "PARCELTYPE",
+      "defaultSymbol": {
+        "type": "esriSFS",
+        "style": "esriSFSSolid",
+        "color": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "outline": {
+          "type": "esriSLS",
+          "style": "esriSLSSolid",
+          "color": [
+            0,
+            255,
+            0,
+            255
+          ],
+          "width": 0.4
+        }
+      },
+      "defaultLabel": "Parcel",
+      "uniqueValueGroups": [
+        {
+          "heading": "PARCELTYPE",
+          "classes": [
+            {
+              "label": "Condo Parcel",
+              "description": "Condo Parcel",
+              "symbol": {
+                "type": "esriSFS",
+                "style": "esriSFSSolid",
+                "color": [
+                  0,
+                  0,
+                  0,
+                  0
+                ],
+                "outline": {
+                  "type": "esriSLS",
+                  "style": "esriSLSSolid",
+                  "color": [
+                    115,
+                    223,
+                    255,
+                    255
+                  ],
+                  "width": 0.4
+                }
+              },
+              "values": [
+                [
+                  "3"
+                ]
+              ]
+            }
+          ]
+        }
+      ],
+      "uniqueValueInfos": [
+        {
+          "symbol": {
+            "type": "esriSFS",
+            "style": "esriSFSSolid",
+            "color": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "outline": {
+              "type": "esriSLS",
+              "style": "esriSLSSolid",
+              "color": [
+                115,
+                223,
+                255,
+                255
+              ],
+              "width": 0.4
+            }
+          },
+          "value": "3",
+          "label": "Condo Parcel"
+        }
+      ],
+      "fieldDelimiter": ",",
+      "authoringInfo": {
+        "colorRamp": {
+          "type": "multipart",
+          "colorRamps": [
+            {
+              "type": "algorithmic",
+              "algorithm": "esriCIELabAlgorithm",
+              "fromColor": [
+                212,
+                204,
+                252,
+                255
+              ],
+              "toColor": [
+                212,
+                204,
+                252,
+                255
+              ]
+            },
+            {
+              "type": "algorithmic",
+              "algorithm": "esriCIELabAlgorithm",
+              "fromColor": [
+                183,
+                252,
+                182,
+                255
+              ],
+              "toColor": [
+                183,
+                252,
+                182,
+                255
+              ]
+            },
+            {
+              "type": "algorithmic",
+              "algorithm": "esriCIELabAlgorithm",
+              "fromColor": [
+                252,
+                214,
+                184,
+                255
+              ],
+              "toColor": [
+                252,
+                214,
+                184,
+                255
+              ]
+            },
+            {
+              "type": "algorithmic",
+              "algorithm": "esriCIELabAlgorithm",
+              "fromColor": [
+                187,
+                252,
+                252,
+                255
+              ],
+              "toColor": [
+                187,
+                252,
+                252,
+                255
+              ]
+            },
+            {
+              "type": "algorithmic",
+              "algorithm": "esriCIELabAlgorithm",
+              "fromColor": [
+                252,
+                182,
+                205,
+                255
+              ],
+              "toColor": [
+                252,
+                182,
+                205,
+                255
+              ]
+            },
+            {
+              "type": "algorithmic",
+              "algorithm": "esriCIELabAlgorithm",
+              "fromColor": [
+                250,
+                179,
+                252,
+                255
+              ],
+              "toColor": [
+                250,
+                179,
+                252,
+                255
+              ]
+            },
+            {
+              "type": "algorithmic",
+              "algorithm": "esriCIELabAlgorithm",
+              "fromColor": [
+                249,
+                252,
+                184,
+                255
+              ],
+              "toColor": [
+                249,
+                252,
+                184,
+                255
+              ]
+            },
+            {
+              "type": "algorithmic",
+              "algorithm": "esriCIELabAlgorithm",
+              "fromColor": [
+                216,
+                252,
+                215,
+                255
+              ],
+              "toColor": [
+                216,
+                252,
+                215,
+                255
+              ]
+            },
+            {
+              "type": "algorithmic",
+              "algorithm": "esriCIELabAlgorithm",
+              "fromColor": [
+                179,
+                216,
+                252,
+                255
+              ],
+              "toColor": [
+                179,
+                216,
+                252,
+                255
+              ]
+            },
+            {
+              "type": "algorithmic",
+              "algorithm": "esriCIELabAlgorithm",
+              "fromColor": [
+                252,
+                215,
+                246,
+                255
+              ],
+              "toColor": [
+                252,
+                215,
+                246,
+                255
+              ]
+            },
+            {
+              "type": "algorithmic",
+              "algorithm": "esriCIELabAlgorithm",
+              "fromColor": [
+                185,
+                179,
+                252,
+                255
+              ],
+              "toColor": [
+                185,
+                179,
+                252,
+                255
+              ]
+            },
+            {
+              "type": "algorithmic",
+              "algorithm": "esriCIELabAlgorithm",
+              "fromColor": [
+                252,
+                246,
+                212,
+                255
+              ],
+              "toColor": [
+                252,
+                246,
+                212,
+                255
+              ]
+            },
+            {
+              "type": "algorithmic",
+              "algorithm": "esriCIELabAlgorithm",
+              "fromColor": [
+                252,
+                184,
+                179,
+                255
+              ],
+              "toColor": [
+                252,
+                184,
+                179,
+                255
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "scaleSymbols": true,
+    "transparency": 0,
+    "labelingInfo": null
+  },
+  "defaultVisibility": true,
+  "extent": {
+    "xmin": 1003175.7479999997,
+    "ymin": 1749884.6522499993,
+    "xmax": 1205633.6220000014,
+    "ymax": 1998851.7049999982,
+    "spatialReference": {
+      "wkid": 102671,
+      "latestWkid": 3435,
+      "xyTolerance": 0.003280833333333333,
+      "zTolerance": 0.001,
+      "mTolerance": 0.001,
+      "falseX": -17463800,
+      "falseY": -46132600,
+      "xyUnits": 3048.0060960121928,
+      "falseZ": -100000,
+      "zUnits": 10000,
+      "falseM": -100000,
+      "mUnits": 10000
+    }
+  },
+  "hasAttachments": false,
+  "htmlPopupType": "esriServerHTMLPopupTypeNone",
+  "displayField": "PIN14",
+  "typeIdField": null,
+  "subtypeFieldName": null,
+  "subtypeField": null,
+  "defaultSubtypeCode": null,
+  "fields": [
+    {
+      "name": "Pin10",
+      "type": "esriFieldTypeString",
+      "alias": "Pin10",
+      "length": 10,
+      "domain": null
+    },
+    {
+      "name": "TaxCode",
+      "type": "esriFieldTypeString",
+      "alias": "TaxCode",
+      "length": 10,
+      "domain": null
+    },
+    {
+      "name": "BLDGClass",
+      "type": "esriFieldTypeString",
+      "alias": "BLDGClass",
+      "length": 6,
+      "domain": null
+    },
+    {
+      "name": "BldgConst",
+      "type": "esriFieldTypeString",
+      "alias": "BldgConst",
+      "length": 34,
+      "domain": null
+    },
+    {
+      "name": "BldgSqft",
+      "type": "esriFieldTypeInteger",
+      "alias": "BldgSqft",
+      "domain": null
+    },
+    {
+      "name": "BldgAge",
+      "type": "esriFieldTypeSmallInteger",
+      "alias": "BldgAge",
+      "domain": null
+    },
+    {
+      "name": "LandValue",
+      "type": "esriFieldTypeString",
+      "alias": "LandValue",
+      "length": 18,
+      "domain": null
+    },
+    {
+      "name": "NBHD",
+      "type": "esriFieldTypeString",
+      "alias": "NBHD",
+      "length": 6,
+      "domain": null
+    },
+    {
+      "name": "Town",
+      "type": "esriFieldTypeString",
+      "alias": "Town",
+      "length": 26,
+      "domain": null
+    },
+    {
+      "name": "MLT_IND",
+      "type": "esriFieldTypeString",
+      "alias": "MLT_IND",
+      "length": 2,
+      "domain": null
+    },
+    {
+      "name": "Per_Ass",
+      "type": "esriFieldTypeString",
+      "alias": "Per_Ass",
+      "length": 16,
+      "domain": null
+    },
+    {
+      "name": "HouseNo",
+      "type": "esriFieldTypeString",
+      "alias": "HouseNo",
+      "length": 10,
+      "domain": null
+    },
+    {
+      "name": "Dir",
+      "type": "esriFieldTypeString",
+      "alias": "Dir",
+      "length": 4,
+      "domain": null
+    },
+    {
+      "name": "Street",
+      "type": "esriFieldTypeString",
+      "alias": "Street",
+      "length": 44,
+      "domain": null
+    },
+    {
+      "name": "Suffix",
+      "type": "esriFieldTypeString",
+      "alias": "Suffix",
+      "length": 8,
+      "domain": null
+    },
+    {
+      "name": "Address",
+      "type": "esriFieldTypeString",
+      "alias": "Address",
+      "length": 64,
+      "domain": null
+    },
+    {
+      "name": "City",
+      "type": "esriFieldTypeString",
+      "alias": "City",
+      "length": 42,
+      "domain": null
+    },
+    {
+      "name": "Zip_Code",
+      "type": "esriFieldTypeString",
+      "alias": "Zip_Code",
+      "length": 10,
+      "domain": null
+    },
+    {
+      "name": "Key_Pin",
+      "type": "esriFieldTypeString",
+      "alias": "Key_Pin",
+      "length": 28,
+      "domain": null
+    },
+    {
+      "name": "Pro_Ind",
+      "type": "esriFieldTypeString",
+      "alias": "Pro_Ind",
+      "length": 2,
+      "domain": null
+    },
+    {
+      "name": "PARCELTYPE",
+      "type": "esriFieldTypeSmallInteger",
+      "alias": "PARCELTYPE",
+      "domain": null
+    },
+    {
+      "name": "PIN14",
+      "type": "esriFieldTypeString",
+      "alias": "PIN14",
+      "length": 28,
+      "domain": null
+    },
+    {
+      "name": "Shape",
+      "type": "esriFieldTypeGeometry",
+      "alias": "Shape",
+      "domain": null
+    },
+    {
+      "name": "TOWNNUM",
+      "type": "esriFieldTypeString",
+      "alias": "TownNum",
+      "length": 5,
+      "domain": null
+    },
+    {
+      "name": "BldgValue",
+      "type": "esriFieldTypeString",
+      "alias": "BldgValue",
+      "length": 20,
+      "domain": null
+    },
+    {
+      "name": "LandSqft",
+      "type": "esriFieldTypeDouble",
+      "alias": "LandSqft",
+      "domain": null
+    },
+    {
+      "name": "TotalValue",
+      "type": "esriFieldTypeString",
+      "alias": "TotalValue",
+      "length": 20,
+      "domain": null
+    },
+    {
+      "name": "TownNeighNum",
+      "type": "esriFieldTypeString",
+      "alias": "TownNeighNum",
+      "length": 10,
+      "domain": null
+    },
+    {
+      "name": "BldgValSqFt",
+      "type": "esriFieldTypeDouble",
+      "alias": "BldgValSqft",
+      "domain": null
+    },
+    {
+      "name": "SDate",
+      "type": "esriFieldTypeString",
+      "alias": "SDate",
+      "length": 16,
+      "domain": null
+    },
+    {
+      "name": "LanValSqft",
+      "type": "esriFieldTypeDouble",
+      "alias": "LanValSqft",
+      "domain": null
+    },
+    {
+      "name": "OBJECTID",
+      "type": "esriFieldTypeInteger",
+      "alias": "OBJECTID",
+      "domain": null
+    },
+    {
+      "name": "Sdate1",
+      "type": "esriFieldTypeDate",
+      "alias": "Sdate1",
+      "length": 8,
+      "domain": null
+    },
+    {
+      "name": "GlobalID",
+      "type": "esriFieldTypeGlobalID",
+      "alias": "GlobalID",
+      "length": 38,
+      "domain": null
+    },
+    {
+      "name": "last_edited_date",
+      "type": "esriFieldTypeDate",
+      "alias": "last_edited_date",
+      "length": 8,
+      "domain": null
+    },
+    {
+      "name": "OBJECTID_1",
+      "type": "esriFieldTypeOID",
+      "alias": "OBJECTID_1",
+      "domain": null
+    },
+    {
+      "name": "geom_year",
+      "type": "esriFieldTypeSmallInteger",
+      "alias": "geom_year",
+      "domain": null
+    },
+    {
+      "name": "GIS_TWP",
+      "type": "esriFieldTypeString",
+      "alias": "GIS_TWP",
+      "length": 30,
+      "domain": null
+    },
+    {
+      "name": "BldgConstNum",
+      "type": "esriFieldTypeString",
+      "alias": "BldgConstNum",
+      "length": 2,
+      "domain": null
+    },
+    {
+      "name": "TownNum_1",
+      "type": "esriFieldTypeString",
+      "alias": "TownNum",
+      "length": 4,
+      "domain": null
+    },
+    {
+      "name": "PIN10_1",
+      "type": "esriFieldTypeString",
+      "alias": "PIN10",
+      "length": 20,
+      "domain": null
+    },
+    {
+      "name": "TAXYR",
+      "type": "esriFieldTypeSmallInteger",
+      "alias": "TAXYR",
+      "domain": null
+    },
+    {
+      "name": "value_description",
+      "type": "esriFieldTypeString",
+      "alias": "value_description",
+      "length": 50,
+      "domain": null
+    },
+    {
+      "name": "Shape.STLength()",
+      "type": "esriFieldTypeDouble",
+      "alias": "Shape_Length",
+      "domain": null
+    },
+    {
+      "name": "Shape.STArea()",
+      "type": "esriFieldTypeDouble",
+      "alias": "Shape_Area",
+      "domain": null
+    },
+    {
+      "name": "TOTVALFP",
+      "type": "esriFieldTypeDouble",
+      "alias": "TOTVALFP",
+      "domain": null
+    },
+    {
+      "name": "TOTVALCASR",
+      "type": "esriFieldTypeDouble",
+      "alias": "TOTVALCASR",
+      "domain": null
+    },
+    {
+      "name": "TOTVALCBRD",
+      "type": "esriFieldTypeDouble",
+      "alias": "TOTVALCBRD",
+      "domain": null
+    },
+    {
+      "name": "SUMMED",
+      "type": "esriFieldTypeString",
+      "alias": "SUMMED",
+      "length": 10,
+      "domain": null
+    },
+    {
+      "name": "RECORD_COUNT",
+      "type": "esriFieldTypeSmallInteger",
+      "alias": "RECORD_COUNT",
+      "domain": null
+    },
+    {
+      "name": "assessor_update_date",
+      "type": "esriFieldTypeDate",
+      "alias": "assessor_update_date",
+      "length": 8,
+      "domain": null
+    },
+    {
+      "name": "SV_URL",
+      "type": "esriFieldTypeString",
+      "alias": "SV_URL",
+      "length": 300,
+      "domain": null
+    },
+    {
+      "name": "SV_URL_STATUS",
+      "type": "esriFieldTypeString",
+      "alias": "SV_URL_STATUS",
+      "length": 50,
+      "domain": null
+    }
+  ],
+  "geometryField": {
+    "name": "Shape",
+    "type": "esriFieldTypeGeometry",
+    "alias": "Shape"
+  },
+  "indexes": [
+    {
+      "name": "R15_pk",
+      "fields": "OBJECTID_1",
+      "isAscending": true,
+      "isUnique": true,
+      "description": ""
+    },
+    {
+      "name": "UUID_15",
+      "fields": "GlobalID",
+      "isAscending": true,
+      "isUnique": true,
+      "description": ""
+    },
+    {
+      "name": "I6Pin10",
+      "fields": "Pin10",
+      "isAscending": true,
+      "isUnique": false,
+      "description": ""
+    },
+    {
+      "name": "UUID_OID_15",
+      "fields": "GlobalID,OBJECTID_1",
+      "isAscending": true,
+      "isUnique": true,
+      "description": ""
+    },
+    {
+      "name": "PIN14",
+      "fields": "PIN14",
+      "isAscending": true,
+      "isUnique": false,
+      "description": ""
+    },
+    {
+      "name": "compareQuery",
+      "fields": "Town,NBHD,BLDGClass,BldgSqft,LandSqft,BldgAge,BldgConst,PIN14",
+      "isAscending": true,
+      "isUnique": false,
+      "description": ""
+    },
+    {
+      "name": "S4_idx",
+      "fields": "Shape",
+      "isAscending": true,
+      "isUnique": true,
+      "description": ""
+    }
+  ],
+  "subtypes": [],
+  "relationships": [],
+  "canModifyLayer": true,
+  "canScaleSymbols": false,
+  "hasLabels": true,
+  "capabilities": "Map,Query,Data",
+  "maxRecordCount": 2000,
+  "maxSelectionCount": 2000,
+  "supportsStatistics": true,
+  "supportsExceedsLimitStatistics": true,
+  "supportsAdvancedQueries": true,
+  "supportedQueryFormats": "JSON, geoJSON, PBF",
+  "isDataVersioned": true,
+  "ownershipBasedAccessControlForFeatures": {
+    "allowOthersToQuery": true
+  },
+  "useStandardizedQueries": true,
+  "supportedSpatialRelationships": [
+    "esriSpatialRelIntersects",
+    "esriSpatialRelContains",
+    "esriSpatialRelCrosses",
+    "esriSpatialRelEnvelopeIntersects",
+    "esriSpatialRelIndexIntersects",
+    "esriSpatialRelOverlaps",
+    "esriSpatialRelTouches",
+    "esriSpatialRelWithin",
+    "esriSpatialRelRelation"
+  ],
+  "advancedQueryCapabilities": {
+    "useStandardizedQueries": true,
+    "supportsStatistics": true,
+    "supportsPercentileStatistics": true,
+    "supportsHavingClause": true,
+    "supportsOrderBy": true,
+    "supportsDistinct": true,
+    "supportsCountDistinct": true,
+    "supportsAdvancedQueryRelated": true,
+    "supportsQueryRelatedPagination": true,
+    "supportsPagination": true,
+    "supportsLod": false,
+    "supportsQueryWithLodSR": false,
+    "supportsTrueCurve": true,
+    "supportsQueryWithDatumTransformation": true,
+    "supportsReturningQueryExtent": true,
+    "supportsQueryWithDistance": true,
+    "supportsSqlExpression": true,
+    "supportsTimeRelation": true,
+    "supportsSqlFormat": false,
+    "supportsQueryAnalytic": true,
+    "supportsCurrentUserQueries": true
+  },
+  "supportsDatumTransformation": true,
+  "advancedQueryAnalyticCapabilities": {
+    "supportsLinearRegression": true,
+    "supportsAsync": false,
+    "supportsPercentileAnalytic": true
+  },
+  "dateFieldsTimeReference": {
+    "timeZone": "Central Standard Time",
+    "timeZoneIANA": "America/Chicago",
+    "respectsDaylightSaving": true
+  },
+  "preferredTimeReference": null,
+  "datesInUnknownTimezone": false,
+  "hasGeometryProperties": true,
+  "geometryProperties": {
+    "shapeAreaFieldName": "Shape.STArea()",
+    "shapeLengthFieldName": "Shape.STLength()",
+    "units": "esriFeet",
+    "mapUnits": {
+      "uwkid": 9003
+    }
+  },
+  "hasMetadata": true,
+  "isDataArchived": false,
+  "archivingInfo": {
+    "supportsQueryWithHistoricMoment": false,
+    "startArchivingMoment": -1
+  },
+  "supportsCoordinatesQuantization": true,
+  "supportsDynamicLegends": true,
+  "serviceItemId": "1effcae31b5f430fa28485477d983210"
+}

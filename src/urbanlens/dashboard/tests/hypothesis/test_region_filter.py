@@ -15,7 +15,7 @@ from django.contrib.gis.geos import MultiPolygon, Polygon
 from django.urls import reverse
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
@@ -37,7 +37,7 @@ def _square(lng: float, lat: float, delta: float) -> Polygon:
     return Polygon(ring, srid=4326)
 
 
-class DissolvePolygonsTests(TestCase):
+class DissolvePolygonsTests(SimpleTestCase):
     """dissolve_polygons: merge overlapping/touching same-type polygons."""
 
     def test_empty_input_returns_empty_multipolygon(self) -> None:

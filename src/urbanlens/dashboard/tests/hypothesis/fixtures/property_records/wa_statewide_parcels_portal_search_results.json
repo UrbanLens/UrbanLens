@@ -1,0 +1,75 @@
+{
+  "total": 226,
+  "results": [
+    {
+      "type": "Feature Service",
+      "title": "Florida Statewide Parcels",
+      "url": "https://services9.arcgis.com/Gh9awoU677aKree0/arcgis/rest/services/Florida_Statewide_Cadastral/FeatureServer",
+      "owner": "FloridaGIO",
+      "snippet": "The parcel data set depicted on this map contains a subset of property tax roll information provided by each of Florida\u2019s 67 county property appraisers to the Florida Department of Revenue (Department) every July.  The information presented represents data most recently received. Each county is responsible for omitting confidential records subject to redaction under Chapter 119, Florida Statutes. Scale dependencies have been set and require users to zoom into1:250,000 to view the over 10.8 million parcels located in the state of Florida."
+    },
+    {
+      "type": "Feature Service",
+      "title": "Previous Parcels",
+      "url": "https://services.arcgis.com/jsIt88o09Q0r1j8h/arcgis/rest/services/Previous_Parcels/FeatureServer",
+      "owner": "WAGeoservices",
+      "snippet": "Washington statewide tax parcel data. Previous year 2025."
+    },
+    {
+      "type": "Feature Service",
+      "title": "Florida Statewide Parcel Centroid Version",
+      "url": "https://services9.arcgis.com/Gh9awoU677aKree0/arcgis/rest/services/Florida_Statewide_Parcel_Centroid_Version/FeatureServer",
+      "owner": "FloridaGIO",
+      "snippet": "This is the centroid version, derived from the polygon version. The centroids of the parcel data set depicted on this map contain a subset of property tax roll information provided by each of Florida\u2019s 67 county property appraisers to the Florida Department of Revenue (Department) every July.  The information presented represents data most recently received. Each county is responsible for omitting confidential records subject to redaction under Chapter 119, Florida Statutes. Scale dependencies have been set and require users to zoom into1:250,000 to view the over 10.8 million parcels located in the state of Florida."
+    },
+    {
+      "type": "Feature Service",
+      "title": "Current Parcels",
+      "url": "https://services.arcgis.com/jsIt88o09Q0r1j8h/arcgis/rest/services/Current_Parcels/FeatureServer",
+      "owner": "WAGeoservices",
+      "snippet": "Washington statewide tax parcel data. Updated April 2026."
+    },
+    {
+      "type": "Feature Service",
+      "title": "Washington_2024_DOR_Parcels",
+      "url": "https://services.arcgis.com/Ie0K5n4UyLAfvdiX/arcgis/rest/services/Washington_2024_DOR_Parcels/FeatureServer",
+      "owner": "matthew.gore9",
+      "snippet": "The parcel data set depicted on this map contains a subset of property tax roll information provided by each of Florida\u2019s 67 county property appraisers to the Florida Department of Revenue (Department) every July.  The information presented represents data most recently received August 2024. Each county is responsible for omitting confidential records subject to redaction under Chapter 119, Florida Statutes. Scale dependencies have been set and require users to zoom into 1:250,000 to view the over 10.5 million parcels located in the state of Florida."
+    },
+    {
+      "type": "Feature Service",
+      "title": "Tax Parcels by Address Number",
+      "url": "https://services2.arcgis.com/Y6OYJsEUmZxbx5nH/arcgis/rest/services/Tax_Parcels_by_Address_Number/FeatureServer",
+      "owner": "jessica_trimble@icloud.com",
+      "snippet": "To enable Washington State Government staff to locate and identify parcel ownership data for projects."
+    },
+    {
+      "type": "Feature Service",
+      "title": "Parcels, Compiled from Opt-In Open Data Counties, Minnesota",
+      "url": "https://enterprise.gisdata.mn.gov/aghost/rest/services/us_mn_state_mngeo/plan_parcels_open/FeatureServer",
+      "owner": "commons_etl_user",
+      "snippet": "Parcel data has been identified as a foundational data layer for Minnesota and provides benefits for many operational uses. This dataset was developed to enable geospatial professionals to perform statewide geospatial analysis, research, and mapping across the state. The dataset provides parcel data in a common coordinate system and with a common attribute scheme (the GAC parcel standard). The dataset is updated quarterly."
+    },
+    {
+      "type": "Feature Service",
+      "title": "Florida_Statewide_Cadastral",
+      "url": "https://services9.arcgis.com/Gh9awoU677aKree0/arcgis/rest/services/Florida_Statewide_Cadastral/FeatureServer",
+      "owner": "FDEPMapDirect",
+      "snippet": "The parcel data set depicted on this map contains a subset of property tax roll information provided by each of Florida\u2019s 67 county property appraisers to the Florida Department of Revenue (Department) every July.  The information presented represents data most recently received. Each county is responsible for omitting confidential records subject to redaction under Chapter 119, Florida Statutes. Scale dependencies have been set and require users to zoom into1:250,000 to view the over 10.8 million parcels located in the state of Florida."
+    },
+    {
+      "type": "Feature Service",
+      "title": "Parcels_2025selection_CopyFeatures_thurston_county",
+      "url": "https://services3.arcgis.com/0IbpLwS460cn4psv/arcgis/rest/services/Parcels_2025selection_CopyFeatures_thurston_county/FeatureServer",
+      "owner": "zhu_dav",
+      "snippet": "To enable Washington State Government staff to locate and identify parcel ownership data for projects."
+    },
+    {
+      "type": "Feature Service",
+      "title": "Palm_Beach_County_Parcels",
+      "url": "https://services.arcgis.com/B7X7NCOKKXditlwZ/arcgis/rest/services/Palm_Beach_County_Parcels/FeatureServer",
+      "owner": "pat10263@esri.com_telecomrc",
+      "snippet": "The parcel data set depicted on this map contains a subset of property tax roll information provided by each of Florida\u2019s 67 county property appraisers to the Florida Department of Revenue (Department) every July.  The information presented represents data most recently received August 2023. Each county is responsible for omitting confidential records subject to redaction under Chapter 119, Florida Statutes. Scale dependencies have been set and require users to zoom into 1:250,000 to view the over 10.5 million parcels located in the state of Florida."
+    }
+  ]
+}

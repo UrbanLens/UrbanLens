@@ -21,7 +21,7 @@ from django.utils import timezone
 from hypothesis import given, settings as hyp_settings, strategies as st
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.controllers.trip import (
     _activity_coords,
     _build_activity_forecasts,
@@ -44,7 +44,7 @@ _hyp = hyp_settings(max_examples=40, deadline=None)
 # _parse_scheduled_at
 # ---------------------------------------------------------------------------
 
-class ParseScheduledAtTests(TestCase):
+class ParseScheduledAtTests(SimpleTestCase):
     """_parse_scheduled_at combines ISO date and time strings."""
 
     def test_date_only_returns_midnight(self):
@@ -91,7 +91,7 @@ class ParseScheduledAtTests(TestCase):
 # _activity_coords
 # ---------------------------------------------------------------------------
 
-class ActivityCoordsTests(TestCase):
+class ActivityCoordsTests(SimpleTestCase):
     """_activity_coords resolves coordinates with correct priority."""
 
     def _make_activity(self, lat_override=None, lng_override=None, pin=None, location=None):
@@ -279,7 +279,7 @@ class CanPerformTests(TestCase):
 # _compute_activity_index_map
 # ---------------------------------------------------------------------------
 
-class ComputeActivityIndexMapTests(TestCase):
+class ComputeActivityIndexMapTests(SimpleTestCase):
     """_compute_activity_index_map assigns sequential 1-based indices to visible activities."""
 
     def _make_activity(self, coords=True, hidden=False, status=TripActivity.STATUS_PROPOSED):
@@ -349,7 +349,7 @@ class ComputeActivityIndexMapTests(TestCase):
 # _build_activity_forecasts
 # ---------------------------------------------------------------------------
 
-class BuildActivityForecastsTests(TestCase):
+class BuildActivityForecastsTests(SimpleTestCase):
     """_build_activity_forecasts matches activities to weather slots."""
 
     def _make_activity(self, lat=51.5, lng=-0.12, scheduled_at=None, status="proposed"):

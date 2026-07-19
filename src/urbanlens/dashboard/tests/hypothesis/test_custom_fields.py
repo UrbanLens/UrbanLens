@@ -12,7 +12,7 @@ from django.urls import reverse
 from hypothesis import given, settings as hypothesis_settings, strategies as st
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.forms.search import SearchForm
 from urbanlens.dashboard.models.custom_fields.model import CustomField, CustomFieldDisplay, CustomFieldEntity, CustomFieldStyle, CustomFieldType, CustomFieldValue
 from urbanlens.dashboard.models.images.model import Image
@@ -36,7 +36,7 @@ class CustomFieldTestsBase(TestCase):
         return CustomField.objects.create(profile=self.profile, entity_type=entity_type, name=name, field_type=field_type)
 
 
-class CustomFieldValueParsingTests(TestCase):
+class CustomFieldValueParsingTests(SimpleTestCase):
     """set_value/display_value round-trips per field type (no DB writes)."""
 
     def _value(self, field_type: str) -> CustomFieldValue:
@@ -422,7 +422,7 @@ class CustomFieldExportTests(CustomFieldTestsBase):
         self.assertEqual(by_name["Best hour"]["values"][0]["value"], "06:30:00")
 
 
-class NewTypeValueParsingTests(TestCase):
+class NewTypeValueParsingTests(SimpleTestCase):
     """set_value/display_value behavior for the time/select/checkbox/url types."""
 
     def _value(self, field_type: str, config: dict | None = None) -> CustomFieldValue:
@@ -484,7 +484,7 @@ class NewTypeValueParsingTests(TestCase):
         self.assertIs(value.value_boolean, True)
 
 
-class CustomFieldStyleTests(TestCase):
+class CustomFieldStyleTests(SimpleTestCase):
     """effective_style resolution and select/slider config helpers."""
 
     def test_effective_style_defaults_per_type(self) -> None:

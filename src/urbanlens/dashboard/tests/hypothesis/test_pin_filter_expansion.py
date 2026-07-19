@@ -12,7 +12,7 @@ from django.urls import reverse
 from django.utils import timezone
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.abstract.security import SECURITY_FIELDS
 from urbanlens.dashboard.models.links.model import PinLink
 from urbanlens.dashboard.models.location.model import Location
@@ -402,7 +402,7 @@ class SearchFormNewFieldsTests(TestCase):
         self.assertFalse(form.is_valid())
 
 
-class FilterCriteriaSummaryNewKeysTests(TestCase):
+class FilterCriteriaSummaryNewKeysTests(SimpleTestCase):
     """filter_criteria_summary() surfaces the new criteria in the auto-name/card summary."""
 
     def test_summary_mentions_each_new_dimension(self) -> None:

@@ -8,7 +8,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.images import ImageKeyword
 from urbanlens.dashboard.models.images.keyword import MAX_KEYWORD_LENGTH
 from urbanlens.dashboard.services.photo_keywords import (
@@ -20,7 +20,7 @@ from urbanlens.dashboard.services.photo_keywords import (
 )
 
 
-class NormalizeKeywordsTests(TestCase):
+class NormalizeKeywordsTests(SimpleTestCase):
     """normalize_keywords cleans, dedupes, and caps provider output."""
 
     def test_lowercases_and_strips_punctuation(self):
@@ -172,7 +172,7 @@ class AiVisionGatingTests(TestCase):
         self.assertFalse(self.provider.is_available_for(self.image))
 
 
-class MetadataKeywordHelpersTests(TestCase):
+class MetadataKeywordHelpersTests(SimpleTestCase):
     """XMP subject extraction handles the common packet shapes."""
 
     def test_bag_of_li_entries(self):
@@ -193,7 +193,7 @@ class MetadataKeywordHelpersTests(TestCase):
         self.assertEqual(_xmp_subjects({"Description": {"title": "x"}}), [])
 
 
-class KeywordParsingTests(TestCase):
+class KeywordParsingTests(SimpleTestCase):
     """Vision-response parsing splits comma/newline keyword lists."""
 
     def test_parse_keyword_text(self):

@@ -6,7 +6,7 @@ from django.urls import reverse
 from hypothesis import HealthCheck, given, settings as hyp_settings, strategies as st
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.article.model import Article, ArticleRevision
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
@@ -16,7 +16,7 @@ from urbanlens.dashboard.services.articles import diff_revisions, render_article
 from urbanlens.dashboard.services.global_search import GlobalSearchEngine
 
 
-class RenderArticleTests(TestCase):
+class RenderArticleTests(SimpleTestCase):
     """Markdown -> sanitized HTML rendering."""
 
     def test_empty_content_renders_empty(self) -> None:
@@ -78,7 +78,7 @@ class RenderArticleTests(TestCase):
         self.assertNotIn("javascript:", rendered.html.lower())
 
 
-class DiffRevisionsTests(TestCase):
+class DiffRevisionsTests(SimpleTestCase):
     """Line diffs between revision bodies."""
 
     def test_added_and_removed_lines(self) -> None:

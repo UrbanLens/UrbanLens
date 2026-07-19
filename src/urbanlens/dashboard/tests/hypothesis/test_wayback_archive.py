@@ -8,7 +8,7 @@ from django.test import override_settings
 from model_bakery import baker
 import requests
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.links.model import PinLink
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.services.apis.locations.wayback_machine import is_own_site_url
@@ -17,7 +17,7 @@ from urbanlens.dashboard.tasks import archive_link_to_wayback
 _GATEWAY = "urbanlens.dashboard.services.apis.locations.wayback_machine.WaybackMachineGateway"
 
 
-class IsOwnSiteUrlTests(TestCase):
+class IsOwnSiteUrlTests(SimpleTestCase):
     """is_own_site_url() gates which links archive_link_to_wayback will submit."""
 
     def test_matches_urbanlens_org_regardless_of_site_url(self) -> None:

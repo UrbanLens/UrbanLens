@@ -14,7 +14,7 @@ from hypothesis import given, settings as hyp_settings, strategies as st
 from model_bakery import baker
 import pytest
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.subscriptions import SiteFeature, SubscriptionRole, grant_subscription
 from urbanlens.dashboard.services.locations.naming import is_meaningful_name
@@ -37,7 +37,7 @@ def _extract_domain(url: str) -> str:
         return ""
 
 
-class DomainExtractionTests(TestCase):
+class DomainExtractionTests(SimpleTestCase):
     """Domain is correctly stripped from full URLs."""
 
     def test_simple_url_returns_domain(self):

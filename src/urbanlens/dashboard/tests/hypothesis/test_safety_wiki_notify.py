@@ -20,7 +20,7 @@ from django.utils import timezone
 from hypothesis import given, settings, strategies as st
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.comments.model import Comment
 from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, NotificationType
 from urbanlens.dashboard.models.notifications.model import NotificationLog, NotificationPreference
@@ -261,7 +261,7 @@ class CommunityStatusPageTests(TestCase):
         self.assertContains(response, "safety-checkin-form")
 
 
-class CommentUrlRenderingTests(TestCase):
+class CommentUrlRenderingTests(SimpleTestCase):
     """Bare URLs in comment text (e.g. the posted check-in link) render as safe anchors."""
 
     def test_url_becomes_anchor(self):

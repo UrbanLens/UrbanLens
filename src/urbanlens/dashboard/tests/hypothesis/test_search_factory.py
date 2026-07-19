@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 from hypothesis import given, settings as hyp_settings, strategies as st
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.locations.naming import is_meaningful_name
 
 _hyp = hyp_settings(max_examples=60, deadline=None)
@@ -58,7 +58,7 @@ def _pin(
 # get_search_gateway - factory
 # ---------------------------------------------------------------------------
 
-class GetSearchGatewayTests(TestCase):
+class GetSearchGatewayTests(SimpleTestCase):
     """get_search_gateway returns the correct gateway for each provider."""
 
     def test_brave_provider_returns_brave_gateway(self):
@@ -127,7 +127,7 @@ class GetSearchGatewayTests(TestCase):
 # get_search_gateways / search_web - automatic fallback chain
 # ---------------------------------------------------------------------------
 
-class GetSearchGatewaysOrderTests(TestCase):
+class GetSearchGatewaysOrderTests(SimpleTestCase):
     """get_search_gateways() returns providers in the expected fallback order."""
 
     def test_default_order_prioritizes_searxng_then_google_then_brave(self):
@@ -177,7 +177,7 @@ class GetSearchGatewaysOrderTests(TestCase):
         self.assertEqual(len(gateways), 6)
 
 
-class SearchWebFallbackTests(TestCase):
+class SearchWebFallbackTests(SimpleTestCase):
     """search_web() tries each gateway in order until one succeeds."""
 
     def test_returns_first_successful_providers_results(self):

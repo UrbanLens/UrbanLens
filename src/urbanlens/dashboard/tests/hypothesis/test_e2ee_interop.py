@@ -28,7 +28,7 @@ import nacl.pwhash
 import nacl.secret
 import nacl.utils
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase
 
 # Mirrors KDF_OPSLIMIT / KDF_MEMLIMIT in frontend/ts/shared/e2ee-crypto.ts and
 # DEFAULT_KDF_* in models/e2ee/key_bundle.py.
@@ -53,7 +53,7 @@ def _derive_wrap_key(password: bytes, salt: bytes) -> bytes:
     )
 
 
-class Argon2idDeriveInteropTests(TestCase):
+class Argon2idDeriveInteropTests(SimpleTestCase):
     """Argon2id derivation is deterministic and salt-separated."""
 
     def test_same_password_and_salt_derive_same_key(self) -> None:
@@ -71,7 +71,7 @@ class Argon2idDeriveInteropTests(TestCase):
         self.assertNotEqual(_derive_wrap_key(b"pw", salt_auth), _derive_wrap_key(b"pw", salt_wrap))
 
 
-class SecretBoxWrapInteropTests(TestCase):
+class SecretBoxWrapInteropTests(SimpleTestCase):
     """The nonce||ciphertext private-key wrap format round-trips."""
 
     def _wrap(self, secret: bytes, wrap_key: bytes) -> str:
@@ -98,7 +98,7 @@ class SecretBoxWrapInteropTests(TestCase):
             self._unwrap(blob, nacl.utils.random(32))
 
 
-class SealedBoxInteropTests(TestCase):
+class SealedBoxInteropTests(SimpleTestCase):
     """Conversation keys seal to a public key and open with its private key."""
 
     def test_seal_open_roundtrip(self) -> None:
@@ -116,7 +116,7 @@ class SealedBoxInteropTests(TestCase):
             nacl.public.SealedBox(attacker).decrypt(sealed)
 
 
-class MessageEncryptInteropTests(TestCase):
+class MessageEncryptInteropTests(SimpleTestCase):
     """Message bodies encrypt/decrypt under the conversation key."""
 
     @_settings

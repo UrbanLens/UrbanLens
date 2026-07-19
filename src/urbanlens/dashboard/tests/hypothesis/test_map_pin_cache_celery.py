@@ -6,7 +6,7 @@ from unittest import mock
 
 import redis
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.map_pins.cache import MapPinCache
 
 
@@ -14,7 +14,7 @@ class _Profile:
     pk = 42
 
 
-class MapPinCacheCeleryTests(TestCase):
+class MapPinCacheCeleryTests(SimpleTestCase):
     """MapPinCache queues one Celery rebuild and clears the guard on enqueue failure."""
 
     def test_enqueue_rebuild_queues_task_when_guard_key_is_set(self) -> None:

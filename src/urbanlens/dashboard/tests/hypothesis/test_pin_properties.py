@@ -14,7 +14,7 @@ from unittest.mock import MagicMock, PropertyMock, patch
 
 from hypothesis import given, settings, strategies as st
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.tests.hypothesis.strategies import (
     latitude,
@@ -68,7 +68,7 @@ def _make_location(name: str, lat: Decimal | None = None, lon: Decimal | None = 
 
 # -- effective_name -------------------------------------------------------------
 
-class PinEffectiveNameTests(TestCase):
+class PinEffectiveNameTests(SimpleTestCase):
 
     @given(nonempty_name)
     @settings(max_examples=300)
@@ -105,7 +105,7 @@ class PinEffectiveNameTests(TestCase):
 
 # -- effective_latitude / effective_longitude -----------------------------------
 
-class PinEffectiveCoordinateTests(TestCase):
+class PinEffectiveCoordinateTests(SimpleTestCase):
     """effective_latitude/effective_longitude always proxy the linked Location.
 
     A Pin has no coordinate fields of its own (see AddressableModel) - there is
@@ -150,7 +150,7 @@ class PinEffectiveCoordinateTests(TestCase):
 
 # -- effective_date_last_active -------------------------------------------------
 
-class PinEffectiveDateLastActiveTests(TestCase):
+class PinEffectiveDateLastActiveTests(SimpleTestCase):
 
     @given(reasonable_date)
     @settings(max_examples=300)
@@ -202,7 +202,7 @@ class PinEffectiveDateLastActiveTests(TestCase):
 
 # -- effective_icon -------------------------------------------------------------
 
-class PinEffectiveIconTests(TestCase):
+class PinEffectiveIconTests(SimpleTestCase):
     """effective_icon follows a defined priority chain.
 
     The DB-backed tag-lookup branch is not tested here (it requires a live ORM
@@ -249,7 +249,7 @@ class PinEffectiveIconTests(TestCase):
 
 # -- deduplicated_identity_fields ------------------------------------------------
 
-class PinDeduplicatedIdentityFieldsTests(TestCase):
+class PinDeduplicatedIdentityFieldsTests(SimpleTestCase):
     """Place Name/Official Name/Address collapse near-duplicate text instead of
     only catching an exact string match."""
 

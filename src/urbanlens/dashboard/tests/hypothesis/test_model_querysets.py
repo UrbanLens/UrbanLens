@@ -19,7 +19,7 @@ from model_bakery import baker
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.comments.queryset import CommentQuerySet
 from urbanlens.dashboard.models.markup.queryset import PinMarkupQuerySet
 from urbanlens.dashboard.models.notifications.meta.status import Status
@@ -423,7 +423,7 @@ class SiteSettingsSingletonTests(TestCase):
 
 # -- TDD: Status enum values are swapped (bug demonstration) -------------------
 
-class NotificationStatusBugTests(TestCase):
+class NotificationStatusBugTests(SimpleTestCase):
     """Status enum member names must match their stored database values."""
 
     def test_unread_value_should_be_unread(self) -> None:

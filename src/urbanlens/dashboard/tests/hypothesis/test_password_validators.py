@@ -10,7 +10,7 @@ from django.urls import reverse
 from hypothesis import given, settings, strategies as st
 import pytest
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.services.passphrases import generate_passphrases
 from urbanlens.dashboard.validators.password import ComplexityValidator, HaveIBeenPwnedValidator
 
@@ -18,7 +18,7 @@ _STRONG_PASSWORD = "Zebra-quilt-nexus-42!"
 _HIBP_PATCH = "urbanlens.dashboard.services.apis.security.hibp.HaveIBeenPwnedGateway.is_password_pwned"
 
 
-class ComplexityValidatorTests(TestCase):
+class ComplexityValidatorTests(SimpleTestCase):
     """ComplexityValidator requires upper, lower, and digit-or-symbol."""
 
     def setUp(self) -> None:
@@ -51,7 +51,7 @@ class ComplexityValidatorTests(TestCase):
         self.assertIn("lowercase", text)
 
 
-class HaveIBeenPwnedValidatorTests(TestCase):
+class HaveIBeenPwnedValidatorTests(SimpleTestCase):
     """HaveIBeenPwnedValidator rejects breached passwords and fails open on errors."""
 
     def setUp(self) -> None:
@@ -72,7 +72,7 @@ class HaveIBeenPwnedValidatorTests(TestCase):
             self.validator.validate("UniqueFreshPassphrase9!")
 
 
-class HaveIBeenPwnedGatewayTests(TestCase):
+class HaveIBeenPwnedGatewayTests(SimpleTestCase):
     """Gateway parses the HIBP range response using k-anonymity."""
 
     def _gateway_with_mock_session(self):
@@ -118,7 +118,7 @@ class HaveIBeenPwnedGatewayTests(TestCase):
         self.assertIsNone(gateway.is_password_pwned("AnythingGoes1!"))
 
 
-class PassphraseGenerationTests(TestCase):
+class PassphraseGenerationTests(SimpleTestCase):
     """Generated passphrases meet complexity rules."""
 
     def test_returns_requested_count(self) -> None:

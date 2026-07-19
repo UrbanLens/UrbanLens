@@ -9,11 +9,11 @@ read isn't interruptible the way a plain `requests` call is - reported as the
 
 from __future__ import annotations
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.apis.locations.boundaries.overture_maps import OvertureMapsGateway
 
 
-class OvertureMapsGatewayTimeoutDefaultsTests(TestCase):
+class OvertureMapsGatewayTimeoutDefaultsTests(SimpleTestCase):
     def test_connect_timeout_defaults_to_a_bound_not_none(self) -> None:
         gateway = OvertureMapsGateway()
         self.assertIsNotNone(gateway.connect_timeout)

@@ -38,6 +38,58 @@ $onboarding-card-accents: (
     }
 }
 
+// -- Privacy intro + "customize features" reveal --------------------------
+// Sits above the History/Community/External-Services cards. Most new users
+// leave the toggle off and never see the cards at all; checking it slides
+// .onboarding-feature-cards-wrap open via a grid-rows animation (0fr -> 1fr),
+// which - unlike max-height - animates cleanly to the content's natural height.
+
+.onboarding-privacy-intro {
+    padding: 1.25rem 1.5rem;
+    @include surface;
+    margin-bottom: 1.75rem;
+}
+
+.onboarding-privacy-copy {
+    font-size: .9rem;
+    line-height: 1.6;
+    color: var(--ul-grey-7);
+    margin: 0 0 .85rem;
+
+    &:last-of-type {
+        margin-bottom: 1.1rem;
+    }
+}
+
+.onboarding-customize-toggle {
+    display: flex;
+    align-items: center;
+    gap: .65rem;
+    cursor: pointer;
+    width: fit-content;
+}
+
+.onboarding-customize-label {
+    font-size: .95rem;
+    font-weight: 600;
+    color: var(--ul-grey-9);
+}
+
+.onboarding-feature-cards-wrap {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows .3s ease;
+
+    &.is-open {
+        grid-template-rows: 1fr;
+    }
+
+    > .onboarding-feature-cards-inner {
+        overflow: hidden;
+        min-height: 0;
+    }
+}
+
 .onboarding-cards {
     display: grid;
     grid-template-columns: 1fr;

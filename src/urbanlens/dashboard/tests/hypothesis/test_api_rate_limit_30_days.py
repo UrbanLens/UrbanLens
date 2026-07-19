@@ -16,7 +16,7 @@ from django.urls import reverse
 from django.utils import timezone
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.api_call_log.model import ApiCallLog
 from urbanlens.dashboard.models.api_rate_limit.model import ApiRateLimit
 from urbanlens.dashboard.services.rate_limiter import RateLimitExceededError, RequestCancelledError, ServiceDefaults, ServiceDisabledError, check_rate_limit
@@ -30,7 +30,7 @@ def _log_call(service: str, *, days_ago: float = 0.0) -> ApiCallLog:
     return entry
 
 
-class ServiceDefaultsThirtyDayFieldTests(TestCase):
+class ServiceDefaultsThirtyDayFieldTests(SimpleTestCase):
     def test_defaults_to_none(self) -> None:
         defaults = ServiceDefaults(display_name="Test Service")
         self.assertIsNone(defaults.calls_per_30_days)
@@ -123,7 +123,7 @@ class ApiLimitsAdminPageThirtyDayFieldTests(TestCase):
         self.assertIn("Reference & Archives", tab_names)
 
 
-class RequestCancelledErrorMessageTests(TestCase):
+class RequestCancelledErrorMessageTests(SimpleTestCase):
     """The cancellation exceptions must carry the service key and a single, un-nested message.
 
     Regression guard: the subclasses used to pass their formatted message to the

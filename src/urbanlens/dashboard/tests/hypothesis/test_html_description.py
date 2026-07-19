@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.import_formats.html_description import extract_image_urls, extract_link_urls, strip_html
 
 
-class StripHtmlTests(TestCase):
+class StripHtmlTests(SimpleTestCase):
     def test_empty_string_returns_empty(self) -> None:
         self.assertEqual(strip_html(""), "")
 
@@ -38,7 +38,7 @@ class StripHtmlTests(TestCase):
         self.assertIn("State: NY", result)
 
 
-class ExtractImageUrlsTests(TestCase):
+class ExtractImageUrlsTests(SimpleTestCase):
     def test_no_images_returns_empty_list(self) -> None:
         self.assertEqual(extract_image_urls("no images here"), [])
 
@@ -55,7 +55,7 @@ class ExtractImageUrlsTests(TestCase):
         self.assertEqual(extract_image_urls(html), ["https://example.com/a.jpg"])
 
 
-class ExtractLinkUrlsTests(TestCase):
+class ExtractLinkUrlsTests(SimpleTestCase):
     def test_finds_anchor_href(self) -> None:
         urls = extract_link_urls('<a href="https://example.com/story">Read more</a>')
         self.assertEqual(urls, ["https://example.com/story"])

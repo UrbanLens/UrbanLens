@@ -13,7 +13,7 @@ from types import SimpleNamespace
 from django.contrib.gis.geos import Point
 from hypothesis import given, settings, strategies as st
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.map_pin_share_detection import (
     bearing_degrees,
     geometry_to_geos,
@@ -31,7 +31,7 @@ def _markup_item(coordinates: list[list[float]]) -> SimpleNamespace:
 
 # -- is_zoomed_in -----------------------------------------------------------------
 
-class IsZoomedInTests(TestCase):
+class IsZoomedInTests(SimpleTestCase):
     def test_none_zoom_is_never_zoomed_in(self) -> None:
         self.assertFalse(is_zoomed_in(None))
 
@@ -44,7 +44,7 @@ class IsZoomedInTests(TestCase):
 
 # -- bearing_degrees ----------------------------------------------------------------
 
-class BearingDegreesTests(TestCase):
+class BearingDegreesTests(SimpleTestCase):
     @given(two_distant_coord_pairs())
     @settings(max_examples=200)
     def test_bearing_is_always_in_range(self, pair) -> None:
@@ -72,7 +72,7 @@ class BearingDegreesTests(TestCase):
 
 # -- viewport_bounds ----------------------------------------------------------------
 
-class ViewportBoundsTests(TestCase):
+class ViewportBoundsTests(SimpleTestCase):
     @given(lat_float, lon_float, st.floats(min_value=1, max_value=20, allow_nan=False))
     @settings(max_examples=200)
     def test_center_is_always_contained(self, lat: float, lon: float, zoom: float) -> None:
@@ -98,7 +98,7 @@ class ViewportBoundsTests(TestCase):
 
 # -- geometry_to_geos ---------------------------------------------------------------
 
-class GeometryToGeosTests(TestCase):
+class GeometryToGeosTests(SimpleTestCase):
     def test_none_geometry_returns_none(self) -> None:
         self.assertIsNone(geometry_to_geos(None))
         self.assertIsNone(geometry_to_geos({}))
@@ -134,7 +134,7 @@ class GeometryToGeosTests(TestCase):
 
 # -- arrow_points_toward -------------------------------------------------------------
 
-class ArrowPointsTowardTests(TestCase):
+class ArrowPointsTowardTests(SimpleTestCase):
     @given(two_distant_coord_pairs())
     @settings(max_examples=200)
     def test_arrow_pointing_exactly_at_target_always_matches(self, pair) -> None:

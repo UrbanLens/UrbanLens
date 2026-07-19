@@ -7,7 +7,7 @@ from unittest import mock
 
 from django.test import Client, override_settings
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.UrbanLens.settings.app import _default_allowed_hosts
 
 
@@ -28,7 +28,7 @@ class HealthEndpointTests(TestCase):
         self.assertEqual(response.status_code, 400)
 
 
-class DefaultAllowedHostsTests(TestCase):
+class DefaultAllowedHostsTests(SimpleTestCase):
     """Non-local defaults must still allow Docker-internal healthcheck hosts."""
 
     def test_staging_default_includes_localhost(self) -> None:

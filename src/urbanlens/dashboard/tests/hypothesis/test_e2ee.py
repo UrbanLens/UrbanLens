@@ -25,7 +25,7 @@ from django.urls import reverse
 from hypothesis import HealthCheck, given, settings, strategies as st
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.account import AccountKdf
 from urbanlens.dashboard.models.direct_messages.model import DirectMessage
 from urbanlens.dashboard.models.e2ee import ConversationKey, MessagingKeyBundle
@@ -76,7 +76,7 @@ def _client_for(profile: Profile) -> Client:
 # -- Service-layer helpers -------------------------------------------------------
 
 
-class BlobValidationTests(TestCase):
+class BlobValidationTests(SimpleTestCase):
     """is_base64 / valid_blob accept only well-formed, bounded base64."""
 
     def test_is_base64_rejects_empty_and_garbage(self) -> None:

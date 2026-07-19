@@ -14,12 +14,12 @@ from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.services.documents import CONVERTIBLE_DOCUMENT_EXTENSIONS, convert_to_pdf, extract_pdf_text, soffice_available
 
 
-class SofficeAvailableTests(TestCase):
+class SofficeAvailableTests(SimpleTestCase):
     def test_true_when_found(self) -> None:
         with patch("shutil.which", return_value="/usr/bin/soffice"):
             self.assertTrue(soffice_available())

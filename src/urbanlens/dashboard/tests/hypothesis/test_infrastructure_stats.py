@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from unittest import mock
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.services.infrastructure_stats import (
     InfrastructureServiceStat,
     _format_duration,
@@ -17,7 +17,7 @@ from urbanlens.dashboard.services.infrastructure_stats import (
 )
 
 
-class FormatDurationTests(TestCase):
+class FormatDurationTests(SimpleTestCase):
     """_format_duration renders compact uptime strings."""
 
     def test_formats_days_hours_minutes(self) -> None:
@@ -27,7 +27,7 @@ class FormatDurationTests(TestCase):
         self.assertEqual(_format_duration(-10), "0d 0h 0m")
 
 
-class PostgresVersionLabelTests(TestCase):
+class PostgresVersionLabelTests(SimpleTestCase):
     """_postgres_version_label shortens version() output."""
 
     def test_extracts_postgresql_version(self) -> None:
@@ -48,7 +48,7 @@ class CollectPostgresStatsTests(TestCase):
         self.assertIn("Connections", labels)
 
 
-class CollectValkeyStatsTests(TestCase):
+class CollectValkeyStatsTests(SimpleTestCase):
     """collect_valkey_stats handles configured and disabled cache backends."""
 
     def test_returns_disabled_when_url_missing(self) -> None:
@@ -78,7 +78,7 @@ class CollectValkeyStatsTests(TestCase):
         self.assertEqual(stat.metrics[-1].value, "5")
 
 
-class CollectCeleryStatsTests(TestCase):
+class CollectCeleryStatsTests(SimpleTestCase):
     """collect_celery_stats reports broker and worker availability."""
 
     def test_returns_disabled_when_broker_missing(self) -> None:
@@ -117,7 +117,7 @@ class CollectCeleryStatsTests(TestCase):
         self.assertIn("Workers", {metric.label for metric in stat.metrics})
 
 
-class CollectNginxStatsTests(TestCase):
+class CollectNginxStatsTests(SimpleTestCase):
     """collect_nginx_stats probes the nginx health endpoint."""
 
     def test_returns_healthy_on_200_response(self) -> None:
@@ -137,7 +137,7 @@ class CollectNginxStatsTests(TestCase):
         self.assertEqual(stat.status_label, "Unreachable")
 
 
-class CollectInfrastructureServiceStatsTests(TestCase):
+class CollectInfrastructureServiceStatsTests(SimpleTestCase):
     """collect_infrastructure_service_stats returns all expected services."""
 
     def test_returns_postgres_valkey_celery_and_nginx(self) -> None:

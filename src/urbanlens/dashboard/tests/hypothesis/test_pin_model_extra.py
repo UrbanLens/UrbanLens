@@ -12,13 +12,13 @@ from unittest.mock import MagicMock, patch
 
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.pin.model import Pin
 
 # -- effective_color ------------------------------------------------------------
 
 
-class PinEffectiveColorTests(TestCase):
+class PinEffectiveColorTests(SimpleTestCase):
     """effective_color returns map icon circle color from pin override or icon label only."""
 
     def _make_pin(self) -> Pin:
@@ -105,7 +105,7 @@ class PinEffectiveColorTests(TestCase):
         self.assertIsNone(pin.effective_color)
 
 
-class PinHasMeaningfulNameTests(TestCase):
+class PinHasMeaningfulNameTests(SimpleTestCase):
     """meaningful_name is None for Google placeholder names."""
 
     def _pin_with_name(self, name: str | None, loc_name: str = "") -> Pin:

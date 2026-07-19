@@ -19,7 +19,7 @@ from unittest import mock
 from django.utils import timezone
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion, VisitSuggestionStatus
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
 from urbanlens.dashboard.services.apis.locations.google.my_activity import (
@@ -74,7 +74,7 @@ def _wrap_html(*entries: str) -> bytes:
     return f"<!DOCTYPE html><html><head><title>My Activity</title></head><body>{body}</body></html>".encode()
 
 
-class LooksLikeMyActivityTests(TestCase):
+class LooksLikeMyActivityTests(SimpleTestCase):
     """looks_like_my_activity() sniffs the Material Design Lite markers My Activity always emits."""
 
     def test_real_sample_detected(self):
@@ -87,7 +87,7 @@ class LooksLikeMyActivityTests(TestCase):
         self.assertFalse(looks_like_my_activity("<html><body>Maps are fun</body></html>"))
 
 
-class ParseMyActivityEntriesTests(TestCase):
+class ParseMyActivityEntriesTests(SimpleTestCase):
     """parse_my_activity_entries() extracts qualifying 'Directions to' entries only."""
 
     def test_directions_entry_parses_name_coords_and_timestamp(self):
@@ -187,7 +187,7 @@ class ParseMyActivityEntriesTests(TestCase):
         self.assertEqual(entries, [])
 
 
-class ParseTimestampTests(TestCase):
+class ParseTimestampTests(SimpleTestCase):
     """_parse_timestamp() covers the fast US-abbreviation path and the dateparser fallback."""
 
     def test_edt_fast_path(self):

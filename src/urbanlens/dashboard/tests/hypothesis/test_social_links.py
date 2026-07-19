@@ -11,7 +11,7 @@ from unittest.mock import MagicMock
 from hypothesis import given, settings as hyp_settings
 from hypothesis import strategies as st
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.social_links import (
     PLATFORM_FA_ICON,
     PLATFORM_URL_TEMPLATE,
@@ -27,7 +27,7 @@ _hyp = hyp_settings(max_examples=60, deadline=None)
 # _clean_handle
 # ---------------------------------------------------------------------------
 
-class CleanHandleTests(TestCase):
+class CleanHandleTests(SimpleTestCase):
     """_clean_handle strips leading @ and rejects invalid characters."""
 
     def test_plain_handle_unchanged(self):
@@ -91,7 +91,7 @@ class CleanHandleTests(TestCase):
 # Instagram
 # ---------------------------------------------------------------------------
 
-class InstagramParserTests(TestCase):
+class InstagramParserTests(SimpleTestCase):
     """parse_social_link correctly extracts Instagram handles."""
 
     def test_standard_url(self):
@@ -121,7 +121,7 @@ class InstagramParserTests(TestCase):
 # Bluesky
 # ---------------------------------------------------------------------------
 
-class BlueskyParserTests(TestCase):
+class BlueskyParserTests(SimpleTestCase):
     """parse_social_link correctly extracts Bluesky profile handles."""
 
     def test_standard_profile_url(self):
@@ -141,7 +141,7 @@ class BlueskyParserTests(TestCase):
 # UER
 # ---------------------------------------------------------------------------
 
-class UERParserTests(TestCase):
+class UERParserTests(SimpleTestCase):
     """parse_social_link correctly extracts UER posterid."""
 
     def test_standard_query_url(self):
@@ -163,7 +163,7 @@ class UERParserTests(TestCase):
 # Facebook
 # ---------------------------------------------------------------------------
 
-class FacebookParserTests(TestCase):
+class FacebookParserTests(SimpleTestCase):
     """parse_social_link correctly extracts Facebook handles."""
 
     def test_facebook_com(self):
@@ -183,7 +183,7 @@ class FacebookParserTests(TestCase):
 # Flickr
 # ---------------------------------------------------------------------------
 
-class FlickrParserTests(TestCase):
+class FlickrParserTests(SimpleTestCase):
     """parse_social_link correctly extracts Flickr usernames."""
 
     def test_photos_path_valid(self):
@@ -203,7 +203,7 @@ class FlickrParserTests(TestCase):
 # YouTube
 # ---------------------------------------------------------------------------
 
-class YouTubeParserTests(TestCase):
+class YouTubeParserTests(SimpleTestCase):
     """parse_social_link correctly extracts YouTube handles and channel IDs."""
 
     def test_at_handle(self):
@@ -241,7 +241,7 @@ class YouTubeParserTests(TestCase):
 # TikTok
 # ---------------------------------------------------------------------------
 
-class TikTokParserTests(TestCase):
+class TikTokParserTests(SimpleTestCase):
     """parse_social_link correctly extracts TikTok handles."""
 
     def test_at_handle(self):
@@ -261,7 +261,7 @@ class TikTokParserTests(TestCase):
 # Reddit
 # ---------------------------------------------------------------------------
 
-class RedditParserTests(TestCase):
+class RedditParserTests(SimpleTestCase):
     """parse_social_link correctly extracts Reddit usernames."""
 
     def test_u_prefix(self):
@@ -293,7 +293,7 @@ class RedditParserTests(TestCase):
 # Generic website
 # ---------------------------------------------------------------------------
 
-class WebsiteParserTests(TestCase):
+class WebsiteParserTests(SimpleTestCase):
     """parse_social_link falls through to generic website for unknown domains."""
 
     def test_arbitrary_https_site(self):
@@ -333,7 +333,7 @@ class WebsiteParserTests(TestCase):
 # Rejected schemes / edge cases
 # ---------------------------------------------------------------------------
 
-class SecurityRejectionTests(TestCase):
+class SecurityRejectionTests(SimpleTestCase):
     """parse_social_link rejects dangerous schemes and empty inputs."""
 
     def test_empty_string_returns_none(self):
@@ -368,7 +368,7 @@ class SecurityRejectionTests(TestCase):
 # get_profile_links
 # ---------------------------------------------------------------------------
 
-class GetProfileLinksTests(TestCase):
+class GetProfileLinksTests(SimpleTestCase):
     """get_profile_links renders SocialLink rows into dicts with URL and icon."""
 
     def _make_link(self, platform: str, handle: str):

@@ -1,0 +1,14 @@
+{
+  "message": "Query coordinator error: query.soql.no-such-function; No such function 'distance_in_meters'; arity=3; position: Map(row -> 1, column -> 216, line -> \"SELECT `the_geom`, `objectid`, `perimeter`, `acres`, `situs_dir`, `situs_street`, `situs_type`, `situs_number`, `geopin`, `shape_area`, `shape_length` WHERE within_circle(`the_geom`, 29.9584, -90.0644, 60) ORDER BY distance_in_meters(`the_geom`, 29.9584, -90.0644) ASC NULL LAST LIMIT 5\\n                                                                                                                                                                                                                       ^\")",
+  "errorCode": "query.soql.no-such-function",
+  "data": {
+    "function": "distance_in_meters",
+    "arity": 3,
+    "dataset": "foxtrot.103384",
+    "position": {
+      "row": 1,
+      "column": 216,
+      "line": "SELECT `the_geom`, `objectid`, `perimeter`, `acres`, `situs_dir`, `situs_street`, `situs_type`, `situs_number`, `geopin`, `shape_area`, `shape_length` WHERE within_circle(`the_geom`, 29.9584, -90.0644, 60) ORDER BY distance_in_meters(`the_geom`, 29.9584, -90.0644) ASC NULL LAST LIMIT 5\n                                                                                                                                                                                                                       ^"
+    }
+  }
+}

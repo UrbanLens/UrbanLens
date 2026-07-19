@@ -102,3 +102,21 @@ def _state_name_to_abbr(name: str | None) -> str:
     if not name:
         return ""
     return _STATE_ABBREVIATIONS.get(name.strip(), "")
+
+
+_STATE_NAMES: dict[str, str] = {abbr: name for name, abbr in _STATE_ABBREVIATIONS.items()}
+
+
+def state_abbr_to_name(abbr: str | None) -> str:
+    """Best-effort USPS state abbreviation -> full name; empty string if unrecognized.
+
+    The inverse of :func:`_state_name_to_abbr`'s table - used by
+    ``discovery.discover_via_portal_search``, whose upstream search index
+    (ArcGIS Online's own item-search API) matches noticeably worse against a
+    bare 2-letter state abbreviation than the spelled-out name: confirmed
+    live, ``"Athens County OH parcels"`` returns zero results while
+    ``"Athens County Ohio parcels"`` returns real hits for the same county.
+    """
+    if not abbr:
+        return ""
+    return _STATE_NAMES.get(abbr.strip().upper(), "")

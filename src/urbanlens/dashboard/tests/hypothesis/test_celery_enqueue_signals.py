@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from unittest import mock
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.models.wiki.signals import suggest_and_add_categories
 
 
@@ -12,7 +12,7 @@ class _Wiki:
     pk = 20
 
 
-class PinCreationExternalWorkTests(TestCase):
+class PinCreationExternalWorkTests(SimpleTestCase):
     """Pin creation triggers no wiki/boundary/external-API work.
 
     Wikis are user-created from the pin detail page and default boundaries are
@@ -26,7 +26,7 @@ class PinCreationExternalWorkTests(TestCase):
         self.assertFalse(hasattr(pin_signals, "enqueue_location_creation"))
 
 
-class WikiCategorySignalTests(TestCase):
+class WikiCategorySignalTests(SimpleTestCase):
     """New Wikis enqueue category suggestion after commit.
 
     Category auto-tagging moved from Location to Wiki in the wiki split (see

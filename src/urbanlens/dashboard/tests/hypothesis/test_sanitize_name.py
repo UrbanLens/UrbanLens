@@ -7,7 +7,7 @@ import unicodedata
 from hypothesis import given, settings as hyp_settings, strategies as st
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.services.locations.naming import sanitize_name
 
 _hyp = hyp_settings(max_examples=100, deadline=None)
@@ -27,7 +27,7 @@ _UNCHANGED_EXAMPLES = (
 )
 
 
-class SanitizeNameTests(TestCase):
+class SanitizeNameTests(SimpleTestCase):
     """sanitize_name allowlists letters/digits/space plus everyday punctuation."""
 
     def test_none_and_empty_pass_through_unchanged(self) -> None:
@@ -72,7 +72,7 @@ class SanitizeNameTests(TestCase):
         self.assertNotIn("|", result)
 
 
-class SanitizeNamePropertyTests(TestCase):
+class SanitizeNamePropertyTests(SimpleTestCase):
     """Property-based checks that hold for arbitrary input."""
 
     @given(text=st.text(min_size=0, max_size=200))

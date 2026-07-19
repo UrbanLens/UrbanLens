@@ -17,7 +17,7 @@ from django.urls import reverse
 from hypothesis import given, settings as hypothesis_settings, strategies as st
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.aliases.model import PinAlias
 from urbanlens.dashboard.models.link_extraction.model import LinkExtraction, LinkExtractionStatus
 from urbanlens.dashboard.models.notifications.meta import NotificationType
@@ -50,7 +50,7 @@ def _grant_ai_to_everyone() -> None:
     SiteSettings.objects.filter(pk=settings_obj.pk).update(default_features=SiteFeature.AI)
 
 
-class ParseHelpersTests(TestCase):
+class ParseHelpersTests(SimpleTestCase):
     """Deterministic parsing/sanitization of untrusted AI values (no DB writes)."""
 
     def test_parse_date_accepts_iso_and_bare_year(self) -> None:

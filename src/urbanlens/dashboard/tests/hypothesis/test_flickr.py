@@ -25,7 +25,7 @@ from django.urls import reverse
 from django.utils import timezone
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard import tasks
 from urbanlens.dashboard.models.flickr.model import FlickrAccount
 from urbanlens.dashboard.models.images.model import Image
@@ -54,7 +54,7 @@ def _account(**kwargs) -> FlickrAccount:
 
 
 @mock.patch.object(flickr_oauth, "settings")
-class FlickrOAuthFlowTests(TestCase):
+class FlickrOAuthFlowTests(SimpleTestCase):
     """start_authorization/finish_authorization wrap OAuth1Session's handshake."""
 
     def _configure_settings(self, mock_settings) -> None:

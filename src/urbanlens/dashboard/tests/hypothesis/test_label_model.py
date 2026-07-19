@@ -15,7 +15,7 @@ from django.contrib.auth.models import User
 from hypothesis import given, settings, strategies as st
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.labels.model import (
     KIND_CATEGORY,
     KIND_STATUS,
@@ -45,7 +45,7 @@ def _custom(name: str | None = None, icon: str | None = None, color: str | None 
 # -- _get_customization --------------------------------------------------------
 
 
-class LabelGetCustomizationTests(TestCase):
+class LabelGetCustomizationTests(SimpleTestCase):
     """_get_customization() returns the first prefetched item or None."""
 
     def test_returns_none_with_empty_list(self) -> None:
@@ -62,7 +62,7 @@ class LabelGetCustomizationTests(TestCase):
 # -- effective_name ------------------------------------------------------------
 
 
-class LabelEffectiveNameTests(TestCase):
+class LabelEffectiveNameTests(SimpleTestCase):
     """effective_name returns the user's override or falls back to the label name."""
 
     def test_no_customization_returns_label_name(self) -> None:
@@ -94,7 +94,7 @@ class LabelEffectiveNameTests(TestCase):
 # -- effective_icon ------------------------------------------------------------
 
 
-class LabelEffectiveIconTests(TestCase):
+class LabelEffectiveIconTests(SimpleTestCase):
     """effective_icon returns the user's override or falls back to the label icon."""
 
     def test_no_customization_returns_label_icon(self) -> None:
@@ -118,7 +118,7 @@ class LabelEffectiveIconTests(TestCase):
 # -- effective_color -----------------------------------------------------------
 
 
-class LabelEffectiveColorTests(TestCase):
+class LabelEffectiveColorTests(SimpleTestCase):
     """effective_color returns the user's override or falls back to the label color."""
 
     def test_no_customization_returns_label_color(self) -> None:
@@ -142,7 +142,7 @@ class LabelEffectiveColorTests(TestCase):
 # -- is_customized -------------------------------------------------------------
 
 
-class LabelIsCustomizedTests(TestCase):
+class LabelIsCustomizedTests(SimpleTestCase):
     """is_customized is True when the prefetched customization has any non-None field."""
 
     def test_no_customization_is_false(self) -> None:
@@ -172,7 +172,7 @@ class LabelIsCustomizedTests(TestCase):
 # -- icon_is_overridden --------------------------------------------------------
 
 
-class LabelIconIsOverriddenTests(TestCase):
+class LabelIconIsOverriddenTests(SimpleTestCase):
     """icon_is_overridden is True only when customization.icon is not None."""
 
     def test_no_customization_is_false(self) -> None:

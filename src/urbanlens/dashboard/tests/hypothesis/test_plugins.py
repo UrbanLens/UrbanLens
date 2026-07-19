@@ -16,7 +16,7 @@ from unittest.mock import patch
 
 from hypothesis import given, strategies as st
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.plugins import UrbanLensPlugin, plugin_registry
 from urbanlens.dashboard.plugins.hooks import HookRegistry
 from urbanlens.dashboard.plugins.registry import PluginRegistry
@@ -26,7 +26,7 @@ from urbanlens.dashboard.services.rate_limiter import ServiceDefaults
 # -- HookRegistry ----------------------------------------------------------------
 
 
-class HookRegistryFilterTests(TestCase):
+class HookRegistryFilterTests(SimpleTestCase):
     """apply_filters chains callbacks in priority order and survives failures."""
 
     def test_filters_apply_in_priority_order(self) -> None:
@@ -80,7 +80,7 @@ class HookRegistryFilterTests(TestCase):
         self.assertEqual(seen, sorted(priorities))
 
 
-class HookRegistryActionTests(TestCase):
+class HookRegistryActionTests(SimpleTestCase):
     """do_action notifies every callback and isolates failures."""
 
     def test_actions_run_with_arguments(self) -> None:
@@ -127,7 +127,7 @@ class BetaPlugin(UrbanLensPlugin):
         return {"beta_api": ServiceDefaults(display_name="Beta API")}
 
 
-class PluginRegistryTests(TestCase):
+class PluginRegistryTests(SimpleTestCase):
     """Registration, ordering, duplicates, and enabled-state filtering."""
 
     def _registry(self, *plugins: type[UrbanLensPlugin]) -> PluginRegistry:
@@ -203,7 +203,7 @@ class PluginRegistryTests(TestCase):
 # -- Integration with real discovery ----------------------------------------------
 
 
-class BuiltinDiscoveryTests(TestCase):
+class BuiltinDiscoveryTests(SimpleTestCase):
     """The bundled plugins are discovered and wired into their consumers."""
 
     def test_builtin_plugins_discovered(self) -> None:

@@ -21,7 +21,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.services.images import parse_reposition_payload
@@ -31,7 +31,7 @@ def _body(latitude: object, longitude: object) -> bytes:
     return json.dumps({"latitude": latitude, "longitude": longitude}).encode()
 
 
-class ParseRepositionPayloadTests(TestCase):
+class ParseRepositionPayloadTests(SimpleTestCase):
     """The shared parser: valid coordinates round-trip, everything else raises ValueError."""
 
     @given(

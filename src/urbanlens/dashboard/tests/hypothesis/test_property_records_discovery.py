@@ -10,8 +10,9 @@ from __future__ import annotations
 
 from unittest import mock
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.property_jurisdiction.meta import AdapterType
+from urbanlens.dashboard.models.property_jurisdiction.model import PropertyJurisdiction
 from urbanlens.dashboard.services.apis.property_records.discovery import (
     _extract_candidate_urls,
     _extract_forms,
@@ -26,7 +27,7 @@ from urbanlens.dashboard.services.apis.property_records.discovery import (
 from urbanlens.dashboard.services.apis.property_records.html_scrape import SearchField
 
 
-class ExtractCandidateUrlsTests(TestCase):
+class ExtractCandidateUrlsTests(SimpleTestCase):
     def test_finds_a_mapserver_url(self) -> None:
         text = "Parcel data: https://gis.example.gov/arcgis/rest/services/Parcels/MapServer/2/query for details"
         candidates = _extract_candidate_urls(text)
@@ -46,23 +47,57 @@ class ExtractCandidateUrlsTests(TestCase):
         self.assertEqual(candidates[0][0], "https://gis.example.gov/arcgis/rest/services/Parcels/FeatureServer/0")
 
 
-class RankCandidatesTests(TestCase):
+class RankCandidatesTests(SimpleTestCase):
     def test_gov_domains_rank_first(self) -> None:
-        candidates = [("https://example.com/MapServer/1", AdapterType.ARCGIS_REST), ("https://example.gov/MapServer/1", AdapterType.ARCGIS_REST)]
+        candidates = [("https://example.com/MapServer/1", AdapterType.ARCGIS_REST, ""), ("https://example.gov/MapServer/1", AdapterType.ARCGIS_REST, "")]
         ranked = _rank_candidates(candidates)
         self.assertTrue(ranked[0][0].endswith(".gov/MapServer/1"))
 
     def test_duplicates_are_removed(self) -> None:
-        candidates = [("https://example.gov/MapServer/1", AdapterType.ARCGIS_REST), ("https://example.gov/MapServer/1", AdapterType.ARCGIS_REST)]
+        candidates = [("https://example.gov/MapServer/1", AdapterType.ARCGIS_REST, ""), ("https://example.gov/MapServer/1", AdapterType.ARCGIS_REST, "")]
         self.assertEqual(len(_rank_candidates(candidates)), 1)
 
     def test_original_order_preserved_within_the_same_rank(self) -> None:
-        candidates = [("https://a.gov/MapServer/1", AdapterType.ARCGIS_REST), ("https://b.gov/MapServer/1", AdapterType.ARCGIS_REST)]
+        candidates = [("https://a.gov/MapServer/1", AdapterType.ARCGIS_REST, ""), ("https://b.gov/MapServer/1", AdapterType.ARCGIS_REST, "")]
         ranked = _rank_candidates(candidates)
         self.assertEqual([url for url, _ in ranked], ["https://a.gov/MapServer/1", "https://b.gov/MapServer/1"])
 
+    def test_wrong_state_source_text_is_rejected_outright(self) -> None:
+        """Regression guard for a live-confirmed bug that recurred even after ranking-only
+        demotion was added: a "Douglas County, NE" search extracted *only* Oregon candidates
+        (Nebraska's real portal never got regex-extracted from its search result at all), so
+        demoting the Oregon candidate behind a nonexistent Nebraska one didn't help - Oregon
+        still won because it was the only candidate on the list. A confirmed different-state
+        title/snippet must be dropped entirely, not just ranked last."""
+        candidates = [
+            ("https://gis.co.douglas.or.us/server/rest/services/Common/DouglasCountyCommonMappingBase/MapServer", AdapterType.ARCGIS_REST, "Geographic Information Systems (GIS) | Douglas County, OR"),
+            ("https://gis.douglascountyne.gov/arcgis/rest/services/Parcels/MapServer", AdapterType.ARCGIS_REST, "Douglas County, Nebraska GIS parcel data"),
+        ]
+        ranked = _rank_candidates(candidates, "Douglas County", "Nebraska")
+        self.assertEqual([url for url, _ in ranked], ["https://gis.douglascountyne.gov/arcgis/rest/services/Parcels/MapServer"])
 
-class IsSafePublicUrlTests(TestCase):
+    def test_wrong_county_same_state_is_only_demoted_not_rejected(self) -> None:
+        """The county-level signal stays ranking-only - it's noisier than the state-level one,
+        so a same-state candidate naming a different county still survives, just ranked last."""
+        candidates = [
+            ("https://gis.example.gov/arcgis/rest/services/Parcels/MapServer", AdapterType.ARCGIS_REST, "Lorain County, Ohio GIS parcel data"),
+            ("https://gis.other.gov/arcgis/rest/services/Parcels/MapServer", AdapterType.ARCGIS_REST, "Athens County, Ohio GIS parcel data"),
+        ]
+        ranked = _rank_candidates(candidates, "Athens County", "Ohio")
+        self.assertEqual([url for url, _ in ranked], ["https://gis.other.gov/arcgis/rest/services/Parcels/MapServer", "https://gis.example.gov/arcgis/rest/services/Parcels/MapServer"])
+
+    def test_without_a_target_state_the_wrong_state_signal_is_disabled(self) -> None:
+        """Both candidates are non-.gov here so .gov preference can't mask the jurisdiction signal."""
+        candidates = [
+            ("https://gis.co.douglas.or.us/server/rest/services/Common/DouglasCountyCommonMappingBase/MapServer", AdapterType.ARCGIS_REST, "Geographic Information Systems (GIS) | Douglas County, OR"),
+            ("https://gis.douglascountyne.example.com/arcgis/rest/services/Parcels/MapServer", AdapterType.ARCGIS_REST, "Douglas County, Nebraska GIS parcel data"),
+        ]
+        ranked = _rank_candidates(candidates)
+        # No jurisdiction context: order falls back to .gov preference (neither qualifies) + first-appearance only.
+        self.assertEqual([url for url, _ in ranked], [pair[0] for pair in candidates])
+
+
+class IsSafePublicUrlTests(SimpleTestCase):
     def test_public_https_url_is_safe(self) -> None:
         self.assertTrue(_is_safe_public_url("https://example.gov/MapServer/1"))
 
@@ -79,7 +114,7 @@ class IsSafePublicUrlTests(TestCase):
         self.assertFalse(_is_safe_public_url("ftp://example.gov/MapServer/1"))
 
 
-class ValidateEndpointTests(TestCase):
+class ValidateEndpointTests(SimpleTestCase):
     """Only URLs the Tier 1 gateway can genuinely query may ever reach the registry."""
 
     _FETCH_JSON = "urbanlens.dashboard.services.apis.property_records.discovery._fetch_json"
@@ -166,8 +201,13 @@ class ValidateEndpointTests(TestCase):
         fetch.assert_not_called()
 
 
-class SelectAiCandidateTests(TestCase):
+class SelectAiCandidateTests(SimpleTestCase):
     """The model may only ever pick a URL verbatim present in the search results - never invent one."""
+
+    def _jurisdiction(self, **overrides) -> PropertyJurisdiction:
+        defaults = {"fips": "36001", "county_name": "Albany County", "state": "NY"}
+        defaults.update(overrides)
+        return PropertyJurisdiction(**defaults)
 
     def _search_results(self):
         return [
@@ -177,41 +217,41 @@ class SelectAiCandidateTests(TestCase):
 
     def test_no_search_results_returns_none_without_calling_ai(self) -> None:
         with mock.patch("urbanlens.dashboard.services.ai.factory.get_gateway") as get_gateway:
-            result = _select_ai_candidate([])
+            result = _select_ai_candidate([], self._jurisdiction())
         self.assertIsNone(result)
         get_gateway.assert_not_called()
 
     def test_ai_disabled_returns_none(self) -> None:
         with mock.patch("urbanlens.dashboard.services.ai.factory.get_gateway", return_value=None):
-            result = _select_ai_candidate(self._search_results())
+            result = _select_ai_candidate(self._search_results(), self._jurisdiction())
         self.assertIsNone(result)
 
     def test_ai_picks_a_url_present_in_results(self) -> None:
         gateway = mock.Mock()
         gateway.send_prompt.return_value = '{"url": "https://gis.albanycounty.gov/arcgis/rest/services/Parcels/MapServer/2", "kind": "arcgis"}'
         with mock.patch("urbanlens.dashboard.services.ai.factory.get_gateway", return_value=gateway):
-            result = _select_ai_candidate(self._search_results())
+            result = _select_ai_candidate(self._search_results(), self._jurisdiction())
         self.assertEqual(result, ("https://gis.albanycounty.gov/arcgis/rest/services/Parcels/MapServer/2", AdapterType.ARCGIS_REST))
 
     def test_ai_inventing_a_url_not_in_results_is_rejected(self) -> None:
         gateway = mock.Mock()
         gateway.send_prompt.return_value = '{"url": "https://not-a-real-result.example.com/MapServer/1", "kind": "arcgis"}'
         with mock.patch("urbanlens.dashboard.services.ai.factory.get_gateway", return_value=gateway):
-            result = _select_ai_candidate(self._search_results())
+            result = _select_ai_candidate(self._search_results(), self._jurisdiction())
         self.assertIsNone(result)
 
     def test_ai_returning_null_url_is_none(self) -> None:
         gateway = mock.Mock()
         gateway.send_prompt.return_value = '{"url": null, "kind": null}'
         with mock.patch("urbanlens.dashboard.services.ai.factory.get_gateway", return_value=gateway):
-            result = _select_ai_candidate(self._search_results())
+            result = _select_ai_candidate(self._search_results(), self._jurisdiction())
         self.assertIsNone(result)
 
     def test_malformed_ai_json_does_not_raise(self) -> None:
         gateway = mock.Mock()
         gateway.send_prompt.return_value = "not json at all"
         with mock.patch("urbanlens.dashboard.services.ai.factory.get_gateway", return_value=gateway):
-            result = _select_ai_candidate(self._search_results())
+            result = _select_ai_candidate(self._search_results(), self._jurisdiction())
         self.assertIsNone(result)
 
     def test_socrata_kind_is_recognized(self) -> None:
@@ -219,11 +259,23 @@ class SelectAiCandidateTests(TestCase):
         gateway = mock.Mock()
         gateway.send_prompt.return_value = '{"url": "https://data.example.gov/resource/ab12-cd34.json", "kind": "socrata"}'
         with mock.patch("urbanlens.dashboard.services.ai.factory.get_gateway", return_value=gateway):
-            result = _select_ai_candidate(results)
+            result = _select_ai_candidate(results, self._jurisdiction())
         self.assertEqual(result, ("https://data.example.gov/resource/ab12-cd34.json", AdapterType.SOCRATA))
 
+    def test_prompt_names_the_target_jurisdiction(self) -> None:
+        """Regression guard for a live-confirmed bug: without naming the target county, the model
+        picked a different, real county's working portal (Lorain's, for an Athens County search) -
+        nothing in its instructions ever said which county it was supposed to find."""
+        gateway = mock.Mock()
+        gateway.send_prompt.return_value = '{"url": null, "kind": null}'
+        with mock.patch("urbanlens.dashboard.services.ai.factory.get_gateway", return_value=gateway) as get_gateway:
+            _select_ai_candidate(self._search_results(), self._jurisdiction(county_name="Athens County", state="OH"))
+        instructions = get_gateway.call_args.kwargs["instructions"]
+        self.assertIn("Athens County", instructions)
+        self.assertIn("OH", instructions)
 
-class ExtractFormsTests(TestCase):
+
+class ExtractFormsTests(SimpleTestCase):
     def test_extracts_action_method_and_input_names(self) -> None:
         html = '<html><body><form action="/search" method="post"><input name="addr"><input name="apn"></form></body></html>'
         forms = _extract_forms(html, "https://example.gov/page")
@@ -256,7 +308,7 @@ class ExtractFormsTests(TestCase):
         self.assertEqual(_extract_forms("<html><body>no forms here</body></html>", "https://example.gov"), [])
 
 
-class SelectAiFormRecipeTests(TestCase):
+class SelectAiFormRecipeTests(SimpleTestCase):
     """The model may only pick a form by index and a field name that genuinely exists on it."""
 
     def _forms(self):
@@ -328,7 +380,7 @@ class SelectAiFormRecipeTests(TestCase):
         self.assertIsNone(result)
 
 
-class DiscoverTier3RecipeTests(TestCase):
+class DiscoverTier3RecipeTests(SimpleTestCase):
     def _jurisdiction(self, **overrides):
         from urbanlens.dashboard.models.property_jurisdiction.model import PropertyJurisdiction
 

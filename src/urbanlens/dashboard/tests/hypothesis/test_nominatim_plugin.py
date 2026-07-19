@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.links.model import PinLink, WikiLink
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
@@ -31,7 +31,7 @@ _RAW_NOMINATIM_RESPONSE = {
 }
 
 
-class NominatimNormaliseExtraFieldsTests(TestCase):
+class NominatimNormaliseExtraFieldsTests(SimpleTestCase):
     """_normalise() surfaces old_name/operator:type/gnis:feature_id, previously dropped."""
 
     def test_old_name_is_captured_verbatim(self) -> None:

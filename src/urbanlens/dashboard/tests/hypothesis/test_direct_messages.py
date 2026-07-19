@@ -18,7 +18,7 @@ from django.urls import reverse
 from hypothesis import HealthCheck, given, settings, strategies as st
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.forms.settings_form import PrivacySettingsForm
 from urbanlens.dashboard.models.direct_messages.model import DirectMessage
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType, Permission
@@ -302,7 +302,7 @@ class DirectMessageQuerySetTests(TestCase):
 # -- HTTP endpoints ----------------------------------------------------------------
 
 
-class ReactionEmojiValidationTests(TestCase):
+class ReactionEmojiValidationTests(SimpleTestCase):
     """`is_safe_reaction_emoji` accepts genuine emoji, rejects render-unsafe input."""
 
     def test_picker_emojis_are_all_accepted(self) -> None:

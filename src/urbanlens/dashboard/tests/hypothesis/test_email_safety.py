@@ -20,7 +20,7 @@ from django.utils import timezone
 from hypothesis import given, strategies as st
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.email_log import EmailSendLog, EmailType
 from urbanlens.dashboard.models.site_settings.model import SiteSettings
 from urbanlens.dashboard.models.subscriptions.model import SubscriptionRole, grant_subscription
@@ -35,7 +35,7 @@ from urbanlens.dashboard.services.email_safety import (
 _EMAILS = st.emails()
 
 
-class HashEmailTests(TestCase):
+class HashEmailTests(SimpleTestCase):
     """hash_email is deterministic, normalized, and never stores the address."""
 
     @given(email=_EMAILS)

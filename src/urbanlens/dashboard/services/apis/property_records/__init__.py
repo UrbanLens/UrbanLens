@@ -14,6 +14,7 @@ Module map:
 * ``arcgis_socrata`` - the Tier 1 (free structured REST) gateway.
 * ``vendor_templates`` - Tier 2: one ``ScrapeRecipe`` factory per known vendor platform.
 * ``html_scrape`` - the shared Tier 2/3 bounded-recipe scrape engine.
+* ``relevance`` - pure accept/reject/ordering heuristics for discovery (no I/O).
 * ``discovery`` - finds/validates Tier 1 endpoints and Tier 3 recipes for the registry.
 * ``merge`` - per-field merging when more than one tier answered.
 * ``orchestrator`` - tries tiers in order for one jurisdiction and returns a ``PropertyRecord``.

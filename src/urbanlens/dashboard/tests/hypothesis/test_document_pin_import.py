@@ -15,7 +15,7 @@ from unittest import mock
 from hypothesis import given, settings as hyp_settings, strategies as st
 import pytest
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.baker_recipes import _make_profile
 from urbanlens.dashboard.models.subscriptions import SiteFeature
 from urbanlens.dashboard.services.ai import document_import
@@ -23,7 +23,7 @@ from urbanlens.dashboard.services.ai import document_import
 _hyp = hyp_settings(max_examples=40, deadline=None)
 
 
-class IsSupportedDocumentFilenameTests(TestCase):
+class IsSupportedDocumentFilenameTests(SimpleTestCase):
     def test_txt_and_docx_supported(self):
         self.assertTrue(document_import.is_supported_document_filename("notes.txt"))
         self.assertTrue(document_import.is_supported_document_filename("Trip Notes.DOCX"))
@@ -75,7 +75,7 @@ class ExtractTextTests(TestCase):
         self.assertIn("123 Mill Rd", text)
 
 
-class ParseCsvRowsTests(TestCase):
+class ParseCsvRowsTests(SimpleTestCase):
     def test_parses_well_formed_csv(self):
         answer = "name,description,address\nOld Mill,Abandoned mill,123 Mill Rd"
 
@@ -139,7 +139,7 @@ class ParseCsvRowsTests(TestCase):
         document_import._parse_csv_rows(garbage)
 
 
-class ParseExplicitCoordinatesTests(TestCase):
+class ParseExplicitCoordinatesTests(SimpleTestCase):
     def test_valid_pair(self):
         self.assertEqual(document_import._parse_explicit_coordinates("40.7128", "-74.0060"), (40.7128, -74.0060))
 
@@ -162,7 +162,7 @@ class ParseExplicitCoordinatesTests(TestCase):
         self.assertEqual(result, (lat, lng))
 
 
-class ParseAiCsvResponseTests(TestCase):
+class ParseAiCsvResponseTests(SimpleTestCase):
     """_parse_ai_csv_response treats the AI's answer like any other untrusted upload:
     written to a scratch file under a name our code controls, parsed from disk, and
     deleted immediately afterwards - success or failure."""

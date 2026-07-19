@@ -8,7 +8,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import mock
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.export import EXPORT_TTL_SECONDS
 from urbanlens.dashboard.services.vestigial_assets import cleanup_vestigial_assets
 from urbanlens.dashboard.tasks import cleanup_vestigial_assets_task
@@ -20,7 +20,7 @@ def _touch_dir(path: Path, when: datetime) -> None:
     os.utime(path, (timestamp, timestamp))
 
 
-class CleanupVestigialAssetsTests(TestCase):
+class CleanupVestigialAssetsTests(SimpleTestCase):
     """cleanup_vestigial_assets removes stale managed artifact directories only."""
 
     def test_deletes_expired_import_and_export_directories(self) -> None:
@@ -74,7 +74,7 @@ class CleanupVestigialAssetsTests(TestCase):
             self.assertTrue((media_root / "imports").is_dir())
 
 
-class CleanupVestigialAssetsTaskTests(TestCase):
+class CleanupVestigialAssetsTaskTests(SimpleTestCase):
     """The scheduled Celery task returns a serializable cleanup summary."""
 
     def test_returns_result_payload(self) -> None:

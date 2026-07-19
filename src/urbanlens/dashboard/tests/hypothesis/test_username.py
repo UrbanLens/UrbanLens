@@ -9,7 +9,7 @@ from django.contrib.auth.models import User
 from hypothesis import given, settings, strategies as st
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.services.social_auth.pipeline import generate_sso_username
 from urbanlens.dashboard.services.username import (
     USERNAME_RE,
@@ -19,7 +19,7 @@ from urbanlens.dashboard.services.username import (
 )
 
 
-class NormalizeUsernameKeyTests(TestCase):
+class NormalizeUsernameKeyTests(SimpleTestCase):
     """Confusable and case variants normalize to the same key."""
 
     def test_case_insensitive(self) -> None:

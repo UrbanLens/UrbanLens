@@ -16,7 +16,7 @@ from pathlib import Path
 
 from hypothesis import given, settings as hyp_settings, strategies as st
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
 
 _hyp = hyp_settings(max_examples=40, deadline=None)
@@ -27,7 +27,7 @@ def _feature_collection(features: list[dict]) -> str:
     return json.dumps({"type": "FeatureCollection", "features": features})
 
 
-class GeojsonToDictTakeoutShapeTests(TestCase):
+class GeojsonToDictTakeoutShapeTests(SimpleTestCase):
     """Existing Google Takeout "Saved Places" behavior is preserved exactly."""
 
     def setUp(self):
@@ -73,7 +73,7 @@ class GeojsonToDictTakeoutShapeTests(TestCase):
         self.assertEqual(pins, [])
 
 
-class GeojsonToDictGenericShapeTests(TestCase):
+class GeojsonToDictGenericShapeTests(SimpleTestCase):
     """Broadened support for arbitrary GeoJSON (Overpass/OSM exports, custom scripts)."""
 
     def setUp(self):

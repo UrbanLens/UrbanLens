@@ -10,7 +10,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.profile.model import (
     MapCenterMode,
@@ -28,7 +28,7 @@ _hyp_db = settings(max_examples=20, deadline=None)
 
 # -- _haversine_km -------------------------------------------------------------
 
-class HaversineTests(TestCase):
+class HaversineTests(SimpleTestCase):
     """_haversine_km computes great-circle distances in kilometres."""
 
     def test_same_point_returns_zero(self) -> None:
@@ -297,7 +297,7 @@ class ProfileComputeMapCenterTests(TestCase):
 
 # -- VisibilityChoice / MapViewChoice / MapCenterMode --------------------------
 
-class ProfileChoiceTests(TestCase):
+class ProfileChoiceTests(SimpleTestCase):
     """Choice enumerations have expected values."""
 
     def test_visibility_choice_includes_anyone(self) -> None:

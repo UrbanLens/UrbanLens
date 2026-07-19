@@ -10,35 +10,45 @@ class WelcomeOnboardingForm(forms.ModelForm):
     """One checkbox per feature category, plus a required Terms of Service agreement.
 
     The three category checkboxes are each checked (fully-featured) by default; unchecking one
-    disables that category, and the label/help text/tooltip copy is written from that "turn this
-    off to disable it" angle. ``tos_agreed`` is the exception - it defaults unchecked, since
-    agreement has to be an explicit action rather than something left on by default. None of the
-    four fields are bound to ``Profile`` via ``Meta.fields`` - each is bulk-applied to one or more
-    underlying settings on ``save()``. The category settings remain independently adjustable
-    afterward from the settings page; this form only offers the bulk "leave on/turn off" choice
-    for a quick first impression.
+    disables that category. Copy for each is written feature-first ("what this covers"), ending
+    with an explicit "Disabling this will turn off X, Y, Z" sentence, so it's unambiguous that the
+    switch being *on* means the features are active. ``customize_features`` is a UI-only toggle
+    (not persisted) that reveals those three cards - most new users can leave it off and continue
+    with everything enabled, since the toggle is purely progressive disclosure. ``tos_agreed`` is
+    the other exception to the "checked by default" rule - it defaults unchecked, since agreement
+    has to be an explicit action rather than something left on by default. None of the fields are
+    bound to ``Profile`` via ``Meta.fields`` - the three category fields are bulk-applied to one or
+    more underlying settings on ``save()``. The category settings remain independently adjustable
+    afterward from the settings page; this form only offers the bulk "leave on/turn off" choice for
+    a quick first impression.
     """
 
+    customize_features = forms.BooleanField(
+        required=False,
+        initial=False,
+        widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
+        label="Customize which features are enabled",
+    )
     history_enabled = forms.BooleanField(
         required=False,
         initial=True,
         widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
         label="History",
-        help_text="Disable features that record your location history. This turns off your visit journal, strips GPS data from photos you upload, and the site will refuse to import GPS routes or record your live location. Memories pages that aren't about tracking - like your Maps and Sharing - are unaffected.",
+        help_text="Your visit journal, GPS route imports, live location tracking, and GPS data kept on uploaded photos. Disabling this will turn off your visit journal, strip GPS data from photos you upload, and stop the site from recording your live location or importing GPS routes. Your Maps and Sharing pages aren't affected.",
     )
     community_enabled = forms.BooleanField(
         required=False,
         initial=True,
         widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
         label="Community",
-        help_text="Disable all interactions with other users. You will not able to see community wikis, join trips, or send friend requests. You will be invisible.",
+        help_text="Community wikis, trip invitations, and friend requests. Disabling this will turn off community wikis, trip invitations, and friend requests, making you invisible to other users.",
     )
     external_apis_enabled = forms.BooleanField(
         required=False,
         initial=True,
         widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
         label="External Services",
-        help_text="Disable all external services (weather, geocoding, place data, web searches, AI). No research data will be displayed, unless it has already been cached from another user's request. This will prevent you from getting alerts about places you research.",
+        help_text="Weather, geocoding, place data, web searches, and AI research about locations. Disabling this will turn off all of the above, so no research data will be displayed unless it was already cached from another user's request.",
     )
     # Unlike the toggles above, this defaults unchecked - agreement has to be an
     # explicit action, not something a user "leaves on" by not noticing it.

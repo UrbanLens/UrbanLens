@@ -18,7 +18,7 @@ from __future__ import annotations
 from django.contrib.auth.models import User
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError, transaction
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 from model_bakery import baker
@@ -238,7 +238,7 @@ class FriendshipQuerySetTests(TestCase):
         self.assertFalse(qs.exists(), f"Status {status!r} must not appear in is_friend()")
 
 
-class FriendshipPredicateInvariantTests(TestCase):
+class FriendshipPredicateInvariantTests(SimpleTestCase):
     """Class-level predicate invariants (no DB required)."""
 
     def test_only_accepted_is_friend(self) -> None:

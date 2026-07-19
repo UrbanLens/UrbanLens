@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import timedelta
 from typing import Self
 
-from django.db.models import Avg, Count, Q
+from django.db.models import Avg, Count, Q, Sum
 from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract
@@ -61,6 +61,7 @@ class ApiCallLogQuerySet(abstract.DashboardQuerySet):
                 geo_skipped=Count("id", filter=Q(was_geo_filtered=True)),
                 errors=Count("id", filter=Q(success=False, was_rate_limited=False, was_geo_filtered=False)),
                 avg_response_ms=Avg("response_ms"),
+                total_cost=Sum("cost_estimate"),
             )
             .order_by("service"),
         )

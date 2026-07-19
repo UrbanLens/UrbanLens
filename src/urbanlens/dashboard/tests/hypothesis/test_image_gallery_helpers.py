@@ -16,7 +16,7 @@ from unittest.mock import MagicMock, patch
 from django.utils import timezone
 from hypothesis import given, settings as hyp_settings, strategies as st
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.images import _dms_to_decimal, extract_gps_coords, extract_taken_at, image_to_gallery_json
 
 _hyp = hyp_settings(max_examples=60, deadline=None)
@@ -26,7 +26,7 @@ _hyp = hyp_settings(max_examples=60, deadline=None)
 # _dms_to_decimal
 # ---------------------------------------------------------------------------
 
-class DmsToDecimalTests(TestCase):
+class DmsToDecimalTests(SimpleTestCase):
     """_dms_to_decimal converts degree/minute/second tuples to signed float."""
 
     def test_north_positive(self):
@@ -90,7 +90,7 @@ class DmsToDecimalTests(TestCase):
 # extract_gps_coords - via mocked PIL
 # ---------------------------------------------------------------------------
 
-class ExtractGpsCoordsMockTests(TestCase):
+class ExtractGpsCoordsMockTests(SimpleTestCase):
     """extract_gps_coords extracts GPS from EXIF via mocked PIL objects."""
 
     def _make_file_with_gps(self, lat_dms, lat_ref, lng_dms, lng_ref):
@@ -210,7 +210,7 @@ class ExtractGpsCoordsMockTests(TestCase):
 # extract_taken_at - via mocked PIL
 # ---------------------------------------------------------------------------
 
-class ExtractTakenAtMockTests(TestCase):
+class ExtractTakenAtMockTests(SimpleTestCase):
     """extract_taken_at extracts EXIF DateTimeOriginal via mocked PIL objects."""
 
     def _make_file_with_exif_ifd(self, exif_ifd: dict):
@@ -284,7 +284,7 @@ class ExtractTakenAtMockTests(TestCase):
 # image_to_gallery_json
 # ---------------------------------------------------------------------------
 
-class ImageToGalleryJsonTests(TestCase):
+class ImageToGalleryJsonTests(SimpleTestCase):
     """image_to_gallery_json serialises Image model instances to map-layer dicts."""
 
     def _make_image(self, lat=None, lng=None, caption=None, profile=None):

@@ -19,7 +19,7 @@ import zipfile
 from django.contrib.auth.models import User
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
 from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.pin.model import Pin
@@ -47,7 +47,7 @@ def _valid_entries() -> dict[str, bytes]:
     }
 
 
-class ExtractAndValidateSafetyTests(TestCase):
+class ExtractAndValidateSafetyTests(SimpleTestCase):
     """Hostile archives are rejected before extraction; valid ones still work."""
 
     def _run(self, entries: dict[str, bytes], extract_dirname: str = "job1") -> str:

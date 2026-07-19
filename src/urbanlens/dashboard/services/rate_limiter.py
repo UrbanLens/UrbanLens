@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import timedelta
+from decimal import Decimal
 import logging
 import time
 from typing import Any
@@ -37,6 +38,14 @@ class ServiceDefaults:
     calls_per_30_days: int | None = None
     usa_only: bool = False
     notes: str = ""
+    #: Estimated USD cost per successful call, if confidently known from the
+    #: provider's published pricing. None means "not yet priced" (which may
+    #: still be a free service - see ``notes``), not "confirmed free". Only
+    #: populate this from a specific, verifiable published rate; a wrong
+    #: number here is worse than no cost-tracking at all for a feature whose
+    #: whole purpose is informing real spending decisions - see
+    #: ApiCallLog.cost_estimate's own docstring for the same caveat.
+    cost_per_call: Decimal | None = None
 
 
 SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
@@ -45,6 +54,9 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         calls_per_minute=20,
         calls_per_day=500,
         notes="Free tier: $200/month credit (~40,000 calls/month).",
+        # Google's published rate is $5/1000 requests, consistent with this
+        # entry's own $200-credit/~40,000-calls note (200/40000 = 0.005).
+        cost_per_call=Decimal("0.005"),
     ),
     "google_search": ServiceDefaults(
         display_name="Google Custom Search",
@@ -306,6 +318,7 @@ def log_api_call(
     was_rate_limited: bool = False,
     was_geo_filtered: bool = False,
     was_service_disabled: bool = False,
+    cost_estimate: Decimal | None = None,
 ) -> None:
     """Record one API call in the ``ApiCallLog`` table.
 
@@ -318,6 +331,8 @@ def log_api_call(
         endpoint: URL or endpoint path (truncated to 500 chars).
         was_rate_limited: True if the call was blocked by rate limiting.
         was_geo_filtered: True if the call was skipped due to geo filtering.
+        cost_estimate: Estimated USD cost of this call, if known - see
+            ``ServiceDefaults.cost_per_call``.
     """
     from urbanlens.dashboard.models.api_call_log import ApiCallLog
 
@@ -330,6 +345,7 @@ def log_api_call(
             was_rate_limited=was_rate_limited,
             was_geo_filtered=was_geo_filtered,
             was_service_disabled=was_service_disabled,
+            cost_estimate=cost_estimate,
         )
     except Exception:
         logger.exception("Failed to log API call for service %s", service)
@@ -412,11 +428,17 @@ class _RateLimitedSession:
         try:
             resp = self._session.request(method, url, **kwargs)
             elapsed_ms = int((time.monotonic() - t0) * 1000)
+            # Only a call that actually reached the provider and succeeded is
+            # billable - a rate-limited/disabled call above never went out,
+            # and a failed response wasn't necessarily charged either way, so
+            # estimating a cost for it would overstate real spend.
+            cost_estimate = all_service_defaults().get(self._service_key, ServiceDefaults(display_name="")).cost_per_call if resp.ok else None
             log_api_call(
                 self._service_key,
                 success=resp.ok,
                 response_ms=elapsed_ms,
                 endpoint=str(url),
+                cost_estimate=cost_estimate,
             )
             return resp
         except RateLimitExceededError:

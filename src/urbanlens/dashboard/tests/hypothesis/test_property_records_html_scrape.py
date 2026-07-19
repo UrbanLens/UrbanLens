@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from unittest import mock
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.apis.property_records.html_scrape import (
     ScrapeRecipe,
     SearchField,
@@ -21,7 +21,7 @@ from urbanlens.dashboard.services.apis.property_records.html_scrape import (
 )
 
 
-class ScrapeRecipeValidationTests(TestCase):
+class ScrapeRecipeValidationTests(SimpleTestCase):
     def test_valid_recipe_constructs(self) -> None:
         recipe = ScrapeRecipe(base_url="https://example.gov/search", search_field=SearchField.SITUS_ADDRESS, param_name="addr")
         self.assertEqual(recipe.method, "GET")
@@ -35,7 +35,7 @@ class ScrapeRecipeValidationTests(TestCase):
             ScrapeRecipe(base_url="https://example.gov/search", search_field=SearchField.APN, param_name="q", method="PUT")
 
 
-class RecipeDictRoundTripTests(TestCase):
+class RecipeDictRoundTripTests(SimpleTestCase):
     def test_round_trips(self) -> None:
         recipe = ScrapeRecipe(base_url="https://example.gov/search", search_field=SearchField.APN, param_name="apn", method="POST", extra_params={"AppID": "1"})
         restored = recipe_from_dict(recipe_to_dict(recipe))
@@ -59,7 +59,7 @@ class RecipeDictRoundTripTests(TestCase):
         self.assertEqual(parsed.extra_params, {})
 
 
-class ExtractLabelValuePairsTests(TestCase):
+class ExtractLabelValuePairsTests(SimpleTestCase):
     def test_table_rows(self) -> None:
         html = "<html><body><table><tr><td>Owner Name</td><td>Jane Smith</td></tr></table></body></html>"
         self.assertEqual(extract_label_value_pairs(html)["Owner Name"], "Jane Smith")
@@ -111,7 +111,7 @@ def _mock_response(content: bytes, *, status_code: int = 200) -> mock.Mock:
     return response
 
 
-class ExecuteScrapeRecipeTests(TestCase):
+class ExecuteScrapeRecipeTests(SimpleTestCase):
     def _recipe(self, **overrides) -> ScrapeRecipe:
         defaults = {"base_url": "https://example.gov/search", "search_field": SearchField.SITUS_ADDRESS, "param_name": "addr"}
         defaults.update(overrides)

@@ -143,9 +143,16 @@ class ArcGisSocrataGateway(Gateway):
         """
         if not geo_field:
             raise GatewayRequestError("Socrata point query requires PropertyJurisdiction.gis_geo_field to be configured.")
+        # Deliberately no $order/distance_in_meters clause: confirmed live
+        # against a real Socrata dataset (New Orleans' parcels resource)
+        # that distance_in_meters isn't a supported SoQL function on every
+        # backend - it fails the *entire* query with a 400, not just the
+        # ordering. within_circle's radius is already small enough that a
+        # point query returns at most a small handful of rows regardless of
+        # order, so dropping it trades "nearest first" for "the query
+        # actually runs" - the only reasonable choice.
         params = {
             "$where": f"within_circle({geo_field}, {latitude}, {longitude}, {radius_meters})",
-            "$order": f"distance_in_meters({geo_field}, {latitude}, {longitude})",
             "$limit": 5,
         }
         response = self._get(resource_url, params)

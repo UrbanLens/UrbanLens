@@ -26,7 +26,7 @@ from django.urls import reverse
 from django.utils import timezone
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripActivityVote, TripMembership
@@ -143,7 +143,7 @@ class TripCreateViewTests(TestCase):
         self.assertNotIn("HX-Redirect", resp)
 
 
-class CreateTripDialogHxTargetTests(TestCase):
+class CreateTripDialogHxTargetTests(SimpleTestCase):
     """The create-trip dialog's hx-target/hx-swap must match whatever's actually
     on the page it's opened from - see TripCreateViewTests.
     test_post_from_overview_redirects_to_new_trip_via_hx_redirect for the

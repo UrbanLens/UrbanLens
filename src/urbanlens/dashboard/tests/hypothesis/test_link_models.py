@@ -6,7 +6,7 @@ from unittest import mock
 
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.links.model import PinLink, WikiLink
 from urbanlens.dashboard.models.links.signals import archive_pin_link, archive_wiki_link
 from urbanlens.dashboard.models.location.model import Location
@@ -63,7 +63,7 @@ class _FakeInstance:
         self.wayback_url = wayback_url
 
 
-class PinLinkArchiveSignalTests(TestCase):
+class PinLinkArchiveSignalTests(SimpleTestCase):
     """A freshly created PinLink enqueues the Wayback archive task after commit."""
 
     def test_enqueues_after_commit_for_new_link(self) -> None:
@@ -91,7 +91,7 @@ class PinLinkArchiveSignalTests(TestCase):
         on_commit.assert_not_called()
 
 
-class WikiLinkArchiveSignalTests(TestCase):
+class WikiLinkArchiveSignalTests(SimpleTestCase):
     def test_enqueues_after_commit_for_new_link(self) -> None:
         callbacks = []
         with (

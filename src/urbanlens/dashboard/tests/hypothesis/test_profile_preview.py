@@ -16,7 +16,7 @@ from django.db import transaction
 from django.urls import reverse
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.services.profile_preview import SESSION_KEY, create_ghost_viewer, preview_modes
 
@@ -28,7 +28,7 @@ def _owner() -> Profile:
 # -- preview_modes ---------------------------------------------------------------
 
 
-class PreviewModesTests(TestCase):
+class PreviewModesTests(SimpleTestCase):
     """The preview menu must mirror the privacy controls on the settings page."""
 
     def test_modes_match_visibility_choices(self) -> None:

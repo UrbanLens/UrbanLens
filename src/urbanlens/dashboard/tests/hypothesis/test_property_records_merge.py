@@ -7,7 +7,7 @@ between tiers are flagged in field_mismatches rather than silently resolved.
 
 from __future__ import annotations
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.apis.property_records.merge import merge_records
 from urbanlens.dashboard.services.apis.property_records.schema import PropertyRecord, RecordSource
 
@@ -25,7 +25,7 @@ def _record(tier: int, **overrides) -> PropertyRecord:
     return PropertyRecord(**defaults)
 
 
-class MergeRecordsTests(TestCase):
+class MergeRecordsTests(SimpleTestCase):
     def test_single_record_passes_through_unchanged(self) -> None:
         record = _record(1, situs_address="123 Main St")
         merged = merge_records([record])

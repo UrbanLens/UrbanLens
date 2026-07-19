@@ -23,7 +23,7 @@ from django.utils import timezone
 from hypothesis import given, strategies as st
 import pytest
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.calendar_sync.model import CalendarSyncDirection, GoogleCalendarAccount, TripCalendarLink
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
@@ -139,7 +139,7 @@ class TripToEventBodyTests(TestCase):
         self.assertNotIn("location", body)
 
 
-class EventToTripKwargsTests(TestCase):
+class EventToTripKwargsTests(SimpleTestCase):
     """event_to_trip_kwargs parses Google event resources defensively."""
 
     def test_timed_event_uses_date_components(self):
@@ -759,7 +759,7 @@ class TripCalendarAutoSyncViewTests(_CalendarSyncDBTestCase):
         gateway.create_event.assert_not_called()
 
 
-class ActivityEventBodyTests(TestCase):
+class ActivityEventBodyTests(SimpleTestCase):
     """activity_to_event_body maps scheduled activities to timed event payloads."""
 
     def _activity(self, **kwargs) -> TripActivity:

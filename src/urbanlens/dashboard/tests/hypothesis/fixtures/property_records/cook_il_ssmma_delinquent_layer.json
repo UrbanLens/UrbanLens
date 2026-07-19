@@ -1,0 +1,3983 @@
+{
+  "currentVersion": 12,
+  "id": 0,
+  "name": "Tax Delinquent Properties",
+  "type": "Feature Layer",
+  "serviceItemId": "87165b30c4bf4a2a94ccb20e0cb076f4",
+  "cacheMaxAge": 30,
+  "displayField": "PIN",
+  "description": "This data set contains parcel polygon, tax block polygon, and leasehold polygon features classes, as well as several object classes (tables), for Cook County, Illinois, including a PIN table, a Ref_PIN table, a condo table, and a condo miscellaneous table. The cadastral data for Cook County have previously not been digital nor automated. This project is the initial automation for this information. This database was designed to represent a continuous, non-overlapping spatial database accounting for all land area in Cook County.",
+  "copyrightText": "David Orr, Cook County Clerk, was instrumental in the process of creating digital cadastral data layers for Cook County, Illinois.",
+  "defaultVisibility": true,
+  "editingInfo": {
+    "lastEditDate": 1756846368862,
+    "schemaLastEditDate": 1756846368862,
+    "dataLastEditDate": 1754933213527
+  },
+  "relationships": [],
+  "isDataVersioned": false,
+  "hasContingentValuesDefinition": false,
+  "supportsAppend": true,
+  "supportsCalculate": true,
+  "supportsASyncCalculate": true,
+  "supportsTruncate": true,
+  "supportsAttachmentsByUploadId": true,
+  "supportsAttachmentsResizing": true,
+  "supportsRollbackOnFailureParameter": true,
+  "supportsStatistics": true,
+  "supportsExceedsLimitStatistics": true,
+  "supportsAdvancedQueries": true,
+  "supportsValidateSql": true,
+  "supportsCoordinatesQuantization": true,
+  "supportsLayerOverrides": true,
+  "supportsTilesAndBasicQueriesMode": true,
+  "supportsFieldDescriptionProperty": true,
+  "supportsQuantizationEditMode": true,
+  "supportsColumnStoreIndex": true,
+  "supportsApplyEditsWithGlobalIds": false,
+  "supportsMultiScaleGeometry": true,
+  "supportsReturningQueryGeometry": true,
+  "enableNullGeometry": false,
+  "hasGeometryProperties": true,
+  "geometryProperties": {
+    "shapeAreaFieldName": "Shape__Area",
+    "shapeLengthFieldName": "Shape__Length",
+    "units": "esriFeet"
+  },
+  "advancedQueryCapabilities": {
+    "supportsPagination": true,
+    "supportsPaginationOnAggregatedQueries": true,
+    "supportsQueryRelatedPagination": true,
+    "supportsQueryWithDistance": true,
+    "supportsOutDistance": true,
+    "supportsReturningQueryExtent": true,
+    "supportsStatistics": true,
+    "supportsOrderBy": true,
+    "supportsDistinct": true,
+    "supportsQueryWithResultType": true,
+    "supportsSqlExpression": true,
+    "supportsTimeRelation": true,
+    "supportsAdvancedQueryRelated": true,
+    "supportsCountDistinct": true,
+    "supportsPercentileStatistics": true,
+    "supportsApproxPercentileStatistics": true,
+    "supportsSpatialAggregationStatistics": true,
+    "supportsTrueCurve": true,
+    "supportedSpatialAggregationStatistics": [
+      "EnvelopeAggregate",
+      "CentroidAggregate",
+      "ConvexHullAggregate"
+    ],
+    "supportsLod": true,
+    "supportsQueryWithLodSR": false,
+    "supportedLodTypes": [
+      "geohash"
+    ],
+    "supportsReturningGeometryCentroid": true,
+    "supportsReturningGeometryEnvelope": true,
+    "supportsReturningGeometryProperties": true,
+    "supportsQueryWithDatumTransformation": true,
+    "supportsCurrentUserQueries": true,
+    "supportsHavingClause": true,
+    "supportsOutFieldSQLExpression": true,
+    "supportsMaxRecordCountFactor": true,
+    "supportsTopFeaturesQuery": true,
+    "supportsDisjointSpatialRel": true,
+    "supportsQueryWithCacheHint": true,
+    "supportedOperationsWithCacheHint": [
+      "query",
+      "queryTopFilter",
+      "queryAnalytics",
+      "queryAttachments",
+      "queryRelated",
+      "queryBins",
+      "queryPivot"
+    ],
+    "supportsQueryAnalytic": true,
+    "supportsQueryPivot": true,
+    "supportsQueryBins": true,
+    "supportsDefaultSR": true,
+    "supportsTranslations": false,
+    "supportsAggIds": true,
+    "supportsQueryWithCollation": true,
+    "supportsISODOW": true,
+    "supportsISOWeek": true,
+    "supportsFullTextSearch": true,
+    "fullTextSearchCapabilities": {
+      "supportsAccentSensitivity": true,
+      "supportsStopWords": true,
+      "supportsSearchOperator": true,
+      "supportsOperator": true
+    }
+  },
+  "advancedQueryAnalyticCapabilities": {
+    "supportsLinearRegression": true,
+    "supportsTrendlineRegression": true,
+    "supportsAsync": true,
+    "supportsPercentileAnalytic": true
+  },
+  "queryBinsCapabilities": {
+    "supportsAsync": true,
+    "supportsAutoIntervalBin": true,
+    "supportsFixedIntervalBin": true,
+    "supportsFixedBoundariesBin": true,
+    "supportsDateBin": true,
+    "supportsClassificationBin": true,
+    "supportsStackBy": true,
+    "supportsSplitBy": true,
+    "supportsFirstDayOfWeek": true,
+    "supportsSnapToData": true,
+    "supportsReturnFullIntervalBin": true,
+    "supportsReturnStackValueRange": true,
+    "supportsNormalization": true,
+    "supportedStatisticTypes": [
+      "COUNT",
+      "SUM",
+      "AVG",
+      "VAR",
+      "STDDEV",
+      "MIN",
+      "MAX",
+      "PERCENTILE_CONT",
+      "PERCENTILE_DISC",
+      "APPROX_PERCENTILE_CONT",
+      "APPROX_PERCENTILE_DISC",
+      "CentroidAggregate",
+      "EnvelopeAggregate",
+      "ConvexHullAggregate"
+    ],
+    "supportedNormalizationTypes": [
+      "boxCox",
+      "field",
+      "inverse",
+      "log",
+      "naturalLog",
+      "percentOfTotal",
+      "squareRoot"
+    ]
+  },
+  "supportedOperationsWithCollation": "query,addField,updateField",
+  "advancedEditingCapabilities": {
+    "supportedSqlFormatsInCalculate": [
+      "standard"
+    ],
+    "supportsAsyncApplyEdits": true,
+    "supportsReturnEditResults": true,
+    "supportsApplyEditsbyUploadID": true,
+    "supportedApplyEditsUploadIDFormats": "JSON,PBF",
+    "supportsTranslation": false,
+    "supportsMaxTranslations": 10
+  },
+  "infoInEstimates": [
+    "extent",
+    "count"
+  ],
+  "useStandardizedQueries": true,
+  "geometryType": "esriGeometryPolygon",
+  "minScale": 0,
+  "maxScale": 0,
+  "extent": {
+    "xmin": 1099588.0040552467,
+    "ymin": 1749970.247135155,
+    "xmax": 1205500.4949857444,
+    "ymax": 1833985.4399968237,
+    "spatialReference": {
+      "wkid": 102671,
+      "latestWkid": 3435
+    }
+  },
+  "spatialReference": {
+    "wkid": 102671,
+    "latestWkid": 3435
+  },
+  "drawingInfo": {
+    "renderer": {
+      "type": "uniqueValue",
+      "valueExpression": "var saletype1 = $feature.sltyp1;\nvar saletype2 = $feature.sltyp2;\nvar saletype3 = $feature.sltyp3;\nvar saletype4 = $feature.sltyp4;\nvar saletype5 = $feature.sltyp5;\nvar saletype6 = $feature.sltyp6;\nvar saletype7 = $feature.sltyp7;\nvar retsaletype = \"No Tax Sale Records\";\n\nIf (saletype1 != \" \") {\n  retsaletype = saletype1;\n}\nElse If (saletype2 != \" \") {\n  retsaletype = saletype2;\n}\nElse If (saletype3 != \" \") {\n  retsaletype = saletype3;\n}\nElse If (saletype4 != \" \") {\n  retsaletype = saletype4;\n}\nElse If (saletype5 != \" \") {\n  retsaletype = saletype5;\n}\nElse If (saletype6 != \" \") {\n  retsaletype = saletype6;\n}\nElse If (saletype7 != \" \") {\n  retsaletype = saletype7;\n}\nElse {\n  retsaletype = \"No Tax Sale Records\"\n}\n\nreturn retsaletype;",
+      "valueExpressionTitle": "TaxSaleType",
+      "uniqueValueGroups": [
+        {
+          "heading": "TaxSaleType",
+          "classes": [
+            {
+              "label": "A - Annual Tax Sale",
+              "description": "A - Annual Tax Sale",
+              "symbol": {
+                "type": "esriSFS",
+                "style": "esriSFSSolid",
+                "color": [
+                  255,
+                  0,
+                  0,
+                  127
+                ],
+                "outline": {
+                  "type": "esriSLS",
+                  "style": "esriSLSSolid",
+                  "color": [
+                    255,
+                    0,
+                    0,
+                    255
+                  ],
+                  "width": 0.7
+                }
+              },
+              "values": [
+                [
+                  "A"
+                ]
+              ]
+            },
+            {
+              "label": "S - Scavenger Sale",
+              "description": "S - Scavenger Sale",
+              "symbol": {
+                "type": "esriSFS",
+                "style": "esriSFSSolid",
+                "color": [
+                  255,
+                  170,
+                  0,
+                  127
+                ],
+                "outline": {
+                  "type": "esriSLS",
+                  "style": "esriSLSSolid",
+                  "color": [
+                    255,
+                    170,
+                    0,
+                    255
+                  ],
+                  "width": 0.7
+                }
+              },
+              "values": [
+                [
+                  "S"
+                ]
+              ]
+            },
+            {
+              "label": "F - Forfeited",
+              "description": "F - Forfeited",
+              "symbol": {
+                "type": "esriSFS",
+                "style": "esriSFSSolid",
+                "color": [
+                  0,
+                  112,
+                  255,
+                  127
+                ],
+                "outline": {
+                  "type": "esriSLS",
+                  "style": "esriSLSSolid",
+                  "color": [
+                    0,
+                    112,
+                    255,
+                    255
+                  ],
+                  "width": 0.7
+                }
+              },
+              "values": [
+                [
+                  "F"
+                ]
+              ]
+            },
+            {
+              "label": "No Tax Sale Records",
+              "description": "No Tax Sale Records",
+              "symbol": {
+                "type": "esriSFS",
+                "style": "esriSFSSolid",
+                "color": [
+                  252,
+                  246,
+                  179,
+                  0
+                ],
+                "outline": {
+                  "type": "esriSLS",
+                  "style": "esriSLSSolid",
+                  "color": [
+                    110,
+                    110,
+                    110,
+                    255
+                  ],
+                  "width": 0.7
+                }
+              },
+              "values": [
+                [
+                  "No Tax Sale Records"
+                ]
+              ]
+            }
+          ]
+        }
+      ],
+      "uniqueValueInfos": [
+        {
+          "symbol": {
+            "type": "esriSFS",
+            "style": "esriSFSSolid",
+            "color": [
+              255,
+              0,
+              0,
+              127
+            ],
+            "outline": {
+              "type": "esriSLS",
+              "style": "esriSLSSolid",
+              "color": [
+                255,
+                0,
+                0,
+                255
+              ],
+              "width": 0.7
+            }
+          },
+          "value": "A",
+          "label": "A - Annual Tax Sale"
+        },
+        {
+          "symbol": {
+            "type": "esriSFS",
+            "style": "esriSFSSolid",
+            "color": [
+              255,
+              170,
+              0,
+              127
+            ],
+            "outline": {
+              "type": "esriSLS",
+              "style": "esriSLSSolid",
+              "color": [
+                255,
+                170,
+                0,
+                255
+              ],
+              "width": 0.7
+            }
+          },
+          "value": "S",
+          "label": "S - Scavenger Sale"
+        },
+        {
+          "symbol": {
+            "type": "esriSFS",
+            "style": "esriSFSSolid",
+            "color": [
+              0,
+              112,
+              255,
+              127
+            ],
+            "outline": {
+              "type": "esriSLS",
+              "style": "esriSLSSolid",
+              "color": [
+                0,
+                112,
+                255,
+                255
+              ],
+              "width": 0.7
+            }
+          },
+          "value": "F",
+          "label": "F - Forfeited"
+        },
+        {
+          "symbol": {
+            "type": "esriSFS",
+            "style": "esriSFSSolid",
+            "color": [
+              252,
+              246,
+              179,
+              0
+            ],
+            "outline": {
+              "type": "esriSLS",
+              "style": "esriSLSSolid",
+              "color": [
+                110,
+                110,
+                110,
+                255
+              ],
+              "width": 0.7
+            }
+          },
+          "value": "No Tax Sale Records",
+          "label": "No Tax Sale Records"
+        }
+      ],
+      "fieldDelimiter": ",",
+      "authoringInfo": {
+        "colorRamp": {
+          "type": "multipart",
+          "colorRamps": [
+            {
+              "type": "algorithmic",
+              "algorithm": "esriCIELabAlgorithm",
+              "fromColor": [
+                184,
+                252,
+                192,
+                255
+              ],
+              "toColor": [
+                184,
+                252,
+                192,
+                255
+              ]
+            },
+            {
+              "type": "algorithmic",
+              "algorithm": "esriCIELabAlgorithm",
+              "fromColor": [
+                238,
+                179,
+                252,
+                255
+              ],
+              "toColor": [
+                238,
+                179,
+                252,
+                255
+              ]
+            },
+            {
+              "type": "algorithmic",
+              "algorithm": "esriCIELabAlgorithm",
+              "fromColor": [
+                252,
+                208,
+                184,
+                255
+              ],
+              "toColor": [
+                252,
+                208,
+                184,
+                255
+              ]
+            },
+            {
+              "type": "algorithmic",
+              "algorithm": "esriCIELabAlgorithm",
+              "fromColor": [
+                197,
+                233,
+                252,
+                255
+              ],
+              "toColor": [
+                197,
+                233,
+                252,
+                255
+              ]
+            },
+            {
+              "type": "algorithmic",
+              "algorithm": "esriCIELabAlgorithm",
+              "fromColor": [
+                251,
+                252,
+                194,
+                255
+              ],
+              "toColor": [
+                251,
+                252,
+                194,
+                255
+              ]
+            },
+            {
+              "type": "algorithmic",
+              "algorithm": "esriCIELabAlgorithm",
+              "fromColor": [
+                252,
+                189,
+                210,
+                255
+              ],
+              "toColor": [
+                252,
+                189,
+                210,
+                255
+              ]
+            },
+            {
+              "type": "algorithmic",
+              "algorithm": "esriCIELabAlgorithm",
+              "fromColor": [
+                194,
+                196,
+                252,
+                255
+              ],
+              "toColor": [
+                194,
+                196,
+                252,
+                255
+              ]
+            },
+            {
+              "type": "algorithmic",
+              "algorithm": "esriCIELabAlgorithm",
+              "fromColor": [
+                215,
+                252,
+                225,
+                255
+              ],
+              "toColor": [
+                215,
+                252,
+                225,
+                255
+              ]
+            },
+            {
+              "type": "algorithmic",
+              "algorithm": "esriCIELabAlgorithm",
+              "fromColor": [
+                251,
+                215,
+                252,
+                255
+              ],
+              "toColor": [
+                251,
+                215,
+                252,
+                255
+              ]
+            },
+            {
+              "type": "algorithmic",
+              "algorithm": "esriCIELabAlgorithm",
+              "fromColor": [
+                184,
+                252,
+                248,
+                255
+              ],
+              "toColor": [
+                184,
+                252,
+                248,
+                255
+              ]
+            },
+            {
+              "type": "algorithmic",
+              "algorithm": "esriCIELabAlgorithm",
+              "fromColor": [
+                252,
+                215,
+                218,
+                255
+              ],
+              "toColor": [
+                252,
+                215,
+                218,
+                255
+              ]
+            },
+            {
+              "type": "algorithmic",
+              "algorithm": "esriCIELabAlgorithm",
+              "fromColor": [
+                252,
+                188,
+                182,
+                255
+              ],
+              "toColor": [
+                252,
+                188,
+                182,
+                255
+              ]
+            },
+            {
+              "type": "algorithmic",
+              "algorithm": "esriCIELabAlgorithm",
+              "fromColor": [
+                222,
+                252,
+                179,
+                255
+              ],
+              "toColor": [
+                222,
+                252,
+                179,
+                255
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "scaleSymbols": true,
+    "transparency": 0,
+    "labelingInfo": null
+  },
+  "allowGeometryUpdates": true,
+  "trueCurveSupportMode": "OGC",
+  "supportedCurveTypes": [
+    "esriGeometryCircularArc"
+  ],
+  "supportedTrueCurvePbfFeatureEncodings": [
+    "esriCompressedShapeBuffer",
+    "esriDefault"
+  ],
+  "allowTrueCurvesUpdates": true,
+  "onlyAllowTrueCurveUpdatesByTrueCurveClients": false,
+  "hasAttachments": false,
+  "htmlPopupType": "esriServerHTMLPopupTypeAsHTMLText",
+  "hasMetadata": true,
+  "hasM": false,
+  "hasZ": false,
+  "objectIdField": "OBJECTID_1",
+  "uniqueIdField": {
+    "name": "OBJECTID_1",
+    "isSystemMaintained": true
+  },
+  "globalIdField": "",
+  "typeIdField": "",
+  "collation": {
+    "locale": "neutral",
+    "caseSensitive": false,
+    "accentSensitive": true
+  },
+  "fields": [
+    {
+      "name": "OBJECTID_1",
+      "type": "esriFieldTypeOID",
+      "alias": "OBJECTID_1",
+      "sqlType": "sqlTypeOther",
+      "nullable": false,
+      "editable": false,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "PIN",
+      "type": "esriFieldTypeString",
+      "alias": "PIN",
+      "sqlType": "sqlTypeOther",
+      "length": 14,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "Municipality",
+      "type": "esriFieldTypeString",
+      "alias": "Municipality",
+      "sqlType": "sqlTypeOther",
+      "length": 50,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "sltyp1",
+      "type": "esriFieldTypeString",
+      "alias": "Sale Type 1",
+      "sqlType": "sqlTypeOther",
+      "length": 1,
+      "nullable": true,
+      "editable": true,
+      "domain": {
+        "type": "codedValue",
+        "name": "SaleType",
+        "mergePolicy": "esriMPTDefaultValue",
+        "splitPolicy": "esriSPTDefaultValue",
+        "description": "Sale Types",
+        "codedValues": [
+          {
+            "name": "A - Annual Tax Sale",
+            "code": "A"
+          },
+          {
+            "name": "S - Scavenger Sale",
+            "code": "S"
+          },
+          {
+            "name": "F - Forfeited",
+            "code": "F"
+          },
+          {
+            "name": "P - Sold Special Assessment",
+            "code": "P"
+          }
+        ]
+      },
+      "defaultValue": null
+    },
+    {
+      "name": "slyr1",
+      "type": "esriFieldTypeString",
+      "alias": "Sale Year 1",
+      "sqlType": "sqlTypeOther",
+      "length": 4,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "frtxyr1",
+      "type": "esriFieldTypeString",
+      "alias": "From Tax year 1",
+      "sqlType": "sqlTypeOther",
+      "length": 4,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "totxyr1",
+      "type": "esriFieldTypeString",
+      "alias": "To Tax Year 1",
+      "sqlType": "sqlTypeOther",
+      "length": 4,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "ind1",
+      "type": "esriFieldTypeString",
+      "alias": "Indicator 1",
+      "sqlType": "sqlTypeOther",
+      "length": 1,
+      "nullable": true,
+      "editable": true,
+      "domain": {
+        "type": "codedValue",
+        "name": "SaleStatus",
+        "mergePolicy": "esriMPTDefaultValue",
+        "splitPolicy": "esriSPTDefaultValue",
+        "description": "Sale Status",
+        "codedValues": [
+          {
+            "name": "Sold",
+            "code": "0"
+          },
+          {
+            "name": "Redeemed",
+            "code": "1"
+          },
+          {
+            "name": "Deeded",
+            "code": "2"
+          },
+          {
+            "name": "Vacated",
+            "code": "3"
+          }
+        ]
+      },
+      "defaultValue": null
+    },
+    {
+      "name": "ind1a",
+      "type": "esriFieldTypeString",
+      "alias": "Indicator 1a",
+      "sqlType": "sqlTypeOther",
+      "length": 1,
+      "nullable": true,
+      "editable": true,
+      "domain": {
+        "type": "codedValue",
+        "name": "SalePriority",
+        "mergePolicy": "esriMPTDefaultValue",
+        "splitPolicy": "esriSPTDefaultValue",
+        "description": "Sale Priority (Urgent Flag)",
+        "codedValues": [
+          {
+            "name": "Urgent",
+            "code": "U"
+          }
+        ]
+      },
+      "defaultValue": null
+    },
+    {
+      "name": "rnum1",
+      "type": "esriFieldTypeString",
+      "alias": "Redemption Number 1",
+      "sqlType": "sqlTypeOther",
+      "length": 15,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "date1",
+      "type": "esriFieldTypeString",
+      "alias": "Date 1",
+      "sqlType": "sqlTypeOther",
+      "length": 6,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "sltyp2",
+      "type": "esriFieldTypeString",
+      "alias": "Sale Type 2",
+      "sqlType": "sqlTypeOther",
+      "length": 1,
+      "nullable": true,
+      "editable": true,
+      "domain": {
+        "type": "codedValue",
+        "name": "SaleType",
+        "mergePolicy": "esriMPTDefaultValue",
+        "splitPolicy": "esriSPTDefaultValue",
+        "description": "Sale Types",
+        "codedValues": [
+          {
+            "name": "A - Annual Tax Sale",
+            "code": "A"
+          },
+          {
+            "name": "S - Scavenger Sale",
+            "code": "S"
+          },
+          {
+            "name": "F - Forfeited",
+            "code": "F"
+          },
+          {
+            "name": "P - Sold Special Assessment",
+            "code": "P"
+          }
+        ]
+      },
+      "defaultValue": null
+    },
+    {
+      "name": "slyr2",
+      "type": "esriFieldTypeString",
+      "alias": "Sale Year 2",
+      "sqlType": "sqlTypeOther",
+      "length": 4,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "frtxyr2",
+      "type": "esriFieldTypeString",
+      "alias": "From Tax year 2",
+      "sqlType": "sqlTypeOther",
+      "length": 4,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "totxyr2",
+      "type": "esriFieldTypeString",
+      "alias": "To Tax Year 2",
+      "sqlType": "sqlTypeOther",
+      "length": 4,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "ind2",
+      "type": "esriFieldTypeString",
+      "alias": "Indicator 2",
+      "sqlType": "sqlTypeOther",
+      "length": 1,
+      "nullable": true,
+      "editable": true,
+      "domain": {
+        "type": "codedValue",
+        "name": "SaleStatus",
+        "mergePolicy": "esriMPTDefaultValue",
+        "splitPolicy": "esriSPTDefaultValue",
+        "description": "Sale Status",
+        "codedValues": [
+          {
+            "name": "Sold",
+            "code": "0"
+          },
+          {
+            "name": "Redeemed",
+            "code": "1"
+          },
+          {
+            "name": "Deeded",
+            "code": "2"
+          },
+          {
+            "name": "Vacated",
+            "code": "3"
+          }
+        ]
+      },
+      "defaultValue": null
+    },
+    {
+      "name": "ind2a",
+      "type": "esriFieldTypeString",
+      "alias": "Indicator 2a",
+      "sqlType": "sqlTypeOther",
+      "length": 1,
+      "nullable": true,
+      "editable": true,
+      "domain": {
+        "type": "codedValue",
+        "name": "SalePriority",
+        "mergePolicy": "esriMPTDefaultValue",
+        "splitPolicy": "esriSPTDefaultValue",
+        "description": "Sale Priority (Urgent Flag)",
+        "codedValues": [
+          {
+            "name": "Urgent",
+            "code": "U"
+          }
+        ]
+      },
+      "defaultValue": null
+    },
+    {
+      "name": "rnum2",
+      "type": "esriFieldTypeString",
+      "alias": "Redemption Number 2",
+      "sqlType": "sqlTypeOther",
+      "length": 15,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "date2",
+      "type": "esriFieldTypeString",
+      "alias": "Date 2",
+      "sqlType": "sqlTypeOther",
+      "length": 6,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "sltyp3",
+      "type": "esriFieldTypeString",
+      "alias": "Sale Type 3",
+      "sqlType": "sqlTypeOther",
+      "length": 1,
+      "nullable": true,
+      "editable": true,
+      "domain": {
+        "type": "codedValue",
+        "name": "SaleType",
+        "mergePolicy": "esriMPTDefaultValue",
+        "splitPolicy": "esriSPTDefaultValue",
+        "description": "Sale Types",
+        "codedValues": [
+          {
+            "name": "A - Annual Tax Sale",
+            "code": "A"
+          },
+          {
+            "name": "S - Scavenger Sale",
+            "code": "S"
+          },
+          {
+            "name": "F - Forfeited",
+            "code": "F"
+          },
+          {
+            "name": "P - Sold Special Assessment",
+            "code": "P"
+          }
+        ]
+      },
+      "defaultValue": null
+    },
+    {
+      "name": "slyr3",
+      "type": "esriFieldTypeString",
+      "alias": "Sale Year 3",
+      "sqlType": "sqlTypeOther",
+      "length": 4,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "frtxyr3",
+      "type": "esriFieldTypeString",
+      "alias": "From Tax year 3",
+      "sqlType": "sqlTypeOther",
+      "length": 4,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "totxyr3",
+      "type": "esriFieldTypeString",
+      "alias": "To Tax Year 3",
+      "sqlType": "sqlTypeOther",
+      "length": 4,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "ind3",
+      "type": "esriFieldTypeString",
+      "alias": "Indicator 3",
+      "sqlType": "sqlTypeOther",
+      "length": 1,
+      "nullable": true,
+      "editable": true,
+      "domain": {
+        "type": "codedValue",
+        "name": "SaleStatus",
+        "mergePolicy": "esriMPTDefaultValue",
+        "splitPolicy": "esriSPTDefaultValue",
+        "description": "Sale Status",
+        "codedValues": [
+          {
+            "name": "Sold",
+            "code": "0"
+          },
+          {
+            "name": "Redeemed",
+            "code": "1"
+          },
+          {
+            "name": "Deeded",
+            "code": "2"
+          },
+          {
+            "name": "Vacated",
+            "code": "3"
+          }
+        ]
+      },
+      "defaultValue": null
+    },
+    {
+      "name": "ind3a",
+      "type": "esriFieldTypeString",
+      "alias": "Indicator 3a",
+      "sqlType": "sqlTypeOther",
+      "length": 1,
+      "nullable": true,
+      "editable": true,
+      "domain": {
+        "type": "codedValue",
+        "name": "SalePriority",
+        "mergePolicy": "esriMPTDefaultValue",
+        "splitPolicy": "esriSPTDefaultValue",
+        "description": "Sale Priority (Urgent Flag)",
+        "codedValues": [
+          {
+            "name": "Urgent",
+            "code": "U"
+          }
+        ]
+      },
+      "defaultValue": null
+    },
+    {
+      "name": "rnum3",
+      "type": "esriFieldTypeString",
+      "alias": "Redemption Number 3",
+      "sqlType": "sqlTypeOther",
+      "length": 15,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "date3",
+      "type": "esriFieldTypeString",
+      "alias": "Date 3",
+      "sqlType": "sqlTypeOther",
+      "length": 6,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "sltyp4",
+      "type": "esriFieldTypeString",
+      "alias": "Sale Type 4",
+      "sqlType": "sqlTypeOther",
+      "length": 1,
+      "nullable": true,
+      "editable": true,
+      "domain": {
+        "type": "codedValue",
+        "name": "SaleType",
+        "mergePolicy": "esriMPTDefaultValue",
+        "splitPolicy": "esriSPTDefaultValue",
+        "description": "Sale Types",
+        "codedValues": [
+          {
+            "name": "A - Annual Tax Sale",
+            "code": "A"
+          },
+          {
+            "name": "S - Scavenger Sale",
+            "code": "S"
+          },
+          {
+            "name": "F - Forfeited",
+            "code": "F"
+          },
+          {
+            "name": "P - Sold Special Assessment",
+            "code": "P"
+          }
+        ]
+      },
+      "defaultValue": null
+    },
+    {
+      "name": "slyr4",
+      "type": "esriFieldTypeString",
+      "alias": "Sale Year 4",
+      "sqlType": "sqlTypeOther",
+      "length": 4,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "frtxyr4",
+      "type": "esriFieldTypeString",
+      "alias": "From Tax year 4",
+      "sqlType": "sqlTypeOther",
+      "length": 4,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "totxyr4",
+      "type": "esriFieldTypeString",
+      "alias": "To Tax Year 4",
+      "sqlType": "sqlTypeOther",
+      "length": 4,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "ind4",
+      "type": "esriFieldTypeString",
+      "alias": "Indicator 4",
+      "sqlType": "sqlTypeOther",
+      "length": 1,
+      "nullable": true,
+      "editable": true,
+      "domain": {
+        "type": "codedValue",
+        "name": "SaleStatus",
+        "mergePolicy": "esriMPTDefaultValue",
+        "splitPolicy": "esriSPTDefaultValue",
+        "description": "Sale Status",
+        "codedValues": [
+          {
+            "name": "Sold",
+            "code": "0"
+          },
+          {
+            "name": "Redeemed",
+            "code": "1"
+          },
+          {
+            "name": "Deeded",
+            "code": "2"
+          },
+          {
+            "name": "Vacated",
+            "code": "3"
+          }
+        ]
+      },
+      "defaultValue": null
+    },
+    {
+      "name": "ind4a",
+      "type": "esriFieldTypeString",
+      "alias": "Indicator 4a",
+      "sqlType": "sqlTypeOther",
+      "length": 1,
+      "nullable": true,
+      "editable": true,
+      "domain": {
+        "type": "codedValue",
+        "name": "SalePriority",
+        "mergePolicy": "esriMPTDefaultValue",
+        "splitPolicy": "esriSPTDefaultValue",
+        "description": "Sale Priority (Urgent Flag)",
+        "codedValues": [
+          {
+            "name": "Urgent",
+            "code": "U"
+          }
+        ]
+      },
+      "defaultValue": null
+    },
+    {
+      "name": "rnum4",
+      "type": "esriFieldTypeString",
+      "alias": "Redemption Number 4",
+      "sqlType": "sqlTypeOther",
+      "length": 15,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "date4",
+      "type": "esriFieldTypeString",
+      "alias": "Date 4",
+      "sqlType": "sqlTypeOther",
+      "length": 6,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "sltyp5",
+      "type": "esriFieldTypeString",
+      "alias": "Sale Type 5",
+      "sqlType": "sqlTypeOther",
+      "length": 1,
+      "nullable": true,
+      "editable": true,
+      "domain": {
+        "type": "codedValue",
+        "name": "SaleType",
+        "mergePolicy": "esriMPTDefaultValue",
+        "splitPolicy": "esriSPTDefaultValue",
+        "description": "Sale Types",
+        "codedValues": [
+          {
+            "name": "A - Annual Tax Sale",
+            "code": "A"
+          },
+          {
+            "name": "S - Scavenger Sale",
+            "code": "S"
+          },
+          {
+            "name": "F - Forfeited",
+            "code": "F"
+          },
+          {
+            "name": "P - Sold Special Assessment",
+            "code": "P"
+          }
+        ]
+      },
+      "defaultValue": null
+    },
+    {
+      "name": "slyr5",
+      "type": "esriFieldTypeString",
+      "alias": "Sale Year 5",
+      "sqlType": "sqlTypeOther",
+      "length": 4,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "frtxyr5",
+      "type": "esriFieldTypeString",
+      "alias": "From Tax year 5",
+      "sqlType": "sqlTypeOther",
+      "length": 4,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "totxyr5",
+      "type": "esriFieldTypeString",
+      "alias": "To Tax Year 5",
+      "sqlType": "sqlTypeOther",
+      "length": 4,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "ind5",
+      "type": "esriFieldTypeString",
+      "alias": "Indicator 5",
+      "sqlType": "sqlTypeOther",
+      "length": 1,
+      "nullable": true,
+      "editable": true,
+      "domain": {
+        "type": "codedValue",
+        "name": "SaleStatus",
+        "mergePolicy": "esriMPTDefaultValue",
+        "splitPolicy": "esriSPTDefaultValue",
+        "description": "Sale Status",
+        "codedValues": [
+          {
+            "name": "Sold",
+            "code": "0"
+          },
+          {
+            "name": "Redeemed",
+            "code": "1"
+          },
+          {
+            "name": "Deeded",
+            "code": "2"
+          },
+          {
+            "name": "Vacated",
+            "code": "3"
+          }
+        ]
+      },
+      "defaultValue": null
+    },
+    {
+      "name": "ind5a",
+      "type": "esriFieldTypeString",
+      "alias": "Indicator 5a",
+      "sqlType": "sqlTypeOther",
+      "length": 1,
+      "nullable": true,
+      "editable": true,
+      "domain": {
+        "type": "codedValue",
+        "name": "SalePriority",
+        "mergePolicy": "esriMPTDefaultValue",
+        "splitPolicy": "esriSPTDefaultValue",
+        "description": "Sale Priority (Urgent Flag)",
+        "codedValues": [
+          {
+            "name": "Urgent",
+            "code": "U"
+          }
+        ]
+      },
+      "defaultValue": null
+    },
+    {
+      "name": "rnum5",
+      "type": "esriFieldTypeString",
+      "alias": "Redemption Number 5",
+      "sqlType": "sqlTypeOther",
+      "length": 15,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "date5",
+      "type": "esriFieldTypeString",
+      "alias": "Date 5",
+      "sqlType": "sqlTypeOther",
+      "length": 6,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "sltyp6",
+      "type": "esriFieldTypeString",
+      "alias": "Sale Type 6",
+      "sqlType": "sqlTypeOther",
+      "length": 1,
+      "nullable": true,
+      "editable": true,
+      "domain": {
+        "type": "codedValue",
+        "name": "SaleType",
+        "mergePolicy": "esriMPTDefaultValue",
+        "splitPolicy": "esriSPTDefaultValue",
+        "description": "Sale Types",
+        "codedValues": [
+          {
+            "name": "A - Annual Tax Sale",
+            "code": "A"
+          },
+          {
+            "name": "S - Scavenger Sale",
+            "code": "S"
+          },
+          {
+            "name": "F - Forfeited",
+            "code": "F"
+          },
+          {
+            "name": "P - Sold Special Assessment",
+            "code": "P"
+          }
+        ]
+      },
+      "defaultValue": null
+    },
+    {
+      "name": "slyr6",
+      "type": "esriFieldTypeString",
+      "alias": "Sale Year 6",
+      "sqlType": "sqlTypeOther",
+      "length": 4,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "frtxyr6",
+      "type": "esriFieldTypeString",
+      "alias": "From Tax year 6",
+      "sqlType": "sqlTypeOther",
+      "length": 4,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "totxyr6",
+      "type": "esriFieldTypeString",
+      "alias": "To Tax Year 6",
+      "sqlType": "sqlTypeOther",
+      "length": 4,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "ind6",
+      "type": "esriFieldTypeString",
+      "alias": "Indicator 6",
+      "sqlType": "sqlTypeOther",
+      "length": 1,
+      "nullable": true,
+      "editable": true,
+      "domain": {
+        "type": "codedValue",
+        "name": "SaleStatus",
+        "mergePolicy": "esriMPTDefaultValue",
+        "splitPolicy": "esriSPTDefaultValue",
+        "description": "Sale Status",
+        "codedValues": [
+          {
+            "name": "Sold",
+            "code": "0"
+          },
+          {
+            "name": "Redeemed",
+            "code": "1"
+          },
+          {
+            "name": "Deeded",
+            "code": "2"
+          },
+          {
+            "name": "Vacated",
+            "code": "3"
+          }
+        ]
+      },
+      "defaultValue": null
+    },
+    {
+      "name": "ind6a",
+      "type": "esriFieldTypeString",
+      "alias": "Indicator 6a",
+      "sqlType": "sqlTypeOther",
+      "length": 1,
+      "nullable": true,
+      "editable": true,
+      "domain": {
+        "type": "codedValue",
+        "name": "SalePriority",
+        "mergePolicy": "esriMPTDefaultValue",
+        "splitPolicy": "esriSPTDefaultValue",
+        "description": "Sale Priority (Urgent Flag)",
+        "codedValues": [
+          {
+            "name": "Urgent",
+            "code": "U"
+          }
+        ]
+      },
+      "defaultValue": null
+    },
+    {
+      "name": "rnum6",
+      "type": "esriFieldTypeString",
+      "alias": "Redemption Number 6",
+      "sqlType": "sqlTypeOther",
+      "length": 15,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "date6",
+      "type": "esriFieldTypeString",
+      "alias": "Date 6",
+      "sqlType": "sqlTypeOther",
+      "length": 6,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "sltyp7",
+      "type": "esriFieldTypeString",
+      "alias": "Sale Type 7",
+      "sqlType": "sqlTypeOther",
+      "length": 1,
+      "nullable": true,
+      "editable": true,
+      "domain": {
+        "type": "codedValue",
+        "name": "SaleType",
+        "mergePolicy": "esriMPTDefaultValue",
+        "splitPolicy": "esriSPTDefaultValue",
+        "description": "Sale Types",
+        "codedValues": [
+          {
+            "name": "A - Annual Tax Sale",
+            "code": "A"
+          },
+          {
+            "name": "S - Scavenger Sale",
+            "code": "S"
+          },
+          {
+            "name": "F - Forfeited",
+            "code": "F"
+          },
+          {
+            "name": "P - Sold Special Assessment",
+            "code": "P"
+          }
+        ]
+      },
+      "defaultValue": null
+    },
+    {
+      "name": "slyr7",
+      "type": "esriFieldTypeString",
+      "alias": "Sale Year 7",
+      "sqlType": "sqlTypeOther",
+      "length": 4,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "frtxyr7",
+      "type": "esriFieldTypeString",
+      "alias": "From Tax year 7",
+      "sqlType": "sqlTypeOther",
+      "length": 4,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "totxyr7",
+      "type": "esriFieldTypeString",
+      "alias": "To Tax Year 7",
+      "sqlType": "sqlTypeOther",
+      "length": 4,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "ind7",
+      "type": "esriFieldTypeString",
+      "alias": "Indicator 7",
+      "sqlType": "sqlTypeOther",
+      "length": 1,
+      "nullable": true,
+      "editable": true,
+      "domain": {
+        "type": "codedValue",
+        "name": "SaleStatus",
+        "mergePolicy": "esriMPTDefaultValue",
+        "splitPolicy": "esriSPTDefaultValue",
+        "description": "Sale Status",
+        "codedValues": [
+          {
+            "name": "Sold",
+            "code": "0"
+          },
+          {
+            "name": "Redeemed",
+            "code": "1"
+          },
+          {
+            "name": "Deeded",
+            "code": "2"
+          },
+          {
+            "name": "Vacated",
+            "code": "3"
+          }
+        ]
+      },
+      "defaultValue": null
+    },
+    {
+      "name": "ind7a",
+      "type": "esriFieldTypeString",
+      "alias": "Indicator 7a",
+      "sqlType": "sqlTypeOther",
+      "length": 1,
+      "nullable": true,
+      "editable": true,
+      "domain": {
+        "type": "codedValue",
+        "name": "SalePriority",
+        "mergePolicy": "esriMPTDefaultValue",
+        "splitPolicy": "esriSPTDefaultValue",
+        "description": "Sale Priority (Urgent Flag)",
+        "codedValues": [
+          {
+            "name": "Urgent",
+            "code": "U"
+          }
+        ]
+      },
+      "defaultValue": null
+    },
+    {
+      "name": "rnum7",
+      "type": "esriFieldTypeString",
+      "alias": "Redemption Number 7",
+      "sqlType": "sqlTypeOther",
+      "length": 15,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "date7",
+      "type": "esriFieldTypeString",
+      "alias": "Date 7",
+      "sqlType": "sqlTypeOther",
+      "length": 6,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "dlyr1",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent Year 1",
+      "sqlType": "sqlTypeOther",
+      "length": 4,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "dlstat1",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent Status 1",
+      "sqlType": "sqlTypeOther",
+      "length": 1,
+      "nullable": true,
+      "editable": true,
+      "domain": {
+        "type": "codedValue",
+        "name": "DelinquentStatus",
+        "mergePolicy": "esriMPTDefaultValue",
+        "splitPolicy": "esriSPTDefaultValue",
+        "description": "Delinquent Status",
+        "codedValues": [
+          {
+            "name": "O - Open",
+            "code": "O"
+          },
+          {
+            "name": "F - Forfeited",
+            "code": "F"
+          }
+        ]
+      },
+      "defaultValue": null
+    },
+    {
+      "name": "dlinst1a",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent First Installment 1",
+      "sqlType": "sqlTypeOther",
+      "length": 11,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "dlinst1b",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent Second Installment 1",
+      "sqlType": "sqlTypeOther",
+      "length": 11,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "bxtxyr1",
+      "type": "esriFieldTypeString",
+      "alias": "Back Tax Year 1",
+      "sqlType": "sqlTypeOther",
+      "length": 4,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "txtyp1",
+      "type": "esriFieldTypeString",
+      "alias": "Tax Type 1",
+      "sqlType": "sqlTypeOther",
+      "length": 1,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "forfdt1",
+      "type": "esriFieldTypeString",
+      "alias": "Forfeiture Date 1",
+      "sqlType": "sqlTypeOther",
+      "length": 8,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "dlyr2",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent Year 2",
+      "sqlType": "sqlTypeOther",
+      "length": 4,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "dlstat2",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent Status 2",
+      "sqlType": "sqlTypeOther",
+      "length": 1,
+      "nullable": true,
+      "editable": true,
+      "domain": {
+        "type": "codedValue",
+        "name": "DelinquentStatus",
+        "mergePolicy": "esriMPTDefaultValue",
+        "splitPolicy": "esriSPTDefaultValue",
+        "description": "Delinquent Status",
+        "codedValues": [
+          {
+            "name": "O - Open",
+            "code": "O"
+          },
+          {
+            "name": "F - Forfeited",
+            "code": "F"
+          }
+        ]
+      },
+      "defaultValue": null
+    },
+    {
+      "name": "dlinst2a",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent First Installment 2",
+      "sqlType": "sqlTypeOther",
+      "length": 11,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "dlinst2b",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent Second Installment 2",
+      "sqlType": "sqlTypeOther",
+      "length": 11,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "bxtxyr2",
+      "type": "esriFieldTypeString",
+      "alias": "Back Tax Year 2",
+      "sqlType": "sqlTypeOther",
+      "length": 4,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "txtyp2",
+      "type": "esriFieldTypeString",
+      "alias": "Tax Type 2",
+      "sqlType": "sqlTypeOther",
+      "length": 1,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "forfdt2",
+      "type": "esriFieldTypeString",
+      "alias": "Forfeiture Date 2",
+      "sqlType": "sqlTypeOther",
+      "length": 8,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "dlyr3",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent Year 3",
+      "sqlType": "sqlTypeOther",
+      "length": 4,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "dlstat3",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent Status 3",
+      "sqlType": "sqlTypeOther",
+      "length": 1,
+      "nullable": true,
+      "editable": true,
+      "domain": {
+        "type": "codedValue",
+        "name": "DelinquentStatus",
+        "mergePolicy": "esriMPTDefaultValue",
+        "splitPolicy": "esriSPTDefaultValue",
+        "description": "Delinquent Status",
+        "codedValues": [
+          {
+            "name": "O - Open",
+            "code": "O"
+          },
+          {
+            "name": "F - Forfeited",
+            "code": "F"
+          }
+        ]
+      },
+      "defaultValue": null
+    },
+    {
+      "name": "dlinst3a",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent First Installment 3",
+      "sqlType": "sqlTypeOther",
+      "length": 11,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "dlinst3b",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent Second Installment 3",
+      "sqlType": "sqlTypeOther",
+      "length": 11,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "bxtxyr3",
+      "type": "esriFieldTypeString",
+      "alias": "Back Tax Year 3",
+      "sqlType": "sqlTypeOther",
+      "length": 4,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "txtyp3",
+      "type": "esriFieldTypeString",
+      "alias": "Tax Type 3",
+      "sqlType": "sqlTypeOther",
+      "length": 1,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "forfdt3",
+      "type": "esriFieldTypeString",
+      "alias": "Forfeiture Date 3",
+      "sqlType": "sqlTypeOther",
+      "length": 8,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "dlyr4",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent Year 4",
+      "sqlType": "sqlTypeOther",
+      "length": 4,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "dlstat4",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent Status 4",
+      "sqlType": "sqlTypeOther",
+      "length": 1,
+      "nullable": true,
+      "editable": true,
+      "domain": {
+        "type": "codedValue",
+        "name": "DelinquentStatus",
+        "mergePolicy": "esriMPTDefaultValue",
+        "splitPolicy": "esriSPTDefaultValue",
+        "description": "Delinquent Status",
+        "codedValues": [
+          {
+            "name": "O - Open",
+            "code": "O"
+          },
+          {
+            "name": "F - Forfeited",
+            "code": "F"
+          }
+        ]
+      },
+      "defaultValue": null
+    },
+    {
+      "name": "dlinst4a",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent First Installment 4",
+      "sqlType": "sqlTypeOther",
+      "length": 11,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "dlinst4b",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent Second Installment 4",
+      "sqlType": "sqlTypeOther",
+      "length": 11,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "bxtxyr4",
+      "type": "esriFieldTypeString",
+      "alias": "Back Tax Year 4",
+      "sqlType": "sqlTypeOther",
+      "length": 4,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "txtyp4",
+      "type": "esriFieldTypeString",
+      "alias": "Tax Type 4",
+      "sqlType": "sqlTypeOther",
+      "length": 1,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "forfdt4",
+      "type": "esriFieldTypeString",
+      "alias": "Forfeiture Date 4",
+      "sqlType": "sqlTypeOther",
+      "length": 8,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "dlyr5",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent Year 5",
+      "sqlType": "sqlTypeOther",
+      "length": 4,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "dlstat5",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent Status 5",
+      "sqlType": "sqlTypeOther",
+      "length": 1,
+      "nullable": true,
+      "editable": true,
+      "domain": {
+        "type": "codedValue",
+        "name": "DelinquentStatus",
+        "mergePolicy": "esriMPTDefaultValue",
+        "splitPolicy": "esriSPTDefaultValue",
+        "description": "Delinquent Status",
+        "codedValues": [
+          {
+            "name": "O - Open",
+            "code": "O"
+          },
+          {
+            "name": "F - Forfeited",
+            "code": "F"
+          }
+        ]
+      },
+      "defaultValue": null
+    },
+    {
+      "name": "dlinst5a",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent First Installment 5",
+      "sqlType": "sqlTypeOther",
+      "length": 11,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "dlinst5b",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent Second Installment 5",
+      "sqlType": "sqlTypeOther",
+      "length": 11,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "bxtxyr5",
+      "type": "esriFieldTypeString",
+      "alias": "Back Tax Year 5",
+      "sqlType": "sqlTypeOther",
+      "length": 4,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "txtyp5",
+      "type": "esriFieldTypeString",
+      "alias": "Tax Type 5",
+      "sqlType": "sqlTypeOther",
+      "length": 1,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "forfdt5",
+      "type": "esriFieldTypeString",
+      "alias": "Forfeiture Date 5",
+      "sqlType": "sqlTypeOther",
+      "length": 8,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "dlyr6",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent Year 6",
+      "sqlType": "sqlTypeOther",
+      "length": 4,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "dlstat6",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent Status 6",
+      "sqlType": "sqlTypeOther",
+      "length": 1,
+      "nullable": true,
+      "editable": true,
+      "domain": {
+        "type": "codedValue",
+        "name": "DelinquentStatus",
+        "mergePolicy": "esriMPTDefaultValue",
+        "splitPolicy": "esriSPTDefaultValue",
+        "description": "Delinquent Status",
+        "codedValues": [
+          {
+            "name": "O - Open",
+            "code": "O"
+          },
+          {
+            "name": "F - Forfeited",
+            "code": "F"
+          }
+        ]
+      },
+      "defaultValue": null
+    },
+    {
+      "name": "dlinst6a",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent First Installment 6",
+      "sqlType": "sqlTypeOther",
+      "length": 11,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "dlinst6b",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent Second Installment 6",
+      "sqlType": "sqlTypeOther",
+      "length": 11,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "bxtxyr6",
+      "type": "esriFieldTypeString",
+      "alias": "Back Tax Year 6",
+      "sqlType": "sqlTypeOther",
+      "length": 4,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "txtyp6",
+      "type": "esriFieldTypeString",
+      "alias": "Tax Type 6",
+      "sqlType": "sqlTypeOther",
+      "length": 1,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "forfdt6",
+      "type": "esriFieldTypeString",
+      "alias": "Forfeiture Date 6",
+      "sqlType": "sqlTypeOther",
+      "length": 8,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "dlyr7",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent Year 7",
+      "sqlType": "sqlTypeOther",
+      "length": 4,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "dlstat7",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent Status 7",
+      "sqlType": "sqlTypeOther",
+      "length": 1,
+      "nullable": true,
+      "editable": true,
+      "domain": {
+        "type": "codedValue",
+        "name": "DelinquentStatus",
+        "mergePolicy": "esriMPTDefaultValue",
+        "splitPolicy": "esriSPTDefaultValue",
+        "description": "Delinquent Status",
+        "codedValues": [
+          {
+            "name": "O - Open",
+            "code": "O"
+          },
+          {
+            "name": "F - Forfeited",
+            "code": "F"
+          }
+        ]
+      },
+      "defaultValue": null
+    },
+    {
+      "name": "dlinst7a",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent First Installment 7",
+      "sqlType": "sqlTypeOther",
+      "length": 11,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "dlinst7b",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent Second Installment 7",
+      "sqlType": "sqlTypeOther",
+      "length": 11,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "bxtxyr7",
+      "type": "esriFieldTypeString",
+      "alias": "Back Tax Year 7",
+      "sqlType": "sqlTypeOther",
+      "length": 4,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "txtyp7",
+      "type": "esriFieldTypeString",
+      "alias": "Tax Type 7",
+      "sqlType": "sqlTypeOther",
+      "length": 1,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "forfdt7",
+      "type": "esriFieldTypeString",
+      "alias": "Forfeiture Date 7",
+      "sqlType": "sqlTypeOther",
+      "length": 8,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "dlyr8",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent Year 8",
+      "sqlType": "sqlTypeOther",
+      "length": 4,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "dlstat8",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent Status 8",
+      "sqlType": "sqlTypeOther",
+      "length": 1,
+      "nullable": true,
+      "editable": true,
+      "domain": {
+        "type": "codedValue",
+        "name": "DelinquentStatus",
+        "mergePolicy": "esriMPTDefaultValue",
+        "splitPolicy": "esriSPTDefaultValue",
+        "description": "Delinquent Status",
+        "codedValues": [
+          {
+            "name": "O - Open",
+            "code": "O"
+          },
+          {
+            "name": "F - Forfeited",
+            "code": "F"
+          }
+        ]
+      },
+      "defaultValue": null
+    },
+    {
+      "name": "dlinst8a",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent First Installment 8",
+      "sqlType": "sqlTypeOther",
+      "length": 11,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "dlinst8b",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent Second Installment 8",
+      "sqlType": "sqlTypeOther",
+      "length": 11,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "bxtxyr8",
+      "type": "esriFieldTypeString",
+      "alias": "Back Tax Year 8",
+      "sqlType": "sqlTypeOther",
+      "length": 4,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "txtyp8",
+      "type": "esriFieldTypeString",
+      "alias": "Tax Type 8",
+      "sqlType": "sqlTypeOther",
+      "length": 1,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "forfdt8",
+      "type": "esriFieldTypeString",
+      "alias": "Forfeiture Date 8",
+      "sqlType": "sqlTypeOther",
+      "length": 8,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "dlyr9",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent Year 9",
+      "sqlType": "sqlTypeOther",
+      "length": 4,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "dlstat9",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent Status 9",
+      "sqlType": "sqlTypeOther",
+      "length": 1,
+      "nullable": true,
+      "editable": true,
+      "domain": {
+        "type": "codedValue",
+        "name": "DelinquentStatus",
+        "mergePolicy": "esriMPTDefaultValue",
+        "splitPolicy": "esriSPTDefaultValue",
+        "description": "Delinquent Status",
+        "codedValues": [
+          {
+            "name": "O - Open",
+            "code": "O"
+          },
+          {
+            "name": "F - Forfeited",
+            "code": "F"
+          }
+        ]
+      },
+      "defaultValue": null
+    },
+    {
+      "name": "dlinst9a",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent First Installment 9",
+      "sqlType": "sqlTypeOther",
+      "length": 11,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "dlinst9b",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent Second Installment 9",
+      "sqlType": "sqlTypeOther",
+      "length": 11,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "bxtxyr9",
+      "type": "esriFieldTypeString",
+      "alias": "Back Tax Year 9",
+      "sqlType": "sqlTypeOther",
+      "length": 4,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "txtyp9",
+      "type": "esriFieldTypeString",
+      "alias": "Tax Type 9",
+      "sqlType": "sqlTypeOther",
+      "length": 1,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "forfdt9",
+      "type": "esriFieldTypeString",
+      "alias": "Forfeiture Date 9",
+      "sqlType": "sqlTypeOther",
+      "length": 8,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "dlyr10",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent Year 10",
+      "sqlType": "sqlTypeOther",
+      "length": 4,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "dlstat10",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent Status 10",
+      "sqlType": "sqlTypeOther",
+      "length": 1,
+      "nullable": true,
+      "editable": true,
+      "domain": {
+        "type": "codedValue",
+        "name": "DelinquentStatus",
+        "mergePolicy": "esriMPTDefaultValue",
+        "splitPolicy": "esriSPTDefaultValue",
+        "description": "Delinquent Status",
+        "codedValues": [
+          {
+            "name": "O - Open",
+            "code": "O"
+          },
+          {
+            "name": "F - Forfeited",
+            "code": "F"
+          }
+        ]
+      },
+      "defaultValue": null
+    },
+    {
+      "name": "dlinst10a",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent First Installment 10",
+      "sqlType": "sqlTypeOther",
+      "length": 11,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "dlinst10b",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent First Installment 10",
+      "sqlType": "sqlTypeOther",
+      "length": 11,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "bxtxyr10",
+      "type": "esriFieldTypeString",
+      "alias": "Back Tax Year 10",
+      "sqlType": "sqlTypeOther",
+      "length": 4,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "txtyp10",
+      "type": "esriFieldTypeString",
+      "alias": "Tax Type 10",
+      "sqlType": "sqlTypeOther",
+      "length": 1,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "forfdt10",
+      "type": "esriFieldTypeString",
+      "alias": "Forfeiture Date 10",
+      "sqlType": "sqlTypeOther",
+      "length": 8,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "dlyr11",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent Year 11",
+      "sqlType": "sqlTypeOther",
+      "length": 4,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "dlstat11",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent Status 11",
+      "sqlType": "sqlTypeOther",
+      "length": 1,
+      "nullable": true,
+      "editable": true,
+      "domain": {
+        "type": "codedValue",
+        "name": "DelinquentStatus",
+        "mergePolicy": "esriMPTDefaultValue",
+        "splitPolicy": "esriSPTDefaultValue",
+        "description": "Delinquent Status",
+        "codedValues": [
+          {
+            "name": "O - Open",
+            "code": "O"
+          },
+          {
+            "name": "F - Forfeited",
+            "code": "F"
+          }
+        ]
+      },
+      "defaultValue": null
+    },
+    {
+      "name": "dlinst11a",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent First Installment 11",
+      "sqlType": "sqlTypeOther",
+      "length": 11,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "dlinst11b",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent Second Installment 11",
+      "sqlType": "sqlTypeOther",
+      "length": 11,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "bxtxyr11",
+      "type": "esriFieldTypeString",
+      "alias": "Back Tax Year 11",
+      "sqlType": "sqlTypeOther",
+      "length": 4,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "txtyp11",
+      "type": "esriFieldTypeString",
+      "alias": "Tax Type 11",
+      "sqlType": "sqlTypeOther",
+      "length": 1,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "forfdt11",
+      "type": "esriFieldTypeString",
+      "alias": "Forfeiture Date 11",
+      "sqlType": "sqlTypeOther",
+      "length": 8,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "dlyr12",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent Year 12",
+      "sqlType": "sqlTypeOther",
+      "length": 4,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "dlstat12",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent Status 12",
+      "sqlType": "sqlTypeOther",
+      "length": 1,
+      "nullable": true,
+      "editable": true,
+      "domain": {
+        "type": "codedValue",
+        "name": "DelinquentStatus",
+        "mergePolicy": "esriMPTDefaultValue",
+        "splitPolicy": "esriSPTDefaultValue",
+        "description": "Delinquent Status",
+        "codedValues": [
+          {
+            "name": "O - Open",
+            "code": "O"
+          },
+          {
+            "name": "F - Forfeited",
+            "code": "F"
+          }
+        ]
+      },
+      "defaultValue": null
+    },
+    {
+      "name": "dlinst12a",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent First Installment 12",
+      "sqlType": "sqlTypeOther",
+      "length": 11,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "dlinst12b",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent Second Installment 12",
+      "sqlType": "sqlTypeOther",
+      "length": 11,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "bxtxyr12",
+      "type": "esriFieldTypeString",
+      "alias": "Back Tax Year 12",
+      "sqlType": "sqlTypeOther",
+      "length": 4,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "txtyp12",
+      "type": "esriFieldTypeString",
+      "alias": "Tax Type 12",
+      "sqlType": "sqlTypeOther",
+      "length": 1,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "forfdt12",
+      "type": "esriFieldTypeString",
+      "alias": "Forfeiture Date 12",
+      "sqlType": "sqlTypeOther",
+      "length": 8,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "dlyr13",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent Year 13",
+      "sqlType": "sqlTypeOther",
+      "length": 4,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "dlstat13",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent Status 13",
+      "sqlType": "sqlTypeOther",
+      "length": 1,
+      "nullable": true,
+      "editable": true,
+      "domain": {
+        "type": "codedValue",
+        "name": "DelinquentStatus",
+        "mergePolicy": "esriMPTDefaultValue",
+        "splitPolicy": "esriSPTDefaultValue",
+        "description": "Delinquent Status",
+        "codedValues": [
+          {
+            "name": "O - Open",
+            "code": "O"
+          },
+          {
+            "name": "F - Forfeited",
+            "code": "F"
+          }
+        ]
+      },
+      "defaultValue": null
+    },
+    {
+      "name": "dlinst13a",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent First Installment 13",
+      "sqlType": "sqlTypeOther",
+      "length": 11,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "dlinst13b",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent Second Installment 13",
+      "sqlType": "sqlTypeOther",
+      "length": 11,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "bxtxyr13",
+      "type": "esriFieldTypeString",
+      "alias": "Back Tax Year 13",
+      "sqlType": "sqlTypeOther",
+      "length": 4,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "txtyp13",
+      "type": "esriFieldTypeString",
+      "alias": "Tax Type 13",
+      "sqlType": "sqlTypeOther",
+      "length": 1,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "forfdt13",
+      "type": "esriFieldTypeString",
+      "alias": "Forfeiture Date 13",
+      "sqlType": "sqlTypeOther",
+      "length": 8,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "dlyr14",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent Year 14",
+      "sqlType": "sqlTypeOther",
+      "length": 4,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "dlstat14",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent Status 14",
+      "sqlType": "sqlTypeOther",
+      "length": 1,
+      "nullable": true,
+      "editable": true,
+      "domain": {
+        "type": "codedValue",
+        "name": "DelinquentStatus",
+        "mergePolicy": "esriMPTDefaultValue",
+        "splitPolicy": "esriSPTDefaultValue",
+        "description": "Delinquent Status",
+        "codedValues": [
+          {
+            "name": "O - Open",
+            "code": "O"
+          },
+          {
+            "name": "F - Forfeited",
+            "code": "F"
+          }
+        ]
+      },
+      "defaultValue": null
+    },
+    {
+      "name": "dlinst14a",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent First Installment 14",
+      "sqlType": "sqlTypeOther",
+      "length": 11,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "dlinst14b",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent Second Installment 14",
+      "sqlType": "sqlTypeOther",
+      "length": 11,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "bxtxyr14",
+      "type": "esriFieldTypeString",
+      "alias": "Back Tax Year 14",
+      "sqlType": "sqlTypeOther",
+      "length": 4,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "txtyp14",
+      "type": "esriFieldTypeString",
+      "alias": "Tax Type 14",
+      "sqlType": "sqlTypeOther",
+      "length": 1,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "forfdt14",
+      "type": "esriFieldTypeString",
+      "alias": "Forfeiture Date 14",
+      "sqlType": "sqlTypeOther",
+      "length": 8,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "dlyr15",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent Year 15",
+      "sqlType": "sqlTypeOther",
+      "length": 4,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "dlstat15",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent Status 15",
+      "sqlType": "sqlTypeOther",
+      "length": 1,
+      "nullable": true,
+      "editable": true,
+      "domain": {
+        "type": "codedValue",
+        "name": "DelinquentStatus",
+        "mergePolicy": "esriMPTDefaultValue",
+        "splitPolicy": "esriSPTDefaultValue",
+        "description": "Delinquent Status",
+        "codedValues": [
+          {
+            "name": "O - Open",
+            "code": "O"
+          },
+          {
+            "name": "F - Forfeited",
+            "code": "F"
+          }
+        ]
+      },
+      "defaultValue": null
+    },
+    {
+      "name": "dlinst15a",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent First Installment 15",
+      "sqlType": "sqlTypeOther",
+      "length": 11,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "dlinst15b",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent Second Installment 15",
+      "sqlType": "sqlTypeOther",
+      "length": 11,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "bxtxyr15",
+      "type": "esriFieldTypeString",
+      "alias": "Back Tax Year 15",
+      "sqlType": "sqlTypeOther",
+      "length": 4,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "txtyp15",
+      "type": "esriFieldTypeString",
+      "alias": "Tax Type 15",
+      "sqlType": "sqlTypeOther",
+      "length": 1,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "forfdt15",
+      "type": "esriFieldTypeString",
+      "alias": "Forfeiture Date 15",
+      "sqlType": "sqlTypeOther",
+      "length": 8,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "dlyr16",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent Year 16",
+      "sqlType": "sqlTypeOther",
+      "length": 4,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "dlstat16",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent Status 16",
+      "sqlType": "sqlTypeOther",
+      "length": 1,
+      "nullable": true,
+      "editable": true,
+      "domain": {
+        "type": "codedValue",
+        "name": "DelinquentStatus",
+        "mergePolicy": "esriMPTDefaultValue",
+        "splitPolicy": "esriSPTDefaultValue",
+        "description": "Delinquent Status",
+        "codedValues": [
+          {
+            "name": "O - Open",
+            "code": "O"
+          },
+          {
+            "name": "F - Forfeited",
+            "code": "F"
+          }
+        ]
+      },
+      "defaultValue": null
+    },
+    {
+      "name": "dlinst16a",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent First Installment 16",
+      "sqlType": "sqlTypeOther",
+      "length": 11,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "dlinst16b",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent Second Installment 16",
+      "sqlType": "sqlTypeOther",
+      "length": 11,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "bxtxyr16",
+      "type": "esriFieldTypeString",
+      "alias": "Back Tax Year 16",
+      "sqlType": "sqlTypeOther",
+      "length": 4,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "txtyp16",
+      "type": "esriFieldTypeString",
+      "alias": "Tax Type 16",
+      "sqlType": "sqlTypeOther",
+      "length": 1,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "forfdt16",
+      "type": "esriFieldTypeString",
+      "alias": "Forfeiture Date 16",
+      "sqlType": "sqlTypeOther",
+      "length": 8,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "dlyr17",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent Year 17",
+      "sqlType": "sqlTypeOther",
+      "length": 4,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "dlstat17",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent Status 17",
+      "sqlType": "sqlTypeOther",
+      "length": 1,
+      "nullable": true,
+      "editable": true,
+      "domain": {
+        "type": "codedValue",
+        "name": "DelinquentStatus",
+        "mergePolicy": "esriMPTDefaultValue",
+        "splitPolicy": "esriSPTDefaultValue",
+        "description": "Delinquent Status",
+        "codedValues": [
+          {
+            "name": "O - Open",
+            "code": "O"
+          },
+          {
+            "name": "F - Forfeited",
+            "code": "F"
+          }
+        ]
+      },
+      "defaultValue": null
+    },
+    {
+      "name": "dlinst17a",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent First Installment 17",
+      "sqlType": "sqlTypeOther",
+      "length": 11,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "dlinst17b",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent Second Installment 17",
+      "sqlType": "sqlTypeOther",
+      "length": 11,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "bxtxyr17",
+      "type": "esriFieldTypeString",
+      "alias": "Back Tax Year 17",
+      "sqlType": "sqlTypeOther",
+      "length": 4,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "txtyp17",
+      "type": "esriFieldTypeString",
+      "alias": "Tax Type 17",
+      "sqlType": "sqlTypeOther",
+      "length": 1,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "forfdt17",
+      "type": "esriFieldTypeString",
+      "alias": "Forfeiture Date 17",
+      "sqlType": "sqlTypeOther",
+      "length": 8,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "dlyr18",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent Year 18",
+      "sqlType": "sqlTypeOther",
+      "length": 4,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "dlstat18",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent Status 18",
+      "sqlType": "sqlTypeOther",
+      "length": 1,
+      "nullable": true,
+      "editable": true,
+      "domain": {
+        "type": "codedValue",
+        "name": "DelinquentStatus",
+        "mergePolicy": "esriMPTDefaultValue",
+        "splitPolicy": "esriSPTDefaultValue",
+        "description": "Delinquent Status",
+        "codedValues": [
+          {
+            "name": "O - Open",
+            "code": "O"
+          },
+          {
+            "name": "F - Forfeited",
+            "code": "F"
+          }
+        ]
+      },
+      "defaultValue": null
+    },
+    {
+      "name": "dlinst18a",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent First Installment 18",
+      "sqlType": "sqlTypeOther",
+      "length": 11,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "dlinst18b",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent Second Installment 18",
+      "sqlType": "sqlTypeOther",
+      "length": 11,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "bxtxyr18",
+      "type": "esriFieldTypeString",
+      "alias": "Back Tax Year 18",
+      "sqlType": "sqlTypeOther",
+      "length": 4,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "txtyp18",
+      "type": "esriFieldTypeString",
+      "alias": "Tax Type 18",
+      "sqlType": "sqlTypeOther",
+      "length": 1,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "forfdt18",
+      "type": "esriFieldTypeString",
+      "alias": "Forfeiture Date 18",
+      "sqlType": "sqlTypeOther",
+      "length": 8,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "dlyr19",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent Year 19",
+      "sqlType": "sqlTypeOther",
+      "length": 4,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "dlstat19",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent Status 19",
+      "sqlType": "sqlTypeOther",
+      "length": 1,
+      "nullable": true,
+      "editable": true,
+      "domain": {
+        "type": "codedValue",
+        "name": "DelinquentStatus",
+        "mergePolicy": "esriMPTDefaultValue",
+        "splitPolicy": "esriSPTDefaultValue",
+        "description": "Delinquent Status",
+        "codedValues": [
+          {
+            "name": "O - Open",
+            "code": "O"
+          },
+          {
+            "name": "F - Forfeited",
+            "code": "F"
+          }
+        ]
+      },
+      "defaultValue": null
+    },
+    {
+      "name": "dlinst19a",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent First Installment 19",
+      "sqlType": "sqlTypeOther",
+      "length": 11,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "dlinst19b",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent Second Installment 19",
+      "sqlType": "sqlTypeOther",
+      "length": 11,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "bxtxyr19",
+      "type": "esriFieldTypeString",
+      "alias": "Back Tax Year 19",
+      "sqlType": "sqlTypeOther",
+      "length": 4,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "txtyp19",
+      "type": "esriFieldTypeString",
+      "alias": "Tax Type 19",
+      "sqlType": "sqlTypeOther",
+      "length": 1,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "forfdt19",
+      "type": "esriFieldTypeString",
+      "alias": "Forfeiture Date 19",
+      "sqlType": "sqlTypeOther",
+      "length": 8,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "dlyr20",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent Year 20",
+      "sqlType": "sqlTypeOther",
+      "length": 4,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "dlstat20",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent Status 20",
+      "sqlType": "sqlTypeOther",
+      "length": 1,
+      "nullable": true,
+      "editable": true,
+      "domain": {
+        "type": "codedValue",
+        "name": "DelinquentStatus",
+        "mergePolicy": "esriMPTDefaultValue",
+        "splitPolicy": "esriSPTDefaultValue",
+        "description": "Delinquent Status",
+        "codedValues": [
+          {
+            "name": "O - Open",
+            "code": "O"
+          },
+          {
+            "name": "F - Forfeited",
+            "code": "F"
+          }
+        ]
+      },
+      "defaultValue": null
+    },
+    {
+      "name": "dlinst20a",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent First Installment 20",
+      "sqlType": "sqlTypeOther",
+      "length": 11,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "dlinst20b",
+      "type": "esriFieldTypeString",
+      "alias": "Delinquent Second Installment 20",
+      "sqlType": "sqlTypeOther",
+      "length": 11,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "bxtxyr20",
+      "type": "esriFieldTypeString",
+      "alias": "Back Tax Year 20",
+      "sqlType": "sqlTypeOther",
+      "length": 4,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "txtyp20",
+      "type": "esriFieldTypeString",
+      "alias": "Tax Type 20",
+      "sqlType": "sqlTypeOther",
+      "length": 1,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "forfdt20",
+      "type": "esriFieldTypeString",
+      "alias": "Forfeiture Date 20",
+      "sqlType": "sqlTypeOther",
+      "length": 8,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "updtdt",
+      "type": "esriFieldTypeString",
+      "alias": "Last date updated",
+      "sqlType": "sqlTypeOther",
+      "length": 8,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "dispdt",
+      "type": "esriFieldTypeString",
+      "alias": "Display Date",
+      "sqlType": "sqlTypeOther",
+      "length": 8,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "filler",
+      "type": "esriFieldTypeString",
+      "alias": "Filler",
+      "sqlType": "sqlTypeOther",
+      "length": 28,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "status",
+      "type": "esriFieldTypeString",
+      "alias": "Status",
+      "sqlType": "sqlTypeOther",
+      "length": 6,
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "ObjectID",
+      "type": "esriFieldTypeInteger",
+      "alias": "ObjectID",
+      "sqlType": "sqlTypeOther",
+      "nullable": true,
+      "editable": true,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "Shape__Area",
+      "type": "esriFieldTypeDouble",
+      "alias": "Shape__Area",
+      "sqlType": "sqlTypeDouble",
+      "nullable": true,
+      "editable": false,
+      "domain": null,
+      "defaultValue": null
+    },
+    {
+      "name": "Shape__Length",
+      "type": "esriFieldTypeDouble",
+      "alias": "Shape__Length",
+      "sqlType": "sqlTypeDouble",
+      "nullable": true,
+      "editable": false,
+      "domain": null,
+      "defaultValue": null
+    }
+  ],
+  "indexes": [
+    {
+      "name": "PK__SSMMA_DE__E458E6E7697C4CF7",
+      "fields": "OBJECTID_1",
+      "isAscending": true,
+      "isUnique": true,
+      "description": "",
+      "indexType": "Attribute"
+    },
+    {
+      "name": "user_10616.SSMMA_DELINQUENT_PARCELS_TAX_DELINQUENT_PROPERTIES2_Shape_sidx",
+      "fields": "Shape",
+      "isAscending": true,
+      "isUnique": false,
+      "description": "",
+      "indexType": "Spatial"
+    },
+    {
+      "name": "Shape__Area_Index",
+      "fields": "Shape__Area",
+      "isAscending": true,
+      "isUnique": false,
+      "description": "",
+      "indexType": "Attribute"
+    },
+    {
+      "name": "Shape__Length_Index",
+      "fields": "Shape__Length",
+      "isAscending": true,
+      "isUnique": false,
+      "description": "",
+      "indexType": "Attribute"
+    },
+    {
+      "name": "Municipality_Index",
+      "fields": "Municipality",
+      "isAscending": true,
+      "isUnique": false,
+      "description": "Municipality_Index",
+      "indexType": "Attribute"
+    },
+    {
+      "name": "slyr4_Index",
+      "fields": "slyr4",
+      "isAscending": true,
+      "isUnique": false,
+      "description": "slyr4_Index",
+      "indexType": "Attribute"
+    }
+  ],
+  "dateFieldsTimeReference": {
+    "timeZone": "UTC",
+    "timeZoneIANA": "Etc/UTC",
+    "respectsDaylightSaving": false
+  },
+  "preferredTimeReference": null,
+  "types": [],
+  "templates": [
+    {
+      "name": "Tax Delinquent Properties",
+      "description": "",
+      "drawingTool": "esriFeatureEditToolPolygon",
+      "prototype": {
+        "attributes": {
+          "status": null,
+          "ObjectID": null,
+          "PIN": null,
+          "Municipality": null,
+          "sltyp1": null,
+          "slyr1": null,
+          "frtxyr1": null,
+          "totxyr1": null,
+          "ind1": null,
+          "ind1a": null,
+          "rnum1": null,
+          "date1": null,
+          "sltyp2": null,
+          "slyr2": null,
+          "frtxyr2": null,
+          "totxyr2": null,
+          "ind2": null,
+          "ind2a": null,
+          "rnum2": null,
+          "date2": null,
+          "sltyp3": null,
+          "slyr3": null,
+          "frtxyr3": null,
+          "totxyr3": null,
+          "ind3": null,
+          "ind3a": null,
+          "rnum3": null,
+          "date3": null,
+          "sltyp4": null,
+          "slyr4": null,
+          "frtxyr4": null,
+          "totxyr4": null,
+          "ind4": null,
+          "ind4a": null,
+          "rnum4": null,
+          "date4": null,
+          "sltyp5": null,
+          "slyr5": null,
+          "frtxyr5": null,
+          "totxyr5": null,
+          "ind5": null,
+          "ind5a": null,
+          "rnum5": null,
+          "date5": null,
+          "sltyp6": null,
+          "slyr6": null,
+          "frtxyr6": null,
+          "totxyr6": null,
+          "ind6": null,
+          "ind6a": null,
+          "rnum6": null,
+          "date6": null,
+          "sltyp7": null,
+          "slyr7": null,
+          "frtxyr7": null,
+          "totxyr7": null,
+          "ind7": null,
+          "ind7a": null,
+          "rnum7": null,
+          "date7": null,
+          "dlyr1": null,
+          "dlstat1": null,
+          "dlinst1a": null,
+          "dlinst1b": null,
+          "bxtxyr1": null,
+          "txtyp1": null,
+          "forfdt1": null,
+          "dlyr2": null,
+          "dlstat2": null,
+          "dlinst2a": null,
+          "dlinst2b": null,
+          "bxtxyr2": null,
+          "txtyp2": null,
+          "forfdt2": null,
+          "dlyr3": null,
+          "dlstat3": null,
+          "dlinst3a": null,
+          "dlinst3b": null,
+          "bxtxyr3": null,
+          "txtyp3": null,
+          "forfdt3": null,
+          "dlyr4": null,
+          "dlstat4": null,
+          "dlinst4a": null,
+          "dlinst4b": null,
+          "bxtxyr4": null,
+          "txtyp4": null,
+          "forfdt4": null,
+          "dlyr5": null,
+          "dlstat5": null,
+          "dlinst5a": null,
+          "dlinst5b": null,
+          "bxtxyr5": null,
+          "txtyp5": null,
+          "forfdt5": null,
+          "dlyr6": null,
+          "dlstat6": null,
+          "dlinst6a": null,
+          "dlinst6b": null,
+          "bxtxyr6": null,
+          "txtyp6": null,
+          "forfdt6": null,
+          "dlyr7": null,
+          "dlstat7": null,
+          "dlinst7a": null,
+          "dlinst7b": null,
+          "bxtxyr7": null,
+          "txtyp7": null,
+          "forfdt7": null,
+          "dlyr8": null,
+          "dlstat8": null,
+          "dlinst8a": null,
+          "dlinst8b": null,
+          "bxtxyr8": null,
+          "txtyp8": null,
+          "forfdt8": null,
+          "dlyr9": null,
+          "dlstat9": null,
+          "dlinst9a": null,
+          "dlinst9b": null,
+          "bxtxyr9": null,
+          "txtyp9": null,
+          "forfdt9": null,
+          "dlyr10": null,
+          "dlstat10": null,
+          "dlinst10a": null,
+          "dlinst10b": null,
+          "bxtxyr10": null,
+          "txtyp10": null,
+          "forfdt10": null,
+          "dlyr11": null,
+          "dlstat11": null,
+          "dlinst11a": null,
+          "dlinst11b": null,
+          "bxtxyr11": null,
+          "txtyp11": null,
+          "forfdt11": null,
+          "dlyr12": null,
+          "dlstat12": null,
+          "dlinst12a": null,
+          "dlinst12b": null,
+          "bxtxyr12": null,
+          "txtyp12": null,
+          "forfdt12": null,
+          "dlyr13": null,
+          "dlstat13": null,
+          "dlinst13a": null,
+          "dlinst13b": null,
+          "bxtxyr13": null,
+          "txtyp13": null,
+          "forfdt13": null,
+          "dlyr14": null,
+          "dlstat14": null,
+          "dlinst14a": null,
+          "dlinst14b": null,
+          "bxtxyr14": null,
+          "txtyp14": null,
+          "forfdt14": null,
+          "dlyr15": null,
+          "dlstat15": null,
+          "dlinst15a": null,
+          "dlinst15b": null,
+          "bxtxyr15": null,
+          "txtyp15": null,
+          "forfdt15": null,
+          "dlyr16": null,
+          "dlstat16": null,
+          "dlinst16a": null,
+          "dlinst16b": null,
+          "bxtxyr16": null,
+          "txtyp16": null,
+          "forfdt16": null,
+          "dlyr17": null,
+          "dlstat17": null,
+          "dlinst17a": null,
+          "dlinst17b": null,
+          "bxtxyr17": null,
+          "txtyp17": null,
+          "forfdt17": null,
+          "dlyr18": null,
+          "dlstat18": null,
+          "dlinst18a": null,
+          "dlinst18b": null,
+          "bxtxyr18": null,
+          "txtyp18": null,
+          "forfdt18": null,
+          "dlyr19": null,
+          "dlstat19": null,
+          "dlinst19a": null,
+          "dlinst19b": null,
+          "bxtxyr19": null,
+          "txtyp19": null,
+          "forfdt19": null,
+          "dlyr20": null,
+          "dlstat20": null,
+          "dlinst20a": null,
+          "dlinst20b": null,
+          "bxtxyr20": null,
+          "txtyp20": null,
+          "forfdt20": null,
+          "updtdt": null,
+          "dispdt": null,
+          "filler": null
+        }
+      }
+    }
+  ],
+  "supportedQueryFormats": "JSON, geoJSON, PBF",
+  "supportedAppendFormats": "sqlite,geoPackage,shapefile,filegdb,featureCollection,geojson,csv,excel,jsonl,featureService,pbf",
+  "supportedAppendSourceFilterFormats": "sqlite,geoPackage,shapefile,filegdb,featureService",
+  "supportedExportFormats": "csv,shapefile,sqlite,geoPackage,filegdb,featureCollection,geojson,kml,excel,parquet",
+  "supportedConvertFileFormats": "JSON,PBF,Parquet",
+  "supportedConvertContentFormats": "LayerEditCollection,FeatureCollection",
+  "supportedSpatialRelationships": [
+    "esriSpatialRelIntersects",
+    "esriSpatialRelContains",
+    "esriSpatialRelCrosses",
+    "esriSpatialRelEnvelopeIntersects",
+    "esriSpatialRelIndexIntersects",
+    "esriSpatialRelOverlaps",
+    "esriSpatialRelTouches",
+    "esriSpatialRelWithin",
+    "esriSpatialRelDisjoint",
+    "esriSpatialRelRelation"
+  ],
+  "guidFormat": "",
+  "supportsContingentValues": true,
+  "supportsEditingContingentValues": true,
+  "supportedContingentValuesFormats": "JSON, PBF",
+  "supportsFieldGroups": true,
+  "supportedSyncDataOptions": 260,
+  "hasStaticData": false,
+  "maxRecordCount": 2000,
+  "standardMaxRecordCount": 2000,
+  "maxIdsCount": 1000000,
+  "standardMaxRecordCountNoGeometry": 32000,
+  "tileMaxRecordCount": 4000,
+  "maxRecordCountFactor": 1,
+  "capabilities": "Query"
+}

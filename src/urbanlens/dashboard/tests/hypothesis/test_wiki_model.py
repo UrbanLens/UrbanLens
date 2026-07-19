@@ -14,7 +14,7 @@ from unittest.mock import patch
 
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.wiki.model import Wiki
@@ -165,7 +165,7 @@ class WikiCommentConstraintTests(TestCase):
         self.assertEqual(list(Comment.objects.for_wiki(wiki)), [comment])
 
 
-class WikiEffectiveDateLastActiveTests(TestCase):
+class WikiEffectiveDateLastActiveTests(SimpleTestCase):
     """effective_date_last_active returns date_last_active, infers from abandoned, or None.
 
     The community "last active"/"abandoned" dates moved from Location to Wiki in

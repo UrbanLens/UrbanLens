@@ -15,7 +15,7 @@ from django.contrib.auth.models import User
 from django.urls import reverse
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.cache.location_cache import LocationCache
 from urbanlens.dashboard.services.external_data import InfoPanelSource, panel_sources
 
@@ -156,7 +156,7 @@ class PanelAiExtractButtonTests(TestCase):
         self.assertNotContains(response, "ai-extract-btn")
 
 
-class SimpleInfoPanelsRegistryTests(TestCase):
+class SimpleInfoPanelsRegistryTests(SimpleTestCase):
     """panel_sources() correctly classifies the migrated InfoPanelSource plugins."""
 
     def test_all_seven_migrated_panels_are_registered_as_info_panels(self) -> None:

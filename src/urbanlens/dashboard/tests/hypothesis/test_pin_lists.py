@@ -30,7 +30,7 @@ from django.urls import reverse
 from hypothesis import HealthCheck, given, settings, strategies as st
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.labels.meta import KIND_TAG
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.location.model import Location
@@ -54,7 +54,7 @@ def _make_pin(profile, **kwargs) -> Pin:
     return baker.make(Pin, profile=profile, location=location, **kwargs)
 
 
-class SerializeFormCriteriaNamePreservedTests(TestCase):
+class SerializeFormCriteriaNamePreservedTests(SimpleTestCase):
     """serialize_form_criteria must not drop the `name` filter field."""
 
     @_db_settings

@@ -1,0 +1,418 @@
+{
+  "currentVersion": 11.5,
+  "cimVersion": "3.5.0",
+  "id": 7,
+  "name": "Parcels",
+  "type": "Feature Layer",
+  "description": "",
+  "geometryType": "esriGeometryPolygon",
+  "sourceSpatialReference": {
+    "wkid": 2270,
+    "latestWkid": 2270,
+    "xyTolerance": 0.0032808398950131233,
+    "zTolerance": 0.001,
+    "mTolerance": 0.001,
+    "falseX": -115243200,
+    "falseY": -97276400,
+    "xyUnits": 3048,
+    "falseZ": -100000,
+    "zUnits": 10000,
+    "falseM": -100000,
+    "mUnits": 10000
+  },
+  "spatialReference": {
+    "wkid": 2270,
+    "latestWkid": 2270,
+    "xyTolerance": 0.0032808398950131233,
+    "zTolerance": 0.001,
+    "mTolerance": 0.001,
+    "falseX": -115243200,
+    "falseY": -97276400,
+    "xyUnits": 3048,
+    "falseZ": -100000,
+    "zUnits": 10000,
+    "falseM": -100000,
+    "mUnits": 10000
+  },
+  "copyrightText": "",
+  "parentLayer": {
+    "id": 0,
+    "name": "Common"
+  },
+  "subLayers": [],
+  "minScale": 75000,
+  "maxScale": 0,
+  "referenceScale": 0.0,
+  "drawingInfo": {
+    "renderer": {
+      "type": "simple",
+      "symbol": {
+        "type": "esriSFS",
+        "style": "esriSFSSolid",
+        "color": [
+          241,
+          252,
+          207,
+          0
+        ],
+        "outline": {
+          "type": "esriSLS",
+          "style": "esriSLSSolid",
+          "color": [
+            221,
+            116,
+            0,
+            255
+          ],
+          "width": 0.7
+        }
+      }
+    },
+    "scaleSymbols": true,
+    "transparency": 0,
+    "labelingInfo": null
+  },
+  "defaultVisibility": true,
+  "extent": {
+    "xmin": -115242814.58605936,
+    "ymin": -97276008.31504323,
+    "xmax": 125085334.27109873,
+    "ymax": 88591654.05866143,
+    "spatialReference": {
+      "wkid": 2270,
+      "latestWkid": 2270,
+      "xyTolerance": 0.0032808398950131233,
+      "zTolerance": 0.001,
+      "mTolerance": 0.001,
+      "falseX": -115243200,
+      "falseY": -97276400,
+      "xyUnits": 3048,
+      "falseZ": -100000,
+      "zUnits": 10000,
+      "falseM": -100000,
+      "mUnits": 10000
+    }
+  },
+  "hasAttachments": false,
+  "htmlPopupType": "esriServerHTMLPopupTypeAsHTMLText",
+  "displayField": "NAME",
+  "typeIdField": null,
+  "subtypeFieldName": null,
+  "subtypeField": null,
+  "defaultSubtypeCode": null,
+  "fields": [
+    {
+      "name": "TAXID",
+      "type": "esriFieldTypeString",
+      "alias": "TAXID",
+      "length": 20,
+      "domain": null
+    },
+    {
+      "name": "PROP_ID",
+      "type": "esriFieldTypeString",
+      "alias": "PROP_ID",
+      "length": 10,
+      "domain": null
+    },
+    {
+      "name": "NAME",
+      "type": "esriFieldTypeString",
+      "alias": "NAME",
+      "length": 350,
+      "domain": null
+    },
+    {
+      "name": "ADDR1",
+      "type": "esriFieldTypeString",
+      "alias": "ADDR1",
+      "length": 100,
+      "domain": null
+    },
+    {
+      "name": "ADDR2",
+      "type": "esriFieldTypeString",
+      "alias": "ADDR2",
+      "length": 100,
+      "domain": null
+    },
+    {
+      "name": "ADDR3",
+      "type": "esriFieldTypeString",
+      "alias": "ADDR3",
+      "length": 100,
+      "domain": null
+    },
+    {
+      "name": "CSZ",
+      "type": "esriFieldTypeString",
+      "alias": "CSZ",
+      "length": 90,
+      "domain": null
+    },
+    {
+      "name": "ACCT_ACREAGE",
+      "type": "esriFieldTypeDouble",
+      "alias": "ACCT_ACREAGE",
+      "domain": null
+    },
+    {
+      "name": "ALT_ACCTNUM",
+      "type": "esriFieldTypeString",
+      "alias": "ALT_ACCTNUM",
+      "length": 15,
+      "domain": null
+    },
+    {
+      "name": "ASSD_VALUE",
+      "type": "esriFieldTypeDouble",
+      "alias": "ASSD_VALUE",
+      "domain": null
+    },
+    {
+      "name": "LAND_MKT_VALUE",
+      "type": "esriFieldTypeDouble",
+      "alias": "LAND_MKT_VALUE",
+      "domain": null
+    },
+    {
+      "name": "MARKET_VALUE",
+      "type": "esriFieldTypeDouble",
+      "alias": "MARKET_VALUE",
+      "domain": null
+    },
+    {
+      "name": "IMPRV_VALUE",
+      "type": "esriFieldTypeDouble",
+      "alias": "IMPRV_VALUE",
+      "domain": null
+    },
+    {
+      "name": "PROPCLASS",
+      "type": "esriFieldTypeString",
+      "alias": "PROPCLASS",
+      "length": 10,
+      "domain": null
+    },
+    {
+      "name": "LEGAL",
+      "type": "esriFieldTypeString",
+      "alias": "LEGAL",
+      "length": 1073741823,
+      "domain": null
+    },
+    {
+      "name": "INST_NO",
+      "type": "esriFieldTypeString",
+      "alias": "INST_NO",
+      "length": 500,
+      "domain": null
+    },
+    {
+      "name": "LOC_CODE",
+      "type": "esriFieldTypeString",
+      "alias": "LOC_CODE",
+      "length": 8,
+      "domain": null
+    },
+    {
+      "name": "MAINTAREA",
+      "type": "esriFieldTypeString",
+      "alias": "MAINTAREA",
+      "length": 5,
+      "domain": null
+    },
+    {
+      "name": "NBHDCODE",
+      "type": "esriFieldTypeString",
+      "alias": "NBHDCODE",
+      "length": 8,
+      "domain": null
+    },
+    {
+      "name": "OWNER_ID",
+      "type": "esriFieldTypeInteger",
+      "alias": "OWNER_ID",
+      "domain": null
+    },
+    {
+      "name": "CODEAREA",
+      "type": "esriFieldTypeString",
+      "alias": "CODEAREA",
+      "length": 10,
+      "domain": null
+    },
+    {
+      "name": "BLOCK",
+      "type": "esriFieldTypeString",
+      "alias": "BLOCK",
+      "length": 255,
+      "domain": null
+    },
+    {
+      "name": "LOT",
+      "type": "esriFieldTypeString",
+      "alias": "LOT",
+      "length": 255,
+      "domain": null
+    },
+    {
+      "name": "SPECINTEREST",
+      "type": "esriFieldTypeString",
+      "alias": "SPECINTEREST",
+      "length": 5,
+      "domain": null
+    },
+    {
+      "name": "MTLACREAGE",
+      "type": "esriFieldTypeDouble",
+      "alias": "MTLACREAGE",
+      "domain": null
+    },
+    {
+      "name": "TotalAcreage",
+      "type": "esriFieldTypeDouble",
+      "alias": "TotalAcreage",
+      "domain": null
+    },
+    {
+      "name": "SaleDate",
+      "type": "esriFieldTypeString",
+      "alias": "SaleDate",
+      "length": 10,
+      "domain": null
+    },
+    {
+      "name": "SitusAddress",
+      "type": "esriFieldTypeString",
+      "alias": "SitusAddress",
+      "length": 50,
+      "domain": null
+    },
+    {
+      "name": "SitusCSZ",
+      "type": "esriFieldTypeString",
+      "alias": "SitusCSZ",
+      "length": 50,
+      "domain": null
+    },
+    {
+      "name": "OBJECTID",
+      "type": "esriFieldTypeOID",
+      "alias": "OBJECTID",
+      "domain": null
+    },
+    {
+      "name": "SHAPE",
+      "type": "esriFieldTypeGeometry",
+      "alias": "SHAPE",
+      "domain": null
+    }
+  ],
+  "geometryField": {
+    "name": "SHAPE",
+    "type": "esriFieldTypeGeometry",
+    "alias": "SHAPE"
+  },
+  "indexes": [
+    {
+      "name": "R07_pk",
+      "fields": "OBJECTID",
+      "isAscending": true,
+      "isUnique": true,
+      "description": ""
+    },
+    {
+      "name": "SHAPE_INDEX",
+      "fields": "SHAPE",
+      "isAscending": true,
+      "isUnique": false,
+      "description": ""
+    },
+    {
+      "name": "FDO_OBJECTID",
+      "fields": "OBJECTID",
+      "isAscending": true,
+      "isUnique": true,
+      "description": ""
+    }
+  ],
+  "subtypes": [],
+  "relationships": [],
+  "canModifyLayer": true,
+  "canScaleSymbols": false,
+  "hasLabels": false,
+  "capabilities": "Query,Map,Data",
+  "maxRecordCount": 2000,
+  "maxSelectionCount": 2000,
+  "supportsStatistics": true,
+  "supportsExceedsLimitStatistics": true,
+  "supportsAdvancedQueries": true,
+  "hasZ": true,
+  "supportedQueryFormats": "JSON, geoJSON, PBF",
+  "isDataVersioned": false,
+  "ownershipBasedAccessControlForFeatures": {
+    "allowOthersToQuery": true
+  },
+  "useStandardizedQueries": true,
+  "supportedSpatialRelationships": [
+    "esriSpatialRelIntersects",
+    "esriSpatialRelContains",
+    "esriSpatialRelCrosses",
+    "esriSpatialRelEnvelopeIntersects",
+    "esriSpatialRelIndexIntersects",
+    "esriSpatialRelOverlaps",
+    "esriSpatialRelTouches",
+    "esriSpatialRelWithin",
+    "esriSpatialRelRelation"
+  ],
+  "advancedQueryCapabilities": {
+    "useStandardizedQueries": true,
+    "supportsStatistics": true,
+    "supportsPercentileStatistics": true,
+    "supportsHavingClause": true,
+    "supportsOrderBy": true,
+    "supportsDistinct": true,
+    "supportsCountDistinct": true,
+    "supportsAdvancedQueryRelated": true,
+    "supportsQueryRelatedPagination": true,
+    "supportsPagination": true,
+    "supportsLod": false,
+    "supportsQueryWithLodSR": false,
+    "supportsTrueCurve": true,
+    "supportsQueryWithDatumTransformation": true,
+    "supportsReturningQueryExtent": true,
+    "supportsQueryWithDistance": true,
+    "supportsSqlExpression": true,
+    "supportsTimeRelation": true,
+    "supportsSqlFormat": false,
+    "supportsQueryAnalytic": true,
+    "supportsCurrentUserQueries": true
+  },
+  "supportsDatumTransformation": true,
+  "advancedQueryAnalyticCapabilities": {
+    "supportsLinearRegression": true,
+    "supportsAsync": false,
+    "supportsPercentileAnalytic": true
+  },
+  "dateFieldsTimeReference": null,
+  "preferredTimeReference": null,
+  "datesInUnknownTimezone": false,
+  "hasMetadata": true,
+  "isDataArchived": false,
+  "archivingInfo": {
+    "supportsQueryWithHistoricMoment": false,
+    "startArchivingMoment": -1
+  },
+  "supportsCoordinatesQuantization": true,
+  "supportsDynamicLegends": true,
+  "uniqueIdInfo": {
+    "type": "simple",
+    "fields": [
+      "OBJECTID"
+    ],
+    "OIDFieldContainsHashValue": false
+  },
+  "maxUniqueIDCount": 100000,
+  "serviceItemId": "3669ec71741f47e0a8463706ccc8d3c6"
+}

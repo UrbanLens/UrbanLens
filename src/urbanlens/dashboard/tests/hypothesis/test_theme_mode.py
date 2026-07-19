@@ -10,7 +10,7 @@ from __future__ import annotations
 from hypothesis import HealthCheck, given, settings, strategies as st
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.forms.settings_form import StyleSettingsForm
 from urbanlens.dashboard.models.profile.meta import DistanceUnit
 from urbanlens.dashboard.models.profile.model import GuidanceLevel, Profile, ThemeChoice
@@ -31,7 +31,7 @@ def _profile() -> Profile:
 # -- ThemeChoice enum ----------------------------------------------------------
 
 
-class ThemeChoiceEnumTests(TestCase):
+class ThemeChoiceEnumTests(SimpleTestCase):
     """ThemeChoice must contain exactly the three expected values."""
 
     def test_system_is_a_valid_choice(self) -> None:

@@ -22,7 +22,7 @@ from django.utils.dateformat import format as format_date
 from hypothesis import given, settings, strategies as st
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.markup.model import MarkupMap, PinMarkup
 from urbanlens.dashboard.services.map_snapshot import default_markup_map_title, materialize_markup_map, sanitize_map_data
 
@@ -45,7 +45,7 @@ def _shape(shape_type: str, latlngs: list, **extra) -> dict:
     return base
 
 
-class ShapeRoundTripTests(TestCase):
+class ShapeRoundTripTests(SimpleTestCase):
     """from_snapshot_shape → to_snapshot_shape preserves the drawing."""
 
     @settings(max_examples=25, deadline=None)
@@ -135,7 +135,7 @@ class ShapeRoundTripTests(TestCase):
         self.assertEqual(result["label"], "path")
 
 
-class SanitizeLayerFieldsTests(TestCase):
+class SanitizeLayerFieldsTests(SimpleTestCase):
     """sanitize_map_data whitelists layer_mode and coerces show_borders."""
 
     def test_valid_layer_modes_pass(self) -> None:

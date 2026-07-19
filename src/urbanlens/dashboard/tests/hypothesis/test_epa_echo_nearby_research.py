@@ -19,7 +19,7 @@ from unittest import mock
 from django.contrib.auth.models import User
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.plugins.builtin.epa_echo import (
     _EXACT_MATCH_BUDGET_SECONDS,
     EpaEchoDetailPanelSource,
@@ -35,7 +35,7 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
 
 
-class MilesBetweenTests(TestCase):
+class MilesBetweenTests(SimpleTestCase):
     def test_same_point_is_zero_distance(self) -> None:
         self.assertAlmostEqual(_miles_between(40.0, -74.0, 40.0, -74.0), 0.0, places=6)
 
@@ -44,7 +44,7 @@ class MilesBetweenTests(TestCase):
         self.assertAlmostEqual(_miles_between(0.0, 0.0, 0.0, 1.0), 69.17, delta=0.5)
 
 
-class NormalizeFacilityLatitudeTests(TestCase):
+class NormalizeFacilityLatitudeTests(SimpleTestCase):
     """EpaEchoGateway._normalize_facility's 'latitude' field - used to prioritize
     which candidates the exact-match loop spends its rate-limited DFR lookups on
     (see _fetch_epa_echo_data)."""

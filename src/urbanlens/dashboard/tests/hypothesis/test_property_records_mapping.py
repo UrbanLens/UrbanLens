@@ -13,13 +13,13 @@ from __future__ import annotations
 
 from hypothesis import given, strategies as st
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.apis.property_records.field_mapping import SQFT_PER_ACRE, map_fields
 from urbanlens.dashboard.services.apis.property_records.normalize import TIER1_CONFIDENCE, _split_owner_names, _to_date, _to_float, build_property_record
 from urbanlens.dashboard.services.apis.property_records.schema import AssessedValue, PropertyRecord, RecordSource
 
 
-class MapFieldsHeuristicTests(TestCase):
+class MapFieldsHeuristicTests(SimpleTestCase):
     def test_resolves_common_apn_spelling(self) -> None:
         mapped = map_fields({"PARCELID": "123-456", "OTHER": "x"})
         self.assertEqual(mapped["apn"], "123-456")
@@ -65,7 +65,7 @@ class MapFieldsHeuristicTests(TestCase):
         self.assertAlmostEqual(mapped["lot_size_sqft"], acres * SQFT_PER_ACRE)
 
 
-class SplitOwnerNamesTests(TestCase):
+class SplitOwnerNamesTests(SimpleTestCase):
     def test_single_owner_is_a_one_item_tuple(self) -> None:
         self.assertEqual(_split_owner_names("Jane Smith"), ("Jane Smith",))
 
@@ -82,7 +82,7 @@ class SplitOwnerNamesTests(TestCase):
         self.assertEqual(_split_owner_names(None), ())
 
 
-class ToDateTests(TestCase):
+class ToDateTests(SimpleTestCase):
     def test_arcgis_epoch_milliseconds_is_parsed(self) -> None:
         # 2020-01-01T00:00:00Z in epoch ms.
         self.assertEqual(_to_date(1577836800000).isoformat(), "2020-01-01")
@@ -100,7 +100,7 @@ class ToDateTests(TestCase):
         self.assertIsNone(_to_date(None))
 
 
-class ToFloatTests(TestCase):
+class ToFloatTests(SimpleTestCase):
     @given(st.one_of(st.text(), st.none(), st.booleans(), st.dictionaries(st.text(), st.text())))
     def test_never_raises_regardless_of_input_type(self, value) -> None:
         _to_float(value)  # Only asserting this doesn't raise.
@@ -109,7 +109,7 @@ class ToFloatTests(TestCase):
         self.assertEqual(_to_float("1234.5"), 1234.5)
 
 
-class BuildPropertyRecordTests(TestCase):
+class BuildPropertyRecordTests(SimpleTestCase):
     def _jurisdiction(self, **overrides):
         from urbanlens.dashboard.models.property_jurisdiction.model import PropertyJurisdiction
 
@@ -158,7 +158,7 @@ class BuildPropertyRecordTests(TestCase):
         self.assertEqual(record.owner_name, ("Bob Jones",))
 
 
-class PropertyRecordToDictTests(TestCase):
+class PropertyRecordToDictTests(SimpleTestCase):
     def test_to_dict_is_json_serializable_shape(self) -> None:
         import json
 

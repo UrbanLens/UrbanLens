@@ -7,7 +7,7 @@ from __future__ import annotations
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.ai.functions import estimate_combined_tokens, estimate_tokens
 from urbanlens.dashboard.services.ai.message import AssistantMessage, MessageQueue, SystemMessage, UserMessage
 from urbanlens.dashboard.services.ai.meta import MAX_TOKENS, SHORTEST_MESSAGE
@@ -27,7 +27,7 @@ _sentence = st.lists(_word, min_size=1, max_size=20).map(" ".join)
 
 # -- estimate_tokens ------------------------------------------------------------
 
-class EstimateTokensTests(TestCase):
+class EstimateTokensTests(SimpleTestCase):
     """estimate_tokens produces a non-negative integer approximation."""
 
     def test_empty_string_returns_zero(self) -> None:
@@ -79,7 +79,7 @@ class EstimateTokensTests(TestCase):
 
 # -- estimate_combined_tokens ---------------------------------------------------
 
-class EstimateCombinedTokensTests(TestCase):
+class EstimateCombinedTokensTests(SimpleTestCase):
     """estimate_combined_tokens sums token counts across all messages."""
 
     def test_empty_list_returns_zero(self) -> None:
@@ -113,7 +113,7 @@ class EstimateCombinedTokensTests(TestCase):
 
 # -- MessageQueue.__init__ and add_message --------------------------------------
 
-class MessageQueueInitTests(TestCase):
+class MessageQueueInitTests(SimpleTestCase):
     """MessageQueue initialises with an empty list and the given max_tokens."""
 
     def test_starts_empty(self) -> None:
@@ -129,7 +129,7 @@ class MessageQueueInitTests(TestCase):
         self.assertEqual(q.max_tokens, 500)
 
 
-class MessageQueueAddMessageTests(TestCase):
+class MessageQueueAddMessageTests(SimpleTestCase):
     """add_message stores typed dicts with the correct role."""
 
     def test_user_role_is_default(self) -> None:
@@ -182,7 +182,7 @@ class MessageQueueAddMessageTests(TestCase):
 
 # -- MessageQueue sequence protocol --------------------------------------------
 
-class MessageQueueSequenceTests(TestCase):
+class MessageQueueSequenceTests(SimpleTestCase):
     """MessageQueue supports __iter__, __len__, __getitem__, __setitem__, __delitem__."""
 
     def _filled(self) -> MessageQueue:
@@ -231,7 +231,7 @@ class MessageQueueSequenceTests(TestCase):
 
 # -- MessageQueue.estimate_tokens -----------------------------------------------
 
-class MessageQueueEstimateTokensTests(TestCase):
+class MessageQueueEstimateTokensTests(SimpleTestCase):
     """estimate_tokens on the queue returns the combined token count."""
 
     def test_empty_queue_returns_zero(self) -> None:

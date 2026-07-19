@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from hypothesis import given, strategies as st
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.services.locations.naming import is_meaningful_name
 
@@ -23,7 +23,7 @@ def _location(**kwargs) -> Location:
     return Location(latitude="42.650000", longitude="-73.750000", **kwargs)
 
 
-class AreaLabelTests(TestCase):
+class AreaLabelTests(SimpleTestCase):
     """Location.area_label builds a short human-readable area string."""
 
     def test_usa_city_state(self):
@@ -62,7 +62,7 @@ class AreaLabelTests(TestCase):
         self.assertIn(city, label)
 
 
-class UnnamedDisplayNameTests(TestCase):
+class UnnamedDisplayNameTests(SimpleTestCase):
     """display_name falls back to 'Unnamed Location in {area}'."""
 
     def test_unnamed_with_area(self):
@@ -77,7 +77,7 @@ class UnnamedDisplayNameTests(TestCase):
         self.assertEqual(loc.display_name, "Old Mill")
 
 
-class PlaceholderMeaningfulnessTests(TestCase):
+class PlaceholderMeaningfulnessTests(SimpleTestCase):
     """The area-suffixed placeholder must never count as a meaningful name."""
 
     def test_plain_placeholder_not_meaningful(self):

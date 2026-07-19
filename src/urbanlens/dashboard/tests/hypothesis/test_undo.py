@@ -10,7 +10,7 @@ from django.utils import timezone
 from model_bakery import baker
 import pytest
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.labels.meta import KIND_TAG
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.model import Pin
@@ -119,7 +119,7 @@ class UndoServiceTests(TestCase):
             get_handler("not_a_real_model")
 
 
-class DescribeBatchTests(TestCase):
+class DescribeBatchTests(SimpleTestCase):
     """describe_batch() names actual items instead of just a bare count for batches."""
 
     def test_single_item_uses_singular_label(self) -> None:

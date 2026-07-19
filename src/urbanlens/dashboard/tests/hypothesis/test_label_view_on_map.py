@@ -15,14 +15,14 @@ from django.contrib.auth.models import User
 from django.urls import reverse
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_STATUS, KIND_TAG, KIND_USER
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.templatetags.dashboard_tags import label_map_url
 
 
-class LabelMapUrlFilterTests(TestCase):
+class LabelMapUrlFilterTests(SimpleTestCase):
     def test_builds_a_single_or_group_for_the_label_id(self) -> None:
         url = label_map_url(42)
         parsed = urlparse(url)

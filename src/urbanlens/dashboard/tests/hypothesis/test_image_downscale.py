@@ -19,7 +19,7 @@ from django.test import override_settings
 from PIL import Image as PILImage
 from PIL.TiffImagePlugin import IFDRational
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.services.images import _json_safe, downscale_stored_image, extract_exif_data
 
@@ -51,7 +51,7 @@ def _make_image_row(content: bytes, name: str = "photo.jpg") -> Image:
     return Image.objects.create(image=SimpleUploadedFile(name, content, content_type="image/jpeg"), profile=profile)
 
 
-class JsonSafeTests(TestCase):
+class JsonSafeTests(SimpleTestCase):
     """_json_safe() reduces EXIF values to JSON-serializable types."""
 
     def test_scalars_pass_through(self):

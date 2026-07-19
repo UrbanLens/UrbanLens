@@ -13,7 +13,7 @@ from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.services.videos import (
     _parse_iso6709,
@@ -23,7 +23,7 @@ from urbanlens.dashboard.services.videos import (
 )
 
 
-class FfmpegAvailableTests(TestCase):
+class FfmpegAvailableTests(SimpleTestCase):
     def test_true_when_both_binaries_found(self) -> None:
         with patch("shutil.which", return_value="/usr/bin/ffmpeg"):
             self.assertTrue(ffmpeg_available())
@@ -33,7 +33,7 @@ class FfmpegAvailableTests(TestCase):
             self.assertFalse(ffmpeg_available())
 
 
-class ParseIso6709Tests(TestCase):
+class ParseIso6709Tests(SimpleTestCase):
     def test_parses_positive_and_negative(self) -> None:
         self.assertEqual(_parse_iso6709("+40.6892-074.0445/"), (40.6892, -74.0445))
 
@@ -47,7 +47,7 @@ class ParseIso6709Tests(TestCase):
         self.assertIsNone(_parse_iso6709(""))
 
 
-class ExtractVideoMetadataTests(TestCase):
+class ExtractVideoMetadataTests(SimpleTestCase):
     def test_no_ffmpeg_returns_empty(self) -> None:
         with patch("urbanlens.dashboard.services.videos.ffmpeg_available", return_value=False):
             self.assertEqual(extract_video_metadata("video.mp4"), {})

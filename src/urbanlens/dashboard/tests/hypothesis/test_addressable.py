@@ -8,7 +8,7 @@ from __future__ import annotations
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.models.location.model import Location
 
 
@@ -38,7 +38,7 @@ def _loc(**kwargs) -> Location:
 
 # -- address property -----------------------------------------------------------
 
-class AddressPropertyTests(TestCase):
+class AddressPropertyTests(SimpleTestCase):
     """AddressableMixin.address builds from street_number, route, locality, state, zipcode."""
 
     def test_all_fields_present(self) -> None:
@@ -113,7 +113,7 @@ class AddressPropertyTests(TestCase):
 
 # -- address_basic property ----------------------------------------------------
 
-class AddressBasicPropertyTests(TestCase):
+class AddressBasicPropertyTests(SimpleTestCase):
     """AddressableMixin.address_basic - only street_number and route."""
 
     def test_both_fields_present(self) -> None:
@@ -156,7 +156,7 @@ class AddressBasicPropertyTests(TestCase):
 
 # -- address_extended property -------------------------------------------------
 
-class AddressExtendedPropertyTests(TestCase):
+class AddressExtendedPropertyTests(SimpleTestCase):
     """AddressableMixin.address_extended - street with city, no state/zip."""
 
     def test_all_three_fields_present(self) -> None:
@@ -191,7 +191,7 @@ class AddressExtendedPropertyTests(TestCase):
 
 # -- Proxy properties and setters ---------------------------------------------
 
-class ProxyPropertyTests(TestCase):
+class ProxyPropertyTests(SimpleTestCase):
     """state, county, and city are thin proxies for administrative_area fields."""
 
     def test_state_getter_reads_level_1(self) -> None:

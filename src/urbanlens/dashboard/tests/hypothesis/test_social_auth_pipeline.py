@@ -15,7 +15,7 @@ from unittest.mock import patch
 from django.contrib.auth.models import User
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.services.social_auth.pipeline import (
     _sanitize_sso_username,
     fetch_and_save_avatar,
@@ -181,7 +181,7 @@ class GenerateSsoUsernameTests(TestCase):
         self.assertTrue(result["username"])
 
 
-class SanitizeSsoUsernameTests(TestCase):
+class SanitizeSsoUsernameTests(SimpleTestCase):
     """Edge cases of the provider-handle normalizer (pure function)."""
 
     def test_email_uses_local_part_with_dots_converted(self) -> None:

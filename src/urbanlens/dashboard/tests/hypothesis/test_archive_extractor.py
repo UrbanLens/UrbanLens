@@ -18,7 +18,7 @@ import zipfile
 
 from hypothesis import given, settings as hyp_settings, strategies as st
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.archive_extractor import (
     _extension,
     _safe_basename,
@@ -58,7 +58,7 @@ def _make_tgz(files: dict[str, bytes]) -> bytes:
 # is_archive
 # ---------------------------------------------------------------------------
 
-class IsArchiveTests(TestCase):
+class IsArchiveTests(SimpleTestCase):
     """is_archive() identifies ZIP and GZIP magic bytes."""
 
     def test_zip_magic_detected(self):
@@ -93,7 +93,7 @@ class IsArchiveTests(TestCase):
 # _safe_basename
 # ---------------------------------------------------------------------------
 
-class SafeBasenameTests(TestCase):
+class SafeBasenameTests(SimpleTestCase):
     """_safe_basename rejects path-traversal and absolute paths."""
 
     def test_simple_filename(self):
@@ -120,7 +120,7 @@ class SafeBasenameTests(TestCase):
 # _extension
 # ---------------------------------------------------------------------------
 
-class ExtensionTests(TestCase):
+class ExtensionTests(SimpleTestCase):
     """_extension returns lowercase extension without leading dot."""
 
     def test_json_extension(self):
@@ -143,7 +143,7 @@ class ExtensionTests(TestCase):
 # validate_content_type
 # ---------------------------------------------------------------------------
 
-class ValidateContentTypeTests(TestCase):
+class ValidateContentTypeTests(SimpleTestCase):
     """validate_content_type identifies format from file content."""
 
     def test_geojson_features_returns_json(self):
@@ -283,7 +283,7 @@ class ValidateContentTypeTests(TestCase):
 # extract_archive - ZIP
 # ---------------------------------------------------------------------------
 
-class ExtractZipTests(TestCase):
+class ExtractZipTests(SimpleTestCase):
     """extract_archive handles ZIP archives correctly."""
 
     def test_extracts_json_file(self):
@@ -382,7 +382,7 @@ class ExtractZipTests(TestCase):
 # extract_archive - TGZ
 # ---------------------------------------------------------------------------
 
-class ExtractTgzTests(TestCase):
+class ExtractTgzTests(SimpleTestCase):
     """extract_archive handles TGZ archives correctly."""
 
     def test_extracts_json_file(self):
@@ -438,7 +438,7 @@ class ExtractTgzTests(TestCase):
 # extract_archive - format dispatch
 # ---------------------------------------------------------------------------
 
-class ExtractArchiveDispatchTests(TestCase):
+class ExtractArchiveDispatchTests(SimpleTestCase):
     """extract_archive raises ValueError for unrecognised format."""
 
     def test_plain_text_raises(self):

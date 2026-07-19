@@ -15,14 +15,14 @@ import shapely.geometry
 import shapely.wkb
 import shapely.wkt
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.import_formats.wkt_wkb import wkb_to_dict, wkt_to_dict
 
 _hyp = hyp_settings(max_examples=40, deadline=None)
 _SAMPLE_DATA_DIR = Path(__file__).resolve().parents[5] / "sample_data"
 
 
-class WktToDictTests(TestCase):
+class WktToDictTests(SimpleTestCase):
     """wkt_to_dict() extracts one pin per valid geometry line."""
 
     def setUp(self):
@@ -88,7 +88,7 @@ class WktToDictTests(TestCase):
         self.assertAlmostEqual(pins[0]["latitude"], lat, places=5)
 
 
-class WkbToDictTests(TestCase):
+class WkbToDictTests(SimpleTestCase):
     """wkb_to_dict() handles both raw binary and hex-encoded WKB."""
 
     def setUp(self):

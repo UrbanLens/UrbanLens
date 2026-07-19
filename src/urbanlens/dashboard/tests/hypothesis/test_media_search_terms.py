@@ -11,7 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.services.apis.assets.base import MediaItem, MediaProvider
@@ -60,7 +60,7 @@ def _pin(location: Location) -> Pin:
     return pin
 
 
-class MediaPanelSourceSearchTermsRejectAddressDerivedTests(TestCase):
+class MediaPanelSourceSearchTermsRejectAddressDerivedTests(SimpleTestCase):
     """search_terms() skips a provider entirely for a pin with only an address-derived name."""
 
     def test_address_derived_only_name_yields_no_terms_when_rejected(self) -> None:
@@ -83,7 +83,7 @@ class MediaPanelSourceSearchTermsRejectAddressDerivedTests(TestCase):
         self.assertIn("Riverside Mill", terms[0])
 
 
-class MediaPanelSourceSearchTermsIncludeAddressTests(TestCase):
+class MediaPanelSourceSearchTermsIncludeAddressTests(SimpleTestCase):
     """include_address=False drops a genuinely separate street address from the query."""
 
     def test_include_address_false_omits_the_address_when_name_is_distinct(self) -> None:
@@ -96,7 +96,7 @@ class MediaPanelSourceSearchTermsIncludeAddressTests(TestCase):
         self.assertIn("Riverside Mill", without_address[0])
 
 
-class LOCJsonGatewayRelevanceFlagsTests(TestCase):
+class LOCJsonGatewayRelevanceFlagsTests(SimpleTestCase):
     """Regression guard for LOC's specific configuration."""
 
     def test_reject_address_derived_names_is_enabled(self) -> None:
@@ -111,7 +111,7 @@ class LOCJsonGatewayRelevanceFlagsTests(TestCase):
         self.assertFalse(_BareGateway.reject_address_derived_names)
 
 
-class InternetArchiveGatewayRelevanceFlagsTests(TestCase):
+class InternetArchiveGatewayRelevanceFlagsTests(SimpleTestCase):
     """Regression guard: Internet Archive has the same word-independent-OR
     relevance ranking symptom as LOC (a generic street-type word like "Road"
     coincidentally matches unrelated nationwide items), fixed the same way."""

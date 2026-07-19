@@ -11,7 +11,7 @@ from hypothesis import settings as hyp_settings
 from hypothesis import strategies as st
 from requests import HTTPError
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.apis.search.duckduckgo import DuckDuckGoError, DuckDuckGoGateway
 
 _hyp = hyp_settings(max_examples=50, deadline=None)
@@ -24,7 +24,7 @@ def _make_gw() -> DuckDuckGoGateway:
     return gw
 
 
-class DuckDuckGoParseTests(TestCase):
+class DuckDuckGoParseTests(SimpleTestCase):
     """_parse converts the Instant Answer JSON structure to normalised dicts."""
 
     def setUp(self):
@@ -76,7 +76,7 @@ class DuckDuckGoParseTests(TestCase):
         self.assertEqual(len(result), len(texts))
 
 
-class DuckDuckGoHTTPTests(TestCase):
+class DuckDuckGoHTTPTests(SimpleTestCase):
     """search() sends the correct request and handles HTTP errors."""
 
     def _gw_with_response(self, status: int = 200, body: dict | None = None) -> tuple[DuckDuckGoGateway, MagicMock]:

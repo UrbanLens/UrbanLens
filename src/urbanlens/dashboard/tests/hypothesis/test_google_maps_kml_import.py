@@ -14,7 +14,7 @@ from __future__ import annotations
 from hypothesis import given, settings as hyp_settings
 from hypothesis import strategies as st
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
 
 _hyp = hyp_settings(max_examples=40, deadline=None)
@@ -44,7 +44,7 @@ def _kml_bytes(body: str) -> bytes:
     return _KML_TEMPLATE.format(body=body).encode("utf-8")
 
 
-class TakeoutKmlToDictTests(TestCase):
+class TakeoutKmlToDictTests(SimpleTestCase):
     """takeout_kml_to_dict() extracts pins regardless of encoding declaration or nesting depth."""
 
     def setUp(self):

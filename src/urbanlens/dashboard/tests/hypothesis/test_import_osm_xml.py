@@ -11,7 +11,7 @@ from pathlib import Path
 
 from hypothesis import given, settings as hyp_settings, strategies as st
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.import_formats.osm_xml import osm_xml_to_dict
 
 _hyp = hyp_settings(max_examples=40, deadline=None)
@@ -22,7 +22,7 @@ def _osm_bytes(body: str) -> bytes:
     return f'<?xml version="1.0"?><osm version="0.6">{body}</osm>'.encode()
 
 
-class OsmXmlToDictTests(TestCase):
+class OsmXmlToDictTests(SimpleTestCase):
     """osm_xml_to_dict() extracts pins from tagged nodes and ways only."""
 
     def setUp(self):

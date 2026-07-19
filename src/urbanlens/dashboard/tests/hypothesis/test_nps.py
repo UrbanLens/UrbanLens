@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.apis.parks.nps.map import NPSMapGateway
 from urbanlens.dashboard.services.apis.parks.nps.parks import NPSGateway
 
@@ -38,7 +38,7 @@ def _parks_gateway() -> NPSGateway:
     return NPSGateway(api_key="test-key", session=MagicMock())
 
 
-class CheckCoordinatesWithinParkTests(TestCase):
+class CheckCoordinatesWithinParkTests(SimpleTestCase):
     """check_coordinates_within_park returns the containing unit's lower-cased code."""
 
     def test_returns_lowercased_unit_code_for_containing_park(self):
@@ -73,7 +73,7 @@ class CheckCoordinatesWithinParkTests(TestCase):
         self.assertEqual(params["geometry"], "-110.5,44.6")
 
 
-class FindParkContainingLocationTests(TestCase):
+class FindParkContainingLocationTests(SimpleTestCase):
     """find_park_containing_location returns details only for a park the point is inside."""
 
     def test_returns_none_and_skips_lookup_outside_usa(self):
@@ -133,7 +133,7 @@ class FindParkContainingLocationTests(TestCase):
         self.assertTrue(any("rate limit" in message.lower() for message in logs.output))
 
 
-class GetParkTests(TestCase):
+class GetParkTests(SimpleTestCase):
     """get_park fetches a single park's detail by park code."""
 
     def test_returns_first_park_on_success(self):

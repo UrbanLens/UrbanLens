@@ -18,7 +18,7 @@ from django.db.models import Q
 from hypothesis import given, settings as hypothesis_settings, strategies as st
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.api_call_log.model import ApiCallLog
 from urbanlens.dashboard.models.api_rate_limit.model import ApiRateLimit
 from urbanlens.dashboard.models.cache.location_cache import LocationCache
@@ -49,7 +49,7 @@ def _make_location(lat: str = "42.650000", lng: str = "-73.750000", **kwargs) ->
     return baker.make(Location, latitude=lat, longitude=lng, google_place=None, **kwargs)
 
 
-class EnrichmentWindowTests(TestCase):
+class EnrichmentWindowTests(SimpleTestCase):
     """enrichment_window_open - the admin-scheduled UTC run window."""
 
     @hypothesis_settings(max_examples=60, deadline=None)
@@ -363,7 +363,7 @@ class RunEnrichmentCycleTests(TestCase):
         self.assertEqual(summary["names_refreshed"], 1)
 
 
-class EnrichmentSourceRegistryTests(TestCase):
+class EnrichmentSourceRegistryTests(SimpleTestCase):
     """enrichment_sources - core sources plus plugin contributions."""
 
     def test_core_and_plugin_sources_are_registered(self) -> None:

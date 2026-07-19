@@ -13,14 +13,14 @@ import types
 
 from django.template.loader import render_to_string
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase
 
 _STREET_VIEW_SLIDE = {"source": "google", "date": "2024", "heading": None, "latitude": 41.0, "longitude": -73.0, "img_src": "https://example.com/a.jpg"}
 _SATELLITE_SLIDE = {"source": "esri", "date": "2024", "detail": "High-res", "img_src": "https://example.com/a.jpg"}
 _FAKE_PIN = types.SimpleNamespace(effective_latitude=None, effective_longitude=None)
 
 
-class StreetViewCarouselArrowTests(TestCase):
+class StreetViewCarouselArrowTests(SimpleTestCase):
     def test_arrows_hidden_with_a_single_slide(self) -> None:
         html = render_to_string("dashboard/pages/location/street_view.html", {"slides": [_STREET_VIEW_SLIDE], "debug_entries": []})
         self.assertNotIn("sv-prev", html)
@@ -32,7 +32,7 @@ class StreetViewCarouselArrowTests(TestCase):
         self.assertIn("sv-next", html)
 
 
-class StreetViewInteractiveEmbedTests(TestCase):
+class StreetViewInteractiveEmbedTests(SimpleTestCase):
     """The interactive Google Street View embed must only render when the FIRST
     slide is actually a Google-sourced slide - it used to trigger for any
     provider's coordinates just because an api key was configured, which meant
@@ -62,7 +62,7 @@ class StreetViewInteractiveEmbedTests(TestCase):
         self.assertRegex(html, r'class="sv-img sv-img--fallback"\s+hidden\s+alt="Google Street View')
 
 
-class SatelliteViewCarouselArrowTests(TestCase):
+class SatelliteViewCarouselArrowTests(SimpleTestCase):
     def test_arrows_hidden_with_a_single_slide(self) -> None:
         html = render_to_string("dashboard/pages/location/satellite_view.html", {"slides": [_SATELLITE_SLIDE], "debug_entries": []})
         self.assertNotIn("sat-prev", html)

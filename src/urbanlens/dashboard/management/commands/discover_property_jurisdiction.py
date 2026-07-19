@@ -31,6 +31,7 @@ from urbanlens.dashboard.services.apis.property_records.discovery import (
     discover_tier3_recipe,
 )
 from urbanlens.dashboard.services.apis.property_records.html_scrape import recipe_to_dict
+from urbanlens.dashboard.services.rate_limiter import RequestCancelledError
 
 
 class Command(BaseCommand):
@@ -63,7 +64,14 @@ class Command(BaseCommand):
 
         found = 0
         for jurisdiction in queryset:
-            result = discover_tier1_endpoint(jurisdiction, allow_ai=not options["no_ai"])
+            try:
+                result = discover_tier1_endpoint(jurisdiction, allow_ai=not options["no_ai"])
+            except RequestCancelledError as exc:
+                # Discovery's probes run through rate-limited sessions; once a
+                # service budget is exhausted, stop the run cleanly instead of
+                # burning the remaining jurisdictions on guaranteed failures.
+                self.stdout.write(self.style.WARNING(f"Stopping early - rate limit reached: {exc}"))
+                break
             if result is None:
                 self.stdout.write(f"  [{jurisdiction.fips}] {jurisdiction.county_name}, {jurisdiction.state}: nothing found.")
             else:
@@ -89,7 +97,11 @@ class Command(BaseCommand):
 
         found = 0
         for jurisdiction in queryset:
-            recipe = discover_tier3_recipe(jurisdiction)
+            try:
+                recipe = discover_tier3_recipe(jurisdiction)
+            except RequestCancelledError as exc:
+                self.stdout.write(self.style.WARNING(f"Stopping early - rate limit reached: {exc}"))
+                break
             if recipe is None:
                 self.stdout.write(f"  [{jurisdiction.fips}] {jurisdiction.county_name}, {jurisdiction.state}: nothing found.")
             else:

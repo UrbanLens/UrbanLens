@@ -11,7 +11,7 @@ from __future__ import annotations
 from django.urls import reverse
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.services.avatar_colors import PALETTE_SIZE, assign_avatar_colors
 from urbanlens.dashboard.services.group_chats import create_group_chat
@@ -30,7 +30,7 @@ class _Item:
         self.identity = identity
 
 
-class AssignAvatarColorsTests(TestCase):
+class AssignAvatarColorsTests(SimpleTestCase):
     """Pure algorithm: deterministic per-identity, collision-free within one call."""
 
     def test_same_identity_always_gets_the_same_color(self) -> None:

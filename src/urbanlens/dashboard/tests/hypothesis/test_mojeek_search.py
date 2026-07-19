@@ -11,7 +11,7 @@ from hypothesis import settings as hyp_settings
 from hypothesis import strategies as st
 from requests import HTTPError
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.apis.search.mojeek import MojeekError, MojeekGateway
 
 _hyp = hyp_settings(max_examples=50, deadline=None)
@@ -25,7 +25,7 @@ def _make_gw(api_key: str | None = "test-key") -> MojeekGateway:
     return gw
 
 
-class MojeekValidateTests(TestCase):
+class MojeekValidateTests(SimpleTestCase):
     """search() raises MojeekError when the API key is missing."""
 
     def test_none_key_raises(self):
@@ -42,7 +42,7 @@ class MojeekValidateTests(TestCase):
         self.assertIn("UL_MOJEEK_API_KEY", str(ctx.exception))
 
 
-class MojeekParseTests(TestCase):
+class MojeekParseTests(SimpleTestCase):
     """_parse converts the Mojeek JSON structure to normalised dicts."""
 
     def setUp(self):
@@ -73,7 +73,7 @@ class MojeekParseTests(TestCase):
         self.assertEqual(len(result), len(titles))
 
 
-class MojeekHTTPTests(TestCase):
+class MojeekHTTPTests(SimpleTestCase):
     """search() sends the correct request and handles HTTP errors."""
 
     def _gw_with_response(self, status: int = 200, body: dict | None = None) -> tuple[MojeekGateway, MagicMock]:

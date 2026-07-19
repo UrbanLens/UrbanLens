@@ -11,7 +11,7 @@ from django import forms as django_forms
 from hypothesis import given, settings, strategies as st
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.forms.profile_form import (
     DiscordHandleForm,
     ProfileForm,
@@ -41,7 +41,7 @@ def _past_date(years_ago: int) -> date:
 
 # -- validate_birth_date -------------------------------------------------------
 
-class ValidateBirthDateTests(TestCase):
+class ValidateBirthDateTests(SimpleTestCase):
     """validate_birth_date returns None for valid dates and an error string otherwise."""
 
     def test_none_input_returns_none(self) -> None:
@@ -107,7 +107,7 @@ class ValidateBirthDateTests(TestCase):
 
 # -- validate_started_exploring ------------------------------------------------
 
-class ValidateStartedExploringTests(TestCase):
+class ValidateStartedExploringTests(SimpleTestCase):
     """validate_started_exploring returns None for past/present dates and an error for future."""
 
     def test_none_input_returns_none(self) -> None:

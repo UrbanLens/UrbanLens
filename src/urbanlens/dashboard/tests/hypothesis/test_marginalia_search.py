@@ -11,7 +11,7 @@ from hypothesis import settings as hyp_settings
 from hypothesis import strategies as st
 from requests import HTTPError
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.apis.search.marginalia import (
     PUBLIC_TEST_API_KEY,
     MarginaliaError,
@@ -29,7 +29,7 @@ def _make_gw(api_key: str | None = "test-key") -> MarginaliaGateway:
     return gw
 
 
-class MarginaliaConfigTests(TestCase):
+class MarginaliaConfigTests(SimpleTestCase):
     """No API key is required - the shared 'public' key is documented as the fallback."""
 
     def test_post_init_falls_back_to_public_key(self):
@@ -47,7 +47,7 @@ class MarginaliaConfigTests(TestCase):
         self.assertEqual(gw.api_key, PUBLIC_TEST_API_KEY)
 
 
-class MarginaliaParseTests(TestCase):
+class MarginaliaParseTests(SimpleTestCase):
     """_parse converts the Marginalia JSON structure to normalised dicts."""
 
     def setUp(self):
@@ -78,7 +78,7 @@ class MarginaliaParseTests(TestCase):
         self.assertEqual(len(result), len(titles))
 
 
-class MarginaliaHTTPTests(TestCase):
+class MarginaliaHTTPTests(SimpleTestCase):
     """search() sends the correct request and handles HTTP errors."""
 
     def _gw_with_response(self, status: int = 200, body: dict | None = None) -> tuple[MarginaliaGateway, MagicMock]:
