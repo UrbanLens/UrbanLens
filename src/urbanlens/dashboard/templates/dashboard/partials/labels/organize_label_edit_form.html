@@ -25,7 +25,7 @@
                 <span><i class="material-symbols-outlined">flag</i> Status</span>
             </label>
         </div>
-        <p class="form-hint">Changing the type will convert this item and migrate its memberships.</p>
+        <p class="form-hint">Changing the type will convert this item and migrate its memberships.{% if selected_parents or selected_children %} Its parent/child relationships will be cleared, since those only make sense within the same type.{% endif %}</p>
     </div>
     {% endif %}
 
