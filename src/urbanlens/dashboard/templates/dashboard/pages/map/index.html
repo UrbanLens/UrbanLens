@@ -3314,6 +3314,7 @@
         document.getElementById('bulk-edit-dialog-title').textContent = `Edit ${uuids.length} pins`;
         document.getElementById('bulk-edit-description-value').value = '';
         document.getElementById('bulk-edit-description-nochange').checked = true;
+        document.getElementById('bulk-edit-rating-value').value = '';
         _bulkEditAddPicker.reset();
         _bulkEditAddPicker.setCandidates(_apdlgAllLabels);
         _bulkEditRemovePicker.reset();
@@ -3342,6 +3343,8 @@
         if (!document.getElementById('bulk-edit-description-nochange').checked) {
             payload.description = document.getElementById('bulk-edit-description-value').value;
         }
+        const ratingValue = document.getElementById('bulk-edit-rating-value').value;
+        if (ratingValue !== '') payload.rating = parseInt(ratingValue, 10);
         payload.add_label_ids = _bulkEditAddPicker.getSelectedIds();
         payload.remove_label_ids = _bulkEditRemovePicker.getSelectedIds();
         const parentUuid = _bulkEditParentPicker.getSelectedUuid();
