@@ -19,15 +19,13 @@ import decimal
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
-from urbanlens.core.tests.testcase import TestCase
-from hypothesis import HealthCheck, assume, given, settings
-from hypothesis import strategies as st
+from hypothesis import HealthCheck, assume, given, settings, strategies as st
 from model_bakery import baker
 
+from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
-from urbanlens.dashboard.models.profile.model import MapCenterMode, Profile
-from urbanlens.dashboard.models.profile.model import _CLUSTER_RADIUS_KM, _haversine_km
+from urbanlens.dashboard.models.profile.model import _CLUSTER_RADIUS_KM, MapCenterMode, Profile, _haversine_km
 from urbanlens.dashboard.tests.hypothesis.strategies import latitude, longitude, valid_zoom
 
 _db_settings = settings(
@@ -156,6 +154,66 @@ class GetMapCenterCustomModeTests(TestCase):
         assert result is not None  # nosec B101
         self.assertAlmostEqual(result[0], float(lat), places=5)
         self.assertAlmostEqual(result[1], float(lng), places=5)
+
+
+class GetMapCenterRememberModeTests(TestCase):
+    """REMEMBER mode returns the stored remembered_map_lat/lng, or None when unset.
+
+    Server-side confirmation for UL-255 ("remember last map position doesn't
+    work") - the read side (this), the write side (SaveMapPositionView, see
+    test_save_map_position_view.py), MapCenterForm.save(), and the map page's
+    JS are all independently correct; see docs/PROBLEMS.md for the more
+    likely actual cause (a separate, unrelated shareable-map-view-URL feature
+    taking precedence over the server-rendered value on page load).
+    """
+
+    def test_remember_mode_returns_tuple_when_both_coords_are_set(self) -> None:
+        profile = _profile_with_mode(
+            MapCenterMode.REMEMBER,
+            remembered_map_lat=decimal.Decimal("42.650000"),
+            remembered_map_lng=decimal.Decimal("-73.750000"),
+        )
+        result = profile.get_map_center()
+        self.assertIsNotNone(result)
+        assert result is not None  # nosec B101
+        self.assertAlmostEqual(result[0], 42.65, places=4)
+        self.assertAlmostEqual(result[1], -73.75, places=4)
+
+    def test_remember_mode_returns_floats_not_decimals(self) -> None:
+        profile = _profile_with_mode(
+            MapCenterMode.REMEMBER,
+            remembered_map_lat=decimal.Decimal("10.000000"),
+            remembered_map_lng=decimal.Decimal("20.000000"),
+        )
+        result = profile.get_map_center()
+        assert result is not None  # nosec B101
+        self.assertIsInstance(result[0], float)
+        self.assertIsInstance(result[1], float)
+
+    def test_remember_mode_returns_none_when_never_saved(self) -> None:
+        profile = _profile_with_mode(MapCenterMode.REMEMBER)
+        self.assertIsNone(profile.get_map_center())
+
+    def test_remember_mode_returns_none_when_only_latitude_is_set(self) -> None:
+        profile = _profile_with_mode(
+            MapCenterMode.REMEMBER,
+            remembered_map_lat=decimal.Decimal("42.65"),
+            remembered_map_lng=None,
+        )
+        self.assertIsNone(profile.get_map_center())
+
+    def test_remember_mode_template_context_reflects_stored_value(self) -> None:
+        """view_map renders **profile.get_map_center_template_context() directly -
+        this is what actually reaches the page's `_SERVER_CENTER_LAT` JS constant."""
+        profile = _profile_with_mode(
+            MapCenterMode.REMEMBER,
+            remembered_map_lat=decimal.Decimal("42.650000"),
+            remembered_map_lng=decimal.Decimal("-73.750000"),
+        )
+        context = profile.get_map_center_template_context()
+        self.assertEqual(context["map_center_mode"], MapCenterMode.REMEMBER)
+        self.assertAlmostEqual(context["map_center_lat"], 42.65, places=4)
+        self.assertAlmostEqual(context["map_center_lng"], -73.75, places=4)
 
 
 # -- AUTO mode - cached centroid -----------------------------------------------

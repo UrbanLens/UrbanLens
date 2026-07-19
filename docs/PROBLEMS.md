@@ -6,6 +6,47 @@ to pick up without re-discovering the problem from scratch.
 
 ---
 
+## UL-255: "Remember last map position" - server side verified correct; likely real cause is unrelated URL-view-sync precedence, needs browser verification
+
+Investigated the whole chain: `MapCenterForm.save()` (`forms/settings_form.py:380`), the profile
+model's `get_map_center()`/`get_map_center_template_context()` (`models/profile/model.py:602-650`),
+`SaveMapPositionView` (`controllers/settings.py:465-495`, correctly debounced 800ms + gated on
+`map_center_mode == REMEMBER`), and the map page's own JS (`pages/map/index.html:1788-1836`,
+correctly debounced with a `sendBeacon` fallback on `pagehide`/`beforeunload` so the last pan/zoom
+before closing the tab isn't lost). All of it is correctly wired - `MapCenterMode.REMEMBER` = the
+same lowercase `"remember"` string on both the Python enum and the JS string comparison, and the
+server-rendered `_SERVER_CENTER_LAT`/`_MAP_CENTER_MODE` template vars correctly reflect
+`profile.remembered_map_lat/lng` when the mode is REMEMBER.
+
+**The more likely actual cause**: the same page has a *separate, unrelated* shareable-map-view
+feature (`pages/map/index.html:709-779`) that writes `?lat=&lng=&zoom=` into the URL bar via
+`history.replaceState`/`pushState` on every pan/zoom, and on page load:
+```js
+const _urlMapView = _parseMapViewFromUrl();
+const _initialCenter = _urlMapView ? _urlMapView.center : _serverCenter;
+```
+`_urlMapView` (from the URL query string) takes **absolute priority** over `_serverCenter` (the
+REMEMBER-mode value from the server) whenever present. Reloading the *same tab* after panning
+would appear to "remember" the position via the URL, independent of whether REMEMBER mode or the
+server round-trip is actually working - masking a real failure there. Conversely, navigating fresh
+(new tab, bookmark, clicking a nav link with no query string) should correctly fall through to
+`_serverCenter` per the code as written; if the bug report describes that specific scenario still
+failing, the actual defect is somewhere I haven't found yet.
+
+**Why not fixed**: I can't run a browser in this environment to confirm which scenario the
+reporter actually hit, and I don't know whether `_urlMapView` winning over REMEMBER-mode is
+intentional (a shared/bookmarked map-view link arguably *should* override a viewer's own
+settings) or the bug itself. Changing the precedence without knowing the intended semantics risks
+breaking the shareable-link feature, which is clearly a deliberately, carefully built feature
+(pushState/replaceState/popstate handling, debounced sync) - not something to touch on a guess.
+
+**Suggested next step**: ask the user which exact reproduction they mean (same-tab reload after
+panning, vs. a genuinely fresh navigation), or add a `has_map_view_url` marker distinguishing "the
+URL carries an intentionally-shared view" from "this tab's own view-sync happened to leave stale
+params" - the former should win, the latter probably shouldn't.
+
+---
+
 ## Wiki-reference custom field picker doesn't recognize boundary-mate Locations
 
 `src/urbanlens/dashboard/services/custom_field_references.py`, `referenceable_queryset()`'s
