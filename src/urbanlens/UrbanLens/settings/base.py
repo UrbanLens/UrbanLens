@@ -99,7 +99,13 @@ ROOT_URLCONF = "urbanlens.UrbanLens.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        # Explicit DIRS is searched before the APP_DIRS loader, so this app's
+        # own registration/*.html and password_reset_*.txt templates always
+        # win over django.contrib.admin/auth's bundled templates of the same
+        # name (both apps are registered ahead of "dashboard" in
+        # INSTALLED_APPS, so without this the app_directories loader picks
+        # theirs first and ours is silently never rendered - UL-257).
+        "DIRS": [os.path.join(PROJECT_ROOT, "dashboard", "templates")],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [

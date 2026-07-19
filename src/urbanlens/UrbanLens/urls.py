@@ -26,6 +26,7 @@ from urbanlens.dashboard.controllers.account import (
     SetPasswordPromptView,
     SetPasswordSkipView,
     SignupView,
+    SsoAwarePasswordResetForm,
     VerifyEmailSentView,
     VerifyEmailView,
     suggest_passphrases,
@@ -69,6 +70,7 @@ urlpatterns = [
     path(
         "accounts/password_reset/",
         auth_views.PasswordResetView.as_view(
+            form_class=SsoAwarePasswordResetForm,
             subject_template_name="registration/password_reset_subject.txt",
             email_template_name="registration/password_reset_email.txt",
             html_email_template_name="registration/password_reset_email.html",

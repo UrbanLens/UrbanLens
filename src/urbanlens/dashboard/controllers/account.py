@@ -5,12 +5,13 @@ from __future__ import annotations
 import logging
 import smtplib
 from typing import TYPE_CHECKING
+import unicodedata
 from urllib.parse import quote
 from uuid import UUID
 
 from django import forms
-from django.contrib.auth import REDIRECT_FIELD_NAME, login as auth_login, views as auth_views
-from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
+from django.contrib.auth import REDIRECT_FIELD_NAME, get_user_model, login as auth_login, views as auth_views
+from django.contrib.auth.forms import AuthenticationForm, PasswordResetForm, UserCreationForm
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User
 from django.contrib.auth.views import LoginView
@@ -349,6 +350,112 @@ def _send_verification_email(request: HttpRequest, user: User, verification: Ema
 # -- Password reset (E2EE-aware) --------------------------------------------
 
 
+def _unicode_ci_compare(s1: str, s2: str) -> bool:
+    """Case-insensitive Unicode comparison (Unicode Technical Report 36, 2.11.2(B)(2)).
+
+    Mirrors ``django.contrib.auth.forms._unicode_ci_compare`` - reimplemented
+    locally rather than imported because that name is private and untyped in
+    django-stubs; it backs the same DB-``__iexact``-plus-Python-comparison
+    pattern Django's own ``PasswordResetForm.get_users()`` uses.
+
+    Args:
+        s1: First string to compare.
+        s2: Second string to compare.
+
+    Returns:
+        True if the two strings are equal under NFKC normalization + casefold.
+    """
+    return unicodedata.normalize("NFKC", s1).casefold() == unicodedata.normalize("NFKC", s2).casefold()
+
+
+def sso_provider_hint(user: User) -> str:
+    """Name the social-auth provider a passwordless account signed up through.
+
+    Shared by the set-password prompt and the SSO-aware password reset form
+    so the two surfaces never drift on how a provider is named.
+
+    Args:
+        user: The user to inspect.
+
+    Returns:
+        A display name like ``"Google"``/``"Discord"``, or the generic
+        ``"a social account"`` fallback if no provider row is found.
+    """
+    provider = user.social_auth.values_list("provider", flat=True).first() if hasattr(user, "social_auth") else None
+    return {"google-oauth2": "Google", "discord": "Discord"}.get(provider or "", "a social account")
+
+
+class SsoAwarePasswordResetForm(PasswordResetForm):
+    """PasswordResetForm that tells SSO-only accounts how to sign in (UL-257).
+
+    Django's stock ``get_users()`` silently drops any account with
+    ``has_usable_password() == False`` - correct for building a raw-password
+    reset link, but the view shows the same generic "check your email"
+    success page regardless, so an SSO-only user who requests a reset is
+    told it worked and then never receives anything, with no hint that their
+    account has no password to reset in the first place.
+
+    This keeps the anti-enumeration property (the requester-facing response
+    never reveals which branch fired, or whether the address matched at all)
+    by still matching SSO-only accounts in ``get_users()``, then routing them
+    to a different email in ``send_mail()`` that names their sign-in
+    provider instead of a reset link.
+    """
+
+    def get_users(self, email: str):
+        """Include SSO-only accounts alongside password-auth accounts.
+
+        Mirrors ``PasswordResetForm.get_users()`` exactly, minus the
+        ``has_usable_password()`` filter. Uses ``get_user_model()`` and a
+        local NFKC-normalized casefold comparison rather than importing
+        Django's private, untyped ``UserModel``/``_unicode_ci_compare``
+        module internals, which django-stubs doesn't expose.
+
+        Args:
+            email: The submitted email address.
+
+        Returns:
+            A generator of active users matching ``email``, regardless of
+            whether they have a usable password.
+        """
+        user_model = get_user_model()
+        email_field_name = user_model.get_email_field_name()
+        active_users = user_model._default_manager.filter(**{f"{email_field_name}__iexact": email, "is_active": True})  # noqa: SLF001
+        return (u for u in active_users if _unicode_ci_compare(email, getattr(u, email_field_name)))
+
+    def send_mail(
+        self,
+        subject_template_name: str,
+        email_template_name: str,
+        context: dict,
+        from_email: str | None,
+        to_email: str,
+        html_email_template_name: str | None = None,
+    ) -> None:
+        """Route SSO-only accounts to the sign-in-hint email instead of a reset link.
+
+        Args:
+            subject_template_name: Password-auth path subject template.
+            email_template_name: Password-auth path plain-text template.
+            context: Rendering context built by ``save()`` (includes ``user``).
+            from_email: Envelope from-address.
+            to_email: Recipient address.
+            html_email_template_name: Password-auth path HTML template.
+        """
+        user = context["user"]
+        if not user.has_usable_password():
+            super().send_mail(
+                "registration/password_reset_sso_notice_subject.txt",
+                "registration/password_reset_sso_notice_email.txt",
+                {**context, "provider_hint": sso_provider_hint(user)},
+                from_email,
+                to_email,
+                html_email_template_name="registration/password_reset_sso_notice_email.html",
+            )
+            return
+        super().send_mail(subject_template_name, email_template_name, context, from_email, to_email, html_email_template_name=html_email_template_name)
+
+
 class E2EEPasswordResetConfirmView(auth_views.PasswordResetConfirmView):
     """PasswordResetConfirmView that keeps derived-auth accounts consistent.
 
@@ -664,12 +771,10 @@ class SetPasswordPromptView(LoginRequiredMixin, View):
         user = profile.user
         if user.has_usable_password():
             return redirect("post_login")
-        provider = user.social_auth.values_list("provider", flat=True).first() if hasattr(user, "social_auth") else None
-        provider_hint = {"google-oauth2": "Google", "discord": "Discord"}.get(provider or "", "a social account")
         return render(
             request,
             "registration/set_password.html",
-            {"self_slug": profile.ensure_slug(), "provider_hint": provider_hint},
+            {"self_slug": profile.ensure_slug(), "provider_hint": sso_provider_hint(user)},
         )
 
 
