@@ -254,10 +254,10 @@ bumps `CACHE_VERSION`.
 
 The app now has real users with 8k+ pins; several systems were designed for hundreds.
 
-- **Map pin pipeline**: localStorage quota failure at 8.5k pins (UL-355). Consider: IndexedDB
+- **Map pin pipeline**: possible localStorage quota (UL-355) - maybe not. Consider: IndexedDB
   instead of localStorage, payload slimming (the cache stores full pin payloads where markers
   need a subset), per-tile eviction, or server-side viewport-bounded queries as the primary path
-  with cache as accel. This is the single highest-leverage perf work item.
+  with cache as accel. This requires investigation to prevent over-engineering.
 - **N+1 discipline**: `select_related`/`prefetch_related` everywhere; the geolocation-visits
   endpoint N+1 (boundary resolution per pin) already caused production nginx timeouts once.
   Any per-pin loop that touches Boundary/Location/Label should be audited at 10k scale.
@@ -429,7 +429,8 @@ Do not start these without a written design (add it to `docs/`):
   community-jury models; needs a threat-model writeup first.
 - **Location voting → "public" locations** (UL-58) — the growth flywheel, and the biggest
   privacy risk in the backlog. Requires: vulnerability assessment gates, vote thresholds,
-  per-user opt-in, and probably staged rollout behind `SiteFeature`.
+  per-user opt-in, and probably staged rollout behind `SiteFeature`. This may not be achievable
+  within the bounds of the project goals.
 - **Report button** (UL-51-adjacent), **hide/mute user** (UL-27) — moderation primitives that
   interact with blocking semantics (§1.3-2); define the visibility matrix
   (block vs mute vs hide) once, in one doc, before implementing any of the three.
@@ -450,7 +451,9 @@ UL-190, UL-210, UL-230/231/233, UL-238, UL-300, UL-352, UL-384, and the trip-det
 "UI - Trip Details Page"). Guidance: batch by page, reuse shared components (the standardized
 badge picker, shared visit dialog, shared map toolbar — UL-210's dialog reinventing pickers is
 the anti-pattern to kill), and check `docs/FEATURES.md` before building "new" UI — several
-requests are already half-implemented.
+requests are already half-implemented. Notes that read "fix" or "improve" the ui without
+concrete details should be assessed or verified by the user prior to making changes; many
+of them may already be complete, and "fixing" them will lead to unwanted ui changes.
 
 ### 4.6 Tier 6: Codebase health epics (background, always-valid work)
 
@@ -568,7 +571,8 @@ non-obvious behavior → `docs/NOTES.md`; TODO strikes with evidence.
 
 ## Appendix A — Current state snapshot (2026-07-18)
 
-- Branch `@features/v0.5.0`; migrations through 0071; ~4850 tests, ~70% line coverage.
+- Branch `@features/v0.5.0`; migrations through 0071; ~4850 tests, ~70% line coverage. (migrations will 
+  be compacted before merging to main, which will impact the 0071 number)
 - 37 builtin plugins; remaining unconverted services listed in UL-294.
 - Uncommitted work: `services/wiki_access.py` boundary-mate follow-up + hypothesis test (§1.3.1).
 - Recent themes (last ~20 commits): trust/security audit of export/import, blocking enforcement,

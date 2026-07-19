@@ -34,6 +34,7 @@ Features planned for this release.
     VM96 map:1055 [UL] Server returned 8495 new pin(s) for tile(s): *
     VM96 map:402 [UL] Cache write failed (QuotaExceededError) - pins will reload next visit
     _writeCache	@	VM96 map:402
+    NOTE From Jess: I think this was actually unrelated to 8.5k pins, and instead related to a stale cache. Clearing the cache fixed the problem.
 
 ## Map Search Filtering Polish
 * The view options in the toolbar need a new button for "street details". [UL-278]
