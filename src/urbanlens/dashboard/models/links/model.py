@@ -1,8 +1,9 @@
 """Link models - external website URLs attached to Pins (personal) and Wikis (shared).
 
 Each link may carry a Wayback Machine snapshot URL, captured asynchronously
-(see services.wayback_archive) so a dead or altered external page can still be
-viewed as it was when the link was added.
+(see tasks.archive_link_to_wayback and services.apis.locations.wayback_machine)
+so a dead or altered external page can still be viewed as it was when the
+link was added.
 """
 
 from __future__ import annotations
