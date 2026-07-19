@@ -232,8 +232,11 @@ Context:
 
   // Anchor element each page's cover-hero banner is inserted directly before
   // when created for the first time (mirrors the server-side markup's fixed
-  // position - see location/index.html and location/wiki.html).
-  var COVER_HERO_INSERT_BEFORE = { pin: '#pin-detail-hero', wiki: '.wiki-banner' };
+  // position - see location/index.html and location/wiki.html). Wiki's
+  // ".wiki-banner" anchor no longer exists since the wiki page hero was
+  // migrated to the shared _page_hero.html component; ".page-tabs" is the
+  // nearest element that's always present regardless of cover/notice state.
+  var COVER_HERO_INSERT_BEFORE = { pin: '#pin-detail-hero', wiki: '.page-tabs' };
 
   // Live-updates the page's cover-hero banner - creating it if this is the
   // first cover photo, updating its background if one already existed, or

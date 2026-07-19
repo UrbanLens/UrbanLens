@@ -1517,15 +1517,15 @@
             }
             if (activeTab !== 'not_relevant' && !sources.includes(activeTab)) activeTab = 'all';
             if (activeTab === 'not_relevant' && !notRelevantCount) activeTab = 'all';
-            var html = '<button type="button" class="media-tab' + (activeTab === 'all' ? ' active' : '') +
+            var html = '<button type="button" class="card-tab media-tab' + (activeTab === 'all' ? ' active' : '') +
                 '" data-tab="all">All<span class="media-tab-count">' + total + '</span></button>';
             sources.sort().forEach(function (src) {
                 var label = TAB_LABELS[src] || src;
-                html += '<button type="button" class="media-tab' + (activeTab === src ? ' active' : '') +
+                html += '<button type="button" class="card-tab media-tab' + (activeTab === src ? ' active' : '') +
                     '" data-tab="' + src + '">' + label + '<span class="media-tab-count">' + counts[src] + '</span></button>';
             });
             if (notRelevantCount) {
-                html += '<button type="button" class="media-tab' + (activeTab === 'not_relevant' ? ' active' : '') +
+                html += '<button type="button" class="card-tab media-tab' + (activeTab === 'not_relevant' ? ' active' : '') +
                     '" data-tab="not_relevant">Not Relevant<span class="media-tab-count">' + notRelevantCount + '</span></button>';
             }
             tabsEl.innerHTML = html;

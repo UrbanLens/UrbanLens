@@ -220,7 +220,7 @@ class Location(abstract.PublicDashboardModel):
         which blocks on a live Google API call. A plain property is the wrong
         place to make a synchronous external request (it fires on every pin
         detail page render until the cache warms, with no way to opt out or
-        show a loading state) - see PinController.view, which dispatches
+        show a loading state) - see PinOverviewView.get, which dispatches
         tasks.resolve_location_place_name in the background instead so this
         stays populated for next time without ever blocking a request.
         """

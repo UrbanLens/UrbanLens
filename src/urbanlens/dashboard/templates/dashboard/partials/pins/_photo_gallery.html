@@ -17,17 +17,22 @@ Context:
     <i class="material-symbols-outlined">photo_library</i>
     <span>Photos</span>
     {% if page_obj.paginator.count %}<span class="badge">{{ page_obj.paginator.count }}</span>{% endif %}
-    {% if context_type == "pin" and profile.external_apis_enabled %}
-    <button type="button" class="gallery-import-photos-btn" title="Import Photos"
-            onclick="document.getElementById('pin-import-photos-dialog').showModal(); var t = document.querySelector('#pin-import-photos-dialog .import-photos-tab'); if (t) t.click();">
-      <i class="material-symbols-outlined">add_photo_alternate</i>
-    </button>
-    {% endif %}
     {% if context_type == "pin" %}
-    <button type="button" class="gallery-import-photos-btn" id="photos-select-btn" title="Select media"
-            onclick="window.photosToggleSelectMode()">
-      <i class="material-symbols-outlined">checklist</i>
-    </button>
+    {# .card-header-actions is the shared multi-action wrapper (see panel-header-grid #}
+    {# mixin) - without it, these buttons have no grid-area of their own and fall to #}
+    {# CSS Grid auto-placement, landing on an implicit second row below the title. #}
+    <div class="card-header-actions">
+      {% if profile.external_apis_enabled %}
+      <button type="button" class="gallery-import-photos-btn" title="Import Photos"
+              onclick="document.getElementById('pin-import-photos-dialog').showModal(); var t = document.querySelector('#pin-import-photos-dialog .import-photos-tab'); if (t) t.click();">
+        <i class="material-symbols-outlined">add_photo_alternate</i>
+      </button>
+      {% endif %}
+      <button type="button" class="gallery-import-photos-btn" id="photos-select-btn" title="Select media"
+              onclick="window.photosToggleSelectMode()">
+        <i class="material-symbols-outlined">checklist</i>
+      </button>
+    </div>
     {% endif %}
   </div>
 

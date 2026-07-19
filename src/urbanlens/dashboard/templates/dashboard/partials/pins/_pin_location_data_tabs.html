@@ -32,7 +32,7 @@ Context:
                 hx-trigger="load[!window.ulSectionCollapsed('pin','location-data')], click"
                 onclick="document.querySelectorAll('#location-data-section .pin-plugin-tab-btn').forEach(function (b) { b.classList.remove('active'); b.setAttribute('aria-selected', 'false'); }); this.classList.add('active'); this.setAttribute('aria-selected', 'true');">
             <i class="material-symbols-outlined">map</i>
-            <span>OpenStreetMap</span>
+            <span>OpenStreetMap (Nominatim)</span>
         </button>
         {% for tab in location_data_tabs %}
         <button type="button" class="pin-plugin-tab-btn card-tab" role="tab" aria-selected="false"

@@ -67,15 +67,18 @@
         font-size: .83rem;
         max-width: 22rem;
         line-height: 1.45;
-        // Above the map's own controls/toolbar (z-index 1000, see .map-buttons /
-        // _layout.scss) - matches the convention already established in _pin_lists.scss.
+        // Low z-index is fine here: while unpinned, this notice sits inside the
+        // page header above the map, so it never actually overlaps map controls.
         z-index: 5;
         transition: top .3s ease, right .3s ease;
         box-shadow: 0px 5px 20px rgba(0,0,0,0.5);
 
         // Once the header has scrolled out of view, the notice would otherwise
         // float in the middle of the page since it's position: fixed - tuck it
-        // into the top-right corner instead.
+        // into the top-right corner instead. This is the state that can actually
+        // overlap the map, so it needs to be above the map's own controls/toolbar
+        // (z-index 1000, see .map-buttons / _layout.scss) - matches the convention
+        // already established in _pin_lists.scss.
         &.wiki-notice--pinned {
             position: fixed;
             top: 0.2rem;

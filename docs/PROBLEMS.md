@@ -6,6 +6,38 @@ to pick up without re-discovering the problem from scratch.
 
 ---
 
+## Property-records log entry describes a `compliance.py` robots.txt gate that no longer exists
+
+Found 2026-07-19 while reviewing `docs/prompts/completed.md`'s "Built the full 4-tier framework..."
+entry for property records Tier 2/3 (the property-records-plan.md section 4 rollout). That entry
+describes a new `compliance.py` module - a robots.txt gate (including an AI-crawler-specific check
+naming ClaudeBot/GPTBot) that every Tier 2/3 fetch was supposed to go through, plus a
+`blocked_by_robots` reason in the orchestrator.
+
+None of that exists in the current codebase: `services/apis/property_records/compliance.py` has
+no source file (only a stale `__pycache__/compliance.cpython-312.pyc` and a stale
+`test_property_records_compliance.cpython-312-pytest-9.1.1.pyc` remain on disk - orphaned
+bytecode with no matching `.py`, harmless but worth cleaning up). `git log --follow` on that path
+returns nothing, meaning it was never committed. Current `orchestrator.py` gates Tier 2/3 purely
+via `PropertyJurisdiction.requires_captcha` (a manually-set boolean, help text: "never attempted
+programmatically") and a `REASON_BLOCKED` constant - not `blocked_by_robots`, and not automated
+robots.txt parsing. `docs/property-records-plan.md:137-138` explicitly says "do not implement
+anything with robots.txt... will take care of that later," consistent with the current code, not
+the log entry.
+
+Likely explanation: the session that wrote the log entry built `compliance.py` but never
+committed it, and a later pass (maybe the same session, maybe the user) reconsidered the
+automated-robots.txt-parsing approach in favor of the simpler manual `requires_captcha` flag,
+deleting the file before it was ever committed - without updating the completed.md entry to match.
+Current code is internally consistent and not broken by this; it's a documentation-accuracy gap,
+not a functional one. Not fixed here since building (or re-building) `compliance.py` would be a
+real feature decision, not a surgical correction, and would contradict the plan doc's own
+documented postponement. Worth deleting the two orphaned `.pyc` files next time someone's in there,
+and worth a human decision on whether automated robots.txt gating is still wanted before any
+future session revives it.
+
+---
+
 ## UL-277: pin-detail external-data freshness window is one global knob, not per-source
 
 Original wording (`TODO.md:28`): "Cache time needs adjustments for some pin details data. Load
