@@ -1,0 +1,56 @@
+{% extends 'dashboard/themes/base.html' %}
+
+{% block page_title %}Running Costs - {{ site_title|default:"UrbanLens" }}{% endblock %}
+
+{% block content %}
+
+{% include "dashboard/partials/ui/_page_hero.html" with eyebrow="Transparency" title="What it costs to run UrbanLens" subtitle="A rough, ongoing estimate of the external API spend behind the map, pin enrichment, search, and messaging features." modifier="wide" %}
+
+<section class="attr-section">
+    <div class="attr-section-inner">
+        <div class="attr-section-label">Last 30 days</div>
+        <h2 class="attr-section-title">
+            {% if total_cost_30d %}Estimated total: ${{ total_cost_30d|floatformat:2 }}{% else %}No priced usage yet{% endif %}
+        </h2>
+        <p class="attr-section-lead">
+            This is an estimate, not an invoice. It only covers services we have a confirmed
+            per-call price for below - {{ unpriced_service_count }} other integration{{ unpriced_service_count|pluralize }}
+            {{ unpriced_service_count|yesno:"are,is" }} either free, priced in a way that doesn't
+            reduce to one number per call, or simply not priced here yet, and so
+            {{ unpriced_service_count|pluralize:"isn't,aren't" }} reflected in the total above.
+            Actual spend may differ from what's shown.
+        </p>
+
+        {% if priced_services %}
+        <div class="attr-list">
+            {% for entry in priced_services %}
+            <div class="attr-list-item">
+                <div class="attr-list-main">
+                    <h3>{{ entry.display_name }}</h3>
+                </div>
+                <span class="attr-list-tag">${{ entry.cost_30d|floatformat:2 }}</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+</section>
+
+<section class="attr-note-section">
+    <div class="attr-section-inner">
+        <div class="attr-note">
+            <i class="material-icons attr-note-icon" aria-hidden="true">info</i>
+            <div>
+                <h2 class="attr-note-title">Why this page exists</h2>
+                <p class="attr-note-body">
+                    UrbanLens leans on a lot of external services - see the
+                    <a href="{% url 'thanks' %}">Thanks &amp; Credits</a> page for the full list.
+                    Most are free or nearly free; a few are metered. We'd rather show a rough,
+                    honest number than none at all.
+                </p>
+            </div>
+        </div>
+    </div>
+</section>
+
+{% endblock %}

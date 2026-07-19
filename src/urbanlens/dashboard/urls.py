@@ -19,6 +19,7 @@ from urbanlens.dashboard.controllers import (
     boundary,
     calendar_sync,
     comments,
+    costs,
     custom_fields,
     detail_pins,
     direct_message_shares,
@@ -130,6 +131,7 @@ urlpatterns = [
         name="terms",
     ),
     path("thanks/", thanks.ThanksView.as_view(), name="thanks"),
+    path("costs/", costs.CostsView.as_view(), name="costs"),
     path(
         "help/import-pins/",
         TemplateView.as_view(

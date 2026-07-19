@@ -1410,9 +1410,15 @@ class SiteAdminStatsApiUsagePartialView(_AdminPermissionMixin, View):
     """
 
     def get(self, request: HttpRequest):
-        from urbanlens.dashboard.services.rate_limiter import SERVICE_REGISTRY
+        from urbanlens.dashboard.services.rate_limiter import all_service_defaults
 
+        # all_service_defaults() (SERVICE_REGISTRY + every plugin's own
+        # get_service_defaults()) - the static registry alone only covers the
+        # handful of integrations not yet converted to plugins, which would
+        # silently omit the great majority of this app's API usage/cost data.
+        service_defaults = all_service_defaults()
         api_usage: list[dict] = []
+        total_cost_30d = None
         with contextlib.suppress(Exception):
             from urbanlens.dashboard.models.api_call_log import ApiCallLog
             from urbanlens.dashboard.models.api_rate_limit import ApiRateLimit
@@ -1420,28 +1426,32 @@ class SiteAdminStatsApiUsagePartialView(_AdminPermissionMixin, View):
             summaries = {row["service"]: row for row in ApiCallLog.objects.summary_by_service()}
             rate_configs = {r.service: r for r in ApiRateLimit.objects.all()}
 
-            for svc in sorted(SERVICE_REGISTRY):
+            for svc in sorted(service_defaults):
                 cfg = rate_configs.get(svc)
                 row = summaries.get(svc, {})
+                cost_30d = row.get("total_cost")
+                if cost_30d is not None:
+                    total_cost_30d = cost_30d if total_cost_30d is None else total_cost_30d + cost_30d
                 api_usage.append(
                     {
                         "service": svc,
-                        "display_name": cfg.display_name if cfg else SERVICE_REGISTRY[svc].display_name,
+                        "display_name": cfg.display_name if cfg else service_defaults[svc].display_name,
                         "enabled": cfg.enabled if cfg else True,
-                        "calls_per_day": cfg.calls_per_day if cfg else SERVICE_REGISTRY[svc].calls_per_day,
-                        "usa_only": cfg.usa_only if cfg else SERVICE_REGISTRY[svc].usa_only,
+                        "calls_per_day": cfg.calls_per_day if cfg else service_defaults[svc].calls_per_day,
+                        "usa_only": cfg.usa_only if cfg else service_defaults[svc].usa_only,
                         "total": row.get("total", 0),
                         "blocked": row.get("blocked", 0),
                         "geo_skipped": row.get("geo_skipped", 0),
                         "errors": row.get("errors", 0),
                         "avg_ms": round(row.get("avg_response_ms") or 0),
+                        "cost_30d": cost_30d,
                     }
                 )
 
         return render(
             request,
             "dashboard/partials/admin/admin_stats_api_usage.html",
-            {"api_usage": api_usage},
+            {"api_usage": api_usage, "total_cost_30d": total_cost_30d},
         )
 
 

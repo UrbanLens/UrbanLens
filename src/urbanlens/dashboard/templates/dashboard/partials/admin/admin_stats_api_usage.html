@@ -4,6 +4,11 @@
         <span style="display:flex;align-items:center;gap:.5rem">
             <i class="material-symbols-outlined">cloud</i>
             External API Usage (last 30 days)
+            {% if total_cost_30d %}
+            <span style="font-size:.8rem;font-weight:400;color:var(--ul-text-muted,#6b7280)" title="Sum of every service's estimated cost below - services with no configured cost_per_call aren't included, so this understates true spend.">
+                (est. ${{ total_cost_30d|floatformat:2 }})
+            </span>
+            {% endif %}
         </span>
         <a href="{% url 'site_admin_api_limits' %}" class="btn btn--ghost btn--sm">
             <i class="material-icons" style="font-size:.9rem;vertical-align:-.1em">tune</i>
@@ -19,6 +24,7 @@
                 <th style="text-align:right">Geo-skipped</th>
                 <th style="text-align:right">Errors</th>
                 <th style="text-align:right">Avg&nbsp;ms</th>
+                <th style="text-align:right">Est.&nbsp;cost</th>
                 <th style="text-align:center">Daily&nbsp;limit</th>
                 <th style="text-align:center">Status</th>
             </tr>
@@ -35,6 +41,10 @@
             <td style="text-align:right">{% if row.geo_skipped %}<span style="color:#0369a1">{{ row.geo_skipped }}</span>{% else %}-{% endif %}</td>
             <td style="text-align:right">{% if row.errors %}<span style="color:#b91c1c">{{ row.errors }}</span>{% else %}-{% endif %}</td>
             <td style="text-align:right">{% if row.avg_ms %}{{ row.avg_ms }}{% else %}-{% endif %}</td>
+            <td style="text-align:right">
+                {% if row.cost_30d %}${{ row.cost_30d|floatformat:2 }}
+                {% else %}<span style="color:var(--ul-text-muted,#6b7280)" title="No cost_per_call configured for this service yet - not necessarily free.">not&nbsp;priced</span>{% endif %}
+            </td>
             <td style="text-align:center">
                 {% if row.calls_per_day %}
                     <span title="{{ row.total }} of {{ row.calls_per_day }} daily limit used">
@@ -55,7 +65,7 @@
             </td>
         </tr>
         {% empty %}
-        <tr><td colspan="8" style="text-align:center;color:var(--ul-text-muted,#6b7280);padding:1rem">No API services configured.</td></tr>
+        <tr><td colspan="9" style="text-align:center;color:var(--ul-text-muted,#6b7280);padding:1rem">No API services configured.</td></tr>
         {% endfor %}
         </tbody>
     </table>
