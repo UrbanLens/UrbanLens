@@ -45,6 +45,14 @@ if TYPE_CHECKING:
 
 _CID_RE = re.compile(r"!1s0x[0-9a-fA-F]+:0x([0-9a-fA-F]+)")
 
+#: Column names (case-insensitive) that hold a Google Maps URL to extract
+#: coordinates/CID from. Google Takeout's various per-category CSV exports
+#: don't agree on a header name for this: starred/saved-place list exports
+#: use "URL", but the Timeline "Parking" export uses "Parking location" -
+#: UL-203: every row in Parking.csv silently failed to import (no coordinate
+#: column matched at all) because only the literal "URL" header was checked.
+_TAKEOUT_URL_COLUMN_KEYS: tuple[str, ...] = ("url", "parking location")
+
 
 def _attach_description_extras(pin: Pin, image_urls: list[str], link_urls: list[str], profile: Profile) -> None:
     """Best-effort: attach a freshly-created pin's extracted image/link URLs.
@@ -324,7 +332,8 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         gateway = GoogleGeocodingGateway()
         reader = csv.DictReader(file_contents.splitlines())
         for row in reader:
-            url = row.get("URL", "")
+            lowered_row = {str(k).strip().lower(): v for k, v in row.items() if k is not None}
+            url = next((lowered_row[key] for key in _TAKEOUT_URL_COLUMN_KEYS if lowered_row.get(key)), "")
             if url:
                 try:
                     latitude, longitude = gateway.extract_coordinates_from_url(url)
@@ -1079,38 +1088,5 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         except (json.JSONDecodeError, KeyError, ValueError) as e:
             logger.exception("Failed to import pins from GeoJSON: %s", e)
             raise
-
-        return pins
-
-    def takeout_csv_to_dict(self, file_contents: str, user_profile: Profile) -> list[dict[str, Any]]:
-        pins: list[dict[str, Any]] = []
-        gateway = GoogleGeocodingGateway()
-        try:
-            reader = csv.DictReader(file_contents.splitlines())
-
-            for row in reader:
-                # Extract coordinates from URL if available
-                url = row.get("URL", "")
-                if not url:
-                    logger.error("No url to extract coordinates from: row -> %s", row)
-                    continue
-
-                latitude, longitude = gateway.extract_coordinates_from_url(url)
-
-                pins.append(
-                    {
-                        "latitude": latitude,
-                        "longitude": longitude,
-                        "profile": user_profile,
-                        "name": row.get("Title", ""),
-                        "description": row.get("Note", "") + " " + row.get("Comment", "").strip(),
-                    },
-                )
-
-        except (csv.Error, KeyError, ValueError) as e:
-            logger.exception("Failed to import pins from CSV: %s", e)
-            raise
-
-        logger.info("Converted %s pins from CSV file to dicts.", len(pins))
 
         return pins
