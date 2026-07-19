@@ -10,9 +10,9 @@ from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_TAG
 from urbanlens.dashboard.models.labels.model import Label
-from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.trips.model import TripActivity
 
@@ -300,6 +300,56 @@ class PinBulkEditViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         child.refresh_from_db()
         self.assertEqual(child.description, "child note")
+
+    def test_sets_rating_on_all_selected_pins(self) -> None:
+        """rating lives on Review (one per profile/pin pair), not a plain Pin field."""
+        from urbanlens.dashboard.models.reviews.model import Review
+
+        self._edit({"uuids": [str(self.pin_a.uuid), str(self.pin_b.uuid)], "rating": 4})
+
+        self.assertEqual(Review.objects.for_pair(self.profile, self.pin_a).first().rating, 4)
+        self.assertEqual(Review.objects.for_pair(self.profile, self.pin_b).first().rating, 4)
+
+    def test_rating_overwrites_an_existing_review(self) -> None:
+        from urbanlens.dashboard.models.reviews.model import Review
+
+        Review.objects.update_or_create(profile=self.profile, pin=self.pin_a, defaults={"rating": 2})
+
+        self._edit({"uuids": [str(self.pin_a.uuid)], "rating": 5})
+
+        self.assertEqual(Review.objects.for_pair(self.profile, self.pin_a).first().rating, 5)
+
+    def test_rating_zero_clears_reviews_on_all_selected_pins(self) -> None:
+        from urbanlens.dashboard.models.reviews.model import Review
+
+        Review.objects.update_or_create(profile=self.profile, pin=self.pin_a, defaults={"rating": 3})
+        Review.objects.update_or_create(profile=self.profile, pin=self.pin_b, defaults={"rating": 3})
+
+        self._edit({"uuids": [str(self.pin_a.uuid), str(self.pin_b.uuid)], "rating": 0})
+
+        self.assertFalse(Review.objects.for_pair(self.profile, self.pin_a).exists())
+        self.assertFalse(Review.objects.for_pair(self.profile, self.pin_b).exists())
+
+    def test_leaves_rating_untouched_when_absent(self) -> None:
+        from urbanlens.dashboard.models.reviews.model import Review
+
+        Review.objects.update_or_create(profile=self.profile, pin=self.pin_a, defaults={"rating": 3})
+
+        self._edit({"uuids": [str(self.pin_a.uuid)], "description": "unrelated change"})
+
+        self.assertEqual(Review.objects.for_pair(self.profile, self.pin_a).first().rating, 3)
+
+    def test_rating_only_applies_to_the_acting_profiles_review(self) -> None:
+        """Bulk-editing rating must never touch another user's review of the same pin."""
+        from urbanlens.dashboard.models.reviews.model import Review
+
+        other_profile = baker.make(User).profile
+        Review.objects.update_or_create(profile=other_profile, pin=self.pin_a, defaults={"rating": 1})
+
+        self._edit({"uuids": [str(self.pin_a.uuid)], "rating": 5})
+
+        self.assertEqual(Review.objects.for_pair(other_profile, self.pin_a).first().rating, 1)
+        self.assertEqual(Review.objects.for_pair(self.profile, self.pin_a).first().rating, 5)
 
 
 class PinBulkEditLabelOptionsViewTests(TestCase):
