@@ -437,7 +437,7 @@
     <div id="map-body"></div>
 
 </div>
-<dialog id="add-pin-dialog" class="add-pin-dialog ul-dialog">
+<dialog id="add-pin-dialog" class="add-pin-dialog ul-dialog" data-closefn="closeAddPinDialog">
     <div class="apdlg-header">
         <h2><i class="material-icons" style="font-size:1.1rem;vertical-align:-.15em;margin-right:.35rem;">add_location</i>Add Pin</h2>
         <button class="btn-close" onclick="closeAddPinDialog()" aria-label="Close">x</button>
@@ -5516,25 +5516,9 @@
         if (_addPinMarker) { map.removeLayer(_addPinMarker); _addPinMarker = null; }
         document.getElementById('add-pin-dialog').close();
     }
-
-    // Close dialog on backdrop click (not drag-outside)
-    (function () {
-        var apDlg = document.getElementById('add-pin-dialog');
-        var apPress = null;
-        function apIsBackdrop(dlg, x, y) {
-            var rect = dlg.getBoundingClientRect();
-            return x < rect.left || x > rect.right || y < rect.top || y > rect.bottom;
-        }
-        apDlg.addEventListener('mousedown', function (e) {
-            if (e.target !== apDlg) { apPress = 'inside'; return; }
-            apPress = apIsBackdrop(apDlg, e.clientX, e.clientY) ? 'backdrop' : 'inside';
-        });
-        apDlg.addEventListener('click', function (e) {
-            if (e.target !== apDlg || apPress !== 'backdrop') return;
-            if (apIsBackdrop(apDlg, e.clientX, e.clientY)) closeAddPinDialog();
-            apPress = null;
-        });
-    }());
+    // Backdrop-click-to-close (not drag-outside) is handled by the site-wide
+    // dialog handler in themes/base.html via data-closefn="closeAddPinDialog"
+    // on the <dialog> element - see that file for the drag-guard logic.
 
     // Map click: place pin while dialog is open
     map.on('click', function(e) {
