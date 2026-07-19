@@ -152,7 +152,7 @@ Features planned for future releases.
 * "Organize a meetup", which would encourage a larger audience, encourage invitees to invite friends, etc. To prevent abuse, possibly: meetup pin would only be shown to those who already had it, and invitees could vote on whether it was too vulnerable to share? Idk. [UL-283]
 * Max zoom out on the map still isn't quite right. Try clamping? [UL-285]
 * Offline maps: mimicing other maps offline features, but tailored for areas around your known pins. For instance: offline maps for a trip would save data around each trip pin, entrance info, directions, etc, without needing to save offline info for the entire city. [UL-287]
-* pages/location/index.html and pages/location/satellite_view.html seem to have duplicate code. Confirm. [UL-288]
+* ~~pages/location/index.html and pages/location/satellite_view.html seem to have duplicate code. Confirm.~~ RESOLVED 2026-07-19 (`45db854e`): those two templates aren't duplicated (index.html just holds the standard HTMX auto-load skeleton for the satellite_view.html fragment) - the real duplication was in `PinController`: `satellite_view_carousell()` and `street_view()` were two near-identical ~50-line methods. Extracted a shared `_render_media_carousel()` helper. [UL-288]
 * Move inline JS into separate TS files for performance, maintainability, typescript. [UL-289]
 * Reorganize template partials [UL-292]
 * AI chat assistant to find, organize (add/remove badges), pin, etc. e.g. "Plan a trip to Washington DC" -> find 5 pins in DC that aren't visited, create trip, etc. Perhaps ask questions about invitees, visited/not visited, etc. [UL-293]

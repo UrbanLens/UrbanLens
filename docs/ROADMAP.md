@@ -419,10 +419,10 @@ Ordering within each tier is roughly by (user impact × risk × leverage). IDs r
 
 Each of these is "confirm, then either close or convert to a bug": visit-history display
 (UL-114), search-query disambiguation keywords (UL-117), child trips (UL-228), badge-kind-change
-UX (UL-155), duplicate code between `location/index.html` and `satellite_view.html` (UL-288),
-wiki section missing on one pin (UL-385), Wikipedia missing for some HRSH buildings (UL-354),
-takeout Parking.csv unreadable (UL-203), import-updates-names flow (UL-207). Closing these
-shrinks `TODO.md` noise cheaply — batch several per session, with a repro test per confirmed bug.
+UX (UL-155), wiki section missing on one pin (UL-385), Wikipedia missing for some HRSH buildings
+(UL-354), takeout Parking.csv unreadable (UL-203), import-updates-names flow (UL-207). Closing
+these shrinks `TODO.md` noise cheaply — batch several per session, with a repro test per
+confirmed bug.
 
 11. ~~**Password reset for SSO users** (UL-257)~~ RESOLVED 2026-07-19 (`def2c4d6`) — SSO-only
     accounts were silently dropped by Django's stock `PasswordResetForm.get_users()`, while the
@@ -443,6 +443,13 @@ shrinks `TODO.md` noise cheaply — batch several per session, with a repro test
     backdrop). The add-pin dialog had its own redundant duplicate of the identical algorithm;
     removed and wired into the shared handler's `data-closefn` mechanism instead, which until now
     had zero callers.
+13. ~~**Duplicate code, `location/index.html`/`satellite_view.html`** (UL-288)~~ RESOLVED
+    2026-07-19 (`45db854e`) — the named templates weren't actually duplicated (the auto-load
+    skeleton/fragment split there is the standard HTMX pattern used throughout the app). The real
+    duplication was in `PinController`: `satellite_view_carousell()`/`street_view()` were two
+    near-identical ~50-line methods, consolidated into a shared `_render_media_carousel()` helper
+    generic over the slide type. Surfaced an out-of-scope dead-code finding along the way (both
+    methods' "no coordinates" branch is unreachable - logged in `docs/PROBLEMS.md`).
 
 ### 4.3 Tier 3: High-leverage features (composable from existing infrastructure)
 
