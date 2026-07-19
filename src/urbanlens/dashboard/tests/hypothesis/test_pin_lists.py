@@ -23,6 +23,7 @@ Invariants verified:
 
 from __future__ import annotations
 
+import itertools
 import json
 
 from django.contrib.auth.models import User
@@ -41,16 +42,15 @@ from urbanlens.dashboard.services.filter_criteria import serialize_form_criteria
 
 _db_settings = settings(max_examples=20, deadline=None, suppress_health_check=[HealthCheck.too_slow, HealthCheck.filter_too_much])
 
-_coord_counter = 0
+_coord_counter = itertools.count(1)
 
 
 def _make_pin(profile, **kwargs) -> Pin:
     """Create a pin with a real coordinate-bearing Location (unique per call)."""
-    global _coord_counter
     location = kwargs.pop("location", None)
     if location is None:
-        _coord_counter += 1
-        location = baker.make(Location, latitude=40.0 + _coord_counter * 0.001, longitude=-74.0 - _coord_counter * 0.001)
+        n = next(_coord_counter)
+        location = baker.make(Location, latitude=40.0 + n * 0.001, longitude=-74.0 - n * 0.001)
     return baker.make(Pin, profile=profile, location=location, **kwargs)
 
 
