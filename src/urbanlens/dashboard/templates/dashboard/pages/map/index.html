@@ -807,14 +807,23 @@
     if (_needsGeoFix) setTimeout(_markGeoReady, 1000);
 
     if (_MAP_CENTER_MODE === 'gps' && navigator.geolocation && !_urlMapView) {
+        // UL-221: a cached position already seeded _initialCenter above, so the
+        // map must NOT visibly jump once this fresh fix resolves - only the
+        // cache gets updated (for next load's accuracy). Without this guard
+        // every returning GPS-mode user saw the map load at their last known
+        // position and then silently snap to the fresh one a moment later,
+        // regardless of the comment above already promising it wouldn't.
+        const _hadCachedLocation = !!_cachedUserLoc;
         navigator.geolocation.getCurrentPosition(
             (pos) => {
                 _cacheUserLocation(pos.coords.latitude, pos.coords.longitude);
                 if (_GEOLOCATION_TRACKING_ALLOWED) {
                     _recordGeolocationVisit(pos.coords.latitude, pos.coords.longitude);
                 }
-                _programmaticMove = true;
-                map.setView([pos.coords.latitude, pos.coords.longitude], _defaultZoom);
+                if (!_hadCachedLocation) {
+                    _programmaticMove = true;
+                    map.setView([pos.coords.latitude, pos.coords.longitude], _defaultZoom);
+                }
                 _markGeoReady();
             },
             () => {
