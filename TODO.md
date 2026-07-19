@@ -120,7 +120,7 @@ Features planned for future releases.
 * Main map: Some ability to go "back to home" quickly. [UL-187]
 * UI Bug: Bulk edit dialog -> visual bug for parent categories without an icon with respect to the tag chip and selector. [UL-190]
 * Organize page: Confirm before deleting badge with pins. [UL-192]
-* Bulk editing pins (based on search, badges, etc). For instance: Bulk set rating. [UL-193] (mostly done: `PinBulk*` views cover bulk edit of description/labels/parent plus bulk delete/merge/undo; bulk rating not yet)
+* ~~Bulk editing pins (based on search, badges, etc). For instance: Bulk set rating.~~ RESOLVED 2026-07-19 (`64c04fd8`, `d42e0be8`): added bulk rating (1-5 sets every selected pin's Review, 0 clears it, matching `PinEditView`'s single-pin semantics) plus a select in the bulk-edit dialog to trigger it. Found and fixed a real pre-existing bug along the way (`616215c6`): the single-pin "clear rating" button never actually deleted the Review row due to a broken sentinel check. [UL-193]
 * Main Map: When searching, show loading overlay [UL-194]
 * Organize > Merge Dialog -> Make an effort to choose the best merge candidate. (The one with an icon, then most pins). Is this done already?? [UL-198]
 * Organize Page -> Allow reordering kind tabs somehow, to make understanding the feature set more accessible. [UL-200]

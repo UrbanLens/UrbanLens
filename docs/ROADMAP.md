@@ -515,7 +515,12 @@ These have most of their machinery already built:
    note) rather than fabricating pricing for the other 50+ paid services without a verifiable
    published rate - populating the rest is real follow-up work, not a blocker on the
    infrastructure landing.
-2. **Bulk rating + remaining bulk ops** (UL-193 rump) — `PinBulk*` framework exists.
+2. ~~**Bulk rating + remaining bulk ops** (UL-193 rump)~~ RESOLVED 2026-07-19 (`64c04fd8`,
+   `d42e0be8`) — added to `PinBulkEditView` (1-5 sets every selected pin's Review, 0 clears it)
+   plus a select in the bulk-edit dialog. Found and fixed a real pre-existing bug along the way
+   (`616215c6`): the single-pin "clear rating" button never actually deleted the Review row,
+   because a `rating=0 -> rating=None` reassignment broke the downstream `elif rating == 0` check
+   that was supposed to trigger the delete - built the bulk version on the corrected semantics.
 3. **Auto-visits from photo timestamps + Immich/Google Photos** (UL-361) — composes photo
    matching (§2.7) with the existing visit-suggestion confirm flow.
 4. ~~**Geolocation visit creation** (UL-312)~~ VERIFIED-ALREADY-IMPLEMENTED 2026-07-19 — contrary
