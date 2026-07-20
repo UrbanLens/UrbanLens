@@ -288,6 +288,43 @@ compose network's Valkey service specifically during test runs.
 
 ---
 
+## Dev-server verification routine only rebuilt the `app` service, leaving `celery-worker`/`celery-worker-panels`/`celery-beat` stale (found 2026-07-20)
+
+Process note, not a product bug: this session's whole deploy-and-verify loop (`docker compose up
+--build -d app` after every feature, then live-check on `dev.urbanlens.org`) only ever rebuilt the
+`app` service. Discovered while verifying the Location Data "Overview" tab (see completed.md) -
+`ElevationPanelSource`'s background fetch (dispatched via `schedule_panel_fetch` to the real
+`panel_fetch` Celery queue, consumed by `celery-worker-panels`) never completed; `docker compose
+ps` showed `celery-worker`/`celery-worker-panels`/`celery-beat` all "Up 15 hours" - i.e. still
+running whatever code existed before most of this session's feature work, including panel/plugin
+registrations added earlier the same day. `celery-worker-panels`' own logs additionally showed an
+unrelated stale-schema error (`relation "dashboard_property_jurisdiction" does not exist`) from a
+migration that had since removed that table, confirming the worker was genuinely running old code
+against the new database - not just old code against a matching schema.
+
+**Impact on this session's own verification claims**: any prior feature this session that relies on
+a real Celery task (background panel fetches, `_process_photo_upload`'s EXIF extraction, media
+materialize's download) was verified correctly wherever verification ran `pytest`/`manage.py shell`
+*inside the `app` container* (those import the current code directly, unaffected) or eagerly
+invoked the task function rather than dispatching through the real queue. Anywhere verification
+specifically exercised the real async dispatch path via a live browser (i.e. actually waiting for a
+background fetch to land), it could have been silently checking against stale worker code without
+that being obvious - the request would still return promptly (schedule_panel_fetch itself doesn't
+block on the worker), so a stuck/stale fetch looks identical to "still fetching, poll again" rather
+than an obvious failure.
+
+**Fixed for future rounds of this session**: now rebuilding `celery-worker celery-worker-panels
+celery-beat` alongside `app` in the same `docker compose up --build -d` call whenever a change
+touches Celery task code. **Not retroactively re-verified**: earlier features this session that
+depend on the real async pipeline (media materialize, EXIF direction extraction via real photo
+uploads, the drag-drop-onto-map materialization) were not re-checked against a freshly-rebuilt
+worker after this was discovered - their pytest-level verification (which doesn't go through the
+stale worker) should still be valid, but a live "upload a real photo and watch it process" check
+specifically was not redone. If a discrepancy shows up in one of those features, rebuild the worker
+services first before assuming the feature code itself is wrong.
+
+---
+
 ## Hardcoded (non-theme-aware) `#2563eb`/`#4f46e5` blue in `_explainer.scss`, `_map.scss`, `_e2ee.scss`
 
 Found while fixing the "illegible dark-blue Nominatim link color" report (see completed.md) - that
