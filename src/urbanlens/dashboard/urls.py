@@ -1278,6 +1278,7 @@ urlpatterns = [
     path("pin-shares/<int:share_id>/respond/", pin_sharing.PinShareRespondView.as_view(), name="pin.share.respond"),
     path("map-shares/<int:share_id>/", map_sharing.MarkupMapShareDetailView.as_view(), name="markup_map.share.detail"),
     path("visit-suggestions/<int:suggestion_id>/respond/", visit_suggestions.VisitSuggestionRespondView.as_view(), name="visit_suggestion.respond"),
+    path("comments/images/picker/", comments.CommentImagePickerView.as_view(), name="comments.image_picker"),
     path(
         "messages/",
         include(

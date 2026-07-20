@@ -883,6 +883,101 @@
     white-space: nowrap;
 }
 
+// -- Comment image-attach dialog (Upload New / Choose Existing) ---------------
+// Reuses .cmc-tabs/.cmc-tab (above) for the tab strip - every `display`
+// declaration below is guarded with `&[hidden] { display: none; }` from the
+// start, having just fixed the map composer for exactly this same class of
+// bug (author styles beat the browser's default [hidden] rule at equal
+// specificity, so an un-guarded `display` silently defeats `.hidden` toggles
+// from JS).
+.comment-image-composer-dialog {
+    @include dialog-base(560px);
+}
+
+.cip-tab-panel {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    overflow: hidden;
+    padding: .75rem 1rem;
+    gap: .6rem;
+
+    &[hidden] { display: none; }
+}
+
+.cip-upload-dropzone {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: .5rem;
+    padding: 2.5rem 1rem;
+    border: 2px dashed var(--ul-surface-raised-border);
+    border-radius: $radius-md;
+    color: var(--ul-grey-5);
+    cursor: pointer;
+    text-align: center;
+
+    i { font-size: 2rem; }
+
+    &:hover {
+        border-color: var(--primary-color);
+        color: var(--ul-grey-7);
+    }
+}
+
+.cip-upload-preview {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+
+    &[hidden] { display: none; }
+
+    img {
+        width: 4rem;
+        height: 4rem;
+        object-fit: cover;
+        border-radius: $radius-sm;
+    }
+}
+
+.cip-existing-list {
+    flex: 1;
+    overflow-y: auto;
+}
+
+.cip-picker-grid {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(5.5rem, 1fr));
+    gap: .5rem;
+}
+
+.cip-picker-item {
+    display: block;
+    width: 100%;
+    aspect-ratio: 1;
+    padding: 0;
+    border: 2px solid transparent;
+    border-radius: $radius-sm;
+    background: none;
+    cursor: pointer;
+    overflow: hidden;
+
+    &:hover { border-color: var(--ul-surface-raised-border); }
+
+    &.is-selected { border-color: var(--primary-color); }
+}
+
+.cip-picker-thumb {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
 .map-layers-strip-btn,
 .cmc-tool-btn,
 .cmc-undo-btn,
@@ -973,6 +1068,11 @@
 // [data-theme="dark"] comment overrides → _dark.scss
 
 .comment-image-label {
+    // Was a <label> wrapping the file input directly; now a <button> that
+    // opens the attach-photo dialog instead, so the browser's default button
+    // chrome needs resetting the same way .comment-map-btn does.
+    background: none;
+    border: none;
     cursor: pointer;
     color: var(--ul-grey-4);
     display: flex;

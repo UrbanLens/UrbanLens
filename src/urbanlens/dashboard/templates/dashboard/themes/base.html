@@ -686,6 +686,46 @@
       </div>
     </dialog>
 
+    {# -- Attach-a-photo dialog for comments/Notes (pin, wiki, and trip #}
+    {# comments all share _comment_compose.html) - "Upload New" (a plain file #}
+    {# picker) or "Choose Existing" (one of the poster's own already-uploaded #}
+    {# photos, via CommentImagePickerView). Reuses the .cmc-tabs/.cmc-tab #}
+    {# strip styling from the map composer above for a consistent look. #}
+    <dialog id="comment-image-composer" class="comment-image-composer-dialog ul-dialog">
+      <div class="dialog-header">
+        <span>Attach a Photo</span>
+        <button type="button" class="dialog-close" id="comment-image-composer-close">
+          <i class="material-symbols-outlined">close</i>
+        </button>
+      </div>
+      <div class="cmc-tabs" id="cip-tabs" role="tablist">
+        <button type="button" class="cmc-tab is-active" id="cip-tab-btn-upload" data-tab="upload" role="tab" aria-selected="true">Upload New</button>
+        <button type="button" class="cmc-tab" id="cip-tab-btn-existing" data-tab="existing" role="tab" aria-selected="false">Choose Existing</button>
+      </div>
+      <div class="cip-tab-panel" id="cip-tab-panel-upload">
+        <label class="cip-upload-dropzone" for="cip-file-input">
+          <i class="material-symbols-outlined">add_photo_alternate</i>
+          <span>Click to choose a photo</span>
+          <input type="file" id="cip-file-input" accept="image/*" hidden>
+        </label>
+        <div class="cip-upload-preview" id="cip-upload-preview" hidden>
+          <img id="cip-upload-preview-img" alt="">
+          <span id="cip-upload-preview-name"></span>
+        </div>
+      </div>
+      <div class="cip-tab-panel" id="cip-tab-panel-existing" hidden>
+        <input type="search" id="cip-existing-search" class="cmcc-title-input cmc-existing-search"
+               placeholder="Search your photos..." autocomplete="off">
+        <div id="cip-existing-list" class="cip-existing-list">
+          <p class="form-hint">Loading your photos&hellip;</p>
+        </div>
+      </div>
+      <div class="dialog-footer">
+        <button type="button" class="btn btn--ghost" id="comment-image-composer-cancel">Cancel</button>
+        <button type="button" class="btn btn--primary" id="comment-image-composer-save" disabled>Attach photo</button>
+      </div>
+    </dialog>
+
     {# -- Global confirm dialog (replaces browser confirm()) -------------------- #}
     <dialog id="confirm-dialog" class="confirm-dialog ul-dialog">
         <div class="dialog-header">
@@ -1560,9 +1600,134 @@
             var text = ((form.querySelector('[name=text]') || {}).value || '').trim();
             var imgInput = form.querySelector('[name=image]');
             var hasImage = !!(imgInput && imgInput.files && imgInput.files.length > 0);
+            var existingImageField = form.querySelector('.comment-existing-image-field');
+            var hasExistingImage = !!(existingImageField && existingImageField.value);
             var mapField = form.querySelector('.comment-map-data-field');
             var hasMap = !!(mapField && mapField.value);
-            return !!(text || hasImage || hasMap);
+            return !!(text || hasImage || hasExistingImage || hasMap);
+        };
+
+        // Reset the image attachment UI on a successful post (mirrors
+        // _clearCommentMap) - form.reset() already restores the hidden
+        // existing_image_id field's default empty value, but the preview
+        // text isn't a form control so it needs clearing separately.
+        window._clearCommentImage = function (form) {
+            var preview = form && form.querySelector('.comment-image-preview');
+            if (preview) preview.textContent = '';
+        };
+
+        // -- Attach-a-photo button for comments/Notes - "Upload New" (plain
+        // file picker) or "Choose Existing" (one of the poster's own already-
+        // uploaded photos, via CommentImagePickerView). Single shared dialog
+        // reused across every "Attach photo" button on the page, same as
+        // #comment-map-composer above; state is closed over the form passed
+        // to whichever call opened it most recently.
+        window._openCommentAttachImageDialog = function (form) {
+            var dialog = document.getElementById('comment-image-composer');
+            if (!dialog) return;
+            var fileInput = document.getElementById('cip-file-input');
+            var uploadPreview = document.getElementById('cip-upload-preview');
+            var uploadPreviewImg = document.getElementById('cip-upload-preview-img');
+            var uploadPreviewName = document.getElementById('cip-upload-preview-name');
+            var saveBtn = document.getElementById('comment-image-composer-save');
+            var tabBtnUpload = document.getElementById('cip-tab-btn-upload');
+            var tabBtnExisting = document.getElementById('cip-tab-btn-existing');
+            var panelUpload = document.getElementById('cip-tab-panel-upload');
+            var panelExisting = document.getElementById('cip-tab-panel-existing');
+            var existingSearch = document.getElementById('cip-existing-search');
+            var existingList = document.getElementById('cip-existing-list');
+
+            var pickedFile = null;
+            var pickedExistingId = null;
+
+            function updateSaveEnabled() {
+                saveBtn.disabled = !pickedFile && !pickedExistingId;
+            }
+
+            function switchTab(tab) {
+                var onExisting = tab === 'existing';
+                tabBtnUpload.classList.toggle('is-active', !onExisting);
+                tabBtnUpload.setAttribute('aria-selected', String(!onExisting));
+                tabBtnExisting.classList.toggle('is-active', onExisting);
+                tabBtnExisting.setAttribute('aria-selected', String(onExisting));
+                panelUpload.hidden = onExisting;
+                panelExisting.hidden = !onExisting;
+                if (onExisting) loadExisting('');
+            }
+
+            function loadExisting(query) {
+                existingList.innerHTML = '<p class="form-hint">Loading your photos&hellip;</p>';
+                var url = '{% url "comments.image_picker" %}' + (query ? '?q=' + encodeURIComponent(query) : '');
+                fetch(url, { credentials: 'same-origin' })
+                    .then(function (r) { return r.text(); })
+                    .then(function (html) { existingList.innerHTML = html; })
+                    .catch(function () { existingList.innerHTML = '<p class="form-hint">Could not load your photos. Please try again.</p>'; });
+            }
+
+            tabBtnUpload.onclick = function () { switchTab('upload'); };
+            tabBtnExisting.onclick = function () { switchTab('existing'); };
+
+            fileInput.onchange = function () {
+                pickedFile = (fileInput.files && fileInput.files[0]) || null;
+                pickedExistingId = null;
+                if (pickedFile) {
+                    uploadPreviewImg.src = URL.createObjectURL(pickedFile);
+                    uploadPreviewName.textContent = pickedFile.name;
+                    uploadPreview.hidden = false;
+                } else {
+                    uploadPreview.hidden = true;
+                }
+                updateSaveEnabled();
+            };
+
+            existingList.onclick = function (e) {
+                var item = e.target.closest('.cip-picker-item');
+                if (!item) return;
+                var prev = existingList.querySelector('.cip-picker-item.is-selected');
+                if (prev) prev.classList.remove('is-selected');
+                item.classList.add('is-selected');
+                pickedExistingId = item.dataset.imageId;
+                pickedFile = null;
+                updateSaveEnabled();
+            };
+
+            if (existingSearch) {
+                var debounce = null;
+                existingSearch.oninput = function () {
+                    clearTimeout(debounce);
+                    var value = existingSearch.value.trim();
+                    debounce = setTimeout(function () { loadExisting(value); }, 300);
+                };
+            }
+
+            saveBtn.onclick = function () {
+                var fileInputOnForm = form.querySelector('.comment-image-input');
+                var existingIdField = form.querySelector('.comment-existing-image-field');
+                var preview = form.querySelector('.comment-image-preview');
+                if (pickedFile && fileInputOnForm) {
+                    var dt = new DataTransfer();
+                    dt.items.add(pickedFile);
+                    fileInputOnForm.files = dt.files;
+                    if (existingIdField) existingIdField.value = '';
+                    if (preview) preview.textContent = '📎 ' + pickedFile.name;
+                } else if (pickedExistingId) {
+                    if (existingIdField) existingIdField.value = pickedExistingId;
+                    if (fileInputOnForm) fileInputOnForm.value = '';
+                    if (preview) preview.textContent = '📎 Photo attached';
+                }
+                dialog.close();
+            };
+
+            document.getElementById('comment-image-composer-cancel').onclick = function () { dialog.close(); };
+            document.getElementById('comment-image-composer-close').onclick = function () { dialog.close(); };
+
+            pickedFile = null;
+            pickedExistingId = null;
+            fileInput.value = '';
+            uploadPreview.hidden = true;
+            updateSaveEnabled();
+            switchTab('upload');
+            dialog.showModal();
         };
 
         // -- Attach-a-map button for comments/Notes (pin, wiki, and trip

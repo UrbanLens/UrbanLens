@@ -66,6 +66,70 @@ def comment_image_error(image_file) -> str | None:
     return upload_error[0] if upload_error else None
 
 
+def attach_existing_comment_image(comment: Comment, existing_image_id: str, profile: Profile) -> None:
+    """Copy one of the poster's own already-uploaded photos onto a comment.
+
+    Backs the "Choose Existing" tab of the comment/Notes image-attach dialog
+    (base.html's ``_openCommentAttachImageDialog``), so posting a photo
+    already shared elsewhere doesn't require re-uploading a duplicate. Copies
+    the file rather than pointing the comment at the same storage the source
+    ``Image`` uses, so deleting either later doesn't orphan the other -
+    deliberately skips re-running ``comment_image_error`` too, since the
+    source file already passed those checks (size/content-type/malware) on
+    its original upload.
+
+    Args:
+        comment: The already-created comment to attach the photo to.
+        existing_image_id: The ``Image.pk`` submitted by the picker.
+        profile: The poster - only their own photos are eligible, same scope
+            ``CommentImagePickerView`` lists.
+
+    Silently no-ops on a bad/foreign id rather than failing the whole post -
+    it only ever comes from a picker listing the poster's own photos, so a
+    mismatch means stale client state, not something worth a hard error.
+    """
+    import os
+
+    from django.core.files.base import ContentFile
+
+    from urbanlens.dashboard.models.images.model import Image
+
+    source = Image.objects.uploaded_by(profile).filter(pk=existing_image_id).first()
+    if not source:
+        return
+    comment.image.save(os.path.basename(source.image.name), ContentFile(source.image.read()), save=True)
+
+
+class CommentImagePickerView(LoginRequiredMixin, View):
+    """GET /comments/images/picker/ - list the caller's own uploaded photos to attach.
+
+    Companion to the plain upload flow for comment/Notes image attachments
+    (``#comment-image-composer``'s "Choose Existing" tab): lets the poster
+    reuse one of their own photos instead of uploading a duplicate. Entirely
+    generic - just the caller's own ``Image`` rows, no comment-specific
+    filtering - mirroring how ``DirectMessageMapPickerView`` is reused as-is
+    for the analogous "Choose Existing" tab on the map-attach dialog.
+    """
+
+    def get(self, request: HttpRequest) -> HttpResponse:
+        """Render the picker list of the caller's own photo uploads.
+
+        Args:
+            request: The HTTP request, optionally carrying a ``q`` search term.
+
+        Returns:
+            Rendered HTML fragment listing matching photos.
+        """
+        from urbanlens.dashboard.models.images.model import Image, MediaKind
+
+        profile = _profile(request)
+        query = (request.GET.get("q") or "").strip()
+        candidates = Image.objects.uploaded_by(profile).filter(media_type=MediaKind.PHOTO)
+        if query:
+            candidates = candidates.filter(caption__icontains=query)
+        return render(request, "dashboard/partials/comments/_comment_image_picker.html", {"candidates": candidates[:50], "query": query})
+
+
 def _render_comments(request, context: dict) -> HttpResponse:
     return render(request, "dashboard/partials/comments/comment_panel.html", context)
 
@@ -180,8 +244,9 @@ class PinCommentsView(LoginRequiredMixin, View):
         profile = _profile(request)
         text = request.POST.get("text", "").strip()
         image = request.FILES.get("image")
+        existing_image_id = request.POST.get("existing_image_id", "").strip()
         map_data = _parse_map_data(request)
-        if not text and not image and not map_data:
+        if not text and not image and not existing_image_id and not map_data:
             return HttpResponse("Please add some text, a photo, or a map.", status=400)
         length_error = text_length_error(text, MAX_COMMENT_TEXT_LENGTH, "Comment")
         if length_error:
@@ -196,6 +261,8 @@ class PinCommentsView(LoginRequiredMixin, View):
         if image:
             comment.image = image
             comment.save(update_fields=["image"])
+        elif existing_image_id:
+            attach_existing_comment_image(comment, existing_image_id, profile)
         if parent and parent.profile != profile:
             _notify_reply(profile, parent, reply=comment)
         ctx = _build_context(pin.comments.all(), profile, request, pin=pin, context_type="pin")
@@ -240,8 +307,9 @@ class WikiCommentsView(LoginRequiredMixin, View):
         _location, wiki, profile = resolve_visible_wiki(request, location_slug)
         text = request.POST.get("text", "").strip()
         image = request.FILES.get("image")
+        existing_image_id = request.POST.get("existing_image_id", "").strip()
         map_data = _parse_map_data(request)
-        if not text and not image and not map_data:
+        if not text and not image and not existing_image_id and not map_data:
             return HttpResponse("Please add some text, a photo, or a map.", status=400)
         length_error = text_length_error(text, MAX_COMMENT_TEXT_LENGTH, "Comment")
         if length_error:
@@ -262,6 +330,8 @@ class WikiCommentsView(LoginRequiredMixin, View):
         if image:
             comment.image = image
             comment.save(update_fields=["image"])
+        elif existing_image_id:
+            attach_existing_comment_image(comment, existing_image_id, profile)
         if parent and parent.profile != profile:
             _notify_reply(profile, parent, reply=comment)
         ctx = _build_context(wiki.comments.all(), profile, request, wiki=wiki, location=wiki.location, context_type="wiki")

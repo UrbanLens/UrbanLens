@@ -1335,7 +1335,7 @@ class TripCommentsView(LoginRequiredMixin, View):
         return _render_trip_comments(request, result, profile)
 
     def post(self, request, trip_slug):
-        from urbanlens.dashboard.controllers.comments import _notify_reply, comment_image_error
+        from urbanlens.dashboard.controllers.comments import _notify_reply, attach_existing_comment_image, comment_image_error
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
         result = _trip_or_403(request, trip_slug, profile)
@@ -1348,11 +1348,12 @@ class TripCommentsView(LoginRequiredMixin, View):
 
         text = request.POST.get("text", "").strip()
         image = request.FILES.get("image")
+        existing_image_id = request.POST.get("existing_image_id", "").strip()
         from urbanlens.dashboard.controllers.comments import _parse_map_data
         from urbanlens.dashboard.services.map_snapshot import materialize_markup_map
 
         map_data = _parse_map_data(request)
-        if not text and not image and not map_data:
+        if not text and not image and not existing_image_id and not map_data:
             return HttpResponse("Please add some text, a photo, or a map.", status=400)
         length_error = text_length_error(text, MAX_COMMENT_TEXT_LENGTH, "Comment")
         if length_error:
@@ -1369,6 +1370,8 @@ class TripCommentsView(LoginRequiredMixin, View):
         if image:
             comment.image = image
             comment.save(update_fields=["image"])
+        elif existing_image_id:
+            attach_existing_comment_image(comment, existing_image_id, profile)
 
         if parent and parent.author and parent.author != profile:
             _notify_reply(profile, parent, reply=comment)

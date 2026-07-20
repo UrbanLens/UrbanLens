@@ -9,7 +9,7 @@
       hx-target="#comment-panel"
       hx-swap="outerHTML"
       hx-encoding="multipart/form-data"
-      hx-on::after-request="if(event.detail.successful){this.reset();_clearCommentMap(this);this.closest('.comment-reply-form') && (this.closest('.comment-reply-form').hidden=true)}"
+      hx-on::after-request="if(event.detail.successful){this.reset();_clearCommentMap(this);_clearCommentImage(this);this.closest('.comment-reply-form') && (this.closest('.comment-reply-form').hidden=true)}"
       hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
       hx-on:submit="if(!window._validateCommentForm||!_validateCommentForm(this)){event.preventDefault();if(window.toastr)toastr.warning('Please add some text, a photo, or a map.');return false;}">
   {% if parent_id %}<input type="hidden" name="parent_id" value="{{ parent_id }}">{% endif %}
@@ -49,10 +49,13 @@
       </div>
 
       <div class="comment-compose-actions">
-        <label class="comment-image-label" title="Attach image">
+        <button type="button" class="comment-image-label" title="Attach photo"
+                onclick="_openCommentAttachImageDialog(this.closest('.comment-compose'))">
           <i class="material-symbols-outlined">image</i>
-          <input type="file" name="image" accept="image/*" class="comment-image-input">
-        </label>
+        </button>
+        <input type="file" name="image" accept="image/*" class="comment-image-input" hidden>
+        {# Hidden field carrying a previously-uploaded photo's id - populated by the "Choose Existing" tab #}
+        <input type="hidden" name="existing_image_id" class="comment-existing-image-field" value="">
         <span class="comment-image-preview"></span>
         <button type="button" class="comment-map-btn" title="Attach map"
                 onclick="_openCommentAttachMapDialog(this.closest('.comment-compose'))">
