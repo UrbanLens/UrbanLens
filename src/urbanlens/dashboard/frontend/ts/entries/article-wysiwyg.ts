@@ -62,7 +62,9 @@ declare module "@tiptap/core" {
 
 type EditorMode = "wysiwyg" | "source";
 
-const editors = new WeakMap<HTMLElement, Editor>();
+// A plain Map (not WeakMap) so mounted roots can be iterated on cleanup - see
+// the htmx:afterSwap handler below.
+const editors = new Map<HTMLElement, Editor>();
 
 function editorRoot(el: Element | null): HTMLElement | null {
     return el?.closest<HTMLElement>("[data-article-editor]") ?? null;
@@ -501,10 +503,9 @@ function destroyEditor(root: HTMLElement): void {
 
 const EDITOR_SELECTOR = "[data-article-editor]";
 
-// container itself may be the swapped-in editor root (htmx outerHTML swaps
-// hand us the new element directly, not a wrapper around it), and
-// querySelectorAll only matches descendants - never the container itself -
-// so that case has to be checked separately or the editor never mounts.
+// container may itself be the swapped-in editor root, and querySelectorAll
+// only matches descendants - never the container itself - so that case has
+// to be checked separately or the editor never mounts.
 function allMatching(container: ParentNode): HTMLElement[] {
     const matches = Array.from(container.querySelectorAll<HTMLElement>(EDITOR_SELECTOR));
     if (container instanceof HTMLElement && container.matches(EDITOR_SELECTOR)) matches.push(container);
@@ -550,15 +551,20 @@ document.addEventListener(
     true,
 );
 
-document.body.addEventListener("htmx:afterSwap", (event) => {
-    const target = (event as CustomEvent<{ target?: unknown }>).detail?.target;
-    initAll(target instanceof Element ? target : document);
-});
-
-document.body.addEventListener("htmx:beforeSwap", (event) => {
-    const target = (event as CustomEvent<{ target?: unknown }>).detail?.target;
-    if (!(target instanceof Element)) return;
-    allMatching(target).forEach(destroyEditor);
+// htmx:afterSwap's event.detail.target is NOT reliable for scoping here: for
+// `outerHTML` swaps (which the editor's own save/cancel/mode-toggle all use)
+// it's htmx's reference to the *old*, already-detached element being replaced
+// - not the new one that took its place - so a mounted editor's canvas would
+// never be found by searching within it. Rescanning the whole document is
+// what actually works; mountEditor() is idempotent (the `editors` Map guard)
+// so this is cheap and safe on every swap anywhere on the page. Cleanup uses
+// the same rescan: any previously-tracked root no longer connected to the
+// document (because it - or an ancestor - just got swapped out) is disposed.
+document.body.addEventListener("htmx:afterSwap", () => {
+    for (const root of editors.keys()) {
+        if (!root.isConnected) destroyEditor(root);
+    }
+    initAll(document);
 });
 
 initAll(document);

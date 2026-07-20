@@ -34970,7 +34970,7 @@ function referenceDefinitionStub(n, currentContent) {
 }
 
 // src/urbanlens/dashboard/frontend/ts/entries/article-wysiwyg.ts
-var editors = new WeakMap;
+var editors = new Map;
 function editorRoot(el) {
   return el?.closest("[data-article-editor]") ?? null;
 }
@@ -35347,14 +35347,11 @@ document.addEventListener("click", (event) => {
     setMode(root, root.dataset.editorMode === "source" ? "wysiwyg" : "source");
   }
 }, true);
-document.body.addEventListener("htmx:afterSwap", (event) => {
-  const target = event.detail?.target;
-  initAll(target instanceof Element ? target : document);
-});
-document.body.addEventListener("htmx:beforeSwap", (event) => {
-  const target = event.detail?.target;
-  if (!(target instanceof Element))
-    return;
-  allMatching(target).forEach(destroyEditor);
+document.body.addEventListener("htmx:afterSwap", () => {
+  for (const root of editors.keys()) {
+    if (!root.isConnected)
+      destroyEditor(root);
+  }
+  initAll(document);
 });
 initAll(document);
