@@ -429,6 +429,12 @@
     gap: 1.5rem;
 }
 
+/* .tools-grid sets display:grid unconditionally, which otherwise overrides the
+   HTML [hidden] attribute the section subnav script toggles - be explicit. */
+.tools-grid[hidden] {
+    display: none;
+}
+
 .tools-card {
     border-radius: 10px;
     width: 100%;
