@@ -306,6 +306,7 @@ def _export_settings(profile: Any, temp_dir: str, *, base_url: str = "") -> None
         "pin_detail_map_height": profile.pin_detail_map_height,
         "media_gallery_sort": profile.media_gallery_sort,
         "show_wiki_cover_photos": profile.show_wiki_cover_photos,
+        "auto_create_pin_article_from_wikipedia": profile.auto_create_pin_article_from_wikipedia,
         "ai": {
             "ai_enabled": profile.ai_enabled,
             "ai_label_tags": profile.ai_label_tags,

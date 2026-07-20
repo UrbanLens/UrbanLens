@@ -571,10 +571,16 @@ class CommunitySettingsForm(forms.ModelForm):
         label="Show Wiki Cover Photos",
         help_text="Show the community-selected cover photo banner on wiki pages. Turn off if you'd rather not see photos the community has chosen there.",
     )
+    auto_create_pin_article_from_wikipedia = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
+        label="Auto-Start Pin Articles from Wikipedia",
+        help_text="When a Wikipedia article is matched to one of your pins, automatically start that pin's article from it (only if it doesn't already have one).",
+    )
 
     class Meta:
         model = Profile
-        fields = ["community_enabled", "show_wiki_cover_photos"]
+        fields = ["community_enabled", "show_wiki_cover_photos", "auto_create_pin_article_from_wikipedia"]
 
 
 class WikiSyncSettingsForm(forms.ModelForm):

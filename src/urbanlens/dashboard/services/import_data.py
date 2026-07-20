@@ -771,6 +771,7 @@ _SETTINGS_PASSTHROUGH_FIELDS: tuple[str, ...] = (
     "pin_detail_map_height",
     "media_gallery_sort",
     "show_wiki_cover_photos",
+    "auto_create_pin_article_from_wikipedia",
     "external_apis_enabled",
     "name_source_priority",
 )

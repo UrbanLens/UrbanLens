@@ -20,7 +20,7 @@ from urbanlens.dashboard.models.cache.location_cache import LocationCache
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.wiki.model import Wiki
-from urbanlens.dashboard.services.wiki_seed import _attribution_line, _extract_html_to_markdown, seed_wiki_article_from_wikipedia
+from urbanlens.dashboard.services.wiki_seed import _attribution_line, _extract_html_to_markdown, seed_pin_article_from_wikipedia, seed_wiki_article_from_wikipedia
 
 _ARTICLE_DATA = {
     "title": "Eighteenth District School",
@@ -140,8 +140,71 @@ class SeedWikiArticleFromWikipediaTests(TestCase):
         self.assertEqual(article.content, "Someone already wrote this.")
 
 
+class SeedPinArticleFromWikipediaTests(TestCase):
+    """seed_pin_article_from_wikipedia's guards - the pin equivalent of SeedWikiArticleFromWikipediaTests."""
+
+    def setUp(self) -> None:
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+
+    def test_owner_setting_off_returns_none(self) -> None:
+        self.profile.auto_create_pin_article_from_wikipedia = False
+        self.profile.save(update_fields=["auto_create_pin_article_from_wikipedia"])
+        location = _location()
+        pin = baker.make(Pin, profile=self.profile, location=location)
+        LocationCache.objects.create(location=location, source="wikipedia", data=_ARTICLE_DATA)
+
+        self.assertIsNone(seed_pin_article_from_wikipedia(pin))
+        self.assertFalse(Article.objects.filter(pin=pin).exists())
+
+    def test_no_cached_wikipedia_row_returns_none(self) -> None:
+        location = _location()
+        pin = baker.make(Pin, profile=self.profile, location=location)
+        self.assertIsNone(seed_pin_article_from_wikipedia(pin))
+        self.assertFalse(Article.objects.filter(pin=pin).exists())
+
+    def test_empty_cached_data_returns_none(self) -> None:
+        location = _location()
+        pin = baker.make(Pin, profile=self.profile, location=location)
+        LocationCache.objects.create(location=location, source="wikipedia", data={})
+        self.assertIsNone(seed_pin_article_from_wikipedia(pin))
+
+    def test_matched_article_seeds_the_pin(self) -> None:
+        location = _location()
+        pin = baker.make(Pin, profile=self.profile, location=location)
+        LocationCache.objects.create(location=location, source="wikipedia", data=_ARTICLE_DATA)
+
+        article = seed_pin_article_from_wikipedia(pin)
+
+        self.assertIsNotNone(article)
+        self.assertEqual(article.pin_id, pin.pk)
+        self.assertIsNone(article.last_edited_by_id)
+        self.assertIn("Eighteenth District School", article.content)
+        self.assertIn("## History", article.content)
+        revision = article.revisions.first()
+        self.assertIsNotNone(revision)
+        self.assertEqual(revision.edit_summary, "Seeded from Wikipedia")
+        self.assertIsNone(revision.editor_id)
+
+    def test_never_overwrites_an_existing_article(self) -> None:
+        location = _location()
+        pin = baker.make(Pin, profile=self.profile, location=location)
+        Article.objects.create(pin=pin, content="Someone already wrote this.")
+        LocationCache.objects.create(location=location, source="wikipedia", data=_ARTICLE_DATA)
+
+        result = seed_pin_article_from_wikipedia(pin)
+
+        self.assertIsNone(result)
+        article = Article.objects.get(pin=pin)
+        self.assertEqual(article.content, "Someone already wrote this.")
+
+
 class WikipediaCacheSignalTriggersSeedingTests(TestCase):
-    """models.cache.signals: a fresh "wikipedia" LocationCache write seeds the wiki article."""
+    """models.cache.signals: a fresh "wikipedia" LocationCache write seeds the wiki AND every pin's article."""
+
+    def setUp(self) -> None:
+        self.user = baker.make(User)
+        self.profile = self.user.profile
 
     def test_caching_a_matched_article_seeds_the_wiki(self) -> None:
         location = _location()
@@ -152,29 +215,59 @@ class WikipediaCacheSignalTriggersSeedingTests(TestCase):
 
         self.assertTrue(Article.objects.filter(wiki=wiki).exists())
 
+    def test_caching_a_matched_article_seeds_every_pin_at_the_location(self) -> None:
+        location = _location()
+        pin_a = baker.make(Pin, profile=self.profile, location=location)
+        other_profile = baker.make(User).profile
+        pin_b = baker.make(Pin, profile=other_profile, location=location)
+
+        with self.captureOnCommitCallbacks(execute=True):
+            LocationCache.set(location, "wikipedia", _ARTICLE_DATA, query_key="Eighteenth District School")
+
+        self.assertTrue(Article.objects.filter(pin=pin_a).exists())
+        self.assertTrue(Article.objects.filter(pin=pin_b).exists())
+
+    def test_pin_owner_opted_out_is_skipped_but_others_still_seed(self) -> None:
+        self.profile.auto_create_pin_article_from_wikipedia = False
+        self.profile.save(update_fields=["auto_create_pin_article_from_wikipedia"])
+        location = _location()
+        opted_out_pin = baker.make(Pin, profile=self.profile, location=location)
+        other_profile = baker.make(User).profile
+        opted_in_pin = baker.make(Pin, profile=other_profile, location=location)
+
+        with self.captureOnCommitCallbacks(execute=True):
+            LocationCache.set(location, "wikipedia", _ARTICLE_DATA, query_key="Eighteenth District School")
+
+        self.assertFalse(Article.objects.filter(pin=opted_out_pin).exists())
+        self.assertTrue(Article.objects.filter(pin=opted_in_pin).exists())
+
     def test_caching_a_no_match_result_does_not_create_an_article(self) -> None:
         location = _location()
         wiki = baker.make(Wiki, location=location)
+        pin = baker.make(Pin, profile=self.profile, location=location)
 
         with self.captureOnCommitCallbacks(execute=True):
             LocationCache.set(location, "wikipedia", {}, query_key="Some Query")
 
         self.assertFalse(Article.objects.filter(wiki=wiki).exists())
+        self.assertFalse(Article.objects.filter(pin=pin).exists())
 
     def test_other_cache_sources_do_not_trigger_seeding(self) -> None:
         location = _location()
         wiki = baker.make(Wiki, location=location)
+        pin = baker.make(Pin, profile=self.profile, location=location)
 
         with self.captureOnCommitCallbacks(execute=True):
             LocationCache.set(location, "nominatim", _ARTICLE_DATA)
 
         self.assertFalse(Article.objects.filter(wiki=wiki).exists())
+        self.assertFalse(Article.objects.filter(pin=pin).exists())
 
-    def test_location_with_no_wiki_does_not_crash(self) -> None:
+    def test_location_with_no_wiki_and_no_pins_does_not_crash(self) -> None:
         location = _location()
         with self.captureOnCommitCallbacks(execute=True):
             LocationCache.set(location, "wikipedia", _ARTICLE_DATA)
-        # No assertion beyond "didn't raise" - there's no wiki to seed.
+        # No assertion beyond "didn't raise" - there's nothing to seed.
 
 
 class WikiCreationSeedsFromAlreadyCachedArticleTests(TestCase):

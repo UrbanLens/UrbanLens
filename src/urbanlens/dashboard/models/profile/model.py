@@ -338,6 +338,16 @@ class Profile(abstract.PublicDashboardModel):
     # affect the viewer's own pin pages, which always show their chosen cover.
     show_wiki_cover_photos = BooleanField(default=True, help_text="Show the community-selected cover photo banner on wiki pages.")
 
+    # Mirrors what already happens automatically for community wikis (see
+    # services.wiki_seed) - when a Wikipedia article is confidently matched to
+    # one of your pins and it doesn't have an article yet, start one from that
+    # extract instead of leaving it blank. Never overwrites an existing
+    # article (seeded or human-written) - see seed_pin_article_from_wikipedia's
+    # own guard. Off entirely disables this per-pin auto-population, not
+    # anything about the wiki-side equivalent (which has no toggle - articles
+    # are private to a pin's owner, community wikis are not).
+    auto_create_pin_article_from_wikipedia = BooleanField(default=True, help_text="When a Wikipedia article is matched to one of your pins, automatically start that pin's article from it (if it doesn't have one yet).")
+
     # Default ordering for the pin detail page's Media gallery. "relevant"
     # surfaces items this user has explicitly marked relevant first (falling
     # back to arrival order); "recent" ignores relevance marks entirely.

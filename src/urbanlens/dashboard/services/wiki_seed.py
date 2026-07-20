@@ -1,4 +1,4 @@
-"""Seed a wiki's article from a confidently-matched Wikipedia article.
+"""Seed a wiki's or pin's article from a confidently-matched Wikipedia article.
 
 Wikis are created empty (see ``services.locations.creation.WikiCreationService``'s
 docstring: "Wikis are never created automatically") - but once a Wikipedia
@@ -16,6 +16,12 @@ true:
 
 Never overwrites: any existing Article row (seeded or human-written) is left
 untouched - see ``seed_wiki_article_from_wikipedia``'s own guard.
+
+``seed_pin_article_from_wikipedia`` does the same thing for a single pin,
+gated on the pin owner's own ``Profile.auto_create_pin_article_from_wikipedia``
+setting (on by default) - unlike a community wiki, a pin's article is
+private to its owner, so seeding it is opt-out per-user rather than
+something that always happens.
 """
 
 from __future__ import annotations
@@ -33,6 +39,7 @@ if TYPE_CHECKING:
 
     from urbanlens.dashboard.models.article.model import Article
     from urbanlens.dashboard.models.location.model import Location
+    from urbanlens.dashboard.models.pin.model import Pin
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +74,61 @@ def seed_wiki_article_from_wikipedia(location: Location) -> Article | None:
     if get_article(wiki=wiki) is not None:
         return None
 
+    content = _seed_content_for_location(location)
+    if content is None:
+        return None
+
+    article, _revision = save_article(editor=None, content=content, edit_summary=_EDIT_SUMMARY, wiki=wiki)
+    logger.info("Seeded wiki %s's article from Wikipedia", wiki.pk)
+    return article
+
+
+def seed_pin_article_from_wikipedia(pin: Pin) -> Article | None:
+    """Write a pin's first article from a cached Wikipedia match, if applicable.
+
+    No-ops (returns None) unless all of: the pin owner's
+    ``auto_create_pin_article_from_wikipedia`` setting is on, the pin has a
+    location, the pin has no article yet (seeded or human-written - never
+    overwrites either), and a Wikipedia article is actually cached for the
+    pin's location with a non-empty extract.
+
+    Args:
+        pin: The pin to seed an article for.
+
+    Returns:
+        The newly created Article, or None if nothing was seeded.
+    """
+    if not pin.profile.auto_create_pin_article_from_wikipedia:
+        return None
+
+    location = pin.location
+    if location is None:
+        return None
+
+    from urbanlens.dashboard.services.articles import get_article, save_article
+
+    if get_article(pin=pin) is not None:
+        return None
+
+    content = _seed_content_for_location(location)
+    if content is None:
+        return None
+
+    article, _revision = save_article(editor=None, content=content, edit_summary=_EDIT_SUMMARY, pin=pin)
+    logger.info("Seeded pin %s's article from Wikipedia", pin.pk)
+    return article
+
+
+def _seed_content_for_location(location: Location) -> str | None:
+    """Build seed-ready Markdown from the location's cached Wikipedia match, if any.
+
+    Args:
+        location: The location whose cached "wikipedia" LocationCache row to read.
+
+    Returns:
+        Markdown content (body + attribution footer), or None when there's no
+        usable cached match to seed from.
+    """
     from urbanlens.dashboard.models.cache.location_cache import LocationCache
 
     cached = LocationCache.objects.filter(location=location, source=_WIKIPEDIA_CACHE_SOURCE).first()
@@ -81,10 +143,7 @@ def seed_wiki_article_from_wikipedia(location: Location) -> Article | None:
     if not body:
         return None
 
-    content = f"{body}\n\n{_attribution_line(cached.data)}".strip()
-    article, _revision = save_article(editor=None, content=content, edit_summary=_EDIT_SUMMARY, wiki=wiki)
-    logger.info("Seeded wiki %s's article from Wikipedia article %r", wiki.pk, cached.data.get("title"))
-    return article
+    return f"{body}\n\n{_attribution_line(cached.data)}".strip()
 
 
 def _attribution_line(article_data: dict) -> str:
