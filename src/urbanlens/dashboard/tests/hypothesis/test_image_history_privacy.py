@@ -38,6 +38,8 @@ def _geotagged_jpeg_bytes() -> bytes:
     gps_ifd[2] = (IFDRational(40, 1), IFDRational(0, 1), IFDRational(0, 1))  # GPSLatitude
     gps_ifd[3] = "W"  # GPSLongitudeRef
     gps_ifd[4] = (IFDRational(74, 1), IFDRational(0, 1), IFDRational(0, 1))  # GPSLongitude
+    gps_ifd[16] = "T"  # GPSImgDirectionRef
+    gps_ifd[17] = IFDRational(90, 1)  # GPSImgDirection
     buf = io.BytesIO()
     img.save(buf, format="JPEG", exif=exif.tobytes())
     return buf.getvalue()
@@ -61,6 +63,7 @@ class ProcessImageUploadLocationPrivacyTests(TestCase):
 
         self.assertIsNone(row.latitude)
         self.assertIsNone(row.longitude)
+        self.assertIsNone(row.direction)
         self.assertIsNotNone(row.exif_data)
         self.assertNotIn("GPSInfo", row.exif_data)
 
@@ -85,6 +88,7 @@ class ProcessImageUploadLocationPrivacyTests(TestCase):
 
         self.assertAlmostEqual(float(row.latitude), 40.0, places=4)
         self.assertAlmostEqual(float(row.longitude), -74.0, places=4)
+        self.assertAlmostEqual(float(row.direction), 90.0, places=2)
         self.assertIn("GPSInfo", row.exif_data)
 
         with row.image.open("rb") as fh:
