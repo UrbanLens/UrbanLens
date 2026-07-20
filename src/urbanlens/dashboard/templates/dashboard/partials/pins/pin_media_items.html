@@ -18,6 +18,9 @@
      data-media-page-url="{{ item.page_url|default:item.url }}"
      data-media-caption="{{ item.caption }}"
      data-media-relevant="{% if entry.is_relevant == True %}true{% elif entry.is_relevant == False %}false{% else %}{% endif %}"
+     data-image-id="{{ entry.image_id|default:"" }}"
+     data-lat="{{ entry.lat|default:"" }}"
+     data-lng="{{ entry.lng|default:"" }}"
      {% if source_key != "photos" %}draggable="true" ondragstart="window.mediaItemDragStart(event, this)"{% endif %}
      title="{{ item.caption }}">
     {% if source_key != "photos" %}

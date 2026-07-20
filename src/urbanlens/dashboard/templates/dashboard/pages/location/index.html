@@ -1799,6 +1799,8 @@
             itemEl.dataset.mediaUrl = data.image_url;
             itemEl.dataset.mediaThumb = data.image_url;
             if (data.image_id) itemEl.dataset.imageId = data.image_id;
+            if (data.latitude != null) itemEl.dataset.lat = data.latitude;
+            if (data.longitude != null) itemEl.dataset.lng = data.longitude;
             var thumbImg = itemEl.querySelector('.media-item-thumb');
             if (thumbImg && thumbImg.tagName === 'IMG') thumbImg.src = data.image_url;
             rebuildMediaTabs();
@@ -1940,6 +1942,13 @@
                     // relevant-marked item exactly like a real upload, since
                     // by then it genuinely is one.
                     imageId: el.dataset.imageId ? parseInt(el.dataset.imageId, 10) : null,
+                    // Own-photos preview tiles always carry these server-side
+                    // (pin.py's photos MediaItem builder); other tiles only
+                    // gain them once dropped onto the map (see
+                    // mediaApplyMaterializedDrop) - drives the lightbox's
+                    // small location map (_photo_lightbox.html).
+                    latitude: el.dataset.lat ? parseFloat(el.dataset.lat) : null,
+                    longitude: el.dataset.lng ? parseFloat(el.dataset.lng) : null,
                 };
             });
             var idx = visible.indexOf(itemEl);

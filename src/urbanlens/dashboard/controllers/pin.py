@@ -501,6 +501,9 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 "item": MediaItem(url=img.image.url, thumb_url=img.image.url, caption=img.caption or "", source="My Photos", page_url=img.image.url),
                 "key": f"photo-{img.pk}",
                 "is_relevant": None,
+                "image_id": img.pk,
+                "lat": img.latitude,
+                "lng": img.longitude,
             }
             for img in images
         ]

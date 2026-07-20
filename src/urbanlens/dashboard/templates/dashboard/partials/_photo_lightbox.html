@@ -5,7 +5,12 @@ Memories > Photos, the user profile page). Include once per page; open it via
 `window.galleryOpenLightboxItem(list, idx)`, where `list` is an array of
 normalized items:
   {url, thumbUrl, caption, author, copyright, sourceUrl, sourceName, takenAt,
-   imageId, canRelevance, relevant, mediaSource, mediaKey}
+   imageId, canRelevance, relevant, mediaSource, mediaKey, latitude, longitude}
+`latitude`/`longitude` (numbers, or omitted/null) draw the small location map
+in the side panel - see #lightbox-location below. The marker is draggable
+(and drags persist via `window.galleryRepositionImage`, reusing whichever
+gallery context - pin/wiki/safety - is on the page) only when both `imageId`
+and that function are present; otherwise the map renders read-only.
 `thumbUrl` is optional - a browser-safe fallback shown in place of `url` if
 the full-resolution file fails to load (e.g. a Wikimedia .tif result).
 
@@ -69,6 +74,12 @@ Context:
           <i class="material-symbols-outlined">open_in_new</i><span>View source</span>
         </a>
       </div>
+      <div id="lightbox-location" class="lightbox-location" hidden>
+        <div id="lightbox-location-map" class="lightbox-location-map"></div>
+        <p id="lightbox-location-hint" class="lightbox-location-hint" hidden>
+          <i class="material-symbols-outlined">drag_pan</i> Drag the marker to update this photo's location
+        </p>
+      </div>
       <div id="lightbox-relevance-actions" class="lightbox-relevance-actions" hidden>
         <button type="button" id="lightbox-relevant-btn" class="btn btn--ghost btn--sm" onclick="window._lightboxSetRelevance(true)">
           <i class="material-symbols-outlined">thumb_up</i> Relevant
@@ -111,6 +122,15 @@ Context:
   var _lightboxList = [];
   var _lightboxIdx = 0;
 
+  // The side panel's small location map - a single Leaflet instance torn down
+  // and recreated per photo shown (see _setLightboxLocation), same pattern as
+  // memories/photos.html's confirm-pin map. Also torn down when the dialog
+  // itself closes, so a stale Leaflet instance never lingers bound to a
+  // detached container.
+  var _lightboxMap = null;
+  var _lightboxDlg = document.getElementById(LIGHTBOX_ID);
+  if (_lightboxDlg) _lightboxDlg.addEventListener('close', function () { if (_lightboxMap) { _lightboxMap.remove(); _lightboxMap = null; } });
+
   // Generalized opener: `list` is an array of normalized items (see the file
   // header), `idx` the one to show first. This is the single entry point
   // every page's photo grid funnels through - each grid keeps its own
@@ -146,6 +166,7 @@ Context:
     }
     document.getElementById('lightbox-caption').textContent = caption || '';
     _setLightboxMeta(item);
+    _setLightboxLocation(item);
     _loadLightboxCustomFields(item.imageId);
     _loadLightboxAttachmentPoints(item.imageId);
 
@@ -242,6 +263,55 @@ Context:
           : '<i class="material-symbols-outlined">wallpaper</i> Set as cover photo';
       }
     }
+  }
+
+  // Small "where was this taken" map in the side panel. Torn down and
+  // recreated for every photo shown (a single Leaflet instance can't just
+  // re-center - the container may not even be visible yet, see the
+  // invalidateSize() note below) - mirrors memories/photos.html's confirm-pin
+  // map. Hidden entirely for a photo with no coordinates. The marker is only
+  // draggable when this photo is a real, owned Image AND the page has wired
+  // up a reposition endpoint (window.galleryRepositionImage - set by
+  // whichever gallery context, pin/wiki/safety, included this partial); every
+  // other case (a still-transient Media item, or a lightbox on a page with no
+  // reposition endpoint at all, e.g. the profile photo strip) shows the map
+  // read-only rather than silently failing to save a drag.
+  function _setLightboxLocation(item) {
+    var section = document.getElementById('lightbox-location');
+    var mapEl = document.getElementById('lightbox-location-map');
+    var hint = document.getElementById('lightbox-location-hint');
+    if (_lightboxMap) { _lightboxMap.remove(); _lightboxMap = null; }
+    if (!section || !mapEl) return;
+    var lat = item.latitude, lng = item.longitude;
+    if (typeof lat !== 'number' || typeof lng !== 'number' || isNaN(lat) || isNaN(lng) || typeof L === 'undefined') {
+      section.hidden = true;
+      return;
+    }
+    section.hidden = false;
+    var editable = !!(item.imageId && typeof window.galleryRepositionImage === 'function');
+    if (hint) hint.hidden = !editable;
+    _lightboxMap = L.map(mapEl, { attributionControl: false, zoomControl: false, dragging: false, scrollWheelZoom: false }).setView([lat, lng], 16);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors',
+      maxZoom: 19,
+    }).addTo(_lightboxMap);
+    var marker = L.marker([lat, lng], { draggable: editable }).addTo(_lightboxMap);
+    if (editable) {
+      marker.on('dragend', function () {
+        var pos = marker.getLatLng();
+        var prevLat = item.latitude, prevLng = item.longitude;
+        window.galleryRepositionImage(item.imageId, pos.lat, pos.lng, function () {
+          // Server rejected the move - snap the marker back.
+          marker.setLatLng([prevLat, prevLng]);
+        });
+        item.latitude = pos.lat;
+        item.longitude = pos.lng;
+      });
+    }
+    // The dialog is still display:none (showModal() hasn't run yet - see
+    // window.galleryOpenLightboxItem) the first time this map is created, so
+    // Leaflet measured a zero-size container; remeasure once it's visible.
+    setTimeout(function () { if (_lightboxMap) { _lightboxMap.invalidateSize(); } }, 60);
   }
 
   // Sets (imageId given) or clears (imageId null) the pin's cover photo, then

@@ -373,6 +373,7 @@ Context:
         url: i.url, caption: '', author: i.author, copyright: i.copyright,
         sourceUrl: i.sourceUrl, sourceName: '', takenAt: i.takenAt,
         imageId: i.id, canRelevance: false, relevant: null,
+        latitude: i.lat, longitude: i.lng,
       };
     });
     var idx = _items.findIndex(function (i) { return i.id === imgId; });
