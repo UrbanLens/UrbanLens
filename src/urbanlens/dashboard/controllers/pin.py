@@ -516,8 +516,20 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
     @action(detail=True, methods=["post"])
     def media_relevance(self, request: Request, pin_slug: str):
-        """Set (or clear) the requesting user's relevance mark on one Media gallery item."""
+        """Set (or clear) the requesting user's relevance mark on one Media gallery item.
+
+        Marking an item relevant also materializes it (downloads and saves it
+        as a real ``Image`` row on this pin, exactly as if the user had
+        uploaded it themselves - see ``services.media_materialize``) so the
+        gallery never depends on the external provider's URL staying alive.
+        A failed download still records the relevance mark (the user's
+        opinion that this item matters is worth keeping even if today's
+        download attempt failed) but is reported back so the frontend can
+        toast the failure instead of silently leaving the external URL as
+        the only copy.
+        """
         from urbanlens.dashboard.models.images.relevance import MediaRelevance, media_item_key
+        from urbanlens.dashboard.services.media_materialize import MaterializeError, materialize_media_item
 
         try:
             pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)
@@ -531,6 +543,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             source = str(data["source"])[:30]
             url = str(data["url"])
             is_relevant = data.get("is_relevant")
+            page_url = str(data.get("page_url") or "")
+            caption = str(data.get("caption") or "")
         except (KeyError, ValueError, TypeError, ParseError):
             return JsonResponse({"error": "Invalid request data."}, status=400)
 
@@ -548,7 +562,18 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             item_key=item_key,
             defaults={"is_relevant": bool(is_relevant)},
         )
-        return JsonResponse({"is_relevant": bool(is_relevant)})
+
+        response: dict = {"is_relevant": bool(is_relevant)}
+        if is_relevant:
+            try:
+                image = materialize_media_item(location=pin.location, profile=profile, source=source, url=url, page_url=page_url, caption=caption, pin=pin)
+            except MaterializeError as exc:
+                logger.warning("media_relevance: failed to materialize %s: %s", url, exc)
+                response["materialize_error"] = str(exc)
+            else:
+                response["image_id"] = image.pk
+                response["image_url"] = image.image.url
+        return JsonResponse(response)
 
     @action(detail=True, methods=["post"])
     def media_send_to_wiki(self, request: Request, pin_slug: str):

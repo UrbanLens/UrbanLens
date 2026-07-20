@@ -1009,6 +1009,19 @@
 .sat-carousel {
     display: flex;
     flex-direction: column;
+    // Matches .sv-carousel's own reservation for its controls/dots bars below
+    // (see .sv-carousel) - without this, the satellite image only ever grew
+    // to its own min-height regardless of how tall the grid row's
+    // align-items:stretch made this card's outer box (e.g. whenever Street
+    // View's interactive embed, the one thing in this row with real
+    // variable-height content, made its own sibling card taller), leaving a
+    // blank gap below the image instead of the image filling the space.
+    height: calc(100% - 4rem);
+
+    .sat-slides-wrapper,
+    .sat-slide {
+        height: 100%;
+    }
 
     .sat-slides-wrapper {
         position: relative;
@@ -1026,6 +1039,7 @@
 
     .sat-img {
         width: 100%;
+        height: 100%;
         min-height: 300px;
         object-fit: cover;
         display: block;
@@ -1148,7 +1162,8 @@
 
     .sv-img {
         width: 100%;
-        height: 300px;
+        height: 100%;
+        min-height: 300px;
         object-fit: cover;
         display: block;
     }

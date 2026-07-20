@@ -25,6 +25,7 @@ from urbanlens.dashboard.services.storage import quota_error_for_upload
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
+    from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.models.wiki.model import Wiki
 
@@ -35,6 +36,17 @@ _DOWNLOAD_TIMEOUT = 15
 # bound the download defensively regardless of what a provider's Content-Length claims.
 _MAX_DOWNLOAD_BYTES = 20 * 1024 * 1024
 _DEFAULT_FILENAME = "photo.jpg"
+
+# The Media gallery's per-provider panel key (GalleryMediaSource.key, what's
+# actually sent as `source` here) doesn't always match the ImageSource value
+# with the same real-world meaning - translate the ones that differ so a
+# materialized row keeps correct attribution instead of silently falling
+# back to plain ImageSource.UPLOAD (see ImageSource.valid() below). Every
+# panel key not listed here already equals its ImageSource value directly
+# (e.g. "smithsonian", "wikimedia", "yelp", "google_images", "google_maps").
+_PANEL_KEY_TO_IMAGE_SOURCE = {
+    "loc": ImageSource.LIBRARY_OF_CONGRESS,
+}
 
 
 class MaterializeError(RuntimeError):
@@ -47,24 +59,45 @@ def _filename_from_url(url: str) -> str:
     return name[:100] if name and "." in name else _DEFAULT_FILENAME
 
 
-def materialize_media_item(*, location: Location, profile: Profile, source: str, url: str, page_url: str = "", caption: str = "", wiki: Wiki | None = None) -> Image:
+def materialize_media_item(
+    *,
+    location: Location,
+    profile: Profile,
+    source: str,
+    url: str,
+    page_url: str = "",
+    caption: str = "",
+    wiki: Wiki | None = None,
+    pin: Pin | None = None,
+) -> Image:
     """Download one Media gallery item and persist it as an ``Image`` row.
 
-    Idempotent per ``(location, source, source_url)``: re-sending the same
+    Idempotent per ``(location, source, source_url)`` - re-sending the same
     item (e.g. clicking "send to wiki" twice) reuses the existing row rather
-    than downloading and storing a duplicate.
+    than downloading and storing a duplicate. When ``pin`` is given (marking
+    a Media item "relevant" on a specific pin, a personal "save this for me"
+    action - see ``PinController.media_relevance``), the dedup check is
+    additionally scoped to ``(pin, profile)`` so it never reuses a row
+    another profile already materialized for the same external item via a
+    *different* action (e.g. sending it to the shared wiki) - unlike the
+    wiki-send path, this one must always end up owned by the marking profile.
 
     Args:
         location: The shared Location the item belongs to.
         profile: The acting user - becomes the row's uploader and pays the
             storage-quota cost of the download.
-        source: An ``ImageSource`` value identifying the provider.
+        source: A Media gallery panel key or ``ImageSource`` value
+            identifying the provider - translated via
+            ``_PANEL_KEY_TO_IMAGE_SOURCE`` first for the handful of panels
+            whose key doesn't already match its ``ImageSource`` value.
         url: The item's full-resolution image URL to download.
         page_url: The item's page on the provider's site, if any - stored as
             ``source_url`` (preferred over ``url`` so the attribution link
             points at a real page rather than a bare image file).
         caption: Human-readable caption, if any.
         wiki: Wiki to attach the row to, when materializing for "send to wiki".
+        pin: Pin to attach the row to, when materializing for "mark relevant"
+            - also narrows the idempotency check (see above).
 
     Returns:
         The persisted (or reused) ``Image`` row.
@@ -74,7 +107,11 @@ def materialize_media_item(*, location: Location, profile: Profile, source: str,
             doesn't have room for it.
     """
     source_url = page_url or url
-    existing = Image.objects.filter(location=location, source=source, source_url=source_url).first()
+    dedupe_filter = {"location": location, "source": source, "source_url": source_url}
+    if pin is not None:
+        dedupe_filter["pin"] = pin
+        dedupe_filter["profile"] = profile
+    existing = Image.objects.filter(**dedupe_filter).first()
     if existing:
         if wiki is not None and existing.wiki_id != wiki.pk:
             existing.wiki = wiki
@@ -96,7 +133,8 @@ def materialize_media_item(*, location: Location, profile: Profile, source: str,
     if quota_error:
         raise MaterializeError(quota_error)
 
-    django_source = source if ImageSource.valid(source) else ImageSource.UPLOAD
+    translated_source = _PANEL_KEY_TO_IMAGE_SOURCE.get(source, source)
+    django_source = translated_source if ImageSource.valid(translated_source) else ImageSource.UPLOAD
     file_obj = ContentFile(content, name=_filename_from_url(url))
     checksum = compute_checksum(file_obj)
     file_obj.seek(0)
@@ -105,6 +143,7 @@ def materialize_media_item(*, location: Location, profile: Profile, source: str,
         image=file_obj,
         location=location,
         wiki=wiki,
+        pin=pin,
         profile=profile,
         source=django_source,
         source_url=source_url,

@@ -1735,6 +1735,11 @@
         document.querySelector('[data-media-visibility="default"]').classList.add('active');
 
         // -- Relevance marking ---------------------------------------------------
+        // Marking an item relevant also downloads and saves it as a real,
+        // durable Image row server-side (see PinController.media_relevance),
+        // so it survives the external provider's URL ever going dead - once
+        // that succeeds, swap this tile (and any future lightbox open of it)
+        // over to the local copy instead of the original external URL.
         window.mediaSetRelevance = function (itemEl, isRelevant) {
             if (!itemEl) return;
             var source = itemEl.dataset.mediaSource;
@@ -1750,7 +1755,18 @@
             fetch('{% url "pin.media.relevance" pin.slug %}', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
-                body: JSON.stringify({ source: source, item_key: key, url: url, is_relevant: nextRelevant }),
+                body: JSON.stringify({
+                    source: source, item_key: key, url: url, is_relevant: nextRelevant,
+                    page_url: itemEl.dataset.mediaPageUrl || '', caption: itemEl.dataset.mediaCaption || '',
+                }),
+            }).then(function (resp) { return resp.json(); }).then(function (data) {
+                if (data.materialize_error && window.toastr) toastr.warning("Marked relevant, but couldn't save a local copy: " + data.materialize_error);
+                if (!data.image_url) return;
+                itemEl.dataset.mediaUrl = data.image_url;
+                itemEl.dataset.mediaThumb = data.image_url;
+                if (data.image_id) itemEl.dataset.imageId = data.image_id;
+                var thumbImg = itemEl.querySelector('.media-item-thumb');
+                if (thumbImg && thumbImg.tagName === 'IMG') thumbImg.src = data.image_url;
             }).catch(function () { if (window.toastr) toastr.error('Failed to save.'); });
         };
 
@@ -1884,6 +1900,11 @@
                     // pin_media_items.html's source_key == "photos" branch) -
                     // manage those from the section's "Mine" tab instead.
                     canRelevance: el.dataset.mediaSource !== 'photos',
+                    // Only set once an item has been materialized (see
+                    // mediaSetRelevance) - enables "Set as cover photo" for a
+                    // relevant-marked item exactly like a real upload, since
+                    // by then it genuinely is one.
+                    imageId: el.dataset.imageId ? parseInt(el.dataset.imageId, 10) : null,
                 };
             });
             var idx = visible.indexOf(itemEl);

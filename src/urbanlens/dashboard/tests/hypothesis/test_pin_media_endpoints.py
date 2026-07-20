@@ -16,6 +16,7 @@ CSRF-enforcement stack, not through calling the view function directly:
 from __future__ import annotations
 
 import json
+from unittest import mock
 
 from django.contrib.auth.models import User
 from django.middleware.csrf import get_token
@@ -63,12 +64,19 @@ class CsrfEnforcedPinMediaEndpointTests(TestCase):
         self.assertEqual(self.profile.pin_detail_map_height, 700)
 
     def test_media_relevance_route_reaches_the_post_handler(self) -> None:
+        """Marking relevant now also materializes the item (downloads it as a
+        real Image row - see media_materialize.py) - mock the download so
+        this route/CSRF regression test doesn't depend on network access."""
         location = baker.make(Location)
         pin = baker.make(Pin, profile=self.profile, location=location)
-        response = self._post_json(
-            reverse("pin.media.relevance", args=[pin.slug]),
-            {"source": "wikipedia", "url": "https://example.com/photo.jpg", "is_relevant": True},
-        )
+        response_mock = mock.Mock(content=b"fake-jpeg-bytes")
+        response_mock.raise_for_status = mock.Mock()
+        response_mock.raw.read.return_value = b"fake-jpeg-bytes"
+        with mock.patch("urbanlens.dashboard.services.media_materialize.requests.get", return_value=response_mock):
+            response = self._post_json(
+                reverse("pin.media.relevance", args=[pin.slug]),
+                {"source": "wikipedia", "url": "https://example.com/photo.jpg", "is_relevant": True},
+            )
         self.assertNotEqual(response.status_code, 405, "media/relevance/ must not be shadowed by the media/<source>/ catch-all")
         self.assertNotEqual(response.status_code, 500)
         self.assertEqual(response.status_code, 200)

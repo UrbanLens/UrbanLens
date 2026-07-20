@@ -340,6 +340,11 @@ Context:
   // Media-gallery items, see canRelevance). Persists the mark, updates the
   // lightbox's own button state, and syncs the corresponding grid tile back
   // on the pin detail page's Media section (if that tile is present).
+  // Marking relevant also materializes the item server-side (downloads and
+  // saves it as a real Image row - see PinController.media_relevance) so it
+  // survives the external provider's URL ever going dead; once that
+  // succeeds, swap this item (and the matching grid tile) over to the local
+  // copy and re-render the now-local image.
   window._lightboxSetRelevance = function (isRelevant) {
     var item = _lightboxList[_lightboxIdx];
     if (!item || !item.canRelevance || !PIN_MEDIA_RELEVANCE_URL) return;
@@ -353,7 +358,21 @@ Context:
     fetch(PIN_MEDIA_RELEVANCE_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
-      body: JSON.stringify({ source: item.mediaSource, item_key: item.mediaKey, url: item.url, is_relevant: next }),
+      body: JSON.stringify({ source: item.mediaSource, item_key: item.mediaKey, url: item.url, is_relevant: next, page_url: item.sourceUrl || '', caption: item.caption || '' }),
+    }).then(function (r) { return r.json(); }).then(function (data) {
+      if (data.materialize_error && window.toastr) toastr.warning("Marked relevant, but couldn't save a local copy: " + data.materialize_error);
+      if (!data.image_url) return;
+      item.url = data.image_url;
+      item.thumbUrl = data.image_url;
+      if (data.image_id) item.imageId = data.image_id;
+      if (_lightboxList[_lightboxIdx] === item) _setLightboxImage(item);
+      if (gridItem) {
+        gridItem.dataset.mediaUrl = data.image_url;
+        gridItem.dataset.mediaThumb = data.image_url;
+        if (data.image_id) gridItem.dataset.imageId = data.image_id;
+        var thumbImg = gridItem.querySelector('.media-item-thumb');
+        if (thumbImg && thumbImg.tagName === 'IMG') thumbImg.src = data.image_url;
+      }
     }).catch(function () { if (window.toastr) toastr.error('Failed to save.'); });
   };
 })();
