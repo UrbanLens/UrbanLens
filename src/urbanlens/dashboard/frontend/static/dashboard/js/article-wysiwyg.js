@@ -35319,7 +35319,16 @@ function mountEditor(root) {
     ],
     content: textarea.value,
     editorProps: {
-      attributes: { class: "article-body" }
+      attributes: { class: "article-body" },
+      handleClick: (_view, _pos, event) => {
+        if (!(event.metaKey || event.ctrlKey))
+          return false;
+        const link2 = event.target?.closest("a[href]");
+        if (!link2)
+          return false;
+        window.open(link2.getAttribute("href") ?? "", "_blank", "noopener,noreferrer");
+        return true;
+      }
     },
     onUpdate: () => syncTextareaFromEditor(root, editor)
   });

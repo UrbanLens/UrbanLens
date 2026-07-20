@@ -516,6 +516,22 @@ function mountEditor(root: HTMLElement): void {
             // the editor's own chrome is styled separately, via
             // .article-editor-canvas .ProseMirror.
             attributes: { class: "article-body" },
+            // Link's own openOnClick is off (a plain click always positions
+            // the cursor for editing, never navigates away mid-edit) - a
+            // Ctrl/Cmd+click is the one exception, the same convention most
+            // rich-text editors use for "this is still a real link". Pairs
+            // with _article.scss's -webkit-user-modify override, which is
+            // what actually lets the hovered cursor show as a pointer here -
+            // Chromium/WebKit hard-code an I-beam cursor for every element
+            // inside a contenteditable region regardless of its own CSS
+            // `cursor` value, unless that element is carved out like this.
+            handleClick: (_view, _pos, event) => {
+                if (!(event.metaKey || event.ctrlKey)) return false;
+                const link = (event.target as HTMLElement | null)?.closest("a[href]");
+                if (!link) return false;
+                window.open(link.getAttribute("href") ?? "", "_blank", "noopener,noreferrer");
+                return true;
+            },
         },
         onUpdate: () => syncTextareaFromEditor(root, editor),
     });

@@ -1116,7 +1116,7 @@ function init() {
     }
     const hasSelectable = detailSelectableEntries().length > 0;
     btn.disabled = !hasSelectable;
-    btn.setAttribute("data-tooltip", hasSelectable ? "Select multiple sub pins to promote or delete" : "This pin has no sub pins to select");
+    btn.setAttribute("data-tooltip", hasSelectable ? "Select multiple child pins to promote or delete" : "This pin has no child pins to select");
     if (!hasSelectable && detailSelectMode)
       exitDetailPinSelectMode();
   }
@@ -1173,7 +1173,7 @@ function init() {
     if (!uuids.length)
       return;
     const n = uuids.length;
-    if (!await confirmAction({ title: "Promote sub pins?", message: `Promote ${n} sub pin${n === 1 ? "" : "s"} to top-level pins on your main map?`, confirmLabel: "Promote" }))
+    if (!await confirmAction({ title: "Promote child pins?", message: `Promote ${n} sub pin${n === 1 ? "" : "s"} to top-level pins on your main map?`, confirmLabel: "Promote" }))
       return;
     const results = await Promise.all(uuids.map((uuid) => {
       const slug = detailPins.find((d) => d.uuid === uuid)?.slug || uuid;
@@ -1195,7 +1195,7 @@ function init() {
     if (!uuids.length)
       return;
     const n = uuids.length;
-    if (!await confirmAction({ title: "Delete sub pins?", message: `Delete ${n} sub pin${n === 1 ? "" : "s"}? This also removes reviews, visit history, and notes.`, confirmLabel: "Delete" }))
+    if (!await confirmAction({ title: "Delete child pins?", message: `Delete ${n} sub pin${n === 1 ? "" : "s"}? This also removes reviews, visit history, and notes.`, confirmLabel: "Delete" }))
       return;
     const results = await Promise.all(uuids.map((uuid) => fetch(`${dpEditBase}${uuid}/`, { method: "DELETE", headers: { "X-CSRFToken": getCsrfToken() } }).then((r) => r.ok)));
     const deleted = results.filter(Boolean).length;
