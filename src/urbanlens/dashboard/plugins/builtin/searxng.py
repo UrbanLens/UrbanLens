@@ -13,10 +13,7 @@ class SearxngPlugin(UrbanLensPlugin):
 
     name: ClassVar[str] = "searxng"
     verbose_name: ClassVar[str] = "SearXNG"
-    description: ClassVar[str] = (
-        "Free, open-source metasearch engine you self-host or point at a trusted instance - "
-        "no API key, aggregates results from many upstream engines. Configure UL_SEARXNG_BASE_URL."
-    )
+    description: ClassVar[str] = "Free, open-source metasearch engine you self-host or point at a trusted instance - no API key, aggregates results from many upstream engines. Configure UL_SEARXNG_BASE_URL."
     author: ClassVar[str] = "UrbanLens"
 
     def get_service_defaults(self) -> dict[str, ServiceDefaults]:

@@ -150,11 +150,7 @@ def home_dashboard_context(profile: Profile) -> dict[str, Any]:
         "home_recent_photos": Image.objects.uploaded_by(profile)[:8],
         "home_recent_pins": Pin.objects.filter(profile=profile).select_related("location").order_by("-created")[:6],
         "home_recent_markup_maps": MarkupMap.objects.for_profile(profile).prefetch_related("items").order_by("-created")[:6],
-        "home_priority_unvisited_pins": (
-            Pin.objects.filter(profile=profile, priority__gt=0, last_visited__isnull=True, visit_history__isnull=True)
-            .select_related("location")
-            .order_by("-priority", "-updated")[:6]
-        ),
+        "home_priority_unvisited_pins": (Pin.objects.filter(profile=profile, priority__gt=0, last_visited__isnull=True, visit_history__isnull=True).select_related("location").order_by("-priority", "-updated")[:6]),
         "home_recent_comments": recent_comments,
         "home_recent_trips": Trip.objects.recently_active_past(profile, since=timezone.now() - timedelta(days=7)),
         "home_upcoming_trips": Trip.objects.upcoming(profile).order_by("start_date", "name")[:6],

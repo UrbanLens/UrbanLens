@@ -41,10 +41,7 @@ class GdeltPanelSource(InfoPanelSource):
 
         # ai_extract: news articles are real content pages about the place, so
         # they offer the AI field-extraction button (see _simple_info_panel.html).
-        meta = [
-            {"label": article.get("date") or "Undated", "value": article.get("title") or article.get("domain") or "", "href": article.get("url") or "", "ai_extract": True}
-            for article in articles[:8]
-        ]
+        meta = [{"label": article.get("date") or "Undated", "value": article.get("title") or article.get("domain") or "", "href": article.get("url") or "", "ai_extract": True} for article in articles[:8]]
 
         facts = []
         tone = (data or {}).get("tone")
@@ -70,10 +67,7 @@ class GdeltPlugin(UrbanLensPlugin):
 
     name: ClassVar[str] = "gdelt"
     verbose_name: ClassVar[str] = "GDELT News"
-    description: ClassVar[str] = (
-        "Free, keyless global news search (GDELT Project DOC 2.0 API) - shows recent news coverage "
-        "mentioning the pin's location."
-    )
+    description: ClassVar[str] = "Free, keyless global news search (GDELT Project DOC 2.0 API) - shows recent news coverage mentioning the pin's location."
     author: ClassVar[str] = "UrbanLens"
 
     def get_service_defaults(self) -> dict[str, ServiceDefaults]:

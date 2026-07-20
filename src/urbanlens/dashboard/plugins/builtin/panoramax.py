@@ -16,10 +16,7 @@ class PanoramaxPlugin(UrbanLensPlugin):
 
     name: ClassVar[str] = "panoramax"
     verbose_name: ClassVar[str] = "Panoramax"
-    description: ClassVar[str] = (
-        "Free, keyless, open-source (GeoVisio) crowdsourced street-level imagery, backed by IGN - "
-        "adds EU-strong coverage alongside the existing KartaView/Mapillary street-view providers."
-    )
+    description: ClassVar[str] = "Free, keyless, open-source (GeoVisio) crowdsourced street-level imagery, backed by IGN - adds EU-strong coverage alongside the existing KartaView/Mapillary street-view providers."
     author: ClassVar[str] = "UrbanLens"
 
     def get_service_defaults(self) -> dict[str, ServiceDefaults]:

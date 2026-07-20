@@ -160,12 +160,7 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
             Root pins ordered nearest-first, annotated with ``distance`` (a
             ``django.contrib.gis.measure.Distance``).
         """
-        return (
-            self.root_pins()
-            .filter(location__point__distance_lte=(point, D(km=radius_km)))
-            .annotate(distance=Distance("location__point", point))
-            .order_by("distance")
-        )
+        return self.root_pins().filter(location__point__distance_lte=(point, D(km=radius_km))).annotate(distance=Distance("location__point", point)).order_by("distance")
 
     def within_bounds(self, south: float, west: float, north: float, east: float) -> Self:
         """Return pins whose location falls within a lat/lng bounding box.

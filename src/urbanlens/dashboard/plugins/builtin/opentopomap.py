@@ -16,10 +16,7 @@ class OpenTopoMapPlugin(UrbanLensPlugin):
 
     name: ClassVar[str] = "opentopomap"
     verbose_name: ClassVar[str] = "OpenTopoMap"
-    description: ClassVar[str] = (
-        "Free, keyless, open-source topographic map tiles (SRTM contours over OpenStreetMap) in the "
-        "pin detail satellite carousel - trail/terrain context aerial photography doesn't show."
-    )
+    description: ClassVar[str] = "Free, keyless, open-source topographic map tiles (SRTM contours over OpenStreetMap) in the pin detail satellite carousel - trail/terrain context aerial photography doesn't show."
     author: ClassVar[str] = "UrbanLens"
 
     def get_service_defaults(self) -> dict[str, ServiceDefaults]:

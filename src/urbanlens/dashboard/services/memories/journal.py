@@ -121,11 +121,7 @@ def _article_entries(profile: Profile) -> Iterator[JournalEntry]:
     """Yield a JournalEntry for each article edit (pin or wiki) the profile has made."""
     from urbanlens.dashboard.models.article.model import ArticleRevision
 
-    revisions = (
-        ArticleRevision.objects.filter(editor=profile)
-        .select_related("article", "article__pin", "article__wiki", "article__wiki__location")
-        .order_by("-created")
-    )
+    revisions = ArticleRevision.objects.filter(editor=profile).select_related("article", "article__pin", "article__wiki", "article__wiki__location").order_by("-created")
     for revision in revisions:
         article = revision.article
         if article.pin_id:

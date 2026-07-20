@@ -54,9 +54,7 @@ def location_visible_to(location: Location, profile: Profile) -> bool:
         return True
 
     polygons = list(
-        Boundary.objects.filter(location=location, pin__isnull=True, wiki__isnull=True, profile__isnull=True)
-        .exclude(generated_polygon__isnull=True)
-        .values_list("generated_polygon", flat=True),
+        Boundary.objects.filter(location=location, pin__isnull=True, wiki__isnull=True, profile__isnull=True).exclude(generated_polygon__isnull=True).values_list("generated_polygon", flat=True),
     )
     if not polygons:
         return False
@@ -113,10 +111,7 @@ def visible_wiki_location_ids(profile: Profile) -> set[int]:
     # only generated_polygon on a Boundary with no owning pin/wiki/profile is
     # ever consulted here - never a user-editable one.
     boundary_candidates = list(
-        Boundary.objects.filter(location__wiki__isnull=False, pin__isnull=True, wiki__isnull=True, profile__isnull=True)
-        .exclude(generated_polygon__isnull=True)
-        .exclude(location_id__in=direct_ids)
-        .values_list("location_id", "generated_polygon"),
+        Boundary.objects.filter(location__wiki__isnull=False, pin__isnull=True, wiki__isnull=True, profile__isnull=True).exclude(generated_polygon__isnull=True).exclude(location_id__in=direct_ids).values_list("location_id", "generated_polygon"),
     )
     if not boundary_candidates:
         return direct_ids

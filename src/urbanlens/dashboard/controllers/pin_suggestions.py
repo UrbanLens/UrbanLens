@@ -38,6 +38,7 @@ def _available_labels(profile: Profile) -> QuerySet[Label]:
     """Organize labels (tags/categories/statuses) visible to ``profile``, for the create-pin dialog's picker."""
     return Label.objects.visible_to(profile).filter(kind__in=_ORGANIZE_LABEL_KINDS).order_by("name")
 
+
 if TYPE_CHECKING:
     from django.db.models import QuerySet
     from django.http import HttpRequest

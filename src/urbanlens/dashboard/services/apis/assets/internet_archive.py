@@ -30,6 +30,7 @@ def _first_str(value: Any) -> str:
         return str(value[0]) if value else ""
     return str(value) if value else ""
 
+
 #: Fields requested from advancedsearch.php - keep in sync with ``_parse``.
 _FIELDS = ("identifier", "title", "description", "date", "mediatype", "creator")
 

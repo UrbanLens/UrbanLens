@@ -99,11 +99,7 @@ def sync_wiki_alias_to_pins(sender: type[WikiAlias], instance: WikiAlias, create
             location_id=wiki.location_id,
             profile__sync_aliases__in=(SyncAliasesDirection.FROM_WIKI, SyncAliasesDirection.BOTH),
         )
-        removed_pin_ids = set(
-            PinAutoRemoval.objects.filter(
-                pin__in=pins, kind=AutoRemovalKind.ALIAS, value=normalize_auto_removal_value(AutoRemovalKind.ALIAS, instance.name)
-            ).values_list("pin_id", flat=True)
-        )
+        removed_pin_ids = set(PinAutoRemoval.objects.filter(pin__in=pins, kind=AutoRemovalKind.ALIAS, value=normalize_auto_removal_value(AutoRemovalKind.ALIAS, instance.name)).values_list("pin_id", flat=True))
         for pin in pins:
             if pin.pk in removed_pin_ids:
                 continue

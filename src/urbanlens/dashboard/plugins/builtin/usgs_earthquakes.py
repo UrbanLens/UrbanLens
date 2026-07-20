@@ -63,10 +63,7 @@ class UsgsEarthquakePlugin(UrbanLensPlugin):
 
     name: ClassVar[str] = "usgs_earthquakes"
     verbose_name: ClassVar[str] = "USGS Earthquake Hazards"
-    description: ClassVar[str] = (
-        "Free, keyless USGS FDSN earthquake catalog lookup - shows recent nearby seismic activity as "
-        "structural-risk context on the pin detail page."
-    )
+    description: ClassVar[str] = "Free, keyless USGS FDSN earthquake catalog lookup - shows recent nearby seismic activity as structural-risk context on the pin detail page."
     author: ClassVar[str] = "UrbanLens"
 
     def get_service_defaults(self) -> dict[str, ServiceDefaults]:

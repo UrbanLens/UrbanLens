@@ -80,10 +80,7 @@ _MAPS_URL_RE = re.compile(r"(?:[@]|[?&]q(?:uery)?=|geo:)(-?\d{1,2}\.\d+),(-?\d{1
 # Conservative US-style street address: house number + name + street suffix,
 # optionally followed by ", City" / ", City, ST". The suffix list keeps prose
 # from matching; geocoding validates whatever slips through.
-_STREET_SUFFIXES = (
-    "street|st|avenue|ave|road|rd|boulevard|blvd|drive|dr|lane|ln|way|court|ct|place|pl|circle|cir|"
-    "highway|hwy|pike|parkway|pkwy|terrace|ter|trail|trl|turnpike|tpke|route|rte"
-)
+_STREET_SUFFIXES = "street|st|avenue|ave|road|rd|boulevard|blvd|drive|dr|lane|ln|way|court|ct|place|pl|circle|cir|highway|hwy|pike|parkway|pkwy|terrace|ter|trail|trl|turnpike|tpke|route|rte"
 # Words that never appear between a real house number and street suffix -
 # blocks prose like "walked 5 miles down the road" from address-matching.
 _ADDRESS_STOPWORDS = "the|a|an|of|to|down|up|along|off|on|for|per|about|around|miles?|mi|km|blocks?|minutes?|hours?|days?"

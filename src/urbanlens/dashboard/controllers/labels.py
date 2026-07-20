@@ -630,8 +630,7 @@ class LabelEditView(_LabelKindMixin, LoginRequiredMixin, View):
                 # per-kind settings (keyword matching needs no site feature/subscription).
                 # Otherwise the option is offering a behavior the user has explicitly
                 # turned off, or that isn't available to them at all.
-                "show_auto_tag_toggle": (can_use_ai_features and profile.ai_enabled and ai_kind_enabled)
-                or (profile.keyword_tagging_enabled and keyword_kind_enabled),
+                "show_auto_tag_toggle": (can_use_ai_features and profile.ai_enabled and ai_kind_enabled) or (profile.keyword_tagging_enabled and keyword_kind_enabled),
             },
         )
 
@@ -678,9 +677,7 @@ class LabelEditView(_LabelKindMixin, LoginRequiredMixin, View):
                 KIND_TAG: profile.keyword_label_tags,
                 KIND_STATUS: profile.keyword_label_statuses,
             }.get(label.kind, False)
-            can_toggle_auto_tag = (user_has_feature(request.user, SiteFeature.AI) and profile.ai_enabled and ai_kind_enabled) or (
-                profile.keyword_tagging_enabled and keyword_kind_enabled
-            )
+            can_toggle_auto_tag = (user_has_feature(request.user, SiteFeature.AI) and profile.ai_enabled and ai_kind_enabled) or (profile.keyword_tagging_enabled and keyword_kind_enabled)
             if can_toggle_auto_tag:
                 label.allow_auto_tag = "allow_auto_tag" in request.POST
             label.keywords = request.POST.get("keywords", "").strip() or None

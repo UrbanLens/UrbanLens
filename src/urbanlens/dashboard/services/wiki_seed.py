@@ -103,11 +103,7 @@ def _attribution_line(article_data: dict) -> str:
         return ""
     title = article_data.get("title") or ""
     suffix = f" ({title})" if title else ""
-    return (
-        f"---\n\n*This article was started from [Wikipedia]({url}){suffix}, "
-        "licensed under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). "
-        "Feel free to expand and edit it.*"
-    )
+    return f"---\n\n*This article was started from [Wikipedia]({url}){suffix}, licensed under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). Feel free to expand and edit it.*"
 
 
 def _extract_html_to_markdown(html: str) -> str:

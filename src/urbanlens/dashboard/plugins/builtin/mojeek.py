@@ -13,10 +13,7 @@ class MojeekPlugin(UrbanLensPlugin):
 
     name: ClassVar[str] = "mojeek"
     verbose_name: ClassVar[str] = "Mojeek Search"
-    description: ClassVar[str] = (
-        "Independent web index (not a Google/Bing reseller) with a free tier for low-volume use - "
-        "surfaces smaller, less SEO-optimised sites the mainstream engines deprioritise."
-    )
+    description: ClassVar[str] = "Independent web index (not a Google/Bing reseller) with a free tier for low-volume use - surfaces smaller, less SEO-optimised sites the mainstream engines deprioritise."
     author: ClassVar[str] = "UrbanLens"
 
     def get_service_defaults(self) -> dict[str, ServiceDefaults]:

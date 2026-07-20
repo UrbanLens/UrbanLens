@@ -23888,7 +23888,7 @@ var HardBreak = Node3.create({
     return `
 `;
   },
-  renderMarkdown: () => `  
+  renderMarkdown: () => `
 `,
   parseMarkdown: () => {
     return {

@@ -639,14 +639,8 @@ class E2EERewrapAllView(LoginRequiredMixin, View):
         if not MessagingKeyBundle.objects.for_profile(profile).exists():
             return JsonResponse({"error": "Not enrolled."}, status=404)
 
-        conversation_keys = [
-            {"id": row.pk, "wrapped_key": row.wrapped_for(profile.pk)}
-            for row in ConversationKey.objects.filter(Q(profile_low=profile) | Q(profile_high=profile))
-        ]
-        group_envelopes = [
-            {"id": envelope.pk, "wrapped_key": envelope.wrapped_key}
-            for envelope in GroupKeyEnvelope.objects.filter(profile=profile)
-        ]
+        conversation_keys = [{"id": row.pk, "wrapped_key": row.wrapped_for(profile.pk)} for row in ConversationKey.objects.filter(Q(profile_low=profile) | Q(profile_high=profile))]
+        group_envelopes = [{"id": envelope.pk, "wrapped_key": envelope.wrapped_key} for envelope in GroupKeyEnvelope.objects.filter(profile=profile)]
         return JsonResponse({"conversation_keys": conversation_keys, "group_envelopes": group_envelopes})
 
 

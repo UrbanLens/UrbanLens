@@ -51,9 +51,7 @@ class ApiCallLog(abstract.DashboardModel):
         decimal_places=6,
         null=True,
         blank=True,
-        help_text="Estimated USD cost of this call, from the service's ServiceDefaults.cost_per_call "
-        "at call time. Null means no per-call cost is configured for this service (free, or not yet "
-        "priced) - not necessarily that the call was free.",
+        help_text="Estimated USD cost of this call, from the service's ServiceDefaults.cost_per_call at call time. Null means no per-call cost is configured for this service (free, or not yet priced) - not necessarily that the call was free.",
     )
 
     objects = ApiCallLogManager()

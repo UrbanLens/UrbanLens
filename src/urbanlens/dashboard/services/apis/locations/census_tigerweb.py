@@ -85,9 +85,7 @@ class CensusTigerwebGateway(Gateway):
         state = self._normalize(self._query_layer(_LAYER_STATE, latitude, longitude))
         if not state:
             return {}
-        tribal_land = self._normalize(self._query_layer(_LAYER_FEDERAL_RESERVATION, latitude, longitude)) or self._normalize(
-            self._query_layer(_LAYER_STATE_RESERVATION, latitude, longitude)
-        )
+        tribal_land = self._normalize(self._query_layer(_LAYER_FEDERAL_RESERVATION, latitude, longitude)) or self._normalize(self._query_layer(_LAYER_STATE_RESERVATION, latitude, longitude))
         return {
             "state": state,
             "county": self._normalize(self._query_layer(_LAYER_COUNTY, latitude, longitude)),

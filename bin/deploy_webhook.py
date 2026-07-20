@@ -135,9 +135,7 @@ class WebhookHandler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length", "0"))
         body = self.rfile.read(length) if length else b""
 
-        authorized = verify_github(body, self.headers.get("X-Hub-Signature-256")) or verify_gitlab(
-            self.headers.get("X-Gitlab-Token")
-        )
+        authorized = verify_github(body, self.headers.get("X-Hub-Signature-256")) or verify_gitlab(self.headers.get("X-Gitlab-Token"))
         if not authorized:
             log("Rejecting webhook: missing or invalid signature.")
             self._respond(403, "invalid signature")
@@ -159,7 +157,7 @@ class WebhookHandler(BaseHTTPRequestHandler):
         # which a rsplit("/", 1) would truncate down to just the last segment.
         ref = payload.get("ref", "")
         prefix = "refs/heads/"
-        pushed_branch = ref[len(prefix):] if ref.startswith(prefix) else ""
+        pushed_branch = ref[len(prefix) :] if ref.startswith(prefix) else ""
         if pushed_branch != BRANCH:
             self._respond(200, f"ignored: push to '{pushed_branch or 'unknown'}', watching '{BRANCH}'")
             return

@@ -20,10 +20,7 @@ class OpenMeteoPlugin(UrbanLensPlugin):
 
     name: ClassVar[str] = "open_meteo"
     verbose_name: ClassVar[str] = "Open-Meteo"
-    description: ClassVar[str] = (
-        "Free, keyless weather forecast API - used automatically as a fallback for the pin detail "
-        "page's weather widget when OpenWeatherMap isn't configured or fails."
-    )
+    description: ClassVar[str] = "Free, keyless weather forecast API - used automatically as a fallback for the pin detail page's weather widget when OpenWeatherMap isn't configured or fails."
     author: ClassVar[str] = "UrbanLens"
 
     def get_service_defaults(self) -> dict[str, ServiceDefaults]:

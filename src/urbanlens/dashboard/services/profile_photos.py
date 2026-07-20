@@ -52,12 +52,7 @@ def strip_photos_for_owner(profile: Profile) -> QuerySet[Image]:
         a wiki or a direct message - never a bare/pin-only upload, which
         stays fully private.
     """
-    return (
-        Image.objects.filter(profile=profile, media_type=MediaKind.PHOTO)
-        .filter(_not_fully_private())
-        .select_related("wiki__location")
-        .order_by("-created")[:STRIP_LIMIT]
-    )
+    return Image.objects.filter(profile=profile, media_type=MediaKind.PHOTO).filter(_not_fully_private()).select_related("wiki__location").order_by("-created")[:STRIP_LIMIT]
 
 
 def strip_photos_visible_to(profile: Profile, viewer: Profile) -> QuerySet[Image]:
@@ -87,12 +82,7 @@ def strip_photos_visible_to(profile: Profile, viewer: Profile) -> QuerySet[Image
     visible_location_ids = visible_wiki_location_ids(viewer)
     if not visible_location_ids:
         return Image.objects.none()
-    return (
-        Image.objects.filter(profile=profile, media_type=MediaKind.PHOTO, wiki__location_id__in=visible_location_ids)
-        .visible_to(viewer)
-        .select_related("wiki__location")
-        .order_by("-created")[:STRIP_LIMIT]
-    )
+    return Image.objects.filter(profile=profile, media_type=MediaKind.PHOTO, wiki__location_id__in=visible_location_ids).visible_to(viewer).select_related("wiki__location").order_by("-created")[:STRIP_LIMIT]
 
 
 def attachment_points_for_image(image: Image) -> list[dict]:

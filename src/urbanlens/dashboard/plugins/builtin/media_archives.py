@@ -103,10 +103,7 @@ class InternetArchivePlugin(UrbanLensPlugin):
 
     name: ClassVar[str] = "internet_archive"
     verbose_name: ClassVar[str] = "Internet Archive"
-    description: ClassVar[str] = (
-        "Free, keyless, open-source full-text/media search across archive.org's books, photos, "
-        "newspapers, and recordings for the pin detail page's Media gallery."
-    )
+    description: ClassVar[str] = "Free, keyless, open-source full-text/media search across archive.org's books, photos, newspapers, and recordings for the pin detail page's Media gallery."
     author: ClassVar[str] = "UrbanLens"
 
     def get_service_defaults(self) -> dict[str, ServiceDefaults]:

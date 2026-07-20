@@ -265,14 +265,7 @@ class PinParentSearchView(LoginRequiredMixin, View):
 
         profile = _request_profile(request)
         exclude_uuids = set(request.GET.getlist("exclude"))
-        pins = (
-            Pin.objects.filter(profile=profile)
-            .select_related("location")
-            .filter(Q(name__icontains=query) | Q(aliases__name__icontains=query))
-            .exclude(uuid__in=exclude_uuids)
-            .distinct()
-            .order_by("name")[:10]
-        )
+        pins = Pin.objects.filter(profile=profile).select_related("location").filter(Q(name__icontains=query) | Q(aliases__name__icontains=query)).exclude(uuid__in=exclude_uuids).distinct().order_by("name")[:10]
         return JsonResponse(
             {
                 "results": [

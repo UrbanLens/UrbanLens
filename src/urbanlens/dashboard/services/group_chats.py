@@ -613,11 +613,7 @@ def group_thread_page(membership: GroupChatMembership, *, before_id: int | None 
         ``(messages, has_more_older)``: messages oldest-first;
         ``has_more_older`` is True when older visible messages remain.
     """
-    queryset = (
-        GroupMessage.objects.visible_window(membership)
-        .select_related("sender", "sender__user")
-        .prefetch_related("shares__pin_share__pin", "shares__pin_share__pin__location")
-    )
+    queryset = GroupMessage.objects.visible_window(membership).select_related("sender", "sender__user").prefetch_related("shares__pin_share__pin", "shares__pin_share__pin__location")
     if before_id is not None:
         queryset = queryset.filter(pk__lt=before_id)
     page = list(queryset.order_by("-id")[: limit + 1])

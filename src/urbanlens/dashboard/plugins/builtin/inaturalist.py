@@ -75,10 +75,7 @@ class INaturalistPlugin(UrbanLensPlugin):
 
     name: ClassVar[str] = "inaturalist"
     verbose_name: ClassVar[str] = "iNaturalist"
-    description: ClassVar[str] = (
-        "Free, keyless, open-source community-science observations - shows recent nearby wildlife/plant "
-        "sightings on the pin detail page."
-    )
+    description: ClassVar[str] = "Free, keyless, open-source community-science observations - shows recent nearby wildlife/plant sightings on the pin detail page."
     author: ClassVar[str] = "UrbanLens"
 
     def get_service_defaults(self) -> dict[str, ServiceDefaults]:

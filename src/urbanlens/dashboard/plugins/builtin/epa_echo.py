@@ -247,12 +247,7 @@ def _propagate_exact_site_to_nearby_locations(location: Location, exact_site: di
         return
 
     point = Point(site_lng, site_lat, srid=4326)
-    nearby_locations = (
-        LocationModel.objects.filter(point__distance_lte=(point, D(mi=_EXACT_MATCH_RADIUS_MILES)))
-        .exclude(pk=location.pk)
-        .filter(pins__isnull=False)
-        .distinct()
-    )
+    nearby_locations = LocationModel.objects.filter(point__distance_lte=(point, D(mi=_EXACT_MATCH_RADIUS_MILES))).exclude(pk=location.pk).filter(pins__isnull=False).distinct()
 
     for neighbor in nearby_locations:
         cache_row = LocationCache.objects.filter(location=neighbor, source=_CACHE_SOURCE).first()
@@ -397,9 +392,7 @@ class EpaEchoDetailPanelSource(CoordinateGatedInfoPanelSource):
         footer_link = (
             # ai_extract: the facility report is a real content page about this
             # exact site, so it offers the AI field-extraction button.
-            {"url": f"https://echo.epa.gov/detailed-facility-report?fid={registry_id}", "label": "View full EPA compliance report", "ai_extract": True}
-            if registry_id
-            else {"url": "https://echo.epa.gov/", "label": "View on EPA ECHO"}
+            {"url": f"https://echo.epa.gov/detailed-facility-report?fid={registry_id}", "label": "View full EPA compliance report", "ai_extract": True} if registry_id else {"url": "https://echo.epa.gov/", "label": "View on EPA ECHO"}
         )
 
         return {

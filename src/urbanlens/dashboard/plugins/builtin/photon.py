@@ -61,10 +61,7 @@ class PhotonPlugin(UrbanLensPlugin):
 
     name: ClassVar[str] = "photon"
     verbose_name: ClassVar[str] = "Photon"
-    description: ClassVar[str] = (
-        "Free, keyless, open-source OSM geocoder (Komoot) - shows an alternate reverse-geocoded address "
-        "on the pin detail page and contributes place-name candidates."
-    )
+    description: ClassVar[str] = "Free, keyless, open-source OSM geocoder (Komoot) - shows an alternate reverse-geocoded address on the pin detail page and contributes place-name candidates."
     author: ClassVar[str] = "UrbanLens"
 
     def get_service_defaults(self) -> dict[str, ServiceDefaults]:

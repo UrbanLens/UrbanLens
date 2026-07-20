@@ -469,12 +469,7 @@ def prioritized_location_candidates(missing: Q, *, limit: int, usa_only: bool = 
             list_count=Count("pins__list_memberships", distinct=True),
         )
         .annotate(
-            priority_score=(
-                F("profile_count") * Value(3)
-                + F("list_count") * Value(2)
-                + Case(When(has_wiki=True, then=Value(2)), default=Value(0), output_field=IntegerField())
-                + F("pin_count")
-            ),
+            priority_score=(F("profile_count") * Value(3) + F("list_count") * Value(2) + Case(When(has_wiki=True, then=Value(2)), default=Value(0), output_field=IntegerField()) + F("pin_count")),
         )
         .order_by("-priority_score", "-updated")
     )

@@ -65,10 +65,7 @@ class CensusTigerwebPlugin(UrbanLensPlugin):
 
     name: ClassVar[str] = "census_tigerweb"
     verbose_name: ClassVar[str] = "US Census TIGERweb"
-    description: ClassVar[str] = (
-        "Free, keyless US Census Bureau geography (state/county/place/tract) for the pin's coordinates. "
-        "USA only."
-    )
+    description: ClassVar[str] = "Free, keyless US Census Bureau geography (state/county/place/tract) for the pin's coordinates. USA only."
     author: ClassVar[str] = "UrbanLens"
 
     def get_service_defaults(self) -> dict[str, ServiceDefaults]:

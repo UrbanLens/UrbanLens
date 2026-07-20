@@ -13,10 +13,7 @@ class DuckDuckGoPlugin(UrbanLensPlugin):
 
     name: ClassVar[str] = "duckduckgo"
     verbose_name: ClassVar[str] = "DuckDuckGo"
-    description: ClassVar[str] = (
-        "Free, keyless Instant Answer API - no signup required. Returns a topic abstract and related "
-        "links rather than a full result set, so it works best as a lightweight supplementary source."
-    )
+    description: ClassVar[str] = "Free, keyless Instant Answer API - no signup required. Returns a topic abstract and related links rather than a full result set, so it works best as a lightweight supplementary source."
     author: ClassVar[str] = "UrbanLens"
 
     def get_service_defaults(self) -> dict[str, ServiceDefaults]:

@@ -91,9 +91,7 @@ class AzureMapsPlugin(UrbanLensPlugin):
     name: ClassVar[str] = "azure_maps"
     verbose_name: ClassVar[str] = "Azure Maps"
     description: ClassVar[str] = (
-        "Microsoft Azure Maps integration: reverse-geocoded address and nearby POI details on the pin "
-        "detail page, static aerial/satellite imagery in the satellite carousel, and place-name "
-        "candidates. Requires an Azure Maps subscription key."
+        "Microsoft Azure Maps integration: reverse-geocoded address and nearby POI details on the pin detail page, static aerial/satellite imagery in the satellite carousel, and place-name candidates. Requires an Azure Maps subscription key."
     )
     author: ClassVar[str] = "UrbanLens"
     # Alongside the other satellite-imagery/name-resolution plugins (Google

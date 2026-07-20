@@ -464,12 +464,7 @@ def _export_pins(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.reviews.model import Review
 
-    pins = (
-        Pin.objects.filter(profile=profile)
-        .select_related("location", "article")
-        .prefetch_related("labels")
-        .order_by("created")
-    )
+    pins = Pin.objects.filter(profile=profile).select_related("location", "article").prefetch_related("labels").order_by("created")
     ratings = dict(Review.objects.filter(profile=profile).values_list("pin_id", "rating"))
 
     rows = []

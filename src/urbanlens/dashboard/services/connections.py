@@ -60,14 +60,7 @@ def recommendable_strangers(new_member: Profile, others: Sequence[Profile]) -> l
 
     if not new_member.allow_friend_recommendations:
         return []
-    return [
-        other
-        for other in others
-        if other.pk != new_member.pk
-        and other.allow_friend_recommendations
-        and not are_connections(new_member, other)
-        and not ProfileModel.are_blocked(new_member, other)
-    ]
+    return [other for other in others if other.pk != new_member.pk and other.allow_friend_recommendations and not are_connections(new_member, other) and not ProfileModel.are_blocked(new_member, other)]
 
 
 def suggest_mutual_connection(a: Profile, b: Profile) -> None:
