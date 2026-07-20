@@ -29,50 +29,91 @@ the data provider. Struck from the blocking list below; the real, addressed gaps
 
 ---
 
-## ✅ Addressed in REData (see "Fixes applied" below)
+## ✅ Fixed in REData (2026-07-19)
 
-### 3. Owner/sale records are never auto-populated from a fetched property record
+The items below (#3, #4, #5, #8) were addressed directly in `../REData` (not just
+documented) - model changes, a generated migration, service logic, and new tests, all
+verified with `ruff check --fix`, `mypy`, and the full REData pytest suite (477 passed,
+no regressions) run inside the local Docker Compose stack.
+
+### 3. Owner/sale records are never auto-populated from a fetched property record — FIXED
 OLD's plugin (`src\urbanlens\dashboard\plugins\builtin\property_records.py`) runs a
 Celery-driven background enrichment cycle whose `_write_official_owners_and_sales`
 (covered by 11 dedicated tests in `test_property_records_plugin.py`) auto-creates
 `OwnerSource.OFFICIAL` `WikiOwner`/`WikiPropertySale` rows from a freshly-fetched
 `PropertyRecord`, deduping on repeat fetch and never overwriting user-entered data.
 
-NEW's `parcel_lookup._upsert_parcel` (`src\redata\parcels\services\parcel_lookup.py:53-77`)
-only stores the raw fetched record as opaque JSON on `Parcel.record_payload` — it never
-promotes `owner_name`/`sales_history` into `ParcelOwner`/`ParcelSale` rows, and REData has
-no Celery task for property records at all (synchronous, on-request only; confirmed via
-`grep -rn "_write_official\|OwnerSource.OFFICIAL"` outside tests finding only the
-model-default declarations). This is an architectural change, not a relocated feature —
-`ParcelOwnerViewSet`/`ParcelSaleViewSet` exist but nothing calls them automatically, and
-they're currently untested (see Test Coverage gap below).
+**Fix**: `parcels\services\parcel_lookup.py` now has `_write_official_owners_and_sales`,
+`_get_or_create_official_owner`, and `_sale_price_as_decimal`, ported from OLD's plugin
+logic and adapted to REData's typed `PropertyRecord` dataclass (no JSON re-parsing
+needed, unlike OLD). `lookup_or_refresh_parcel` calls it immediately after upserting the
+`Parcel` row, inside the same `transaction.atomic()` block so a fetch can never leave the
+parcel updated without its owner/sale rows (or vice versa). Matches OLD's behavior
+exactly: only ever creates or links `OFFICIAL` rows, never edits/unlinks an existing one,
+so a `MANUAL` correction is never overwritten. Covered by 19 new tests in
+`parcels\tests\hypothesis\test_parcel_lookup.py`.
 
-### 4. Cross-property owner identity is lost
+### 4. Cross-property owner identity is lost — FIXED
 OLD's `WikiOwner` has `locations = ManyToManyField(..., related_name="owners")`
 (`models\property_owner\model.py:80`), explicitly documented as modeling "the same
 landlord owns many places" — one owner entity linked to many properties, and unlinking
-never deletes the shared record. NEW's `ParcelOwner` has a single FK to one `Parcel`
-(`owner\model.py:16`), so the same real-world owner appearing at multiple parcels becomes
-N independent, un-linked duplicate rows with no shared identity. Reasonable for a
-per-parcel cache design, but it is a genuine loss of a modeled relationship, not a rename.
+never deletes the shared record.
 
----
+**Fix**: `parcels\models\owner\model.py`'s `ParcelOwner.parcel` FK was changed to
+`ParcelOwner.parcels = ManyToManyField("parcels.Parcel", related_name="owners")` —
+restoring `WikiOwner`'s exact modeling, adapted to REData's Parcel-keyed identity. The
+same real-world owner reported on multiple parcels now resolves to one shared row
+(matched deterministically by case-insensitive name + mailing address, `OFFICIAL` rows
+only - see `_get_or_create_official_owner`'s docstring for why an exact rather than fuzzy
+match was chosen) instead of a duplicate per parcel. Migration `0002_owner_many_to_many_parcels.py`
+was generated via `manage.py makemigrations` (verified against the real schema, not
+hand-written). `admin.py`, `api\serializers.py` (`ParcelOwnerSerializer`), and
+`api\views.py` (`ParcelOwnerViewSet.get_queryset`/`perform_create`) were all updated for
+the M2M relation - DRF's `ModelSerializer.create()` already handles M2M kwargs correctly,
+so the API's create-owner endpoint didn't need special-casing. Covered by new
+cascade/cross-parcel-identity tests in `test_parcel_owner.py`, plus integration coverage
+in `test_parcel_lookup.py`.
 
-## 🟡 Should fix before cutover, but not outright data loss
-
-### 5. Rate-limit tuning dropped for property-records-specific services
+### 5. Rate-limit tuning dropped for property-records-specific services — FIXED
 OLD's plugin (`plugins\builtin\property_records.py:359-383`) registers tuned
 `ServiceDefaults` for `census_geocoder` (20/min, 1000/day, `usa_only=True`),
 `property_records_gis` (30/min, 2000/day), and `property_records_scrape` (10/min,
-500/day — deliberately lower, since it's scraping). NEW's static `SERVICE_REGISTRY`
-(`src\redata\core\services\rate_limiter.py:52-72`) has no entries for any of these three
-keys (or `census_tigerweb`), and NEW has no plugin system to supply them dynamically —
-confirmed the actual `service_key`s are still used at call sites
-(`arcgis_socrata.py:97`, `html_scrape.py:146`, `locations\census_geocoder.py:64`).
-They silently fall back to a generic, untuned default (20/min, 500/day, no `usa_only`,
-no cost/notes metadata) — under-limiting GIS calls and over-limiting nothing, but losing
-the documented `usa_only` guard and any per-service cost-tracking metadata your project
-CLAUDE.md requires for external API calls.
+500/day — deliberately lower, since it's scraping); `census_tigerweb` (30/min, 2000/day)
+was similarly tuned via a separate plugin (`plugins\builtin\census_tigerweb.py:74-84`).
+NEW's static `SERVICE_REGISTRY` (`src\redata\core\services\rate_limiter.py:52-72`) had no
+entries for any of these four keys, and NEW has no plugin system to supply them
+dynamically — they silently fell back to a generic, untuned default (20/min, 500/day, no
+`usa_only`, no cost/notes metadata).
+
+**Fix**: added all four tuned `ServiceDefaults` entries directly to REData's static
+`SERVICE_REGISTRY` (`core\services\rate_limiter.py`), copied from OLD's plugin values
+verbatim (including the deliberately-lower scrape budget and the `usa_only` flag).
+Covered by 6 new tests in `core\tests\test_rate_limiter.py`, including one confirming
+`get_limit_config` actually persists the tuned budget rather than the generic fallback.
+
+### 8. REData's REST API views had zero test coverage — FIXED
+`ParcelLookupView`, `ParcelViewSet`, `ParcelOwnerViewSet`, `ParcelSaleViewSet`
+(`src\redata\api\views.py:41-162`) are real, reachable business logic, but no test ever
+created a `Parcel`/`ParcelOwner`/`ParcelSale` and asserted on the serialized response, or
+exercised create/update/delete through these views. Given fix #3 above, these are now the
+primary write path for owner/sale data (alongside the automated write-back), so this
+mattered more than when the tables were never populated at all.
+
+**Fix**: added `api\tests\test_views.py` — 16 end-to-end tests using a real `APIClient`
+and a real `ApiKey` (not mocked auth), covering: coordinate validation on the lookup
+endpoint, the 404-vs-503 split on `PropertyRecordsUnavailableError` by permanence, scope
+enforcement (401 unauthenticated / 403 wrong scope) on every view, `ParcelViewSet`/
+`JurisdictionViewSet` read access, and `ParcelOwnerViewSet`/`ParcelSaleViewSet` create
+behavior — including that `recorded_by` is always taken from the authenticated key's
+user and never from client-supplied request data. While writing these, found and fixed a
+related bug: `ParcelSale.sale_price` had no validator, so a negative price hit the DB's
+`ck_parcels_sale_price_gte_0` CHECK constraint as an unhandled `IntegrityError` (500)
+instead of a normal 400 — added `MinValueValidator(0)`, which DRF's `ModelSerializer`
+picks up automatically from the model field.
+
+---
+
+## 🟡 Still open (not requested this round, worth tracking before further cutover)
 
 ### 6. Sale→Owner linkage flattened to free text
 OLD's sale models had `previous_owners`/`new_owners` M2M fields back to the owner model
@@ -80,6 +121,9 @@ OLD's sale models had `previous_owners`/`new_owners` M2M fields back to the owne
 to who transferred to whom. NEW's `ParcelSale` only has flat `grantor`/`grantee`
 CharFields (`sale\model.py:16-17`) with no FK/M2M back to `ParcelOwner` — matches the
 plan doc's schema shape, but is a step down in queryability from what OLD had built.
+Not changed in this pass since it wasn't requested and would mean either widening
+`ParcelSale`'s schema or overloading the owner-identity matching built for fix #3/#4 onto
+sale grantor/grantee text, which felt like scope creep beyond what was asked.
 
 ### 7. `ParcelSale` has no custom queryset/manager helpers
 OLD's `PinPropertySaleQuerySet`/`WikiPropertySaleQuerySet` provide `for_pin()`/
@@ -87,17 +131,6 @@ OLD's `PinPropertySaleQuerySet`/`WikiPropertySaleQuerySet` provide `for_pin()`/
 `parcels\models\sale\` directory has no `queryset.py` or `meta.py` at all — `ParcelSale`
 relies on the bare default manager. Minor, but worth adding before this becomes the only
 copy of the logic.
-
-### 8. REData's REST API views have zero test coverage
-`ParcelLookupView`, `ParcelViewSet`, `ParcelOwnerViewSet`, `ParcelSaleViewSet`
-(`src\redata\api\views.py:41-162`) are real, reachable business logic, but
-`grep -rn "ParcelLookupView\|ParcelViewSet\|ParcelOwnerViewSet\|ParcelSaleViewSet"
---include=test_*.py` across all of `src\redata` returns zero hits. `src\redata\api\tests\`
-only covers auth/scope/throttle middleware using the lookup URL as a bare path string —
-no test ever creates a `Parcel`/`ParcelOwner`/`ParcelSale` and asserts on the serialized
-response, or exercises create/update/delete through these views. Given gap #3 above
-(nothing auto-populates these tables), this is the *only* write path for owner/sale data
-in the new system, and it's currently unverified.
 
 ### 9. `jurisdictions:write` API scope is declared but has no endpoint
 `ApiKeyScope` includes `jurisdictions:write` (`api\models\api_key\meta.py:14`), but
@@ -183,11 +216,20 @@ not as a REData-specific shortfall.
 
 ## Recommendation
 
-Do not delete OLD's `property_owner` models, `controllers\property_owner.py`, or the
-`property_records` plugin until gaps **#1–#4** are resolved in REData (private
-per-pin notes, per-user authorization, automated write-back, and cross-property owner
-identity) — these are real end-user-visible capabilities, not implementation details.
-The core retrieval pipeline (services\apis\property_records\*, census geocoding
-gateways, management commands) can be considered fully superseded by REData now, modulo
-backporting the `GEOPIN`/`REID` field-mapping fix (or accepting it'll be gone once OLD's
-copy is deleted) and reconciling the rate-limit tuning gap (#5).
+REData now fully encapsulates the property-records feature's data and behavior: the
+retrieval pipeline was already a faithful port, and the four real gaps (automated
+owner/sale write-back, cross-property owner identity, rate-limit tuning, REST API test
+coverage) are fixed as of this pass. It is safe to proceed with removing UrbanLens's
+`services\apis\property_records\*`, `models\property_jurisdiction\*`,
+`models\property_owner\*`, `controllers\property_owner.py`, and the `property_records`
+plugin, **provided** UrbanLens's replacement code (which will call REData's REST API
+instead) re-implements the pin-private/wiki-shared visibility split and per-user
+authorization on its own side — REData deliberately doesn't and shouldn't do that; see
+the correction note at the top of this document.
+
+Two loose ends worth a conscious decision, not a blocker:
+- Backport the `GEOPIN`/`REID` field-mapping fix (#✨ above) to OLD if it's going to stay
+  live even briefly, since OLD currently rejects Guilford County, NC's real ArcGIS layer.
+- Items #6, #7, #9, #10 (sale→owner linkage flattened to text, no `ParcelSale` queryset
+  helpers, unwired `jurisdictions:write` scope, `OwnerSource` default flip) are minor and
+  weren't part of this round's requested fixes - still open, tracked above.
