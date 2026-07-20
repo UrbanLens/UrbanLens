@@ -23,8 +23,6 @@
     </div>
 </dialog>
 
-{# Submitted programmatically by _exportSelection() below - a plain form POST so the
-   browser downloads the response via Content-Disposition instead of fetch+blob. #}
 <form id="bulk-export-form" method="post" action="{% url 'pin.bulk_export' %}" target="_blank" hidden>
     {% csrf_token %}
     <input type="hidden" name="format" id="bulk-export-format-field">
