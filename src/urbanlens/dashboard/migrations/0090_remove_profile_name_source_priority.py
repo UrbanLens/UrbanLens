@@ -6,7 +6,7 @@ from django.db import migrations
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("dashboard", "0089_invalidate_wikipedia_cache_for_infobox_seeding"),
+        ("dashboard", "0087_seed_global_demolished_label"),
     ]
 
     operations = [

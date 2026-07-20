@@ -38,7 +38,7 @@ def remove_global_demolished_label(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("dashboard", "0086_invalidate_wikipedia_cache_for_pin_article_seeding"),
+        ("dashboard", "0089_invalidate_wikipedia_cache_for_infobox_seeding"),
     ]
 
     operations = [
