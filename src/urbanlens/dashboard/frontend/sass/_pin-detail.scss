@@ -5606,6 +5606,10 @@ body.page-location-details .pin-detail-grid {
         background: rgba(255,255,255,0.04)
     }
 
+    .article-subtabs {
+        background: rgba(0,0,0,0.3);
+    }
+
     .pin-plugin-tab-btn {
         &.active {
             color: $color-blue-300;

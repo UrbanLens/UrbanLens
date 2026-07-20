@@ -258,13 +258,23 @@ $article-serif: Georgia, 'Times New Roman', Times, serif;
 // been written yet - not a standalone empty-state screen, since the canvas
 // itself is right there ready to type into (no "Edit"/"Start the article"
 // button to click - see article-panel's data-article-editor contract).
+.article-editor-wysiwyg-hint,
 .article-empty-hint-block {
     display: flex;
     align-items: flex-start;
     gap: .6rem;
-    margin-bottom: .85rem;
+    max-width: 40rem;
+    margin: 0 auto;
+    padding: 1rem 2rem;
+    background: rgba(0,0,0,0.2);
+    border-radius: 15px;
 
     h3 { margin: 0 0 .2rem; color: var(--ul-grey-8); font-size: 1.05rem; }
+}
+
+.article-editor-form {
+    padding: 1rem;
+    background: rgba(0,0,0,0.1);
 }
 
 .article-empty-icon {
@@ -530,7 +540,6 @@ $article-serif: Georgia, 'Times New Roman', Times, serif;
 // permanent line of chrome - only shown in WYSIWYG mode, see rule below.
 .article-editor-wysiwyg-hint {
     display: none;
-    margin-top: .6rem;
     color: var(--ul-grey-5);
     font-size: .82rem;
 
@@ -658,7 +667,7 @@ $article-serif: Georgia, 'Times New Roman', Times, serif;
     justify-content: center;
     width: 1.6rem;
     height: 1.6rem;
-    margin-left: -2rem;
+    margin-left: -4rem;
     border: 1px solid var(--ul-grey-2);
     border-radius: $radius-xs;
     background: var(--ul-control-bg);
