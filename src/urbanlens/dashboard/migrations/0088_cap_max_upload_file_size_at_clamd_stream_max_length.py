@@ -21,7 +21,7 @@ def cap_existing_value(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("dashboard", "0087_seed_global_demolished_label"),
+        ("dashboard", "0086_invalidate_wikipedia_cache_for_pin_article_seeding"),
     ]
 
     operations = [
