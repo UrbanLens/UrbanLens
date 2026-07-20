@@ -3780,6 +3780,16 @@
             const el = form.querySelector(`input[name=${key}]`);
             if ((el?.value || '').trim()) n++;
         }
+        // Bottom-right toolbar's own active saved filters (toggleToolbarSavedFilter) -
+        // a SEPARATE mechanism from every field above (its state lives in
+        // _activeToolbarFilters/#fp-toolbar-filter-ids, not a sidebar form field).
+        // Omitting this meant a toolbar-only filter (no sidebar criteria) made
+        // _hasActiveFilters() report false, so the htmx:beforeRequest handler
+        // below treated it as "no filters" and skipped the server round-trip
+        // entirely - the toolbar filter's client-side optimistic pass (which
+        // doesn't even support every criteria type _apply_toolbar_filters does
+        // server-side) was left as the only, never-reconciled, effect.
+        n += _activeToolbarFilters.size;
         return n;
     }
 
