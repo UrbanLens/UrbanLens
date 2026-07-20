@@ -75,7 +75,6 @@ def _wiki_urls(location_slug: str) -> dict[str, str]:
     """Build the endpoint URL map for a wiki-hosted article."""
     return {
         "view": reverse("location.wiki.article", kwargs={"location_slug": location_slug}),
-        "edit": reverse("location.wiki.article.edit", kwargs={"location_slug": location_slug}),
         "save": reverse("location.wiki.article.save", kwargs={"location_slug": location_slug}),
         "preview": reverse("location.wiki.article.preview", kwargs={"location_slug": location_slug}),
         "image": reverse("location.wiki.article.image", kwargs={"location_slug": location_slug}),
@@ -87,7 +86,6 @@ def _pin_urls(pin_slug: str) -> dict[str, str]:
     """Build the endpoint URL map for a pin-hosted article."""
     return {
         "view": reverse("pin.article", kwargs={"pin_slug": pin_slug}),
-        "edit": reverse("pin.article.edit", kwargs={"pin_slug": pin_slug}),
         "save": reverse("pin.article.save", kwargs={"pin_slug": pin_slug}),
         "preview": reverse("pin.article.preview", kwargs={"pin_slug": pin_slug}),
         "image": reverse("pin.article.image", kwargs={"pin_slug": pin_slug}),
@@ -168,7 +166,11 @@ class ArticleViewBase(LoginRequiredMixin, View):
         return response
 
     def render_panel(self, request: HttpRequest, scope: ArticleScope) -> HttpResponse:
-        """Render the read-mode article panel for the resolved scope."""
+        """Render the article panel (Notion-style: always the editable canvas, never a
+        separate read-only view - see frontend/ts/entries/article-wysiwyg.ts) for the
+        resolved scope.
+        """
+        latest_revision = scope.article.revisions.order_by("-created").first() if scope.article else None
         return render(
             request,
             "dashboard/partials/articles/_article_panel.html",
@@ -176,13 +178,15 @@ class ArticleViewBase(LoginRequiredMixin, View):
                 "scope": scope,
                 "article": scope.article,
                 "toc": (scope.article.toc if scope.article else []) or [],
-                "revision_count": scope.article.revisions.count() if scope.article else 0,
+                "base_revision_id": latest_revision.id if latest_revision else "",
+                "max_length": MAX_ARTICLE_LENGTH,
             },
         )
 
 
 class ArticlePanelView(ArticleViewBase):
-    """Read view of the article (the Article tab's content).
+    """The article panel (the Article tab's content) - an always-editable canvas,
+    like a Notion page, with no separate read-only mode to click "Edit" out of.
 
     GET /location/<slug>/wiki/article/  or  /map/pin/<slug>/article/
     """
@@ -190,27 +194,6 @@ class ArticlePanelView(ArticleViewBase):
     def get(self, request: HttpRequest, **kwargs) -> HttpResponse:
         scope = self.resolve(request, **kwargs)
         return self.render_panel(request, scope)
-
-
-class ArticleEditorView(ArticleViewBase):
-    """The article editor partial (toolbar + textarea + preview).
-
-    GET .../article/edit/
-    """
-
-    def get(self, request: HttpRequest, **kwargs) -> HttpResponse:
-        scope = self.resolve(request, **kwargs)
-        latest_revision = scope.article.revisions.order_by("-created").first() if scope.article else None
-        return render(
-            request,
-            "dashboard/partials/articles/_article_editor.html",
-            {
-                "scope": scope,
-                "article": scope.article,
-                "base_revision_id": latest_revision.id if latest_revision else "",
-                "max_length": MAX_ARTICLE_LENGTH,
-            },
-        )
 
 
 class ArticleSaveView(ArticleViewBase):

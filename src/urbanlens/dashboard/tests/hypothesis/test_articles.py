@@ -218,29 +218,29 @@ class PinArticleViewTests(TestCase):
         self.assertContains(response, "<strong>bold</strong>")
         self.assertFalse(Article.objects.filter(pin=self.pin).exists())
 
-    def test_meta_bar_is_gone_but_edit_button_still_works(self) -> None:
+    def test_meta_bar_is_gone(self) -> None:
         """The privacy/word-count/last-edited/revision-count meta bar was removed
-        as redundant now the pin detail page always shows an Edit History tab -
-        but the Edit button it also contained must still be reachable."""
+        as redundant now the pin detail page always shows an Edit History tab."""
         save_article(editor=self.profile, content="Built in 1900. Some history here.", pin=self.pin)
         response = self.client.get(reverse("pin.article", args=[self.pin.slug]))
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, "article-meta-bar")
         self.assertNotContains(response, "Last edited")
         self.assertNotContains(response, "word")
-        self.assertContains(response, "article-edit-btn")
-        self.assertContains(response, reverse("pin.article.edit", args=[self.pin.slug]))
 
-    def test_editor_renders_wysiwyg_canvas_and_source_toggle(self) -> None:
-        """The Markdown textarea is still the real form field (article-wysiwyg.ts
-        mirrors into it), but a WYSIWYG canvas mount point and a Source-mode
-        toggle should now also be present - see frontend/ts/entries/article-wysiwyg.ts."""
-        response = self.client.get(reverse("pin.article.edit", args=[self.pin.slug]))
+    def test_panel_is_always_the_editable_canvas_no_edit_click_needed(self) -> None:
+        """Notion-style: the Article tab is always the WYSIWYG canvas itself, with
+        no separate read-only mode and no Edit button to click through first -
+        see frontend/ts/entries/article-wysiwyg.ts."""
+        save_article(editor=self.profile, content="Built in 1900. Some history here.", pin=self.pin)
+        response = self.client.get(reverse("pin.article", args=[self.pin.slug]))
         self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "data-article-editor")
         self.assertContains(response, "data-article-canvas")
         self.assertContains(response, "data-article-mode-toggle")
         self.assertContains(response, "data-article-textarea")
         self.assertContains(response, 'name="content"')
+        self.assertNotContains(response, "article-edit-btn")
 
     def test_pin_detail_page_loads_the_wysiwyg_editor_script(self) -> None:
         response = self.client.get(reverse("pin.details", args=[self.pin.slug]))
