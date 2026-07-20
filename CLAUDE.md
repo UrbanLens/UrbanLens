@@ -305,6 +305,13 @@ These are planned features - treat any missing implementation as a gap to fill, 
   AddField-then-AlterField dance creates a duplicate index.
 - `RenameIndex` runs immediately even when `CreateModel` indexes are deferred - beware when
   squashing.
+- `makemigrations` picks its `dependencies` from whatever migration files are on disk, regardless of
+  git tracking status - if another in-progress feature (yours or someone else's, in the same
+  checkout) has left an uncommitted migration sitting in `migrations/`, a freshly generated
+  migration can silently depend on it. That breaks any other checkout/deploy with
+  `NodeNotFoundError` once pushed, since the dependency doesn't exist there. Run `git status
+  src/urbanlens/dashboard/migrations/` before trusting a new migration's dependency, and repoint it
+  at the actual latest *committed* migration if the auto-picked one is untracked.
 
 **Templates & HTMX**
 - `htmx:afterSwap` fires before `showModal()` - initialize Leaflet maps inside dialogs from the
