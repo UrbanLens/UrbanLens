@@ -1,5 +1,10 @@
 <div id="{{ panel_id }}" class="ownership-panel card"
-     data-collapse-scope="{{ collapse_scope }}" data-collapse-section="ownership">
+     data-collapse-scope="{{ collapse_scope }}" data-collapse-section="ownership"
+     {# Auto-collapsed (session-only, never persisted - see base.html's #}
+     {# _applyState) whenever there's no owner on record yet, so an empty #}
+     {# card doesn't take up space by default; the user can still expand it #}
+     {# manually to add one. #}
+     data-collapse-if-empty="{% if not owners %}true{% endif %}">
     <div class="card-header">
         <i class="material-symbols-outlined">real_estate_agent</i>
         <span>Ownership</span>

@@ -798,7 +798,7 @@
 
         // -- Shared pin delete flow (map popup, pin edit dialog, pin detail page) --
         // Confirms the delete, then lets the server veto with a 409 when the pin
-        // has sub pins so the user decides whether those are deleted too or kept.
+        // has child pins so the user decides whether those are deleted too or kept.
         // Resolves with true (deleted), false (user cancelled), or null (request failed).
         window.deletePinCascade = async function (pinUuid, pinName, csrfToken) {
             var confirmed = await window.confirmDialog({
@@ -827,7 +827,7 @@
                 var plural = n === 1 ? '' : 's';
                 var them = n === 1 ? 'it' : 'them';
                 var choice = await window.confirmDialog({
-                    title: 'Delete sub pins too?',
+                    title: 'Delete child pins too?',
                     message: 'This pin has ' + n + ' sub pin' + plural + '.\n\nDelete ' + them + ' as well, or keep ' + them + ' on your map?',
                     confirmLabel: 'Delete all',
                     altLabel: 'Keep sub pin' + plural,
@@ -1804,7 +1804,16 @@
             var scope = container.dataset.collapseScope;
             var section = container.dataset.collapseSection;
             if (!scope || !section) return;
-            var collapsed = _isCollapsed(scope, section);
+            // data-collapse-if-empty (set server-side per section - e.g. Links,
+            // Custom Fields, Ownership - whenever that section currently has no
+            // content) collapses by default alongside the normal stored
+            // preference, but is deliberately never written to localStorage via
+            // _setCollapsed - it's re-derived from the section's actual content
+            // on every load, not a sticky choice. The toggle button still works
+            // normally on top of it: expanding un-collapses for this view (see
+            // the click handler below), and if the section is still empty next
+            // visit, it re-collapses on its own rather than staying stuck open.
+            var collapsed = _isCollapsed(scope, section) || container.dataset.collapseIfEmpty === 'true';
             container.classList.toggle('is-collapsed', collapsed);
             var btn = container.querySelector('.section-collapse-btn');
             if (btn) btn.setAttribute('aria-expanded', String(!collapsed));

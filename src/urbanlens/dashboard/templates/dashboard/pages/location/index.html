@@ -387,12 +387,18 @@
 
 
 
+        {% with link_count=pin.links.count %}
         <div class="pin-links-card card card--secondary"
-             data-collapse-scope="pin" data-collapse-section="links">
+             data-collapse-scope="pin" data-collapse-section="links"
+             {# Auto-collapsed (session-only, never persisted - see base.html's #}
+             {# _applyState) whenever the pin has no links yet, so an empty card #}
+             {# doesn't take up space by default; the user can still expand it #}
+             {# manually to add one. #}
+             data-collapse-if-empty="{% if not link_count %}true{% endif %}">
             <div class="card-header">
                 <i class="material-symbols-outlined">link</i>
                 <span>Links</span>
-                {% with link_count=pin.links.count %}<span class="badge" id="pin-links-count-badge"{% if not link_count %} hidden{% endif %}>{{ link_count }}</span>{% endwith %}
+                <span class="badge" id="pin-links-count-badge"{% if not link_count %} hidden{% endif %}>{{ link_count }}</span>
                 <button type="button" class="btn btn--icon-sm" title="Add a link"
                         onclick="document.getElementById('pin-link-add-dialog').showModal()">
                     <i class="material-symbols-outlined">add_link</i>
@@ -405,6 +411,7 @@
                 {% include "dashboard/partials/pins/_pin_links_row.html" with pin=pin links=pin.links.all add_url="pin.links" delete_url_name="pin.link.delete" row_id="pin-links-row" owner_slug=pin.slug use_dialog=True %}
             </div>
         </div>
+        {% endwith %}
 
         <div hx-get="{% url 'pin.aliases' pin.slug %}"
             hx-trigger="load[!window.ulSectionCollapsed('pin','aliases')], ul:unhide, pinAliasesChanged from:body"
@@ -694,7 +701,7 @@
         {% if has_child_pins %}
         <a class="pin-actions-item{% if include_children %} is-active{% endif %}"
            href="{% url 'pin.details' pin.slug %}{% if not include_children %}?children=1{% endif %}"
-           title="Show everything from this pin's sub pins on this page - map details, photos, and visit history">
+           title="Show everything from this pin's child pins on this page - map details, photos, and visit history">
             <i class="material-symbols-outlined">{% if include_children %}toggle_on{% else %}toggle_off{% endif %}</i>
             <span>Sub pin details</span>
             <span class="pin-actions-state">{% if include_children %}On{% else %}Off{% endif %}</span>
