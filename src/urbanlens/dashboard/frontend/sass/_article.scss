@@ -290,12 +290,15 @@ $article-serif: Georgia, 'Times New Roman', Times, serif;
 // Floating toolbar docked to the bottom-right of the viewport - Source/Visual
 // switch + Clear, with room for more tools later. Always visible in both
 // editor modes (deliberately outside .article-editor-toolbar, which is
-// Source-mode-only). Sits below the save/cancel footer's own fixed position
-// (bottom: 4rem below) so an open save bar never overlaps it.
+// Source-mode-only). bottom: 4rem clears the site's own sticky .page-footer
+// (_nav.scss - ~3.25rem tall, z-index 9999, stuck to the viewport bottom on
+// every page) so that bar never sits on top of - and eats clicks meant for -
+// this toolbar. Pushed up further still once the save/cancel footer is also
+// showing (data-dirty), so the two floating bars never overlap each other.
 .article-floating-toolbar {
     position: fixed;
     right: 1.25rem;
-    bottom: 1.25rem;
+    bottom: 4rem;
     z-index: 400;
     display: flex;
     flex-direction: column;
@@ -307,6 +310,10 @@ $article-serif: Georgia, 'Times New Roman', Times, serif;
     backdrop-filter: blur(20px) saturate(1.15);
     -webkit-backdrop-filter: blur(20px) saturate(1.15);
     box-shadow: 0 4px 20px rgba(15, 23, 42, .14);
+
+    [data-article-editor][data-dirty="1"] & {
+        bottom: 8rem;
+    }
 
     .article-tool {
         color: var(--ul-grey-6);
