@@ -36,7 +36,7 @@ if TYPE_CHECKING:
 
     from rest_framework.request import Request
 
-    from urbanlens.dashboard.services.external_data import ProviderFetchResult
+    from urbanlens.dashboard.services.external_data import LocationCachePanelSource, ProviderFetchResult
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +96,13 @@ _NEARBY_RESEARCH_TABS = {
 _LOCATION_DATA_PLUGIN_TABS = {
     "photon": "Photon",
     "overture_building_attributes": "Building Characteristics",
+    "open_elevation": "Elevation",
 }
+
+# All Location Data tabs' source keys, including the bespoke Nominatim panel -
+# used by location_data_overview to build its combined summary. Order here is
+# the order sections appear in the Overview tab.
+_LOCATION_DATA_OVERVIEW_KEYS = ["nominatim", *_LOCATION_DATA_PLUGIN_TABS.keys()]
 
 
 class PinController(LoginRequiredMixin, GenericViewSet):
@@ -1340,6 +1346,127 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         context = {"park": data, "debug": self._debug_entry(request, "nps", cached.query_key, from_cache=True, count=1)}
         return render(request, "dashboard/partials/pins/pin_nps.html", context)
+
+    def _location_data_overview_section(self, pin: Pin, source: LocationCachePanelSource, data: dict) -> dict | None:
+        """Adapt one Location Data source's cached data into the Overview tab's generic section shape.
+
+        Nominatim is bespoke (no ``render_context``, see ``NominatimPanelSource``)
+        so its ``place`` dict is translated by hand here into the same
+        ``{heading_name, chips, facts, meta, footer_link}`` shape every other
+        ``InfoPanelSource`` already produces - letting one template loop over
+        every section uniformly.
+
+        Args:
+            pin: The pin whose panel is being rendered.
+            source: The panel source (``get_panel_source(key)``).
+            data: Its ``LocationCache`` row's ``data`` dict.
+
+        Returns:
+            ``{icon, title, heading_name, chips, facts, meta, footer_link}``,
+            or None when this source has nothing worth summarizing.
+        """
+        from urbanlens.dashboard.services.external_data import InfoPanelSource
+
+        if isinstance(source, InfoPanelSource):
+            context = source.render_context(pin, data)
+            if context is None:
+                return None
+            context["icon"] = source.icon
+            context["title"] = source.title
+            return context
+
+        if source.key != "nominatim":
+            return None
+        place = data or {}
+        if not place.get("name"):
+            return None
+        facts = []
+        if place.get("website"):
+            facts.append({"icon": "language", "text": place["website"], "href": place["website"]})
+        if place.get("phone"):
+            facts.append({"icon": "call", "text": place["phone"], "href": f"tel:{place['phone']}"})
+        if place.get("opening_hours"):
+            facts.append({"icon": "schedule", "text": place["opening_hours"]})
+        if place.get("operator"):
+            facts.append({"icon": "apartment", "text": place["operator"]})
+        return {
+            "icon": "map",
+            "title": "Nominatim",
+            "heading_name": place.get("name"),
+            "chips": [place["kind_label"]] if place.get("kind_label") else [],
+            "facts": facts,
+            "meta": [],
+            "footer_link": {"url": place["osm_url"], "label": "View on OpenStreetMap"} if place.get("osm_url") else None,
+        }
+
+    def location_data_overview(self, request: HttpRequest, pin_slug: str):
+        """
+        HTMX partial: combined summary of every Location Data tab's cached data.
+
+        The first tab in the Location Data card (see _pin_location_data_tabs.html) -
+        aggregates whichever of Nominatim/Photon/Building Characteristics/Elevation
+        already has fresh data into one scrollable summary, triggering a background
+        fetch for any that don't. Renders whatever is ready immediately rather than
+        blocking on the slowest source; if anything is still pending, the response
+        keeps self-polling (like every other panel) until everything settles or the
+        poll budget runs out.
+        """
+        from urbanlens.dashboard.services.external_data import MAX_POLL_ATTEMPTS, POLL_INTERVAL_SECONDS, LocationCachePanelSource, get_panel_source, schedule_panel_fetch
+
+        try:
+            pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)
+        except Pin.DoesNotExist:
+            return HttpResponse(status=404)
+
+        location = pin.location
+        if not location or not pin.effective_latitude or not pin.effective_longitude:
+            return HttpResponse(status=204)
+
+        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+
+        sections = []
+        pending_any = False
+        for key in _LOCATION_DATA_OVERVIEW_KEYS:
+            source = get_panel_source(key)
+            if not isinstance(source, LocationCachePanelSource):
+                continue
+            if source.is_ready(pin):
+                cached = LocationCache.get_fresh(location, source.cache_source)
+                section = self._location_data_overview_section(pin, source, cached.data if cached else {})
+                if section:
+                    sections.append(section)
+            elif schedule_panel_fetch(key, pin):
+                pending_any = True
+
+        attempt = self._poll_attempt(request)
+        still_waiting = pending_any and attempt < MAX_POLL_ATTEMPTS
+
+        if not sections:
+            if still_waiting:
+                return render(
+                    request,
+                    "dashboard/partials/pins/panel_pending.html",
+                    {
+                        "section_id": "location-data-overview-body",
+                        "outer_class": "pin-plugin-tab-body",
+                        "outer_is_card": True,
+                        "icon": "travel_explore",
+                        "title": "Overview",
+                        "poll_url": request.path,
+                        "next_attempt": attempt + 1,
+                        "poll_interval": POLL_INTERVAL_SECONDS,
+                    },
+                )
+            return HttpResponse(status=204)
+
+        # Render whatever's ready immediately rather than waiting on the
+        # slowest source - if something's still pending, the section keeps
+        # self-polling (outerHTML swap, same as panel_pending.html) to pick
+        # up later arrivals instead of leaving the tab stuck on a partial view.
+        context: dict = {"sections": sections}
+        if still_waiting:
+            context.update({"poll_url": request.path, "next_attempt": attempt + 1, "poll_interval": POLL_INTERVAL_SECONDS})
+        return render(request, "dashboard/partials/pins/_pin_location_data_overview.html", context)
 
     def nominatim_info(self, request: HttpRequest, pin_slug: str):
         """

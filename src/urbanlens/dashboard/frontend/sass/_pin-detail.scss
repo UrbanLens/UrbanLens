@@ -1666,6 +1666,35 @@
     font-size: .85rem;
 }
 
+// -- Location Data card's "Overview" tab (_pin_location_data_overview.html) --
+// Stacks each ready source's summary (reusing .simple-info-panel's scoped
+// heading/facts/meta classes, see the template) under its own small header.
+.location-data-overview-section-header {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    margin-bottom: .3rem;
+    color: var(--ul-grey-6);
+
+    h4 {
+        margin: 0;
+        font-size: .78rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: .02em;
+    }
+
+    .material-symbols-outlined {
+        font-size: 1rem;
+    }
+}
+
+.location-data-overview-divider {
+    margin: 1rem 0;
+    border: none;
+    border-top: 1px solid var(--ul-border);
+}
+
 // -- Azure Maps address/POI panel ----------------------------------------------
 .azure-maps-info {
     .azure-maps-heading {

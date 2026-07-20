@@ -1,23 +1,26 @@
 {% comment %}
-Location Data card: OpenStreetMap (Nominatim), Photon, and Building
-Characteristics used to render as three separate, near-identically-styled
-standalone cards with no explanation of how they relate - two of them
-("OpenStreetMap" and "Photon") both reverse-geocode the same underlying OSM
-data via independent services and can surface different amounts of detail.
-Grouping them as tabs of one card makes that relationship visible instead of
-implying three unrelated data sources.
+Location Data card: an Overview summary plus OpenStreetMap (Nominatim),
+Photon, Building Characteristics, and Elevation - these used to render as
+separate, near-identically-styled standalone cards with no explanation of
+how they relate - two of them ("OpenStreetMap" and "Photon") both
+reverse-geocode the same underlying OSM data via independent services and
+can surface different amounts of detail. Grouping them as tabs of one card
+makes that relationship visible instead of implying unrelated data sources.
 
-Unlike _pin_plugin_tabs.html this isn't a generic reusable tab strip: Nominatim
-has its own dedicated route/template (PinController.nominatim_info has side
-effects - it can auto-add an alias/link from OSM data) rather than being a
-plain InfoPanelSource, so it can't flow through the generic pin.panel
-dispatch every other tab here uses. That one tab is hardcoded; the rest come
-from PinController.view's location_data_tabs (see _LOCATION_DATA_PLUGIN_TABS).
+Unlike _pin_plugin_tabs.html this isn't a generic reusable tab strip:
+Nominatim has its own dedicated route/template (PinController.nominatim_info
+has side effects - it can auto-add an alias/link from OSM data) rather than
+being a plain InfoPanelSource, so it can't flow through the generic pin.panel
+dispatch every other tab here uses; Overview is its own bespoke aggregation
+(PinController.location_data_overview) for the same reason - it reads every
+other tab's cache directly rather than being one itself. Those two tabs are
+hardcoded; the rest come from PinController.view's location_data_tabs (see
+_LOCATION_DATA_PLUGIN_TABS).
 
 Context:
   pin                - the Pin being viewed
   location_data_tabs - list of {key, label, icon} dicts for the InfoPanelSource
-                       tabs (Photon, Building Characteristics), in tab order
+                       tabs (Photon, Building Characteristics, Elevation), in tab order
 {% endcomment %}
 <div id="location-data-section" class="card card--secondary"
      data-collapse-scope="pin" data-collapse-section="location-data" data-collapse-label="Location Data">
@@ -27,9 +30,16 @@ Context:
     </div>
     <div class="card-tabs" role="tablist">
         <button type="button" class="pin-plugin-tab-btn card-tab active" role="tab" aria-selected="true"
-                hx-get="{% url 'pin.nominatim' pin.slug %}"
+                hx-get="{% url 'pin.location_data_overview' pin.slug %}"
                 hx-target="#location-data-body" hx-swap="innerHTML"
                 hx-trigger="load[!window.ulSectionCollapsed('pin','location-data')], click"
+                onclick="document.querySelectorAll('#location-data-section .pin-plugin-tab-btn').forEach(function (b) { b.classList.remove('active'); b.setAttribute('aria-selected', 'false'); }); this.classList.add('active'); this.setAttribute('aria-selected', 'true');">
+            <i class="material-symbols-outlined">travel_explore</i>
+            <span>Overview</span>
+        </button>
+        <button type="button" class="pin-plugin-tab-btn card-tab" role="tab" aria-selected="false"
+                hx-get="{% url 'pin.nominatim' pin.slug %}"
+                hx-target="#location-data-body" hx-swap="innerHTML"
                 onclick="document.querySelectorAll('#location-data-section .pin-plugin-tab-btn').forEach(function (b) { b.classList.remove('active'); b.setAttribute('aria-selected', 'false'); }); this.classList.add('active'); this.setAttribute('aria-selected', 'true');">
             <i class="material-symbols-outlined">map</i>
             <span>Nominatim</span>
