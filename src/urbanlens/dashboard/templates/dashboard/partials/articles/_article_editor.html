@@ -20,29 +20,36 @@
         {% endif %}
 
         <div class="article-editor-toolbar" role="toolbar" aria-label="Formatting">
-            <button type="button" class="article-tool" data-md-action="bold" title="Bold (Ctrl+B)"><i class="material-symbols-outlined">format_bold</i></button>
-            <button type="button" class="article-tool" data-md-action="italic" title="Italic (Ctrl+I)"><i class="material-symbols-outlined">format_italic</i></button>
-            <button type="button" class="article-tool" data-md-action="strike" title="Strikethrough"><i class="material-symbols-outlined">strikethrough_s</i></button>
-            <span class="article-tool-sep"></span>
-            <button type="button" class="article-tool" data-md-action="h2" title="Section heading"><i class="material-symbols-outlined">format_h2</i></button>
-            <button type="button" class="article-tool" data-md-action="h3" title="Sub-section heading"><i class="material-symbols-outlined">format_h3</i></button>
-            <span class="article-tool-sep"></span>
-            <button type="button" class="article-tool" data-md-action="link" title="Link (Ctrl+K)"><i class="material-symbols-outlined">link</i></button>
-            <button type="button" class="article-tool" data-md-action="reference" title="Add a numbered reference (footnote)"><i class="material-symbols-outlined">superscript</i></button>
-            <button type="button" class="article-tool" data-md-action="image" title="Image"><i class="material-symbols-outlined">image</i></button>
-            <span class="article-tool-sep"></span>
-            <button type="button" class="article-tool" data-md-action="ul" title="Bulleted list"><i class="material-symbols-outlined">format_list_bulleted</i></button>
-            <button type="button" class="article-tool" data-md-action="ol" title="Numbered list"><i class="material-symbols-outlined">format_list_numbered</i></button>
-            <button type="button" class="article-tool" data-md-action="quote" title="Quote"><i class="material-symbols-outlined">format_quote</i></button>
-            <button type="button" class="article-tool" data-md-action="code" title="Code"><i class="material-symbols-outlined">code</i></button>
-            <button type="button" class="article-tool" data-md-action="table" title="Table"><i class="material-symbols-outlined">table</i></button>
-            <button type="button" class="article-tool" data-md-action="hr" title="Horizontal rule"><i class="material-symbols-outlined">horizontal_rule</i></button>
+            {# This whole group is only visible in Source mode - the WYSIWYG canvas #}
+            {# gets its formatting from the selection bubble menu and "/" block menu #}
+            {# instead (see article-wysiwyg.ts), so it doesn't read as a markdown #}
+            {# editor with a toolbar bolted on. See [data-editor-mode="wysiwyg"] in #}
+            {# _article.scss for the hide rule. #}
+            <div class="article-toolbar-format-group">
+                <button type="button" class="article-tool" data-md-action="bold" title="Bold (Ctrl+B)"><i class="material-symbols-outlined">format_bold</i></button>
+                <button type="button" class="article-tool" data-md-action="italic" title="Italic (Ctrl+I)"><i class="material-symbols-outlined">format_italic</i></button>
+                <button type="button" class="article-tool" data-md-action="strike" title="Strikethrough"><i class="material-symbols-outlined">strikethrough_s</i></button>
+                <span class="article-tool-sep"></span>
+                <button type="button" class="article-tool" data-md-action="h2" title="Section heading"><i class="material-symbols-outlined">format_h2</i></button>
+                <button type="button" class="article-tool" data-md-action="h3" title="Sub-section heading"><i class="material-symbols-outlined">format_h3</i></button>
+                <span class="article-tool-sep"></span>
+                <button type="button" class="article-tool" data-md-action="link" title="Link (Ctrl+K)"><i class="material-symbols-outlined">link</i></button>
+                <button type="button" class="article-tool" data-md-action="reference" title="Add a numbered reference (footnote)"><i class="material-symbols-outlined">superscript</i></button>
+                <button type="button" class="article-tool" data-md-action="image" title="Image"><i class="material-symbols-outlined">image</i></button>
+                <span class="article-tool-sep"></span>
+                <button type="button" class="article-tool" data-md-action="ul" title="Bulleted list"><i class="material-symbols-outlined">format_list_bulleted</i></button>
+                <button type="button" class="article-tool" data-md-action="ol" title="Numbered list"><i class="material-symbols-outlined">format_list_numbered</i></button>
+                <button type="button" class="article-tool" data-md-action="quote" title="Quote"><i class="material-symbols-outlined">format_quote</i></button>
+                <button type="button" class="article-tool" data-md-action="code" title="Code"><i class="material-symbols-outlined">code</i></button>
+                <button type="button" class="article-tool" data-md-action="table" title="Table"><i class="material-symbols-outlined">table</i></button>
+                <button type="button" class="article-tool" data-md-action="hr" title="Horizontal rule"><i class="material-symbols-outlined">horizontal_rule</i></button>
+            </div>
             <span class="article-toolbar-spacer"></span>
-            <button type="button" class="article-tool article-mode-toggle" data-article-mode-toggle title="View/edit Markdown source">
-                <i class="material-symbols-outlined">code_blocks</i><span>Source</span>
-            </button>
             <button type="button" class="article-tool article-preview-toggle" data-article-preview-toggle title="Toggle live preview">
                 <i class="material-symbols-outlined">visibility</i><span>Preview</span>
+            </button>
+            <button type="button" class="article-tool article-mode-toggle" data-article-mode-toggle title="View/edit Markdown source">
+                <i class="material-symbols-outlined">code_blocks</i><span>Source</span>
             </button>
         </div>
 
@@ -76,6 +83,11 @@
                 <div><code>Fact.[^1]</code> then <code>[^1]: Source</code> at the bottom &mdash; numbered reference</div>
             </div>
         </details>
+
+        <p class="article-editor-wysiwyg-hint" data-article-wysiwyg-hint>
+            <i class="material-symbols-outlined">tips_and_updates</i>
+            Select text to format it, or type <code>/</code> on a new line to insert a heading, list, table, image, and more.
+        </p>
 
         <div class="article-editor-footer">
             <input type="text" name="edit_summary" class="article-summary-input" maxlength="255"

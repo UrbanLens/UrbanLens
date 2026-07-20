@@ -6,6 +6,18 @@
  * beforeunload guard, HTMX save/cancel) keeps working completely unchanged -
  * this module only owns the WYSIWYG canvas and toolbar routing.
  *
+ * UX model (Notion-style, not a Markdown editor with a preview bolted on):
+ *   - No fixed row of format buttons. Formatting a selection shows a
+ *     floating bubble menu right above it (bold/italic/link/headings/...).
+ *   - Inserting a block (heading, list, table, image, ...) is done by
+ *     typing "/" at the start of a line, which opens a filterable slash
+ *     command menu - or by clicking the "+" that appears on an empty line.
+ *   - The old fixed toolbar, the live-preview pane, and the Markdown cheat
+ *     sheet still exist for Source mode (raw Markdown editing is still
+ *     supported and always available via the mode toggle), but are hidden
+ *     while the WYSIWYG canvas is active - see the
+ *     `[data-editor-mode="wysiwyg"]` rules in _article.scss.
+ *
  * Markup contract (see partials/articles/_article_editor.html):
  *   [data-article-editor]        editor root (also carries data-editor-mode,
  *                                 set to "wysiwyg" once mounted, or "source"
@@ -22,11 +34,14 @@
  * as before - nothing here is load-bearing for basic editing.
  */
 
-import { Editor } from "@tiptap/core";
+import { Editor, Extension, type Range } from "@tiptap/core";
+import { BubbleMenu } from "@tiptap/extension-bubble-menu";
+import { FloatingMenu } from "@tiptap/extension-floating-menu";
 import { Image } from "@tiptap/extension-image";
 import { Placeholder } from "@tiptap/extension-placeholder";
 import { TableKit } from "@tiptap/extension-table";
 import StarterKit from "@tiptap/starter-kit";
+import Suggestion, { type SuggestionProps } from "@tiptap/suggestion";
 import { Markdown } from "tiptap-markdown";
 import { nextReferenceNumber, referenceDefinitionStub } from "../shared/article-footnotes";
 import { getCsrfToken } from "../shared/csrf";
@@ -175,12 +190,16 @@ function pickAndUploadImage(root: HTMLElement, editor: Editor): void {
     input.click();
 }
 
-type ToolbarAction = (editor: Editor, root: HTMLElement) => void;
+type EditorAction = (editor: Editor, root: HTMLElement) => void;
 
-const TOOLBAR_ACTIONS: Record<string, ToolbarAction> = {
+// Shared command implementations - reused by the (hidden-in-WYSIWYG-mode)
+// legacy fixed toolbar, the selection bubble menu, and the "/" slash-command
+// menu, so every entry point stays behaviorally identical.
+const TOOLBAR_ACTIONS: Record<string, EditorAction> = {
     bold: (editor) => editor.chain().focus().toggleBold().run(),
     italic: (editor) => editor.chain().focus().toggleItalic().run(),
     strike: (editor) => editor.chain().focus().toggleStrike().run(),
+    paragraph: (editor) => editor.chain().focus().setParagraph().run(),
     h2: (editor) => editor.chain().focus().toggleHeading({ level: 2 }).run(),
     h3: (editor) => editor.chain().focus().toggleHeading({ level: 3 }).run(),
     ul: (editor) => editor.chain().focus().toggleBulletList().run(),
@@ -195,6 +214,7 @@ const TOOLBAR_ACTIONS: Record<string, ToolbarAction> = {
         if (selected.includes("\n")) editor.chain().focus().toggleCodeBlock().run();
         else editor.chain().focus().toggleCode().run();
     },
+    codeBlock: (editor) => editor.chain().focus().toggleCodeBlock().run(),
     table: (editor) => editor.chain().focus().insertTable({ rows: 3, cols: 2, withHeaderRow: true }).run(),
     link: (editor) => {
         const previousUrl = editor.getAttributes("link").href as string | undefined;
@@ -210,11 +230,236 @@ const TOOLBAR_ACTIONS: Record<string, ToolbarAction> = {
     reference: (editor, root) => insertReference(root, editor),
 };
 
+// -- Bubble menu (format-on-selection, Notion's core formatting affordance) -
+
+interface BubbleButtonDef {
+    action: string;
+    icon: string;
+    title: string;
+    isActive: (editor: Editor) => boolean;
+}
+
+const BUBBLE_BUTTONS: BubbleButtonDef[] = [
+    { action: "bold", icon: "format_bold", title: "Bold (Ctrl+B)", isActive: (e) => e.isActive("bold") },
+    { action: "italic", icon: "format_italic", title: "Italic (Ctrl+I)", isActive: (e) => e.isActive("italic") },
+    { action: "strike", icon: "strikethrough_s", title: "Strikethrough", isActive: (e) => e.isActive("strike") },
+    { action: "code", icon: "code", title: "Code", isActive: (e) => e.isActive("code") },
+    { action: "link", icon: "link", title: "Link (Ctrl+K)", isActive: (e) => e.isActive("link") },
+    { action: "h2", icon: "format_h2", title: "Heading", isActive: (e) => e.isActive("heading", { level: 2 }) },
+    { action: "h3", icon: "format_h3", title: "Sub-heading", isActive: (e) => e.isActive("heading", { level: 3 }) },
+    { action: "quote", icon: "format_quote", title: "Quote", isActive: (e) => e.isActive("blockquote") },
+];
+
+/**
+ * Holds the Editor instance once constructed. BubbleMenu/FloatingMenu
+ * elements must be built and handed to their extensions' `.configure()`
+ * before `new Editor(...)` returns, but their button handlers need the
+ * editor itself - closing over this mutable box (instead of the editor
+ * directly) lets the elements be built first and wired to the real instance
+ * right after construction finishes, before anything can click them.
+ */
+interface EditorBox {
+    current: Editor | null;
+}
+
+function buildBubbleMenuElement(root: HTMLElement, box: EditorBox): { element: HTMLElement; refresh: () => void } {
+    const el = document.createElement("div");
+    el.className = "article-bubble-menu";
+    el.setAttribute("role", "toolbar");
+    el.setAttribute("aria-label", "Format selection");
+
+    const refresh = (): void => {
+        const editor = box.current;
+        if (!editor) return;
+        el.querySelectorAll<HTMLButtonElement>(".article-bubble-btn").forEach((button, index) => {
+            const def = BUBBLE_BUTTONS[index];
+            if (def) button.classList.toggle("is-active", def.isActive(editor));
+        });
+    };
+
+    BUBBLE_BUTTONS.forEach((def) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "article-bubble-btn";
+        button.title = def.title;
+        button.innerHTML = `<i class="material-symbols-outlined">${def.icon}</i>`;
+        // Formatting must not steal focus/collapse the selection before the
+        // command runs against it.
+        button.addEventListener("mousedown", (event) => event.preventDefault());
+        button.addEventListener("click", () => {
+            const editor = box.current;
+            if (!editor) return;
+            TOOLBAR_ACTIONS[def.action]?.(editor, root);
+            refresh();
+        });
+        el.appendChild(button);
+    });
+
+    return { element: el, refresh };
+}
+
+// -- Slash command menu (block insertion, Notion's core "/" affordance) -----
+
+interface SlashItem {
+    action: string;
+    icon: string;
+    label: string;
+    keywords: string;
+}
+
+const SLASH_ITEMS: SlashItem[] = [
+    { action: "paragraph", icon: "notes", label: "Text", keywords: "text paragraph plain" },
+    { action: "h2", icon: "format_h2", label: "Heading", keywords: "heading h2 title section" },
+    { action: "h3", icon: "format_h3", label: "Sub-heading", keywords: "subheading h3" },
+    { action: "ul", icon: "format_list_bulleted", label: "Bulleted list", keywords: "bullet list ul unordered" },
+    { action: "ol", icon: "format_list_numbered", label: "Numbered list", keywords: "numbered list ol ordered" },
+    { action: "quote", icon: "format_quote", label: "Quote", keywords: "quote blockquote" },
+    { action: "codeBlock", icon: "code", label: "Code block", keywords: "code codeblock fenced" },
+    { action: "table", icon: "table", label: "Table", keywords: "table grid rows columns" },
+    { action: "image", icon: "image", label: "Image", keywords: "image photo picture upload" },
+    { action: "hr", icon: "horizontal_rule", label: "Divider", keywords: "divider rule horizontal hr separator" },
+    { action: "reference", icon: "superscript", label: "Reference", keywords: "reference footnote citation source" },
+];
+
+function filterSlashItems(query: string): SlashItem[] {
+    const q = query.trim().toLowerCase();
+    if (!q) return SLASH_ITEMS;
+    return SLASH_ITEMS.filter((item) => item.keywords.includes(q) || item.label.toLowerCase().includes(q));
+}
+
+function renderSlashItems(listEl: HTMLElement, items: SlashItem[], selectedIndex: number, onPick: (item: SlashItem) => void): void {
+    listEl.innerHTML = "";
+    if (!items.length) {
+        const empty = document.createElement("div");
+        empty.className = "article-slash-empty";
+        empty.textContent = "No matching blocks";
+        listEl.appendChild(empty);
+        return;
+    }
+    items.forEach((item, index) => {
+        const row = document.createElement("button");
+        row.type = "button";
+        row.className = "article-slash-item" + (index === selectedIndex ? " is-selected" : "");
+        row.setAttribute("role", "option");
+        row.innerHTML = `<i class="material-symbols-outlined">${item.icon}</i><span>${item.label}</span>`;
+        row.addEventListener("mousedown", (event) => event.preventDefault());
+        row.addEventListener("click", () => onPick(item));
+        listEl.appendChild(row);
+    });
+}
+
+/**
+ * Custom Extension wrapping @tiptap/suggestion to implement Notion-style
+ * "/" block insertion. Triggering on "/" opens a filterable popup (positioned
+ * by Suggestion's managed floating-ui mount); picking an item deletes the
+ * typed "/query" text and runs the matching block-insert command.
+ */
+const SlashCommand = Extension.create<{ root: HTMLElement | null }>({
+    name: "slashCommand",
+
+    addOptions() {
+        return { root: null };
+    },
+
+    addProseMirrorPlugins() {
+        const editor = this.editor;
+        const root = this.options.root;
+        if (!root) return [];
+
+        let items: SlashItem[] = [];
+        let selectedIndex = 0;
+        let listEl: HTMLElement | null = null;
+        let unmount: (() => void) | null = null;
+
+        const pick = (range: Range, item: SlashItem): void => {
+            editor.chain().focus().deleteRange(range).run();
+            TOOLBAR_ACTIONS[item.action]?.(editor, root);
+            unmount?.();
+        };
+
+        const rerender = (range: Range): void => {
+            if (listEl) renderSlashItems(listEl, items, selectedIndex, (item) => pick(range, item));
+        };
+
+        return [
+            Suggestion({
+                editor,
+                char: "/",
+                startOfLine: false,
+                items: ({ query }) => filterSlashItems(query),
+                render: () => ({
+                    onStart: (props: SuggestionProps<SlashItem>) => {
+                        items = props.items;
+                        selectedIndex = 0;
+                        listEl = document.createElement("div");
+                        listEl.className = "article-slash-menu";
+                        listEl.setAttribute("role", "listbox");
+                        rerender(props.range);
+                        unmount = props.mount(listEl);
+                    },
+                    onUpdate: (props: SuggestionProps<SlashItem>) => {
+                        items = props.items;
+                        selectedIndex = 0;
+                        rerender(props.range);
+                    },
+                    onKeyDown: (props) => {
+                        if (props.event.key === "Escape") {
+                            unmount?.();
+                            return true;
+                        }
+                        if (!items.length) return false;
+                        if (props.event.key === "ArrowDown") {
+                            selectedIndex = (selectedIndex + 1) % items.length;
+                            rerender(props.range);
+                            return true;
+                        }
+                        if (props.event.key === "ArrowUp") {
+                            selectedIndex = (selectedIndex - 1 + items.length) % items.length;
+                            rerender(props.range);
+                            return true;
+                        }
+                        if (props.event.key === "Enter" || props.event.key === "Tab") {
+                            const selected = items[selectedIndex];
+                            if (selected) pick(props.range, selected);
+                            return true;
+                        }
+                        return false;
+                    },
+                    onExit: () => {
+                        unmount?.();
+                        listEl = null;
+                    },
+                }),
+            }),
+        ];
+    },
+});
+
+/**
+ * "+" affordance shown on an empty line (Notion's mouse-driven equivalent of
+ * typing "/") - inserting the trigger character hands off to SlashCommand's
+ * already-wired Suggestion plugin instead of duplicating the popup.
+ */
+function buildFloatingPlusElement(box: EditorBox): HTMLElement {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "article-floating-plus";
+    button.title = "Add a block";
+    button.innerHTML = '<i class="material-symbols-outlined">add</i>';
+    button.addEventListener("mousedown", (event) => event.preventDefault());
+    button.addEventListener("click", () => box.current?.chain().focus().insertContent("/").run());
+    return button;
+}
+
 function mountEditor(root: HTMLElement): void {
     if (editors.has(root)) return;
     const textarea = textareaOf(root);
     const canvas = canvasOf(root);
     if (!textarea || !canvas) return;
+
+    const editorBox: EditorBox = { current: null };
+    const bubbleMenu = buildBubbleMenuElement(root, editorBox);
+    const floatingPlus = buildFloatingPlusElement(editorBox);
 
     const editor = new Editor({
         element: canvas,
@@ -225,8 +470,11 @@ function mountEditor(root: HTMLElement): void {
             }),
             Image,
             TableKit.configure({ table: { resizable: false } }),
-            Placeholder.configure({ placeholder: "Start writing…" }),
+            Placeholder.configure({ placeholder: "Start writing, or type “/” to insert a block…" }),
             Markdown.configure({ html: false, linkify: true, transformPastedText: true }),
+            SlashCommand.configure({ root }),
+            BubbleMenu.configure({ element: bubbleMenu.element }),
+            FloatingMenu.configure({ element: floatingPlus }),
         ],
         content: textarea.value,
         editorProps: {
@@ -237,6 +485,10 @@ function mountEditor(root: HTMLElement): void {
         },
         onUpdate: () => syncTextareaFromEditor(root, editor),
     });
+
+    editorBox.current = editor;
+    editor.on("transaction", bubbleMenu.refresh);
+    editor.on("selectionUpdate", bubbleMenu.refresh);
 
     editors.set(root, editor);
     setMode(root, "wysiwyg");
@@ -266,7 +518,10 @@ function initAll(container: ParentNode): void {
 // Capture phase, so this always runs before article-editor.js's own
 // bubble-phase delegated click handler - when in WYSIWYG mode we handle the
 // toolbar click ourselves and stop it from also mutating the (hidden)
-// textarea directly via the old raw-Markdown action map.
+// textarea directly via the old raw-Markdown action map. The fixed toolbar
+// buttons themselves are hidden while WYSIWYG is active (see
+// [data-editor-mode="wysiwyg"] in _article.scss - formatting now happens via
+// the bubble/slash menus instead) but this still backs Source mode's toolbar.
 document.addEventListener(
     "click",
     (event) => {
