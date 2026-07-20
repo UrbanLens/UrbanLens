@@ -84,7 +84,7 @@ class GetArticleForLocationTests(SimpleTestCase):
                 "_fetch_summary",
                 return_value={"title": "The Actual Place", "extract": "Located in Poughkeepsie.", "extract_html": "<p>Located in Poughkeepsie.</p>"},
             ),
-            mock.patch.object(WikipediaGateway, "_fill_short_extract"),
+            mock.patch.object(WikipediaGateway, "_fill_full_extract"),
             mock.patch.object(WikipediaGateway, "_fetch_infobox", return_value=[]),
         ):
             result = self.gateway.get_article_for_location(40.0, -74.0, _COMPONENTS, name="The Actual Place")
@@ -102,7 +102,7 @@ class GetArticleForLocationTests(SimpleTestCase):
         with (
             mock.patch.object(WikipediaGateway, "_geo_search", return_value=candidates),
             mock.patch.object(WikipediaGateway, "_fetch_summary", side_effect=lambda title: summaries[title]),
-            mock.patch.object(WikipediaGateway, "_fill_short_extract"),
+            mock.patch.object(WikipediaGateway, "_fill_full_extract"),
             mock.patch.object(WikipediaGateway, "_fetch_infobox", return_value=[]),
         ):
             result = self.gateway.get_article_for_location(40.0, -74.0, _COMPONENTS, name="The Actual Place")
@@ -118,7 +118,7 @@ class GetArticleForLocationTests(SimpleTestCase):
                 "_fetch_summary",
                 return_value={"title": "The Actual Place", "extract": "Located in Poughkeepsie.", "extract_html": "<p>Located in Poughkeepsie.</p>"},
             ),
-            mock.patch.object(WikipediaGateway, "_fill_short_extract"),
+            mock.patch.object(WikipediaGateway, "_fill_full_extract"),
             mock.patch.object(WikipediaGateway, "_fetch_infobox", return_value=[["Established", "1900"]]) as fetch_infobox,
         ):
             result = self.gateway.get_article_for_location(40.0, -74.0, _COMPONENTS, name="The Actual Place")

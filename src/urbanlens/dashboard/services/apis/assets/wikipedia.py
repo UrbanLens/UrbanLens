@@ -28,19 +28,17 @@ _RADIUS_METERS = 500
 _MAX_CANDIDATES = 5
 _USER_AGENT = "UrbanLens/1.0 (https://github.com/urbanlens/urbanlens; jess.a.mann@gmail.com) python-requests/2.x"
 
-# The REST summary endpoint (`_fetch_summary`) truncates well below the
-# article's actual lead section, and the lead section itself is often not
-# enough to fill the card's available space either (e.g. a cemetery article
-# whose lead is a couple hundred words but whose body has several more
-# sections of real content). Below this length, pull a much bigger slice of
-# the whole article body instead of just the lead, so the frontend has real
-# margin to work with regardless of how tall its card ends up (see the
-# client-side clamp in dashboard/pages/location/index.html).
-_SHORT_EXTRACT_CHARS = 1200
+# The REST summary endpoint (`_fetch_summary`) only ever returns the lead
+# section, which is frequently a couple hundred words even for articles with
+# several more sections of real body content. The pin details page's
+# Wikipedia sub-tab renders this as a standalone full page (not a
+# space-constrained card - see docs/prompts/completed.md for the history of
+# removing the CSS height clamp that used to apply here), so the full article
+# body is always pulled instead of just the lead.
 # Server-side cap on the extended extract - generous, but bounded so a single
 # huge article (some run 50k+ characters) doesn't get pulled in wholesale.
 # Measured in visible text characters, not markup bytes.
-_EXTENDED_EXTRACT_CHARS = 5000
+_EXTENDED_EXTRACT_CHARS = 20_000
 
 # `prop=extracts` (without `explaintext`) returns the article's real parsed
 # markup instead of flattened plain text, so headings/paragraphs/lists survive.
@@ -221,7 +219,7 @@ class WikipediaGateway(Gateway):
             summary = self._fetch_summary(candidate["title"])
             if summary and self._address_matches(summary, address_components, name):
                 article = self._normalise(summary)
-                self._fill_short_extract(article, candidate["title"])
+                self._fill_full_extract(article, candidate["title"])
                 article["infobox"] = self._fetch_infobox(candidate["title"])
                 return article
         return None
@@ -283,15 +281,14 @@ class WikipediaGateway(Gateway):
 
     # -- private ----------------------------------------------------------------
 
-    def _fill_short_extract(self, article: dict[str, Any], title: str) -> None:
-        """Mutate ``article["extract"]`` in place with more text when it's short.
+    def _fill_full_extract(self, article: dict[str, Any], title: str) -> None:
+        """Mutate ``article["extract"]`` in place with the full article body.
 
-        The lead section alone is frequently not enough content to fill a
-        card's available space, so this pulls from later sections of the
-        article body too rather than stopping at the lead.
+        The lead section alone (all the REST summary endpoint returns) is
+        frequently only a fraction of the article's real content, so this
+        always pulls from later sections of the body too rather than
+        stopping at the lead.
         """
-        if self._visible_length(article["extract"]) >= _SHORT_EXTRACT_CHARS:
-            return
         extended = self._fetch_extended_extract(title)
         if extended and self._visible_length(extended) > self._visible_length(article["extract"]):
             article["extract"] = extended
