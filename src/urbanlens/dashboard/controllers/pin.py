@@ -99,6 +99,11 @@ _LOCATION_DATA_PLUGIN_TABS = {
     "open_elevation": "Elevation",
 }
 
+# Mirrors plugins.builtin.open_elevation's own module-level constant - kept as
+# a separate copy since importing a private constant across module boundaries
+# would couple this controller to that plugin's internals.
+_METERS_PER_FOOT = 0.3048
+
 # All Location Data tabs' source keys, including the bespoke Nominatim panel -
 # used by location_data_overview to build its combined summary. Order here is
 # the order sections appear in the Overview tab.
@@ -1347,69 +1352,109 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         context = {"park": data, "debug": self._debug_entry(request, "nps", cached.query_key, from_cache=True, count=1)}
         return render(request, "dashboard/partials/pins/pin_nps.html", context)
 
-    def _location_data_overview_section(self, pin: Pin, source: LocationCachePanelSource, data: dict) -> dict | None:
-        """Adapt one Location Data source's cached data into the Overview tab's generic section shape.
+    def _location_data_overview_fields(self, source_key: str, data: dict) -> dict | None:
+        """Extract one Location Data source's cached data as generic Overview fields.
 
-        Nominatim is bespoke (no ``render_context``, see ``NominatimPanelSource``)
-        so its ``place`` dict is translated by hand here into the same
-        ``{heading_name, chips, facts, meta, footer_link}`` shape every other
-        ``InfoPanelSource`` already produces - letting one template loop over
-        every section uniformly.
+        Unlike each source's own ``render_context`` (which builds a
+        source-attributed, source-titled panel for that source's own dedicated
+        tab - see ``InfoPanelSource``/``_simple_info_panel.html``), this builds
+        plain ``{label, value, href}`` field pairs meant to be merged with every
+        other ready source's fields into one combined, unattributed summary -
+        so the Overview tab reads as "facts about this place," not a stack of
+        per-provider panels.
 
         Args:
-            pin: The pin whose panel is being rendered.
-            source: The panel source (``get_panel_source(key)``).
+            source_key: The panel source's key (``get_panel_source`` key).
             data: Its ``LocationCache`` row's ``data`` dict.
 
         Returns:
-            ``{icon, title, heading_name, chips, facts, meta, footer_link}``,
-            or None when this source has nothing worth summarizing.
+            ``{heading_name, chips, fields, footer_link}``, or None when this
+            source has nothing worth summarizing.
         """
-        from urbanlens.dashboard.services.external_data import InfoPanelSource
+        data = data or {}
 
-        if isinstance(source, InfoPanelSource):
-            context = source.render_context(pin, data)
-            if context is None:
+        if source_key == "nominatim":
+            if not data.get("name"):
                 return None
-            context["icon"] = source.icon
-            context["title"] = source.title
-            return context
+            fields = []
+            if data.get("website"):
+                fields.append({"label": "Website", "value": data["website"], "href": data["website"]})
+            if data.get("phone"):
+                fields.append({"label": "Phone", "value": data["phone"], "href": f"tel:{data['phone']}"})
+            if data.get("opening_hours"):
+                fields.append({"label": "Hours", "value": data["opening_hours"]})
+            if data.get("operator"):
+                fields.append({"label": "Operator", "value": data["operator"]})
+            return {
+                "heading_name": data.get("name"),
+                "chips": [data["kind_label"]] if data.get("kind_label") else [],
+                "fields": fields,
+                "footer_link": {"url": data["osm_url"], "label": "View on OpenStreetMap"} if data.get("osm_url") else None,
+            }
 
-        if source.key != "nominatim":
-            return None
-        place = data or {}
-        if not place.get("name"):
-            return None
-        facts = []
-        if place.get("website"):
-            facts.append({"icon": "language", "text": place["website"], "href": place["website"]})
-        if place.get("phone"):
-            facts.append({"icon": "call", "text": place["phone"], "href": f"tel:{place['phone']}"})
-        if place.get("opening_hours"):
-            facts.append({"icon": "schedule", "text": place["opening_hours"]})
-        if place.get("operator"):
-            facts.append({"icon": "apartment", "text": place["operator"]})
-        return {
-            "icon": "map",
-            "title": "Nominatim",
-            "heading_name": place.get("name"),
-            "chips": [place["kind_label"]] if place.get("kind_label") else [],
-            "facts": facts,
-            "meta": [],
-            "footer_link": {"url": place["osm_url"], "label": "View on OpenStreetMap"} if place.get("osm_url") else None,
-        }
+        if source_key == "photon":
+            if not data.get("name"):
+                return None
+            fields = []
+            street_parts = [data[key] for key in ("housenumber", "street") if data.get(key)]
+            if street_parts:
+                fields.append({"label": "Street", "value": " ".join(street_parts)})
+            for key, label in (("locality", "Locality"), ("district", "District"), ("city", "City"), ("county", "County"), ("state", "State"), ("country", "Country"), ("postcode", "Postal Code")):
+                if data.get(key):
+                    fields.append({"label": label, "value": data[key]})
+            return {
+                "heading_name": data.get("name"),
+                "chips": [data["osm_value"].replace("_", " ").title()] if data.get("osm_value") else [],
+                "fields": fields,
+                "footer_link": {"url": data["osm_url"], "label": "View raw OSM entry"} if data.get("osm_url") else None,
+            }
+
+        if source_key == "overture_building_attributes":
+            if not data:
+                return None
+            fields = []
+            if data.get("height_m"):
+                fields.append({"label": "Height", "value": f"{data['height_m']:.0f} m"})
+            if data.get("num_floors"):
+                fields.append({"label": "Floors", "value": str(data["num_floors"])})
+            if data.get("roof_shape"):
+                fields.append({"label": "Roof Shape", "value": data["roof_shape"].replace("_", " ").title()})
+            if data.get("roof_material"):
+                fields.append({"label": "Roof Material", "value": data["roof_material"].replace("_", " ").title()})
+            for place in data.get("nearby_places") or []:
+                category = (place.get("category") or "").replace("_", " ").title()
+                status_suffix = " (closed)" if place.get("operating_status") == "closed" else ""
+                value = f"{place['name']}{status_suffix} - {category} ({place['distance_m']:.0f}m)" if category else f"{place['name']}{status_suffix} ({place['distance_m']:.0f}m)"
+                fields.append({"label": "Nearby", "value": value})
+            chips = [data["subtype"].replace("_", " ").title()] if data.get("subtype") else []
+            if not chips and not fields:
+                return None
+            return {"heading_name": data.get("primary_name"), "chips": chips, "fields": fields, "footer_link": None}
+
+        if source_key == "open_elevation":
+            elevation_m = data.get("elevation_m")
+            if elevation_m is None:
+                return None
+            elevation_ft = elevation_m / _METERS_PER_FOOT
+            below_sea_level = elevation_m < 0
+            value = f"{abs(elevation_m):,.0f} m ({abs(elevation_ft):,.0f} ft) {'below' if below_sea_level else 'above'} sea level"
+            return {"heading_name": None, "chips": [], "fields": [{"label": "Elevation", "value": value}], "footer_link": None}
+
+        return None
 
     def location_data_overview(self, request: HttpRequest, pin_slug: str):
         """
         HTMX partial: combined summary of every Location Data tab's cached data.
 
         The first tab in the Location Data card (see _pin_location_data_tabs.html) -
-        aggregates whichever of Nominatim/Photon/Building Characteristics/Elevation
-        already has fresh data into one scrollable summary, triggering a background
-        fetch for any that don't. Renders whatever is ready immediately rather than
-        blocking on the slowest source; if anything is still pending, the response
-        keeps self-polling (like every other panel) until everything settles or the
-        poll budget runs out.
+        merges whichever of Nominatim/Photon/Building Characteristics/Elevation
+        already has fresh data into one summarized list of field:value facts
+        about the place (no per-source attribution or headers - see
+        ``_location_data_overview_fields``), triggering a background fetch for
+        any source that doesn't have fresh data yet. Renders whatever is ready
+        immediately rather than blocking on the slowest source; if anything is
+        still pending, the response keeps self-polling (like every other panel)
+        until everything settles or the poll budget runs out.
         """
         from urbanlens.dashboard.services.external_data import MAX_POLL_ATTEMPTS, POLL_INTERVAL_SECONDS, LocationCachePanelSource, get_panel_source, schedule_panel_fetch
 
@@ -1424,7 +1469,11 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
 
-        sections = []
+        heading_name: str | None = None
+        chips: list[str] = []
+        fields: list[dict] = []
+        footer_links: list[dict] = []
+        seen_footer_urls: set[str] = set()
         pending_any = False
         for key in _LOCATION_DATA_OVERVIEW_KEYS:
             source = get_panel_source(key)
@@ -1432,16 +1481,26 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 continue
             if source.is_ready(pin):
                 cached = LocationCache.get_fresh(location, source.cache_source)
-                section = self._location_data_overview_section(pin, source, cached.data if cached else {})
-                if section:
-                    sections.append(section)
+                piece = self._location_data_overview_fields(key, cached.data if cached else {})
+                if piece is None:
+                    continue
+                if heading_name is None and piece["heading_name"]:
+                    heading_name = piece["heading_name"]
+                for chip in piece["chips"]:
+                    if chip not in chips:
+                        chips.append(chip)
+                fields.extend(piece["fields"])
+                footer_link = piece["footer_link"]
+                if footer_link and footer_link["url"] not in seen_footer_urls:
+                    seen_footer_urls.add(footer_link["url"])
+                    footer_links.append(footer_link)
             elif schedule_panel_fetch(key, pin):
                 pending_any = True
 
         attempt = self._poll_attempt(request)
         still_waiting = pending_any and attempt < MAX_POLL_ATTEMPTS
 
-        if not sections:
+        if not (heading_name or chips or fields or footer_links):
             if still_waiting:
                 return render(
                     request,
@@ -1463,7 +1522,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         # slowest source - if something's still pending, the section keeps
         # self-polling (outerHTML swap, same as panel_pending.html) to pick
         # up later arrivals instead of leaving the tab stuck on a partial view.
-        context: dict = {"sections": sections}
+        context: dict = {"heading_name": heading_name, "chips": chips, "fields": fields, "footer_links": footer_links}
         if still_waiting:
             context.update({"poll_url": request.path, "next_attempt": attempt + 1, "poll_interval": POLL_INTERVAL_SECONDS})
         return render(request, "dashboard/partials/pins/_pin_location_data_overview.html", context)

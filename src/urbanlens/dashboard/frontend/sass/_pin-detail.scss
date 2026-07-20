@@ -1659,32 +1659,98 @@
 }
 
 // -- Location Data card's "Overview" tab (_pin_location_data_overview.html) --
-// Stacks each ready source's summary (reusing .simple-info-panel's scoped
-// heading/facts/meta classes, see the template) under its own small header.
-.location-data-overview-section-header {
+// One merged summary of field:value facts from every ready source, with no
+// per-source headers or attribution - see PinController.location_data_overview.
+.location-data-overview-heading {
     display: flex;
-    align-items: center;
-    gap: .4rem;
-    margin-bottom: .3rem;
-    color: var(--ul-grey-6);
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: .1rem .6rem;
+    margin-bottom: .5rem;
+}
 
-    h4 {
-        margin: 0;
-        font-size: .78rem;
+.location-data-overview-place-name {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--ul-grey-9);
+}
+
+.location-data-overview-chip {
+    padding: .1rem .55rem;
+    font-size: .68rem;
+    font-weight: 600;
+    letter-spacing: .02em;
+    text-transform: uppercase;
+    color: var(--ul-primary-color);
+    background: var(--ul-primary-light, rgba(37, 99, 235, .12));
+    border-radius: 999px;
+    white-space: nowrap;
+}
+
+.location-data-overview-fields {
+    margin: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: .5rem 1rem;
+}
+
+.location-data-overview-field {
+    display: flex;
+    flex-direction: column;
+    gap: .05rem;
+    min-width: 0;
+
+    dt {
+        font-size: .68rem;
         font-weight: 600;
         text-transform: uppercase;
         letter-spacing: .02em;
+        color: var(--ul-grey-5);
     }
 
-    .material-symbols-outlined {
-        font-size: 1rem;
+    dd {
+        margin: 0;
+        font-size: .85rem;
+        color: var(--ul-grey-8);
+        overflow-wrap: break-word;
+
+        a {
+            color: inherit;
+
+            &:hover {
+                color: var(--ul-primary-color);
+                text-decoration: underline;
+            }
+        }
     }
 }
 
-.location-data-overview-divider {
-    margin: 1rem 0;
-    border: none;
+.location-data-overview-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem 1.25rem;
+    margin-top: 1rem;
+    padding-top: .75rem;
     border-top: 1px solid var(--ul-border);
+}
+
+.location-data-overview-link {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    font-size: .82rem;
+    font-weight: 600;
+    color: var(--ul-primary-color);
+    text-decoration: none;
+
+    .material-symbols-outlined {
+        font-size: .95rem;
+    }
+
+    &:hover {
+        text-decoration: underline;
+    }
 }
 
 // -- Azure Maps address/POI panel ----------------------------------------------

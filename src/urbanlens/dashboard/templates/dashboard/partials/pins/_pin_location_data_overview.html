@@ -1,14 +1,19 @@
 {% comment %}
 Location Data card's "Overview" tab (always the first tab - see
 _pin_location_data_tabs.html and PinController.location_data_overview):
-one scrollable summary combining whichever of Nominatim/Photon/Building
-Characteristics/Elevation already has fresh data, reusing the same
-simple-info-* classes _simple_info_panel.html's single-panel view uses so
-each section looks consistent with its own dedicated tab.
+one merged summary of whichever of Nominatim/Photon/Building
+Characteristics/Elevation already has fresh data - combined into a single
+list of field:value facts about the place, with no mention of which
+provider each fact came from.
 
 Context:
-    sections    - list of {icon, title, heading_name, chips, facts, meta,
-                  footer_link} dicts, one per ready source, in tab order.
+    heading_name - the place's name (from whichever ready source has one),
+                  or None.
+    chips       - deduplicated kind/type chips from every ready source.
+    fields      - deduplicated list of {label, value, href} facts merged
+                  from every ready source, in source-priority order.
+    footer_links - deduplicated list of {url, label} "view the raw record"
+                  links from every ready source.
     poll_url, next_attempt, poll_interval - present only when at least one
                   source is still pending: the whole body keeps
                   self-polling (outerHTML swap) to pick up later arrivals
@@ -21,65 +26,38 @@ Context:
      hx-swap="outerHTML"
      hx-timeout="25000"
      {% endif %}>
-    {% for section in sections %}
-    {# simple-info-panel: reuses _simple_info_panel.html's scoped CSS for the #}
-    {# heading/facts/meta classes below, without its own card/polling chrome. #}
-    <div class="location-data-overview-section simple-info-panel">
-        <div class="location-data-overview-section-header">
-            <i class="material-symbols-outlined">{{ section.icon }}</i>
-            <h4>{{ section.title }}</h4>
-        </div>
-        {% if section.heading_name or section.chips %}
-        <div class="simple-info-heading">
-            {% if section.heading_name %}
-            <p class="simple-info-place-name">{{ section.heading_name }}</p>
-            {% endif %}
-            {% for chip in section.chips %}
-            <span class="simple-info-kind-chip">{{ chip }}</span>
-            {% endfor %}
-        </div>
-        {% endif %}
+    {% if heading_name or chips %}
+    <div class="location-data-overview-heading">
+        {% if heading_name %}<p class="location-data-overview-place-name">{{ heading_name }}</p>{% endif %}
+        {% for chip in chips %}
+        <span class="location-data-overview-chip">{{ chip }}</span>
+        {% endfor %}
+    </div>
+    {% endif %}
 
-        {% if section.facts %}
-        <div class="simple-info-quick-facts">
-            {% for fact in section.facts %}
-            {% if fact.href %}
-            <a class="simple-info-fact" href="{{ fact.href }}" target="_blank" rel="noopener noreferrer">
-                <i class="material-symbols-outlined">{{ fact.icon }}</i>
-                <span>{{ fact.text }}</span>
-            </a>
+    {% if fields %}
+    <dl class="location-data-overview-fields">
+        {% for field in fields %}
+        <div class="location-data-overview-field">
+            <dt>{{ field.label }}</dt>
+            {% if field.href %}
+            <dd><a href="{{ field.href }}" target="_blank" rel="noopener noreferrer">{{ field.value }}</a></dd>
             {% else %}
-            <span class="simple-info-fact">
-                <i class="material-symbols-outlined">{{ fact.icon }}</i>
-                <span>{{ fact.text }}</span>
-            </span>
+            <dd>{{ field.value }}</dd>
             {% endif %}
-            {% endfor %}
         </div>
-        {% endif %}
+        {% endfor %}
+    </dl>
+    {% endif %}
 
-        {% if section.meta %}
-        <dl class="simple-info-meta">
-            {% for entry in section.meta %}
-            <div class="simple-info-meta-item">
-                <dt>{{ entry.label }}</dt>
-                {% if entry.href %}
-                <dd><a href="{{ entry.href }}" target="_blank" rel="noopener noreferrer">{{ entry.value }}</a></dd>
-                {% else %}
-                <dd>{{ entry.value }}</dd>
-                {% endif %}
-            </div>
-            {% endfor %}
-        </dl>
-        {% endif %}
-
-        {% if section.footer_link %}
-        <a href="{{ section.footer_link.url }}" target="_blank" rel="noopener noreferrer" class="simple-info-view-link">
-            {{ section.footer_link.label }}
+    {% if footer_links %}
+    <div class="location-data-overview-links">
+        {% for link in footer_links %}
+        <a href="{{ link.url }}" target="_blank" rel="noopener noreferrer" class="location-data-overview-link">
+            {{ link.label }}
             <i class="material-symbols-outlined">arrow_forward</i>
         </a>
-        {% endif %}
+        {% endfor %}
     </div>
-    {% if not forloop.last %}<hr class="location-data-overview-divider">{% endif %}
-    {% endfor %}
+    {% endif %}
 </div>
