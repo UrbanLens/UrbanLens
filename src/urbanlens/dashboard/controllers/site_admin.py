@@ -256,7 +256,11 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
             settings.image_downscale_vip = request.POST.get("image_downscale_vip") in {"1", "true", "on", "True"}
         if "max_upload_file_size_mb" in request.POST:
             with contextlib.suppress(ValueError, TypeError):
-                settings.max_upload_file_size_mb = max(1, int(request.POST.get("max_upload_file_size_mb", settings.max_upload_file_size_mb)))
+                # Upper-clamped to clamd's StreamMaxLength (docker-compose.yml's
+                # clamav service) so this can't drift back out of sync with what
+                # the malware scanner will actually accept - see the matching
+                # MaxValueValidator on the model field.
+                settings.max_upload_file_size_mb = min(max(1, int(request.POST.get("max_upload_file_size_mb", settings.max_upload_file_size_mb))), 900)
         if "video_downscale_enabled" in request.POST:
             settings.video_downscale_enabled = request.POST.get("video_downscale_enabled") in {"1", "true", "on", "True"}
         if "video_downscale_max_height" in request.POST:

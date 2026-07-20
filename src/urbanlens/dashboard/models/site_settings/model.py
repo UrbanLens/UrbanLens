@@ -191,7 +191,11 @@ class SiteSettings(abstract.FrontendDashboardModel):
         default=250,
         help_text="Maximum size (MB) for a single photo, video, or document upload. Enforced on both the frontend and backend.",
         verbose_name="Max upload file size (MB)",
-        validators=[MinValueValidator(1), MaxValueValidator(20_000)],
+        # Capped comfortably under clamd's StreamMaxLength (docker-compose.yml's
+        # clamav service, currently 1000M) - a value above that lets an upload
+        # pass this check and then fail the malware scan with a confusing
+        # "too large to scan" error instead of a clean upfront rejection.
+        validators=[MinValueValidator(1), MaxValueValidator(900)],
     )
     video_downscale_enabled = BooleanField(
         default=True,

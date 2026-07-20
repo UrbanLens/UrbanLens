@@ -347,7 +347,7 @@ component's actual rendered surface, not just grepping for the hex value.
 
 ---
 
-## `max_upload_file_size_mb` (admin-configurable, up to 20,000MB) isn't coupled to clamd's `StreamMaxLength` (found 2026-07-20)
+## `max_upload_file_size_mb` (admin-configurable, up to 20,000MB) isn't coupled to clamd's `StreamMaxLength` (found 2026-07-20, fixed 2026-07-20)
 
 While fixing the "250kb image upload rejected as too large to scan for malware" report (see
 completed.md), couldn't reproduce the exact failure against the dev server's live clamd daemon - a
@@ -364,22 +364,15 @@ actual stream cap and the site's configured max passes our own size check but th
 with the confusing "too large to scan" message - which is real regardless of whether it's exactly
 what the original reporter hit.
 
-**Partially fixed**: pinned `CLAMD_CONF_StreamMaxLength=1000M` in `docker-compose.yml` (the image's
-`/init` entrypoint turns `CLAMD_CONF_<Directive>` env vars into clamd.conf directives), comfortably
-above the 250MB default, and added the actual byte count to the warning log when
-`BufferTooLongError` fires so a recurrence is diagnosable instead of a total mystery.
-
-**Why not fully fixed**: `max_upload_file_size_mb` is dynamically admin-configurable at runtime (no
-redeploy needed) up to 20,000MB, while `StreamMaxLength` is a static clamd.conf directive only
-settable at container start - no fixed value I bake into docker-compose can guarantee the two never
-drift apart again if an admin ever raises the site setting above 1000MB. Coupling them properly
-would mean either capping `max_upload_file_size_mb`'s max value to something clamd can realistically
-stream-scan in one synchronous request, or having the app read clamd's actual configured limit (no
-clean way to query it via the `clamd` protocol) and clamp the effective ceiling used by
-`file_size_error_for_upload` to whichever is smaller.
-
-**Suggested next step**: decide whether 20,000MB was ever meant to be a real usable ceiling for a
-single synchronously-malware-scanned upload (a 20GB request would likely time out the whole HTTP
-request/worker regardless of clamd) - if not, lower `MaxValueValidator(20_000)` on
-`SiteSettings.max_upload_file_size_mb` to something in clamd's realistic streaming range, and change
-site_admin.html's `max="20000"` to match.
+**Fixed**: pinned `CLAMD_CONF_StreamMaxLength=1000M` in `docker-compose.yml` (the image's `/init`
+entrypoint turns `CLAMD_CONF_<Directive>` env vars into clamd.conf directives), comfortably above
+the 250MB default, and added the actual byte count to the warning log when `BufferTooLongError`
+fires so a recurrence is diagnosable instead of a total mystery. Then closed the drift risk
+structurally: lowered `MaxValueValidator(20_000)` on `SiteSettings.max_upload_file_size_mb` to `900`
+(migration `0088`, which also clamps any already-persisted value above 900 down to it), matched
+`site_admin.html`'s `max="20000"` to `900`, and - the part that actually mattered, since
+`site_admin.py`'s POST handler sets model attributes and calls `.save()` directly without ever
+running form/`full_clean()` validation - added the same upper clamp to that handler's manual
+`int(...)` parsing (it previously only clamped to a floor of `1`, with no ceiling at all, so the
+model-level validator alone would never have been enforced through that code path). An admin can no
+longer configure a value clamd can't actually stream-scan.
