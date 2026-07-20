@@ -15,7 +15,7 @@ from django.http import HttpResponse
 from django.shortcuts import render
 from django.views import View
 
-from urbanlens.dashboard.controllers.pin_edit import _overview_context, _pin_for_user
+from urbanlens.dashboard.controllers.pin_edit import _overview_context, _pin_for_user, _pin_hero_oob
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.locations.creation import (
     WikiCreationService,
@@ -80,6 +80,14 @@ class PinWikiCreateView(LoginRequiredMixin, View):
 
         pin.refresh_from_db()
         created_flag = "true" if created else "false"
-        response = render(request, "dashboard/partials/pins/pin_overview_partial.html", _overview_context(pin))
+        overview_context = _overview_context(pin)
+        overview_html = render(request, "dashboard/partials/pins/pin_overview_partial.html", overview_context).content.decode()
+        # The Community Wiki box lives in the page hero, outside #pin-overview
+        # (this view's own hx-target) - without this OOB swap, the "Create
+        # Community Wiki" button stays stuck in its stale pre-creation state
+        # (and doesn't turn into a link to the new wiki) until a full reload.
+        # Same fix PinOverviewView already needed for the slug-backfill case.
+        hero_html = _pin_hero_oob(request, pin, overlapping_location_count=overview_context["overlapping_location_count"])
+        response = HttpResponse(overview_html + hero_html)
         response["HX-Trigger"] = f'{{"wikiCreated": {{"created": {created_flag}}}}}'
         return response

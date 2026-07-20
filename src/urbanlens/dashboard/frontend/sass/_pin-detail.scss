@@ -2675,6 +2675,15 @@ body.page-location-details {
             background: var(--ul-surface-2);
             border-color: var(--ul-surface-2-border);
         }
+
+        // The checkbox's own accent-color is too subtle a signal on its own
+        // (unlike the seed-photo grid's much bolder ribbon/checkmark
+        // treatment) - highlight the whole row so a selected alias/field
+        // reads as clearly "on" at a glance, not just a small tick.
+        &:has(input:checked) {
+            background: var(--ul-color-accent-bg, rgba(99, 102, 241, .1));
+            border-color: var(--primary-color);
+        }
     }
 
     input[type="checkbox"] {
