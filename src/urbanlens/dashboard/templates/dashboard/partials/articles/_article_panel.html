@@ -20,14 +20,6 @@
         {% csrf_token %}
         <input type="hidden" name="base_revision_id" value="{{ base_revision_id }}">
 
-        {# Always-visible, low-emphasis Source/Visual switch - deliberately #}
-        {# outside .article-editor-toolbar (Source-mode-only formatting #}
-        {# controls) so it doesn't disappear along with that toolbar in the #}
-        {# default WYSIWYG view; see [data-editor-mode] rules in _article.scss. #}
-        <button type="button" class="article-tool article-mode-toggle article-mode-toggle--floating" data-article-mode-toggle title="View/edit Markdown source">
-            <i class="material-symbols-outlined">code_blocks</i><span>Source</span>
-        </button>
-
         {% if not article or not article.content %}
         <div class="article-empty-hint-block">
             <i class="material-symbols-outlined article-empty-icon">article</i>
@@ -154,6 +146,20 @@
                     Cancel
                 </button>
             </div>
+        </div>
+
+        {# Floating bottom-right toolbar - replaces the old top-right Source #}
+        {# toggle (moved here) and adds a Clear button. Always visible in both #}
+        {# modes, same as the toggle it replaces; sits below the save/cancel #}
+        {# footer's own fixed position (see .article-editor-footer's #}
+        {# bottom: 4rem in _article.scss) so the two never overlap. #}
+        <div class="article-floating-toolbar">
+            <button type="button" class="article-tool article-mode-toggle" data-article-mode-toggle title="View/edit Markdown source">
+                <i class="material-symbols-outlined">code_blocks</i><span>Source</span>
+            </button>
+            <button type="button" class="article-tool" data-article-clear title="Clear all content and start over">
+                <i class="material-symbols-outlined">delete_sweep</i><span>Clear</span>
+            </button>
         </div>
     </form>
 </div>

@@ -26,6 +26,7 @@
  *   [data-article-textarea]      the Markdown textarea (article-editor.js's
  *                                 source of truth; this module keeps it synced)
  *   [data-article-mode-toggle]   Source/Visual switch button
+ *   [data-article-clear]         Clears the article's content (after confirming)
  *
  * Progressive enhancement: the textarea is server-rendered and fully
  * functional on its own (article-editor.js's raw-Markdown toolbar). If this
@@ -45,6 +46,7 @@ import Suggestion, { type SuggestionProps } from "@tiptap/suggestion";
 import { Markdown } from "tiptap-markdown";
 import { nextReferenceNumber, referenceDefinitionStub } from "../shared/article-footnotes";
 import { getCsrfToken } from "../shared/csrf";
+import { confirmAction } from "../shared/dialogs";
 
 interface MarkdownStorage {
     getMarkdown(): string;
@@ -118,6 +120,36 @@ function setMode(root: HTMLElement, mode: EditorMode): void {
         toggle.classList.toggle("is-active", mode === "source");
         toggle.title = mode === "source" ? "Switch to the visual editor" : "View/edit Markdown source";
     }
+}
+
+/**
+ * Blanks the article (e.g. to discard a Wikipedia-seeded starting point and
+ * write from scratch) after confirming - this only clears the in-progress
+ * edit, it doesn't save; Cancel still discards the whole thing (including the
+ * clear) if the user changes their mind, same safety net as any other edit.
+ */
+async function handleClearClick(root: HTMLElement): Promise<void> {
+    const confirmed = await confirmAction({
+        title: "Clear this article?",
+        message: "This removes all of the article's current content. Nothing is saved until you click Save, so you can still Cancel afterward to discard the change.",
+        confirmLabel: "Clear",
+        cancelLabel: "Keep writing",
+    });
+    if (!confirmed) return;
+
+    const editor = editors.get(root);
+    if (editor && root.dataset.editorMode === "wysiwyg") {
+        // emitUpdate: true fires onUpdate -> syncTextareaFromEditor, which
+        // mirrors the empty content into the textarea and marks the editor
+        // dirty - the same path every other WYSIWYG edit already goes through.
+        editor.commands.clearContent(true);
+        return;
+    }
+
+    const textarea = textareaOf(root);
+    if (!textarea) return;
+    textarea.value = "";
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
 /**
@@ -546,6 +578,14 @@ document.addEventListener(
             if (!root) return;
             event.preventDefault();
             setMode(root, root.dataset.editorMode === "source" ? "wysiwyg" : "source");
+            return;
+        }
+        const clearButton = target?.closest<HTMLElement>("[data-article-clear]");
+        if (clearButton) {
+            const root = editorRoot(clearButton);
+            if (!root) return;
+            event.preventDefault();
+            void handleClearClick(root);
         }
     },
     true,

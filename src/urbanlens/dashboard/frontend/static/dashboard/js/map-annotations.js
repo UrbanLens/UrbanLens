@@ -1,10 +1,8 @@
 import {
   confirmAction,
+  getCsrfToken,
   toast
-} from "./article-wysiwyg-gm2v5wzm.js";
-import {
-  getCsrfToken
-} from "./article-wysiwyg-y9qpab7g.js";
+} from "./article-wysiwyg-5jnnp4sj.js";
 import"./article-wysiwyg-2vd5xdaq.js";
 
 // src/urbanlens/dashboard/frontend/ts/shared/map-layers.ts

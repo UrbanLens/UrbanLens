@@ -1,6 +1,7 @@
 import {
+  confirmAction,
   getCsrfToken
-} from "./article-wysiwyg-y9qpab7g.js";
+} from "./article-wysiwyg-5jnnp4sj.js";
 import {
   __commonJS,
   __export,
@@ -23888,7 +23889,7 @@ var HardBreak = Node3.create({
     return `
 `;
   },
-  renderMarkdown: () => `
+  renderMarkdown: () => `  
 `,
   parseMarkdown: () => {
     return {
@@ -35016,6 +35017,26 @@ function setMode(root, mode) {
     toggle.title = mode === "source" ? "Switch to the visual editor" : "View/edit Markdown source";
   }
 }
+async function handleClearClick(root) {
+  const confirmed = await confirmAction({
+    title: "Clear this article?",
+    message: "This removes all of the article's current content. Nothing is saved until you click Save, so you can still Cancel afterward to discard the change.",
+    confirmLabel: "Clear",
+    cancelLabel: "Keep writing"
+  });
+  if (!confirmed)
+    return;
+  const editor = editors.get(root);
+  if (editor && root.dataset.editorMode === "wysiwyg") {
+    editor.commands.clearContent(true);
+    return;
+  }
+  const textarea = textareaOf(root);
+  if (!textarea)
+    return;
+  textarea.value = "";
+  textarea.dispatchEvent(new Event("input", { bubbles: true }));
+}
 function insertReference(root, editor) {
   const n = nextReferenceNumber(markdownOf(editor));
   editor.chain().focus().insertContent(`[^${n}]`).run();
@@ -35345,6 +35366,15 @@ document.addEventListener("click", (event) => {
       return;
     event.preventDefault();
     setMode(root, root.dataset.editorMode === "source" ? "wysiwyg" : "source");
+    return;
+  }
+  const clearButton = target?.closest("[data-article-clear]");
+  if (clearButton) {
+    const root = editorRoot(clearButton);
+    if (!root)
+      return;
+    event.preventDefault();
+    handleClearClick(root);
   }
 }, true);
 document.body.addEventListener("htmx:afterSwap", () => {
