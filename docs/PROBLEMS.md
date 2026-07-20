@@ -376,3 +376,26 @@ running form/`full_clean()` validation - added the same upper clamp to that hand
 `int(...)` parsing (it previously only clamped to a floor of `1`, with no ceiling at all, so the
 model-level validator alone would never have been enforced through that code path). An admin can no
 longer configure a value clamd can't actually stream-scan.
+
+---
+
+## `.btn`'s `display: inline-flex` beats `[hidden]` sitewide (found 2026-07-20)
+
+While fixing the broken comment/Notes "Attach a Map" dialog (several elements toggled via JS
+`.hidden` were staying visible - see completed.md - because their own classes set `display`
+unconditionally, which beats the browser's default `[hidden] { display: none }` since author
+styles always win over the UA stylesheet at equal specificity), found the same root cause one
+level higher: `.btn` (`_buttons.scss`) includes the `btn-base` mixin (`_mixins.scss:180-198`),
+which sets `display: inline-flex` with nothing gating it on `:not([hidden])`. Any `<button
+class="btn ...">` or `<a class="btn ...">` anywhere on the site that gets `.hidden = true`'d from
+JS (as opposed to removed from the DOM, or hidden via some wrapper element instead) will silently
+stay visible.
+
+Only fixed the one concrete instance this surfaced (`#comment-map-composer-save[hidden] { display:
+none; }`, scoped to that button) rather than adding `&[hidden] { display: none; }` to `.btn`
+itself - that mixin backs essentially every button on the site, and a global change, however
+logically safe, is a broader blast radius than this dialog's fix warranted. Worth doing as its own
+small, deliberate change: add the guard to `btn-base` once, then grep for other `.btn`/`.btn--*`
+elements toggled via a bare `.hidden = ...` (as opposed to `hidden` attribute template conditionals,
+which never render the element in the first place and aren't affected) to confirm nothing else is
+silently broken the same way.
