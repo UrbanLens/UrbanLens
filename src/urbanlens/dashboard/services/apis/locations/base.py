@@ -156,7 +156,7 @@ class StaticBoundaryProvider(BoundaryProvider):
     around the location's coordinates instead of a static bbox.
     """
 
-    service_key: ClassVar[str | None] = "static_default_boundary"
+    service_key: ClassVar[str | None] = "static_default_boundary"  # pyright: ignore[reportIncompatibleVariableOverride]
 
     def get_boundary(self, latitude: float, longitude: float, *, name: str | None = None) -> Polygon:
         return default_bbox(latitude, longitude)
