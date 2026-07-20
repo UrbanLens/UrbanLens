@@ -520,11 +520,13 @@ function mountEditor(root: HTMLElement): void {
             // the cursor for editing, never navigates away mid-edit) - a
             // Ctrl/Cmd+click is the one exception, the same convention most
             // rich-text editors use for "this is still a real link". Pairs
-            // with _article.scss's -webkit-user-modify override, which is
-            // what actually lets the hovered cursor show as a pointer here -
-            // Chromium/WebKit hard-code an I-beam cursor for every element
-            // inside a contenteditable region regardless of its own CSS
-            // `cursor` value, unless that element is carved out like this.
+            // with the hover-driven contenteditable toggle below, which is
+            // what actually lets the hovered cursor show as a pointer -
+            // Chromium/WebKit force an I-beam cursor for anything inside a
+            // contenteditable region regardless of its own CSS `cursor`
+            // value, so the pointer only shows once a link is genuinely
+            // carved out of the editable region, not just styled to look
+            // like it is.
             handleClick: (_view, _pos, event) => {
                 if (!(event.metaKey || event.ctrlKey)) return false;
                 const link = (event.target as HTMLElement | null)?.closest("a[href]");
@@ -539,6 +541,31 @@ function mountEditor(root: HTMLElement): void {
     editorBox.current = editor;
     editor.on("transaction", bubbleMenu.refresh);
     editor.on("selectionUpdate", bubbleMenu.refresh);
+
+    // Chromium/WebKit force an I-beam cursor - not just render it, but report
+    // it back via getComputedStyle - for anything inside a contenteditable
+    // region, no matter what CSS says (confirmed live: not even
+    // `cursor: pointer !important` changes the computed value). Briefly
+    // marking a hovered link contenteditable="false" is the one thing that
+    // genuinely changes Chromium's editability determination for cursor
+    // purposes, so the browser's own normal link-hover cursor takes over.
+    // Undone again on mousedown (before the click/selection logic runs) and
+    // on mouseleave, so this is purely a hover-only visual cue - actual
+    // clicks always see a normal, still-editable link, whether that's
+    // ProseMirror's own click-to-position-cursor or the Ctrl/Cmd+click
+    // handler above.
+    canvas.addEventListener("mouseover", (event) => {
+        const link = (event.target as HTMLElement | null)?.closest("a[href]");
+        if (link) link.setAttribute("contenteditable", "false");
+    });
+    canvas.addEventListener("mouseout", (event) => {
+        const link = (event.target as HTMLElement | null)?.closest("a[href]");
+        if (link) link.removeAttribute("contenteditable");
+    });
+    canvas.addEventListener("mousedown", (event) => {
+        const link = (event.target as HTMLElement | null)?.closest("a[href]");
+        if (link) link.removeAttribute("contenteditable");
+    });
 
     editors.set(root, editor);
     setMode(root, "wysiwyg");

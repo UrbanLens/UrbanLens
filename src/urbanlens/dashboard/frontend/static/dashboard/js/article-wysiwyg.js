@@ -35335,6 +35335,21 @@ function mountEditor(root) {
   editorBox.current = editor;
   editor.on("transaction", bubbleMenu.refresh);
   editor.on("selectionUpdate", bubbleMenu.refresh);
+  canvas.addEventListener("mouseover", (event) => {
+    const link2 = event.target?.closest("a[href]");
+    if (link2)
+      link2.setAttribute("contenteditable", "false");
+  });
+  canvas.addEventListener("mouseout", (event) => {
+    const link2 = event.target?.closest("a[href]");
+    if (link2)
+      link2.removeAttribute("contenteditable");
+  });
+  canvas.addEventListener("mousedown", (event) => {
+    const link2 = event.target?.closest("a[href]");
+    if (link2)
+      link2.removeAttribute("contenteditable");
+  });
   editors.set(root, editor);
   setMode(root, "wysiwyg");
 }

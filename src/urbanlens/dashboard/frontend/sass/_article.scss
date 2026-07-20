@@ -142,19 +142,22 @@ $article-serif: Georgia, 'Times New Roman', Times, serif;
 
         &:hover { text-decoration: underline; }
 
-        // Chromium/WebKit hard-code an I-beam cursor for every element inside
-        // a contenteditable region (the always-editable WYSIWYG canvas -
-        // _article_panel.html has no separate read-only mode) regardless of
-        // its own `cursor` CSS - author styles are ignored outright, not just
-        // outweighed by specificity. Carving links out of the editable
-        // region for cursor-resolution purposes (without making them
-        // non-editable content - arrow-key navigation and selection across
-        // them still work) is the standard fix. Harmless outside the editor
-        // (comments/diffs/previews aren't contenteditable, so this is a
-        // no-op there) - see article-wysiwyg.ts's handleClick for the
-        // matching Ctrl/Cmd+click-to-open behavior this cursor now promises.
-        -webkit-user-modify: read-only;
-        -moz-user-modify: read-only;
+        // Chromium/WebKit force an I-beam cursor - and report it back via
+        // getComputedStyle, not just render it - for anything inside a
+        // contenteditable region (the always-editable WYSIWYG canvas -
+        // _article_panel.html has no separate read-only mode), regardless of
+        // any author `cursor` CSS, even `!important` (confirmed live: no
+        // amount of CSS specificity changes the computed value). The actual
+        // fix is in article-wysiwyg.ts, which briefly flips a hovered link to
+        // contenteditable="false" - the one thing that genuinely changes
+        // Chromium's editability determination for cursor purposes - and
+        // undoes it again before mousedown, so click-to-position-cursor and
+        // the Ctrl/Cmd+click-to-open handler both still see a normal editable
+        // link. This rule is just the cursor value the browser then honors
+        // once that attribute is off; harmless outside the editor too
+        // (comments/diffs/previews aren't contenteditable, so this never
+        // fires there and the fallback default `<a>` cursor already applies).
+        cursor: pointer;
     }
 
     // Wikipedia-style external-link arrow
