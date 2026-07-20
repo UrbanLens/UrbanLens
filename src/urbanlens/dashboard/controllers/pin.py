@@ -1455,6 +1455,14 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         immediately rather than blocking on the slowest source; if anything is
         still pending, the response keeps self-polling (like every other panel)
         until everything settles or the poll budget runs out.
+
+        Also tells the client, via an ``HX-Trigger`` event, which of the
+        sources it just checked turned out to be settled (``is_ready``) but
+        genuinely empty (``_location_data_overview_fields`` returned None) -
+        the corresponding tab button (Nominatim, Photon, etc.) is a dead end
+        with nothing to show, so ``_pin_location_data_tabs.html``'s own JS
+        hides it rather than leaving it clickable only to land on "No data
+        available." every time.
         """
         from urbanlens.dashboard.services.external_data import MAX_POLL_ATTEMPTS, POLL_INTERVAL_SECONDS, LocationCachePanelSource, get_panel_source, schedule_panel_fetch
 
@@ -1475,6 +1483,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         footer_links: list[dict] = []
         seen_footer_urls: set[str] = set()
         pending_any = False
+        empty_keys: list[str] = []
         for key in _LOCATION_DATA_OVERVIEW_KEYS:
             source = get_panel_source(key)
             if not isinstance(source, LocationCachePanelSource):
@@ -1483,6 +1492,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 cached = LocationCache.get_fresh(location, source.cache_source)
                 piece = self._location_data_overview_fields(key, cached.data if cached else {})
                 if piece is None:
+                    empty_keys.append(key)
                     continue
                 if heading_name is None and piece["heading_name"]:
                     heading_name = piece["heading_name"]
@@ -1502,7 +1512,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         if not (heading_name or chips or fields or footer_links):
             if still_waiting:
-                return render(
+                response = render(
                     request,
                     "dashboard/partials/pins/panel_pending.html",
                     {
@@ -1516,7 +1526,9 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                         "poll_interval": POLL_INTERVAL_SECONDS,
                     },
                 )
-            return HttpResponse(status=204)
+            else:
+                response = HttpResponse(status=204)
+            return self._notify_empty_location_data_tabs(response, empty_keys)
 
         # Render whatever's ready immediately rather than waiting on the
         # slowest source - if something's still pending, the section keeps
@@ -1525,7 +1537,25 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         context: dict = {"heading_name": heading_name, "chips": chips, "fields": fields, "footer_links": footer_links}
         if still_waiting:
             context.update({"poll_url": request.path, "next_attempt": attempt + 1, "poll_interval": POLL_INTERVAL_SECONDS})
-        return render(request, "dashboard/partials/pins/_pin_location_data_overview.html", context)
+        response = render(request, "dashboard/partials/pins/_pin_location_data_overview.html", context)
+        return self._notify_empty_location_data_tabs(response, empty_keys)
+
+    @staticmethod
+    def _notify_empty_location_data_tabs(response: HttpResponse, empty_keys: list[str]) -> HttpResponse:
+        """Attach an HX-Trigger event listing Location Data tabs confirmed to have no content.
+
+        Args:
+            response: The response to annotate.
+            empty_keys: Panel source keys that are settled (``is_ready``) but
+                produced no summarizable data this call - safe to hide.
+
+        Returns:
+            The same response, for chaining.
+        """
+        if not empty_keys:
+            return response
+        response["HX-Trigger"] = json.dumps({"pinLocationDataEmpty": {"keys": empty_keys}})
+        return response
 
     def nominatim_info(self, request: HttpRequest, pin_slug: str):
         """

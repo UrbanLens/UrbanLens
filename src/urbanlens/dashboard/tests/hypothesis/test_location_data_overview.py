@@ -8,6 +8,7 @@ sources into one unattributed summary - see docs/prompts/completed.md).
 
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING
 from unittest import mock
 
@@ -177,3 +178,37 @@ class LocationDataOverviewEndpointTests(TestCase):
             LocationCache.set(self.pin.location, key, {}, query_key="")
         response = self.client.get(reverse("pin.location_data_overview", args=[self.pin.slug]))
         self.assertEqual(response.status_code, 204)
+
+    def test_all_sources_empty_notifies_the_client_to_hide_every_tab(self) -> None:
+        for key in ("nominatim", "photon", "overture_building_attributes", "open_elevation"):
+            LocationCache.set(self.pin.location, key, {}, query_key="")
+        response = self.client.get(reverse("pin.location_data_overview", args=[self.pin.slug]))
+        trigger = json.loads(response["HX-Trigger"])
+        self.assertEqual(set(trigger["pinLocationDataEmpty"]["keys"]), {"nominatim", "photon", "overture_building_attributes", "open_elevation"})
+
+    def test_a_settled_but_empty_source_is_flagged_even_when_others_are_ready(self) -> None:
+        """Photon has real data; nominatim settled with nothing - only nominatim should be flagged."""
+        LocationCache.set(self.pin.location, "photon", {"name": "Ready Place", "osm_value": "cafe"}, query_key="")
+        LocationCache.set(self.pin.location, "nominatim", {}, query_key="")
+        with mock.patch("urbanlens.dashboard.tasks.fetch_panel_source"):
+            response = self.client.get(reverse("pin.location_data_overview", args=[self.pin.slug]))
+        self.assertEqual(response.status_code, 200)
+        trigger = json.loads(response["HX-Trigger"])
+        self.assertEqual(trigger["pinLocationDataEmpty"]["keys"], ["nominatim"])
+
+    def test_a_settled_but_empty_source_is_flagged_while_others_are_still_pending(self) -> None:
+        """Nominatim settled with nothing; photon/others not yet fetched (still pending)."""
+        LocationCache.set(self.pin.location, "nominatim", {}, query_key="")
+        with mock.patch("urbanlens.dashboard.tasks.fetch_panel_source"):
+            response = self.client.get(reverse("pin.location_data_overview", args=[self.pin.slug]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "hx-trigger")  # still self-polling for the pending sources
+        trigger = json.loads(response["HX-Trigger"])
+        self.assertEqual(trigger["pinLocationDataEmpty"]["keys"], ["nominatim"])
+
+    def test_nothing_settled_yet_carries_no_empty_tab_notification(self) -> None:
+        """Nothing ready at all - every source just got scheduled, none confirmed empty yet."""
+        with mock.patch("urbanlens.dashboard.tasks.fetch_panel_source"):
+            response = self.client.get(reverse("pin.location_data_overview", args=[self.pin.slug]))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("HX-Trigger", response)

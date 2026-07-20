@@ -1377,6 +1377,28 @@
         }, true);
     }());
 
+    // -- Location Data: hide tabs confirmed to have no content -----------------
+    // location_data_overview already checks every source (Nominatim, Photon,
+    // Building Characteristics, Elevation) to build the Overview tab, so it
+    // knows which ones are settled but have nothing worth showing - it fires
+    // this event (HX-Trigger: pinLocationDataEmpty) rather than leaving those
+    // tabs sitting there only to land on "No data available." if ever clicked.
+    document.body.addEventListener('pinLocationDataEmpty', function (evt) {
+        var keys = (evt.detail && evt.detail.keys) || [];
+        var section = document.getElementById('location-data-section');
+        if (!section || !keys.length) return;
+        keys.forEach(function (key) {
+            var btn = section.querySelector('.pin-plugin-tab-btn[data-panel-key="' + key + '"]');
+            if (!btn) return;
+            var wasActive = btn.classList.contains('active');
+            btn.remove();
+            if (wasActive) {
+                var overviewBtn = section.querySelector('.pin-plugin-tab-btn');
+                if (overviewBtn) overviewBtn.click();
+            }
+        });
+    });
+
     // -- Media gallery: combines Smithsonian / Wikimedia Commons / Library of --
     // Congress results as each provider's own HTMX request completes, so one
     // slow provider never blocks the others from appearing. Each loader is a
