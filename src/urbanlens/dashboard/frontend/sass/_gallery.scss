@@ -470,6 +470,50 @@
   .material-symbols-outlined { font-size: 1rem; }
 }
 
+// "Shared via" wiki/DM links - profile photo strip's lightbox only, loaded
+// into #lightbox-attachment-points (see _photo_lightbox.html). Empty for
+// every other lightbox use and for photos with no real attachment.
+#lightbox-attachment-points:empty { display: none; }
+
+.lightbox-attachment-points {
+  padding-top: .5rem;
+  border-top: 1px solid rgba(255, 255, 255, .1);
+}
+
+.lightbox-attachment-points-title {
+  display: flex;
+  align-items: center;
+  gap: .3rem;
+  margin-bottom: .35rem;
+  color: rgba(255, 255, 255, .55);
+  font-size: .78rem;
+  font-weight: 600;
+
+  .material-symbols-outlined { font-size: 1rem; }
+}
+
+.lightbox-attachment-points-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: .25rem;
+
+  a {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    color: rgba(255, 255, 255, .85);
+    font-size: .82rem;
+    text-decoration: none;
+
+    &:hover { text-decoration: underline; }
+
+    .material-symbols-outlined { font-size: 1rem; color: rgba(255, 255, 255, .55); }
+  }
+}
+
 .lightbox-relevance-actions {
   display: flex;
   gap: .5rem;

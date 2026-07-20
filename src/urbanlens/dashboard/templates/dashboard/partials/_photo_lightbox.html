@@ -33,6 +33,12 @@ Context:
                             (harmless even if set - only used for items with
                             canRelevance true, which pages outside the pin
                             Media gallery never set).
+  show_attachment_points  - whether to load "Shared via" (wiki/DM) info for
+                            the current item's owner (see
+                            PhotoAttachmentPointsView) - only the profile
+                            photo strip sets this; every other lightbox use
+                            leaves it off so it doesn't fire a needless
+                            request per photo.
 {% endcomment %}
 {% with lightbox_id=lightbox_id|default:"gallery-lightbox" %}
 <dialog id="{{ lightbox_id }}" class="gallery-lightbox ul-dialog">
@@ -80,6 +86,9 @@ Context:
       {% endif %}
       {# Custom fields (viewer's own photo fields; loads empty for photos that aren't theirs) #}
       <div id="lightbox-custom-fields" class="lightbox-custom-fields"></div>
+      {% if show_attachment_points %}
+      <div id="lightbox-attachment-points"></div>
+      {% endif %}
     </div>
   </div>
 </dialog>
@@ -91,6 +100,8 @@ Context:
   var PIN_MEDIA_RELEVANCE_URL = '{{ pin_media_relevance_url|default:"" }}';
   var COVER_PHOTO_URL = '{{ cover_photo_url|default:"" }}';
   var CF_PHOTO_URL_TEMPLATE = '{% url "custom_fields.photo" 0 %}';
+  var SHOW_ATTACHMENT_POINTS = {% if show_attachment_points %}true{% else %}false{% endif %};
+  var ATTACHMENT_POINTS_URL_TEMPLATE = SHOW_ATTACHMENT_POINTS ? '{% url "profile.photo.attachments" 0 %}' : '';
   // Mutated in place as the cover photo is changed live (see _setCoverPhoto).
   var CURRENT_COVER_ID = {{ current_cover_image_id|default:"null" }};
   var COVER_HERO_KEY = '{{ cover_hero_key|default:"" }}';
@@ -136,6 +147,7 @@ Context:
     document.getElementById('lightbox-caption').textContent = caption || '';
     _setLightboxMeta(item);
     _loadLightboxCustomFields(item.imageId);
+    _loadLightboxAttachmentPoints(item.imageId);
 
     // Nav arrows are pointless (and misleading - they'd just reopen the same
     // photo) when there's nothing else to scroll to.
@@ -178,6 +190,18 @@ Context:
     el.innerHTML = '';
     if (!imgId || !window.htmx) return;
     htmx.ajax('GET', CF_PHOTO_URL_TEMPLATE.replace('/0/', '/' + imgId + '/'), { target: '#lightbox-custom-fields', swap: 'innerHTML' });
+  }
+
+  // Load "Shared via" attachment points for the current photo (profile photo
+  // strip only, see SHOW_ATTACHMENT_POINTS). The endpoint returns 204
+  // (leaving the slot empty) for anything but the viewer's own photo, or a
+  // photo with no real attachment - same contract as the custom-fields strip.
+  function _loadLightboxAttachmentPoints(imgId) {
+    var el = document.getElementById('lightbox-attachment-points');
+    if (!el) return;
+    el.innerHTML = '';
+    if (!imgId || !window.htmx || !ATTACHMENT_POINTS_URL_TEMPLATE) return;
+    htmx.ajax('GET', ATTACHMENT_POINTS_URL_TEMPLATE.replace('/0/', '/' + imgId + '/'), { target: '#lightbox-attachment-points', swap: 'innerHTML' });
   }
 
   function _setLightboxMeta(item) {

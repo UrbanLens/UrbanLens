@@ -35,6 +35,30 @@
     </div>
     {% endif %}
 
+    {# -- Photo strip ----------------------------------------------------------- #}
+    {# Owner: photos attached to a wiki or a DM - i.e. not fully private (see  #}
+    {# services.profile_photos.strip_photos_for_owner). Other viewers: only    #}
+    {# wiki-attached photos for a location they've independently pinned       #}
+    {# themselves (strip_photos_visible_to) - never anything the viewer       #}
+    {# doesn't already have some other existing way to see.                   #}
+    {% if profile_photos %}
+    <div class="profile-section ul-section">
+        <h3 class="profile-section-title">Photos</h3>
+        <div class="profile-photo-strip">
+            {% for photo in profile_photos %}
+            <button type="button" class="profile-photo-strip-item" id="profile-photo-{{ photo.pk }}"
+                    data-photo-url="{{ photo.image.url }}"
+                    data-photo-caption="{{ photo.caption|default:'' }}"
+                    data-photo-taken-at="{{ photo.taken_at|date:'c'|default:'' }}"
+                    data-photo-id="{{ photo.pk }}"
+                    onclick="window.profilePhotoStripOpen(this)">
+                <img src="{{ photo.image.url }}" alt="{{ photo.caption|default:'' }}" loading="lazy">
+            </button>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
     {# -- Stats row ----------------------------------------------------------- #}
     {% if profile.user != request.user %}
     <div class="profile-stats-row">
@@ -263,6 +287,14 @@
 
 
 </div>
+
+{% if profile_photos %}
+{% if profile.user == request.user %}
+{% include "dashboard/partials/_photo_lightbox.html" with lightbox_id="profile-photo-lightbox" show_attachment_points=True %}
+{% else %}
+{% include "dashboard/partials/_photo_lightbox.html" with lightbox_id="profile-photo-lightbox" %}
+{% endif %}
+{% endif %}
 
 {# -- External-link warning dialog -------------------------------------------- #}
 <div id="ext-warn-overlay" class="dialog-overlay" style="display:none;" aria-hidden="true">
@@ -778,4 +810,25 @@ function panToggleEdit(noteId) {
     }
 }());
 </script>
+
+{% if profile_photos %}
+<script>
+// -- Photo strip lightbox --------------------------------------------------
+// Reads the strip's own data-* tiles rather than a server-built JSON blob -
+// same convention as pin_media_items.html's mediaOpenLightbox.
+window.profilePhotoStripOpen = function (tileBtn) {
+    var tiles = Array.prototype.slice.call(document.querySelectorAll('.profile-photo-strip-item'));
+    var list = tiles.map(function (el) {
+        return {
+            url: el.dataset.photoUrl,
+            caption: el.dataset.photoCaption || '',
+            takenAt: el.dataset.photoTakenAt || '',
+            imageId: el.dataset.photoId ? parseInt(el.dataset.photoId, 10) : null,
+        };
+    });
+    var idx = tiles.indexOf(tileBtn);
+    if (window.galleryOpenLightboxItem) window.galleryOpenLightboxItem(list, idx < 0 ? 0 : idx);
+};
+</script>
+{% endif %}
 {% endblock %}

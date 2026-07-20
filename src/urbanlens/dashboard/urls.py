@@ -723,6 +723,7 @@ urlpatterns = [
         include(
             [
                 path("", userprofile.ViewProfileView.as_view(), name="profile.view"),
+                path("photos/<int:image_id>/attachments/", userprofile.PhotoAttachmentPointsView.as_view(), name="profile.photo.attachments"),
                 path("edit/", userprofile.EditProfileView.as_view(), name="profile.edit"),
                 path("edit/field/", userprofile.ProfileFieldUpdateView.as_view(), name="profile.field.update"),
                 path("edit/social/verify/", userprofile.SocialLinkVerifyView.as_view(), name="profile.social.verify"),

@@ -71,11 +71,22 @@ class ViewProfileView(LoginRequiredMixin, View):
                 "matrix_handle": profile.matrix_handle,
             }
 
+        from urbanlens.dashboard.models.images.model import Image
+        from urbanlens.dashboard.services.profile_photos import strip_photos_for_owner, strip_photos_visible_to
+
+        if request.user == profile.user:
+            profile_photos = strip_photos_for_owner(profile)
+        elif viewer_profile is not None:
+            profile_photos = strip_photos_visible_to(profile, viewer_profile)
+        else:
+            profile_photos = Image.objects.none()
+
         context = {
             "profile": profile,
             "social_links": get_profile_links(profile),
             "contact_info": contact_info,
             "can_view_contact": can_view_contact,
+            "profile_photos": profile_photos,
         }
         if request.user == profile.user:
             from urbanlens.dashboard.services.profile_preview import preview_modes
@@ -207,6 +218,32 @@ class ViewProfileView(LoginRequiredMixin, View):
         from urbanlens.dashboard.services.direct_messages import can_direct_message
 
         context["can_message"] = can_direct_message(my_profile, profile) or DirectMessage.objects.between(my_profile, profile).exists()
+
+
+class PhotoAttachmentPointsView(LoginRequiredMixin, View):
+    """GET: where one of the requesting user's own photo-strip photos is attached.
+
+    Owner-only, same shape as PhotoCustomFieldsView (controllers/custom_fields.py)
+    - shown in the profile photo strip's lightbox side panel so the owner can
+    see at a glance which wiki(s)/conversation(s) a photo is shared through.
+    Never used to determine whether anyone else can *see* the photo - that's
+    services.profile_photos.strip_photos_visible_to's job, applied before an
+    image ever reaches this view's caller.
+    """
+
+    def get(self, request: HttpRequest, image_id: int) -> HttpResponse:
+        from urbanlens.dashboard.models.images.model import Image
+        from urbanlens.dashboard.services.profile_photos import attachment_points_for_image
+
+        profile = Profile.objects.filter(user=request.user).first()
+        image = Image.objects.filter(id=image_id, profile=profile).select_related("wiki__location", "direct_message__sender", "direct_message__recipient").first() if profile else None
+        if image is None:
+            return HttpResponse(status=204)
+
+        points = attachment_points_for_image(image)
+        if not points:
+            return HttpResponse(status=204)
+        return render(request, "dashboard/partials/profile/_photo_attachment_points.html", {"points": points})
 
 
 class CommonPinsView(LoginRequiredMixin, View):
