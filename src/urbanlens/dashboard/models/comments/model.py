@@ -21,6 +21,13 @@ class Comment(abstract.FrontendDashboardModel):
 
     text = models.TextField(max_length=MAX_COMMENT_TEXT_LENGTH, validators=[MaxLengthValidator(MAX_COMMENT_TEXT_LENGTH)])
     image = models.ImageField(upload_to="comment_images/", null=True, blank=True)
+    # True from creation until the async malware scan (tasks.scan_comment_image)
+    # clears a newly-uploaded image - never set for a comment with no image, or
+    # one attached via "Choose Existing" (already scanned on its original
+    # upload). While True, the comment is visible only to its own author (see
+    # controllers.comments._build_context) - not shown to other viewers until
+    # the scan confirms it's clean, so posting never has to wait on clamd.
+    pending_scan = models.BooleanField(default=False)
 
     pin = models.ForeignKey(
         "dashboard.Pin",

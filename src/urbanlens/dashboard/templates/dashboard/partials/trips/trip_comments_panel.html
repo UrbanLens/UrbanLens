@@ -36,9 +36,15 @@
         </div>
         <div class="comment-text">{{ item.rendered_text }}</div>
         {% if c.image %}
+        {% if c.pending_scan %}
+        <p class="comment-image-scanning" title="Only visible to you until this clears - other trip members will see it once it's confirmed clean">
+          <i class="material-symbols-outlined">shield_person</i> Scanning photo for malware&hellip;
+        </p>
+        {% else %}
         <a href="{{ c.image.url }}" target="_blank" class="comment-image-link">
           <img src="{{ c.image.url }}" alt="Attached" class="comment-image">
         </a>
+        {% endif %}
         {% endif %}
         {% if c.map_data %}
         {% include "dashboard/partials/map/_map_view_preview.html" with map_id=c.id %}
@@ -164,9 +170,15 @@
               </div>
               <div class="comment-text">{{ reply_item.rendered_text }}</div>
               {% if r.image %}
+              {% if r.pending_scan %}
+              <p class="comment-image-scanning" title="Only visible to you until this clears - other trip members will see it once it's confirmed clean">
+                <i class="material-symbols-outlined">shield_person</i> Scanning photo for malware&hellip;
+              </p>
+              {% else %}
               <a href="{{ r.image.url }}" target="_blank" class="comment-image-link">
                 <img src="{{ r.image.url }}" alt="Attached" class="comment-image">
               </a>
+              {% endif %}
               {% endif %}
               {% if r.map_data %}
               {% include "dashboard/partials/map/_map_view_preview.html" with map_id=r.id %}

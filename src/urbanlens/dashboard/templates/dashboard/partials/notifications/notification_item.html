@@ -122,6 +122,7 @@
       {% elif n.notification_type == 'visit_suggested' %}event_available
       {% elif n.notification_type == 'error' %}error
       {% elif n.notification_type == 'warning' %}warning
+      {% elif n.notification_type == 'comment_upload_failed' %}image_not_supported
       {% else %}notifications{% endif %}
     </i>
   </div>

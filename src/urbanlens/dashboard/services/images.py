@@ -542,7 +542,7 @@ def compute_checksum(image_file: IO[bytes]) -> str:
     return digest.hexdigest()
 
 
-def image_upload_error(file_obj: UploadedFile, declared_media_type: MediaKind) -> tuple[str, int] | None:
+def image_upload_error(file_obj: UploadedFile, declared_media_type: MediaKind, *, skip_malware_scan: bool = False) -> tuple[str, int] | None:
     """Run every pre-storage safety check an uploaded file must pass, in order.
 
     Every endpoint that creates an ``Image`` row from a user-uploaded file
@@ -558,13 +558,17 @@ def image_upload_error(file_obj: UploadedFile, declared_media_type: MediaKind) -
         file_obj: The uploaded file.
         declared_media_type: The ``MediaKind`` the caller expects/classified
             this upload as.
+        skip_malware_scan: When True, skips the antivirus scan - only the
+            fast, local size/content-type checks run. For callers that scan
+            asynchronously after accepting the upload (see
+            ``controllers.comments``/``tasks.scan_comment_image``) instead of
+            blocking the request on a clamd round-trip.
 
     Returns:
         ``(message, status_code)`` for the first failing check, or ``None``
         if the file passes every check and is safe to store.
     """
     from urbanlens.dashboard.services.content_sniffing import content_type_mismatch_error
-    from urbanlens.dashboard.services.malware_scan import MalwareScanUnavailableError, malware_error_for_upload
     from urbanlens.dashboard.services.storage import file_size_error_for_upload
 
     size_error = file_size_error_for_upload(file_obj.size)
@@ -574,6 +578,11 @@ def image_upload_error(file_obj: UploadedFile, declared_media_type: MediaKind) -
     sniff_error = content_type_mismatch_error(file_obj, declared_media_type)
     if sniff_error:
         return sniff_error, 400
+
+    if skip_malware_scan:
+        return None
+
+    from urbanlens.dashboard.services.malware_scan import MalwareScanUnavailableError, malware_error_for_upload
 
     try:
         malware_error = malware_error_for_upload(file_obj)

@@ -1280,12 +1280,19 @@ def _render_trip_comments(request: HttpRequest, trip: Trip, profile: Profile) ->
 
     rendered: list[_CommentData] = []
     for c in top_comments:
+        # A newly-uploaded image is scanned asynchronously - until that
+        # clears pending_scan, the comment stays visible only to its own
+        # author (see controllers.comments.start_comment_image_scan).
+        if c.pending_scan and c.author != profile:
+            continue
         html = render_comment_text(c.text, pinned, act_index_for_render)
         if html is None:
             continue
         reactions = _aggregate_reactions(c.reactions.all())
         replies_rendered: list[_ReplyData] = []
         for r in c.replies.all():
+            if r.pending_scan and r.author != profile:
+                continue
             r_html = render_comment_text(r.text, pinned, act_index_for_render)
             if r_html is None:
                 continue
@@ -1370,6 +1377,9 @@ class TripCommentsView(LoginRequiredMixin, View):
         if image:
             comment.image = image
             comment.save(update_fields=["image"])
+            from urbanlens.dashboard.controllers.comments import start_comment_image_scan
+
+            start_comment_image_scan(comment)
         elif existing_image_id:
             attach_existing_comment_image(comment, existing_image_id, profile)
 

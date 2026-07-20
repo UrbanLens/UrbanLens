@@ -250,6 +250,21 @@
     .material-symbols-outlined { font-size: 1rem; }
 }
 
+// Shown in place of the image while its async malware scan is still pending
+// (see tasks.scan_comment_image) - only the uploader ever sees this; other
+// viewers don't see the comment at all until the scan clears it.
+.comment-image-scanning {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    margin: .35rem 0 0;
+    font-size: .8rem;
+    font-style: italic;
+    color: var(--ul-grey-6);
+
+    .material-symbols-outlined { font-size: 1rem; }
+}
+
 // -- Reply button --------------------------------------------------------------
 
 .comment-reply-btn {

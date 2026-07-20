@@ -46,12 +46,17 @@ def _profile(request) -> Profile:
 
 
 def comment_image_error(image_file) -> str | None:
-    """Validate an image attached to a comment (pin, wiki, or trip).
+    """Validate an image attached to a comment (pin, wiki, or trip) before accepting it.
 
     Shared by all three comment POST handlers - comments don't go through
     the ``Image`` model, so they can't reuse ``services.images.image_upload_error``
-    directly, but every upload still gets the same size/content-type/malware
-    checks before it's ever saved.
+    directly, but every upload still gets the same size/content-type checks
+    before it's ever saved. The antivirus scan itself is deliberately
+    skipped here - it's slow and occasionally unavailable (a clamd hiccup
+    used to fail the whole comment submission outright) - and instead runs
+    asynchronously after the comment is created (see ``start_comment_image_scan``
+    and ``tasks.scan_comment_image``/``scan_trip_comment_image``), with the
+    comment hidden from other viewers until it clears.
 
     Args:
         image_file: The uploaded file from ``request.FILES.get("image")``.
@@ -62,8 +67,33 @@ def comment_image_error(image_file) -> str | None:
     from urbanlens.dashboard.models.images.model import MediaKind
     from urbanlens.dashboard.services.images import image_upload_error
 
-    upload_error = image_upload_error(image_file, MediaKind.PHOTO)
+    upload_error = image_upload_error(image_file, MediaKind.PHOTO, skip_malware_scan=True)
     return upload_error[0] if upload_error else None
+
+
+def start_comment_image_scan(comment) -> None:
+    """Mark a newly-uploaded comment image pending and queue its background malware scan.
+
+    Call immediately after saving a brand-new image upload onto a comment
+    (never for one attached via "Choose Existing" - that file was already
+    scanned on its original upload, see ``attach_existing_comment_image``).
+    Sets ``pending_scan`` so the comment is hidden from every other viewer
+    (see ``_build_context``/``trip._render_trip_comments``) until the scan
+    clears it, then enqueues the appropriate task for whichever comment type
+    this is.
+
+    Args:
+        comment: The just-created ``Comment`` or ``TripComment``, already
+            carrying its new image.
+    """
+    from urbanlens.dashboard.models.trips.model import TripComment
+    from urbanlens.dashboard.services.celery import safely_enqueue_task
+    from urbanlens.dashboard.tasks import scan_comment_image, scan_trip_comment_image
+
+    comment.pending_scan = True
+    comment.save(update_fields=["pending_scan"])
+    task = scan_trip_comment_image if isinstance(comment, TripComment) else scan_comment_image
+    safely_enqueue_task(task, comment.pk)
 
 
 def attach_existing_comment_image(comment: Comment, existing_image_id: str, profile: Profile) -> None:
@@ -180,12 +210,20 @@ def _build_context(comments_qs, profile: Profile, request: HttpRequest, **extra)
     for c in top_level:
         if not profile.can_view_comments_from(c.profile):
             continue
+        # A newly-uploaded image is scanned asynchronously (tasks.scan_comment_image) -
+        # until that clears pending_scan, the comment stays visible only to
+        # its own author, never to any other viewer (see
+        # controllers.comments.start_comment_image_scan).
+        if c.pending_scan and c.profile != profile:
+            continue
         html = render_comment_text(c.text, pinned)
         if html is None:
             continue
         replies_rendered = []
         for r in c.replies.all():
             if not profile.can_view_comments_from(r.profile):
+                continue
+            if r.pending_scan and r.profile != profile:
                 continue
             r_html = render_comment_text(r.text, pinned)
             if r_html is None:
@@ -261,6 +299,7 @@ class PinCommentsView(LoginRequiredMixin, View):
         if image:
             comment.image = image
             comment.save(update_fields=["image"])
+            start_comment_image_scan(comment)
         elif existing_image_id:
             attach_existing_comment_image(comment, existing_image_id, profile)
         if parent and parent.profile != profile:
@@ -330,6 +369,7 @@ class WikiCommentsView(LoginRequiredMixin, View):
         if image:
             comment.image = image
             comment.save(update_fields=["image"])
+            start_comment_image_scan(comment)
         elif existing_image_id:
             attach_existing_comment_image(comment, existing_image_id, profile)
         if parent and parent.profile != profile:

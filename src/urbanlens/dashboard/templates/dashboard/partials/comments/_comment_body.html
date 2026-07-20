@@ -48,7 +48,11 @@
   {% endif %}
 
   {% if comment.image %}
-  {% if comment.profile.pk in blurred_profiles %}
+  {% if comment.pending_scan %}
+  <p class="comment-image-scanning" title="Only visible to you until this clears - other viewers will see it once it's confirmed clean">
+    <i class="material-symbols-outlined">shield_person</i> Scanning photo for malware&hellip;
+  </p>
+  {% elif comment.profile.pk in blurred_profiles %}
   <div class="comment-image-blurred" title="Photo hidden by your privacy settings">
     <img src="{{ comment.image.url }}" alt="Attached" class="comment-image comment-image--blurred">
     <span class="comment-image-blur-label">

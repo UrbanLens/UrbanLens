@@ -10,6 +10,7 @@ class NotificationType(TextChoices):
     MESSAGE = "message", "New Message"
     COMMENT_REPLY = "comment_reply", "Reply to Comment"
     COMMENT_LIKED = "comment_liked", "Comment Likes"
+    COMMENT_UPLOAD_FAILED = "comment_upload_failed", "Comment Upload Failed"
     FRIEND_ACCEPTED = "friend_accepted", "Friend Request Accepted"
     ADDED_TO_TRIP = "added_to_trip", "Trip Invitation"
     WIKI_UPDATED = "wiki_updated", "Community Wiki Updated"

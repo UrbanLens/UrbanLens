@@ -357,6 +357,10 @@ class TripComment(abstract.DashboardModel):
 
     text = TextField(max_length=MAX_COMMENT_TEXT_LENGTH, validators=[MaxLengthValidator(MAX_COMMENT_TEXT_LENGTH)])
     image = ImageField(upload_to="comment_images/", null=True, blank=True)
+    # Mirrors dashboard.Comment.pending_scan - see its docstring. True from
+    # creation until tasks.scan_trip_comment_image clears a newly-uploaded
+    # image; hidden from other trip members until then.
+    pending_scan = BooleanField(default=False)
     # Standalone map (viewport + markup items) attached to this comment.
     markup_map = ForeignKey(
         "dashboard.MarkupMap",

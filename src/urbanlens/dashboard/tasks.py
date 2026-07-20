@@ -733,6 +733,129 @@ def generate_image_keywords(image_id: int) -> dict[str, int]:
     return generate_keywords_for_image(image_id)
 
 
+@shared_task(bind=True, max_retries=5)
+def scan_comment_image(self, comment_id: int) -> bool:
+    """Background malware-scan a newly-uploaded pin/wiki comment image.
+
+    Runs after the comment (and its image) is already saved and visible to
+    its own author only (see ``controllers.comments.start_comment_image_scan`` -
+    sets ``pending_scan`` before enqueuing this) - a clamd round-trip no
+    longer blocks the comment POST itself. Clears ``pending_scan`` on a clean
+    result, making the comment visible to every other viewer; on an infected
+    result, deletes the comment and notifies its author with their original
+    text so they can try posting again (see ``_reject_comment_upload``). A
+    clamd connectivity hiccup retries with backoff instead of immediately
+    treating the upload as rejected.
+
+    Args:
+        comment_id: PK of the ``Comment`` whose image should be scanned.
+
+    Returns:
+        True when the scan completed and found the image clean.
+    """
+    from urbanlens.dashboard.models.comments.model import Comment
+
+    comment = Comment.objects.filter(pk=comment_id, pending_scan=True).select_related("profile", "pin", "wiki__location").first()
+    if comment is None or not comment.image:
+        return False
+    return _run_comment_image_scan(self, comment, Comment)
+
+
+@shared_task(bind=True, max_retries=5)
+def scan_trip_comment_image(self, comment_id: int) -> bool:
+    """Background malware-scan a newly-uploaded trip comment image. Mirrors ``scan_comment_image``.
+
+    Args:
+        comment_id: PK of the ``TripComment`` whose image should be scanned.
+
+    Returns:
+        True when the scan completed and found the image clean.
+    """
+    from urbanlens.dashboard.models.trips.model import TripComment
+
+    comment = TripComment.objects.filter(pk=comment_id, pending_scan=True).select_related("author", "trip").first()
+    if comment is None or not comment.image:
+        return False
+    return _run_comment_image_scan(self, comment, TripComment)
+
+
+def _run_comment_image_scan(task, comment, model) -> bool:
+    """Shared body for ``scan_comment_image``/``scan_trip_comment_image`` - see either's docstring.
+
+    Args:
+        task: The bound Celery task instance (for ``self.retry``).
+        comment: The ``Comment`` or ``TripComment`` row to scan.
+        model: Its model class, for the ``pending_scan`` clear on success.
+
+    Returns:
+        True when the scan completed and found the image clean.
+    """
+    from urbanlens.dashboard.services.malware_scan import MalwareScanUnavailableError, malware_error_for_upload
+
+    try:
+        malware_error = malware_error_for_upload(comment.image)
+    except MalwareScanUnavailableError as exc:
+        if task.request.retries >= task.max_retries:
+            logger.exception("Malware scan permanently unavailable for comment %s after %s retries", comment.pk, task.request.retries)
+            _reject_comment_upload(comment, "Our antivirus scanner was unavailable and your photo could not be scanned.")
+            return False
+        raise task.retry(exc=exc, countdown=min(60 * (2**task.request.retries), 900)) from exc
+
+    if malware_error:
+        _reject_comment_upload(comment, malware_error)
+        return False
+
+    model.objects.filter(pk=comment.pk).update(pending_scan=False)
+    return True
+
+
+def _reject_comment_upload(comment, reason: str) -> None:
+    """Notify a comment's author their upload was rejected, and remove the comment.
+
+    The comment (text included) never went visible to anyone but its own
+    author (see ``pending_scan``), so removing it outright and handing the
+    author their own text back via the notification is simpler than leaving
+    a permanently-broken "image rejected" placeholder behind - they can copy
+    the text from the notification and try posting again. Explicitly deletes
+    the stored image file too (not just the DB row) - this path is also hit
+    for a confirmed-infected upload, which shouldn't linger in storage just
+    because nothing points at it anymore.
+
+    Args:
+        comment: The ``Comment`` or ``TripComment`` to remove.
+        reason: The user-facing reason the upload was rejected.
+    """
+    from django.urls import NoReverseMatch, reverse
+
+    from urbanlens.dashboard.models.notifications.meta import NotificationType
+    from urbanlens.dashboard.models.notifications.model import NotificationLog
+
+    recipient = getattr(comment, "profile", None) or getattr(comment, "author", None)
+    text_preview = (comment.text or "").strip() or "(no text)"
+    url = ""
+    try:
+        if getattr(comment, "pin_id", None):
+            url = reverse("pin.details", kwargs={"pin_slug": comment.pin.slug or str(comment.pin.uuid)})
+        elif getattr(comment, "wiki_id", None) and comment.wiki.location_id:
+            url = reverse("location.wiki", kwargs={"location_slug": comment.wiki.location.slug or str(comment.wiki.location.uuid)})
+        elif getattr(comment, "trip_id", None):
+            url = reverse("trips.detail", kwargs={"trip_slug": comment.trip.slug})
+    except NoReverseMatch:
+        logger.warning("Could not build a comment URL while notifying about a rejected upload (comment %s)", comment.pk)
+
+    if recipient is not None:
+        NotificationLog.objects.create(
+            profile=recipient,
+            notification_type=NotificationType.COMMENT_UPLOAD_FAILED,
+            title="Your comment could not be posted",
+            message=f'{reason} Your comment text: "{text_preview}". You can try posting it again.',
+            url=url,
+        )
+    if comment.image:
+        comment.image.delete(save=False)
+    comment.delete()
+
+
 def _resolve_image_location(image: Image, coords: tuple[float, float] | None) -> Location | None:
     """Resolve the shared Location an image belongs to, if determinable.
 
