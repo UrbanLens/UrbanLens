@@ -262,14 +262,15 @@
                 </div>
             </div>
 
-            {# -- All / Mine view switch --------------------------------------- #}
-            <div class="media-view-toggle" role="tablist" aria-label="Media view">
-                <button type="button" class="media-view-toggle-btn active" data-media-view-btn="all" onclick="window.mediaSetView('all')">All</button>
-                <button type="button" class="media-view-toggle-btn" data-media-view-btn="mine" onclick="window.mediaSetView('mine')">Mine</button>
-            </div>
+            {# -- Source filter tabs + All/Mine view switch, combined into one row -- #}
+            {# "All" and "Mine" are built into rebuildMediaTabs() alongside the      #}
+            {# per-source tabs (see index.html's media-gallery IIFE) so there's a    #}
+            {# single tab strip instead of two stacked ones - "Mine" switches to the #}
+            {# pin's own full gallery panel below; every other tab filters within    #}
+            {# the combined grid. #}
+            <div class="card-tabs" id="media-tabs" role="tablist" aria-label="Media view"></div>
 
             <div class="media-view-panel" data-media-view-panel="all">
-                <div class="card-tabs" id="media-tabs" hidden></div>
                 <div class="view-loading" id="media-gallery-loading">
                     <i class="material-icons spin">autorenew</i>
                     Loading...
@@ -1528,6 +1529,16 @@
             internet_archive: 'Internet Archive',
         };
 
+        // Builds the single combined tab strip: All | Mine | <source tabs> |
+        // Not Relevant. "All"/"Mine" are always present (even before any
+        // provider has responded, and even for a pin with no media at all -
+        // "Mine" must stay reachable so a first-time visitor can still get to
+        // the upload flow) so this runs once unconditionally at setup, not
+        // just after items exist. Source tabs only appear once there are 2+
+        // distinct sources ("photos" - the pin's own uploads - never gets one;
+        // that's what the "Mine" tab is for, since a same-shape tab here would
+        // misleadingly imply it shows every photo when it only shows the
+        // first 12, see PinController._photos_media_preview).
         function rebuildMediaTabs() {
             var g = grid();
             var tabsEl = document.getElementById('media-tabs');
@@ -1539,16 +1550,6 @@
                 var src = item.dataset.mediaSource;
                 var isNotRelevant = item.classList.contains('media-item--not-relevant');
                 total += 1;
-                // Not-relevant items don't count toward their source's tab, so a
-                // source whose only items have all been marked not relevant drops
-                // out of `sources` below and its tab disappears entirely, instead
-                // of lingering with a stale, unopenable count. "photos" is
-                // excluded entirely - it's just a capped preview of the pin's
-                // own uploads (see PinController._photos_media_preview), and
-                // gets its own dedicated "Mine" toggle (full, unlimited
-                // browsing - see the All/Mine buttons below) instead of a
-                // same-shape tab that would misleadingly imply it shows every
-                // photo when it only shows the first 12.
                 if (src && src !== 'photos' && !isNotRelevant) counts[src] = (counts[src] || 0) + 1;
                 if (isNotRelevant) notRelevantCount += 1;
             });
@@ -1558,30 +1559,36 @@
                 countBadge.hidden = total === 0;
             }
             var sources = Object.keys(counts);
-            if (sources.length < 2 && !notRelevantCount) {
-                tabsEl.hidden = true;
-                tabsEl.innerHTML = '';
-                return;
-            }
-            if (activeTab !== 'not_relevant' && !sources.includes(activeTab)) activeTab = 'all';
+            var showSourceTabs = sources.length >= 2;
+            if (activeTab !== 'not_relevant' && activeTab !== 'all' && !(showSourceTabs && sources.includes(activeTab))) activeTab = 'all';
             if (activeTab === 'not_relevant' && !notRelevantCount) activeTab = 'all';
-            var html = '<button type="button" class="card-tab media-tab' + (activeTab === 'all' ? ' active' : '') +
+
+            var currentView = section().dataset.mediaView || 'all';
+            var html = '<button type="button" class="card-tab media-tab' + (currentView === 'all' && activeTab === 'all' ? ' active' : '') +
                 '" data-tab="all">All<span class="media-tab-count">' + total + '</span></button>';
-            sources.sort().forEach(function (src) {
-                var label = TAB_LABELS[src] || src;
-                html += '<button type="button" class="card-tab media-tab' + (activeTab === src ? ' active' : '') +
-                    '" data-tab="' + src + '">' + label + '<span class="media-tab-count">' + counts[src] + '</span></button>';
-            });
+            html += '<button type="button" class="card-tab media-tab' + (currentView === 'mine' ? ' active' : '') +
+                '" data-tab="mine">Mine</button>';
+            if (showSourceTabs) {
+                sources.sort().forEach(function (src) {
+                    var label = TAB_LABELS[src] || src;
+                    html += '<button type="button" class="card-tab media-tab' + (currentView === 'all' && activeTab === src ? ' active' : '') +
+                        '" data-tab="' + src + '">' + label + '<span class="media-tab-count">' + counts[src] + '</span></button>';
+                });
+            }
             if (notRelevantCount) {
-                html += '<button type="button" class="card-tab media-tab' + (activeTab === 'not_relevant' ? ' active' : '') +
+                html += '<button type="button" class="card-tab media-tab' + (currentView === 'all' && activeTab === 'not_relevant' ? ' active' : '') +
                     '" data-tab="not_relevant">Not Relevant<span class="media-tab-count">' + notRelevantCount + '</span></button>';
             }
             tabsEl.innerHTML = html;
-            tabsEl.hidden = false;
             tabsEl.querySelectorAll('.media-tab').forEach(function (btn) {
-                btn.addEventListener('click', function () { window.mediaSetTab(btn.dataset.tab); });
+                btn.addEventListener('click', function () {
+                    if (btn.dataset.tab === 'mine') { window.mediaSetView('mine'); return; }
+                    if (currentView !== 'all') window.mediaSetView('all');
+                    window.mediaSetTab(btn.dataset.tab);
+                });
             });
         }
+        rebuildMediaTabs();
 
         // Reapplies the active tab's exclusion classes to whatever items exist
         // right now, without touching the current pagination page - used both
@@ -1829,14 +1836,12 @@
         window.mediaSetView = function (view) {
             var sec = section();
             if (sec) sec.dataset.mediaView = view;
-            document.querySelectorAll('[data-media-view-btn]').forEach(function (btn) {
-                btn.classList.toggle('active', btn.dataset.mediaViewBtn === view);
-            });
             document.querySelectorAll('[data-media-view-panel]').forEach(function (panel) {
                 panel.hidden = panel.dataset.mediaViewPanel !== view;
             });
             var settingsBtn = document.getElementById('media-settings-btn');
             if (settingsBtn) settingsBtn.hidden = view !== 'all';
+            rebuildMediaTabs();
             if (view === 'all' && window.initAdaptivePagination) window.initAdaptivePagination(document, true);
         };
 

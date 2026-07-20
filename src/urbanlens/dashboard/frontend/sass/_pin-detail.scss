@@ -4211,32 +4211,9 @@ body.page-location-details .pin-detail-grid {
     // reads as part of the surrounding Media card instead of a second nested
     // one - the outer header's own Import/Select buttons already operate on
     // whichever view (All/Mine) is currently active (see mediaDispatchSelect
-    // in index.html).
-    .media-view-toggle {
-        display: flex;
-        gap: .25rem;
-        padding: 0 .85rem .6rem;
-        border-bottom: 1px solid var(--ul-grey-1b);
-    }
-
-    .media-view-toggle-btn {
-        padding: .3rem .85rem;
-        border: none;
-        border-radius: $radius-full;
-        background: transparent;
-        color: var(--ul-grey-6);
-        font-size: .82rem;
-        font-weight: 600;
-        cursor: pointer;
-
-        &:hover { background: var(--ul-hover-bg); }
-
-        &.active {
-            background: var(--ul-primary-color);
-            color: #fff;
-        }
-    }
-
+    // in index.html). The All/Mine switch itself is just another #media-tabs
+    // entry (see rebuildMediaTabs in index.html) - one .card-tab strip instead
+    // of a second, separately-styled row.
     .media-view-panel[hidden] { display: none; }
 
     #pin-gallery-panel {
