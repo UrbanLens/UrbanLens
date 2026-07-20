@@ -329,6 +329,18 @@ services:
     container_name: urbanlens_${UL_ENVIRONMENT:-production}_clamav
     image: clamav/clamav-debian:stable
     restart: unless-stopped
+    environment:
+      # StreamMaxLength is unset by default, which falls back to clamd's own
+      # compiled-in default - observed to be well under SiteSettings'
+      # max_upload_file_size_mb (250MB by default, admin-adjustable up to
+      # 20,000MB), so an upload that passes our own size check could still
+      # be rejected by clamd with a confusing "too large to scan" error (see
+      # docs/prompts/completed.md's "article image upload malware-scan-too-
+      # large" entry). Pinned explicitly, comfortably above the default site
+      # setting, so clamd is never the surprise bottleneck for a normal-sized
+      # upload - see the image's /init entrypoint script, which turns any
+      # CLAMD_CONF_<Directive> env var into that clamd.conf directive.
+      CLAMD_CONF_StreamMaxLength: "1000M"
     volumes:
       - clamav-db:/var/lib/clamav
     networks:

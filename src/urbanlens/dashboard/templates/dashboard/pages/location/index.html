@@ -1871,6 +1871,9 @@
                 var relevant = el.dataset.mediaRelevant === 'true' ? true : (el.dataset.mediaRelevant === 'false' ? false : null);
                 return {
                     url: el.dataset.mediaUrl,
+                    // Fallback for a full-res file the browser can't render
+                    // (e.g. a Wikimedia .tif result) - see _photo_lightbox.html.
+                    thumbUrl: el.dataset.mediaThumb || '',
                     caption: el.dataset.mediaCaption || '',
                     sourceUrl: el.dataset.mediaPageUrl || el.dataset.mediaUrl,
                     sourceName: el.dataset.mediaSourceName || '',
@@ -1907,6 +1910,7 @@
             input.value = rawValue;
             input.maxLength = 255;
 
+            window.urbanlensSizeEditInPlaceInput(el, input);
             var displayText = el.textContent;
             el.textContent = '';
             el.appendChild(input);
@@ -1983,6 +1987,7 @@
             textarea.maxLength = 50000;
             textarea.rows = 3;
 
+            window.urbanlensSizeEditInPlaceInput(el, textarea);
             var displayText = el.textContent;
             var wasEmpty = el.classList.contains('pin-description--empty');
             el.textContent = '';

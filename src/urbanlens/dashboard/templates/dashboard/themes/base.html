@@ -210,6 +210,22 @@
             span.innerHTML = '<i class="material-icons">' + (icon || 'description') + '</i>';
             img.replaceWith(span);
         };
+
+        // Every click-to-edit-in-place field (pin name/description, trip
+        // title/description, profile bio/name/contact fields, pin list
+        // title/description, memories map titles, ...) swaps a text element
+        // for an <input>/<textarea> of the same field. Left unsized, the new
+        // control falls back to its own intrinsic/min-width, which is usually
+        // far narrower than real content once ever typed in - the swap reads
+        // as the text abruptly shrinking. Call this with the *display*
+        // element (still showing its real text/value) and the element about
+        // to replace it, before the display element's content is cleared or
+        // replaced, to floor the replacement at the same on-screen size.
+        window.urbanlensSizeEditInPlaceInput = function (displayEl, inputEl) {
+            var rect = displayEl.getBoundingClientRect();
+            if (rect.width > 0) inputEl.style.minWidth = rect.width + 'px';
+            if (rect.height > 0) inputEl.style.minHeight = rect.height + 'px';
+        };
     </script>
     <script>
     // -- Comment utilities -----------------------------------------------------

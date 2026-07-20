@@ -50,7 +50,7 @@ class AdditionalDetailsSectionTests(TestCase):
         response = self._get()
         content = _strip_scripts(response.content.decode())
         self.assertNotIn(">Birthday: ", content)
-        self.assertIn("Add your birthday...", content)
+        self.assertNotIn("Add your birthday...", content)
 
     def test_secondary_email_shown(self) -> None:
         ProfileEmail.objects.create(profile=self.profile, email="alt@example.com", is_verified=True)
@@ -62,12 +62,13 @@ class AdditionalDetailsSectionTests(TestCase):
         response = self._get()
         self.assertContains(response, "pending@example.com (unverified)")
 
-    def test_section_shown_for_owner_even_with_nothing_set_yet(self) -> None:
-        """Changed from "hidden when empty" to "shown with a placeholder" for
-        the owner, so there's something to click to add a birthday - matching
-        the same empty-state fix applied to bio/area/contact fields."""
+    def test_section_hidden_for_owner_with_nothing_set_yet(self) -> None:
+        """Hidden rather than shown with a placeholder - adding a first
+        birthday is the Edit Profile page's job, matching the same
+        empty-state treatment applied to area/started-exploring/contact."""
         response = self._get()
-        self.assertContains(response, "Additional Details")
+        content = _strip_scripts(response.content.decode())
+        self.assertNotIn(">Additional Details<", content)
 
     def test_other_viewer_never_sees_section(self) -> None:
         self.profile.birth_date = datetime.date(1990, 6, 15)

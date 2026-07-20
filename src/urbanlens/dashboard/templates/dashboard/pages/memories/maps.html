@@ -126,6 +126,7 @@
         input.value = rawTitle;
         input.placeholder = 'Untitled map';
 
+        window.urbanlensSizeEditInPlaceInput(titleEl, input);
         var displayText = titleEl.textContent;
         titleEl.textContent = '';
         titleEl.appendChild(input);

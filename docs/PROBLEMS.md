@@ -230,43 +230,6 @@ target-reference shape first, in export.py, so the importer has something reliab
 
 ---
 
-## Property records: Tier 2/3 framework is real and working, but no vendor/county is populated yet
-
-`docs/property-records-plan.md` designs a 4-tier fallback pipeline for county property/tax
-records. All four tiers are now implemented end-to-end in
-`services/apis/property_records/` and wired into `plugins/builtin/property_records.py`:
-jurisdiction registry + Census-based resolution (Tier 0), a generic ArcGIS/Socrata client (Tier
-1), a vendor-template routing layer (Tier 2) sharing an HTML scrape/recipe
-engine (`html_scrape.py`) with per-county bespoke recipes (Tier 3), an explicit `MANUAL_ONLY`
-short-circuit (Tier 4), and per-field merging across however many tiers a jurisdiction has
-configured (`merge.py`, plan section 4 - lower tier number wins per field, disagreements are
-flagged in `field_mismatches` rather than silently resolved). `orchestrator.get_property_record`
-tries every tier a jurisdiction has real configuration for and merges whatever succeeds; a
-jurisdiction with nothing configured for a given tier gets a `PropertyRecordsUnavailableError`
-with a specific machine-readable reason rather than a silent gap.
-
-**What's still missing is data, not code**, and that's deliberate rather than an oversight:
-
-- **No `PropertyJurisdiction.scrape_recipe` has been populated for a real county.**
-  `discovery.discover_tier3_recipe` (AI-assisted, cross-validates the model's proposed form field
-  against the real page's actual `<input name=...>` attributes - it can't hallucinate a field
-  that doesn't exist) is implemented and unit-tested, but has never been run against a live site
-  in this session. `apply_tier3_discovery` deliberately
-  never sets `last_verified` - it confirms the field exists, not that submitting it returns real
-  data - so any recipe it saves needs a human to confirm against one known real property first.
-- **No headless-browser executor.** The plan's Tier 3 describes "browser automation" for
-  JS-heavy sites; `html_scrape.execute_scrape_recipe` is plain `requests` GET/POST, which works for
-  query-string-driven sites (e.g. qPublic's `KeyValue=` pattern)
-  but not old-style ASP.NET `__VIEWSTATE` postback forms or anything JS-rendered. Adding Playwright
-  (no existing browser-automation dependency in this project) is real, scoped follow-up work if a
-  target site needs it - not attempted here to avoid a large new infra dependency without a
-  concrete site that actually needs it.
-- The `discover_property_jurisdiction` command (both `--tier1` default and `--tier3` modes) has
-  never been run against a real search provider/AI backend end-to-end in this session (only
-  unit-tested with mocks) - worth a smoke-test pass once a specific county is targeted.
-
----
-
 ## UL-354: Wikipedia missing for some HRSH buildings - likely geosearch radius, not a bug
 
 Original wording (`TODO.md:30`): "Wikipedia not showing up for some HRSH buildings." HRSH (Harlem
@@ -344,3 +307,42 @@ rgba() washes mismatched. Left alone this round because verifying each is genuin
 legibility bug (vs. e.g. a component that's already fine because its own surface is intentionally
 dark in both themes, like the lightbox case handled in the fix above) needs checking each
 component's actual rendered surface, not just grepping for the hex value.
+
+---
+
+## `max_upload_file_size_mb` (admin-configurable, up to 20,000MB) isn't coupled to clamd's `StreamMaxLength` (found 2026-07-20)
+
+While fixing the "250kb image upload rejected as too large to scan for malware" report (see
+completed.md), couldn't reproduce the exact failure against the dev server's live clamd daemon - a
+250KB `InMemoryUploadedFile` run through the real `image_upload_error`/`malware_error_for_upload`
+path scanned clean (verified via `manage.py shell` on `urbanlens_development_app`, talking to the
+real `urbanlens_development_clamav` container). But found a real, structural mismatch that's almost
+certainly the actual cause (with "250kb" most likely a typo/misremembering of "250mb," or the
+original report's environment having an even smaller clamd limit than dev's): `StreamMaxLength` is
+left unset in `docker-compose.yml` (commented out in clamd.conf, so clamd falls back to its own
+compiled-in default - the commented reference value is `25M`), while `SiteSettings.
+max_upload_file_size_mb` (`file_size_error_for_upload`, checked *before* the malware scan) defaults
+to 250MB and is admin-adjustable up to 20,000MB via the site-admin UI. Any upload between clamd's
+actual stream cap and the site's configured max passes our own size check but then fails clamd's
+with the confusing "too large to scan" message - which is real regardless of whether it's exactly
+what the original reporter hit.
+
+**Partially fixed**: pinned `CLAMD_CONF_StreamMaxLength=1000M` in `docker-compose.yml` (the image's
+`/init` entrypoint turns `CLAMD_CONF_<Directive>` env vars into clamd.conf directives), comfortably
+above the 250MB default, and added the actual byte count to the warning log when
+`BufferTooLongError` fires so a recurrence is diagnosable instead of a total mystery.
+
+**Why not fully fixed**: `max_upload_file_size_mb` is dynamically admin-configurable at runtime (no
+redeploy needed) up to 20,000MB, while `StreamMaxLength` is a static clamd.conf directive only
+settable at container start - no fixed value I bake into docker-compose can guarantee the two never
+drift apart again if an admin ever raises the site setting above 1000MB. Coupling them properly
+would mean either capping `max_upload_file_size_mb`'s max value to something clamd can realistically
+stream-scan in one synchronous request, or having the app read clamd's actual configured limit (no
+clean way to query it via the `clamd` protocol) and clamp the effective ceiling used by
+`file_size_error_for_upload` to whichever is smaller.
+
+**Suggested next step**: decide whether 20,000MB was ever meant to be a real usable ceiling for a
+single synchronously-malware-scanned upload (a 20GB request would likely time out the whole HTTP
+request/worker regardless of clamd) - if not, lower `MaxValueValidator(20_000)` on
+`SiteSettings.max_upload_file_size_mb` to something in clamd's realistic streaming range, and change
+site_admin.html's `max="20000"` to match.

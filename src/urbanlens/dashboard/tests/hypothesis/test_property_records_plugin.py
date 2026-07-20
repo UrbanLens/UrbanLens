@@ -222,7 +222,7 @@ class PanelRenderContextTests(SimpleTestCase):
 class FetchPayloadTransientErrorTests(TestCase):
     """A transient source outage must propagate, never be written to the cache as a durable fact."""
 
-    _PATCH_TARGET = "urbanlens.dashboard.services.apis.property_records.orchestrator.get_property_record"
+    _PATCH_TARGET = "urbanlens.dashboard.services.apis.property_records.redata_gateway.RedataGateway"
 
     def setUp(self) -> None:
         super().setUp()
@@ -232,24 +232,49 @@ class FetchPayloadTransientErrorTests(TestCase):
         from unittest import mock
 
         from urbanlens.dashboard.plugins.builtin.property_records import _fetch_payload
-        from urbanlens.dashboard.services.apis.property_records.orchestrator import REASON_SOURCE_ERROR, PropertyRecordsUnavailableError
+        from urbanlens.dashboard.services.apis.property_records.redata_gateway import REASON_SOURCE_ERROR, PropertyRecordsUnavailableError
 
         error = PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, "down")
-        with mock.patch(self._PATCH_TARGET, side_effect=error), self.assertRaises(PropertyRecordsUnavailableError):
-            _fetch_payload(self.location, 42.65, -73.75)
+        with mock.patch(self._PATCH_TARGET) as mock_gateway_cls:
+            mock_gateway_cls.return_value.lookup_parcel.side_effect = error
+            with self.assertRaises(PropertyRecordsUnavailableError):
+                _fetch_payload(self.location, 42.65, -73.75)
 
     def test_permanent_reason_returns_a_cacheable_unavailable_payload_with_links(self) -> None:
         from unittest import mock
 
         from urbanlens.dashboard.plugins.builtin.property_records import _fetch_payload
-        from urbanlens.dashboard.services.apis.property_records.orchestrator import REASON_MANUAL_ONLY, PropertyRecordsUnavailableError
+        from urbanlens.dashboard.services.apis.property_records.redata_gateway import REASON_MANUAL_ONLY, PropertyRecordsUnavailableError
 
         error = PropertyRecordsUnavailableError(REASON_MANUAL_ONLY, "Call the assessor.", links={"assessor_url": "https://example.gov/assessor"})
-        with mock.patch(self._PATCH_TARGET, side_effect=error):
+        with mock.patch(self._PATCH_TARGET) as mock_gateway_cls:
+            mock_gateway_cls.return_value.lookup_parcel.side_effect = error
             payload = _fetch_payload(self.location, 42.65, -73.75)
         self.assertEqual(payload["available"], False)
         self.assertEqual(payload["reason"], REASON_MANUAL_ONLY)
         self.assertEqual(payload["links"], {"assessor_url": "https://example.gov/assessor"})
+
+    def test_successful_lookup_marks_the_payload_available(self) -> None:
+        from unittest import mock
+
+        from urbanlens.dashboard.plugins.builtin.property_records import _fetch_payload
+
+        with mock.patch(self._PATCH_TARGET) as mock_gateway_cls:
+            mock_gateway_cls.return_value.lookup_parcel.return_value = {"situs_address": "123 Main St", "owner_name": ["Jane Smith"]}
+            payload = _fetch_payload(self.location, 42.65, -73.75)
+        self.assertEqual(payload["available"], True)
+        self.assertEqual(payload["owner_name"], ["Jane Smith"])
+
+    def test_the_locations_address_is_passed_through_as_the_situs_search_key(self) -> None:
+        from unittest import mock
+
+        from urbanlens.dashboard.plugins.builtin.property_records import _fetch_payload
+
+        self.location.address = "123 Main St"
+        with mock.patch(self._PATCH_TARGET) as mock_gateway_cls:
+            mock_gateway_cls.return_value.lookup_parcel.return_value = {}
+            _fetch_payload(self.location, 42.65, -73.75)
+        mock_gateway_cls.return_value.lookup_parcel.assert_called_once_with(42.65, -73.75, situs_address="123 Main St")
 
 
 class WriteOfficialOwnersAndSalesTests(TestCase):

@@ -66,8 +66,12 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   danger/vulnerability/rating stat voting (`WikiStatVote`, fuzzed community counts for privacy),
   edit history with revert (`WikiEdit`)
 - Place-name resolution across multiple sources (Google Places, OSM/Nominatim, NPS, Photon, EPA ECHO, **Azure Maps**, Wikipedia, OpenStreetMap) with agreement-based priority ordering and a **user-configurable drag-to-reorder name source priority list** in Settings → Privacy
-- Boundary drawing — property/building polygons per pin, generated automatically from external
-  building-footprint data where available, editable by the user
+- Boundary drawing — property/building polygons per pin, generated automatically from a typed
+  provider chain (`services.locations.boundaries.BoundaryProviderChain`) trying, in order:
+  REData's authoritative county GIS parcel/building geometry (`RedataBoundaryProvider` - see
+  `docs/redata.md`, US-only, coverage limited to jurisdictions REData has researched), then
+  OSM/Overpass, Overture Maps, Microsoft Building Footprints, and Google Open Buildings; editable
+  by the user
 - Standalone reusable **MarkupMaps** with freehand drawing/annotation tools (point, line, arrow, text, box, circle, polygon), attachable to pins, wikis, safety check-ins, or kept independent; also embedded in the **safety check-in creation form** for drawing routes and destinations
 - Detail pins — sub-markers placed inside a pin/wiki's bounding box for finer-grained mapping
   (rooms, entrances, hazards, etc.)
@@ -80,13 +84,15 @@ On-demand, cached lookups shown as panels on the pin detail page:
 - **Wikimedia Commons**, **Smithsonian Open Access**, **Library of Congress** — archival photos/media
 - **National Park Service** (USA) — nearby park info
 - **LoopNet** (USA) — commercial real-estate listings
-- **Property Records** (USA) — automated county parcel ownership/tax/sale-history lookup with a
+- **Property Records** (USA) — county parcel ownership/tax/sale-history lookup, retrieved from
+  REData (`../REData`, a standalone service - see `docs/redata.md`) via `RedataGateway`
+  (`services.apis.property_records.redata_gateway`); populates the wiki's Ownership and Sale
+  History cards with `OFFICIAL`-sourced records in addition to a details card. REData owns the
   4-tier fallback pipeline (free ArcGIS REST/Socrata county GIS, vendor-platform scraping,
-  bespoke per-county recipes, explicit manual-only), US Census-based jurisdiction resolution, and
-  per-field merging across whichever tiers a county has configured; populates the wiki's Ownership
-  and Sale History cards with `OFFICIAL`-sourced records in addition to a details card. Coverage
-  depends on the county-by-county `PropertyJurisdiction` registry (site-admin) — see
-  `docs/property-records-plan.md` and `docs/PROBLEMS.md` for the tiered design
+  bespoke per-county recipes, explicit manual-only), jurisdiction resolution, and per-field
+  merging; coverage depends on REData's own jurisdiction registry. Requires
+  `UL_REDATA_API_URL`/`UL_REDATA_API_KEY` to be configured - see `docs/property-records-plan.md`
+  for the original tiered design this feature was built from
 - **USGS Historical Topo Maps** (USA) — historical topographic maps
 - **Nominatim/OpenStreetMap** — reverse geocoding and place metadata (two panels: Nominatim structured data and Photon nearest-feature lookup)
 - **Regional Data** — US Census, Wildlife, Seismic, and EPA data loaded on demand per sub-tab

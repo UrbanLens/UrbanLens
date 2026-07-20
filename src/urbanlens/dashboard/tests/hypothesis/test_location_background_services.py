@@ -8,7 +8,7 @@ from unittest import mock
 from hypothesis import given, settings as hyp_settings, strategies as st
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
-from urbanlens.dashboard.services.apis.locations.base import default_bbox
+from urbanlens.dashboard.services.apis.locations.base import best_polygon_from_geometry, default_bbox
 from urbanlens.dashboard.services.locations.google import PlaceNameResolverChain
 from urbanlens.dashboard.services.locations.naming import is_meaningful_name
 
@@ -50,6 +50,32 @@ class DefaultBoundingBoxTests(SimpleTestCase):
         self.assertGreater(max_x, longitude)
         self.assertLess(min_y, latitude)
         self.assertGreater(max_y, latitude)
+
+
+class BestPolygonFromGeometryTests(SimpleTestCase):
+    """Regression coverage for a real bug: MultiPolygon.__iter__ yields Polygon elements that
+    must be returned as-is, never re-wrapped in Polygon(...) - Django's Polygon constructor has
+    no "copy an existing Polygon" overload and raises TypeError when given one."""
+
+    def test_single_polygon_is_returned_unwrapped(self) -> None:
+        from django.contrib.gis.geos import Polygon
+
+        polygon = Polygon(((0, 0), (0, 10), (10, 10), (10, 0), (0, 0)))
+        self.assertEqual(best_polygon_from_geometry(polygon), polygon)
+
+    def test_multipolygon_returns_its_largest_element_without_raising(self) -> None:
+        from django.contrib.gis.geos import MultiPolygon, Polygon
+
+        small = Polygon(((0, 0), (0, 1), (1, 1), (1, 0), (0, 0)))
+        large = Polygon(((20, 20), (20, 30), (30, 30), (30, 20), (20, 20)))
+        result = best_polygon_from_geometry(MultiPolygon(small, large))
+        self.assertIsNotNone(result)
+        self.assertAlmostEqual(result.area, large.area)
+
+    def test_empty_geometry_returns_none(self) -> None:
+        from django.contrib.gis.geos import GEOSGeometry
+
+        self.assertIsNone(best_polygon_from_geometry(GEOSGeometry("POLYGON EMPTY")))
 
 
 class PlaceNameResolverChainTests(SimpleTestCase):
@@ -167,6 +193,14 @@ class PlaceNameResolverChainTests(SimpleTestCase):
 
 class BoundaryProviderChainTests(SimpleTestCase):
     """Typed boundary resolution fills property/building slots independently, with no bbox fallback."""
+
+    def test_default_chain_tries_redata_first(self) -> None:
+        """RedataBoundaryProvider is authoritative when it has data - see boundaries.py's
+        own docstring for why it runs before the community/ML-derived providers."""
+        from urbanlens.dashboard.services.apis.locations.boundaries.redata import RedataBoundaryProvider
+        from urbanlens.dashboard.services.locations.boundaries import BoundaryProviderChain
+
+        self.assertIsInstance(BoundaryProviderChain().providers[0], RedataBoundaryProvider)
 
     def test_chain_returns_first_provider_boundary(self) -> None:
         from urbanlens.dashboard.services.locations.boundaries import BoundaryProviderChain

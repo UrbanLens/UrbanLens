@@ -31,10 +31,13 @@ the data provider. Struck from the blocking list below; the real, addressed gaps
 
 ## ✅ Fixed in REData (2026-07-19)
 
-The items below (#3, #4, #5, #8) were addressed directly in `../REData` (not just
-documented) - model changes, a generated migration, service logic, and new tests, all
-verified with `ruff check --fix`, `mypy`, and the full REData pytest suite (477 passed,
-no regressions) run inside the local Docker Compose stack.
+All eight numbered findings (#3-#10) were addressed directly in `../REData` (not just
+documented) across two passes - model changes, three generated migrations, service
+logic, and new tests, all verified with `ruff check --fix`, `mypy`, and the full REData
+pytest suite (496 passed, no regressions) run inside the local Docker Compose stack
+against a real Postgres/Redis backend. #1/#2 were struck as non-issues (see the
+correction note above) rather than fixed - REData deliberately doesn't own pin/wiki/
+per-user concerns, so there was nothing there to implement.
 
 ### 3. Owner/sale records are never auto-populated from a fetched property record — FIXED
 OLD's plugin (`src\urbanlens\dashboard\plugins\builtin\property_records.py`) runs a
@@ -111,42 +114,67 @@ related bug: `ParcelSale.sale_price` had no validator, so a negative price hit t
 instead of a normal 400 — added `MinValueValidator(0)`, which DRF's `ModelSerializer`
 picks up automatically from the model field.
 
----
-
-## 🟡 Still open (not requested this round, worth tracking before further cutover)
-
-### 6. Sale→Owner linkage flattened to free text
+### 6. Sale→Owner linkage flattened to free text — FIXED
 OLD's sale models had `previous_owners`/`new_owners` M2M fields back to the owner model
 (`models\property_owner\model.py:114-115,149-150`), so a sale recorded structured links
-to who transferred to whom. NEW's `ParcelSale` only has flat `grantor`/`grantee`
-CharFields (`sale\model.py:16-17`) with no FK/M2M back to `ParcelOwner` — matches the
-plan doc's schema shape, but is a step down in queryability from what OLD had built.
-Not changed in this pass since it wasn't requested and would mean either widening
-`ParcelSale`'s schema or overloading the owner-identity matching built for fix #3/#4 onto
-sale grantor/grantee text, which felt like scope creep beyond what was asked.
+to who transferred to whom. NEW's `ParcelSale` only had flat `grantor`/`grantee`
+CharFields with no FK/M2M back to `ParcelOwner`.
 
-### 7. `ParcelSale` has no custom queryset/manager helpers
+**Fix**: added `ParcelSale.previous_owners`/`new_owners` (`ManyToManyField` to
+`ParcelOwner`, `related_name="sales_as_previous_owner"`/`"sales_as_new_owner"` -
+matching OLD's exact related-name convention). `grantor`/`grantee` text fields are kept
+(still populated straight from the source, unconditionally) and now *additionally*
+resolved to owner rows: `parcel_lookup._write_official_sale` calls the same
+`_get_or_create_official_owner` used for `owner_name`, so a grantor/grantee reuses an
+already-known owner instead of creating a disconnected duplicate, and links them to the
+sale (`previous_owners`/`new_owners`) and to the parcel itself (`ParcelOwner.parcels`) -
+mirroring OLD's `_write_official_owners_and_sales` exactly, including that a grantor/
+grantee becomes a linked owner of that parcel, not just sale metadata. Migration
+`0003_sale_owner_links.py` generated via `makemigrations`. Covered by new tests in
+`test_parcel_owner.py` (model-level M2M behavior) and `test_parcel_lookup.py`
+(`WriteBackSaleOwnerLinkageTests` - linkage, owner reuse, blank grantor/grantee).
+
+### 7. `ParcelSale` had no custom queryset/manager helpers — FIXED
 OLD's `PinPropertySaleQuerySet`/`WikiPropertySaleQuerySet` provide `for_pin()`/
-`for_location()` convenience filters (`models\property_owner\queryset.py:52-87`). NEW's
-`parcels\models\sale\` directory has no `queryset.py` or `meta.py` at all — `ParcelSale`
-relies on the bare default manager. Minor, but worth adding before this becomes the only
-copy of the logic.
+`for_location()` convenience filters. NEW's `parcels\models\sale\` directory had no
+`queryset.py` at all.
 
-### 9. `jurisdictions:write` API scope is declared but has no endpoint
-`ApiKeyScope` includes `jurisdictions:write` (`api\models\api_key\meta.py:14`), but
-`PropertyJurisdictionSerializer`'s own docstring confirms "No write endpoint in v1."
-Not urgent (OLD's jurisdiction registry is site-admin-only today), but worth tracking so
-it doesn't ship half-wired.
+**Fix**: added `parcels\models\sale\queryset.py` (`ParcelSaleQuerySet`/`ParcelSaleManager`)
+with `official()`/`manual()` (mirroring `ParcelOwnerQuerySet`), `for_parcel()` (REData's
+equivalent of OLD's `for_pin`/`for_location` - REData has no Pin/Location, only Parcel),
+and `for_owner()` (new - REData-only, since `previous_owners`/`new_owners` didn't exist
+in OLD's shape either; matches a sale where the given owner appears on either side).
+Covered by `ParcelSaleQuerySetTests` in `test_parcel_owner.py`.
 
-### 10. `OwnerSource` default flipped from `USER` to `OFFICIAL` with no visible guard
-OLD: `OwnerSource.USER` is the default, and its docstring states `OFFICIAL` "is never
-directly user-editable" (`property_owner\meta.py:7-9,15-16`) — enforced at the
-controller/view layer. NEW: default is `OFFICIAL` (`owner\meta.py:9-10`), and
-`ParcelOwner` adds a `recorded_by` FK with no model-layer guard preventing an API caller
-with `owners:write` scope from creating an `OFFICIAL`-sourced row directly — there's no
-per-caller enforcement distinguishing "this came from our own automated write-back" from
-"a client app asked us to write an official record" at the API boundary. Worth confirming
-intentional before treating "official" records as trustworthy provenance.
+### 9. `jurisdictions:write` API scope was declared but had no endpoint — FIXED
+`ApiKeyScope` includes `jurisdictions:write`, but `PropertyJurisdictionSerializer`'s own
+docstring said "No write endpoint in v1."
+
+**Fix**: `JurisdictionViewSet` is now a full `ModelViewSet` (was read-only
+`Retrieve`/`ListModelMixin`) - no `urls.py` change needed since it was already
+router-registered, so the same URLs simply gained `POST`/`PATCH`/`PUT`/`DELETE`. Added
+`PropertyJurisdictionWriteSerializer` (the full registry shape, including the Tier 1-3
+adapter wiring - `gis_rest_url`, `field_map`, `scrape_recipe`, etc. - that the read
+serializer deliberately omits), selected via `get_serializer_class` branching on
+read-vs-write actions the same way `ParcelOwnerViewSet`/`ParcelSaleViewSet` already
+branch `required_scopes`. `discovered_by` is set server-side from the authenticated
+user on create, never client-supplied. Covered by 6 new tests in
+`JurisdictionViewSetTests` (scope enforcement, create, client-supplied-`discovered_by`
+rejection, update).
+
+### 10. `OwnerSource` default flip had no API-boundary guard — FIXED
+OLD's docstring states `OFFICIAL` "is never directly user-editable" - enforced at the
+controller/view layer. NEW's `ParcelOwner`/`ParcelSale` default to `OFFICIAL` with no
+guard stopping an API caller with `owners:write`/`sales:write` scope from creating an
+`OFFICIAL`-sourced row directly.
+
+**Fix**: added `source` to `read_only_fields` on both `ParcelOwnerSerializer` and
+`ParcelSaleSerializer`, and both viewsets' `perform_create` now explicitly force
+`source=OwnerSource.MANUAL` - mirroring `parcel`/`recorded_by`'s existing
+server-side-only handling. A client-supplied `source` value (on create *or* update, since
+read-only fields are excluded from both) is now always ignored; `OFFICIAL` is reachable
+only through `parcels.services.parcel_lookup`'s automated write-back. Covered by 4 new
+tests across both viewsets' test classes in `api\tests\test_views.py`.
 
 ---
 
@@ -217,19 +245,114 @@ not as a REData-specific shortfall.
 ## Recommendation
 
 REData now fully encapsulates the property-records feature's data and behavior: the
-retrieval pipeline was already a faithful port, and the four real gaps (automated
-owner/sale write-back, cross-property owner identity, rate-limit tuning, REST API test
-coverage) are fixed as of this pass. It is safe to proceed with removing UrbanLens's
-`services\apis\property_records\*`, `models\property_jurisdiction\*`,
-`models\property_owner\*`, `controllers\property_owner.py`, and the `property_records`
-plugin, **provided** UrbanLens's replacement code (which will call REData's REST API
-instead) re-implements the pin-private/wiki-shared visibility split and per-user
-authorization on its own side — REData deliberately doesn't and shouldn't do that; see
-the correction note at the top of this document.
+retrieval pipeline was already a faithful port, and all eight real gaps found in the
+original audit (automated owner/sale write-back, cross-property owner identity,
+rate-limit tuning, sale→owner linkage, missing `ParcelSale` queryset helpers, the unwired
+`jurisdictions:write` scope, the `OwnerSource` API-boundary guard, and REST API test
+coverage) are now fixed and verified against a real Postgres/Redis backend with zero
+regressions.
 
-Two loose ends worth a conscious decision, not a blocker:
-- Backport the `GEOPIN`/`REID` field-mapping fix (#✨ above) to OLD if it's going to stay
-  live even briefly, since OLD currently rejects Guilford County, NC's real ArcGIS layer.
-- Items #6, #7, #9, #10 (sale→owner linkage flattened to text, no `ParcelSale` queryset
-  helpers, unwired `jurisdictions:write` scope, `OwnerSource` default flip) are minor and
-  weren't part of this round's requested fixes - still open, tracked above.
+One loose end worth a conscious decision, not a blocker: backport the `GEOPIN`/`REID`
+field-mapping fix (see "Improvements found in NEW" above) to OLD if it's going to stay
+live even briefly, since OLD currently rejects Guilford County, NC's real ArcGIS layer.
+
+---
+
+## Integration status (2026-07-20): UrbanLens now consumes REData
+
+`dashboard.plugins.builtin.property_records` was rewired to fetch records via a new
+`RedataGateway` (`services.apis.property_records.redata_gateway`) calling REData's
+`GET /api/v1/parcels/lookup/` instead of a local tiered pipeline. Removed from UrbanLens
+as a result (all now superseded by REData, confirmed with zero remaining references):
+`services\apis\property_records\{arcgis_socrata,discovery,field_mapping,html_scrape,
+jurisdiction,merge,meta,normalize,orchestrator,pacing,relevance,schema,vendor_templates}.py`,
+`services\apis\locations\census_geocoder.py`, `models\property_jurisdiction\*` (+ a new
+migration dropping the table), `management\commands\{discover_property_jurisdiction,
+test_property_record}.py`, and their corresponding hypothesis tests.
+
+**Deliberately kept, unchanged**: `models\property_owner\*` (`PinOwner`/`WikiOwner`/
+`PinPropertySale`/`WikiPropertySale`) and `controllers\property_owner.py` - this is
+UrbanLens's own private-per-pin/shared-per-wiki community-data layer with its own
+authorization rules, exactly the concern the correction note above says belongs in the
+consuming app, not REData. `_write_official_owners_and_sales` in the plugin still
+auto-populates these `OwnerSource.OFFICIAL` rows from a successful fetch, unchanged -
+only where the fetched data comes from changed.
+
+Requires `UL_REDATA_API_URL`/`UL_REDATA_API_KEY` configured (see `.env-sample`) - the
+plugin's `get_service_defaults` now declares one `redata_api` rate-limit budget instead
+of the three third-party ones it used to (`census_geocoder`/`property_records_gis`/
+`property_records_scrape`).
+
+---
+
+## Expansion (2026-07-20): authoritative property/building boundaries
+
+Investigated what other data REData's sources return that wasn't yet surfaced. Two findings,
+both now implemented:
+
+### 1. `parcel_geometry` was already flowing through, just unused
+
+REData's Tier 1 ArcGIS adapter has always captured parcel boundary geometry
+(`arcgis_socrata.py`, `returnGeometry=true&outSR=4326`) and included it in every
+`record_payload` - UrbanLens's plugin received it in `_fetch_payload` all along but only ever
+rendered a "Boundary available" chip, never the geometry itself. Meanwhile
+`services\locations\boundaries.py`'s `BoundaryProviderChain` had an empty **property**
+boundary slot for US coordinates - `RegridGateway` (the one provider that could fill it) is
+implemented but deliberately excluded (paid service, no current plans to integrate).
+
+**Fix**: added `RedataBoundaryProvider`
+(`services\apis\locations\boundaries\redata.py`), wired in as the *first* provider in the
+default chain (`services\locations\boundaries.py`) - authoritative county-GIS geometry beats
+community/ML-derived boundaries whenever it's available, and it's a quiet no-op (not an
+error) both for installs that haven't configured REData and for jurisdictions REData hasn't
+researched. Added `esri_rings_to_polygon` (`services\apis\locations\base.py`) to convert
+REData's raw Esri ring-list geometry into a GEOS `Polygon`/`MultiPolygon` - correctly
+classifying exterior shells vs. holes by ring winding direction (Esri's convention is the
+*opposite* of GeoJSON's) and assigning each hole to whichever shell actually contains it
+(point-in-polygon test, since Esri doesn't guarantee array ordering). This conversion didn't
+exist anywhere before; REData's own schema docstring explicitly deferred it, assuming a
+Leaflet consumer that could draw raw rings directly.
+
+**Bonus fix found via this work**: `best_polygon_from_geometry` (the existing helper every
+other boundary provider already used) had a real, confirmed bug - `Polygon(geos_geometry)`
+where `geos_geometry` was already a `Polygon` (a `MultiPolygon`'s own element). Django's
+`Polygon` constructor has no "copy an existing Polygon" overload and raises `TypeError` on
+one, so any provider resolving a genuinely multi-shell geometry (a building complex with
+detached wings, a multi-part OSM relation) would have crashed instead of returning the
+largest shell. Fixed the same way as the new code: return the element directly, never
+re-wrap it. Covered by a new regression test
+(`test_location_background_services.py::BestPolygonFromGeometryTests`) that reproduces the
+crash against real GEOS objects.
+
+### 2. Building footprints - not previously possible, now supported
+
+REData's registry (`PropertyJurisdiction`) only ever stored one GIS endpoint per county (the
+parcels layer) - even though many of the same county ArcGIS servers also publish a *separate*
+building-footprint layer as a sibling on the same MapServer, REData had no way to query it.
+
+**Fix (REData)**: added `PropertyJurisdiction.gis_building_layer_url` (manually curated, like
+`vendor`/`scrape_recipe` - distinguishing a real building-footprint layer from the dozens of
+other layers a county MapServer typically exposes needs a human looking at the actual layer
+list, not a heuristic), `ArcGisSocrataGateway.query_building_geometry_by_point`, and
+`PropertyRecord.building_geometry` (same Esri-ring-list shape as `parcel_geometry`). Wired
+into `orchestrator._try_tier1` as a best-effort supplementary lookup - a down/misconfigured
+building layer degrades to "no building geometry", never fails the parcel match itself.
+Exposed automatically via the existing `record_payload` (no API-layer change needed, same as
+`parcel_geometry` before it). ArcGIS-only (Socrata has no sibling-layer concept); ARM-length
+from the merge pipeline's tier-authority logic for free, since `merge.py`'s `_CONTENT_FIELDS`
+is derived from `dataclasses.fields(PropertyRecord)` automatically.
+
+**Fix (UrbanLens)**: `RedataBoundaryProvider.get_typed_boundaries` reads `building_geometry`
+the same way as `parcel_geometry`, filling the chain's **building** slot too when present -
+authoritative survey-grade footprints from the county itself, a real quality upgrade over the
+ML-derived Microsoft/Google/Overture datasets whenever a jurisdiction has one configured.
+
+### 3. Other data considered, not pursued
+
+`tax_history` (payment/delinquency status) and `deed_document_links` are schema fields REData
+never actually populates from any tier today. Not an "available but withheld" situation like
+the geometry was - Tier 1 assessor GIS layers don't typically carry that data at all; it would
+need a real Tier 2/3 (treasurer/recorder site) integration verified against a live target,
+which is explicitly the unpopulated part of REData's own roadmap (no vendor scrape templates
+yet). Not attempted here for the same reason REData's own CLAUDE.md gives for not guessing at
+vendor templates without a concrete site to verify against.

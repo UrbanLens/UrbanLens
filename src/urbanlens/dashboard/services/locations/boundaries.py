@@ -24,6 +24,7 @@ from urbanlens.dashboard.services.apis.locations.boundaries.google_open_building
 from urbanlens.dashboard.services.apis.locations.boundaries.microsoft_buildings import MicrosoftBuildingFootprintsGateway
 from urbanlens.dashboard.services.apis.locations.boundaries.overpass import OverpassGateway
 from urbanlens.dashboard.services.apis.locations.boundaries.overture_maps import OvertureMapsGateway
+from urbanlens.dashboard.services.apis.locations.boundaries.redata import RedataBoundaryProvider
 from urbanlens.dashboard.services.redact import redact_coordinate
 
 if TYPE_CHECKING:
@@ -67,13 +68,20 @@ class BoundaryProviderChain:
     Each provider contributes to whichever boundary-type slots it can fill
     (declared via ``BoundaryProvider.boundary_kind`` or a per-feature
     ``get_typed_boundaries`` override); the chain stops once both slots are
-    filled or providers are exhausted. Regrid (parcel/property data) is
-    implemented but deliberately excluded - it is a paid service (see
-    regrid.py); add ``RegridGateway()`` here to enable parcel boundaries.
+    filled or providers are exhausted. ``RedataBoundaryProvider`` runs first:
+    when it has data at all, it's authoritative survey-grade county GIS
+    geometry, not community-tagged or ML-derived - but its coverage is
+    narrower (US-only, and only jurisdictions REData has researched), so
+    every other provider still matters as a fallback. It's also a no-op, not
+    an error, for installs that haven't configured REData at all (see its own
+    docstring). Regrid (parcel/property data) is implemented but deliberately
+    excluded - it is a paid service (see regrid.py); add ``RegridGateway()``
+    here to enable it too.
     """
 
     providers: tuple[BoundaryProvider, ...] = field(
         default_factory=lambda: (
+            RedataBoundaryProvider(),
             OverpassGateway(),
             OvertureMapsGateway(),
             MicrosoftBuildingFootprintsGateway(),

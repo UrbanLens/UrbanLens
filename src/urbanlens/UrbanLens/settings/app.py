@@ -173,6 +173,8 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     yelp_api_key: str | None = Field(default=None, description="The Yelp Fusion API key (private key, server-side only)")
     openweathermap_api_key: str | None = Field(default=None, description="The openweathermap key")
     nps_api_key: str | None = Field(default=None, description="The national park service api key")
+    redata_api_url: str | None = Field(default=None, description="Base URL of the REData property-records service (e.g. https://redata.example.com), no trailing slash needed")
+    redata_api_key: str | None = Field(default=None, description="Bearer API key for REData's external API - needs at least the parcels:read scope")
     discord_client_secret: str | None = Field(default=None, description="The discord client secret")
     discord_client_id: str | None = Field(default=None, description="The discord client ID")
     twilio_account_sid: str | None = Field(default=None, description="The Twilio account SID, for outbound SMS/WhatsApp notifications")

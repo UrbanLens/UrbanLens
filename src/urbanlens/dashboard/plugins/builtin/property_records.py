@@ -1,11 +1,14 @@
-"""Property records plugin: automated US county property ownership & tax data.
+"""Property records plugin: US county property ownership & tax data via REData.
 
-Implements ``docs/property-records-plan.md``'s tiered retrieval pipeline
-(``services.apis.property_records``) as a pin-detail panel and a background
-enrichment source. Both share one upstream fetch (``_fetch_payload``, mirroring
-the EPA ECHO plugin's ``_fetch_and_cache`` shared-row trick - see
-``epa_echo.py``'s module docstring) so whichever runs first for a Location
-populates the same ``LocationCache`` row for the other.
+Renders a pin-detail panel and a background enrichment source from records
+fetched over REData's REST API (``services.apis.property_records.redata_gateway``)
+- the standalone service that now owns the tiered retrieval pipeline this
+plugin used to implement locally (jurisdiction resolution, ArcGIS/Socrata,
+vendor scraping, bespoke recipes; see ``docs/redata.md``). Both panel and
+enrichment share one upstream fetch (``_fetch_payload``, mirroring the EPA
+ECHO plugin's ``_fetch_and_cache`` shared-row trick - see ``epa_echo.py``'s
+module docstring) so whichever runs first for a Location populates the same
+``LocationCache`` row for the other.
 
 A successful fetch also upserts ``WikiOwner``/``WikiPropertySale`` rows with
 ``source=OwnerSource.OFFICIAL`` - the automated data source those fields were
@@ -14,19 +17,20 @@ docstring). This never touches a pre-existing owner/sale record: an OFFICIAL
 row is only ever created when no matching owner already exists for that
 Location (by name, case-insensitively) - manually-entered data always wins,
 matching every other auto-population code path in this codebase (AI link
-extraction, name resolution, ...).
+extraction, name resolution, ...). This is UrbanLens's own community-data
+layer on top of REData's raw facts - REData has no notion of Locations, wikis,
+or per-user privacy, and isn't meant to; see ``docs/redata.md``'s correction
+note on why that split is intentional.
 
-All three automated tiers run through the orchestrator (Tier 1 ArcGIS
-REST/Socrata, Tier 2 vendor templates, Tier 3 bespoke recipes - see
-``services.apis.property_records.orchestrator``). Unavailable jurisdictions
-render nothing (a quiet 204) except the deliberate "a human must do this"
-cases - ``MANUAL_ONLY`` and CAPTCHA-``blocked`` - which show a small card
-pointing at the county's manual-lookup links instead of silently
-disappearing: the plan's explicit ask that "not automatable" surface clearly
-rather than fail silently. A transient ``source_error`` (county server down)
-is never cached at all - the fetch raises so the panel framework's
-failure-skip/retry machinery handles it, instead of a days-long
-``LocationCache`` row remembering an outage as "no data".
+Unavailable jurisdictions render nothing (a quiet 204) except the deliberate
+"a human must do this" cases - ``MANUAL_ONLY`` and CAPTCHA-``blocked`` - which
+show a small card pointing at the county's manual-lookup links instead of
+silently disappearing: the plan's explicit ask that "not automatable" surface
+clearly rather than fail silently. A transient ``source_error`` (REData
+unreachable, or a county source it depends on is down) is never cached at all
+- the fetch raises so the panel framework's failure-skip/retry machinery
+handles it, instead of a days-long ``LocationCache`` row remembering an
+outage as "no data".
 """
 
 from __future__ import annotations
@@ -37,7 +41,7 @@ import logging
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
-from urbanlens.dashboard.services.apis.property_records.orchestrator import REASON_BLOCKED, REASON_MANUAL_ONLY, REASON_SOURCE_ERROR
+from urbanlens.dashboard.services.apis.property_records.redata_gateway import REASON_BLOCKED, REASON_MANUAL_ONLY, REASON_SOURCE_ERROR
 from urbanlens.dashboard.services.enrichment import LocationCacheEnrichmentSource
 from urbanlens.dashboard.services.external_data import CoordinateGatedInfoPanelSource
 from urbanlens.dashboard.services.rate_limiter import ServiceDefaults
@@ -55,15 +59,15 @@ _CACHE_SOURCE = "property_records"
 
 
 def _fetch_payload(location: Location, latitude: float, longitude: float) -> dict[str, Any]:
-    """Run the orchestrator and return the shared LocationCache payload shape.
+    """Call REData and return the shared LocationCache payload shape.
 
     Args:
         location: The Location to fetch a property record for. Its own
             geocoded ``address`` (when already resolved - see
             ``services.enrichment.AddressEnrichmentSource``) is passed
-            through as the Tier 2/3 search key; Tier 1's own GIS-derived
-            situs address still takes precedence over it when both run (see
-            ``orchestrator.get_property_record``'s docstring).
+            through to REData as a Tier 2/3 search key; REData's own Tier 1
+            GIS-derived situs address still takes precedence over it when
+            both are available (see REData's own orchestrator).
         latitude: The latitude to look up - passed explicitly (rather than
             re-read off ``location``) so the panel path can use the pin's
             own effective marker coordinates, keeping the coordinates
@@ -71,32 +75,31 @@ def _fetch_payload(location: Location, latitude: float, longitude: float) -> dic
         longitude: The longitude to look up.
 
     Returns:
-        ``{"available": True, ...PropertyRecord.to_dict()}`` on success, or
+        ``{"available": True, ...record payload}`` on success, or
         ``{"available": False, "reason": ..., "message": ..., "links": {...}?}``
         - ``links`` (assessor/treasurer/recorder URLs) is present for the
         manual-lookup reasons (``manual_only``/CAPTCHA-``blocked``), carried
-        on the orchestrator's exception so no second jurisdiction resolution
-        round-trip is needed.
+        on REData's error response so no second lookup round-trip is needed.
 
     Raises:
         PropertyRecordsUnavailableError: Only for ``REASON_SOURCE_ERROR`` - a
-            transient outage must not be written to the cache as a durable
-            "no data" fact; the panel/enrichment frameworks' own failure
-            handling retries it instead.
+            transient outage (REData itself, or a source it depends on) must
+            not be written to the cache as a durable "no data" fact; the
+            panel/enrichment frameworks' own failure handling retries it
+            instead.
     """
-    from urbanlens.dashboard.services.apis.property_records.orchestrator import PropertyRecordsUnavailableError, get_property_record
+    from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError, RedataGateway
 
     try:
-        record = get_property_record(latitude, longitude, situs_address=location.address or "")
+        payload = RedataGateway().lookup_parcel(latitude, longitude, situs_address=location.address or "")
     except PropertyRecordsUnavailableError as exc:
         if exc.reason == REASON_SOURCE_ERROR:
             raise
-        payload: dict[str, Any] = {"available": False, "reason": exc.reason, "message": str(exc)}
+        result: dict[str, Any] = {"available": False, "reason": exc.reason, "message": str(exc)}
         if exc.links:
-            payload["links"] = dict(exc.links)
-        return payload
+            result["links"] = dict(exc.links)
+        return result
 
-    payload = record.to_dict()
     payload["available"] = True
     return payload
 
@@ -316,11 +319,11 @@ class PropertyRecordsEnrichmentSource(LocationCacheEnrichmentSource):
     key: ClassVar[str] = "property_records"
     verbose_name: ClassVar[str] = "Property Records (county GIS/tax data)"
     cache_source: ClassVar[str] = _CACHE_SOURCE
-    service_keys: ClassVar[tuple[str, ...]] = ("census_tigerweb", "property_records_gis", "property_records_scrape")
+    service_keys: ClassVar[tuple[str, ...]] = ("redata_api",)
     usa_only: ClassVar[bool] = True
 
     def fetch(self, location: Location) -> tuple[dict | None, str]:
-        """Run the orchestrator and, on success, upsert OFFICIAL owner/sale rows.
+        """Call REData and, on success, upsert OFFICIAL owner/sale rows.
 
         Args:
             location: The location to fetch a property record for.
@@ -343,42 +346,35 @@ class PropertyRecordsEnrichmentSource(LocationCacheEnrichmentSource):
 
 
 class PropertyRecordsPlugin(UrbanLensPlugin):
-    """Automated US county property ownership & tax record retrieval. USA only."""
+    """US county property ownership & tax record retrieval, via REData. USA only."""
 
     name: ClassVar[str] = "property_records"
     verbose_name: ClassVar[str] = "Property Records"
     description: ClassVar[str] = (
-        "Free county GIS/open-data lookups (ArcGIS REST / Socrata) for parcel ownership, assessed value, and sale "
-        "history, with automatic jurisdiction resolution via the US Census Bureau. Populates the pin/wiki Ownership "
-        "and Sale History cards with OFFICIAL-sourced records and shows a details card on the pin detail page. "
-        "Coverage depends on the property jurisdiction registry (site-admin) - only ArcGIS/Socrata counties are "
-        "automated today; everything else surfaces as 'not automatable' rather than failing silently. USA only."
+        "County GIS/open-data, vendor-platform, and bespoke-recipe parcel ownership, assessed value, and sale "
+        "history lookups, retrieved from REData (a standalone service - see docs/redata.md) with automatic "
+        "jurisdiction resolution. Populates the pin/wiki Ownership and Sale History cards with OFFICIAL-sourced "
+        "records and shows a details card on the pin detail page. Coverage depends on REData's own jurisdiction "
+        "registry - counties it hasn't researched surface as 'not automatable' rather than failing silently. "
+        "USA only. Requires REDATA_API_URL/REDATA_API_KEY to be configured."
     )
     author: ClassVar[str] = "UrbanLens"
 
     def get_service_defaults(self) -> dict[str, ServiceDefaults]:
-        """Rate-limit defaults for the Census geocoder and the shared county-GIS gateway."""
+        """Rate-limit defaults for REData's own external API.
+
+        Generous relative to the free third-party budgets this plugin used to
+        declare (census_geocoder/property_records_gis/property_records_scrape)
+        - REData is our own service, not a shared public API, and it does its
+        own internal per-host pacing against the underlying county sources.
+        """
         return {
-            "census_geocoder": ServiceDefaults(
-                display_name="US Census Bureau Geocoder",
-                calls_per_minute=20,
-                calls_per_day=1000,
+            "redata_api": ServiceDefaults(
+                display_name="REData (property records service)",
+                calls_per_minute=120,
+                calls_per_day=10000,
                 usa_only=True,
-                notes="Free, keyless API. Used to resolve an address to its county FIPS code.",
-            ),
-            "property_records_gis": ServiceDefaults(
-                display_name="County Property Records (ArcGIS/Socrata)",
-                calls_per_minute=30,
-                calls_per_day=2000,
-                usa_only=True,
-                notes="Free county GIS/open-data endpoints, one per jurisdiction (see the property jurisdiction registry). Each host is separately paced regardless of this overall budget.",
-            ),
-            "property_records_scrape": ServiceDefaults(
-                display_name="County Property Records (Tier 2/3 site search)",
-                calls_per_minute=10,
-                calls_per_day=500,
-                usa_only=True,
-                notes="Vendor-platform and bespoke county assessor-site searches (see the property jurisdiction registry). Kept well below the GIS budget - these hit ordinary county websites, not data APIs. Each host is separately paced regardless of this overall budget.",
+                notes="Our own standalone property-records service (see docs/redata.md) - not a third-party budget, just a sanity ceiling.",
             ),
         }
 

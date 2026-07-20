@@ -187,22 +187,25 @@ Expects:
     </div>
 
     <div class="profile-meta-row">
+        {% if profile.area %}
         {% if profile.user == request.user and not edit_mode %}
         <span class="profile-meta-item profile-area--editable" tabindex="0" role="button"
-              data-raw-area="{{ profile.area|default:'' }}" title="Click to edit">
-            <i class="material-symbols-outlined">place</i><span class="profile-meta-text">{{ profile.area|default:"Add your area..." }}</span>
-        </span>
-        <span class="profile-meta-item profile-started-exploring--editable" tabindex="0" role="button"
-              data-raw-started-exploring="{{ profile.started_exploring|date:'Y-m-d'|default:'' }}" title="Click to edit">
-            <i class="material-symbols-outlined">explore</i><span class="profile-meta-text">{% if profile.started_exploring %}Exploring since {{ profile.started_exploring|date:"Y" }}{% else %}Add when you started exploring...{% endif %}</span>
+              data-raw-area="{{ profile.area }}" title="Click to edit">
+            <i class="material-symbols-outlined">place</i><span class="profile-meta-text">{{ profile.area }}</span>
         </span>
         {% else %}
-        {% if profile.area %}
         <span class="profile-meta-item">
             <i class="material-symbols-outlined">place</i>{{ profile.area }}
         </span>
         {% endif %}
+        {% endif %}
         {% if profile.started_exploring %}
+        {% if profile.user == request.user and not edit_mode %}
+        <span class="profile-meta-item profile-started-exploring--editable" tabindex="0" role="button"
+              data-raw-started-exploring="{{ profile.started_exploring|date:'Y-m-d' }}" title="Click to edit">
+            <i class="material-symbols-outlined">explore</i><span class="profile-meta-text">Exploring since {{ profile.started_exploring|date:"Y" }}</span>
+        </span>
+        {% else %}
         <span class="profile-meta-item">
             <i class="material-symbols-outlined">explore</i>Exploring since {{ profile.started_exploring|date:"Y" }}
         </span>

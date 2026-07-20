@@ -79,13 +79,8 @@ class ViewProfileView(LoginRequiredMixin, View):
         }
         if request.user == profile.user:
             from urbanlens.dashboard.services.profile_preview import preview_modes
-            from urbanlens.dashboard.services.social_links import URL_INPUT_PLATFORM_LABELS
 
             context["preview_modes"] = preview_modes()
-            # The owner's Social section embeds the same self-contained HTMX
-            # add/remove partial the Edit Profile page uses - it needs the
-            # supported-platform labels for its footer line.
-            context["supported_platforms"] = URL_INPUT_PLATFORM_LABELS
         self._add_common_context(request, profile, context)
         return render(request, "dashboard/pages/profile/index.html", context)
 

@@ -1,10 +1,12 @@
 """Tests for the profile hero's click-to-edit-in-place area/started_exploring fields.
 
 Covers:
-- Own-profile view renders both hero meta fields as editable elements (even
-  when empty, so there's something to click to add one) - other viewers, and
-  the owner's own Edit Profile page (which already has full form fields for
-  these), see plain text instead.
+- Own-profile view renders each hero meta field as a click-to-edit element
+  only once it actually has a value - an empty field is hidden entirely
+  rather than shown with an "Add ..." placeholder (adding a first value is
+  the Edit Profile page's job, which already has full form fields for these).
+  Other viewers, and the owner's own Edit Profile page, see plain text (or
+  nothing) instead of the inline editor either way.
 - ProfileFieldUpdateView's field="area"/field="started_exploring" POST paths,
   previously untested despite already existing (used by the full Edit
   Profile page) - now exercised more, via the profile view page's inline editor.
@@ -41,10 +43,14 @@ class ProfileHeroMetaEditableRenderingTests(TestCase):
         self.assertContains(response, "profile-area--editable")
         self.assertContains(response, 'data-raw-area="Rochester, NY"')
 
-    def test_area_placeholder_shown_with_no_value_yet(self) -> None:
+    def test_area_hidden_with_no_value_yet(self) -> None:
         response = self._get_own()
-        self.assertContains(response, "profile-area--editable")
-        self.assertContains(response, "Add your area...")
+        # data-raw-area only appears on the real editable span, which is now
+        # only rendered once profile.area has a value - unlike the bare class
+        # name (also present, inertly, in the wiring script's own
+        # querySelector('.profile-area--editable') call on every render).
+        self.assertNotContains(response, "data-raw-area")
+        self.assertNotContains(response, "Add your area...")
 
     def test_started_exploring_editable_markup_shown_with_a_value(self) -> None:
         self.profile.started_exploring = "2015-06-01"
@@ -53,10 +59,10 @@ class ProfileHeroMetaEditableRenderingTests(TestCase):
         self.assertContains(response, "profile-started-exploring--editable")
         self.assertContains(response, 'data-raw-started-exploring="2015-06-01"')
 
-    def test_started_exploring_placeholder_shown_with_no_value_yet(self) -> None:
+    def test_started_exploring_hidden_with_no_value_yet(self) -> None:
         response = self._get_own()
-        self.assertContains(response, "profile-started-exploring--editable")
-        self.assertContains(response, "Add when you started exploring...")
+        self.assertNotContains(response, "data-raw-started-exploring")
+        self.assertNotContains(response, "Add when you started exploring...")
 
     def test_other_viewer_sees_plain_area_not_editable(self) -> None:
         self.profile.area = "Rochester, NY"

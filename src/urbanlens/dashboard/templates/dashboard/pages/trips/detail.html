@@ -1759,6 +1759,7 @@ window.tripOpenCompleteDialog = function (url, activityDate) {
         input.value = rawValue;
         if (opts.maxLength) input.maxLength = opts.maxLength;
 
+        window.urbanlensSizeEditInPlaceInput(el, input);
         var displayText = el.textContent;
         el.textContent = '';
         el.appendChild(input);

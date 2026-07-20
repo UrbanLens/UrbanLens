@@ -1,10 +1,12 @@
 """Tests for the profile page's click-to-edit-in-place contact fields + birthday.
 
 Covers:
-- Own-profile view renders all 6 contact fields (phone/whatsapp/signal/
-  telegram/discord/matrix) and birth_date as click-to-edit elements, even
-  when every one is empty (so there's something to click to add one) - the
-  whole Contact section used to be hidden entirely in that case.
+- Own-profile view renders each of the 6 contact fields (phone/whatsapp/
+  signal/telegram/discord/matrix) and birth_date as a click-to-edit element
+  only once it actually has a value - an empty field (and, at the section
+  level, an entirely-empty Contact/Additional Details section) is hidden
+  rather than shown with an "Add ..." placeholder; adding a first value is
+  the Edit Profile page's job, not this page's.
 - Other viewers see plain read-only text (only for populated fields, same
   as before) and the section still disappears entirely when nothing to show.
 - ProfileFieldUpdateView's field="phone_number"/etc and field="birth_date"
@@ -42,22 +44,19 @@ class ProfileContactEditableRenderingTests(TestCase):
     def _get_own(self):
         return self.client.get(reverse("profile.view"))
 
-    def test_contact_section_shown_for_owner_with_no_contact_info_yet(self) -> None:
-        """Unlike the plain "hide the section entirely" behavior for other
-        viewers, the owner needs it rendered so there's something to click."""
+    def test_contact_section_hidden_for_owner_with_no_contact_info_yet(self) -> None:
+        """Same "hide the section entirely" behavior as other viewers now -
+        an owner adds a first contact value via the Edit Profile page."""
         response = self._get_own()
-        self.assertContains(response, "Contact")
+        self.assertNotContains(response, ">Contact<")
         for cls in _CONTACT_EDITABLE_CLASSES.values():
-            self.assertContains(response, cls)
-
-    def test_each_field_carries_a_placeholder_when_empty(self) -> None:
-        response = self._get_own()
-        self.assertContains(response, "Add phone number...")
-        self.assertContains(response, "Add WhatsApp...")
-        self.assertContains(response, "Add Signal...")
-        self.assertContains(response, "Add Telegram...")
-        self.assertContains(response, "Add Discord...")
-        self.assertContains(response, "Add Matrix...")
+            # The wiring script's `simpleTextField('.profile-xxx-editable', ...)`
+            # calls legitimately contain each class name as inert text on
+            # every render regardless of field population (see the hero-meta
+            # test's identical caveat) - check the actual rendered element's
+            # class list, not just "does this string appear anywhere in the
+            # page source".
+            self.assertNotContains(response, f'contact-info-item {cls}"')
 
     def test_populated_field_carries_the_raw_value(self) -> None:
         self.profile.phone_number = "555-0100"
@@ -65,6 +64,15 @@ class ProfileContactEditableRenderingTests(TestCase):
         response = self._get_own()
         self.assertContains(response, 'data-raw-phone="555-0100"')
         self.assertContains(response, "555-0100")
+
+    def test_only_populated_fields_render_as_editable_others_stay_hidden(self) -> None:
+        self.profile.phone_number = "555-0100"
+        self.profile.save(update_fields=["phone_number"])
+        response = self._get_own()
+        self.assertContains(response, 'contact-info-item profile-phone-editable"')
+        for field, cls in _CONTACT_EDITABLE_CLASSES.items():
+            if field != "phone_number":
+                self.assertNotContains(response, f'contact-info-item {cls}"')
 
     def test_other_viewer_sees_plain_text_for_populated_field_not_editable(self) -> None:
         self.profile.phone_number = "555-0100"
@@ -104,11 +112,17 @@ class ProfileBirthDateEditableRenderingTests(TestCase):
     def _get_own(self):
         return self.client.get(reverse("profile.view"))
 
-    def test_additional_details_shown_for_owner_with_no_birth_date_yet(self) -> None:
+    def test_additional_details_hidden_for_owner_with_no_birth_date_and_no_secondary_emails(self) -> None:
+        """Same reasoning as the Contact section - an owner adds a first
+        birthday via the Edit Profile page rather than an inline placeholder."""
         response = self._get_own()
-        self.assertContains(response, "Additional Details")
-        self.assertContains(response, "profile-birth-date-editable")
-        self.assertContains(response, "Add your birthday...")
+        self.assertNotContains(response, "Additional Details")
+        # data-raw-birth-date only ever appears on the real editable span,
+        # which is now only rendered once profile.birth_date has a value -
+        # unlike the bare class name, the wiring script's
+        # `wireMetaField({selector: '.profile-birth-date-editable', ...})`
+        # call never emits this attribute name as inert text.
+        self.assertNotContains(response, "data-raw-birth-date")
 
     def test_populated_birth_date_carries_the_raw_iso_value(self) -> None:
         self.profile.birth_date = "1990-06-15"
@@ -116,6 +130,18 @@ class ProfileBirthDateEditableRenderingTests(TestCase):
         response = self._get_own()
         self.assertContains(response, 'data-raw-birth-date="1990-06-15"')
         self.assertContains(response, "Birthday: June 15, 1990")
+
+    def test_additional_details_shown_for_secondary_email_alone_but_no_birth_date_row(self) -> None:
+        """The section has two independent triggers - a secondary email with
+        no birthday set yet must still show the section (for the email), just
+        without the birth-date editable row itself."""
+        from urbanlens.dashboard.models.profile.email import ProfileEmail
+
+        baker.make(ProfileEmail, profile=self.profile, email="alt@example.com")
+        response = self._get_own()
+        self.assertContains(response, "Additional Details")
+        self.assertContains(response, "alt@example.com")
+        self.assertNotContains(response, "data-raw-birth-date")
 
 
 class ProfileFieldUpdateContactAndBirthDateTests(TestCase):

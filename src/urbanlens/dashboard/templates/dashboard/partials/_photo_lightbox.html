@@ -4,8 +4,10 @@ viewer on the site (pin detail / location wiki / safety check-in galleries,
 Memories > Photos, the user profile page). Include once per page; open it via
 `window.galleryOpenLightboxItem(list, idx)`, where `list` is an array of
 normalized items:
-  {url, caption, author, copyright, sourceUrl, sourceName, takenAt, imageId,
-   canRelevance, relevant, mediaSource, mediaKey}
+  {url, thumbUrl, caption, author, copyright, sourceUrl, sourceName, takenAt,
+   imageId, canRelevance, relevant, mediaSource, mediaKey}
+`thumbUrl` is optional - a browser-safe fallback shown in place of `url` if
+the full-resolution file fails to load (e.g. a Wikimedia .tif result).
 
 Context:
   lightbox_id            - DOM id for the <dialog> (default "gallery-lightbox").
@@ -43,6 +45,9 @@ Context:
         <i class="material-symbols-outlined">chevron_left</i>
       </button>
       <img id="lightbox-img" src="" alt="" class="lightbox-img">
+      <span id="lightbox-fallback-note" class="lightbox-fallback-note" hidden>
+        <i class="material-symbols-outlined">image</i> Showing a smaller preview - the full-size file isn't viewable in this browser
+      </span>
       <button type="button" id="lightbox-next-btn" class="lightbox-nav lightbox-next" onclick="galleryLightboxNav(1)">
         <i class="material-symbols-outlined">chevron_right</i>
       </button>
@@ -122,7 +127,7 @@ Context:
   function _showLightbox() {
     var item = _lightboxList[_lightboxIdx];
     if (!item) return;
-    document.getElementById('lightbox-img').src = item.url;
+    _setLightboxImage(item);
     var caption = item.caption;
     if (!caption && item.imageId) {
       var el = document.getElementById('gallery-item-' + item.imageId);
@@ -139,6 +144,29 @@ Context:
     var nextBtn = document.getElementById('lightbox-next-btn');
     if (prevBtn) prevBtn.hidden = !multi;
     if (nextBtn) nextBtn.hidden = !multi;
+  }
+
+  // Prefer the full-resolution URL, but fall back to item.thumbUrl if it
+  // fails to load - most commonly a Wikimedia result whose full-size file is
+  // a .tif, which practically no browser renders in an <img> tag (Safari has
+  // some native TIF support, so this still tries the full-res version first
+  // rather than pre-emptively downgrading every item, in case it works) while
+  // the thumbnail is always a browser-safe .jpg. Always shows *something*
+  // instead of a broken-image icon, as long as either URL actually works.
+  function _setLightboxImage(item) {
+    var img = document.getElementById('lightbox-img');
+    var note = document.getElementById('lightbox-fallback-note');
+    img.classList.remove('lightbox-img--fallback');
+    if (note) note.hidden = true;
+    img.onerror = function () {
+      img.onerror = null;
+      if (item.thumbUrl && item.thumbUrl !== item.url) {
+        img.classList.add('lightbox-img--fallback');
+        img.src = item.thumbUrl;
+        if (note) note.hidden = false;
+      }
+    };
+    img.src = item.url;
   }
 
   // Load the viewer's custom-field strip for the current photo. The endpoint

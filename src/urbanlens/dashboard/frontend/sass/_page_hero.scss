@@ -183,7 +183,16 @@
         }
     }
 
+    // Docked to the hero's own left edge (mirrors &__adjust's top-right dock)
+    // rather than stacked above the title - it used to sit inline as the
+    // __inner flex column's first item, pushing the centered title/subtitle
+    // down by its own height on every hero that sets back_url.
     &__back {
+        position: absolute;
+        left: 1.25rem;
+        top: 50%;
+        transform: translateY(-50%);
+        z-index: 1;
         display: inline-flex;
         align-items: center;
         gap: .3rem;
@@ -192,7 +201,10 @@
         color: var(--ul-grey-6);
         text-decoration: none;
         transition: color .15s;
-        margin-bottom: .25rem;
+
+        @include up($breakpoint-sm) {
+            left: 1.5rem;
+        }
 
         .material-symbols-outlined {
             font-size: 1rem;

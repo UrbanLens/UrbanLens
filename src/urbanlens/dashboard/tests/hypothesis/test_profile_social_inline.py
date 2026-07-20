@@ -1,10 +1,10 @@
-"""Tests for the profile view page's embedded social-links add/remove UI.
+"""Tests for the profile view page's social-links display.
 
-The owner's Social section now embeds the same self-contained HTMX partial
-the Edit Profile page uses (its posts target the absolute ``profile.edit``
-URL and it re-renders itself in place), so links can be added/removed
-without leaving the profile page. Other viewers keep the read-only list,
-hidden entirely when empty.
+The Social section on profile/index.html renders the same read-only chip
+list for the owner and other viewers alike - hidden entirely when there are
+no links. Adding/removing links is the Edit Profile page's job (it embeds
+the CRUD partial these tests' sibling class, ProfileSocialInlineActionTests,
+posts to directly); the view page never did and does not now.
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ def _strip_scripts(html: str) -> str:
 
 
 class ProfileSocialInlineRenderingTests(TestCase):
-    """Owner sees the CRUD partial; other viewers see read-only or nothing."""
+    """Owner and other viewers see the same read-only chip list."""
 
     def setUp(self) -> None:
         self.user = baker.make(User)
@@ -38,17 +38,20 @@ class ProfileSocialInlineRenderingTests(TestCase):
     def _get_own(self):
         return self.client.get(reverse("profile.view"))
 
-    def test_owner_with_no_links_still_sees_the_section_with_an_add_form(self) -> None:
+    def test_owner_with_no_links_sees_no_social_section(self) -> None:
+        """Same "hide entirely" behavior as other viewers - adding a first
+        link is the Edit Profile page's job, not this page's."""
         content = _strip_scripts(self._get_own().content.decode())
-        self.assertIn("social-links-content", content)
-        self.assertIn("edit-add-link-form", content)
-        self.assertIn('name="link_input"', content)
+        self.assertNotIn(">Social<", content)
+        self.assertNotIn("edit-add-link-form", content)
 
-    def test_owner_sees_existing_links_with_remove_buttons(self) -> None:
+    def test_owner_sees_existing_links_as_chips_not_the_crud_partial(self) -> None:
         SocialLink.objects.create(profile=self.profile, platform="instagram", handle="urbex_jane")
         content = _strip_scripts(self._get_own().content.decode())
         self.assertIn("urbex_jane", content)
-        self.assertIn('value="remove_link"', content)
+        self.assertIn("social-link", content)
+        self.assertNotIn("edit-add-link-form", content)
+        self.assertNotIn('value="remove_link"', content)
 
     def test_other_viewer_sees_read_only_links_without_the_add_form(self) -> None:
         SocialLink.objects.create(profile=self.profile, platform="instagram", handle="urbex_jane")

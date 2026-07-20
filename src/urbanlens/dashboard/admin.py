@@ -5,7 +5,6 @@ from django.urls import reverse
 from urbanlens.dashboard.models.api_call_log import ApiCallLog
 from urbanlens.dashboard.models.api_rate_limit import ApiRateLimit
 from urbanlens.dashboard.models.pin import Pin
-from urbanlens.dashboard.models.property_jurisdiction import PropertyJurisdiction
 from urbanlens.dashboard.models.site_settings import SiteSettings
 from urbanlens.dashboard.models.wiki import Wiki
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
@@ -117,32 +116,6 @@ class SiteSettingsAdmin(admin.ModelAdmin):
         return HttpResponseRedirect(
             reverse("admin:dashboard_sitesettings_change", args=[obj.pk]),
         )
-
-
-@admin.register(PropertyJurisdiction)
-class PropertyJurisdictionAdmin(admin.ModelAdmin):
-    """Admin for PropertyJurisdiction - the county property-record retrieval registry.
-
-    This table is meant to be grown by hand (or via the
-    ``discover_property_jurisdiction`` management command) over time - see
-    the model's own docstring - so editable list columns matter here more
-    than on most admin pages.
-    """
-
-    list_display = ["county_name", "state", "fips", "adapter_type", "requires_captcha", "last_verified"]
-    list_editable = ["adapter_type", "requires_captcha"]
-    list_filter = ["adapter_type", "requires_captcha", "state"]
-    search_fields = ["fips", "county_name", "state", "gis_rest_url"]
-    ordering = ["state", "county_name"]
-    readonly_fields = ["created", "updated"]
-    fieldsets = [
-        (None, {"fields": ["fips", "county_name", "state", "adapter_type", "last_verified", "notes"]}),
-        ("Tier 1 - ArcGIS REST / Socrata", {"fields": ["gis_rest_url", "gis_id_field", "gis_geo_field", "field_map"]}),
-        ("Reference links", {"fields": ["assessor_url", "treasurer_url", "recorder_url"]}),
-        ("Tier 2 / Tier 3 (not yet implemented)", {"fields": ["vendor", "scrape_recipe"], "classes": ["collapse"]}),
-        ("Tier 4 - manual only", {"fields": ["requires_captcha", "manual_instructions"]}),
-        ("Discovery", {"fields": ["discovered_by"], "classes": ["collapse"]}),
-    ]
 
 
 @admin.register(Pin)
