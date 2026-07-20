@@ -130,6 +130,50 @@ def extract_gps_coords(image_file: IO[bytes]) -> tuple[float, float] | None:
     return lat, lng
 
 
+def extract_gps_direction(image_file: IO[bytes]) -> float | None:
+    """Return the compass bearing the camera was pointing, or None if absent.
+
+    Prefers ``GPSImgDirection`` (the direction the camera itself was facing -
+    what a "same place, same angle over time" comparison actually needs);
+    falls back to ``GPSDestBearing`` (direction *to* a destination point) only
+    when a device wrote that instead, which happens on some cameras. Neither
+    tag's *Ref* companion (``"T"`` true north vs ``"M"`` magnetic north) is
+    preserved as a separate field - like ``GPSLatitudeRef``/``GPSLongitudeRef``
+    above, it's a single already-decided reference frame per photo, not a
+    per-record ambiguity worth threading through the rest of the app for.
+
+    Args:
+        image_file: The uploaded/stored image file to read EXIF from.
+
+    Returns:
+        A bearing in degrees, normalized to ``[0, 360)``, or ``None`` if the
+        image has no GPS IFD or neither direction tag.
+    """
+    try:
+        gps_ifd = _get_gps_ifd(image_file)
+    except Exception as exc:
+        logger.debug("EXIF GPS direction extraction failed: %s", exc)
+        return None
+    finally:
+        with contextlib.suppress(Exception):
+            image_file.seek(0)
+
+    if not gps_ifd:
+        return None
+    gps_data = {GPSTAGS.get(k, k): v for k, v in gps_ifd.items()}
+    raw = gps_data.get("GPSImgDirection", gps_data.get("GPSDestBearing"))
+    if raw is None:
+        return None
+    try:
+        direction = float(raw) % 360.0
+    except (TypeError, ValueError, ZeroDivisionError):
+        return None
+    if not math.isfinite(direction):
+        # Same zero-denominator-rational failure mode as extract_gps_coords.
+        return None
+    return direction
+
+
 def extract_taken_at(image_file: IO[bytes]) -> datetime | None:
     """Return the EXIF DateTimeOriginal capture time, or None if absent/unparseable.
 

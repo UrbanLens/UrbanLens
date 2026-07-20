@@ -148,6 +148,14 @@ class Image(abstract.FrontendDashboardModel):
     # photo belongs to.
     latitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     longitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    # Compass bearing (0-360, true or magnetic north per the device's own
+    # EXIF GPSImgDirectionRef - not itself preserved, see
+    # services.images.extract_gps_direction) the camera was facing when this
+    # photo was taken. Standardized field for a future "same place, same
+    # angle, over time" comparison UI - not read or displayed anywhere yet.
+    # Same GPS-IFD-sourced privacy opt-out as latitude/longitude: never
+    # extracted for a profile with visit-history tracking off.
+    direction = DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
     # SHA-256 hex digest of the uploaded file, used to reject duplicate uploads.
     # Nullable because rows predating this field are backfilled lazily (in
     # process_image_upload) - duplicate checks simply skip unhashed rows.

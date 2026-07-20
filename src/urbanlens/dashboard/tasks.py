@@ -492,6 +492,8 @@ def _process_photo_upload(image: Image, image_id: int, strip_location: bool) -> 
     Returns None on unrecoverable read failure (the caller treats that as a
     failed task run).
     """
+    from decimal import Decimal
+
     from urbanlens.dashboard.services.images import (
         compute_checksum,
         downscale_stored_image,
@@ -500,6 +502,7 @@ def _process_photo_upload(image: Image, image_id: int, strip_location: bool) -> 
         extract_copyright_notice,
         extract_exif_data,
         extract_gps_coords,
+        extract_gps_direction,
         extract_source_url,
         extract_taken_at,
         is_camera_generated_filename,
@@ -509,6 +512,9 @@ def _process_photo_upload(image: Image, image_id: int, strip_location: bool) -> 
     try:
         with image.image.open("rb") as image_file:
             coords = None if strip_location else extract_gps_coords(image_file)
+            # Same GPS-IFD-derived, same privacy opt-out as coords above - the
+            # compass bearing is only ever meaningful alongside a location.
+            direction = None if strip_location else extract_gps_direction(image_file)
             taken_at = extract_taken_at(image_file)
             checksum = compute_checksum(image_file) if not image.checksum else None
             exif_data = extract_exif_data(image_file) if image.exif_data is None else None
@@ -524,6 +530,9 @@ def _process_photo_upload(image: Image, image_id: int, strip_location: bool) -> 
         exif_data.pop("GPSInfo", None)
 
     update_fields: dict[str, object] = {}
+    if direction is not None:
+        image.direction = Decimal(str(round(direction, 2)))
+        update_fields["direction"] = image.direction
     if taken_at:
         image.taken_at = taken_at
         update_fields["taken_at"] = taken_at

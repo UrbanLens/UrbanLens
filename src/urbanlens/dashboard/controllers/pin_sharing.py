@@ -99,6 +99,7 @@ def _create_pin_from_share(share: PinShare, parent_pin: Pin | None = None) -> Pi
             copyright=image.copyright,
             latitude=image.latitude,
             longitude=image.longitude,
+            direction=image.direction,
             checksum=image.checksum,
             taken_at=image.taken_at,
             file_size=image.file_size,
