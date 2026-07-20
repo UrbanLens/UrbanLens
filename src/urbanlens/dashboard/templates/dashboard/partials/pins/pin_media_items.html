@@ -18,6 +18,7 @@
      data-media-page-url="{{ item.page_url|default:item.url }}"
      data-media-caption="{{ item.caption }}"
      data-media-relevant="{% if entry.is_relevant == True %}true{% elif entry.is_relevant == False %}false{% else %}{% endif %}"
+     {% if source_key != "photos" %}draggable="true" ondragstart="window.mediaItemDragStart(event, this)"{% endif %}
      title="{{ item.caption }}">
     {% if source_key != "photos" %}
     <button type="button" class="media-item-select-check" title="Select photo" onclick="window.mediaToggleSelect(event, this)" hidden>

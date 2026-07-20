@@ -17,8 +17,7 @@ import json
 
 from django.contrib.auth.models import User
 from django.urls import reverse
-from hypothesis import given, settings
-from hypothesis import strategies as st
+from hypothesis import given, settings, strategies as st
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
@@ -67,7 +66,7 @@ class ParseRepositionPayloadTests(SimpleTestCase):
             parse_reposition_payload(_body("0", "-180.5"))
 
     def test_boundary_coordinates_are_accepted(self) -> None:
-        self.assertEqual(parse_reposition_payload(_body("90", "-180")), (Decimal("90"), Decimal("-180")))
+        self.assertEqual(parse_reposition_payload(_body("90", "-180")), (Decimal(90), Decimal(-180)))
 
     def test_missing_keys_are_rejected(self) -> None:
         with self.assertRaises(ValueError):

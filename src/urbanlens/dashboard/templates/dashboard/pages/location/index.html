@@ -953,6 +953,7 @@
      data-boundary-url="{{ boundary_url }}"
      data-photo-gallery-json-url="{{ photo_gallery_json_url }}{% if include_children %}?children=1{% endif %}"
      data-nearby-pins-json-url="{{ nearby_pins_json_url }}"
+     data-media-relevance-url="{% url 'pin.media.relevance' pin.slug %}"
      data-markup-fill-opacity="{{ markup_fill_opacity|default:87 }}"
      data-markup-border-opacity="{{ markup_border_opacity|default:100 }}"
      data-show-onboarding-tips="{{ request.user.profile.show_onboarding_tips|yesno:'1,' }}"></div>
@@ -1768,6 +1769,40 @@
                 var thumbImg = itemEl.querySelector('.media-item-thumb');
                 if (thumbImg && thumbImg.tagName === 'IMG') thumbImg.src = data.image_url;
             }).catch(function () { if (window.toastr) toastr.error('Failed to save.'); });
+        };
+
+        // Dragging a Media tile onto the map (map-annotations.ts's "drop"
+        // handler for the "text/media-item" MIME type) sets its coordinates
+        // via the same media_relevance endpoint used for relevance marking -
+        // an unmaterialized item is downloaded and saved locally in the same
+        // request, exactly as if the user had dropped a real gallery photo.
+        // The element itself is stashed on window (HTML5 drag-and-drop only
+        // carries string data through dataTransfer, not element references)
+        // so mediaApplyMaterializedDrop below can update this exact tile once
+        // the drop handler's fetch resolves.
+        window.mediaItemDragStart = function (e, itemEl) {
+            e.dataTransfer.effectAllowed = 'copy';
+            window._mediaDragItemEl = itemEl;
+            e.dataTransfer.setData('text/media-item', JSON.stringify({
+                source: itemEl.dataset.mediaSource,
+                key: itemEl.dataset.mediaKey,
+                url: itemEl.dataset.mediaUrl,
+                pageUrl: itemEl.dataset.mediaPageUrl || '',
+                caption: itemEl.dataset.mediaCaption || '',
+            }));
+        };
+
+        window.mediaApplyMaterializedDrop = function (itemEl, data) {
+            if (data.materialize_error && window.toastr) toastr.warning("Coordinates saved, but couldn't save a local copy: " + data.materialize_error);
+            if (!itemEl || !data.image_url) return;
+            applyRelevanceState(itemEl, true);
+            itemEl.dataset.mediaUrl = data.image_url;
+            itemEl.dataset.mediaThumb = data.image_url;
+            if (data.image_id) itemEl.dataset.imageId = data.image_id;
+            var thumbImg = itemEl.querySelector('.media-item-thumb');
+            if (thumbImg && thumbImg.tagName === 'IMG') thumbImg.src = data.image_url;
+            rebuildMediaTabs();
+            applyMediaTabFilter(activeTab);
         };
 
         function applyRelevanceState(itemEl, value) {

@@ -165,3 +165,43 @@ class MediaRelevanceMaterializesTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("materialize_error", response.json())
         self.assertTrue(MediaRelevance.objects.filter(profile=self.profile, location=self.location, is_relevant=True).exists())
+
+    def test_dropping_onto_the_map_materializes_and_sets_coordinates(self) -> None:
+        """The drag/drop-onto-map flow (map-annotations.ts's drop handler)
+        sends latitude/longitude alongside is_relevant=True, so the freshly
+        materialized Image never has a moment with no coordinates."""
+        with mock.patch("urbanlens.dashboard.services.media_materialize.requests.get", return_value=_ok_response()):
+            response = self._post({"source": "wikimedia", "url": "https://example.test/photo.jpg", "is_relevant": True, "latitude": "40.123456", "longitude": "-74.654321"})
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertAlmostEqual(data["latitude"], 40.123456)
+        self.assertAlmostEqual(data["longitude"], -74.654321)
+        image = Image.objects.get(pk=data["image_id"])
+        self.assertAlmostEqual(float(image.latitude), 40.123456)
+        self.assertAlmostEqual(float(image.longitude), -74.654321)
+
+    def test_invalid_coordinates_reject_before_materializing(self) -> None:
+        with mock.patch("urbanlens.dashboard.services.media_materialize.requests.get") as mocked:
+            response = self._post({"source": "wikimedia", "url": "https://example.test/photo.jpg", "is_relevant": True, "latitude": "not-a-number", "longitude": "-74.0"})
+        self.assertEqual(response.status_code, 400)
+        mocked.assert_not_called()
+        self.assertFalse(Image.objects.filter(pin=self.pin).exists())
+
+    def test_one_missing_coordinate_is_rejected(self) -> None:
+        with mock.patch("urbanlens.dashboard.services.media_materialize.requests.get") as mocked:
+            response = self._post({"source": "wikimedia", "url": "https://example.test/photo.jpg", "is_relevant": True, "latitude": "40.0"})
+        self.assertEqual(response.status_code, 400)
+        mocked.assert_not_called()
+
+    def test_marking_relevant_without_coordinates_leaves_them_unset(self) -> None:
+        """Existing (non-drag) relevance-marking path - no latitude/longitude
+        keys sent at all - must keep behaving exactly as before."""
+        with mock.patch("urbanlens.dashboard.services.media_materialize.requests.get", return_value=_ok_response()):
+            response = self._post({"source": "wikimedia", "url": "https://example.test/photo.jpg", "is_relevant": True})
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertNotIn("latitude", data)
+        self.assertNotIn("longitude", data)
+        image = Image.objects.get(pk=data["image_id"])
+        self.assertIsNone(image.latitude)
+        self.assertIsNone(image.longitude)

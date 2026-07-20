@@ -4308,6 +4308,19 @@ body.page-location-details .pin-detail-grid {
                 transform .2s cubic-bezier(.22, 1, .36, 1),
                 box-shadow .2s ease;
 
+            // Draggable onto the map to save + set coordinates (see
+            // mediaItemDragStart, map-annotations.ts). Excludes the "photos"
+            // preview tab's own-upload tiles, which aren't draggable - those
+            // are already Image rows, managed via the "Mine" tab's own
+            // drag-to-map (.photo-panel-item).
+            &[draggable="true"] {
+                cursor: grab;
+
+                &:active {
+                    cursor: grabbing;
+                }
+            }
+
             &:hover,
             &:focus-visible {
                 transform: translateY(-2px);

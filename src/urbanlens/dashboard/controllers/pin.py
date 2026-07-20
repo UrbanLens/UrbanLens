@@ -527,8 +527,14 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         download attempt failed) but is reported back so the frontend can
         toast the failure instead of silently leaving the external URL as
         the only copy.
+
+        An optional ``latitude``/``longitude`` pair (sent when the item was
+        dragged onto the map rather than clicked "relevant") is applied to
+        the materialized ``Image`` in the same request, so a freshly
+        materialized photo never has a moment with no coordinates.
         """
         from urbanlens.dashboard.models.images.relevance import MediaRelevance, media_item_key
+        from urbanlens.dashboard.services.images import coerce_coordinates
         from urbanlens.dashboard.services.media_materialize import MaterializeError, materialize_media_item
 
         try:
@@ -547,6 +553,13 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             caption = str(data.get("caption") or "")
         except (KeyError, ValueError, TypeError, ParseError):
             return JsonResponse({"error": "Invalid request data."}, status=400)
+
+        coordinates = None
+        if "latitude" in data or "longitude" in data:
+            try:
+                coordinates = coerce_coordinates(data)
+            except ValueError as exc:
+                return JsonResponse({"error": str(exc)}, status=400)
 
         item_key = data.get("item_key") or media_item_key(url)
         profile, _ = Profile.objects.get_or_create(user=request.user)
@@ -573,6 +586,11 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             else:
                 response["image_id"] = image.pk
                 response["image_url"] = image.image.url
+                if coordinates is not None:
+                    image.latitude, image.longitude = coordinates
+                    image.save(update_fields=["latitude", "longitude"])
+                    response["latitude"] = float(image.latitude)
+                    response["longitude"] = float(image.longitude)
         return JsonResponse(response)
 
     @action(detail=True, methods=["post"])

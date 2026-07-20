@@ -87,6 +87,7 @@ function readConfig(el: HTMLElement) {
         boundaryUrl: d.boundaryUrl || "",
         photoGalleryJsonUrl: d.photoGalleryJsonUrl || "",
         nearbyPinsJsonUrl: d.nearbyPinsJsonUrl || "",
+        mediaRelevanceUrl: d.mediaRelevanceUrl || "",
         markupFillOpacity: d.markupFillOpacity ? Number.parseInt(d.markupFillOpacity, 10) : 87,
         markupBorderOpacity: d.markupBorderOpacity ? Number.parseInt(d.markupBorderOpacity, 10) : 100,
         showOnboardingTips: d.showOnboardingTips === "1",
@@ -1204,6 +1205,61 @@ function init(): void {
         refreshPanelHeader();
     });
 
+    // Drop a Media-section item (external provider result, not yet a real
+    // Image row - see PinController.media_relevance) onto the map: this
+    // materializes it locally (downloads + saves, same as clicking
+    // "relevant") and sets its coordinates in one request, then adds it to
+    // the photo layer exactly like a real gallery photo. Only wired when the
+    // page actually has a Media section (cfg.mediaRelevanceUrl - the wiki
+    // page, which shares this module, has none).
+    mapEl.addEventListener("dragover", (e) => {
+        if (!cfg.mediaRelevanceUrl || !e.dataTransfer?.types.includes("text/media-item")) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "copy";
+        mapEl.classList.add("photo-drop-target");
+    });
+    mapEl.addEventListener("dragleave", () => mapEl.classList.remove("photo-drop-target"));
+    mapEl.addEventListener("drop", (e) => {
+        const raw = e.dataTransfer?.getData("text/media-item");
+        if (!cfg.mediaRelevanceUrl || !raw) return;
+        e.preventDefault();
+        mapEl.classList.remove("photo-drop-target");
+        const itemEl = window._mediaDragItemEl;
+        window._mediaDragItemEl = undefined;
+        let item: { source: string; key: string; url: string; pageUrl: string; caption: string };
+        try {
+            item = JSON.parse(raw);
+        } catch {
+            return;
+        }
+        const rect = mapEl.getBoundingClientRect();
+        const latlng = map.containerPointToLatLng([e.clientX - rect.left, e.clientY - rect.top]);
+        fetch(cfg.mediaRelevanceUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
+            body: JSON.stringify({
+                source: item.source,
+                item_key: item.key,
+                url: item.url,
+                is_relevant: true,
+                page_url: item.pageUrl,
+                caption: item.caption,
+                latitude: latlng.lat,
+                longitude: latlng.lng,
+            }),
+        })
+            .then((r) => r.json())
+            .then((data) => {
+                window.mediaApplyMaterializedDrop?.(itemEl, data);
+                if (data.image_id && data.latitude != null && data.longitude != null) {
+                    window._galleryAddMarker({ id: data.image_id, url: data.image_url, latitude: data.latitude, longitude: data.longitude });
+                } else if (data.materialize_error) {
+                    toast.warning(`Couldn't save a local copy: ${data.materialize_error}`);
+                }
+            })
+            .catch(() => toast.error("Failed to save photo location."));
+    });
+
     // Tab switching.
     document.querySelectorAll<HTMLElement>(".map-panel-tab").forEach((btn) => {
         btn.addEventListener("click", () => {
@@ -2026,5 +2082,12 @@ declare global {
         _galleryAddMarker: (img: GalleryImage) => void;
         _galleryRemoveMarker: (imgId: number) => void;
         _galleryHighlightMarker: (imgId: number, on: boolean) => void;
+
+        // Media-section drag-onto-map integration (pages/location/index.html).
+        // The dragged tile's own element, stashed by mediaItemDragStart so the
+        // drop handler above can update its visual state - HTML5 drag-and-drop
+        // only carries string data through dataTransfer, not element refs.
+        _mediaDragItemEl?: HTMLElement;
+        mediaApplyMaterializedDrop?: (itemEl: HTMLElement | undefined, data: Record<string, unknown>) => void;
     }
 }
