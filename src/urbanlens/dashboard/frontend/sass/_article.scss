@@ -324,7 +324,7 @@ $article-serif: Georgia, 'Times New Roman', Times, serif;
 // showing (data-dirty), so the two floating bars never overlap each other.
 .article-floating-toolbar {
     position: fixed;
-    right: 1.25rem;
+    right: 10.25rem;
     bottom: 4rem;
     z-index: 400;
     display: flex;
