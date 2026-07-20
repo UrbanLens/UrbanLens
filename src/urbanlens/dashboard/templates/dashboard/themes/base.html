@@ -1894,8 +1894,20 @@
             if (!fab || !group) return;
 
             var scope = _currentScope();
+            // A pin/wiki detail page renders every subpage tab's markup at once
+            // (data-tab-panel, plus nested data-article-subtab wrappers), only
+            // toggling `hidden` to switch which one is visible - so a section
+            // collapsed on one tab (e.g. Overview) would otherwise still show up
+            // here while viewing an unrelated tab (e.g. Article) that has nothing
+            // to do with it. `.closest('[hidden]')` excludes anything nested
+            // inside a currently-hidden tab/subtab wrapper, regardless of how
+            // many levels deep - only sections on the tab actually being viewed
+            // are offered for restore.
             var hiddenSections = scope
-                ? document.querySelectorAll('[data-collapse-scope="' + scope + '"][data-collapse-section].is-collapsed')
+                ? Array.prototype.filter.call(
+                    document.querySelectorAll('[data-collapse-scope="' + scope + '"][data-collapse-section].is-collapsed'),
+                    function (section) { return !section.closest('[hidden]'); },
+                  )
                 : [];
             var restoreMenu = group.querySelector('.collapse-restore-menu');
             var countEl = fab.querySelector('.collapse-restore-count');
@@ -1940,6 +1952,12 @@
             });
         }
 
+        // Exposed so page-specific tab switches that don't go through
+        // page-tabs.js's `ul:tabShown` event (e.g. the Article tab's own
+        // internal Article/Wikipedia sub-tab toggle) can still refresh which
+        // collapsed sections are currently visible/restorable.
+        window.ulRefreshCollapseRestore = _updateRestoreControls;
+
         function _scanAll() {
             document.querySelectorAll('[data-collapse-scope][data-collapse-section]').forEach(_ensureToggle);
             _updateRestoreControls();
@@ -1977,6 +1995,12 @@
 
         document.addEventListener('DOMContentLoaded', _scanAll);
         document.addEventListener('htmx:afterSettle', _scanAll);
+        // page-tabs.js dispatches this on every tab switch (pin/wiki detail
+        // pages render every tab's markup at once, just toggling `hidden`) -
+        // refresh the restore list immediately rather than waiting for the
+        // next htmx settle, so switching away from a tab with collapsed
+        // sections hides them from the FAB right away.
+        document.body.addEventListener('ul:tabShown', _updateRestoreControls);
     }());
     </script>
 

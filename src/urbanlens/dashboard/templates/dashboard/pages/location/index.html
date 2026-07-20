@@ -657,6 +657,7 @@
         document.querySelectorAll('[data-article-subtab]').forEach(function (panel) {
             panel.hidden = panel.dataset.articleSubtab !== key;
         });
+        if (window.ulRefreshCollapseRestore) window.ulRefreshCollapseRestore();
     };
 </script>
 
