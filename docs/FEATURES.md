@@ -65,6 +65,11 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
 - **Wiki** — opt-in, community-editable page for a Location: description, aliases, community
   danger/vulnerability/rating stat voting (`WikiStatVote`, fuzzed community counts for privacy),
   edit history with revert (`WikiEdit`)
+- **Wiki article auto-seeding** — a wiki with no article yet is automatically started from a
+  confidently-matched Wikipedia article the first time one is cached for its location (converted
+  to Markdown, with a required CC BY-SA attribution footer linking back to the source) - never
+  overwrites an existing article, seeded or human-written (`services.wiki_seed`,
+  `models.cache.signals`)
 - Place-name resolution across multiple sources (Google Places, OSM/Nominatim, NPS, Photon, EPA ECHO, **Azure Maps**, Wikipedia, OpenStreetMap) with agreement-based priority ordering and a **user-configurable drag-to-reorder name source priority list** in Settings → Privacy
 - Boundary drawing — property/building polygons per pin, generated automatically from a typed
   provider chain (`services.locations.boundaries.BoundaryProviderChain`) trying, in order:

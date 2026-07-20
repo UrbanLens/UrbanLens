@@ -217,7 +217,7 @@ def get_article(*, pin: Pin | None = None, wiki: Wiki | None = None) -> Article 
 
 def save_article(
     *,
-    editor: Profile,
+    editor: Profile | None,
     content: str,
     edit_summary: str = "",
     pin: Pin | None = None,
@@ -231,7 +231,11 @@ def save_article(
     complete new source. Saving identical content is a no-op (no revision).
 
     Args:
-        editor: The profile making the edit.
+        editor: The profile making the edit, or None for a system-initiated
+            save (e.g. seeding a new wiki article from a matched Wikipedia
+            article) - both ``Article.last_edited_by`` and
+            ``ArticleRevision.editor`` are already nullable (SET_NULL) for
+            exactly this case.
         content: The complete new Markdown source.
         edit_summary: Optional one-line description of the change.
         pin: Host pin (mutually exclusive with ``wiki``).

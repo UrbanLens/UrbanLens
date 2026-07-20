@@ -100,8 +100,18 @@ class WikiCreationService:
 
             safely_enqueue_task(enrich_wiki_location, wiki.pk)
 
+        def _seed_article() -> None:
+            # Covers the case where a Wikipedia article was already matched
+            # and cached for this location *before* the wiki existed to seed
+            # (see models.cache.signals for the other trigger - a Wikipedia
+            # match caching *after* the wiki already exists).
+            from urbanlens.dashboard.services.wiki_seed import seed_wiki_article_from_wikipedia
+
+            seed_wiki_article_from_wikipedia(location)
+
         if created:
             transaction.on_commit(_enqueue)
+            transaction.on_commit(_seed_article)
         return wiki, created
 
     def _seed_aliases(self, pin: Pin, wiki: Wiki, alias_ids: set[int]) -> None:

@@ -4,8 +4,29 @@
 
 $article-serif: Georgia, 'Times New Roman', Times, serif;
 
+// Deliberately not a boxed dashboard container - reads as a plain page of
+// content (like about/index.html), not an editing tool bolted onto a card.
+// .card's own background/border/box-shadow (_layout.scss) are stripped here
+// rather than overridden piecemeal at each declaration.
+.article-card {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+}
+
 .article-card > .card__body {
-    padding: 1.25rem 1.5rem 1.75rem;
+    padding: .5rem 0 1rem;
+
+    @include up($breakpoint-sm) {
+        padding: .5rem 1rem 1rem;
+    }
+
+    // Room for the fixed-bottom save bar once it's actually showing (see
+    // .article-editor-footer below) so it never overlaps the article's own
+    // last line/the Cancel button never sits over real content.
+    &:has([data-article-editor][data-dirty="1"]) {
+        padding-bottom: 6rem;
+    }
 }
 
 // -- Read layout: contents box + body ---------------------------------------
@@ -232,18 +253,9 @@ $article-serif: Georgia, 'Times New Roman', Times, serif;
 
 // -- Editor -----------------------------------------------------------------
 
-.article-editor-notice {
-    display: flex;
-    align-items: center;
-    gap: .5rem;
-    margin: 0 0 .75rem;
-    padding: .5rem .85rem;
-    border-radius: $radius-sm;
-    background: var(--ul-color-accent-bg);
-    color: var(--ul-color-accent-fg);
-    font-size: .85rem;
-
-    .material-symbols-outlined { font-size: 1.1rem; }
+.article-editor-form {
+    // Positioning context for .article-mode-toggle--floating below.
+    position: relative;
 }
 
 .article-editor-toolbar {
@@ -258,6 +270,35 @@ $article-serif: Georgia, 'Times New Roman', Times, serif;
     background: var(--ul-grey-0);
 }
 
+// The whole toolbar (format buttons + preview toggle) is Source-mode-only
+// content - the WYSIWYG canvas gets its formatting from the bubble/slash
+// menus instead (see article-wysiwyg.ts). Previously only its *children*
+// were hidden here, leaving an empty bordered strip behind that read like a
+// dashboard card header sitting above the content - hide the whole bar.
+[data-editor-mode="wysiwyg"] .article-editor-toolbar {
+    display: none;
+}
+
+// Always-visible Source/Visual switch, deliberately outside the toolbar
+// above so it doesn't disappear along with it in the default WYSIWYG view -
+// a small, low-emphasis control docked to the top-right of the content
+// rather than a card-header-style button row.
+.article-mode-toggle--floating {
+    position: absolute;
+    top: 0;
+    right: 0;
+    z-index: 1;
+    color: var(--ul-grey-5);
+
+    &:hover {
+        color: var(--ul-grey-8);
+    }
+
+    &.is-active {
+        color: var(--ul-color-accent-fg);
+    }
+}
+
 .article-toolbar-format-group {
     display: flex;
     align-items: center;
@@ -266,15 +307,11 @@ $article-serif: Georgia, 'Times New Roman', Times, serif;
 }
 
 // WYSIWYG mode gets its formatting from the selection bubble menu and "/"
-// block menu instead (see article-wysiwyg.ts) - the fixed toolbar's format
-// buttons, the live-preview toggle (redundant once the canvas already shows
-// the rendered result), and the Markdown cheat sheet are Source-mode-only.
-[data-editor-mode="wysiwyg"] {
-    .article-toolbar-format-group,
-    .article-preview-toggle,
-    .article-editor-help {
-        display: none;
-    }
+// block menu instead (see article-wysiwyg.ts) - the Markdown cheat sheet is
+// Source-mode-only (the toolbar itself - format buttons and live-preview
+// toggle - is already hidden as a whole above).
+[data-editor-mode="wysiwyg"] .article-editor-help {
+    display: none;
 }
 
 .article-tool {
@@ -450,13 +487,28 @@ $article-serif: Georgia, 'Times New Roman', Times, serif;
     }
 }
 
+// A collapsible explainer (native <details>, no JS needed) rather than a
+// permanent line of chrome - only shown in WYSIWYG mode, see rule below.
 .article-editor-wysiwyg-hint {
-    display: none; // only shown in WYSIWYG mode, see rule below
-    align-items: center;
-    gap: .4rem;
+    display: none;
     margin-top: .6rem;
     color: var(--ul-grey-5);
     font-size: .82rem;
+
+    summary {
+        display: inline-flex;
+        align-items: center;
+        gap: .4rem;
+        cursor: pointer;
+        user-select: none;
+        list-style: none; // hide the default disclosure triangle - the icon carries that role
+
+        &::-webkit-details-marker { display: none; }
+    }
+
+    p {
+        margin: .35rem 0 0 1.45rem; // aligns under the summary text, past its icon
+    }
 
     code {
         padding: .05em .35em;
@@ -469,7 +521,7 @@ $article-serif: Georgia, 'Times New Roman', Times, serif;
 }
 
 [data-editor-mode="wysiwyg"] .article-editor-wysiwyg-hint {
-    display: flex;
+    display: block;
 }
 
 // -- Bubble menu (format-on-selection) and slash command menu (block insert)
@@ -583,12 +635,45 @@ $article-serif: Georgia, 'Times New Roman', Times, serif;
     }
 }
 
+// Hidden until the user has actually changed something (root's
+// [data-dirty="1"], set by article-editor.js's textarea `input` listener -
+// already reset for free on every save/cancel/restore, since those all swap
+// in a fresh #article-panel with no data-dirty attribute at all) - then
+// appears as a save bar fixed to the bottom of the viewport instead of
+// permanently occupying in-page space below an article that's just being
+// read. Same floating-surface treatment as .ul-bulk-bar (_gallery.scss).
 .article-editor-footer {
+    display: none;
+}
+
+[data-article-editor][data-dirty="1"] .article-editor-footer {
     display: flex;
     align-items: center;
     gap: .75rem;
     flex-wrap: wrap;
-    margin-top: .85rem;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 500;
+    max-width: 70rem;
+    margin: 0 auto;
+    padding: .75rem 1.25rem;
+    padding-bottom: calc(.75rem + env(safe-area-inset-bottom, 0px));
+    background: color-mix(in srgb, var(--ul-surface-raised) 92%, transparent);
+    backdrop-filter: blur(20px) saturate(1.15);
+    -webkit-backdrop-filter: blur(20px) saturate(1.15);
+    border: 1px solid var(--ul-surface-raised-border);
+    border-radius: $radius-md $radius-md 0 0;
+    box-shadow:
+        0 -10px 40px rgba(15, 23, 42, .14),
+        0 -2px 8px rgba(15, 23, 42, .08);
+    animation: article-footer-slide-up .25s cubic-bezier(.34, 1.56, .64, 1);
+}
+
+@keyframes article-footer-slide-up {
+    from { transform: translateY(100%); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
 }
 
 .article-summary-input {

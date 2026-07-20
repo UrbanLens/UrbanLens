@@ -387,6 +387,49 @@ class OverpassGatewayTests(SimpleTestCase):
         self.assertEqual(result, [])
 
 
+class SelfIntersectingRingTests(SimpleTestCase):
+    """Regression coverage for a real reported bug: a self-intersecting OSM way
+
+    (GEOS logs "GEOS_NOTICE: Self-intersection at or near point ...") used to
+    crash `_polygon_from_element` -> `_polygon_from_ring` ->
+    `best_polygon_from_geometry` with `TypeError: Parameter must be a sequence
+    of LinearRings...`, from a `Polygon(geos_geometry)` call re-wrapping a
+    geometry that `.buffer(0)` had already turned into something other than a
+    plain Polygon (see BestPolygonFromGeometryTests above for the underlying
+    fix - this class instead drives the exact failing scenario end-to-end,
+    starting from a genuinely self-intersecting ring, the way real Overpass
+    data triggered it, rather than re-testing the already-fixed function in
+    isolation).
+    """
+
+    #: A classic "bowtie"/figure-8 ring - crosses itself at (5, 5), which is
+    #: exactly the shape GEOS flags as self-intersecting and that used to
+    #: crash boundary resolution for the affected pin.
+    _BOWTIE_RING = [(0.0, 0.0), (10.0, 10.0), (10.0, 0.0), (0.0, 10.0), (0.0, 0.0)]
+
+    def test_polygon_from_ring_never_raises_on_a_self_intersecting_ring(self) -> None:
+        from urbanlens.dashboard.services.apis.locations.boundaries.overpass import _polygon_from_ring
+
+        result = _polygon_from_ring(list(self._BOWTIE_RING))
+        # Either a valid Polygon or None (buffer(0) on a bowtie can legitimately
+        # collapse to two triangles touching at a point, or something GEOS
+        # doesn't consider a simple Polygon) - the only wrong outcome is raising.
+        if result is not None:
+            self.assertTrue(result.valid)
+
+    def test_polygon_from_element_never_raises_on_a_self_intersecting_way(self) -> None:
+        """Same scenario via the real Overpass element shape (a `way` with a
+        flat `geometry` list of {lat, lon} nodes), matching the exact call
+        chain in the original traceback: _polygon_from_element ->
+        _polygon_from_ring -> best_polygon_from_geometry."""
+        from urbanlens.dashboard.services.apis.locations.boundaries.overpass import _polygon_from_element
+
+        element = {"type": "way", "geometry": [{"lat": lat, "lon": lon} for lon, lat in self._BOWTIE_RING]}
+        result = _polygon_from_element(element)
+        if result is not None:
+            self.assertTrue(result.valid)
+
+
 class NominatimGatewayTests(SimpleTestCase):
     """Nominatim search and lookup normalize OSM place payloads."""
 

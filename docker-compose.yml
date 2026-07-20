@@ -341,6 +341,16 @@ services:
       # upload - see the image's /init entrypoint script, which turns any
       # CLAMD_CONF_<Directive> env var into that clamd.conf directive.
       CLAMD_CONF_StreamMaxLength: "1000M"
+      # clamd has no separate log-level control for its own periodic
+      # "SelfCheck: Database status OK." heartbeat - it isn't gated by
+      # LogVerbose (confirmed: it still logs with LogVerbose at its default
+      # of "no"), so the only lever available is how often it runs. Left at
+      # its compiled-in default (600s = every 10 minutes) this floods
+      # `docker compose logs` with a benign, expected message every few
+      # minutes; once a day is still a reasonable cadence for what this
+      # check actually verifies (the virus database directory hasn't gone
+      # stale/corrupted underneath the running daemon).
+      CLAMD_CONF_SelfCheck: "86400"
     volumes:
       - clamav-db:/var/lib/clamav
     networks:

@@ -20,12 +20,13 @@
         {% csrf_token %}
         <input type="hidden" name="base_revision_id" value="{{ base_revision_id }}">
 
-        {% if not scope.is_private %}
-        <p class="article-editor-notice">
-            <i class="material-symbols-outlined">public</i>
-            This is a community article. Your changes are visible to everyone with access to this wiki, and every version is kept in the edit history.
-        </p>
-        {% endif %}
+        {# Always-visible, low-emphasis Source/Visual switch - deliberately #}
+        {# outside .article-editor-toolbar (Source-mode-only formatting #}
+        {# controls) so it doesn't disappear along with that toolbar in the #}
+        {# default WYSIWYG view; see [data-editor-mode] rules in _article.scss. #}
+        <button type="button" class="article-tool article-mode-toggle article-mode-toggle--floating" data-article-mode-toggle title="View/edit Markdown source">
+            <i class="material-symbols-outlined">code_blocks</i><span>Source</span>
+        </button>
 
         {% if not article or not article.content %}
         <div class="article-empty-hint-block">
@@ -46,11 +47,13 @@
         {% endif %}
 
         <div class="article-editor-toolbar" role="toolbar" aria-label="Formatting">
-            {# This whole group is only visible in Source mode - the WYSIWYG canvas #}
-            {# gets its formatting from the selection bubble menu and "/" block menu #}
-            {# instead (see article-wysiwyg.ts), so it doesn't read as a markdown #}
-            {# editor with a toolbar bolted on. See [data-editor-mode="wysiwyg"] in #}
-            {# _article.scss for the hide rule. #}
+            {# This whole toolbar is only visible in Source mode - the WYSIWYG #}
+            {# canvas gets its formatting from the selection bubble menu and "/" #}
+            {# block menu instead (see article-wysiwyg.ts), so it doesn't read as #}
+            {# a markdown editor with a toolbar bolted on. See #}
+            {# [data-editor-mode="wysiwyg"] in _article.scss for the hide rule - #}
+            {# the Source/Visual switch itself lives outside this toolbar (see #}
+            {# above) so it stays visible in both modes. #}
             <div class="article-toolbar-format-group">
                 <button type="button" class="article-tool" data-md-action="bold" title="Bold (Ctrl+B)"><i class="material-symbols-outlined">format_bold</i></button>
                 <button type="button" class="article-tool" data-md-action="italic" title="Italic (Ctrl+I)"><i class="material-symbols-outlined">format_italic</i></button>
@@ -73,9 +76,6 @@
             <span class="article-toolbar-spacer"></span>
             <button type="button" class="article-tool article-preview-toggle" data-article-preview-toggle title="Toggle live preview">
                 <i class="material-symbols-outlined">visibility</i><span>Preview</span>
-            </button>
-            <button type="button" class="article-tool article-mode-toggle" data-article-mode-toggle title="View/edit Markdown source">
-                <i class="material-symbols-outlined">code_blocks</i><span>Source</span>
             </button>
         </div>
 
@@ -125,11 +125,19 @@
             </div>
         </details>
 
-        <p class="article-editor-wysiwyg-hint" data-article-wysiwyg-hint>
-            <i class="material-symbols-outlined">tips_and_updates</i>
-            Select text to format it, or type <code>/</code> on a new line to insert a heading, list, table, image, and more.
-        </p>
+        <details class="article-editor-wysiwyg-hint" data-article-wysiwyg-hint open>
+            <summary>
+                <i class="material-symbols-outlined">tips_and_updates</i>
+                <span>Formatting tips</span>
+            </summary>
+            <p>Select text to format it, or type <code>/</code> on a new line to insert a heading, list, table, image, and more.</p>
+        </details>
 
+        {# Hidden until the user actually edits something (root's data-dirty, #}
+        {# set by article-editor.js's input listener - see the #}
+        {# [data-dirty="1"] rule in _article.scss), then appears as a fixed #}
+        {# bar at the bottom of the viewport rather than taking up in-page #}
+        {# space the rest of the time. #}
         <div class="article-editor-footer">
             <input type="text" name="edit_summary" class="article-summary-input" maxlength="255"
                    placeholder="Briefly describe your changes (optional){% if not scope.is_private %} - shown in the edit history{% endif %}">
