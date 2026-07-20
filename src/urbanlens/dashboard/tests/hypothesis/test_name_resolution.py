@@ -361,34 +361,23 @@ class UpdateLocationNameResolutionTests(TestCase):
         loc.refresh_from_db()
         self.assertEqual(loc.official_name, "Park Name")
 
-    def test_profile_override_beats_site_default_priority(self) -> None:
-        """A profile's own name_source_priority wins over the site-wide default."""
-        settings = SiteSettings.get_current()
-        settings.default_name_source_priority = "nps,wikipedia"
-        settings.save(update_fields=["default_name_source_priority", "updated"])
-        profile = baker.make("dashboard.Profile", name_source_priority="wikipedia,nps")
+    def test_google_places_is_dropped_when_another_source_has_a_candidate(self) -> None:
+        """Google Places is demoted to fallback-only: any other source's candidate wins outright."""
         loc, _wiki = self._location_with_wiki(wiki_name="Curated Mill", lat="41.230000", lng="-73.230000")
         with _patch_providers(
-            _StaticProvider("wikipedia", ["Wiki Name"]),
+            _StaticProvider("google_places", ["Noisy Google Name"]),
             _StaticProvider("nps", ["Park Name"]),
         ):
-            update_location_name_from_external_sources(loc, profile=profile)
-        loc.refresh_from_db()
-        self.assertEqual(loc.official_name, "Wiki Name")
-
-    def test_blank_profile_override_falls_back_to_site_default(self) -> None:
-        settings = SiteSettings.get_current()
-        settings.default_name_source_priority = "nps,wikipedia"
-        settings.save(update_fields=["default_name_source_priority", "updated"])
-        profile = baker.make("dashboard.Profile", name_source_priority="")
-        loc, _wiki = self._location_with_wiki(wiki_name="Curated Mill", lat="41.240000", lng="-73.240000")
-        with _patch_providers(
-            _StaticProvider("wikipedia", ["Wiki Name"]),
-            _StaticProvider("nps", ["Park Name"]),
-        ):
-            update_location_name_from_external_sources(loc, profile=profile)
+            update_location_name_from_external_sources(loc)
         loc.refresh_from_db()
         self.assertEqual(loc.official_name, "Park Name")
+
+    def test_google_places_is_used_when_it_is_the_only_source(self) -> None:
+        loc, _wiki = self._location_with_wiki(wiki_name="Curated Mill", lat="41.240000", lng="-73.240000")
+        with _patch_providers(_StaticProvider("google_places", ["Only Google Name"])):
+            update_location_name_from_external_sources(loc)
+        loc.refresh_from_db()
+        self.assertEqual(loc.official_name, "Only Google Name")
 
 
 # -- Current-name alias invariant ----------------------------------------------------
@@ -435,11 +424,11 @@ class PinNameAliasInvariantTests(TestCase):
 
 
 class NameSourcePriorityPickerRenderTests(TestCase):
-    """Both the site-admin and per-user pickers reuse the shared `.priority-list`
-    component (see _priority_list.html/_priority_list_script.html) - confirm each
-    page still renders after that extraction, with distinct element ids."""
+    """The site-admin picker is the only one left - users can no longer override
+    name-source priority themselves, see naming.py's _FALLBACK_ONLY_SOURCES and
+    default_name_resolver's docstring."""
 
-    def test_settings_page_renders_user_priority_picker(self) -> None:
+    def test_settings_page_no_longer_renders_a_user_priority_picker(self) -> None:
         from django.test import Client
         from django.urls import reverse
 
@@ -447,9 +436,8 @@ class NameSourcePriorityPickerRenderTests(TestCase):
         client = Client()
         client.force_login(user)
         html = client.get(reverse("settings.view")).content.decode()
-        self.assertIn('id="user-name-source-priority-list"', html)
-        self.assertIn('id="user-name-source-priority"', html)
-        self.assertIn('name="name_source_priority"', html)
+        self.assertNotIn("user-name-source-priority-list", html)
+        self.assertNotIn('name="name_source_priority"', html)
 
     def test_site_admin_page_renders_default_priority_picker(self) -> None:
         from django.test import Client

@@ -343,7 +343,6 @@ def _export_settings(profile: Any, temp_dir: str, *, base_url: str = "") -> None
             "sync_aliases": profile.sync_aliases,
         },
         "external_apis_enabled": profile.external_apis_enabled,
-        "name_source_priority": profile.name_source_priority,
         "privacy": {
             "profile_visibility": profile.profile_visibility,
             "comment_visibility": profile.comment_visibility,

@@ -773,7 +773,6 @@ _SETTINGS_PASSTHROUGH_FIELDS: tuple[str, ...] = (
     "show_wiki_cover_photos",
     "auto_create_pin_article_from_wikipedia",
     "external_apis_enabled",
-    "name_source_priority",
 )
 
 #: Settings stored as DecimalField on Profile - imported only when parseable.

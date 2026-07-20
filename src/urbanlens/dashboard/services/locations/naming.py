@@ -269,6 +269,13 @@ _NAME_CHAR_SUBSTITUTIONS: dict[str, str] = {
 
 _WHITESPACE_RUN_PATTERN = re.compile(r"\s+")
 
+# Sources demoted to "fallback only": their candidates are dropped whenever
+# any other source has a meaningful candidate, and only considered when
+# nothing else does. Google Places names are frequently generic/noisy
+# (parking lots, nearby businesses) compared to purpose-built sources like
+# Wikipedia or NPS.
+_FALLBACK_ONLY_SOURCES: frozenset[str] = frozenset({"google_places"})
+
 
 def is_coordinate_name(name: str) -> bool:
     if len(name) > _MAX_COORDINATE_NAME_LENGTH:
@@ -473,7 +480,10 @@ def external_name_candidates_for_location(
     contributions in plugin ``(order, name)`` order. Raw values are cleaned
     (:func:`is_meaningful_name`) and address-derived fragments are rejected
     (:func:`is_address_derived_name`); duplicates of the same normalized name
-    from the same source are dropped, preserving first-seen order.
+    from the same source are dropped, preserving first-seen order. Sources in
+    ``_FALLBACK_ONLY_SOURCES`` (currently just Google Places) are dropped
+    entirely whenever any other source has a surviving candidate, and only
+    considered when they are the only source with one.
 
     Args:
         location: The location to gather candidates for.
@@ -509,7 +519,9 @@ def external_name_candidates_for_location(
             continue
         seen.add(key)
         candidates.append(NameCandidate(name=name, source=source))
-    return candidates
+
+    non_fallback = [candidate for candidate in candidates if candidate.source not in _FALLBACK_ONLY_SOURCES]
+    return non_fallback or candidates
 
 
 def best_external_name_for_location(
@@ -522,8 +534,8 @@ def best_external_name_for_location(
     Candidates come from plugin name providers (plus any explicit extras) and
     the winner is picked by the configured
     :class:`~urbanlens.dashboard.services.locations.name_resolution.NameResolver`
-    - by default, two-source agreement first, then the source priority order
-    (the acting profile's personal override when set, else the site-admin default).
+    - by default, two-source agreement first, then the site-admin-configured
+    source priority order.
 
     Args:
         location: The location to name.

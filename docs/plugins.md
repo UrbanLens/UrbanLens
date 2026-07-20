@@ -68,10 +68,14 @@ def get_name_providers(self):
 
 Candidates from all plugins are cleaned, quality-gated (meaningless names and
 address-derived fragments like street or city names are rejected), and persisted as
-official aliases attributed to the provider's `source` slug. A `NameResolver` then picks
-the official name: a name that two or more sources agree on wins; otherwise the
-site-admin's source priority order (Settings → *Name source priority*) decides, with
-unlisted sources falling back to plugin order.
+official aliases attributed to the provider's `source` slug. Sources listed in
+`naming._FALLBACK_ONLY_SOURCES` (currently just Google Places, whose results are often
+generic/noisy) are dropped outright whenever any other source has a surviving
+candidate, and considered only when nothing else does. A `NameResolver` then picks the
+official name from what's left: a name that two or more sources agree on wins;
+otherwise the site-admin's source priority order (Site Admin → *Name source priority*)
+decides, with unlisted sources falling back to plugin order. This ordering is an
+admin-only decision - individual users cannot override it.
 
 ### Enrichment sources
 

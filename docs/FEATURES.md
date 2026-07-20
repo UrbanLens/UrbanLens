@@ -7,7 +7,7 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
 ## Mapping & Pins
 
 - Interactive Leaflet map with 9 configurable layers (Street, Terrain, Satellite, Weather, Dark,
-  Borders, Places, Pins, Sub Pins), HTMX-driven panels, and a filter sidebar (labels, rating,
+  Borders, Places, Pins, Child pins), HTMX-driven panels, and a filter sidebar (labels, rating,
   visited status, date pinned, scores, saved filter configurations)
 - **Pin** — a user's personal record for a place (custom name, private notes, icon, priority,
   status, last-visited date, marker coordinates), separate from the shared **Location** record
@@ -70,7 +70,7 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   to Markdown, with a required CC BY-SA attribution footer linking back to the source) - never
   overwrites an existing article, seeded or human-written (`services.wiki_seed`,
   `models.cache.signals`)
-- Place-name resolution across multiple sources (Google Places, OSM/Nominatim, NPS, Photon, EPA ECHO, **Azure Maps**, Wikipedia, OpenStreetMap) with agreement-based priority ordering and a **user-configurable drag-to-reorder name source priority list** in Settings → Privacy
+- Place-name resolution across multiple sources (Google Places, OSM/Nominatim, NPS, Photon, EPA ECHO, **Azure Maps**, Wikipedia, OpenStreetMap) with agreement-based priority ordering, an admin-only drag-to-reorder priority list (Site Admin), and Google Places demoted to fallback-only (only considered when no other source has a candidate) - individual users cannot override the ordering
 - Boundary drawing — property/building polygons per pin, generated automatically from a typed
   provider chain (`services.locations.boundaries.BoundaryProviderChain`) trying, in order:
   REData's authoritative county GIS parcel/building geometry (`RedataBoundaryProvider` - see

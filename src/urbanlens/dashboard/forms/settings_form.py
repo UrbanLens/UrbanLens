@@ -590,31 +590,31 @@ class WikiSyncSettingsForm(forms.ModelForm):
         required=False,
         widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
         label="Rating",
-        help_text="When you rate a pin, also count that rating on its community wiki.",
+        help_text="When you rate a pin, also vote on the wiki.",
     )
     sync_vulnerability_to_wiki = forms.BooleanField(
         required=False,
         widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
         label="Vulnerability",
-        help_text="When you set a pin's vulnerability, also count it on its community wiki.",
+        help_text="When you set a pin's vulnerability, also vote on the wiki.",
     )
     sync_priority_to_wiki = forms.BooleanField(
         required=False,
         widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
         label="Priority",
-        help_text="When you set a pin's priority, also count it on its community wiki.",
+        help_text="When you set a pin's priority, also vote on the wiki.",
     )
     sync_danger_to_wiki = forms.BooleanField(
         required=False,
         widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
         label="Danger",
-        help_text="When you set a pin's danger, also count it on its community wiki.",
+        help_text="When you set a pin's danger, also vote on the wiki.",
     )
     sync_aliases = forms.ChoiceField(
         choices=SyncAliasesDirection.choices,
         widget=forms.Select(attrs={"class": "settings-select browser-default"}),
         label="Aliases",
-        help_text="Automatically copy newly-added alternate names between a pin and its community wiki. Never deletes an alias on either side, and never syncs edits to an existing alias - only new ones.",
+        help_text="Automatically copy newly-added alternate names between a pin and its community wiki. Never deletes an alias on either side, and never changes an existing alias - only adds new ones.",
     )
 
     class Meta:
@@ -638,10 +638,7 @@ class ExternalApiSettingsForm(forms.ModelForm):
         label="External Services",
         help_text="Allow UrbanLens to call external services (weather, geocoding, place data, AI) on your behalf.",
     )
-    # Rendered manually via the shared _priority_list.html partial, not the
-    # default widget - this field just needs to accept its serialized value.
-    name_source_priority = forms.CharField(required=False, widget=forms.HiddenInput())
 
     class Meta:
         model = Profile
-        fields = ["external_apis_enabled", "name_source_priority"]
+        fields = ["external_apis_enabled"]

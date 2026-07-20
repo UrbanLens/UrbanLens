@@ -214,23 +214,20 @@ class RuleBasedNameResolver(NameResolver):
 def default_name_resolver(profile: Profile | None = None) -> NameResolver:
     """Return the resolver used for official-name selection.
 
-    This is the single seam where a future AI-backed resolver plugs in
-    (e.g. switched by a SiteSettings choice); today it is always the
-    rule-based resolver driven by the source priority, preferring the
-    acting profile's personal override (``Profile.name_source_priority``)
-    over the site-wide admin default when one is configured.
+    This is the single seam where a future AI-backed resolver plugs in (e.g.
+    switched by a SiteSettings choice); today it is always the rule-based
+    resolver driven by the site-wide admin-configured source priority. Name
+    resolution is an intentionally system-driven decision - individual users
+    cannot override the source ordering with their own preference.
 
     Args:
         profile: The profile whose action triggered this resolution, if any.
-            Passed when a specific user's preference should apply (e.g.
-            creating a pin); omitted for unattended background refreshes,
-            which always use the site-wide default.
+            Unused by the current resolver but kept for a future
+            profile-aware (e.g. AI-backed) resolver to consume.
 
     Returns:
         The resolver to use for official-name selection.
     """
     from urbanlens.dashboard.models.site_settings.model import SiteSettings
 
-    if profile is not None and profile.name_source_priority_list:
-        return RuleBasedNameResolver(profile.name_source_priority_list)
     return RuleBasedNameResolver(SiteSettings.get_current().name_source_priority_list)

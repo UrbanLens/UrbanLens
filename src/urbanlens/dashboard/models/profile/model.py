@@ -395,15 +395,6 @@ class Profile(abstract.PublicDashboardModel):
     # toggles below/elsewhere that remain independently adjustable.
     external_apis_enabled = BooleanField(default=True, help_text="Allow external services (weather, geocoding, place data, AI) to retrieve anonymized research data for you.")
 
-    # Personal override of SiteSettings.default_name_source_priority - same
-    # comma-separated slug format. Blank means "use the site-wide default."
-    name_source_priority = CharField(
-        max_length=500,
-        blank=True,
-        default="",
-        help_text="Comma-separated name-provider slugs, highest priority first. Blank uses the site-wide default.",
-    )
-
     # Ordered list of enabled homepage widget keys (see services.home_widgets),
     # e.g. ["stats", "recent_photos", ...]. Empty = never customized - the
     # homepage falls back to every widget, in the registry's default order.
@@ -533,16 +524,6 @@ class Profile(abstract.PublicDashboardModel):
         if point is not None:
             return _units_for_point(*point)
         return DistanceUnit.KILOMETERS
-
-    @property
-    def name_source_priority_list(self) -> list[str]:
-        """This profile's name-source priority override as an ordered slug list.
-
-        Returns:
-            Provider slugs in descending priority; empty when this profile has
-            no override configured (falls back to the site-wide default).
-        """
-        return [slug for raw in self.name_source_priority.split(",") if (slug := raw.strip())]
 
     @property
     def username(self):

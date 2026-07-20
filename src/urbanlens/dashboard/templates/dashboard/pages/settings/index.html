@@ -234,7 +234,7 @@
                 <i class="material-symbols-outlined">sync</i>
                 Wiki Sync
             </h3>
-            <p class="settings-section-desc">Automatically send information from a pin's private details to its community wiki, and/or receive new alternate names back.</p>
+            <p class="settings-section-desc">Automatically sync public information between a pin and its community wiki. This only applies to anonymized public details, never your private notes about a pin.</p>
 
             <form method="post" class="settings-form" id="wiki-sync-form">
                 {% csrf_token %}
@@ -395,16 +395,6 @@
                 {% if not external_api_form.instance.external_apis_enabled %}
                 <p class="settings-help">Weather, geocoding, place-data panels, and AI features are unavailable while this is off. AI and Places sources below can still be turned back on individually.</p>
                 {% endif %}
-
-                <div class="settings-field">
-                    <label for="user-name-source-priority-list">Name source priority</label>
-                    <p class="settings-help">
-                        Your own override for which external source wins when picking a location's official
-                        name (drag to reorder, or use the arrow buttons). Leave every source unranked to use
-                        the site-wide default instead.
-                    </p>
-                    {% include "dashboard/partials/ui/_priority_list.html" with list_id="user-name-source-priority-list" hidden_id="user-name-source-priority" field_name="name_source_priority" current_value=external_api_form.instance.name_source_priority items=name_source_order empty_text="No name-provider plugins are enabled." %}
-                </div>
 
                 <div class="settings-actions">
                     <button type="submit" class="settings-save-btn">Save</button>
