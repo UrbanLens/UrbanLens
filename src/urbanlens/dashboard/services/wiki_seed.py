@@ -34,6 +34,8 @@ from typing import TYPE_CHECKING
 # services/apis/assets/wikipedia.py) - never raw/untrusted HTML.
 import lxml.html as lxml_html  # nosec B410
 
+from urbanlens.dashboard.models.article.model import EDIT_SUMMARY_SEEDED_FROM_WIKIPEDIA
+
 if TYPE_CHECKING:
     from lxml.html import HtmlElement
 
@@ -44,7 +46,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _WIKIPEDIA_CACHE_SOURCE = "wikipedia"
-_EDIT_SUMMARY = "Seeded from Wikipedia"
+_EDIT_SUMMARY = EDIT_SUMMARY_SEEDED_FROM_WIKIPEDIA
 
 #: Markdown heading prefix for each heading tag WikipediaGateway's extract
 #: allowlist permits (h2-h6 - Wikipedia extracts never carry an h1).

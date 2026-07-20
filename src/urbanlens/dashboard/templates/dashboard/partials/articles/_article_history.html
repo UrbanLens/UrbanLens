@@ -13,7 +13,7 @@
                 <span class="article-history-number" title="Revision {{ row.number }}">#{{ row.number }}</span>
                 <div class="article-history-summary">
                     <span class="article-history-meta">
-                        {% if row.revision.editor %}<strong>{{ row.revision.editor.username }}</strong>{% else %}<strong>Deleted user</strong>{% endif %}
+                        <strong>{{ row.revision.editor_display_name }}</strong>
                         &middot; {{ row.revision.created|date:"M d, Y H:i" }}
                         {% if forloop.first %}<span class="article-history-chip article-history-chip--current">current</span>{% endif %}
                         {% if row.revision.restored_from %}<span class="article-history-chip" title="Restored an earlier version"><i class="material-symbols-outlined">history</i> restore</span>{% endif %}

@@ -7,7 +7,7 @@
                 {% if previous %}Changes in this revision{% else %}Initial version{% endif %}
             </strong>
             <span class="article-history-meta">
-                {% if revision.editor %}{{ revision.editor.username }}{% else %}Deleted user{% endif %}
+                {{ revision.editor_display_name }}
                 &middot; {{ revision.created|date:"M d, Y H:i" }}
                 {% if revision.edit_summary %}&middot; <em>{{ revision.edit_summary }}</em>{% endif %}
             </span>

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from django.contrib.auth.models import User
 from django.urls import reverse
 from hypothesis import HealthCheck, given, settings as hyp_settings, strategies as st
 from model_bakery import baker
@@ -14,6 +15,32 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.articles import diff_revisions, render_article, save_article
 from urbanlens.dashboard.services.global_search import GlobalSearchEngine
+
+
+class EditorDisplayNameTests(SimpleTestCase):
+    """ArticleRevision.editor_display_name - regression coverage for the
+    "'Deleted user' shown for a Wikipedia-seeded starting article" report
+    (docs/prompts/completed.md): a null ``editor`` means either a genuinely
+    deleted account or a system-initiated seed (services.wiki_seed passes
+    editor=None on purpose) - these must not both show "Deleted user".
+    """
+
+    def test_editor_present_returns_username(self) -> None:
+        profile = Profile(user=User(username="alice"))
+        revision = ArticleRevision(editor=profile)
+        self.assertEqual(revision.editor_display_name, "alice")
+
+    def test_no_editor_and_no_summary_returns_deleted_user(self) -> None:
+        revision = ArticleRevision(editor=None, edit_summary="")
+        self.assertEqual(revision.editor_display_name, "Deleted user")
+
+    def test_no_editor_with_unrelated_summary_returns_deleted_user(self) -> None:
+        revision = ArticleRevision(editor=None, edit_summary="Fixed a typo")
+        self.assertEqual(revision.editor_display_name, "Deleted user")
+
+    def test_no_editor_with_wikipedia_seed_summary_returns_wikipedia(self) -> None:
+        revision = ArticleRevision(editor=None, edit_summary="Seeded from Wikipedia")
+        self.assertEqual(revision.editor_display_name, "Wikipedia")
 
 
 class RenderArticleTests(SimpleTestCase):

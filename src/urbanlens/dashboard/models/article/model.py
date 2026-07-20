@@ -28,6 +28,14 @@ from urbanlens.dashboard.services.text_limits import MAX_ARTICLE_LENGTH
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
 
+#: edit_summary used by services.wiki_seed's system-initiated saves (editor
+#: left None deliberately, not because an account was deleted) - the single
+#: source of truth for both the writer (wiki_seed.py imports this rather than
+#: redefining its own copy) and the reader (ArticleRevision.editor_display_name
+#: below, which needs to tell the two null-editor cases apart).
+EDIT_SUMMARY_SEEDED_FROM_WIKIPEDIA = "Seeded from Wikipedia"
+SYSTEM_EDIT_SUMMARIES = frozenset({EDIT_SUMMARY_SEEDED_FROM_WIKIPEDIA})
+
 logger = logging.getLogger(__name__)
 
 
@@ -170,6 +178,29 @@ class ArticleRevision(abstract.DashboardModel):
         restored_from_id: int | None
 
     objects = ArticleRevisionManager()
+
+    @property
+    def editor_display_name(self) -> str:
+        """The name to show for who made this revision.
+
+        ``editor`` is null both when the account that made it has since been
+        deleted (``Profile``'s own ``on_delete=SET_NULL``) and when the
+        revision was a system-initiated save that never had one to begin with
+        (``services.wiki_seed`` passes ``editor=None`` deliberately when
+        seeding a starting article from Wikipedia) - those need different
+        labels, so this checks the edit summary against the known
+        system-generated ones instead of assuming every null editor means a
+        deleted account.
+
+        Returns:
+            The editor's username, "Wikipedia" for a system-seeded revision,
+            or "Deleted user" for a genuinely deleted account.
+        """
+        if self.editor is not None:
+            return self.editor.username
+        if self.edit_summary in SYSTEM_EDIT_SUMMARIES:
+            return "Wikipedia"
+        return "Deleted user"
 
     def size_delta(self, previous: ArticleRevision | None) -> int:
         """Character-count change relative to ``previous`` (Wikipedia-style +N/-N).
