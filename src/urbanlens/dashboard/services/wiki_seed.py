@@ -145,15 +145,36 @@ def _seed_content_for_location(location: Location) -> str | None:
     if not body:
         return None
 
-    infobox_block = _infobox_markdown(cached.data.get("infobox"))
-    if infobox_block:
-        body = f"{infobox_block}\n\n{body}"
+    blocks = [block for block in (_lead_image_markdown(cached.data), _infobox_markdown(cached.data.get("infobox")), body) if block]
+    body = "\n\n".join(blocks)
 
     return f"{body}\n\n{_attribution_line(cached.data)}".strip()
 
 
+def _lead_image_markdown(article_data: dict) -> str:
+    """Render the article's lead thumbnail (already cached alongside the extract) as a Markdown image.
+
+    Uses ``WikipediaGateway._normalise``'s own ``thumbnail`` field - no extra
+    fetch - rather than pulling in the separate, multi-image
+    ``get_article_media`` gallery source (used for the pin's Media tab, a
+    different feature): a seeded article calls for the one image Wikipedia
+    itself leads with, not every image on the page.
+
+    Args:
+        article_data: The cached Wikipedia article dict (``title``/``thumbnail``).
+
+    Returns:
+        A Markdown image block, or "" when there's no thumbnail cached.
+    """
+    url = (article_data.get("thumbnail") or "").strip()
+    if not url:
+        return ""
+    alt = (article_data.get("title") or "Wikipedia lead image").replace("[", "(").replace("]", ")")
+    return f"![{alt}]({url})"
+
+
 def _infobox_markdown(pairs: object) -> str:
-    """Render a Wikipedia infobox's label/value fact pairs as a Markdown table.
+    """Render a Wikipedia infobox's label/value fact pairs as a Markdown bullet list.
 
     ``WikipediaGateway._fetch_infobox`` reaches Wikipedia's real rendered
     HTML (the only response of theirs that carries the infobox at all - the
@@ -163,6 +184,14 @@ def _infobox_markdown(pairs: object) -> str:
     and any image/map-only row (the embedded Kartographer map has no
     Markdown equivalent) - this only needs to format what's left.
 
+    A GFM table was tried first, but a Markdown table always needs a header
+    row, and a blank one (there's no natural two-column header for an
+    arbitrary facts list) renders as a visibly empty header row once parsed
+    into the article editor - ProseMirror fills any truly empty cell with
+    its own placeholder paragraph (the ``<tr><th>...<br
+    class="ProseMirror-trailingBreak">...`` artifact reported against the
+    seeded article). A bullet list has no such requirement.
+
     Args:
         pairs: The cached ``infobox`` value (``list[list[str]]`` when
             present) - typed loosely since it comes back out of a JSONField
@@ -170,23 +199,19 @@ def _infobox_markdown(pairs: object) -> str:
             existed, or genuinely empty when the article had no infobox.
 
     Returns:
-        A GFM pipe table, or "" if there are no usable pairs.
+        A Markdown bullet list, or "" if there are no usable pairs.
     """
     if not isinstance(pairs, list):
         return ""
-    rows: list[tuple[str, str]] = []
+    lines: list[str] = []
     for pair in pairs:
         if not isinstance(pair, list) or len(pair) != 2:
             continue
-        label, value = (str(pair[0]).strip(), str(pair[1]).strip())
+        label = " ".join(str(pair[0]).split())
+        value = " ".join(str(pair[1]).split())
         if not label or not value:
             continue
-        rows.append((label.replace("|", "\\|"), value.replace("|", "\\|")))
-    if not rows:
-        return ""
-
-    lines = ["| | |", "| --- | --- |"]
-    lines.extend(f"| **{label}** | {value} |" for label, value in rows)
+        lines.append(f"- **{label}:** {value}")
     return "\n".join(lines)
 
 

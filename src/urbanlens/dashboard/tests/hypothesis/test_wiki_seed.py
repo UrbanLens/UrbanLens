@@ -82,9 +82,9 @@ def test_attribution_no_url_returns_empty_string() -> None:
     assert _attribution_line({"title": "Some Article", "url": ""}) == ""  # nosec B101
 
 
-def test_infobox_markdown_renders_a_table() -> None:
+def test_infobox_markdown_renders_a_bullet_list() -> None:
     md = _infobox_markdown([["Established", "1900"], ["Country", "US"]])
-    assert md == "| | |\n| --- | --- |\n| **Established** | 1900 |\n| **Country** | US |"  # nosec B101
+    assert md == "- **Established:** 1900\n- **Country:** US"  # nosec B101
 
 
 def test_infobox_markdown_empty_list_returns_empty_string() -> None:
@@ -97,16 +97,47 @@ def test_infobox_markdown_none_returns_empty_string() -> None:
 
 def test_infobox_markdown_skips_pairs_with_blank_label_or_value() -> None:
     md = _infobox_markdown([["", "value"], ["label", ""], ["Real", "Row"]])
-    assert md == "| | |\n| --- | --- |\n| **Real** | Row |"  # nosec B101
+    assert md == "- **Real:** Row"  # nosec B101
 
 
-def test_infobox_markdown_escapes_pipe_characters() -> None:
-    md = _infobox_markdown([["Type", "A | B"]])
-    assert "A \\| B" in md  # nosec B101
+def test_infobox_markdown_collapses_internal_whitespace() -> None:
+    """A <br>-separated value (from a multi-line infobox cell) must not break the bullet list."""
+    md = _infobox_markdown([["Type", "A\n  B"]])
+    assert md == "- **Type:** A B"  # nosec B101
+
+
+def test_infobox_markdown_never_produces_an_empty_table_header() -> None:
+    """Regression guard: the previous GFM-table rendering's mandatory blank
+    header row used to render as an empty <tr> once parsed into the article
+    editor - see docs/prompts/completed.md. A bullet list has no header row."""
+    md = _infobox_markdown([["Established", "1900"]])
+    assert "| | |" not in md  # nosec B101
 
 
 def test_infobox_markdown_malformed_pairs_are_ignored() -> None:
     assert _infobox_markdown([["only_one"], "not_a_list", ["a", "b", "c"]]) == ""  # nosec B101
+
+
+def test_lead_image_markdown_renders_an_image() -> None:
+    from urbanlens.dashboard.services.wiki_seed import _lead_image_markdown
+
+    md = _lead_image_markdown({"title": "Eighteenth District School", "thumbnail": "https://upload.wikimedia.org/thumb.jpg"})
+    assert md == "![Eighteenth District School](https://upload.wikimedia.org/thumb.jpg)"  # nosec B101
+
+
+def test_lead_image_markdown_no_thumbnail_returns_empty_string() -> None:
+    from urbanlens.dashboard.services.wiki_seed import _lead_image_markdown
+
+    assert _lead_image_markdown({"title": "Some Article", "thumbnail": ""}) == ""  # nosec B101
+    assert _lead_image_markdown({"title": "Some Article"}) == ""  # nosec B101
+
+
+def test_lead_image_markdown_sanitizes_brackets_in_title() -> None:
+    """A literal `]` in the title must not be able to close the Markdown image's alt text early."""
+    from urbanlens.dashboard.services.wiki_seed import _lead_image_markdown
+
+    md = _lead_image_markdown({"title": "Foo [bar]", "thumbnail": "https://example.test/x.jpg"})
+    assert md == "![Foo (bar)](https://example.test/x.jpg)"  # nosec B101
 
 
 def _location() -> Location:
@@ -166,7 +197,7 @@ class SeedWikiArticleFromWikipediaTests(TestCase):
         article = Article.objects.get(wiki=wiki)
         self.assertEqual(article.content, "Someone already wrote this.")
 
-    def test_matched_article_with_infobox_includes_the_table_before_the_body(self) -> None:
+    def test_matched_article_with_infobox_includes_the_facts_before_the_body(self) -> None:
         """Regression coverage for the "started from Wikipedia" seed missing
         the infobox (docs/prompts/completed.md)."""
         location = _location()
@@ -177,17 +208,17 @@ class SeedWikiArticleFromWikipediaTests(TestCase):
         article = seed_wiki_article_from_wikipedia(location)
 
         self.assertIsNotNone(article)
-        self.assertIn("| **Established** | 1900 |", article.content)
-        self.assertIn("| **Country** | US |", article.content)
-        # The table comes before the prose body, and the body/attribution
+        self.assertIn("- **Established:** 1900", article.content)
+        self.assertIn("- **Country:** US", article.content)
+        # The facts list comes before the prose body, and the body/attribution
         # footer both still render normally alongside it.
         self.assertLess(article.content.index("Established"), article.content.index("Eighteenth District School"))
         self.assertIn("## History", article.content)
         self.assertIn("wikipedia.org/wiki/Eighteenth_District_School", article.content)
 
-    def test_matched_article_with_no_infobox_key_omits_the_table(self) -> None:
+    def test_matched_article_with_no_infobox_key_omits_the_facts_list(self) -> None:
         """A location cached before this field existed (or a genuinely
-        infobox-less article) must still seed normally, with no table."""
+        infobox-less article) must still seed normally, with no facts list."""
         location = _location()
         baker.make(Wiki, location=location)
         LocationCache.objects.create(location=location, source="wikipedia", data=_ARTICLE_DATA)
@@ -195,7 +226,30 @@ class SeedWikiArticleFromWikipediaTests(TestCase):
         article = seed_wiki_article_from_wikipedia(location)
 
         self.assertIsNotNone(article)
-        self.assertNotIn("| --- | --- |", article.content)
+        self.assertNotIn("- **", article.content)
+
+    def test_matched_article_with_thumbnail_includes_the_lead_image(self) -> None:
+        location = _location()
+        baker.make(Wiki, location=location)
+        data = {**_ARTICLE_DATA, "thumbnail": "https://upload.wikimedia.org/thumb.jpg"}
+        LocationCache.objects.create(location=location, source="wikipedia", data=data)
+
+        article = seed_wiki_article_from_wikipedia(location)
+
+        self.assertIsNotNone(article)
+        self.assertIn("![Eighteenth District School](https://upload.wikimedia.org/thumb.jpg)", article.content)
+        # The lead image comes before the prose body.
+        self.assertLess(article.content.index("upload.wikimedia.org"), article.content.index("historic building"))
+
+    def test_matched_article_with_no_thumbnail_omits_the_lead_image(self) -> None:
+        location = _location()
+        baker.make(Wiki, location=location)
+        LocationCache.objects.create(location=location, source="wikipedia", data=_ARTICLE_DATA)
+
+        article = seed_wiki_article_from_wikipedia(location)
+
+        self.assertIsNotNone(article)
+        self.assertNotIn("![", article.content)
 
 
 class SeedPinArticleFromWikipediaTests(TestCase):
