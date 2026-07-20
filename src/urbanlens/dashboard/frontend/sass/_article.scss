@@ -14,6 +14,19 @@ $article-serif: Georgia, 'Times New Roman', Times, serif;
     box-shadow: none;
 }
 
+// Article/Wikipedia sub-tabs (index.html) - the generic .card-tabs/.card-tab
+// strip, lightened to match this page's deliberately-not-boxed look (see
+// .article-card above) instead of its usual opaque card-header background.
+.article-subtabs {
+    background: transparent;
+    padding: 0 0 0 .1rem;
+    margin-bottom: .5rem;
+
+    @include up($breakpoint-sm) {
+        padding-left: 1rem;
+    }
+}
+
 .article-card > .card__body {
     padding: .5rem 0 1rem;
 
@@ -394,9 +407,6 @@ $article-serif: Georgia, 'Times New Roman', Times, serif;
 // typography rules needed here, only editor chrome.
 .article-editor-canvas {
     min-height: 24rem;
-    border: 1px solid var(--ul-grey-1b);
-    border-radius: 0 0 $radius-sm $radius-sm;
-    background: var(--ul-control-bg);
     overflow-y: auto;
 
     &[hidden] { display: none; }
@@ -654,7 +664,7 @@ $article-serif: Georgia, 'Times New Roman', Times, serif;
     position: fixed;
     left: 0;
     right: 0;
-    bottom: 0;
+    bottom: 4rem;
     z-index: 500;
     max-width: 70rem;
     margin: 0 auto;

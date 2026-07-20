@@ -1274,23 +1274,15 @@
     .wikipedia-body {
         display: flex;
         flex-direction: column;
-        // Without a cap here, this card's natural height grows with however long the
-        // article extract is, which is also what `.pin-aux-grid` uses to size the whole
-        // row - so a long article stretches every sibling card in the row to match. The
-        // JS clamp (see index.html) measures its "available" budget from this element's
-        // own bottom edge, which only works if that edge is fixed independently of the
-        // extract's length instead of growing to contain it.
-        max-height: 20rem;
-        overflow: hidden;
     }
 
-    // The extract now contains real block markup (headings/paragraphs/lists)
-    // rather than one flat run of text, so it's clamped in JS by hiding
-    // overflowing block children (see index.html) instead of relying on
-    // -webkit-line-clamp across mixed block content, which isn't reliable.
+    // The extract is real block markup (headings/paragraphs/lists) from
+    // WikipediaGateway's server-side cleaning/trimming - shown in full now
+    // that this panel is its own standalone Article sub-tab rather than one
+    // card in a `.pin-aux-grid` row of unrelated cards (which used to force a
+    // client-side height clamp here so a long article couldn't stretch its
+    // shorter siblings - see docs/prompts/completed.md for that history).
     .wikipedia-extract {
-        overflow: hidden;
-
         > :first-child { margin-top: 0; }
         > :last-child { margin-bottom: 0; }
 

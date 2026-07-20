@@ -31,10 +31,7 @@
             {% endif %}
             {% if article.extract %}
             {# article.extract is server-sanitized HTML (WikipediaGateway._clean_and_trim_extract) #}
-            {# - real headings/paragraphs/lists, already capped server-side. The visible amount is #}
-            {# then further clamped client-side by height (see index.html), since a fixed character #}
-            {# count either wastes room or overflows depending on how tall this card's row siblings #}
-            {# stretch it. #}
+            {# - real headings/paragraphs/lists, already capped server-side. #}
             <div class="wikipedia-extract">{{ article.extract|safe }}</div>
             {% endif %}
             <a href="{{ article.url }}" target="_blank" rel="noopener noreferrer"

@@ -489,19 +489,6 @@
         </div>
         {% endif %}
 
-        <div id="wikipedia-section" class="card card--secondary" data-ext-panel-204
-            hx-get="{% url 'pin.wikipedia' pin.slug %}"
-            hx-trigger="load[!window.ulSectionCollapsed('pin','wikipedia')], ul:unhide"
-            hx-swap="outerHTML"
-            hx-timeout="25000"
-            data-collapse-scope="pin" data-collapse-section="wikipedia">
-            <div class="card-header">
-                <i class="material-symbols-outlined">menu_book</i>
-                <h3>Wikipedia</h3>
-            </div>
-            <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
-        </div>
-
         {% include "dashboard/partials/pins/_pin_location_data_tabs.html" with pin=pin location_data_tabs=location_data_tabs %}
 
         <div id="azure-maps-section" class="card card--secondary" data-ext-panel-204
@@ -606,19 +593,65 @@
     </div>
 </section>
 
-{# -- Article tab: the user's private, Wikipedia-style article ------------- #}
+{# -- Article tab: the user's private, Wikipedia-style article, plus a ------ #}
+{# Wikipedia sub-tab (moved here from the Overview tab's aux grid) showing -- #}
+{# the matched Wikipedia article read-only for reference/comparison. -------- #}
 <section class="page-tab-panel" data-tab-panel="article" hidden>
-    <div class="card article-card">
-        <div class="card__body">
+    <div class="card-tabs article-subtabs" role="tablist" aria-label="Article view">
+        <button type="button" class="pin-plugin-tab-btn card-tab active" role="tab" aria-selected="true"
+                onclick="window.articleSetSubTab(this, 'article')">
+            <i class="material-symbols-outlined">article</i><span>Article</span>
+        </button>
+        <button type="button" class="pin-plugin-tab-btn card-tab" role="tab" aria-selected="false"
+                onclick="window.articleSetSubTab(this, 'wikipedia')">
+            <i class="material-symbols-outlined">menu_book</i><span>Wikipedia</span>
+        </button>
+    </div>
+    <div data-article-subtab="article">
+        <div class="card article-card">
             <div id="article-panel"
-                 hx-get="{% url 'pin.article' pin.slug %}"
-                 hx-trigger="load"
-                 hx-swap="outerHTML">
+                    hx-get="{% url 'pin.article' pin.slug %}"
+                    hx-trigger="load"
+                    hx-swap="outerHTML">
                 <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading article...</div>
             </div>
         </div>
     </div>
+    <div data-article-subtab="wikipedia" hidden>
+        <div id="wikipedia-section" class="card card--secondary" data-ext-panel-204
+            hx-get="{% url 'pin.wikipedia' pin.slug %}"
+            hx-trigger="load[!window.ulSectionCollapsed('pin','wikipedia')], ul:unhide"
+            hx-swap="outerHTML"
+            hx-timeout="25000"
+            data-collapse-scope="pin" data-collapse-section="wikipedia">
+            <div class="card-header">
+                <i class="material-symbols-outlined">menu_book</i>
+                <h3>Wikipedia</h3>
+            </div>
+            <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
+        </div>
+    </div>
 </section>
+<script>
+    // Article/Wikipedia sub-tabs: both panels' markup is always present (the
+    // Wikipedia one eagerly loads on page load, same as before it moved here
+    // from the Overview tab's aux grid) - switching just toggles which is
+    // visible, so nothing needs re-fetching on every click. The Wikipedia
+    // panel's own hx-swap="outerHTML" only ever replaces #wikipedia-section
+    // itself, never this wrapper div, so the `hidden` state set here survives
+    // every poll/refresh of that panel.
+    window.articleSetSubTab = function (btn, key) {
+        document.querySelectorAll('.article-subtabs .pin-plugin-tab-btn').forEach(function (b) {
+            b.classList.remove('active');
+            b.setAttribute('aria-selected', 'false');
+        });
+        btn.classList.add('active');
+        btn.setAttribute('aria-selected', 'true');
+        document.querySelectorAll('[data-article-subtab]').forEach(function (panel) {
+            panel.hidden = panel.dataset.articleSubtab !== key;
+        });
+    };
+</script>
 
 {# -- Notes tab (backend: pin comments, private to the pin's owner) --------- #}
 <section class="page-tab-panel" data-tab-panel="comments" hidden>
@@ -1338,139 +1371,6 @@
                 showPlaceholder(el, 'This data is temporarily unavailable.');
             }
         }, true);
-    }());
-
-    // -- Wikipedia summary: fill whatever height the card's row already --------
-    // gave it, rather than a fixed character count. `.pin-aux-grid > .card`
-    // stretches every card in a row to match its tallest sibling, so a fixed
-    // truncation length often leaves blank space below the text (short excerpt,
-    // tall row) or could in principle overflow it (long excerpt, short row).
-    // This clamps by measured height instead, recomputed against the card's
-    // actual rendered height - it only ever fits content into space the card
-    // already has, so it can't itself grow the row and create a stretch
-    // feedback loop. No pagination controls: overflow is simply hidden behind
-    // "Read more".
-    //
-    // The extract is now real block markup (headings/paragraphs/lists), not
-    // one flat run of text, so it's clamped by hiding whichever trailing
-    // block-level children don't fit rather than a single -webkit-line-clamp
-    // on the container (unreliable once children are block-level rather than
-    // inline text). The one child straddling the cutoff gets its own
-    // line-clamp applied instead of being hidden outright, since it's just
-    // one element and clamping *that* works exactly like the old approach.
-    (function () {
-        // A floor under the clamp budget so at least a paragraph or two always
-        // shows - without this, an early call (e.g. on first paint, before a
-        // slower sibling card like Media has loaded in and stretched the row
-        // to its eventual height) could compute a near-zero budget and hide
-        // the extract entirely, even though the article has plenty of text.
-        var MIN_BODY_HEIGHT_PX = 200;
-
-        function clampExtract(section) {
-            var extract = section.querySelector('.wikipedia-extract');
-            var body = section.querySelector('.wikipedia-body');
-            var readMore = section.querySelector('.wikipedia-read-more');
-            if (!extract || !body || !readMore) return;
-
-            // .wikipedia-body has a static max-height in CSS so a long article can't
-            // itself set this row's height (that's what stops it from stretching
-            // shorter sibling cards to match). But that means the cap never grows
-            // back when a *different* reason stretches the row taller - e.g. a
-            // sibling card's own image finishing load - leaving spare room unused.
-            // .card-header sits outside .wikipedia-body, so whatever's left of the
-            // card's own (grid-stretched) height after subtracting it is what
-            // .wikipedia-body is actually allowed to fill; raise the cap to that,
-            // never below the minimum floor above.
-            var header = section.querySelector('.card-header');
-            var headerHeight = header ? header.getBoundingClientRect().height : 0;
-            var bodyBudget = section.getBoundingClientRect().height - headerHeight;
-            body.style.maxHeight = Math.max(bodyBudget, MIN_BODY_HEIGHT_PX) + 'px';
-
-            var children = Array.prototype.slice.call(extract.children);
-            children.forEach(function (el) {
-                el.style.display = '';
-                el.style.webkitLineClamp = '';
-                el.style.webkitBoxOrient = '';
-                el.style.overflow = '';
-            });
-            if (!children.length) return;
-
-            var readMoreStyle = getComputedStyle(readMore);
-            var readMoreSpace = readMore.getBoundingClientRect().height
-                + (parseFloat(readMoreStyle.marginTop) || 0)
-                + (parseFloat(readMoreStyle.marginBottom) || 0);
-            // .wikipedia-body reuses .card__body, which has its own bottom padding -
-            // exclude it so text doesn't run flush to the card's border.
-            var bodyPaddingBottom = parseFloat(getComputedStyle(body).paddingBottom) || 0;
-            var bodyBottom = body.getBoundingClientRect().bottom - bodyPaddingBottom;
-            var available = bodyBottom - extract.getBoundingClientRect().top - readMoreSpace;
-
-            if (extract.getBoundingClientRect().height <= available) return;
-
-            var extractTop = extract.getBoundingClientRect().top;
-            for (var i = 0; i < children.length; i++) {
-                var el = children[i];
-                var rect = el.getBoundingClientRect();
-                if (rect.bottom - extractTop <= available) continue;
-
-                var remaining = available - (rect.top - extractTop);
-                var lineHeight = parseFloat(getComputedStyle(el).lineHeight);
-                if (remaining > 0 && lineHeight) {
-                    el.style.display = '-webkit-box';
-                    el.style.webkitBoxOrient = 'vertical';
-                    el.style.overflow = 'hidden';
-                    el.style.webkitLineClamp = String(Math.max(1, Math.floor(remaining / lineHeight)));
-                } else {
-                    el.style.display = 'none';
-                }
-                for (var j = i + 1; j < children.length; j++) {
-                    children[j].style.display = 'none';
-                }
-                break;
-            }
-        }
-
-        function scheduleClamp(section) {
-            // Let this frame's layout (including any grid stretch driven by
-            // sibling cards) settle before measuring.
-            requestAnimationFrame(function () { clampExtract(section); });
-        }
-
-        document.body.addEventListener('htmx:afterOnLoad', function (evt) {
-            var el = evt.detail && evt.detail.elt;
-            if (!el || el.id !== 'wikipedia-section') return;
-            var section = document.getElementById('wikipedia-section');
-            if (!section || !section.querySelector('.wikipedia-extract')) return;
-
-            scheduleClamp(section);
-
-            var thumb = section.querySelector('.wikipedia-thumb');
-            if (thumb) thumb.addEventListener('load', function () { scheduleClamp(section); }, { once: true });
-
-            // Re-measure whenever the card's own rendered height changes for
-            // any reason - most commonly a sibling .pin-aux-grid card loading
-            // in and changing the row's stretched height. Our own clamp writes
-            // never grow the card past that height, so this can't self-trigger.
-            //
-            // Also observe .pin-aux-grid itself, not just this card: a sibling
-            // that finishes loading well after this one (a slow external-API
-            // panel, or one that only appears once its own hx-get resolves)
-            // changes the *grid's* auto-sized row height first, which then
-            // stretches every card in the row - watching the grid container
-            // directly is a more direct signal than waiting on that
-            // propagation to also show up as a resize of this card specifically.
-            if (window.ResizeObserver) {
-                var ro = new ResizeObserver(function () { scheduleClamp(section); });
-                ro.observe(section);
-                var grid = section.closest('.pin-aux-grid');
-                if (grid) ro.observe(grid);
-            }
-        });
-
-        window.addEventListener('resize', function () {
-            var section = document.getElementById('wikipedia-section');
-            if (section) scheduleClamp(section);
-        });
     }());
 
     // -- Media gallery: combines Smithsonian / Wikimedia Commons / Library of --
