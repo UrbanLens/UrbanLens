@@ -323,6 +323,19 @@ These are planned features - treat any missing implementation as a gap to fill, 
 - `pin-cache.ts` has a `CACHE_VERSION` constant that must be bumped whenever the pin payload
   shape changes - it goes silently stale otherwise.
 - Non-map pages invalidate the map's pin cache via the `ul_pins_dirty` localStorage flag.
+- **`dev.urbanlens.org` sits behind Cloudflare, which caches everything under `/static/...`
+  (compiled `style.css`, `map-annotations.js`, `article-wysiwyg.js`, etc.) for 4 hours
+  (`Cache-Control: max-age=14400`), keyed on the exact URL - these files have no cache-busting
+  hash in their filename, so a fresh rebuild+redeploy does NOT make the live site serve the new
+  CSS/JS immediately; `curl -sD -` will show `cf-cache-status: HIT` and a `last-modified` older
+  than the actual rebuild. A live browser check done shortly after deploying a CSS/JS-only change
+  can silently verify the OLD stale asset while looking like a pass (structural/HTML changes are
+  unaffected - Cloudflare doesn't cache the dynamic page response, only `/static/` files).
+  **Workaround for verification**: fetch the asset with a cache-busting query string
+  (`curl "https://dev.urbanlens.org/static/dashboard/style.css?cb=$(date +%s)"`) to force
+  `cf-cache-status: MISS` and confirm what's actually at the origin, or use Chrome DevTools
+  Protocol's `CSS.getMatchedStylesForNode` (via a Playwright CDP session) to see which rule a
+  live page actually applied if a rendered value looks unexpectedly stale.
 
 **Other**
 - Any new pin/location share path must call `resolve_origin_share` + `record_share_exposure` to
