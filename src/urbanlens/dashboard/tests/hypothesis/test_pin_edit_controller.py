@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 from django.contrib.auth.models import User
 from django.test import RequestFactory
+from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
@@ -243,7 +244,17 @@ class PinOverviewAddressBackfillDispatchTests(TestCase):
 
 
 class PinOverviewEditableDescriptionTests(TestCase):
-    """The pin description renders as a click-to-edit-in-place element, wired to pin.edit."""
+    """The pin description renders as a click-to-edit-in-place element.
+
+    Only the markup itself (data-raw-description, the editable marker class)
+    lives in pin_overview_partial.html - the actual wiring (the pin.edit POST
+    URL, the click-to-edit JS) lives in the FULL page's own inline <script>
+    (pages/location/index.html, mirroring the hero title's identical pattern),
+    not in this bare partial. See PinDescriptionEditableTests below for that
+    - this class covers only what PinOverviewView's own partial response
+    actually contains (matches the correction applied to the equivalent,
+    now-deleted PinOverviewEditableTitleTests class - see docs/prompts/completed.md).
+    """
 
     def setUp(self) -> None:
         self.factory = RequestFactory()
@@ -269,9 +280,45 @@ class PinOverviewEditableDescriptionTests(TestCase):
         content = self._get().content.decode()
         self.assertIn('data-raw-description="A crumbling old mill."', content)
 
+
+class PinDescriptionEditableTests(TestCase):
+    """Full-page coverage: the description's click-to-edit JS and pin.edit wiring.
+
+    Mirrors PinHeroEditableNameTests (test_pin_hero_editable_name.py) for the
+    title - the pin.edit POST URL is only ever present in the full page's own
+    inline <script> (pages/location/index.html), never in the bare
+    PinOverviewView partial response (see PinOverviewEditableDescriptionTests
+    above), so this has to render via the real pin.details view.
+    """
+
+    def setUp(self) -> None:
+        self.profile = baker.make(User).profile
+        self.user = self.profile.user
+        self.pin = baker.make(Pin, profile=self.profile, description="A crumbling old mill.")
+        self.client.force_login(self.user)
+
+    def _get(self, pin=None):
+        pin = pin or self.pin
+        return self.client.get(reverse("pin.details", args=[pin.slug]))
+
     def test_description_wiring_posts_to_pin_edit(self) -> None:
-        content = self._get().content.decode()
-        self.assertIn(f"/map/pin/{self.pin.slug}/edit/", content)
+        response = self._get()
+        self.assertContains(response, reverse("pin.edit", args=[self.pin.slug]))
+
+    def test_description_click_handler_is_present(self) -> None:
+        response = self._get()
+        self.assertContains(response, "pin-description--editable")
+        self.assertContains(response, "pin-description-input")
+
+    def test_renaming_description_via_pin_edit_updates_the_displayed_value(self) -> None:
+        """End-to-end: the endpoint the description's inline editor posts to
+        actually updates the pin (already covered in depth elsewhere for the
+        edit dialog - this just confirms the click-to-edit markup/endpoint
+        pairing is real, matching PinHeroEditableNameTests's equivalent test)."""
+        response = self.client.post(reverse("pin.edit", args=[self.pin.slug]), {"description": "Now fully collapsed."})
+        self.assertEqual(response.status_code, 200)
+        self.pin.refresh_from_db()
+        self.assertEqual(self.pin.description, "Now fully collapsed.")
 
     def test_empty_description_still_renders_with_a_placeholder(self) -> None:
         empty_pin = baker.make(Pin, profile=self.profile, description=None)

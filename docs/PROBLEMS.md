@@ -4,6 +4,23 @@ Bugs or quirks identified during other work but out of scope to investigate/fix 
 Each entry should have enough detail (repro steps, file:line, symptoms) for a future session
 to pick up without re-discovering the problem from scratch.
 
+**Status as of 2026-07-19**: worked through this backlog across several autonomous rounds this
+session (see `docs/prompts/completed.md` for fix details). Everything cleanly actionable without
+a browser, a product decision, or a large/risky refactor has been fixed: the ZIP re-import
+malware-scan gap, the wiki-reference boundary-mate bug, the Cloudflare AI cost table, `tos_
+accepted_at`'s missing UI, the satellite/street-view dead coordinate check, two orphaned `.pyc`
+files, four of six identity-masking render sites, the stale `PinOverviewEditableTitleTests` test
+debt, and the pin-description click-to-edit JS that investigation turned up along the way. Every
+item still below is blocked on one of three things, noted per entry: (a) a product/policy
+decision only a human can make (which TTLs, which radius, whether to mask two more identity
+sites, whether to build vs. remove a dead settings toggle), (b) browser-based verification this
+environment cannot do, or (c) a large, multi-file feature build or refactor that PROBLEMS.md's
+own entry already flags as substantial follow-up work rather than a bug-fix-sized change - not
+attempted blind, to avoid introducing new untested surface area in sensitive code (payments-
+adjacent notification delivery, the encrypted-message export format, a 650-line map filter
+sidebar). If picking this back up, the "Suggested next step"/"Why not fixed" text in each entry
+is the starting point.
+
 ---
 
 ## UL-277: pin-detail external-data freshness window is one global knob, not per-source
@@ -148,36 +165,6 @@ than an autonomous fix:
    `resolve_visible_identities`, rendered through `trip_comments_panel.html`'s own
    `display_name`/`display_avatar_url` markup, a separate template from pin/wiki's
    `_comment_body.html`. Only the content-visibility gate itself is the remaining gap here.)
-
----
-
-## Pin description click-to-edit-in-place has no JS wiring anywhere (found 2026-07-19)
-
-While investigating `PinOverviewEditableTitleTests` (see completed.md - that class was deleted as
-redundant test debt, not a missing feature), found a genuinely separate, real gap in its sibling
-class `PinOverviewEditableDescriptionTests`. `pin_overview_partial.html`'s description field
-renders a `<span class="pin-description--editable" tabindex="0" role="button"
-data-raw-description="...">` - styled and marked up exactly like the hero's title
-(`.pin-name-editable`, confirmed working, wired in `pages/location/index.html`'s own inline
-`<script>` block, lines ~1805-1879) - but grepping the entire codebase for
-`pin-description--editable` only turns up the SCSS styling and the template itself. There is no
-click handler anywhere (not in `index.html`, not in any shared JS file, not inline in the partial
-itself - `pin_overview_partial.html` has no `<script>` tag at all). Clicking the description does
-nothing.
-
-This also means `PinOverviewEditableDescriptionTests.test_description_wiring_posts_to_pin_edit`
-(`test_pin_edit_controller.py`, checks for the literal `/map/pin/<slug>/edit/` path substring in
-`PinOverviewView`'s bare-partial response) almost certainly fails for the same structural reason
-`PinOverviewEditableTitleTests`'s equivalent test did: even if wiring existed, it would live in
-the full page's own script (like the title's `editUrl` closure variable), never in the partial-only
-response this test renders directly via `PinOverviewView.as_view()`.
-
-**Not fixed**: two separate things would need doing - (1) write the missing click-to-edit-in-place
-JS for the description (mirroring the hero title's pattern: delegated listener on
-`document.body`, textarea swap-in, submit-on-blur/Enter, POST to `pin.edit`), and (2) fix or
-rewrite the one wrongly-scoped test the same way the title's redundant test class was resolved.
-Out of scope for the stale-test-debt pass this was found during (a real feature build, not a test
-correction) - worth a focused follow-up.
 
 ---
 

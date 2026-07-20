@@ -1877,5 +1877,85 @@
             }
         });
     }());
+
+    // -- Click-to-edit-in-place pin description (see .pin-description--editable,
+    // pin_overview_partial.html) - same pattern as the hero title above, but a
+    // multi-line <textarea> (Enter inserts a newline instead of saving) since
+    // descriptions can run much longer, and #pin-overview can itself be
+    // swapped wholesale (htmx reloads), so listeners are delegated on
+    // document.body rather than attached directly to the span.
+    (function () {
+        var csrftoken = '{{ csrf_token }}';
+        var editUrl = '{% url "pin.edit" pin.slug %}';
+
+        function startEdit(el) {
+            if (el.querySelector('textarea')) return;
+            var rawValue = el.dataset.rawDescription || '';
+            var textarea = document.createElement('textarea');
+            textarea.className = 'pin-description-input';
+            textarea.value = rawValue;
+            textarea.maxLength = 50000;
+            textarea.rows = 3;
+
+            var displayText = el.textContent;
+            var wasEmpty = el.classList.contains('pin-description--empty');
+            el.textContent = '';
+            el.appendChild(textarea);
+            textarea.focus();
+            textarea.select();
+
+            function autoGrow() {
+                textarea.style.height = 'auto';
+                textarea.style.height = textarea.scrollHeight + 'px';
+            }
+            textarea.addEventListener('input', autoGrow);
+            autoGrow();
+
+            var done = false;
+            function finish(save) {
+                if (done) return;
+                done = true;
+                var newValue = textarea.value.trim();
+                if (save && newValue !== rawValue.trim()) {
+                    var body = new URLSearchParams();
+                    body.set('description', newValue);
+                    fetch(editUrl, { method: 'POST', headers: { 'X-CSRFToken': csrftoken }, body: body })
+                        .then(function (r) { if (!r.ok) throw new Error(); })
+                        .then(function () {
+                            el.dataset.rawDescription = newValue;
+                            el.textContent = newValue || 'Add a description...';
+                            el.classList.toggle('pin-description--empty', !newValue);
+                            if (window.toastr) toastr.success('Description updated.');
+                        })
+                        .catch(function () {
+                            el.textContent = displayText;
+                            el.classList.toggle('pin-description--empty', wasEmpty);
+                            if (window.toastr) toastr.error('Failed to update description.');
+                        });
+                } else {
+                    el.textContent = displayText;
+                    el.classList.toggle('pin-description--empty', wasEmpty);
+                }
+            }
+            textarea.addEventListener('blur', function () { finish(true); });
+            textarea.addEventListener('keydown', function (e) {
+                e.stopPropagation();
+                if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+            });
+        }
+
+        document.body.addEventListener('click', function (e) {
+            var descEl = e.target.closest('.pin-description--editable');
+            if (descEl) startEdit(descEl);
+        });
+        document.body.addEventListener('keydown', function (e) {
+            if (e.key !== 'Enter' && e.key !== ' ') return;
+            var el = e.target.closest('.pin-description--editable');
+            if (el && el === e.target) {
+                e.preventDefault();
+                startEdit(el);
+            }
+        });
+    }());
 </script>
 {% endblock %}
