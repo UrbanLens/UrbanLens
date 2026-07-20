@@ -5,14 +5,26 @@ select mode and per-item checkboxes; this only renders the bar and wires its
 buttons to whatever callbacks the caller supplies via `sync`.
 
 Context:
-  namespace - unique key (e.g. "media", "photos") matching the sync() calls
-  actions   - list of {action, icon, label} dicts, one per possible button;
-              a button only appears when the caller's sync() supplies a
-              callback for its `action` key
+  namespace   - unique key (e.g. "media", "photos") matching the sync() calls
+  actions     - list of {action, icon, label} dicts, one per possible button;
+                a button only appears when the caller's sync() supplies a
+                callback for its `action` key
+  date_field  - optional: when truthy, renders a <input type="date"> ahead of
+                the action buttons (e.g. Memories > Visits' bulk "log visit on
+                this date" action) - read it via
+                document.querySelector('#ul-bulk-bar-<namespace> [data-bulk-date]').value
+                from whichever action callback needs it; this partial never
+                reads it itself.
+  date_value  - optional: initial value for the date field (e.g. today's date)
+  date_max    - optional: max attribute for the date field
 {% endcomment %}
 <div class="ul-bulk-bar" id="ul-bulk-bar-{{ namespace }}" aria-live="polite">
     <span class="ul-bulk-count"></span>
     <span class="ul-bulk-sep"></span>
+    {% if date_field %}
+    <input type="date" class="ul-bulk-date" data-bulk-date aria-label="Date to apply"
+           value="{{ date_value }}" max="{{ date_max }}">
+    {% endif %}
     {% for item in actions %}
     <button type="button" class="ul-bulk-btn ul-bulk-btn--{{ item.action }}" data-bulk-action="{{ item.action }}" title="{{ item.label }}" hidden>
         <i class="material-symbols-outlined">{{ item.icon }}</i>

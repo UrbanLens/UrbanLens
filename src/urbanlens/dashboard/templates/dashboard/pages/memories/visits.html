@@ -58,7 +58,7 @@
 </div>
 
 {% if unlogged_visits %}
-{% include "dashboard/partials/ui/_bulk_toolbar.html" with namespace="unlogged_visits" actions=bulk_actions %}
+{% include "dashboard/partials/ui/_bulk_toolbar.html" with namespace="unlogged_visits" actions=bulk_actions date_field=True date_value=today date_max=today %}
 <script src="{% static 'js/bulk-toolbar.js' %}"></script>
 <script src="{% static 'js/pin-select-map.js' %}"></script>
 
@@ -80,10 +80,15 @@
     }
 
     function runBulkAction(action, ids) {
+        var body = { pin_slugs: ids };
+        if (action === 'log') {
+            var dateInput = document.querySelector('#ul-bulk-bar-unlogged_visits [data-bulk-date]');
+            if (dateInput && dateInput.value) body.visited_date = dateInput.value;
+        }
         return fetch(bulkUrls[action], {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
-            body: JSON.stringify({ pin_slugs: ids }),
+            body: JSON.stringify(body),
         })
         .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
         .then(function (data) {
@@ -103,6 +108,7 @@
         wrapEl: document.getElementById('memories-unlogged-band'),
         checkboxSelector: '.pin-select-cb',
         checkboxIdAttr: 'pinSlug',
+        cardSelector: '.unlogged-card',
         layersPanelId: 'unlogged-visits-map-layers',
         selectToggleBtnId: 'unlogged-visits-select-toggle',
         namespace: 'unlogged_visits',

@@ -516,6 +516,24 @@
   flex-shrink: 0;
 }
 
+// -- Optional date field (see _bulk_toolbar.html's date_field context var) --
+.ul-bulk-date {
+  min-height: 34px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font: inherit;
+  font-size: .82rem;
+  color: inherit;
+  background: var(--ul-surface-raised, transparent);
+  border: 1px solid var(--ul-surface-raised-border);
+  flex-shrink: 0;
+
+  &:focus-visible {
+    outline: 2px solid var(--color-accent, #2563eb);
+    outline-offset: 1px;
+  }
+}
+
 .ul-bulk-btn {
   display: inline-flex;
   align-items: center;

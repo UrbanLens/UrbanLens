@@ -784,6 +784,15 @@ $memories-type-colors: (
     gap: .65rem;
     padding: .85rem;
     @include surface($radius: .85rem);
+    transition: background .15s ease, box-shadow .15s ease;
+
+    // Paired with the map marker via .is-hovered (see pin-select-map.js) -
+    // same amber highlight convention as the trip detail page's
+    // map/activity-list hover-sync.
+    &.is-hovered {
+        background: rgba($color-amber-500, .08);
+        box-shadow: 0 0 0 2px $color-amber-500;
+    }
 }
 
 .unlogged-card-dismiss {

@@ -187,6 +187,16 @@ class MemoriesVisitsViewTests(TestCase):
         self.assertContains(response, reverse("memories.visits.map_data"))
         self.assertContains(response, "ul-bulk-bar-unlogged_visits")
 
+    def test_bulk_toolbar_has_a_date_field_and_hover_pairing(self) -> None:
+        """The bulk toolbar's "log" action lets the user pick which date to
+        apply (not just today), and the map<->list is wired for hover
+        highlight, matching the trip detail page's UX."""
+        _make_pin(self.profile, last_visited=_aware(2024, 6, 1), name="My Place")
+        response = self.client.get(reverse("memories.visits"))
+        self.assertContains(response, 'data-bulk-date')
+        self.assertContains(response, "Log visit on this date")
+        self.assertContains(response, "cardSelector: '.unlogged-card'")
+
     def test_empty_queue_shows_caught_up_body(self) -> None:
         response = self.client.get(reverse("memories.visits"))
         self.assertEqual(response.status_code, 200)
@@ -330,8 +340,11 @@ class MemoriesVisitsBulkActionViewTests(TestCase):
         self.profile = self.user.profile
         self.client.force_login(self.user)
 
-    def _post(self, action: str, slugs: list[str]):
-        return self.client.post(reverse("memories.visits.bulk", args=[action]), data=json.dumps({"pin_slugs": slugs}), content_type="application/json")
+    def _post(self, action: str, slugs: list[str], visited_date: str | None = None):
+        payload = {"pin_slugs": slugs}
+        if visited_date is not None:
+            payload["visited_date"] = visited_date
+        return self.client.post(reverse("memories.visits.bulk", args=[action]), data=json.dumps(payload), content_type="application/json")
 
     def test_log_creates_a_dated_visit_for_each_pin(self) -> None:
         first = _make_pin(self.profile, last_visited=_aware(2024, 6, 1))
@@ -343,11 +356,31 @@ class MemoriesVisitsBulkActionViewTests(TestCase):
         self.assertTrue(PinVisit.objects.filter(pin=second).exists())
         self.assertNotIn(first, unlogged_visited_pins(self.profile))
 
-    def test_log_visit_is_dated_today(self) -> None:
+    def test_log_visit_is_dated_today_by_default(self) -> None:
         pin = _make_pin(self.profile, last_visited=_aware(2024, 6, 1))
         self._post("log", [pin.slug])
         visit = PinVisit.objects.get(pin=pin)
         self.assertEqual(visit.visited_at.date(), timezone.now().date())
+
+    def test_log_visit_uses_the_chosen_date(self) -> None:
+        first = _make_pin(self.profile, last_visited=_aware(2024, 6, 1))
+        second = _make_pin(self.profile, last_visited=_aware(2024, 6, 2))
+        response = self._post("log", [first.slug, second.slug], visited_date="2024-03-15")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(PinVisit.objects.get(pin=first).visited_at.date(), datetime.date(2024, 3, 15))
+        self.assertEqual(PinVisit.objects.get(pin=second).visited_at.date(), datetime.date(2024, 3, 15))
+
+    def test_log_rejects_a_malformed_date(self) -> None:
+        pin = _make_pin(self.profile, last_visited=_aware(2024, 6, 1))
+        response = self._post("log", [pin.slug], visited_date="not-a-date")
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(PinVisit.objects.filter(pin=pin).exists())
+
+    def test_unmark_ignores_a_visited_date_if_sent(self) -> None:
+        """visited_date is only ever read for the log action."""
+        pin = _make_pin(self.profile, last_visited=_aware(2024, 6, 1))
+        response = self._post("unmark", [pin.slug], visited_date="not-a-date")
+        self.assertEqual(response.status_code, 200)
 
     def test_log_respects_visit_logging_disabled(self) -> None:
         self.profile.track_pin_visits = False

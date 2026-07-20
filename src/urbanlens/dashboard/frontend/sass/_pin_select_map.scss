@@ -105,6 +105,15 @@
     z-index: 1000 !important;
 }
 
+// Card <-> marker hover pairing - same amber highlight convention as the trip
+// detail page's map/activity-list hover-sync (.trip-map-marker--highlighted).
+.pin-select-marker.is-hovered {
+    background: #{$color-amber-500};
+    transform: rotate(-45deg) scale(1.2);
+    box-shadow: 0 3px 10px rgba($color-amber-500, .5);
+    z-index: 999 !important;
+}
+
 // -- Card selection checkbox --------------------------------------------------
 
 .pin-select {

@@ -50,7 +50,7 @@ _DEFAULT_WINDOW_DAYS = 90
 _ON_THIS_DAY_LIMIT = 10
 _MAX_BULK_VISITS = 60  # matches unlogged.UNLOGGED_VISIT_LIMIT - never more pins than the page can show
 _VISITS_BULK_ACTIONS = [
-    {"action": "log", "icon": "check", "label": "Log visit (today)"},
+    {"action": "log", "icon": "check", "label": "Log visit on this date"},
     {"action": "unmark", "icon": "cancel", "label": "Not visited"},
 ]
 
@@ -684,14 +684,17 @@ class MemoriesVisitsMapDataView(LoginRequiredMixin, View):
 class MemoriesVisitsBulkActionView(LoginRequiredMixin, View):
     """Quick-log or un-mark many visited-but-unlogged pins at once.
 
-    POST /memories/visits/bulk/<action>/, JSON body ``{"pin_slugs": [...]}``.
+    POST /memories/visits/bulk/<action>/, JSON body
+    ``{"pin_slugs": [...], "visited_date": "YYYY-MM-DD"}`` (``visited_date``
+    only read for ``log``).
 
     Modeled on ``PinSuggestionBulkActionView`` (Memories > Locations):
     non-owned, already-resolved, or nonexistent slugs are silently skipped
     rather than erroring the whole batch.
 
-    - ``log``: creates a dated ``PinVisit`` for each pin, dated today - the
-      same minimal path as the single-item quick-log form (date only, no
+    - ``log``: creates a dated ``PinVisit`` for each pin, dated
+      ``visited_date`` (defaulting to today when omitted) - the same minimal
+      path as the single-item quick-log form (date only, no
       notes/photos/participants/map).
     - ``unmark``: clears each pin's "visited" status entirely, same as the
       single-item "Not visited" button.
@@ -715,6 +718,15 @@ class MemoriesVisitsBulkActionView(LoginRequiredMixin, View):
         if action == "log" and not visit_logging_allowed(profile):
             return JsonResponse({"error": "Visit logging is turned off - enable it in Settings to log a visit."}, status=403)
 
+        visited_date = timezone.now().date()
+        if action == "log":
+            raw_date = body.get("visited_date") if isinstance(body, dict) else None
+            if raw_date:
+                try:
+                    visited_date = datetime.date.fromisoformat(raw_date)
+                except (TypeError, ValueError):
+                    return JsonResponse({"error": "Invalid date."}, status=400)
+
         pins = Pin.objects.filter(profile=profile, slug__in=raw_slugs).visited_without_record()
         processed = 0
         for pin in pins:
@@ -722,7 +734,7 @@ class MemoriesVisitsBulkActionView(LoginRequiredMixin, View):
                 if action == "unmark":
                     remove_visited_status(pin)
                 else:
-                    visited_at = datetime.datetime.combine(timezone.now().date(), datetime.time.min, tzinfo=datetime.UTC)
+                    visited_at = datetime.datetime.combine(visited_date, datetime.time.min, tzinfo=datetime.UTC)
                     PinVisit.objects.create(pin=pin, visited_at=visited_at, source=VisitSource.MANUAL)
                     add_visited_status(pin)
                     sync_last_visited(pin)

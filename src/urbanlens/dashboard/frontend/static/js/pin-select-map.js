@@ -17,9 +17,12 @@
  *     icon: function (item, selected) { return L.divIcon({...}); },
  *     tooltip: function (item) { return item.name; },  // optional
  *     cardEl: function (id) { return document.getElementById('card-' + id); },
- *     wrapEl: document.getElementById('cards-wrap'),   // delegated checkbox listener root
+ *     wrapEl: document.getElementById('cards-wrap'),   // delegated checkbox/hover listener root
  *     checkboxSelector: '.my-select-cb',
  *     checkboxIdAttr: 'itemId',       // dataset key on the checkbox holding the id
+ *     cardSelector: '.my-card',       // optional: enables list<->marker hover
+ *                                     // highlight (adds/removes .is-hovered on
+ *                                     // both the card and the marker element)
  *     layersPanelId: 'my-map-layers',
  *     selectToggleBtnId: 'my-select-toggle',
  *     namespace: 'my_items',          // bulk-toolbar namespace
@@ -56,6 +59,7 @@
         var selectedIds = new Set();
         var markerMap = new Map();  // id -> L.Marker
         var itemById = new Map();   // id -> raw item, for re-deriving icons on select toggle
+        var cardToId = new WeakMap();  // card root element -> id, for hover delegation
 
         function syncMarker(id) {
             var marker = markerMap.get(id);
@@ -70,6 +74,22 @@
             card.classList.toggle('is-selected', selectedIds.has(id));
             var cb = opts.checkboxSelector ? card.querySelector(opts.checkboxSelector) : null;
             if (cb) cb.checked = selectedIds.has(id);
+        }
+
+        // -- Hover highlight: hovering a marker highlights its list card and
+        // vice versa, mirroring the trip detail page's map/activity-list
+        // pairing (tripHighlightMarker/tripHighlightActivity). Opt-in via
+        // opts.cardSelector (a CSS selector matching each card's root
+        // element, e.g. '.unlogged-card') - callers that don't pass it just
+        // don't get this half of the pairing.
+        function setHover(id, on) {
+            var marker = markerMap.get(id);
+            if (marker) {
+                var el = marker.getElement();
+                if (el) el.classList.toggle('is-hovered', on);
+            }
+            var card = opts.cardEl(id);
+            if (card) card.classList.toggle('is-hovered', on);
         }
 
         function syncToolbar() {
@@ -126,7 +146,11 @@
                         toggleSelection(id);
                         if (opts.onMarkerClick) opts.onMarkerClick(item);
                     });
+                    marker.on('mouseover', function () { setHover(id, true); });
+                    marker.on('mouseout', function () { setHover(id, false); });
                     markerMap.set(id, marker);
+                    var card = opts.cardEl(id);
+                    if (card) cardToId.set(card, id);
                     bounds.push([item.latitude, item.longitude]);
                 });
                 // Drop any selection for items no longer on the map (handled/off-page).
@@ -203,6 +227,29 @@
                 // one, so it matches whatever type the map-data JSON used.
                 var id = /^-?\d+$/.test(raw || '') ? parseInt(raw, 10) : raw;
                 if (id !== undefined && id !== null && id !== '') toggleSelection(id);
+            });
+        }
+
+        // -- Card-level hover highlight (list -> marker direction) -----------
+        // mouseover/mouseout bubble (unlike mouseenter/mouseleave), so this is
+        // delegated the same way the checkbox listener above is - but needs
+        // manual enter/leave tracking since a bubbled event fires repeatedly
+        // as the pointer moves over a card's children.
+        if (opts.wrapEl && opts.cardSelector) {
+            var hoveredCard = null;
+            opts.wrapEl.addEventListener('mouseover', function (e) {
+                var card = e.target.closest(opts.cardSelector);
+                if (card === hoveredCard) return;
+                if (hoveredCard && cardToId.has(hoveredCard)) setHover(cardToId.get(hoveredCard), false);
+                hoveredCard = card;
+                if (card && cardToId.has(card)) setHover(cardToId.get(card), true);
+            });
+            opts.wrapEl.addEventListener('mouseout', function (e) {
+                if (!hoveredCard) return;
+                var to = e.relatedTarget;
+                if (to && hoveredCard.contains(to)) return;
+                if (cardToId.has(hoveredCard)) setHover(cardToId.get(hoveredCard), false);
+                hoveredCard = null;
             });
         }
 
