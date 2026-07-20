@@ -143,7 +143,49 @@ def _seed_content_for_location(location: Location) -> str | None:
     if not body:
         return None
 
+    infobox_block = _infobox_markdown(cached.data.get("infobox"))
+    if infobox_block:
+        body = f"{infobox_block}\n\n{body}"
+
     return f"{body}\n\n{_attribution_line(cached.data)}".strip()
+
+
+def _infobox_markdown(pairs: object) -> str:
+    """Render a Wikipedia infobox's label/value fact pairs as a Markdown table.
+
+    ``WikipediaGateway._fetch_infobox`` reaches Wikipedia's real rendered
+    HTML (the only response of theirs that carries the infobox at all - the
+    lead/extended extracts are both backed by an extension that strips
+    tables before returning) and already reduces it to plain-text ``[label,
+    value]`` pairs, skipping the infobox's own title row, section dividers,
+    and any image/map-only row (the embedded Kartographer map has no
+    Markdown equivalent) - this only needs to format what's left.
+
+    Args:
+        pairs: The cached ``infobox`` value (``list[list[str]]`` when
+            present) - typed loosely since it comes back out of a JSONField
+            and may be missing/None for a location cached before this field
+            existed, or genuinely empty when the article had no infobox.
+
+    Returns:
+        A GFM pipe table, or "" if there are no usable pairs.
+    """
+    if not isinstance(pairs, list):
+        return ""
+    rows: list[tuple[str, str]] = []
+    for pair in pairs:
+        if not isinstance(pair, list) or len(pair) != 2:
+            continue
+        label, value = (str(pair[0]).strip(), str(pair[1]).strip())
+        if not label or not value:
+            continue
+        rows.append((label.replace("|", "\\|"), value.replace("|", "\\|")))
+    if not rows:
+        return ""
+
+    lines = ["| | |", "| --- | --- |"]
+    lines.extend(f"| **{label}** | {value} |" for label, value in rows)
+    return "\n".join(lines)
 
 
 def _attribution_line(article_data: dict) -> str:

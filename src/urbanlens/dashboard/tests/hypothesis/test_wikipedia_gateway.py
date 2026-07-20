@@ -85,11 +85,13 @@ class GetArticleForLocationTests(SimpleTestCase):
                 return_value={"title": "The Actual Place", "extract": "Located in Poughkeepsie.", "extract_html": "<p>Located in Poughkeepsie.</p>"},
             ),
             mock.patch.object(WikipediaGateway, "_fill_short_extract"),
+            mock.patch.object(WikipediaGateway, "_fetch_infobox", return_value=[]),
         ):
             result = self.gateway.get_article_for_location(40.0, -74.0, _COMPONENTS, name="The Actual Place")
         self.assertIsNotNone(result)
         assert result is not None
         self.assertEqual(result["title"], "The Actual Place")
+        self.assertEqual(result["infobox"], [])
 
     def test_skips_a_rejected_candidate_and_accepts_the_next_matching_one(self) -> None:
         candidates = [{"title": "Wrong Nearby Article"}, {"title": "The Actual Place"}]
@@ -101,11 +103,28 @@ class GetArticleForLocationTests(SimpleTestCase):
             mock.patch.object(WikipediaGateway, "_geo_search", return_value=candidates),
             mock.patch.object(WikipediaGateway, "_fetch_summary", side_effect=lambda title: summaries[title]),
             mock.patch.object(WikipediaGateway, "_fill_short_extract"),
+            mock.patch.object(WikipediaGateway, "_fetch_infobox", return_value=[]),
         ):
             result = self.gateway.get_article_for_location(40.0, -74.0, _COMPONENTS, name="The Actual Place")
         self.assertIsNotNone(result)
         assert result is not None
         self.assertEqual(result["title"], "The Actual Place")
+
+    def test_matched_candidate_gets_its_infobox_fetched(self) -> None:
+        with (
+            mock.patch.object(WikipediaGateway, "_geo_search", return_value=[{"title": "The Actual Place"}]),
+            mock.patch.object(
+                WikipediaGateway,
+                "_fetch_summary",
+                return_value={"title": "The Actual Place", "extract": "Located in Poughkeepsie.", "extract_html": "<p>Located in Poughkeepsie.</p>"},
+            ),
+            mock.patch.object(WikipediaGateway, "_fill_short_extract"),
+            mock.patch.object(WikipediaGateway, "_fetch_infobox", return_value=[["Established", "1900"]]) as fetch_infobox,
+        ):
+            result = self.gateway.get_article_for_location(40.0, -74.0, _COMPONENTS, name="The Actual Place")
+        fetch_infobox.assert_called_once_with("The Actual Place")
+        assert result is not None
+        self.assertEqual(result["infobox"], [["Established", "1900"]])
 
 
 class AbsoluteMediaUrlTests(SimpleTestCase):
@@ -219,3 +238,80 @@ class WikipediaMediaGatewayTests(SimpleTestCase):
         ):
             items = list(gateway._generate_media("Example Article"))
         self.assertEqual([item.url for item in items], ["https://upload.wikimedia.org/new.jpg"])
+
+
+class FetchInfoboxTests(SimpleTestCase):
+    """WikipediaGateway._fetch_infobox() - regression coverage for the
+    "started from Wikipedia" seed missing the infobox" report
+    (docs/prompts/completed.md).
+
+    _fetch_summary/_fetch_extended_extract are both backed by the
+    TextExtracts extension, which strips infoboxes before returning "extract"
+    text - _fetch_infobox instead parses action=parse's real rendered HTML,
+    which is the only Wikipedia response that carries the infobox table.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.gateway = WikipediaGateway()
+
+    @staticmethod
+    def _response(payload: dict) -> mock.Mock:
+        resp = mock.Mock()
+        resp.raise_for_status = mock.Mock()
+        resp.json.return_value = payload
+        return resp
+
+    # A trimmed version of the "New St. Joseph Cemetery" infobox from the
+    # original bug report: a title row (th only, no td), an image/map row
+    # (td only, no th), a section-divider row ("Details", th only), then
+    # real label/value fact rows - including one with inline markup
+    # (a <span> around a non-breaking space in "Owned by") and a linked label
+    # ("Find a Grave") to confirm text_content() flattens both correctly.
+    _INFOBOX_HTML = """
+    <table class="infobox vcard">
+    <tbody>
+    <tr><th colspan="2" class="infobox-above">New St. Joseph Cemetery</th></tr>
+    <tr><td colspan="2" class="infobox-image"><a><img src="map.png"></a></td></tr>
+    <tr><th colspan="2" class="infobox-header">Details</th></tr>
+    <tr><th class="infobox-label">Established</th><td class="infobox-data">1843/1853</td></tr>
+    <tr><th class="infobox-label">Country</th><td class="infobox-data">US</td></tr>
+    <tr><th class="infobox-label">Owned<span>&nbsp;</span>by</th><td class="infobox-data">St. Joseph New Cemetery Association</td></tr>
+    <tr><th class="infobox-label"><a href="/wiki/Find_a_Grave">Find a Grave</a></th><td class="infobox-data"><a href="https://example.com">New St. Joseph Cemetery</a></td></tr>
+    </tbody>
+    </table>
+    """
+
+    def test_extracts_label_value_pairs_skipping_title_map_and_header_rows(self) -> None:
+        payload = {"parse": {"text": f"<div>{self._INFOBOX_HTML}</div>"}}
+        with mock.patch.object(self.gateway.session, "get", return_value=self._response(payload)):
+            pairs = self.gateway._fetch_infobox("New St. Joseph Cemetery")
+        self.assertEqual(
+            pairs,
+            [
+                ["Established", "1843/1853"],
+                ["Country", "US"],
+                ["Owned by", "St. Joseph New Cemetery Association"],
+                ["Find a Grave", "New St. Joseph Cemetery"],
+            ],
+        )
+
+    def test_no_infobox_table_returns_empty_list(self) -> None:
+        payload = {"parse": {"text": "<div><p>No infobox here.</p></div>"}}
+        with mock.patch.object(self.gateway.session, "get", return_value=self._response(payload)):
+            self.assertEqual(self.gateway._fetch_infobox("Some Article"), [])
+
+    def test_empty_parse_text_returns_empty_list(self) -> None:
+        with mock.patch.object(self.gateway.session, "get", return_value=self._response({"parse": {"text": ""}})):
+            self.assertEqual(self.gateway._fetch_infobox("Some Article"), [])
+
+    def test_request_failure_returns_empty_list(self) -> None:
+        with mock.patch.object(self.gateway.session, "get", side_effect=ConnectionError("boom")):
+            self.assertEqual(self.gateway._fetch_infobox("Some Article"), [])
+
+    def test_row_count_is_capped(self) -> None:
+        rows = "".join(f'<tr><th class="infobox-label">Field {i}</th><td class="infobox-data">Value {i}</td></tr>' for i in range(50))
+        payload = {"parse": {"text": f'<div><table class="infobox">{rows}</table></div>'}}
+        with mock.patch.object(self.gateway.session, "get", return_value=self._response(payload)):
+            pairs = self.gateway._fetch_infobox("Some Article")
+        self.assertEqual(len(pairs), 20)

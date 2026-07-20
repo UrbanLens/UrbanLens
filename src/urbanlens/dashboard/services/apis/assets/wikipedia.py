@@ -78,6 +78,19 @@ _ALLOWED_TAGS = frozenset(
 # into the card as noise (chart axis labels, raw JSON, etc.).
 _CLEAN_CONTENT_TAGS = frozenset({"wiki-chart", "svg", "style", "script", "table"})
 _HEADING_TAGS = frozenset({"h1", "h2", "h3", "h4", "h5", "h6"})
+
+# Infobox extraction is the one case that needs the opposite allowlist from
+# the prose extract above: table structure kept, everything else (article
+# body, navboxes, footnotes) unwrapped down to plain text so lxml can walk
+# just the rows. `class` is kept on `table` only, so the infobox itself can
+# still be found by class after sanitizing - every other attribute is
+# stripped, same as the prose extract.
+_INFOBOX_ALLOWED_TAGS = frozenset({"table", "thead", "tbody", "tr", "th", "td"})
+_INFOBOX_CLEAN_CONTENT_TAGS = frozenset({"script", "style", "svg"})
+_INFOBOX_ALLOWED_ATTRIBUTES: dict[str, set[str]] = {"table": {"class"}}
+# Defensive cap - a real infobox has a handful of rows; this only guards
+# against something pathological slipping through.
+_MAX_INFOBOX_ROWS = 20
 # Sections whose content reads poorly as prose (bibliography entries, bare
 # citation text, etc.) - the extended extract is truncated at the first
 # heading matching one of these rather than including them.
@@ -199,7 +212,9 @@ class WikipediaGateway(Gateway):
 
         Returns:
             A dict with keys ``title``, ``extract``, ``url``, ``thumbnail``,
-            ``description``, ``page_id`` - or None if no matching article found.
+            ``description``, ``page_id``, ``infobox`` (ordered ``[label,
+            value]`` pairs, possibly empty - see ``_fetch_infobox``) - or
+            None if no matching article found.
         """
         candidates = self._geo_search(latitude, longitude)
         for candidate in candidates:
@@ -207,6 +222,7 @@ class WikipediaGateway(Gateway):
             if summary and self._address_matches(summary, address_components, name):
                 article = self._normalise(summary)
                 self._fill_short_extract(article, candidate["title"])
+                article["infobox"] = self._fetch_infobox(candidate["title"])
                 return article
         return None
 
@@ -304,6 +320,64 @@ class WikipediaGateway(Gateway):
         except Exception:
             logger.warning("Wikipedia extended extract fetch failed for %r", title)
         return None
+
+    def _fetch_infobox(self, title: str) -> list[list[str]]:
+        """Fetch and extract an article's infobox as ordered label/value fact pairs.
+
+        `_fetch_summary`/`_fetch_extended_extract` are both backed by the
+        TextExtracts extension, which strips infoboxes (and every other
+        table) before returning "extract" text - there's no way to reach the
+        infobox through either. This instead requests the article's real
+        rendered HTML (``action=parse``) and pulls just the infobox table out
+        of it, since that's the only Wikipedia response that contains it.
+
+        Args:
+            title: Exact Wikipedia article title.
+
+        Returns:
+            Ordered ``[label, value]`` pairs for infobox rows that have both
+            a label and real text content - skips the infobox's own title
+            row, section-divider rows (e.g. "Details"), and any image/map-only
+            row (the embedded Kartographer map has no Markdown equivalent).
+            Empty list on failure, a missing infobox, or no matching rows.
+        """
+        params: dict[str, str] = {
+            "action": "parse",
+            "page": title,
+            "prop": "text",
+            "format": "json",
+            "formatversion": "2",
+        }
+        try:
+            resp = self.session.get(self.base_url, params=params, timeout=10)
+            resp.raise_for_status()
+            raw_html = resp.json().get("parse", {}).get("text", "")
+        except Exception:
+            logger.warning("Wikipedia infobox fetch failed for %r", title)
+            return []
+        if not raw_html:
+            return []
+
+        safe_html = nh3.clean(raw_html, tags=_INFOBOX_ALLOWED_TAGS, clean_content_tags=_INFOBOX_CLEAN_CONTENT_TAGS, attributes=_INFOBOX_ALLOWED_ATTRIBUTES)
+        root = lxml_html.fromstring(f"<div>{safe_html}</div>")
+        tables = root.xpath('//table[contains(concat(" ", normalize-space(@class), " "), " infobox ")]')
+        if not tables:
+            return []
+
+        pairs: list[list[str]] = []
+        for row in tables[0].xpath(".//tr"):
+            th = row.find("th")
+            td = row.find("td")
+            if th is None or td is None:
+                continue
+            label = " ".join(th.text_content().split())
+            value = " ".join(td.text_content().split())
+            if not label or not value:
+                continue
+            pairs.append([label, value])
+            if len(pairs) >= _MAX_INFOBOX_ROWS:
+                break
+        return pairs
 
     @staticmethod
     def _visible_length(html_fragment: str) -> int:

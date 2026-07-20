@@ -20,7 +20,7 @@ from urbanlens.dashboard.models.cache.location_cache import LocationCache
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.wiki.model import Wiki
-from urbanlens.dashboard.services.wiki_seed import _attribution_line, _extract_html_to_markdown, seed_pin_article_from_wikipedia, seed_wiki_article_from_wikipedia
+from urbanlens.dashboard.services.wiki_seed import _attribution_line, _extract_html_to_markdown, _infobox_markdown, seed_pin_article_from_wikipedia, seed_wiki_article_from_wikipedia
 
 _ARTICLE_DATA = {
     "title": "Eighteenth District School",
@@ -82,6 +82,33 @@ def test_attribution_no_url_returns_empty_string() -> None:
     assert _attribution_line({"title": "Some Article", "url": ""}) == ""  # nosec B101
 
 
+def test_infobox_markdown_renders_a_table() -> None:
+    md = _infobox_markdown([["Established", "1900"], ["Country", "US"]])
+    assert md == "| | |\n| --- | --- |\n| **Established** | 1900 |\n| **Country** | US |"  # nosec B101
+
+
+def test_infobox_markdown_empty_list_returns_empty_string() -> None:
+    assert _infobox_markdown([]) == ""  # nosec B101
+
+
+def test_infobox_markdown_none_returns_empty_string() -> None:
+    assert _infobox_markdown(None) == ""  # nosec B101
+
+
+def test_infobox_markdown_skips_pairs_with_blank_label_or_value() -> None:
+    md = _infobox_markdown([["", "value"], ["label", ""], ["Real", "Row"]])
+    assert md == "| | |\n| --- | --- |\n| **Real** | Row |"  # nosec B101
+
+
+def test_infobox_markdown_escapes_pipe_characters() -> None:
+    md = _infobox_markdown([["Type", "A | B"]])
+    assert "A \\| B" in md  # nosec B101
+
+
+def test_infobox_markdown_malformed_pairs_are_ignored() -> None:
+    assert _infobox_markdown([["only_one"], "not_a_list", ["a", "b", "c"]]) == ""  # nosec B101
+
+
 def _location() -> Location:
     return baker.make(Location, latitude=40.5, longitude=-74.5)
 
@@ -138,6 +165,37 @@ class SeedWikiArticleFromWikipediaTests(TestCase):
         self.assertIsNone(result)
         article = Article.objects.get(wiki=wiki)
         self.assertEqual(article.content, "Someone already wrote this.")
+
+    def test_matched_article_with_infobox_includes_the_table_before_the_body(self) -> None:
+        """Regression coverage for the "started from Wikipedia" seed missing
+        the infobox (docs/prompts/completed.md)."""
+        location = _location()
+        baker.make(Wiki, location=location)
+        data = {**_ARTICLE_DATA, "infobox": [["Established", "1900"], ["Country", "US"]]}
+        LocationCache.objects.create(location=location, source="wikipedia", data=data)
+
+        article = seed_wiki_article_from_wikipedia(location)
+
+        self.assertIsNotNone(article)
+        self.assertIn("| **Established** | 1900 |", article.content)
+        self.assertIn("| **Country** | US |", article.content)
+        # The table comes before the prose body, and the body/attribution
+        # footer both still render normally alongside it.
+        self.assertLess(article.content.index("Established"), article.content.index("Eighteenth District School"))
+        self.assertIn("## History", article.content)
+        self.assertIn("wikipedia.org/wiki/Eighteenth_District_School", article.content)
+
+    def test_matched_article_with_no_infobox_key_omits_the_table(self) -> None:
+        """A location cached before this field existed (or a genuinely
+        infobox-less article) must still seed normally, with no table."""
+        location = _location()
+        baker.make(Wiki, location=location)
+        LocationCache.objects.create(location=location, source="wikipedia", data=_ARTICLE_DATA)
+
+        article = seed_wiki_article_from_wikipedia(location)
+
+        self.assertIsNotNone(article)
+        self.assertNotIn("| --- | --- |", article.content)
 
 
 class SeedPinArticleFromWikipediaTests(TestCase):
