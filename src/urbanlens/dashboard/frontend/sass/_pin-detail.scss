@@ -4340,6 +4340,7 @@ body.page-location-details .pin-detail-grid {
             gap: clamp(.5rem, 1.5vw, .85rem);
             padding: .75rem;
             min-height: 12rem;
+            max-height: 40rem;
 
             @include up($breakpoint-sm) {
                 grid-template-columns: repeat(auto-fit, minmax(108px, 1fr));

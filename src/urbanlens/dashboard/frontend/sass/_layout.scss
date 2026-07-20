@@ -202,7 +202,7 @@
 div.container {
     width: 100%;
     max-width: 100%;
-    min-height: calc(100vh - 4rem - 4rem - 17rem);
+    min-height: calc(100vh - 4rem - 4rem);
     /* Adjust the height of the container to be at least 100% of the viewport height minus the header and footer heights (and page hero) */
     display: flex;
     flex-direction: column;
