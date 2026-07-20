@@ -745,7 +745,6 @@ _API_LIMIT_CATEGORIES: dict[str, str] = {
     "google_places": "Geocoding & Places",
     "nominatim": "Geocoding & Places",
     "photon": "Geocoding & Places",
-    "datagov": "Geocoding & Places",
     # Search & News
     "google_search": "Search & News",
     "brave_search": "Search & News",

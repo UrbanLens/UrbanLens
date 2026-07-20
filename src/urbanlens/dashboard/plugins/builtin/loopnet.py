@@ -1,4 +1,15 @@
-"""LoopNet plugin: commercial real-estate listings panel on the pin detail page."""
+"""LoopNet plugin: commercial real-estate listings panel on the pin detail page.
+
+Infrastructure only for now - see ``docs/redata.md``. The scraping logic this
+plugin used to run locally (``services.apis.real_estate.loopnet.LoopNetGateway``)
+has been ported into REData, the standalone service that already owns property
+records for this app (see ``plugins.builtin.property_records``), but REData
+doesn't expose a commercial-listings lookup endpoint yet. Until it does,
+:meth:`LoopnetPanelSource.fetch` persists an explicit empty result - the panel
+scheduling, single-flight, and failure-suppression machinery
+(``services.external_data``) is fully wired and safe to ship this way (it just
+never shows data yet), the same stub shape as ``plugins.builtin.cris_buildings``.
+"""
 
 from __future__ import annotations
 
@@ -6,7 +17,6 @@ from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.external_data import LocationCachePanelSource
-from urbanlens.dashboard.services.rate_limiter import ServiceDefaults
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
@@ -44,13 +54,16 @@ class LoopnetPanelSource(LocationCachePanelSource):
         return ", ".join(p for p in parts if p).strip(", ")
 
     def fetch(self, pin: Pin) -> None:
-        """Search LoopNet for the pin's address and cache the listings."""
+        """Persist an empty result until REData exposes a commercial-listings lookup endpoint.
+
+        TODO: once REData implements LoopNet retrieval (see module docstring),
+        replace this body with a call mirroring
+        ``RedataGateway.lookup_parcel`` (see ``plugins.builtin.property_records``).
+        """
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
-        from urbanlens.dashboard.services.apis.real_estate.loopnet import LoopNetGateway
 
         address = self.address(pin)
-        result = LoopNetGateway().search(address) if address else None
-        LocationCache.set(pin.location, self.cache_source, result or {}, query_key=address)
+        LocationCache.set(pin.location, self.cache_source, {}, query_key=address)
 
 
 class LoopnetPlugin(UrbanLensPlugin):
@@ -58,20 +71,12 @@ class LoopnetPlugin(UrbanLensPlugin):
 
     name: ClassVar[str] = "loopnet"
     verbose_name: ClassVar[str] = "LoopNet"
-    description: ClassVar[str] = "Shows LoopNet commercial real-estate listings for a pin's address on the pin detail page. USA only."
+    description: ClassVar[str] = "Shows LoopNet commercial real-estate listings for a pin's address on the pin detail page, via REData. USA only."
     author: ClassVar[str] = "UrbanLens"
 
-    def get_service_defaults(self) -> dict[str, ServiceDefaults]:
-        """Rate-limit defaults for LoopNet."""
-        return {
-            "loopnet": ServiceDefaults(
-                display_name="LoopNet",
-                calls_per_minute=5,
-                calls_per_day=100,
-                usa_only=True,
-                notes="US commercial real estate. Scraped - be conservative to avoid blocking.",
-            ),
-        }
+    # No get_service_defaults() yet - there's no direct upstream call to
+    # rate-limit until REData's commercial-listings endpoint (and its service
+    # key) exists. See plugins.builtin.cris_buildings for the same pattern.
 
     def get_panel_sources(self) -> list[PanelSource]:
         """Contribute the LoopNet pin-detail panel."""

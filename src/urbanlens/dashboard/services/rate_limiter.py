@@ -82,13 +82,6 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         calls_per_day=200,
         notes="Free tier: 2,000 queries/month.",
     ),
-    "datagov": ServiceDefaults(
-        display_name="Data.gov",
-        calls_per_minute=10,
-        calls_per_day=500,
-        usa_only=True,
-        notes="US government open data. Free API.",
-    ),
     "digital_commonwealth": ServiceDefaults(
         display_name="Digital Commonwealth",
         calls_per_minute=10,

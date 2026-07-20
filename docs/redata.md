@@ -356,3 +356,38 @@ need a real Tier 2/3 (treasurer/recorder site) integration verified against a li
 which is explicitly the unpopulated part of REData's own roadmap (no vendor scrape templates
 yet). Not attempted here for the same reason REData's own CLAUDE.md gives for not guessing at
 vendor templates without a concrete site to verify against.
+
+---
+
+## Further extraction (2026-07-20): LoopNet and CT real-estate sales
+
+Audited the rest of `dashboard/plugins/builtin/` and `dashboard/services/apis/` for other
+parcel/county-record-shaped code that belongs in REData rather than UrbanLens, the same way
+property records and CRIS do. Two more candidates found; a third (Regrid) was already
+excluded and stayed that way.
+
+**LoopNet** (`plugins.builtin.loopnet`) - its retrieval logic
+(`services.apis.real_estate.loopnet.LoopNetGateway`: direct HTML scraping of LoopNet's search
+and property-record pages, with a web-search fallback) has been ported into REData separately.
+The local gateway and its scraping-focused test suite (`tests/hypothesis/test_loopnet.py`) were
+deleted from UrbanLens as dead code. `LoopnetPanelSource.fetch()` now persists an explicit empty
+result, following the exact stub pattern `plugins.builtin.cris_buildings` already uses - the
+panel/route/template (`controllers.pin.PinController.loopnet_info`,
+`templates/dashboard/partials/pins/pin_loopnet.html`) are unchanged and ready to show real data
+again once REData exposes a commercial-listings lookup endpoint and the plugin is wired to call
+it, mirroring `RedataGateway.lookup_parcel`.
+
+**CT real-estate sales** - `RealEstateSalesGateway` (a thin wrapper around data.ct.gov's Socrata
+`rows.json` sales dump) existed in two duplicate, entirely orphaned copies
+(`services/datagov/realestate.py`, `services/apis/civic/datagov/realestate.py`) with zero
+callers anywhere - no plugin, panel, or view ever used it, even before REData existed. Both were
+deleted outright as dead code, along with the now-empty `datagov`/`civic` packages and the
+unused `datagov` entry in `rate_limiter.SERVICE_REGISTRY`. If CT sales data is wanted, it should
+be built directly in REData as a new Tier 1 Socrata jurisdiction (the same shape REData's
+pipeline already handles), not resurrected from this one-off script.
+
+**Regrid** (`services.apis.locations.boundaries.regrid.RegridGateway`) - already documented
+above as implemented-but-deliberately-unused (paid service). Confirmed it's genuinely dormant
+(no env var, no test, no other reference) and deleted outright, since `RedataBoundaryProvider`
+already fills the property-boundary slot it would have. `services.locations.boundaries`'s
+`BoundaryProviderChain` docstring was updated to stop pointing at the now-deleted file.

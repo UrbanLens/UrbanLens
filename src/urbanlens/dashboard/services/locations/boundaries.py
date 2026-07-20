@@ -74,9 +74,10 @@ class BoundaryProviderChain:
     narrower (US-only, and only jurisdictions REData has researched), so
     every other provider still matters as a fallback. It's also a no-op, not
     an error, for installs that haven't configured REData at all (see its own
-    docstring). Regrid (parcel/property data) is implemented but deliberately
-    excluded - it is a paid service (see regrid.py); add ``RegridGateway()``
-    here to enable it too.
+    docstring). A Regrid-backed provider (parcel/property data) was
+    investigated but never added - it's a paid service, and
+    ``RedataBoundaryProvider`` already fills the property-boundary slot
+    Regrid would have (see ``docs/redata.md``).
     """
 
     providers: tuple[BoundaryProvider, ...] = field(
