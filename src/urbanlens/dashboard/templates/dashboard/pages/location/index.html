@@ -277,6 +277,10 @@
                 </div>
                 <div class="media-gallery-grid" id="media-gallery-grid"
                      data-adaptive-pagination-list data-adaptive-pagination-min-page-size="6"></div>
+                <div class="media-gallery-empty" id="media-gallery-empty" hidden>
+                    <i class="material-symbols-outlined">collections</i>
+                    <p>No media found for this location yet.</p>
+                </div>
                 <div class="pagination-bar" data-adaptive-pagination-controls
                      data-server-page="1" data-server-pages="1" hidden></div>
             </div>
@@ -1575,13 +1579,15 @@
             if (loading) loading.remove();
             var g = grid();
             var sec = section();
+            if (sec) sec.hidden = false;
             // Count actual media tiles, not the hidden debug-marker spans each
             // provider response also appends (even when it found nothing, so
-            // its query still shows up in the admin debug overlay) - otherwise
-            // an all-providers-empty pin would leave a header-only empty card.
-            if (!g || !g.querySelectorAll('.media-item').length) {
-                if (sec) sec.remove();
-            }
+            // its query still shows up in the admin debug overlay) - the
+            // section itself always stays visible (so "Mine" stays reachable
+            // for a first-time uploader) rather than vanishing outright, which
+            // previously looked indistinguishable from a rendering bug.
+            var empty = document.getElementById('media-gallery-empty');
+            if (empty) empty.hidden = !!(g && g.querySelectorAll('.media-item').length);
         }
 
         document.body.addEventListener('htmx:afterOnLoad', function (evt) {
