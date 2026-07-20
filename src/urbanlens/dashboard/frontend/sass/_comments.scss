@@ -663,6 +663,14 @@
     flex-direction: column;
     flex: 1;
     overflow: hidden;
+
+    // The class's own unconditional `display: flex` above otherwise beats the
+    // browser's default `[hidden] { display: none }` (author styles always
+    // win over the UA stylesheet, even at equal specificity), so toggling
+    // `.hidden` from JS (_switchComposerTab in base.html) had no visual
+    // effect - both this panel and #cmc-tab-panel-existing rendered stacked
+    // at once regardless of which tab was "active".
+    &[hidden] { display: none; }
 }
 
 .comment-map-composer-controls {
@@ -672,6 +680,11 @@
     align-items: center;
     gap: .75rem;
     flex-shrink: 0;
+
+    // Same fix as .comment-map-composer-body above - #cmc-title-row (this
+    // class plus .cmcc-title-row) is toggled via `_titleRow.hidden` in
+    // base.html for standalone/screenshot mode and needs the same guard.
+    &[hidden] { display: none; }
 }
 
 .cmcc-label {
@@ -752,6 +765,8 @@
     gap: .25rem;
     padding: 0 1rem;
     border-bottom: 1px solid var(--ul-surface-border);
+
+    &[hidden] { display: none; }
 }
 
 .cmc-tab {
@@ -780,6 +795,8 @@
     overflow: hidden;
     padding: .75rem 1rem;
     gap: .6rem;
+
+    &[hidden] { display: none; }
 }
 
 .cmc-existing-search {

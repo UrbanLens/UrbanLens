@@ -450,6 +450,11 @@ class DirectMessageMapPickerView(LoginRequiredMixin, View):
     lets the sender attach one of their existing maps instead - the only way
     a previously-cloned ("Add to my maps") map can be forwarded on, since
     ``create_direct_message`` only accepts maps the sender already owns.
+
+    Despite the name/URL, this is entirely generic (just the caller's own
+    maps, no DM-specific filtering) - also reused by the comment/Notes map
+    composer's "Choose Existing" tab (see base.html's
+    ``_openCommentAttachMapDialog``) rather than duplicating this endpoint.
     """
 
     def get(self, request: HttpRequest) -> HttpResponse:
