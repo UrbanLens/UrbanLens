@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import logging
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from django.utils.html import escape
 
@@ -12,13 +12,18 @@ from django.utils.html import escape
 import lxml.html as lxml_html  # nosec B410
 import nh3
 
+from urbanlens.dashboard.services.apis.assets.base import MediaItem, MediaProvider
 from urbanlens.dashboard.services.gateway import Gateway
 from urbanlens.dashboard.services.redact import redact_coordinate
+
+if TYPE_CHECKING:
+    from collections.abc import Generator
 
 logger = logging.getLogger(__name__)
 
 _GEO_SEARCH_URL = "https://en.wikipedia.org/w/api.php"
 _SUMMARY_URL = "https://en.wikipedia.org/api/rest_v1/page/summary/{title}"
+_MEDIA_LIST_URL = "https://en.wikipedia.org/api/rest_v1/page/media-list/{title}"
 _RADIUS_METERS = 500
 _MAX_CANDIDATES = 5
 _USER_AGENT = "UrbanLens/1.0 (https://github.com/urbanlens/urbanlens; jess.a.mann@gmail.com) python-requests/2.x"
@@ -205,6 +210,61 @@ class WikipediaGateway(Gateway):
                 return article
         return None
 
+    def get_article_media(self, title: str) -> list[dict[str, Any]]:
+        """
+        Return the images actually shown on a specific Wikipedia article.
+
+        Unlike a Wikimedia Commons text search (which only finds files whose
+        own title/description text happens to match a query - see
+        ``WikimediaGateway``), this reads the article's own curated media list,
+        so it also picks up images that are only reachable through an in-body
+        gallery and aren't independently discoverable by name (a known gap:
+        see docs/PROBLEMS.md/completed.md for the original report). Should
+        only be called once an article has already been confidently matched
+        to a location (e.g. via ``get_article_for_location``) - this takes the
+        article title directly, not a search query.
+
+        Args:
+            title: Exact Wikipedia article title (as returned by
+                ``get_article_for_location``'s ``title`` key).
+
+        Returns:
+            List of dicts with keys ``title`` (the Commons ``File:`` page
+            title, useful for cross-provider dedup), ``url`` (largest
+            available rendition), and ``thumb_url`` (smallest). Empty on
+            failure or no matches.
+        """
+        url = _MEDIA_LIST_URL.format(title=title.replace(" ", "_"))
+        try:
+            resp = self.session.get(url, timeout=10)
+            if resp.status_code == 404:
+                return []
+            resp.raise_for_status()
+            items = resp.json().get("items", [])
+        except Exception:
+            logger.warning("Wikipedia media-list fetch failed for %r", title)
+            return []
+
+        media: list[dict[str, Any]] = []
+        for item in items:
+            if item.get("type") != "image":
+                continue
+            srcset = item.get("srcset") or []
+            if not srcset:
+                continue
+            urls = [_absolute_media_url(src.get("src", "")) for src in srcset if src.get("src")]
+            urls = [u for u in urls if u]
+            if not urls:
+                continue
+            media.append(
+                {
+                    "title": (item.get("title") or "").removeprefix("File:"),
+                    "url": urls[-1],
+                    "thumb_url": urls[0],
+                },
+            )
+        return media
+
     # -- private ----------------------------------------------------------------
 
     def _fill_short_extract(self, article: dict[str, Any], title: str) -> None:
@@ -369,3 +429,52 @@ class WikipediaGateway(Gateway):
             "description": summary.get("description", ""),
             "page_id": summary.get("pageid"),
         }
+
+
+def _absolute_media_url(src: str) -> str:
+    """Prefix a protocol-relative media-list URL (``//upload.wikimedia.org/...``) with https:."""
+    if src.startswith("//"):
+        return f"https:{src}"
+    return src
+
+
+@dataclass(slots=True, kw_only=True)
+class WikipediaMediaGateway(MediaProvider):
+    """
+    Images from a pin's own already-matched Wikipedia article (see
+    ``WikipediaGateway.get_article_media``), as a second, independent path
+    into the Media gallery alongside ``WikimediaGateway``'s generic Commons
+    text search - the two catch different failure modes (an unmatchable
+    query vs. a gallery image with no matching Commons metadata), and
+    together are meant to make it unlikely that images visibly present on a
+    confidently-matched Wikipedia article never reach the gallery.
+
+    The "search term" this provider is given (see ``WikipediaMediaPanelSource``)
+    is the exact matched article title, not a free-text query - it makes no
+    sense to call this provider without one.
+    """
+
+    service_key: ClassVar[str] = "wikipedia_media"
+    display_name: ClassVar[str] = "Wikipedia"
+    paid_service: ClassVar[bool] = False
+
+    #: URLs already surfaced by the Wikimedia Commons panel for the same
+    #: Location, populated by ``WikipediaMediaPanelSource`` before fetching -
+    #: skipped here so the same photo doesn't appear twice in the gallery.
+    known_urls: frozenset[str] = field(default_factory=frozenset)
+
+    def _generate_media(self, search_term: str, address: str | None = None) -> Generator[MediaItem]:
+        if not search_term:
+            return
+        for img in WikipediaGateway().get_article_media(search_term):
+            url = img.get("url") or img.get("thumb_url") or ""
+            if not url or url in self.known_urls:
+                continue
+            title = img.get("title") or ""
+            yield MediaItem(
+                url=url,
+                thumb_url=img.get("thumb_url") or url,
+                caption=title,
+                source=self.display_name,
+                page_url=f"https://commons.wikimedia.org/wiki/File:{title}" if title else "",
+            )

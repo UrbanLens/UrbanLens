@@ -28,7 +28,7 @@
   &::placeholder { color: var(--color-muted, #94a3b8); }
 
   &:focus {
-    border-color: var(--color-accent, #2563eb);
+    border-color: var(--ul-primary-color);
     box-shadow: 0 0 0 2px rgba(37, 99, 235, .15);
   }
 }

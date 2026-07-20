@@ -58,7 +58,7 @@
 
     .wx-icon {
         font-size: 2.2rem;
-        color: var(--ul-primary, #2563eb);
+        color: var(--ul-primary-color);
         line-height: 1;
     }
 
@@ -483,7 +483,7 @@
         &.visit-source--history { color: var(--ul-info, #3b82f6); }
         &.visit-source--photo   { color: var(--ul-accent, #8b5cf6); }
         &.visit-source--user,
-        &.visit-source--trip    { color: var(--ul-primary, #2563eb); }
+        &.visit-source--trip    { color: var(--ul-primary-color); }
     }
 
     // Column wrapper holding the date line, notes, participants, photos and map.
@@ -1341,7 +1341,7 @@
         font-weight: 600;
         letter-spacing: .02em;
         text-transform: uppercase;
-        color: var(--ul-primary, #2563eb);
+        color: var(--ul-primary-color);
         background: var(--ul-primary-light, rgba(37, 99, 235, .12));
         border-radius: 999px;
         white-space: nowrap;
@@ -1376,7 +1376,7 @@
         }
 
         &:is(a):hover {
-            color: var(--ul-primary, #2563eb);
+            color: var(--ul-primary-color);
             text-decoration: underline;
         }
     }
@@ -1434,7 +1434,7 @@
         }
 
         &:hover {
-            color: var(--ul-primary, #2563eb);
+            color: var(--ul-primary-color);
             background: var(--ul-primary-light, rgba(37, 99, 235, .12));
         }
     }
@@ -1446,7 +1446,7 @@
         margin-top: .85rem;
         font-size: .82rem;
         font-weight: 600;
-        color: var(--ul-primary, #2563eb);
+        color: var(--ul-primary-color);
         text-decoration: none;
 
         .material-symbols-outlined {
@@ -1481,7 +1481,7 @@
         font-weight: 600;
         letter-spacing: .02em;
         text-transform: uppercase;
-        color: var(--ul-primary, #2563eb);
+        color: var(--ul-primary-color);
         background: var(--ul-primary-light, rgba(37, 99, 235, .12));
         border-radius: 999px;
         white-space: nowrap;
@@ -1516,7 +1516,7 @@
         }
 
         &:is(a):hover {
-            color: var(--ul-primary, #2563eb);
+            color: var(--ul-primary-color);
             text-decoration: underline;
         }
     }
@@ -1557,7 +1557,7 @@
         margin-top: .85rem;
         font-size: .82rem;
         font-weight: 600;
-        color: var(--ul-primary, #2563eb);
+        color: var(--ul-primary-color);
         text-decoration: none;
 
         .material-symbols-outlined {
@@ -1673,7 +1673,7 @@
         font-weight: 600;
         letter-spacing: .02em;
         text-transform: uppercase;
-        color: var(--ul-primary, #2563eb);
+        color: var(--ul-primary-color);
         background: var(--ul-primary-light, rgba(37, 99, 235, .12));
         border-radius: 999px;
         white-space: nowrap;
@@ -1708,7 +1708,7 @@
         }
 
         &:is(a):hover {
-            color: var(--ul-primary, #2563eb);
+            color: var(--ul-primary-color);
             text-decoration: underline;
         }
     }
@@ -4188,6 +4188,54 @@ body.page-location-details .pin-detail-grid {
         }
     }
 
+    // -- Combined Media section: All/Mine view switch ------------------------
+    // "Mine" nests the (unmodified) photo-gallery partial - _photo_gallery.html
+    // is also used standalone on the wiki/safety check-in pages, so rather than
+    // fork it for this one context, its own card chrome and header (icon,
+    // "Photos" title, badge, Import/Select buttons) are neutralized here so it
+    // reads as part of the surrounding Media card instead of a second nested
+    // one - the outer header's own Import/Select buttons already operate on
+    // whichever view (All/Mine) is currently active (see mediaDispatchSelect
+    // in index.html).
+    .media-view-toggle {
+        display: flex;
+        gap: .25rem;
+        padding: 0 .85rem .6rem;
+        border-bottom: 1px solid var(--ul-grey-1b);
+    }
+
+    .media-view-toggle-btn {
+        padding: .3rem .85rem;
+        border: none;
+        border-radius: $radius-full;
+        background: transparent;
+        color: var(--ul-grey-6);
+        font-size: .82rem;
+        font-weight: 600;
+        cursor: pointer;
+
+        &:hover { background: var(--ul-hover-bg); }
+
+        &.active {
+            background: var(--ul-primary-color);
+            color: #fff;
+        }
+    }
+
+    .media-view-panel[hidden] { display: none; }
+
+    #pin-gallery-panel {
+        .photo-gallery.card {
+            box-shadow: none;
+            border-radius: 0;
+            background: transparent;
+        }
+
+        .photo-gallery .card-header {
+            display: none;
+        }
+    }
+
     .media-gallery {
         .card-header {
             position: relative;
@@ -4254,7 +4302,7 @@ body.page-location-details .pin-detail-grid {
             }
 
             &:focus-visible {
-                outline: 2px solid var(--ul-link, #2563eb);
+                outline: 2px solid var(--ul-primary-color);
                 outline-offset: 2px;
             }
         }
@@ -4403,7 +4451,7 @@ body.page-location-details .pin-detail-grid {
             }
 
             &.is-active {
-                background: var(--ul-primary, #2563eb);
+                background: var(--ul-primary-color);
             }
         }
         .media-item-not-relevant-btn.is-active {
@@ -4436,11 +4484,11 @@ body.page-location-details .pin-detail-grid {
             display: flex;
         }
         .media-item.is-selected {
-            outline: 2px solid var(--ul-primary, #2563eb);
+            outline: 2px solid var(--ul-primary-color);
             outline-offset: -2px;
         }
         .media-item.is-selected .media-item-select-check {
-            color: var(--ul-primary, #2563eb);
+            color: var(--ul-primary-color);
         }
 
         // -- Source tabs ---------------------------------------------------------
@@ -4483,7 +4531,7 @@ body.page-location-details .pin-detail-grid {
             }
 
             &.is-active {
-                color: var(--ul-primary, #2563eb);
+                color: var(--ul-primary-color);
                 background: var(--ul-primary-tint, rgba(37, 99, 235, .12));
             }
         }
@@ -4538,7 +4586,7 @@ body.page-location-details .pin-detail-grid {
             }
 
             &.active {
-                color: var(--ul-primary, #2563eb);
+                color: var(--ul-primary-color);
                 font-weight: 600;
             }
         }
@@ -4659,7 +4707,7 @@ body.page-location-details .pin-detail-grid {
             margin-top: .75rem;
             font-size: .82rem;
             font-weight: 600;
-            color: var(--ul-primary, #2563eb);
+            color: var(--ul-primary-color);
             text-decoration: none;
 
             .material-symbols-outlined {
@@ -4787,7 +4835,7 @@ body.page-location-details .pin-detail-grid {
             gap: .25rem;
             font-weight: 600;
             font-size: .88rem;
-            color: var(--ul-link, #1a73e8);
+            color: var(--ul-primary-color);
             line-height: 1.35;
             text-decoration: none;
 
@@ -5359,8 +5407,8 @@ body.page-location-details .pin-detail-grid {
     }
 
     &.is-active {
-        color: var(--color-accent, #2563eb);
-        border-bottom-color: var(--color-accent, #2563eb);
+        color: var(--ul-primary-color);
+        border-bottom-color: var(--ul-primary-color);
     }
 }
 
@@ -5390,7 +5438,7 @@ body.page-location-details .pin-detail-grid {
 
     &.is-active {
         background: var(--ul-surface, #fff);
-        color: var(--color-accent, #2563eb);
+        color: var(--ul-primary-color);
         box-shadow: 0 1px 2px rgba(0, 0, 0, .1);
     }
 }
@@ -5446,7 +5494,7 @@ body.page-location-details .pin-detail-grid {
     }
 
     &:has(input:checked) {
-        border-color: var(--color-accent, #2563eb);
+        border-color: var(--ul-primary-color);
     }
 
     &--disabled {
@@ -5499,7 +5547,7 @@ body.page-location-details .pin-detail-grid {
 
 .immich-import-progress-bar {
     height: 100%;
-    background: var(--color-accent, #2563eb);
+    background: var(--ul-primary-color);
     transition: width .3s ease;
 }
 

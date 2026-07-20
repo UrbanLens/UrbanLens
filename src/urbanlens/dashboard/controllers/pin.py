@@ -43,6 +43,14 @@ logger = logging.getLogger(__name__)
 _SlideT = TypeVar("_SlideT")
 
 _WEB_SEARCH_CLIENT_PAGE_SIZE = 5
+# How many of the pin's own photos to preview in the combined Media
+# section's default "All" view - matches image_gallery.PinGalleryView's own
+# per-page size, so the preview shows the same "at a glance" amount as the
+# old standalone Photos section did. Browsing beyond this many is still
+# fully supported (unlimited, paginated) via the section's "Mine" tab - see
+# docs/prompts/completed.md's Photos+Media merge entry for why the preview
+# is capped instead of listing every photo into the client-side gallery.
+_MEDIA_PHOTOS_PREVIEW_LIMIT = 12
 _ADAPTIVE_PAGE_BATCH_MULTIPLIER = 2
 _WEB_SEARCH_PAGE_SIZE = _WEB_SEARCH_CLIENT_PAGE_SIZE * _ADAPTIVE_PAGE_BATCH_MULTIPLIER
 _WEB_SEARCH_MIN_REFRESH_AGE = timedelta(days=1)
@@ -404,8 +412,15 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         the shared gallery grid (see ``media-gallery-section`` in the pin detail
         template), so a slow provider never blocks the others from appearing.
         Every provider is a ``GalleryMediaSource``, so this view is oblivious to
-        which one it's rendering.
+        which one it's rendering - except ``"photos"``, a synchronous read
+        straight off the pin's own uploaded ``Image`` rows rather than an
+        async ``LocationCache``-backed external fetch (there's no external API
+        call to warm, so the whole async-panel machinery would be pure
+        overhead) - see ``_photos_media_preview``.
         """
+        if source == "photos":
+            return self._photos_media_preview(request, pin_slug)
+
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
         from urbanlens.dashboard.models.images.relevance import MediaRelevance, media_item_key
         from urbanlens.dashboard.services.external_data import GalleryMediaSource, get_panel_source
@@ -448,6 +463,54 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             "rendered_items": rendered_items,
             "source_key": source,
             "debug": self._debug_entry(request, source, cached.query_key, from_cache=True, count=len(items)),
+        }
+        return render(request, "dashboard/partials/pins/pin_media_items.html", context)
+
+    def _photos_media_preview(self, request: HttpRequest, pin_slug: str):
+        """Render the pin owner's own most-recent photos as Media-gallery tiles.
+
+        A lightweight, read-only preview (view + open in the lightbox; no
+        relevance marking, since that concept doesn't apply to your own
+        upload) feeding the combined Media section's default "All" view
+        alongside the external providers - full management (delete,
+        reposition, cover photo, bulk actions, unlimited pagination) lives in
+        that section's "Mine" tab, which reuses the pin gallery panel
+        (``image_gallery.PinGalleryView``) completely unchanged.
+
+        Args:
+            request: The current request.
+            pin_slug: The pin's slug, from the URL kwargs.
+
+        Returns:
+            The rendered ``pin_media_items.html`` fragment, or 204 when the
+            pin has no photos of its own yet.
+        """
+        from urbanlens.dashboard.models.images.model import Image
+        from urbanlens.dashboard.services.apis.assets.base import MediaItem
+
+        try:
+            pin = Pin.objects.get(slug=pin_slug, profile__user=request.user)
+        except Pin.DoesNotExist:
+            return HttpResponse(status=404)
+
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        images = Image.objects.filter(pin=pin, profile=profile).exclude(image="").order_by("-created")[:_MEDIA_PHOTOS_PREVIEW_LIMIT]
+
+        rendered_items = [
+            {
+                "item": MediaItem(url=img.image.url, thumb_url=img.image.url, caption=img.caption or "", source="My Photos", page_url=img.image.url),
+                "key": f"photo-{img.pk}",
+                "is_relevant": None,
+            }
+            for img in images
+        ]
+        if not rendered_items:
+            return HttpResponse(status=204)
+
+        context = {
+            "rendered_items": rendered_items,
+            "source_key": "photos",
+            "debug": self._debug_entry(request, "photos", "own uploads", from_cache=False, count=len(rendered_items)),
         }
         return render(request, "dashboard/partials/pins/pin_media_items.html", context)
 

@@ -19,9 +19,11 @@
      data-media-caption="{{ item.caption }}"
      data-media-relevant="{% if entry.is_relevant == True %}true{% elif entry.is_relevant == False %}false{% else %}{% endif %}"
      title="{{ item.caption }}">
+    {% if source_key != "photos" %}
     <button type="button" class="media-item-select-check" title="Select photo" onclick="window.mediaToggleSelect(event, this)" hidden>
         <i class="material-symbols-outlined">check_circle</i>
     </button>
+    {% endif %}
     <button type="button" class="media-item-thumb-btn" onclick="window.mediaOpenLightbox(this)">
         <span class="media-item-source">{{ item.source }}</span>
         {% if item.thumb_url %}
@@ -36,6 +38,7 @@
         <span class="media-item-caption">{{ item.caption|truncatechars:80 }}</span>
         {% endif %}
     </button>
+    {% if source_key != "photos" %}
     <div class="media-item-actions">
         <a class="media-item-action-btn media-item-open-source" href="{{ item.page_url|default:item.url }}"
            target="_blank" rel="noopener noreferrer" title="Open source" onclick="event.stopPropagation()">
@@ -50,6 +53,9 @@
             <i class="material-symbols-outlined">thumb_down</i>
         </button>
     </div>
+    {% else %}
+    <p class="media-item-mine-hint">Manage in the "Mine" tab</p>
+    {% endif %}
 </div>
 {% endwith %}
 {% endfor %}

@@ -16,6 +16,7 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.forms.settings_form import WikiSyncSettingsForm
 from urbanlens.dashboard.models.aliases.model import PinAlias, WikiAlias
+from urbanlens.dashboard.models.cache.location_cache import LocationCache
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.meta import SyncAliasesDirection
@@ -397,3 +398,55 @@ class SettingsViewWikiSyncSectionTests(TestCase):
         self.assertTrue(self.profile.sync_rating_to_wiki)
         self.assertFalse(self.profile.sync_vulnerability_to_wiki)
         self.assertEqual(self.profile.sync_aliases, SyncAliasesDirection.OFF)
+
+
+class MediaCacheInvalidationOnNewAliasTests(TestCase):
+    """A new pin/wiki alias may surface a name-quality-dependent match (a
+    Wikipedia article, or images on one) that couldn't be found under the
+    previous name set - see docs/prompts/completed.md's "Wikipedia article
+    images not reliably reaching Media section" entry. A genuinely new alias
+    should clear the location's Wikipedia/Wikimedia LocationCache rows so the
+    next panel view does a fresh lookup; renaming an existing alias should not.
+    """
+
+    def setUp(self) -> None:
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+        self.pin = _make_pin_with_wiki(self.profile)
+
+    def _seed_cache(self) -> None:
+        for source in ("wikipedia", "wikimedia", "wikipedia_media", "nominatim"):
+            LocationCache.objects.update_or_create(location=self.pin.location, source=source, defaults={"data": {"stub": True}})
+
+    def _cached_sources(self) -> set[str]:
+        return set(LocationCache.objects.filter(location=self.pin.location).values_list("source", flat=True))
+
+    def test_new_pin_alias_clears_name_sensitive_caches_but_not_others(self) -> None:
+        self._seed_cache()
+        with self.captureOnCommitCallbacks(execute=True):
+            PinAlias.objects.create(pin=self.pin, name="New Alias")
+        self.assertEqual(self._cached_sources(), {"nominatim"})
+
+    def test_renaming_an_existing_pin_alias_does_not_clear_the_cache(self) -> None:
+        with self.captureOnCommitCallbacks(execute=True):
+            alias = PinAlias.objects.create(pin=self.pin, name="Original")
+        # Creation above already cleared the seeded rows (tested separately) -
+        # reseed to isolate the rename itself.
+        self._seed_cache()
+        with self.captureOnCommitCallbacks(execute=True):
+            alias.name = "Renamed"
+            alias.save()
+        self.assertEqual(self._cached_sources(), {"wikipedia", "wikimedia", "wikipedia_media", "nominatim"})
+
+    def test_new_wiki_alias_clears_name_sensitive_caches_but_not_others(self) -> None:
+        self._seed_cache()
+        with self.captureOnCommitCallbacks(execute=True):
+            WikiAlias.objects.create(wiki=self.pin.wiki, name="New Wiki Alias")
+        self.assertEqual(self._cached_sources(), {"nominatim"})
+
+    def test_new_pin_alias_with_no_cached_data_yet_does_not_crash(self) -> None:
+        location = baker.make(Location, latitude=44.0, longitude=-78.0)
+        pin = baker.make(Pin, profile=self.profile, location=location)
+        with self.captureOnCommitCallbacks(execute=True):
+            PinAlias.objects.create(pin=pin, name="No Cache Yet")
+        self.assertEqual(LocationCache.objects.filter(location=location).count(), 0)

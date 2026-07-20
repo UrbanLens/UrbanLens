@@ -27,6 +27,13 @@ logger = logging.getLogger(__name__)
 #: mirrored alias actually came from.
 WIKI_SYNC_SOURCE = "wiki_sync"
 
+#: LocationCache sources whose result quality depends on the name/aliases
+#: available for the location - a new alias may surface a Wikipedia article
+#: (or images on one) that couldn't be matched under the previous name set.
+#: See docs/prompts/completed.md's "Wikipedia article images not reliably
+#: reaching Media section" entry for the report this addresses.
+_ALIAS_SENSITIVE_CACHE_SOURCES = ("wikipedia", "wikimedia", "wikipedia_media")
+
 
 @receiver(post_save, sender=PinAlias, dispatch_uid="pin_alias_sync_to_wiki")
 def sync_pin_alias_to_wiki(sender: type[PinAlias], instance: PinAlias, created: bool, **kwargs) -> None:
@@ -103,5 +110,53 @@ def sync_wiki_alias_to_pins(sender: type[WikiAlias], instance: WikiAlias, create
             # Case-insensitive lookup: this pin may already have the name
             # under different casing, which would otherwise race it.
             PinAlias.objects.get_or_create(pin=pin, name__iexact=instance.name, defaults={"name": instance.name, "kind": instance.kind, "source": WIKI_SYNC_SOURCE})
+
+    transaction.on_commit(_run)
+
+
+@receiver(post_save, sender=PinAlias, dispatch_uid="pin_alias_invalidate_name_sensitive_cache")
+def invalidate_name_sensitive_cache_for_new_pin_alias(sender: type[PinAlias], instance: PinAlias, created: bool, **kwargs) -> None:
+    """Drop the location's Wikipedia/Wikimedia LocationCache rows when a new pin alias appears.
+
+    A missing row is treated as "never queried" (see LocationCache's own
+    docstring), so this just makes the next panel view do a fresh lookup with
+    the wider name set - it doesn't change any other read path's behavior.
+    """
+    if not created:
+        return
+
+    def _run() -> None:
+        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+        from urbanlens.dashboard.models.pin.model import Pin
+
+        try:
+            pin = Pin.objects.get(pk=instance.pin_id)
+        except Pin.DoesNotExist:
+            return
+        if pin.location_id is None:
+            return
+        LocationCache.objects.filter(location_id=pin.location_id, source__in=_ALIAS_SENSITIVE_CACHE_SOURCES).delete()
+
+    transaction.on_commit(_run)
+
+
+@receiver(post_save, sender=WikiAlias, dispatch_uid="wiki_alias_invalidate_name_sensitive_cache")
+def invalidate_name_sensitive_cache_for_new_wiki_alias(sender: type[WikiAlias], instance: WikiAlias, created: bool, **kwargs) -> None:
+    """Drop the location's Wikipedia/Wikimedia LocationCache rows when a new wiki alias appears.
+
+    Same rationale as ``invalidate_name_sensitive_cache_for_new_pin_alias``.
+    """
+    if not created:
+        return
+
+    def _run() -> None:
+        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+        from urbanlens.dashboard.models.wiki.model import Wiki
+
+        try:
+            wiki = Wiki.objects.get(pk=instance.wiki_id)
+        except Wiki.DoesNotExist:
+            return
+        LocationCache.objects.filter(location_id=wiki.location_id, source__in=_ALIAS_SENSITIVE_CACHE_SOURCES).delete()
 
     transaction.on_commit(_run)

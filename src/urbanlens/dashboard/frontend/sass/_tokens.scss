@@ -565,6 +565,13 @@ $z-nav: 1100;
     --card-bg: #1e1e1e;
     --ul-border-color: var(--ul-grey-8b);
 
+    // The light-mode $primary-color (a muted blue-grey, #496793) has never had
+    // a dark-mode override despite --ul-primary-color's own comment above
+    // saying it exists precisely so dark mode can do this - it reads as
+    // illegible link/icon text against dark surfaces. Brighter, more
+    // saturated blue for real contrast there.
+    --ul-primary-color: #039be5;
+
     // Tooltips in dark mode: slightly elevated dark blue-grey to stand out from page surface
     --ul-tooltip-bg: rgba(36, 42, 64, 0.97);
     --ul-tooltip-fg: #dde5f5;

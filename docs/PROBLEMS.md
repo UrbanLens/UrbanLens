@@ -294,3 +294,53 @@ add a "same complex, different building" special case, or accept the limitation 
 manually confirm/link an article via whatever manual-override path already exists (if any -
 check `pin.wiki.create`/`_pin_detail_hero_body.html` for a manual Wikipedia-link mechanism before
 assuming a code-only fix is even the right first step).
+
+---
+
+## `docker compose exec app pytest` can't reach Valkey - no documented way to run pytest against the dev container
+
+Discovered while trying to verify the article-editor changes (2026-07-19/20) with real Postgres,
+since local Windows dev has no Docker (per this project's CLAUDE.md) so `pytest` there never
+touches a real database - DB-backed tests just error out with a connection refusal locally.
+
+Tried running the suite inside the running `app` container on the dev VM instead
+(`docker compose exec app python -m pytest ...`), which does reach Postgres fine, but every
+session-touching test then fails with `RuntimeError: External network access is disabled during
+tests. Attempted to connect to '172.18.0.2'` (or, with `UL_VALKEY_URL=redis://localhost:6379/0`
+forced, a plain connection-refused) - see `core/tests/testing_network.py`'s
+`LocalhostOnlyNetwork` guard, which only allows loopback connections during tests. The app's real
+runtime `UL_VALKEY_URL` resolves to the `valkey` service's docker-network hostname/IP (correct for
+serving traffic), which the guard then blocks as non-localhost, and there's no override I found
+that both resolves to the running Valkey container *and* satisfies the guard's localhost check
+from inside `app`'s network namespace.
+
+**Not fixed now**: this is infra/tooling, not a product bug, and out of scope for whatever feature
+prompted hitting it. Workaround used in the moment: ran the non-DB `SimpleTestCase` subset locally
+on Windows (passes, catches import/syntax regressions) plus ruff/mypy, and relied on live
+browser verification via Playwright-over-CDP against the dev server for the DB-touching behavior
+instead. A real fix would be either a dedicated `docker compose run` test profile that points
+`UL_VALKEY_URL` at `redis://localhost:6379` with Valkey ALSO listening on `app`'s loopback (e.g.
+via a sidecar or `network_mode: service:app`), or relaxing `LocalhostOnlyNetwork` to allow the
+compose network's Valkey service specifically during test runs.
+
+---
+
+## Hardcoded (non-theme-aware) `#2563eb`/`#4f46e5` blue in `_explainer.scss`, `_map.scss`, `_e2ee.scss`
+
+Found while fixing the "illegible dark-blue Nominatim link color" report (see completed.md) - that
+fix covered every `var(--undefined-name, #hex)` broken-reference instance of the same blue
+(`--ul-primary`, `--ul-link`, `--color-accent`, none of which were ever actually defined, so they
+always rendered their hardcoded fallback regardless of theme) across `_pin-detail.scss`,
+`_messages.scss`, `_gallery.scss`, and `_markup.scss`, by pointing them at the real,
+now-dark-mode-aware `--ul-primary-color` token.
+
+These three files use the *same* blue (`#2563eb` in `_explainer.scss`/`_map.scss`, `#4f46e5` in
+`_e2ee.scss`) but as genuine hardcoded literals - `color: #2563eb;`, several `rgba(37, 99, 235,
+.NN)` washes, and `linear-gradient(135deg, #2563eb, #06b6d4)` gradients - not a broken variable
+reference. `_explainer.scss` in particular builds a whole small design system out of this blue
+(border/background/text all coordinated at different opacities) for its info-callout component, so
+a blind find-replace to `var(--ul-primary-color)` on just the solid-color instances would leave the
+rgba() washes mismatched. Left alone this round because verifying each is genuinely a dark-mode
+legibility bug (vs. e.g. a component that's already fine because its own surface is intentionally
+dark in both themes, like the lightbox case handled in the fix above) needs checking each
+component's actual rendered surface, not just grepping for the hex value.

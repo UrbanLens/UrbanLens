@@ -208,17 +208,154 @@
             </div>
         </div>
 
-        <div id="pin-gallery-panel" class="card card--secondary"
-         hx-get="{% url 'pin.gallery' pin.slug %}{% if include_children %}?children=1{% endif %}"
-         hx-trigger="load[!window.ulSectionCollapsed('pin','gallery')], ul:unhide"
-         hx-swap="outerHTML"
-         data-collapse-scope="pin" data-collapse-section="gallery">
+        {# -- Combined Media section: the pin's own photos + every external ---- #}
+        {# provider (Wikimedia, Smithsonian, ...) in one place. "All" (default) #}
+        {# shows everything together, with a capped preview of the pin's own   #}
+        {# photos (PinController._photos_media_preview) alongside the external #}
+        {# providers; "Mine" swaps in the full, unlimited photo gallery        #}
+        {# (_photo_gallery.html, completely unchanged - same partial the wiki  #}
+        {# and safety check-in pages still use standalone) with everything it  #}
+        {# already had: drag-drop upload, delete, reposition, cover photo,     #}
+        {# bulk select/delete/send-to-wiki. See completed.md for why the two   #}
+        {# halves aren't merged into one literal grid (different pagination    #}
+        {# models: this section's external items are a capped, client-side-   #}
+        {# paginated batch; a pin's photos need real unlimited pagination). #}
+        <div id="media-gallery-section" class="media-gallery card card--secondary"
+             data-media-view="all"
+             data-media-sort="{{ profile.media_gallery_sort }}"
+             data-collapse-scope="pin" data-collapse-section="media">
             <div class="card-header">
-                <i class="material-symbols-outlined">photo_library</i>
-                <span>Photos</span>
+                <i class="material-symbols-outlined">collections</i>
+                <h3>Media</h3>
+                <span class="badge" id="media-count-badge" hidden></span>
+                {# .card-header-actions is the shared multi-action wrapper (see panel-header-grid #}
+                {# mixin) - without it, these buttons had no grid-area of their own and fell #}
+                {# to CSS Grid auto-placement, landing on an implicit second row below the title. #}
+                <div class="card-header-actions">
+                    {% if profile.external_apis_enabled %}
+                    <button type="button" class="media-gallery-header-btn" title="Import Photos"
+                            onclick="document.getElementById('pin-import-photos-dialog').showModal(); var t = document.querySelector('#pin-import-photos-dialog .import-photos-tab'); if (t) t.click();">
+                        <i class="material-symbols-outlined">add_photo_alternate</i>
+                    </button>
+                    {% endif %}
+                    <button type="button" class="media-gallery-header-btn" id="media-select-btn" title="Select media"
+                            onclick="window.mediaDispatchSelect()">
+                        <i class="material-symbols-outlined">checklist</i>
+                    </button>
+                    <button type="button" class="media-gallery-header-btn" id="media-settings-btn" title="Media settings"
+                            onclick="window.mediaToggleSettingsMenu()">
+                        <i class="material-symbols-outlined">tune</i>
+                    </button>
+                </div>
+                <div class="media-settings-menu" id="media-settings-menu" hidden>
+                    <div class="media-settings-group">
+                        <span class="media-settings-label">Visibility</span>
+                        <button type="button" class="media-settings-option" data-media-visibility="default">Hide not-relevant photos</button>
+                        <button type="button" class="media-settings-option" data-media-visibility="show-hidden">Temporarily show all</button>
+                        <button type="button" class="media-settings-option" data-media-visibility="only-relevant">Show only relevant</button>
+                    </div>
+                    <div class="media-settings-group">
+                        <span class="media-settings-label">Order</span>
+                        <button type="button" class="media-settings-option" data-media-sort="relevant">Relevant first</button>
+                        <button type="button" class="media-settings-option" data-media-sort="recent">Most recent</button>
+                    </div>
+                </div>
             </div>
-            <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
+
+            {# -- All / Mine view switch --------------------------------------- #}
+            <div class="media-view-toggle" role="tablist" aria-label="Media view">
+                <button type="button" class="media-view-toggle-btn active" data-media-view-btn="all" onclick="window.mediaSetView('all')">All</button>
+                <button type="button" class="media-view-toggle-btn" data-media-view-btn="mine" onclick="window.mediaSetView('mine')">Mine</button>
+            </div>
+
+            <div class="media-view-panel" data-media-view-panel="all">
+                <div class="card-tabs" id="media-tabs" hidden></div>
+                <div class="view-loading" id="media-gallery-loading">
+                    <i class="material-icons spin">autorenew</i>
+                    Loading...
+                </div>
+                <div class="media-gallery-grid" id="media-gallery-grid"
+                     data-adaptive-pagination-list data-adaptive-pagination-min-page-size="6"></div>
+                <div class="pagination-bar" data-adaptive-pagination-controls
+                     data-server-page="1" data-server-pages="1" hidden></div>
+            </div>
+
+            <div class="media-view-panel" data-media-view-panel="mine" hidden>
+                <div id="pin-gallery-panel"
+                     hx-get="{% url 'pin.gallery' pin.slug %}{% if include_children %}?children=1{% endif %}"
+                     hx-trigger="load"
+                     hx-swap="innerHTML">
+                    <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
+                </div>
+            </div>
         </div>
+        {# Per-provider loaders - hidden, append their results into #media-gallery-grid #}
+        {# above as each responds (see the media-gallery IIFE further down this file). #}
+        <div class="media-provider-loader" id="media-loader-photos"
+            hx-get="{% url 'pin.media' pin.slug 'photos' %}"
+            hx-trigger="load"
+            hx-target="#media-gallery-grid"
+            hx-swap="beforeend"
+            hx-timeout="25000"
+            hidden></div>
+        <div class="media-provider-loader" id="media-loader-smithsonian"
+            hx-get="{% url 'pin.media' pin.slug 'smithsonian' %}"
+            hx-trigger="load"
+            hx-target="#media-gallery-grid"
+            hx-swap="beforeend"
+            hx-timeout="25000"
+            hidden></div>
+        <div class="media-provider-loader" id="media-loader-wikimedia"
+            hx-get="{% url 'pin.media' pin.slug 'wikimedia' %}"
+            hx-trigger="load"
+            hx-target="#media-gallery-grid"
+            hx-swap="beforeend"
+            hx-timeout="25000"
+            hidden></div>
+        {# Images from the pin's own matched Wikipedia article page, distinct from the #}
+        {# Wikimedia Commons text search above - see WikipediaMediaGateway. #}
+        <div class="media-provider-loader" id="media-loader-wikipedia_media"
+            hx-get="{% url 'pin.media' pin.slug 'wikipedia_media' %}"
+            hx-trigger="load"
+            hx-target="#media-gallery-grid"
+            hx-swap="beforeend"
+            hx-timeout="25000"
+            hidden></div>
+        <div class="media-provider-loader" id="media-loader-loc"
+            hx-get="{% url 'pin.media' pin.slug 'loc' %}"
+            hx-trigger="load"
+            hx-target="#media-gallery-grid"
+            hx-swap="beforeend"
+            hx-timeout="25000"
+            hidden></div>
+        <div class="media-provider-loader" id="media-loader-internet_archive"
+            hx-get="{% url 'pin.media' pin.slug 'internet_archive' %}"
+            hx-trigger="load"
+            hx-target="#media-gallery-grid"
+            hx-swap="beforeend"
+            hx-timeout="25000"
+            hidden></div>
+        <div class="media-provider-loader" id="media-loader-yelp"
+            hx-get="{% url 'pin.media' pin.slug 'yelp' %}"
+            hx-trigger="load"
+            hx-target="#media-gallery-grid"
+            hx-swap="beforeend"
+            hx-timeout="25000"
+            hidden></div>
+        <div class="media-provider-loader" id="media-loader-google_images"
+            hx-get="{% url 'pin.media' pin.slug 'google_images' %}"
+            hx-trigger="load"
+            hx-target="#media-gallery-grid"
+            hx-swap="beforeend"
+            hx-timeout="25000"
+            hidden></div>
+        <div class="media-provider-loader" id="media-loader-google_maps"
+            hx-get="{% url 'pin.media' pin.slug 'google_maps' %}"
+            hx-trigger="load"
+            hx-target="#media-gallery-grid"
+            hx-swap="beforeend"
+            hx-timeout="25000"
+            hidden></div>
     </div>{# end .pin-media-row #}
 
     {# -- Categories / aliases: same fill-the-gap behavior as above -- #}
@@ -334,103 +471,6 @@
     {# removed at runtime when their HTMX request returns 204 - see the ------ #}
     {# htmx:afterOnLoad handler near the bottom of this file). ---------------- #}
     <div class="pin-aux-grid">
-        <div id="media-gallery-section" class="media-gallery card card--secondary" hidden
-             data-media-sort="{{ profile.media_gallery_sort }}">
-            <div class="card-header">
-                <i class="material-symbols-outlined">collections</i>
-                <h3>Media</h3>
-                <span class="badge" id="media-count-badge" hidden></span>
-                {# .card-header-actions is the shared multi-action wrapper (see panel-header-grid #}
-                {# mixin) - without it, these two buttons had no grid-area of their own and fell #}
-                {# to CSS Grid auto-placement, landing on an implicit second row below the title. #}
-                <div class="card-header-actions">
-                    <button type="button" class="media-gallery-header-btn" id="media-select-btn" title="Select media"
-                            onclick="window.mediaToggleSelectMode()">
-                        <i class="material-symbols-outlined">checklist</i>
-                    </button>
-                    <button type="button" class="media-gallery-header-btn" id="media-settings-btn" title="Media settings"
-                            onclick="window.mediaToggleSettingsMenu()">
-                        <i class="material-symbols-outlined">tune</i>
-                    </button>
-                </div>
-                <div class="media-settings-menu" id="media-settings-menu" hidden>
-                    <div class="media-settings-group">
-                        <span class="media-settings-label">Visibility</span>
-                        <button type="button" class="media-settings-option" data-media-visibility="default">Hide not-relevant photos</button>
-                        <button type="button" class="media-settings-option" data-media-visibility="show-hidden">Temporarily show all</button>
-                        <button type="button" class="media-settings-option" data-media-visibility="only-relevant">Show only relevant</button>
-                    </div>
-                    <div class="media-settings-group">
-                        <span class="media-settings-label">Order</span>
-                        <button type="button" class="media-settings-option" data-media-sort="relevant">Relevant first</button>
-                        <button type="button" class="media-settings-option" data-media-sort="recent">Most recent</button>
-                    </div>
-                </div>
-            </div>
-            <div class="card-tabs" id="media-tabs" hidden></div>
-            <div class="view-loading" id="media-gallery-loading">
-                <i class="material-icons spin">autorenew</i>
-                Loading...
-            </div>
-            <div class="media-gallery-grid" id="media-gallery-grid"
-                 data-adaptive-pagination-list data-adaptive-pagination-min-page-size="6"></div>
-            <div class="pagination-bar" data-adaptive-pagination-controls
-                 data-server-page="1" data-server-pages="1" hidden></div>
-        </div>
-        {# Loader ids are load-bearing: while a provider's background fetch is #}
-        {# in flight, the server's pending response retargets itself onto the #}
-        {# requesting loader by id (HX-Retarget) so the loader re-polls itself #}
-        {# instead of appending into the gallery grid. #}
-        <div class="media-provider-loader" id="media-loader-smithsonian"
-            hx-get="{% url 'pin.media' pin.slug 'smithsonian' %}"
-            hx-trigger="load"
-            hx-target="#media-gallery-grid"
-            hx-swap="beforeend"
-            hx-timeout="25000"
-            hidden></div>
-        <div class="media-provider-loader" id="media-loader-wikimedia"
-            hx-get="{% url 'pin.media' pin.slug 'wikimedia' %}"
-            hx-trigger="load"
-            hx-target="#media-gallery-grid"
-            hx-swap="beforeend"
-            hx-timeout="25000"
-            hidden></div>
-        <div class="media-provider-loader" id="media-loader-loc"
-            hx-get="{% url 'pin.media' pin.slug 'loc' %}"
-            hx-trigger="load"
-            hx-target="#media-gallery-grid"
-            hx-swap="beforeend"
-            hx-timeout="25000"
-            hidden></div>
-        <div class="media-provider-loader" id="media-loader-internet_archive"
-            hx-get="{% url 'pin.media' pin.slug 'internet_archive' %}"
-            hx-trigger="load"
-            hx-target="#media-gallery-grid"
-            hx-swap="beforeend"
-            hx-timeout="25000"
-            hidden></div>
-        <div class="media-provider-loader" id="media-loader-yelp"
-            hx-get="{% url 'pin.media' pin.slug 'yelp' %}"
-            hx-trigger="load"
-            hx-target="#media-gallery-grid"
-            hx-swap="beforeend"
-            hx-timeout="25000"
-            hidden></div>
-        <div class="media-provider-loader" id="media-loader-google_images"
-            hx-get="{% url 'pin.media' pin.slug 'google_images' %}"
-            hx-trigger="load"
-            hx-target="#media-gallery-grid"
-            hx-swap="beforeend"
-            hx-timeout="25000"
-            hidden></div>
-        <div class="media-provider-loader" id="media-loader-google_maps"
-            hx-get="{% url 'pin.media' pin.slug 'google_maps' %}"
-            hx-trigger="load"
-            hx-target="#media-gallery-grid"
-            hx-swap="beforeend"
-            hx-timeout="25000"
-            hidden></div>
-
         {% if pin.meaningful_name and can_use_web_search %}
         <div id="web-search-section" class="web-search card card--secondary" data-ext-panel-204
             hx-get="{% url 'pin.web_search' pin.slug %}"
@@ -1482,7 +1522,7 @@
 
         // -- Source tabs -------------------------------------------------------
         var TAB_LABELS = {
-            smithsonian: 'Smithsonian', wikimedia: 'Wikimedia', loc: 'Library of Congress',
+            smithsonian: 'Smithsonian', wikimedia: 'Wikimedia', wikipedia_media: 'Wikipedia', loc: 'Library of Congress',
             yelp: 'Yelp', google_images: 'Google Images', google_maps: 'Google Maps',
             internet_archive: 'Internet Archive',
         };
@@ -1501,8 +1541,14 @@
                 // Not-relevant items don't count toward their source's tab, so a
                 // source whose only items have all been marked not relevant drops
                 // out of `sources` below and its tab disappears entirely, instead
-                // of lingering with a stale, unopenable count.
-                if (src && !isNotRelevant) counts[src] = (counts[src] || 0) + 1;
+                // of lingering with a stale, unopenable count. "photos" is
+                // excluded entirely - it's just a capped preview of the pin's
+                // own uploads (see PinController._photos_media_preview), and
+                // gets its own dedicated "Mine" toggle (full, unlimited
+                // browsing - see the All/Mine buttons below) instead of a
+                // same-shape tab that would misleadingly imply it shows every
+                // photo when it only shows the first 12.
+                if (src && src !== 'photos' && !isNotRelevant) counts[src] = (counts[src] || 0) + 1;
                 if (isNotRelevant) notRelevantCount += 1;
             });
             var countBadge = document.getElementById('media-count-badge');
@@ -1719,6 +1765,43 @@
         }
         window._mediaApplyRelevanceState = applyRelevanceState;
 
+        // -- All / Mine view switch -------------------------------------------------
+        // "All" is the combined adaptive grid (external providers + a capped
+        // preview of the pin's own photos); "Mine" swaps in the pin gallery
+        // panel (_photo_gallery.html, unchanged - see #pin-gallery-panel
+        // above) for full, unlimited photo management. Both panels' markup is
+        // always present (the "Mine" one loads eagerly on page load, same as
+        // every other panel on this page); switching views just toggles which
+        // is visible, so nothing needs re-fetching on every click.
+        window.mediaSetView = function (view) {
+            var sec = section();
+            if (sec) sec.dataset.mediaView = view;
+            document.querySelectorAll('[data-media-view-btn]').forEach(function (btn) {
+                btn.classList.toggle('active', btn.dataset.mediaViewBtn === view);
+            });
+            document.querySelectorAll('[data-media-view-panel]').forEach(function (panel) {
+                panel.hidden = panel.dataset.mediaViewPanel !== view;
+            });
+            var settingsBtn = document.getElementById('media-settings-btn');
+            if (settingsBtn) settingsBtn.hidden = view !== 'all';
+            if (view === 'all' && window.initAdaptivePagination) window.initAdaptivePagination(document, true);
+        };
+
+        // The header's one "Select" button controls whichever view is
+        // currently showing - the "All" grid's own multi-select (external
+        // items + the read-only photo preview, which just won't have a
+        // checkbox to check - see pin_media_items.html) or the "Mine" gallery's
+        // (own photos: delete / send to wiki), never both at once.
+        window.mediaDispatchSelect = function () {
+            var sec = section();
+            var view = sec ? sec.dataset.mediaView : 'all';
+            if (view === 'mine' && typeof window.photosToggleSelectMode === 'function') {
+                window.photosToggleSelectMode();
+                return;
+            }
+            window.mediaToggleSelectMode();
+        };
+
         // -- Multi-select mode ----------------------------------------------------
         window.mediaToggleSelectMode = function () {
             selecting = !selecting;
@@ -1794,7 +1877,10 @@
                     mediaSource: el.dataset.mediaSource,
                     mediaKey: el.dataset.mediaKey,
                     relevant: relevant,
-                    canRelevance: true,
+                    // Your own photos aren't "relevant"-markable (see
+                    // pin_media_items.html's source_key == "photos" branch) -
+                    // manage those from the section's "Mine" tab instead.
+                    canRelevance: el.dataset.mediaSource !== 'photos',
                 };
             });
             var idx = visible.indexOf(itemEl);

@@ -6,13 +6,14 @@ from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.enrichment import LocationCacheEnrichmentSource
-from urbanlens.dashboard.services.external_data import LocationCachePanelSource
+from urbanlens.dashboard.services.external_data import LocationCachePanelSource, MediaPanelSource
 from urbanlens.dashboard.services.locations.name_resolution import LocationCacheNameProvider
 from urbanlens.dashboard.services.rate_limiter import ServiceDefaults
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.services.apis.assets.base import MediaProvider
     from urbanlens.dashboard.services.enrichment import EnrichmentSource
     from urbanlens.dashboard.services.external_data import PanelSource
     from urbanlens.dashboard.services.locations.name_resolution import NameProvider
@@ -89,6 +90,73 @@ class WikipediaEnrichmentSource(LocationCacheEnrichmentSource):
         return article, name or f"{lat:.5f}, {lng:.5f}"
 
 
+class WikipediaMediaPanelSource(MediaPanelSource):
+    """Media panel backed by the pin's own matched Wikipedia article, not a
+    generic name search - see ``WikipediaMediaGateway``.
+
+    The "search term" ``fetch`` uses is the exact article title from the
+    Wikipedia summary panel's own cache, so this naturally no-ops for any pin
+    without a confidently-matched article - there's nothing to read images
+    from yet.
+    """
+
+    @staticmethod
+    def search_terms(pin: Pin, _gateway: MediaProvider) -> list[str]:
+        """The matched article's exact title, or ``[]`` if none is cached (yet, or ever)."""
+        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+
+        if pin.location is None:
+            return []
+        cached = LocationCache.get_fresh(pin.location, "wikipedia")
+        if cached is None:
+            return []
+        title = (cached.data or {}).get("title") or ""
+        return [title] if title else []
+
+    def gate(self, pin: Pin) -> bool:
+        """Whether to attempt this panel at all.
+
+        Slightly looser than the base class's "has a search term" check: on a
+        pin's very first visit, this panel's own background fetch and the
+        Wikipedia summary panel's fetch are scheduled at roughly the same
+        time (see ``PanelSource.fetch``'s "runs inside a Celery worker, never
+        on the request path" contract - neither can synchronously wait for
+        the other on the request path here in ``gate``, which runs on every
+        request/poll and must stay cheap). Gating strictly on an
+        already-cached title would mean this panel gives up permanently
+        (204, the gallery JS's "done, nothing" signal) if it's asked before
+        the summary panel has reported back even once - so a pin with no
+        ``wikipedia`` LocationCache row *at all* yet (never fetched, as
+        opposed to fetched-and-found-nothing) still gets a shot: its own
+        fetch will re-check the cache when it actually runs, by which point
+        the summary panel has very likely already completed.
+        """
+        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+
+        if pin.location is None:
+            return False
+        cached = LocationCache.get_fresh(pin.location, "wikipedia")
+        if cached is None:
+            return True
+        return bool((cached.data or {}).get("title"))
+
+    def fetch(self, pin: Pin) -> None:
+        """Fetch this pin's article images, deduped against the Wikimedia Commons panel."""
+        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+        from urbanlens.dashboard.services.apis.assets.wikipedia import WikipediaMediaGateway
+
+        gateway = self.make_gateway()
+        terms = self.search_terms(pin, gateway)
+        if not terms:
+            LocationCache.set(pin.location, self.cache_source, {"items": []}, query_key="")
+            return
+        if isinstance(gateway, WikipediaMediaGateway) and pin.location is not None:
+            wikimedia_cache = LocationCache.get_fresh(pin.location, "wikimedia")
+            if wikimedia_cache is not None:
+                gateway.known_urls = frozenset(item.get("url", "") for item in (wikimedia_cache.data or {}).get("items", []) if item.get("url"))
+        gateway.get_media(pin.location, terms)
+
+
 class WikipediaPlugin(UrbanLensPlugin):
     """Wikipedia article summaries for pinned locations."""
 
@@ -106,11 +174,22 @@ class WikipediaPlugin(UrbanLensPlugin):
                 calls_per_day=2000,
                 notes="Free API. Be polite - set a descriptive User-Agent.",
             ),
+            "wikipedia_media": ServiceDefaults(
+                display_name="Wikipedia (article images)",
+                calls_per_minute=20,
+                calls_per_day=1000,
+                notes="Free API. Only called for pins with an already-matched article.",
+            ),
         }
 
     def get_panel_sources(self) -> list[PanelSource]:
-        """Contribute the Wikipedia pin-detail panel."""
-        return [WikipediaPanelSource()]
+        """Contribute the Wikipedia summary panel and its article-images Media panel."""
+        from urbanlens.dashboard.services.apis.assets.wikipedia import WikipediaMediaGateway
+
+        return [
+            WikipediaPanelSource(),
+            WikipediaMediaPanelSource("wikipedia_media", WikipediaMediaGateway.service_key, WikipediaMediaGateway),
+        ]
 
     def get_name_providers(self) -> list[NameProvider]:
         """Contribute the cached article's title as a place-name candidate."""

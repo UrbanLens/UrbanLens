@@ -15,7 +15,7 @@
   transition: color .15s, background .15s;
 
   &:hover {
-    color: var(--color-accent, #2563eb);
+    color: var(--ul-primary-color);
     background: rgba(37, 99, 235, .08);
   }
 
@@ -40,7 +40,7 @@
   transition: color .15s, background .15s;
 
   &:hover {
-    color: var(--color-accent, #2563eb);
+    color: var(--ul-primary-color);
     background: rgba(37, 99, 235, .08);
   }
 
@@ -60,7 +60,7 @@
   align-items: center;
   justify-content: center;
   pointer-events: all;
-  border: 3px dashed var(--color-accent, #2563eb);
+  border: 3px dashed var(--ul-primary-color);
 
   &[hidden] { display: none !important; }
 }
@@ -79,14 +79,14 @@
   .material-symbols-outlined,
   .material-icons {
     font-size: 3.5rem;
-    color: var(--color-accent, #2563eb);
+    color: var(--ul-primary-color);
   }
 
   p {
     margin: 0;
     font-size: 1.1rem;
     font-weight: 600;
-    color: var(--color-accent, #2563eb);
+    color: var(--ul-primary-color);
   }
 }
 
@@ -101,7 +101,7 @@
 .gallery-upload-bar {
   height: 100%;
   width: 0;
-  background: var(--color-accent, #2563eb);
+  background: var(--ul-primary-color);
   transition: width .2s;
 }
 
@@ -264,16 +264,16 @@
 }
 
 .gallery-item.is-selected {
-  outline: 2px solid var(--color-accent, #2563eb);
+  outline: 2px solid var(--ul-primary-color);
   outline-offset: -2px;
 }
 
 .gallery-item.is-selected .gallery-select-check {
-  color: var(--color-accent, #2563eb);
+  color: var(--ul-primary-color);
 }
 
 .gallery-import-photos-btn.is-active {
-  color: var(--color-accent, #2563eb);
+  color: var(--ul-primary-color);
   background: rgba(37, 99, 235, .12);
 }
 
@@ -423,7 +423,11 @@
   display: inline-flex;
   align-items: center;
   gap: .3rem;
-  color: var(--color-accent, #60a5fa);
+  // Always a light blue on a permanently-dark backdrop (see .gallery-lightbox's
+  // background), independent of site theme - not the (broken - see completed.md)
+  // var(--color-accent) reference this used to be, just its own fallback value
+  // made literal, since that's what always actually rendered.
+  color: #60a5fa;
   text-decoration: none;
   cursor: pointer;
 
@@ -447,8 +451,8 @@
 
   .btn.is-active {
     color: #fff;
-    background: var(--color-accent, #2563eb);
-    border-color: var(--color-accent, #2563eb);
+    background: var(--ul-primary-color);
+    border-color: var(--ul-primary-color);
   }
 }
 
@@ -497,11 +501,11 @@
   min-height: 30px;
   font-size: .78rem;
   font-weight: 700;
-  color: var(--color-accent, #2563eb);
+  color: var(--ul-primary-color);
   padding: 0 12px;
-  background: color-mix(in srgb, var(--color-accent, #2563eb) 12%, transparent);
+  background: color-mix(in srgb, var(--ul-primary-color) 12%, transparent);
   border-radius: 999px;
-  border: 1.5px solid color-mix(in srgb, var(--color-accent, #2563eb) 28%, transparent);
+  border: 1.5px solid color-mix(in srgb, var(--ul-primary-color) 28%, transparent);
   letter-spacing: -.01em;
   margin-right: 2px;
   flex-shrink: 0;
@@ -529,7 +533,7 @@
   flex-shrink: 0;
 
   &:focus-visible {
-    outline: 2px solid var(--color-accent, #2563eb);
+    outline: 2px solid var(--ul-primary-color);
     outline-offset: 1px;
   }
 }
@@ -597,9 +601,9 @@
 .ul-bulk-btn--wiki,
 .ul-bulk-btn--relevant {
   &:hover {
-    background: color-mix(in srgb, var(--color-accent, #2563eb) 10%, var(--ul-surface-raised));
-    border-color: color-mix(in srgb, var(--color-accent, #2563eb) 35%, transparent);
-    color: var(--color-accent, #2563eb);
+    background: color-mix(in srgb, var(--ul-primary-color) 10%, var(--ul-surface-raised));
+    border-color: color-mix(in srgb, var(--ul-primary-color) 35%, transparent);
+    color: var(--ul-primary-color);
   }
 }
 
