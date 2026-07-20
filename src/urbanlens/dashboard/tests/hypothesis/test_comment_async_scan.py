@@ -75,7 +75,7 @@ class ScanCommentImageTaskTests(TestCase):
 
     def test_clean_result_clears_pending_scan(self) -> None:
         comment = self._pending_comment()
-        with patch("urbanlens.dashboard.tasks.malware_error_for_upload", return_value=None):
+        with patch("urbanlens.dashboard.services.malware_scan.malware_error_for_upload", return_value=None):
             result = scan_comment_image(comment.pk)
         comment.refresh_from_db()
         self.assertTrue(result)
@@ -84,7 +84,7 @@ class ScanCommentImageTaskTests(TestCase):
     def test_infected_result_deletes_the_comment_and_notifies_the_author(self) -> None:
         comment = self._pending_comment(text="my cool photo")
         comment_id = comment.pk
-        with patch("urbanlens.dashboard.tasks.malware_error_for_upload", return_value="This file was flagged as malicious."):
+        with patch("urbanlens.dashboard.services.malware_scan.malware_error_for_upload", return_value="This file was flagged as malicious."):
             result = scan_comment_image(comment_id)
         self.assertFalse(result)
         self.assertFalse(Comment.objects.filter(pk=comment_id).exists())
@@ -96,7 +96,7 @@ class ScanCommentImageTaskTests(TestCase):
         comment = self._pending_comment(text="retry me")
         comment_id = comment.pk
         with (
-            patch("urbanlens.dashboard.tasks.malware_error_for_upload", side_effect=MalwareScanUnavailableError("down")),
+            patch("urbanlens.dashboard.services.malware_scan.malware_error_for_upload", side_effect=MalwareScanUnavailableError("down")),
             patch.object(scan_comment_image, "max_retries", 0),
         ):
             result = scan_comment_image(comment_id)
@@ -111,7 +111,7 @@ class ScanCommentImageTaskTests(TestCase):
 
     def test_comment_no_longer_pending_is_a_no_op(self) -> None:
         comment = Comment.objects.create(pin=self.pin, profile=self.profile, text="already scanned", image=_fake_image(), pending_scan=False)
-        with patch("urbanlens.dashboard.tasks.malware_error_for_upload") as scan:
+        with patch("urbanlens.dashboard.services.malware_scan.malware_error_for_upload") as scan:
             self.assertFalse(scan_comment_image(comment.pk))
         scan.assert_not_called()
 
@@ -129,7 +129,7 @@ class ScanTripCommentImageTaskTests(TestCase):
 
     def test_clean_result_clears_pending_scan(self) -> None:
         comment = self._pending_comment()
-        with patch("urbanlens.dashboard.tasks.malware_error_for_upload", return_value=None):
+        with patch("urbanlens.dashboard.services.malware_scan.malware_error_for_upload", return_value=None):
             result = scan_trip_comment_image(comment.pk)
         comment.refresh_from_db()
         self.assertTrue(result)
@@ -138,7 +138,7 @@ class ScanTripCommentImageTaskTests(TestCase):
     def test_infected_result_deletes_the_comment_and_notifies_the_author(self) -> None:
         comment = self._pending_comment(text="trip photo text")
         comment_id = comment.pk
-        with patch("urbanlens.dashboard.tasks.malware_error_for_upload", return_value="This file was flagged as malicious."):
+        with patch("urbanlens.dashboard.services.malware_scan.malware_error_for_upload", return_value="This file was flagged as malicious."):
             result = scan_trip_comment_image(comment_id)
         self.assertFalse(result)
         self.assertFalse(TripComment.objects.filter(pk=comment_id).exists())
