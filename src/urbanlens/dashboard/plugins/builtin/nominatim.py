@@ -94,19 +94,9 @@ class NominatimPanelSource(LocationCachePanelSource):
             location: The pin's location, for reaching its wiki (if any).
             osm_url: The OSM element URL from the reverse-geocode result.
         """
-        from django.core.exceptions import ObjectDoesNotExist
+        from urbanlens.dashboard.services.locations.external_links import add_pin_and_wiki_link
 
-        from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, PinAutoRemoval, WikiAutoRemoval
-        from urbanlens.dashboard.models.links.model import PinLink, WikiLink
-
-        if not PinAutoRemoval.objects.was_removed(pin=pin, kind=AutoRemovalKind.LINK, value=osm_url):
-            PinLink.objects.get_or_create(pin=pin, url=osm_url, defaults={"name": "OpenStreetMap"})
-        try:
-            wiki = location.wiki
-        except ObjectDoesNotExist:
-            return
-        if not WikiAutoRemoval.objects.was_removed(wiki=wiki, kind=AutoRemovalKind.LINK, value=osm_url):
-            WikiLink.objects.get_or_create(wiki=wiki, url=osm_url, defaults={"name": "OpenStreetMap"})
+        add_pin_and_wiki_link(pin, location, osm_url, "OpenStreetMap")
 
 
 class NominatimEnrichmentSource(LocationCacheEnrichmentSource):

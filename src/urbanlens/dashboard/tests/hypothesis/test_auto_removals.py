@@ -246,3 +246,63 @@ class LabelDeletionTombstoneTests(TestCase):
             AutoTagService(kinds=["category"]).suggest_for_wiki(self.wiki, apply=True)
 
         self.assertFalse(self.wiki.labels.filter(pk=self.label.pk).exists())
+
+
+class ExternalLinksHelperTests(TestCase):
+    """services.locations.external_links - the shared add_pin_link/add_wiki_link/
+    add_pin_and_wiki_link primitive used by Nominatim, EPA ECHO, and Wikipedia."""
+
+    def setUp(self) -> None:
+        baker.make("auth.User")  # bootstrap site admin
+        self.user = baker.make("auth.User")
+        self.profile = Profile.objects.get(user=self.user)
+        self.location = baker.make(Location, latitude="41.500000", longitude="-73.500000")
+        self.wiki = baker.make("dashboard.Wiki", location=self.location, name="Curated Mill")
+        self.pin = baker.make(Pin, profile=self.profile, location=self.location, name="Curated Mill")
+
+    def test_add_pin_link_creates_a_new_link(self) -> None:
+        from urbanlens.dashboard.services.locations.external_links import add_pin_link
+
+        created = add_pin_link(self.pin, "https://example.test/a", "Example")
+        self.assertTrue(created)
+        self.assertTrue(self.pin.links.filter(url="https://example.test/a", name="Example").exists())
+
+    def test_add_pin_link_does_not_duplicate(self) -> None:
+        from urbanlens.dashboard.services.locations.external_links import add_pin_link
+
+        add_pin_link(self.pin, "https://example.test/a", "Example")
+        created_again = add_pin_link(self.pin, "https://example.test/a", "Example")
+        self.assertFalse(created_again)
+        self.assertEqual(self.pin.links.filter(url="https://example.test/a").count(), 1)
+
+    def test_add_pin_link_respects_tombstone(self) -> None:
+        from urbanlens.dashboard.services.locations.external_links import add_pin_link
+
+        PinAutoRemoval.objects.record(pin=self.pin, kind=AutoRemovalKind.LINK, value="https://example.test/a")
+        created = add_pin_link(self.pin, "https://example.test/a", "Example")
+        self.assertFalse(created)
+        self.assertFalse(self.pin.links.filter(url="https://example.test/a").exists())
+
+    def test_add_wiki_link_respects_tombstone(self) -> None:
+        from urbanlens.dashboard.services.locations.external_links import add_wiki_link
+
+        WikiAutoRemoval.objects.record(wiki=self.wiki, kind=AutoRemovalKind.LINK, value="https://example.test/a")
+        created = add_wiki_link(self.wiki, "https://example.test/a", "Example")
+        self.assertFalse(created)
+
+    def test_add_pin_and_wiki_link_adds_to_both(self) -> None:
+        from urbanlens.dashboard.services.locations.external_links import add_pin_and_wiki_link
+
+        add_pin_and_wiki_link(self.pin, self.location, "https://example.test/a", "Example")
+        self.assertTrue(self.pin.links.filter(url="https://example.test/a").exists())
+        self.assertTrue(self.wiki.links.filter(url="https://example.test/a").exists())
+
+    def test_add_pin_and_wiki_link_with_no_wiki_only_adds_pin_link(self) -> None:
+        from urbanlens.dashboard.services.locations.external_links import add_pin_and_wiki_link
+
+        location_no_wiki = baker.make(Location, latitude="41.510000", longitude="-73.510000")
+        pin_no_wiki = baker.make(Pin, profile=self.profile, location=location_no_wiki)
+
+        add_pin_and_wiki_link(pin_no_wiki, location_no_wiki, "https://example.test/b", "Example")
+
+        self.assertTrue(pin_no_wiki.links.filter(url="https://example.test/b").exists())

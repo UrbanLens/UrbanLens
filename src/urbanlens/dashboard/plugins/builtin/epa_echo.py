@@ -347,20 +347,10 @@ class EpaEchoDetailPanelSource(CoordinateGatedInfoPanelSource):
             location: The pin's location, for reaching its wiki (if any).
             registry_id: The EPA FRS Registry ID of the matched facility.
         """
-        from django.core.exceptions import ObjectDoesNotExist
-
-        from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, PinAutoRemoval, WikiAutoRemoval
-        from urbanlens.dashboard.models.links.model import PinLink, WikiLink
+        from urbanlens.dashboard.services.locations.external_links import add_pin_and_wiki_link
 
         url = f"https://echo.epa.gov/detailed-facility-report?fid={registry_id}"
-        if not PinAutoRemoval.objects.was_removed(pin=pin, kind=AutoRemovalKind.LINK, value=url):
-            PinLink.objects.get_or_create(pin=pin, url=url, defaults={"name": "EPA Compliance Report"})
-        try:
-            wiki = location.wiki
-        except ObjectDoesNotExist:
-            return
-        if not WikiAutoRemoval.objects.was_removed(wiki=wiki, kind=AutoRemovalKind.LINK, value=url):
-            WikiLink.objects.get_or_create(wiki=wiki, url=url, defaults={"name": "EPA Compliance Report"})
+        add_pin_and_wiki_link(pin, location, url, "EPA Compliance Report")
 
     def render_context(self, pin: Pin, data: dict) -> dict | None:
         """Build the exact-site detail card; None (204, hidden) when no facility matched this pin's coordinates."""
