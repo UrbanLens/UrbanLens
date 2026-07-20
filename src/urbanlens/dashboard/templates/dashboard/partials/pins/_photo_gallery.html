@@ -178,6 +178,23 @@ Context:
   var _dragDepth = 0;
   var _overlay   = document.getElementById('gallery-drop-overlay');
 
+  // On the pin detail page, this partial is nested inside the "Mine" media
+  // sub-tab (see location/index.html's #pin-gallery-panel, hidden whenever
+  // "All" is the active view) - a hidden ancestor hides this overlay
+  // regardless of its own `hidden` state, so setting `_overlay.hidden = false`
+  // below had no visible effect unless "Mine" already happened to be
+  // selected. Re-parenting to <body> escapes that ancestor entirely; harmless
+  // on the standalone wiki/safety-checkin pages that render this partial
+  // directly under <body> anyway, since this is then a same-parent no-op.
+  // Drops any pre-existing body-level overlay first in case this script runs
+  // more than once for the same panel (e.g. an htmx reload of the "Mine"
+  // panel), so a stale duplicate never lingers with the same id.
+  if (_overlay && _overlay.parentElement !== document.body) {
+    var _stalePageOverlay = document.body.querySelector('#gallery-drop-overlay');
+    if (_stalePageOverlay && _stalePageOverlay !== _overlay) _stalePageOverlay.remove();
+    document.body.appendChild(_overlay);
+  }
+
   // Drags that originate inside the page (photo thumbnails, panel items, etc.)
   // must never open the drop-to-upload overlay - browsers attach the image file
   // to such drags, so treating them as uploads would re-upload an existing
