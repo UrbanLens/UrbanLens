@@ -97,7 +97,7 @@ class PinShare(abstract.DashboardModel):
         null=True,
         blank=True,
     )
-    # The root share of a "pin + its sub pins" bundle. When a sharer opts to
+    # The root share of a "pin + its child pins" bundle. When a sharer opts to
     # include a pin's child pins, each child pin gets its own PinShare row
     # (it counts as a share of that pin) pointing here; the recipient accepts
     # or rejects the whole bundle through the root share, and accepting

@@ -37,6 +37,7 @@ from urbanlens.dashboard.services.enrichment import (
     run_enrichment_cycle,
     stagger_seconds,
 )
+from urbanlens.dashboard.services.geo_boundary import USA
 from urbanlens.dashboard.services.rate_limiter import RateLimitExceededError
 
 
@@ -201,7 +202,7 @@ class PrioritizedCandidatesTests(TestCase):
             baker.make(Pin, profile=_make_profile(), location=_make_location(lat=f"40.{index:06d}"))
         self.assertEqual(len(prioritized_location_candidates(Q(), limit=2)), 2)
 
-    def test_usa_only_excludes_foreign_locations(self) -> None:
+    def test_geo_boundary_excludes_locations_outside_it(self) -> None:
         foreign = _make_location(lat="48.850000", lng="2.350000", country="France")
         baker.make(Pin, profile=_make_profile(), location=foreign)
         domestic = _make_location(lat="42.650000", country="United States")
@@ -209,7 +210,7 @@ class PrioritizedCandidatesTests(TestCase):
         blank = _make_location(lat="42.660000", country="")
         baker.make(Pin, profile=_make_profile(), location=blank)
 
-        pks = [location.pk for location in prioritized_location_candidates(Q(), limit=10, usa_only=True)]
+        pks = [location.pk for location in prioritized_location_candidates(Q(), limit=10, geo_boundary=USA)]
         self.assertNotIn(foreign.pk, pks)
         self.assertIn(domestic.pk, pks)
         self.assertIn(blank.pk, pks)

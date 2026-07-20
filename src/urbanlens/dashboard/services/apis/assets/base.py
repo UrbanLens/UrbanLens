@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from collections.abc import Generator
 
     from urbanlens.dashboard.models.location.model import Location
+    from urbanlens.dashboard.services.geo_boundary import GeoBoundary
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +57,9 @@ class MediaProvider(Gateway, ABC):
     """
 
     display_name: ClassVar[str] = "Media"
-    usa_only: ClassVar[bool] = False
+    #: Restricts this provider to a geographic region (see ``services.geo_boundary``);
+    #: None means unrestricted. Enforced by ``MediaPanelSource.gate``.
+    geo_boundary: ClassVar[GeoBoundary | None] = None
     search_with_country: ClassVar[bool] = True
     quote_name: ClassVar[bool] = False
     multi_query: ClassVar[bool] = False

@@ -53,6 +53,7 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.services.apis.assets.base import MediaProvider
     from urbanlens.dashboard.services.apis.locations.base import SatelliteSlide, SatelliteViewProvider, StreetViewProvider, StreetViewSlide
+    from urbanlens.dashboard.services.geo_boundary import GeoBoundary
 
 logger = logging.getLogger(__name__)
 
@@ -258,11 +259,21 @@ class InfoPanelSource(LocationCachePanelSource, ABC):
 
 
 class CoordinateGatedInfoPanelSource(InfoPanelSource, ABC):
-    """An ``InfoPanelSource`` that only makes sense when the pin has coordinates."""
+    """An ``InfoPanelSource`` that only makes sense when the pin has coordinates.
+
+    Attributes:
+        geo_boundary: Restricts this panel to a geographic region (see
+            ``services.geo_boundary``); None means unrestricted.
+    """
+
+    geo_boundary: ClassVar[GeoBoundary | None] = None
 
     def gate(self, pin: Pin) -> bool:
-        """Skip scheduling a fetch for a pin with no usable coordinates."""
-        return bool(pin.effective_latitude and pin.effective_longitude)
+        """Skip scheduling a fetch for a pin with no usable coordinates, or outside ``geo_boundary``."""
+        lat, lng = pin.effective_latitude, pin.effective_longitude
+        if not (lat and lng):
+            return False
+        return self.geo_boundary is None or self.geo_boundary.contains(lat, lng)
 
 
 class GalleryMediaSource(LocationCachePanelSource, ABC):
@@ -367,11 +378,9 @@ class MediaPanelSource(GalleryMediaSource):
         gateway.get_media(pin.location, terms)
 
     def gate(self, pin: Pin) -> bool:
-        """USA-only providers and pins with no usable search name are skipped."""
-        from urbanlens.dashboard.services.geo_filter import is_usa_coordinates
-
+        """Geo-restricted providers and pins with no usable search name are skipped."""
         gateway = self.make_gateway()
-        if gateway.usa_only and not is_usa_coordinates(pin.effective_latitude, pin.effective_longitude):
+        if gateway.geo_boundary is not None and not gateway.geo_boundary.contains(pin.effective_latitude, pin.effective_longitude):
             return False
         return bool(self.search_terms(pin, gateway))
 

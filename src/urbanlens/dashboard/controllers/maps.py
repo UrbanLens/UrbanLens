@@ -594,11 +594,11 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         return JsonResponse(payload)
 
     def map_child_pins_json(self, request, *args, **kwargs):
-        """Return the profile's child pins (all nesting depths) for the Sub Pins layer.
+        """Return the profile's child pins (all nesting depths) for the Child pins layer.
 
         Child pins are pins nested under another pin via ``parent_pin`` (created
         by merging pins or by adding detail pins on a pin's page). The main map
-        hides them by default; the "Sub Pins" layer renders this payload.
+        hides them by default; the "Child pins" layer renders this payload.
 
         The same ``SearchForm`` criteria the filter panel posts are honoured
         when present in the query string, so an active map filter narrows the

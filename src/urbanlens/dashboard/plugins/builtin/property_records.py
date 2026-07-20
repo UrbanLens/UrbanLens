@@ -44,6 +44,7 @@ from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.apis.property_records.redata_gateway import REASON_BLOCKED, REASON_MANUAL_ONLY, REASON_SOURCE_ERROR
 from urbanlens.dashboard.services.enrichment import LocationCacheEnrichmentSource
 from urbanlens.dashboard.services.external_data import CoordinateGatedInfoPanelSource
+from urbanlens.dashboard.services.geo_boundary import USA
 from urbanlens.dashboard.services.rate_limiter import ServiceDefaults
 
 if TYPE_CHECKING:
@@ -52,6 +53,7 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.property_owner.model import WikiOwner
     from urbanlens.dashboard.services.enrichment import EnrichmentSource
     from urbanlens.dashboard.services.external_data import PanelSource
+    from urbanlens.dashboard.services.geo_boundary import GeoBoundary
 
 logger = logging.getLogger(__name__)
 
@@ -320,7 +322,7 @@ class PropertyRecordsEnrichmentSource(LocationCacheEnrichmentSource):
     verbose_name: ClassVar[str] = "Property Records (county GIS/tax data)"
     cache_source: ClassVar[str] = _CACHE_SOURCE
     service_keys: ClassVar[tuple[str, ...]] = ("redata_api",)
-    usa_only: ClassVar[bool] = True
+    geo_boundary: ClassVar[GeoBoundary | None] = USA
 
     def fetch(self, location: Location) -> tuple[dict | None, str]:
         """Call REData and, on success, upsert OFFICIAL owner/sale rows.

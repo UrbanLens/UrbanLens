@@ -58,7 +58,7 @@ class PinDeleteTests(TestCase):
 
 @override_settings(CACHES=_LOCMEM_CACHES)
 class PinDeleteChildrenDecisionTests(TestCase):
-    """A pin with sub pins requires an explicit children decision."""
+    """A pin with child pins requires an explicit children decision."""
 
     def setUp(self) -> None:
         self.owner = baker.make(User)

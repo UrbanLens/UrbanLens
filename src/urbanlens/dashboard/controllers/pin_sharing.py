@@ -39,7 +39,7 @@ def _create_pin_from_share(share: PinShare, parent_pin: Pin | None = None) -> Pi
         share: The accepted share to copy the pin from. Location-only shares
             (no sender pin, e.g. coordinates detected in a DM) produce a bare
             pin at the shared location instead of a property copy.
-        parent_pin: When the share is part of a "pin + sub pins" bundle, the
+        parent_pin: When the share is part of a "pin + child pins" bundle, the
             recipient-side pin the new pin should nest under.
 
     Returns:
@@ -203,7 +203,7 @@ class PinShareCreateView(LoginRequiredMixin, View):
         if attached_map is not None:
             share_markup_map_with_profile(sender, recipient, attached_map)
 
-        # Bundle the pin's sub pins: each child pin gets its own share row
+        # Bundle the pin's child pins: each child pin gets its own share row
         # (counting as a share of that pin), tied to the root share. Children
         # that already have a pending share to this recipient are skipped so
         # the one-pending-share-per-pin-and-recipient constraint holds.

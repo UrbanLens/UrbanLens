@@ -53,6 +53,7 @@ if TYPE_CHECKING:
 
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.site_settings.model import SiteSettings
+    from urbanlens.dashboard.services.geo_boundary import GeoBoundary
 
 logger = logging.getLogger(__name__)
 
@@ -77,10 +78,6 @@ _DENSITY_SHORTLIST_FACTOR = 3
 _DENSITY_RADIUS_KM = 2.0
 _DENSITY_SCORE_CAP = 20
 
-#: Recognized USA country spellings for ``usa_only`` candidate filtering
-#: (blank country is treated as USA, matching ``Location.is_usa``).
-_USA_COUNTRY_REGEX = r"^\s*(u\.?s\.?a?\.?|united states( of america)?)\s*$"
-
 
 class EnrichmentSource(ABC):
     """One kind of background-enrichable data for a Location.
@@ -98,7 +95,9 @@ class EnrichmentSource(ABC):
             The per-run budget is the *minimum* budget across these services.
         calls_per_item: Estimated API calls one :meth:`enrich` makes; budgets
             are divided by this so a two-call source gets half the items.
-        usa_only: When True, candidate locations are restricted to the USA.
+        geo_boundary: When set, candidate locations are restricted to this
+            geographic region (see ``services.geo_boundary``); None means
+            unrestricted.
         refreshes_names: When True, official names/aliases are re-resolved for
             every location this source successfully enriches in a cycle.
     """
@@ -107,7 +106,7 @@ class EnrichmentSource(ABC):
     verbose_name: ClassVar[str] = ""
     service_keys: ClassVar[tuple[str, ...]] = ()
     calls_per_item: ClassVar[int] = 1
-    usa_only: ClassVar[bool] = False
+    geo_boundary: ClassVar[GeoBoundary | None] = None
     refreshes_names: ClassVar[bool] = False
 
     def gate(self) -> bool:
@@ -423,7 +422,7 @@ def enrichment_window_open(site_settings: SiteSettings, *, now: datetime | None 
     return hour >= start or hour < end
 
 
-def prioritized_location_candidates(missing: Q, *, limit: int, usa_only: bool = False) -> list[Location]:
+def prioritized_location_candidates(missing: Q, *, limit: int, geo_boundary: GeoBoundary | None = None) -> list[Location]:
     """Pick the Locations most worth enriching next, highest impact first.
 
     Impact scoring favors places more users will actually see:
@@ -441,8 +440,9 @@ def prioritized_location_candidates(missing: Q, *, limit: int, usa_only: bool = 
     Args:
         missing: The source's :meth:`EnrichmentSource.missing_filter`.
         limit: Maximum candidates to return (the per-run item budget).
-        usa_only: Restrict to USA locations (blank country counts as USA,
-            matching ``Location.is_usa``).
+        geo_boundary: Restrict to locations within this region (a real
+            PostGIS spatial filter against ``Location.point``), or None for
+            no restriction.
 
     Returns:
         Up to ``limit`` locations, best candidates first.
@@ -473,8 +473,8 @@ def prioritized_location_candidates(missing: Q, *, limit: int, usa_only: bool = 
         )
         .order_by("-priority_score", "-updated")
     )
-    if usa_only:
-        queryset = queryset.filter(Q(country="") | Q(country__iregex=_USA_COUNTRY_REGEX))
+    if geo_boundary is not None and geo_boundary.geometry is not None:
+        queryset = queryset.filter(point__within=geo_boundary.geometry)
 
     shortlist = list(queryset[: limit * _DENSITY_SHORTLIST_FACTOR])
     if len(shortlist) > limit:
@@ -558,7 +558,7 @@ def run_enrichment_cycle(*, force: bool = False, sleep: Callable[[float], None] 
                 entry["skipped"] = "no_budget"
                 continue
 
-            candidates = prioritized_location_candidates(source.missing_filter(), limit=items, usa_only=source.usa_only)
+            candidates = prioritized_location_candidates(source.missing_filter(), limit=items, geo_boundary=source.geo_boundary)
             if not candidates:
                 entry["skipped"] = "nothing_missing"
                 continue

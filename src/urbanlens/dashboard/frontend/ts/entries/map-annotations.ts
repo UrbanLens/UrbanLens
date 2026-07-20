@@ -269,7 +269,7 @@ function init(): void {
     // -- Nearby pins layer -----------------------------------------------------
     // This profile's other pins near the one being viewed. Off by default and
     // fetched lazily the first time the layer is turned on (mirrors the main
-    // map's "Sub Pins" layer - see setChildPinsActive in pages/map/index.html).
+    // map's "Child Pins" layer - see setChildPinsActive in pages/map/index.html).
     const nearbyLayer = L.layerGroup();
     let nearbyActive = false;
     let nearbyFetchPromise: Promise<void> | null = null;
@@ -302,7 +302,7 @@ function init(): void {
             })
             .catch(() => {
                 // Silently ignore - the layer just stays empty, matching the
-                // main map's "Sub Pins" layer failure behavior.
+                // main map's "Child Pins" layer failure behavior.
             });
         return nearbyFetchPromise;
     }
@@ -848,7 +848,7 @@ function init(): void {
             .catch((err) => console.warn("Could not load detail pins:", err));
     }
 
-    // -- Detail pin multi-select: promote or delete several sub pins at once --
+    // -- Detail pin multi-select: promote or delete several child pins at once --
     // Pin-only (cfg.pinSlug is empty on the wiki page, which shares this module
     // but has no reparentable Pin-backed detail pins to act on) - the button is
     // removed there. Nested entries (entry.owner_name set) are display-only and
@@ -870,7 +870,7 @@ function init(): void {
         }
         const hasSelectable = detailSelectableEntries().length > 0;
         btn.disabled = !hasSelectable;
-        btn.setAttribute("data-tooltip", hasSelectable ? "Select multiple sub pins to promote or delete" : "This pin has no sub pins to select");
+        btn.setAttribute("data-tooltip", hasSelectable ? "Select multiple child pins to promote or delete" : "This pin has no child pins to select");
         if (!hasSelectable && detailSelectMode) exitDetailPinSelectMode();
     }
 
@@ -932,7 +932,7 @@ function init(): void {
         const uuids = Array.from(selectedDpUuids);
         if (!uuids.length) return;
         const n = uuids.length;
-        if (!(await confirmAction({ title: "Promote sub pins?", message: `Promote ${n} sub pin${n === 1 ? "" : "s"} to top-level pins on your main map?`, confirmLabel: "Promote" }))) return;
+        if (!(await confirmAction({ title: "Promote child pins?", message: `Promote ${n} sub pin${n === 1 ? "" : "s"} to top-level pins on your main map?`, confirmLabel: "Promote" }))) return;
         const results = await Promise.all(
             uuids.map((uuid) => {
                 const slug = detailPins.find((d) => d.uuid === uuid)?.slug || uuid;
@@ -953,7 +953,7 @@ function init(): void {
         const uuids = Array.from(selectedDpUuids);
         if (!uuids.length) return;
         const n = uuids.length;
-        if (!(await confirmAction({ title: "Delete sub pins?", message: `Delete ${n} sub pin${n === 1 ? "" : "s"}? This also removes reviews, visit history, and notes.`, confirmLabel: "Delete" }))) return;
+        if (!(await confirmAction({ title: "Delete child pins?", message: `Delete ${n} sub pin${n === 1 ? "" : "s"}? This also removes reviews, visit history, and notes.`, confirmLabel: "Delete" }))) return;
         const results = await Promise.all(uuids.map((uuid) => fetch(`${dpEditBase}${uuid}/`, { method: "DELETE", headers: { "X-CSRFToken": getCsrfToken() } }).then((r) => r.ok)));
         const deleted = results.filter(Boolean).length;
         if (deleted) toast.success(`${deleted} pin${deleted === 1 ? "" : "s"} deleted.`);

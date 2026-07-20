@@ -516,7 +516,7 @@ class PinPromoteChildrenView(LoginRequiredMixin, View):
         pin = result
         child_count = Pin.objects.filter(parent_pin=pin).count()
         if not child_count:
-            return JsonResponse({"error": "This pin has no sub pins to promote."}, status=400)
+            return JsonResponse({"error": "This pin has no child pins to promote."}, status=400)
         promoted = pin.promote_children()
         logger.info("User %s promoted %s child pin(s) of pin %s", request.user.id, promoted, pin.id)
         return JsonResponse({"ok": True, "promoted": promoted})

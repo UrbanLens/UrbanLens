@@ -160,8 +160,8 @@ register_map_layer(
     MapLayerSpec(
         key="childpins",
         kind="custom",
-        label="Sub Pins",
-        aria_label="Show or hide sub pins",
+        label="Child Pins",
+        aria_label="Show or hide child pins",
         tooltip="Show pins nested inside other pins",
         icon="subdirectory_arrow_right",
         thumb="dashboard/images/map_layer_child_pins.jpg",
@@ -439,8 +439,8 @@ register_map_tool(
     MapToolSpec(
         key="select_detail_pins",
         icon="check_box",
-        aria_label="Select sub pins",
-        tooltip="Select multiple sub pins to promote or delete",
+        aria_label="Select child pins",
+        tooltip="Select multiple child pins to promote or delete",
         tooltip_pos="below",
         button_id="select-detail-pins-button",
         onclick="toggleDetailPinSelectMode()",

@@ -1,5 +1,5 @@
 """Tests for child (sub) pin functionality: merge property retention, the main
-map's Sub Pins layer, jump-to-pin search coverage, detaching a child pin, the
+map's Child Pins layer, jump-to-pin search coverage, detaching a child pin, the
 pin page's "show sub pin details" toggle endpoints, share bundles, and the
 Visited-label propagation to ancestors."""
 
@@ -565,7 +565,7 @@ class PinShareBundleTests(TestCase):
     def test_notification_mentions_sub_pins(self) -> None:
         self._share(include_children=True)
         root_share = PinShare.objects.select_related("notification").get(pin=self.root)
-        self.assertIn("2 sub pins", root_share.notification.message)
+        self.assertIn("2 child pins", root_share.notification.message)
 
     def test_accept_recreates_hierarchy_for_recipient(self) -> None:
         self._share(include_children=True)

@@ -60,12 +60,12 @@ Tested all layers via the Layers panel. Working layers:
 - Satellite (Esri) ✅
 - Weather ✅
 - Pins (overlay toggle) ✅
-- Sub Pins (overlay toggle) ✅
+- Child Pins (overlay toggle) ✅
 - Dark ✅
 - Borders ✅
 - Places ✅
 
-**Issue (from Round 1, unresolved)**: Basemap options (Street/Terrain/Satellite/Dark) and overlay toggles (Pins/Sub Pins/Weather/Borders/Places) are mixed in the same list without visual grouping. A user could accidentally "stack" two basemaps. Consider separating with a divider and using radio vs. checkbox behavior.
+**Issue (from Round 1, unresolved)**: Basemap options (Street/Terrain/Satellite/Dark) and overlay toggles (Pins/Child pins/Weather/Borders/Places) are mixed in the same list without visual grouping. A user could accidentally "stack" two basemaps. Consider separating with a divider and using radio vs. checkbox behavior.
 
 **Note**: FEATURES.md mentions "topographic" but UI shows "Terrain" — these are the same layer.
 

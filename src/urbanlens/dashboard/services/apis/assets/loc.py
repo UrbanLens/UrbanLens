@@ -4,9 +4,12 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from urbanlens.dashboard.services.apis.assets.base import MediaItem, MediaProvider
+from urbanlens.dashboard.services.geo_boundary import USA
 
 if TYPE_CHECKING:
     from collections.abc import Generator
+
+    from urbanlens.dashboard.services.geo_boundary import GeoBoundary
 
 
 @dataclass(slots=True, kw_only=True)
@@ -20,7 +23,7 @@ class LOCJsonGateway(MediaProvider):
     service_key: ClassVar[str] = "library_of_congress"
     display_name: ClassVar[str] = "Library of Congress"
     paid_service: ClassVar[bool] = False
-    usa_only: ClassVar[bool] = True
+    geo_boundary: ClassVar[GeoBoundary | None] = USA
     search_with_country: ClassVar[bool] = False
     # NOTE: quoting the name (quote_name=True) was tried and reverted -- LOC's
     # /search/ endpoint returned wildly unrelated results (e.g. out-of-state

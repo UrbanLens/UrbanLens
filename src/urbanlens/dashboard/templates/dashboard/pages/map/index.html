@@ -239,7 +239,7 @@
                 </div>
             </details>
 
-            {# Links & sub pins -- collapsible -- #}
+            {# Links & child pins -- collapsible -- #}
             <details class="fp-accordion-item" id="fp-acc-links" data-importance="low">
                 <summary class="fp-accordion-summary">
                     <span class="fp-accordion-label">Links &amp; Detail Pins</span>
@@ -1428,7 +1428,7 @@
                 <div class="popup-actions">
                     <a href="${_escHtml(pin.viewLocationUrl)}" class="view-full-pin">View Details</a>
                     ${pin.id ? `<button class="add-to-list-button" onclick="event.stopPropagation(); openAddToListDialog(${pin.id})" title="Add to list"><i class="material-symbols-outlined">playlist_add</i></button>` : ''}
-                    ${pin.child_count > 0 ? `<button class="promote-children-button" onclick="event.stopPropagation(); promoteChildPins('${pin.slug || pin.uuid}', ${pin.child_count})" title="Promote all sub pins up one level"><i class="material-symbols-outlined">move_up</i></button>` : ''}
+                    ${pin.child_count > 0 ? `<button class="promote-children-button" onclick="event.stopPropagation(); promoteChildPins('${pin.slug || pin.uuid}', ${pin.child_count})" title="Promote all child pins up one level"><i class="material-symbols-outlined">move_up</i></button>` : ''}
                     <button class="edit-pin-button" onclick="openEditPinDialog('${pin.uuid}')" title="Edit pin"><i class="material-symbols-outlined">edit</i></button>
                     <button class="delete-button" onclick="deletePin(this)" title="Delete pin"><i class="material-symbols-outlined">delete</i></button>
                 </div>
@@ -1939,13 +1939,13 @@
         setInterval(_pollForUpdates, _POLL_INTERVAL);
     })();
 
-    // -- Sub pins (child pins) layer ---------------------------------------------
+    // -- Child pins (child pins) layer ---------------------------------------------
     // Pins nested inside another pin (merged pins, detail pins) are hidden from
     // the main map by default; this layer renders them as smaller markers with
     // a link back to their parent. Loaded lazily the first time it's turned on,
     // and re-fetched with the active filter criteria whenever filters change.
     // Markers are added directly into the shared clusterGroup (not a separate
-    // plain layer group) so sub pins cluster together with regular pins when
+    // plain layer group) so child pins cluster together with regular pins when
     // zoomed out instead of always rendering as loose individual markers.
     const _childPinStore  = new Map();   // uuid → child pin data
     const _childMarkerMap = new Map();   // uuid → L.Marker
@@ -1977,7 +1977,7 @@
                 ${pin.description ? `<div class="popup-desc">${_escHtml(pin.description)}</div>` : ''}
                 <div class="popup-actions">
                     <a href="${_escHtml(pin.url || '#')}" class="view-full-pin">View Details</a>
-                    ${pin.child_count > 0 ? `<button class="promote-children-button" onclick="event.stopPropagation(); promoteChildPins('${pin.slug || pin.uuid}', ${pin.child_count})" title="Promote all sub pins up one level"><i class="material-symbols-outlined">move_up</i></button>` : ''}
+                    ${pin.child_count > 0 ? `<button class="promote-children-button" onclick="event.stopPropagation(); promoteChildPins('${pin.slug || pin.uuid}', ${pin.child_count})" title="Promote all child pins up one level"><i class="material-symbols-outlined">move_up</i></button>` : ''}
                 </div>
             </div>`);
 
@@ -2012,7 +2012,7 @@
     function _loadChildPins() {
         const qs = _activeFilterQueryString();
         const url = '{% url "map.pins.children" %}' + (qs ? `?${qs}` : '');
-        _setFetching(true, 'Loading sub pins...');
+        _setFetching(true, 'Loading child pins...');
         _childPinsFetchPromise = _fetchJson(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } }, 30000)
             .then(function (data) {
                 if (_childMarkerMap.size) clusterGroup.removeLayers(Array.from(_childMarkerMap.values()));
@@ -2026,7 +2026,7 @@
                 });
                 if (newMarkers.length) clusterGroup.addLayers(newMarkers);
             })
-            .catch(function (err) { console.warn('[UL] Could not load sub pins:', err); })
+            .catch(function (err) { console.warn('[UL] Could not load child pins:', err); })
             .finally(function () { _setFetching(false); });
         return _childPinsFetchPromise;
     }
@@ -2046,7 +2046,7 @@
     function toggleChildPins() { setChildPinsActive(!_childPinsActive); }
 
     // Keep the layer in sync with the filter panel: any filter change (or reset)
-    // re-fetches the sub pins with the same criteria the root pins use.
+    // re-fetches the child pins with the same criteria the root pins use.
     document.getElementById('filter-form').addEventListener('htmx:afterRequest', function (e) {
         if (_childPinsActive && e.detail && e.detail.successful) _loadChildPins();
     });
@@ -2742,7 +2742,7 @@
     L.Marker.prototype.options.icon = newIcon;
 
     async function _deletePinByUuid(pinUuid, pinName) {
-        // Shared flow (base.html): confirm, then ask what to do with sub pins
+        // Shared flow (base.html): confirm, then ask what to do with child pins
         // when the server reports the pin has some (delete them or keep them).
         const result = await window.deletePinCascade(pinUuid, pinName, '{{ csrf_token }}');
         if (result === null) {
@@ -2751,7 +2751,7 @@
         }
         if (result !== true) return false;
         toastr.success('Location deleted successfully');
-        // Kept (promoted) sub pins and any other side effects surface on the
+        // Kept (promoted) child pins and any other side effects surface on the
         // next pin poll - flag the cache dirty so that happens promptly.
         try { localStorage.setItem('ul_pins_dirty', '1'); } catch (e) { /* poll covers it */ }
         if (pinUuid && _markerMap.has(pinUuid)) {
@@ -2776,7 +2776,7 @@
     async function promoteChildPins(pinSlug, childCount) {
         const n = childCount || 0;
         const confirmed = await window.confirmDialog({
-            title: 'Promote sub pins?',
+            title: 'Promote child pins?',
             message: `This moves ${n} sub pin${n === 1 ? '' : 's'} up one level, so ${n === 1 ? 'it is' : 'they are'} no longer nested under this pin.`,
             confirmLabel: 'Promote',
         });
@@ -2793,7 +2793,7 @@
             _refreshAllPins();
             if (_childPinsActive) _loadChildPins();
         })
-        .catch(function () { toastr.error('Failed to promote sub pins.'); });
+        .catch(function () { toastr.error('Failed to promote child pins.'); });
     }
 
     // ============================================================
@@ -3191,16 +3191,16 @@
             document.getElementById('bulk-merge-dialog').close();
             exitSelectMode();
             _refreshAllPins();
-            // Merged sources become sub pins of the target and stop appearing as
+            // Merged sources become child pins of the target and stop appearing as
             // root-level markers - without this they'd look like they vanished.
-            // Turn the Sub Pins layer on (if it wasn't already) so they're still
+            // Turn the Child Pins layer on (if it wasn't already) so they're still
             // visible immediately after the merge.
             if (_childPinsActive) {
                 _loadChildPins();
                 toastr.success('Pins merged.');
             } else {
                 _mapLayers.toggleCustom('childpins');
-                toastr.success('Pins merged. They\'re now shown as sub pins on the map (Layers → Sub Pins).');
+                toastr.success('Pins merged. They\'re now shown as child pins on the map (Layers → Child Pins).');
             }
         })
         .catch(function () { toastr.error('Merge failed.'); btn.disabled = false; btn.innerHTML = saved; });
@@ -3383,8 +3383,8 @@
             toastr.success('Pins updated.');
             exitSelectMode();
             _refreshAllPins();
-            // Pins reparented via this dialog become sub pins and stop appearing
-            // as root-level markers - refresh the Sub Pins layer so they don't
+            // Pins reparented via this dialog become child pins and stop appearing
+            // as root-level markers - refresh the Child Pins layer so they don't
             // look like they vanished (same treatment as bulk merge).
             if (data.reparented) {
                 if (_childPinsActive) _loadChildPins();
@@ -4473,7 +4473,7 @@
                 }
             }
             if (!found) {
-                // Not a root pin - it's a child (sub) pin. Turn the Sub Pins
+                // Not a root pin - it's a child (sub) pin. Turn the Child Pins
                 // layer on when it isn't already, so the jumped-to pin is
                 // actually visible, then open its popup.
                 const openChild = function () {

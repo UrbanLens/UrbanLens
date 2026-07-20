@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, ClassVar
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.enrichment import LocationCacheEnrichmentSource
 from urbanlens.dashboard.services.external_data import LocationCachePanelSource
+from urbanlens.dashboard.services.geo_boundary import USA
 from urbanlens.dashboard.services.locations.name_resolution import LocationCacheNameProvider
 from urbanlens.dashboard.services.rate_limiter import ServiceDefaults
 
@@ -15,6 +16,7 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.services.enrichment import EnrichmentSource
     from urbanlens.dashboard.services.external_data import PanelSource
+    from urbanlens.dashboard.services.geo_boundary import GeoBoundary
     from urbanlens.dashboard.services.locations.name_resolution import NameProvider
 
 
@@ -53,7 +55,7 @@ class NpsEnrichmentSource(LocationCacheEnrichmentSource):
     verbose_name: ClassVar[str] = "National Park Service"
     cache_source: ClassVar[str] = "nps"
     service_keys: ClassVar[tuple[str, ...]] = ("nps",)
-    usa_only: ClassVar[bool] = True
+    geo_boundary: ClassVar[GeoBoundary | None] = USA
 
     def gate(self) -> bool:
         """Requires the NPS API key."""
