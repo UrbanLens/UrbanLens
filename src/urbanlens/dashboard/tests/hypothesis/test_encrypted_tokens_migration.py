@@ -26,7 +26,7 @@ from urbanlens.dashboard.models.site_settings.model import SiteSettings
 
 # The original 0018_encrypt_external_tokens_data module was folded into the
 # v0.4.0+ squash - encrypt_existing_tokens now lives in the squashed module.
-_migration = import_module("urbanlens.dashboard.migrations.0007_pinshare_bundled_with_squashed_0037_markup_map_removed_flags")
+_migration = import_module("urbanlens.dashboard.migrations.0007_pinshare_bundled_with_markup_map_removed_flags")
 encrypt_existing_tokens = _migration.encrypt_existing_tokens
 
 

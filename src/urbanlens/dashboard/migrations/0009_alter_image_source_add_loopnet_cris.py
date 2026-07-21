@@ -8,7 +8,7 @@ class Migration(migrations.Migration):
     dependencies = [
         (
             "dashboard",
-            "0038_add_image_media_labels_squashed_0092_alter_notificationlog_notification_type",
+            "0008_add_image_media_labels",
         ),
     ]
 
