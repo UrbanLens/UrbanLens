@@ -301,13 +301,17 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         except (TypeError, ValueError):
             return 0
 
-    def _pending_panel(self, request: HttpRequest, pin: Pin, source_key: str):
+    def _pending_panel(self, request: HttpRequest, pin: Pin, source_key: str, hide_tab_id: str | None = None):
         """Schedule a panel's background fetch and return its polling placeholder.
 
         Args:
             request: The current request (its path doubles as the poll URL).
             pin: The pin whose panel data is being fetched.
             source_key: An ``external_data.panel_sources()`` key.
+            hide_tab_id: DOM id of a tab button that should hide itself once a
+                204 arrives (see ``panel_pending.html``'s own docstring) - only
+                panels also reachable via their own tab (currently just
+                Wikipedia's) need this; every other caller omits it.
 
         Returns:
             The self-polling placeholder fragment, or a 204 when the source is
@@ -334,6 +338,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 "poll_url": request.path,
                 "next_attempt": attempt + 1,
                 "poll_interval": POLL_INTERVAL_SECONDS,
+                "hide_tab_id": hide_tab_id,
             },
         )
 
@@ -1221,7 +1226,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         cached = LocationCache.get_fresh(location, "wikipedia")
         if cached is None:
-            return self._pending_panel(request, pin, "wikipedia")
+            return self._pending_panel(request, pin, "wikipedia", hide_tab_id="article-subtab-btn-wikipedia")
         data = cached.data or None
 
         if not data:
