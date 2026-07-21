@@ -4341,6 +4341,13 @@ body.page-location-details .pin-detail-grid {
             padding: .75rem;
             min-height: 12rem;
             max-height: 40rem;
+            // Adaptive pagination briefly un-hides every item on the current
+            // batch to measure how many actually fit (see
+            // measureVisiblePageSize in location/index.html) before re-hiding
+            // the excess - without this, that instant (and any measurement
+            // that ends up taller than this cap) visibly spilled a huge grid
+            // out past the card's boundary instead of being clipped.
+            overflow: hidden;
 
             @include up($breakpoint-sm) {
                 grid-template-columns: repeat(auto-fit, minmax(108px, 1fr));

@@ -1137,7 +1137,15 @@
             var cardTop = card.getBoundingClientRect().top;
             var availableCardHeight = Math.max(180, viewportBottom - cardTop - 24);
             var nonListHeight = card.offsetHeight - list.offsetHeight;
-            return Math.max(120, availableCardHeight - nonListHeight);
+            var height = Math.max(120, availableCardHeight - nonListHeight);
+            // Some lists (the Media gallery grid) also declare their own CSS
+            // max-height as an upper bound for unusually tall viewports - without
+            // clamping to it here too, this viewport-derived measurement could
+            // count more items as "visible" than the CSS box can actually show,
+            // so the page would overflow the instant the measurement's inline
+            // override is removed and the CSS max-height takes back over.
+            var cssMaxHeight = parseFloat(getComputedStyle(list).maxHeight);
+            return isNaN(cssMaxHeight) ? height : Math.min(height, cssMaxHeight);
         }
 
         function measureVisiblePageSize(card, list, items) {
