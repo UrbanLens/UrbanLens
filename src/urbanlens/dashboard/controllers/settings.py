@@ -71,12 +71,13 @@ def _e2ee_enrolled(profile: Profile) -> bool:
 
 
 def _security_context(user: User, request: HttpRequest) -> dict:
-    """Context for the Security section: passkeys, TOTP status, backup codes, API keys.
+    """Context for the Security section (passkeys, TOTP status, backup codes) and the
+    Advanced tab's separate API Keys section.
 
     Thin wrapper around ``services.two_factor.security_settings_context`` and
     ``services.api_keys.api_keys_settings_context``, which are also called
     directly by the 2FA and API key action views (``two_factor.py``,
-    ``api_keys.py``) so they can re-render just this section for htmx requests.
+    ``api_keys.py``) so they can re-render just their own section for htmx requests.
     """
     from urbanlens.dashboard.services.api_keys import api_keys_settings_context
     from urbanlens.dashboard.services.two_factor import security_settings_context

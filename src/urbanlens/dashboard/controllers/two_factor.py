@@ -24,7 +24,6 @@ from django.urls import reverse
 from django.views import View
 import qrcode
 
-from urbanlens.dashboard.services.api_keys import api_keys_settings_context
 from urbanlens.dashboard.services.two_factor import (
     SESSION_PENDING_TOTP_SECRET,
     disable_totp,
@@ -48,13 +47,8 @@ def _is_htmx(request: HttpRequest) -> bool:
 
 
 def _security_section_response(request: HttpRequest, user: User, **extra: object) -> HttpResponse:
-    """Render the Security section partial for an htmx swap, with fresh state.
-
-    Merges in the API Keys subsection's context too - both live in the same
-    partial and share the same swap target, so every action that re-renders
-    one must re-render the other with equally fresh state.
-    """
-    context = {**security_settings_context(user, request), **api_keys_settings_context(user, request), **extra}
+    """Render the Security section partial for an htmx swap, with fresh state."""
+    context = {**security_settings_context(user, request), **extra}
     return render(request, _SECURITY_SECTION_PARTIAL, context)
 
 

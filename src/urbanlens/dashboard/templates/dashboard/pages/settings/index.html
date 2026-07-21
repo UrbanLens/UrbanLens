@@ -1464,6 +1464,19 @@
             </div>
         </div>
     </section>
+
+    {# -- API keys -------------------------------------------------------------- #}
+    <section class="settings-section ul-section" id="api-keys-settings-section">
+        <div class="settings-section-header">
+            <i class="material-symbols-outlined">vpn_key</i>
+            <div>
+                <h2 class="settings-section-title">API Keys</h2>
+                <p class="settings-section-desc">Let another application create pins on your behalf.</p>
+            </div>
+        </div>
+
+        {% include "dashboard/partials/settings/_api_keys_section_body.html" %}
+    </section>
     </div> {# /tab-panel-advanced #}
 </div>
 
