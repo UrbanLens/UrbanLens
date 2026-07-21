@@ -129,6 +129,18 @@ Context:
   // detached container.
   var _lightboxMap = null;
   var _lightboxDlg = document.getElementById(LIGHTBOX_ID);
+  // A <dialog> opened with showModal() is promoted to the browser's top layer,
+  // but per spec that promotion is void if any ancestor has display: none -
+  // the dialog still reports open === true, but renders at zero size and is
+  // never actually painted. On the pin detail page this partial is loaded
+  // (via _photo_gallery.html) inside the Media section's "Mine" view panel,
+  // which is exactly such an ancestor whenever a different view tab is
+  // active - the common case, since "All" is the default. Reparenting to
+  // <body> once, up front, makes every lightbox immune to this regardless of
+  // where its host partial happens to be nested, on this page or any other.
+  if (_lightboxDlg && _lightboxDlg.parentElement !== document.body) {
+    document.body.appendChild(_lightboxDlg);
+  }
   if (_lightboxDlg) _lightboxDlg.addEventListener('close', function () { if (_lightboxMap) { _lightboxMap.remove(); _lightboxMap = null; } });
 
   // Generalized opener: `list` is an array of normalized items (see the file
