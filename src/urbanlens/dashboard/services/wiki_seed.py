@@ -81,7 +81,7 @@ def seed_wiki_article_from_wikipedia(location: Location) -> Article | None:
         return None
 
     article, _revision = save_article(editor=None, content=content, edit_summary=_EDIT_SUMMARY, wiki=wiki)
-    logger.info("Seeded wiki %s's article from Wikipedia", wiki.pk)
+    logger.debug("Seeded wiki %s's article from Wikipedia", wiki.pk)
     return article
 
 
@@ -117,7 +117,7 @@ def seed_pin_article_from_wikipedia(pin: Pin) -> Article | None:
         return None
 
     article, _revision = save_article(editor=None, content=content, edit_summary=_EDIT_SUMMARY, pin=pin)
-    logger.info("Seeded pin %s's article from Wikipedia", pin.pk)
+    logger.debug("Seeded pin %s's article from Wikipedia", pin.pk)
     return article
 
 
