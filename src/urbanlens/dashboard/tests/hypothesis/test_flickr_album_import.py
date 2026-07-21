@@ -274,6 +274,7 @@ class ImportFlickrAlbumPhotosTaskTests(TestCase):
             mock.patch.object(FlickrPublicGateway, "get_album", return_value=self._fake_album()),
             mock.patch.object(FlickrPublicGateway, "download_photo", return_value=(b"jpeg-bytes", "1.jpg", "image/jpeg")),
             mock.patch("urbanlens.dashboard.services.celery.safely_enqueue_task"),
+            mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
         ):
             counts = tasks.import_flickr_album_photos("pin", self.pin.pk, self.profile.pk, self.album_url, ["1"])
 
@@ -289,6 +290,7 @@ class ImportFlickrAlbumPhotosTaskTests(TestCase):
             mock.patch.object(FlickrPublicGateway, "get_album", return_value=self._fake_album()),
             mock.patch.object(FlickrPublicGateway, "download_photo", return_value=(b"jpeg-bytes", "1.jpg", "image/jpeg")),
             mock.patch("urbanlens.dashboard.services.celery.safely_enqueue_task"),
+            mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
         ):
             counts = tasks.import_flickr_album_photos("wiki", self.wiki.pk, self.profile.pk, self.album_url, ["1"])
 
@@ -301,6 +303,7 @@ class ImportFlickrAlbumPhotosTaskTests(TestCase):
             mock.patch.object(FlickrPublicGateway, "get_album", return_value=self._fake_album()),
             mock.patch.object(FlickrPublicGateway, "download_photo", return_value=(b"jpeg-bytes", "1.jpg", "image/jpeg")),
             mock.patch("urbanlens.dashboard.services.celery.safely_enqueue_task"),
+            mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
             mock.patch("urbanlens.dashboard.services.memories.photos.log_visit_on_pin") as mock_log_visit,
         ):
             tasks.import_flickr_album_photos("pin", self.pin.pk, self.profile.pk, self.album_url, ["1"])
@@ -312,12 +315,17 @@ class ImportFlickrAlbumPhotosTaskTests(TestCase):
         with (
             mock.patch.object(FlickrPublicGateway, "get_album", return_value=self._fake_album()),
             mock.patch.object(FlickrPublicGateway, "download_photo", return_value=(b"jpeg-bytes", "1.jpg", "image/jpeg")),
+            mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
         ):
             counts = tasks.import_flickr_album_photos("pin", self.pin.pk, self.profile.pk, self.album_url, ["1"])
         self.assertEqual(counts, {"imported": 0, "skipped": 1, "failed": 0})
 
     def test_download_failure_is_counted_as_failed(self) -> None:
-        with mock.patch.object(FlickrPublicGateway, "get_album", return_value=self._fake_album()), mock.patch.object(FlickrPublicGateway, "download_photo", side_effect=GatewayRequestError("boom")):
+        with (
+            mock.patch.object(FlickrPublicGateway, "get_album", return_value=self._fake_album()),
+            mock.patch.object(FlickrPublicGateway, "download_photo", side_effect=GatewayRequestError("boom")),
+            mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
+        ):
             counts = tasks.import_flickr_album_photos("pin", self.pin.pk, self.profile.pk, self.album_url, ["1"])
         self.assertEqual(counts, {"imported": 0, "skipped": 0, "failed": 1})
 
@@ -326,15 +334,17 @@ class ImportFlickrAlbumPhotosTaskTests(TestCase):
             mock.patch.object(FlickrPublicGateway, "get_album", return_value=self._fake_album()),
             mock.patch.object(FlickrPublicGateway, "download_photo", return_value=(b"jpeg-bytes", "1.jpg", "image/jpeg")),
             mock.patch("urbanlens.dashboard.services.storage.quota_error_for_upload", return_value="Storage full."),
+            mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
         ):
             counts = tasks.import_flickr_album_photos("pin", self.pin.pk, self.profile.pk, self.album_url, ["1"])
         self.assertEqual(counts, {"imported": 0, "skipped": 0, "failed": 1})
 
     def test_missing_pin_returns_empty_counts_without_crashing(self) -> None:
-        counts = tasks.import_flickr_album_photos("pin", 0, self.profile.pk, self.album_url, ["1"])
+        with mock.patch("urbanlens.dashboard.tasks.update_task_progress"):
+            counts = tasks.import_flickr_album_photos("pin", 0, self.profile.pk, self.album_url, ["1"])
         self.assertEqual(counts, {"imported": 0, "skipped": 0, "failed": 0})
 
     def test_unresolvable_photo_ids_are_silently_dropped(self) -> None:
-        with mock.patch.object(FlickrPublicGateway, "get_album", return_value=self._fake_album()):
+        with mock.patch.object(FlickrPublicGateway, "get_album", return_value=self._fake_album()), mock.patch("urbanlens.dashboard.tasks.update_task_progress"):
             counts = tasks.import_flickr_album_photos("pin", self.pin.pk, self.profile.pk, self.album_url, ["does-not-exist"])
         self.assertEqual(counts, {"imported": 0, "skipped": 0, "failed": 0})
