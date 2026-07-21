@@ -1084,6 +1084,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         import json as _json
 
         from urbanlens.dashboard.models.labels.model import Label
+        from urbanlens.dashboard.services.apis.locations.google.maps import _filename_stem
         from urbanlens.dashboard.services.archive_extractor import extract_archive, is_archive
 
         if not isinstance(request.user, User):
@@ -1121,15 +1122,30 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 except ValueError as exc:
                     logger.warning("Could not extract archive: %s", exc)
                     return JsonResponse({"error": "Invalid archive."}, status=400)
-                for entry in extracted:
-                    if is_archive(entry.data):
-                        try:
-                            inner = extract_archive(entry.data)
-                            all_files.extend((x.name, x.data) for x in inner)
-                        except ValueError:
-                            logger.warning("Could not extract nested archive during preview")
-                    else:
-                        all_files.append((entry.name, entry.data))
+                non_archive_entries = [entry for entry in extracted if not is_archive(entry.data)]
+                # A KMZ is just a ZIP wrapping a single "doc.kml" - Google's own
+                # fixed internal filename, unrelated to what the user actually
+                # named the .kmz. Using that inner name as the suggested list/
+                # category name always produced the same generic "doc"
+                # regardless of the uploaded file - substitute the outer
+                # archive's own filename instead whenever extraction yields
+                # exactly one non-archive entry named that way.
+                if len(extracted) == 1 and len(non_archive_entries) == 1 and _filename_stem(non_archive_entries[0].name) == "doc":
+                    entry = non_archive_entries[0]
+                    outer_stem = _filename_stem(uploaded_file.name or "")
+                    inner_suffix = entry.name.rsplit(".", 1)[-1] if "." in entry.name else ""
+                    renamed = f"{outer_stem}.{inner_suffix}" if inner_suffix else outer_stem
+                    all_files.append((renamed, entry.data))
+                else:
+                    for entry in extracted:
+                        if is_archive(entry.data):
+                            try:
+                                inner = extract_archive(entry.data)
+                                all_files.extend((x.name, x.data) for x in inner)
+                            except ValueError:
+                                logger.warning("Could not extract nested archive during preview")
+                        else:
+                            all_files.append((entry.name, entry.data))
             else:
                 all_files.append((uploaded_file.name, data))
 
