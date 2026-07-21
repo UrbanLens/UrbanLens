@@ -1428,7 +1428,7 @@
                 <div class="popup-actions">
                     <a href="${_escHtml(pin.viewLocationUrl)}" class="view-full-pin">View Details</a>
                     ${pin.id ? `<button class="add-to-list-button" onclick="event.stopPropagation(); openAddToListDialog(${pin.id})" title="Add to list"><i class="material-symbols-outlined">playlist_add</i></button>` : ''}
-                    ${pin.child_count > 0 ? `<button class="promote-children-button" onclick="event.stopPropagation(); promoteChildPins('${pin.slug || pin.uuid}', ${pin.child_count})" title="Promote all child pins up one level"><i class="material-symbols-outlined">move_up</i></button>` : ''}
+                    ${pin.child_count > 0 ? `<button class="btn btn--icon promote-children-button" onclick="event.stopPropagation(); promoteChildPins('${pin.slug || pin.uuid}', ${pin.child_count})" title="Promote all child pins up one level"><i class="material-symbols-outlined">move_up</i></button>` : ''}
                     <button class="edit-pin-button" onclick="openEditPinDialog('${pin.uuid}')" title="Edit pin"><i class="material-symbols-outlined">edit</i></button>
                     <button class="delete-button" onclick="deletePin(this)" title="Delete pin"><i class="material-symbols-outlined">delete</i></button>
                 </div>
@@ -1977,7 +1977,7 @@
                 ${pin.description ? `<div class="popup-desc">${_escHtml(pin.description)}</div>` : ''}
                 <div class="popup-actions">
                     <a href="${_escHtml(pin.url || '#')}" class="view-full-pin">View Details</a>
-                    ${pin.child_count > 0 ? `<button class="promote-children-button" onclick="event.stopPropagation(); promoteChildPins('${pin.slug || pin.uuid}', ${pin.child_count})" title="Promote all child pins up one level"><i class="material-symbols-outlined">move_up</i></button>` : ''}
+                    ${pin.child_count > 0 ? `<button class="btn btn--icon promote-children-button" onclick="event.stopPropagation(); promoteChildPins('${pin.slug || pin.uuid}', ${pin.child_count})" title="Promote all child pins up one level"><i class="material-symbols-outlined">move_up</i></button>` : ''}
                 </div>
             </div>`);
 

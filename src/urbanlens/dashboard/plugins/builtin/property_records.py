@@ -202,7 +202,7 @@ _BUILDING_CHARACTERISTIC_LABELS: tuple[tuple[str, str], ...] = (
 
 def _render_available(data: dict[str, Any]) -> dict[str, Any]:
     """Build the info-panel context for a successful record."""
-    meta = [{"label": "Situs address", "value": data["situs_address"]}] if data.get("situs_address") else []
+    meta = [{"label": "Address", "value": data["situs_address"]}] if data.get("situs_address") else []
     if data.get("apn"):
         meta.append({"label": "APN / Parcel ID", "value": data["apn"]})
     if data.get("prior_parcel_ids"):
