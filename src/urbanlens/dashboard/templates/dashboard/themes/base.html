@@ -1241,8 +1241,26 @@
                     .then(function (r) { return r.json(); })
                     .then(function (data) {
                         if (!data.ok) throw new Error();
-                        toastr.success('Map saved.');
                         if (_standaloneOnSaved) _standaloneOnSaved(data.uuid);
+                        // Ask before closing (not after) - the composer's map is
+                        // still live and visible, so MapExport.download has a
+                        // real rendered container to screenshot rather than one
+                        // already hidden behind a closed dialog.
+                        return window.confirmDialog({
+                            title: 'Map created',
+                            message: 'Your map has been saved. Download it as a JPEG now?',
+                            confirmLabel: 'Download',
+                            danger: false,
+                        });
+                    })
+                    .then(function (shouldDownload) {
+                        if (shouldDownload) {
+                            window.MapExport.download(_composerMap, {
+                                layers: _composerLayers,
+                                getShapes: function () { return _composerShapes; },
+                                filename: 'map-screenshot.jpg',
+                            });
+                        }
                         _closeComposer();
                     })
                     .catch(function () { toastr.error('Failed to save map.'); })
