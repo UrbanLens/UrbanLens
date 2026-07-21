@@ -195,6 +195,31 @@ class EnrollEndpointTests(TestCase):
         self.assertEqual(response.status_code, 400)
 
 
+class OwnKeysEndpointTests(TestCase):
+    """The caller's own "keys" endpoint always returns 200, not 404.
+
+    Not being enrolled is a common, expected state (checked unconditionally
+    on every page load to render the encryption status indicator) - it must
+    not surface as an HTTP error status, which would show up as a spurious
+    error in the browser console for most accounts on every page view.
+    """
+
+    def test_not_enrolled_reports_200_with_enrolled_false(self) -> None:
+        profile = _profile()
+        response = _client_for(profile).get(reverse("e2ee.keys"))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"enrolled": False})
+
+    def test_enrolled_reports_the_bundle(self) -> None:
+        profile = _profile()
+        bundle = _enroll(profile)
+        response = _client_for(profile).get(reverse("e2ee.keys"))
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["enrolled"])
+        self.assertEqual(payload["public_key"], bundle.public_key)
+
+
 class PartnerKeyEndpointTests(TestCase):
     """Partner public keys are exposed only to profiles that may message them."""
 

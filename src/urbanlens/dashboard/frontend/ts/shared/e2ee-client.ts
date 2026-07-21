@@ -107,7 +107,10 @@ interface LoginParams {
     auth_salt: string;
 }
 
+/** The "keys" endpoint always returns 200; `enrolled: false` (with no other
+ * fields) means the account has no bundle yet - a common, expected state. */
 interface KeyBundlePayload {
+    enrolled: boolean;
     public_key: string;
     password_wrapped_secret: string;
     password_wrap_salt: string;
@@ -273,7 +276,11 @@ async function runLoginFlow(form: HTMLFormElement): Promise<void> {
  */
 async function unlockAfterDerivedLogin(password: string): Promise<void> {
     const keysResponse = await fetch(cfg().urls.keys, { credentials: "same-origin" });
-    if (keysResponse.status === 404) {
+    if (!keysResponse.ok) {
+        return;
+    }
+    const bundle = (await keysResponse.json()) as KeyBundlePayload;
+    if (!bundle.enrolled) {
         // AccountKdf exists (signup created it) but no bundle yet - finish
         // enrollment now that we're authenticated.
         const result = await enroll({ password, rotateAuth: false });
@@ -282,10 +289,6 @@ async function unlockAfterDerivedLogin(password: string): Promise<void> {
         }
         return;
     }
-    if (!keysResponse.ok) {
-        return;
-    }
-    const bundle = (await keysResponse.json()) as KeyBundlePayload;
 
     if (bundle.password_wrapped_secret && bundle.password_wrap_salt) {
         const wrapKey = deriveKey(password, bundle.password_wrap_salt, bundle.kdf_opslimit, bundle.kdf_memlimit);
@@ -479,13 +482,13 @@ export async function getUnlockState(): Promise<UnlockState> {
         return "not-enrolled";
     }
     const response = await fetch(cfg().urls.keys, { credentials: "same-origin" });
-    if (response.status === 404) {
-        return "not-enrolled";
-    }
     if (!response.ok) {
         return "locked";
     }
     const bundle = (await response.json()) as KeyBundlePayload;
+    if (!bundle.enrolled) {
+        return "not-enrolled";
+    }
     const cached = await getIdentity(bundle.profile_slug);
     if (cached !== null && cached.version === bundle.version && cached.publicKey === bundle.public_key) {
         return "unlocked";
@@ -510,6 +513,9 @@ export async function unlockWithRecovery(display: string): Promise<boolean> {
         return false;
     }
     const bundle = (await response.json()) as KeyBundlePayload;
+    if (!bundle.enrolled) {
+        return false;
+    }
     const privateKey = unwrapSecretKey(bundle.recovery_wrapped_secret, key);
     if (privateKey === null) {
         return false;
@@ -530,6 +536,9 @@ export async function getUnlockOptions(): Promise<{ enrolled: boolean; password:
         return { enrolled: false, password: false };
     }
     const bundle = (await response.json()) as KeyBundlePayload;
+    if (!bundle.enrolled) {
+        return { enrolled: false, password: false };
+    }
     return { enrolled: true, password: Boolean(bundle.password_wrapped_secret) && !bundle.password_wrap_stale };
 }
 
@@ -797,6 +806,9 @@ export async function resetKeys(password?: string): Promise<ResetResult | null> 
         return null;
     }
     const bundle = (await bundleResponse.json()) as KeyBundlePayload;
+    if (!bundle.enrolled) {
+        return null;
+    }
     const oldPrivateKey = await recoverOldPrivateKey(bundle, password);
 
     const identity = generateIdentity();

@@ -21970,17 +21970,17 @@ https://github.com/browserify/crypto-browserify`);
   }
   async function unlockAfterDerivedLogin(password) {
     const keysResponse = await fetch(cfg().urls.keys, { credentials: "same-origin" });
-    if (keysResponse.status === 404) {
+    if (!keysResponse.ok) {
+      return;
+    }
+    const bundle = await keysResponse.json();
+    if (!bundle.enrolled) {
       const result = await enroll({ password, rotateAuth: false });
       if (result) {
         await showRecoveryDialog(result.recoveryDisplay);
       }
       return;
     }
-    if (!keysResponse.ok) {
-      return;
-    }
-    const bundle = await keysResponse.json();
     if (bundle.password_wrapped_secret && bundle.password_wrap_salt) {
       const wrapKey = deriveKey(password, bundle.password_wrap_salt, bundle.kdf_opslimit, bundle.kdf_memlimit);
       const privateKey = unwrapSecretKey(bundle.password_wrapped_secret, wrapKey);
@@ -22106,13 +22106,13 @@ https://github.com/browserify/crypto-browserify`);
       return "not-enrolled";
     }
     const response = await fetch(cfg().urls.keys, { credentials: "same-origin" });
-    if (response.status === 404) {
-      return "not-enrolled";
-    }
     if (!response.ok) {
       return "locked";
     }
     const bundle = await response.json();
+    if (!bundle.enrolled) {
+      return "not-enrolled";
+    }
     const cached = await getIdentity(bundle.profile_slug);
     if (cached !== null && cached.version === bundle.version && cached.publicKey === bundle.public_key) {
       return "unlocked";
@@ -22130,6 +22130,9 @@ https://github.com/browserify/crypto-browserify`);
       return false;
     }
     const bundle = await response.json();
+    if (!bundle.enrolled) {
+      return false;
+    }
     const privateKey = unwrapSecretKey(bundle.recovery_wrapped_secret, key);
     if (privateKey === null) {
       return false;
@@ -22143,6 +22146,9 @@ https://github.com/browserify/crypto-browserify`);
       return { enrolled: false, password: false };
     }
     const bundle = await response.json();
+    if (!bundle.enrolled) {
+      return { enrolled: false, password: false };
+    }
     return { enrolled: true, password: Boolean(bundle.password_wrapped_secret) && !bundle.password_wrap_stale };
   }
   async function unlockWithPassword(password) {
@@ -22309,6 +22315,9 @@ https://github.com/browserify/crypto-browserify`);
       return null;
     }
     const bundle = await bundleResponse.json();
+    if (!bundle.enrolled) {
+      return null;
+    }
     const oldPrivateKey = await recoverOldPrivateKey(bundle, password);
     const identity = generateIdentity();
     const recovery = generateRecoveryKey();

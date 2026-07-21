@@ -195,20 +195,29 @@ class E2EEOwnKeysView(LoginRequiredMixin, View):
     """GET: return the caller's full key bundle (wrapped blobs included)."""
 
     def get(self, request: HttpRequest) -> HttpResponse:
-        """Return the caller's bundle, or 404 when not enrolled.
+        """Return the caller's bundle, or an "enrolled: false" body when not enrolled.
+
+        Not being enrolled yet is the common, expected state for most accounts
+        (checked unconditionally on every page load to render the encryption
+        status indicator), so it is reported as a normal 200 rather than a 404
+        - an HTTP error status here would show up as a spurious-looking error
+        in the browser console on essentially every page view for these
+        accounts, even though the client handles it gracefully.
 
         Args:
             request: The authenticated request.
 
         Returns:
-            JSON with every bundle field the client needs to unlock.
+            JSON with every bundle field the client needs to unlock, or
+            ``{"enrolled": false}`` when the account has no bundle yet.
         """
         profile = _get_profile(request)
         bundle = MessagingKeyBundle.objects.for_profile(profile).first()
         if bundle is None:
-            return JsonResponse({"error": "Not enrolled."}, status=404)
+            return JsonResponse({"enrolled": False})
         return JsonResponse(
             {
+                "enrolled": True,
                 "public_key": bundle.public_key,
                 "password_wrapped_secret": bundle.password_wrapped_secret,
                 "password_wrap_salt": bundle.password_wrap_salt,
