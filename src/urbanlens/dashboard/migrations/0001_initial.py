@@ -49,8 +49,6 @@ def backfill_primary_email_normalized(apps, schema_editor):
 
 class Migration(migrations.Migration):
 
-    replaces = [('dashboard', '0001_initial'), ('dashboard', '0002_emergencycontactdefault_route_safetycheckin_and_more'), ('dashboard', '0003_profileemail_and_email_normalization'), ('dashboard', '0004_safetycheckin_final_warning_sent_at'), ('dashboard', '0005_safety_contact_optout_and_plan_update'), ('dashboard', '0006_alter_notificationlog_notification_type_and_more')]
-
     dependencies = [
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
