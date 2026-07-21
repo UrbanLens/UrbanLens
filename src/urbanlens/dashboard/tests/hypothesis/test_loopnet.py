@@ -10,7 +10,8 @@ listing's photos.
 
 from __future__ import annotations
 
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
 
 from model_bakery import baker
 
@@ -48,7 +49,11 @@ class AddressTests(SimpleTestCase):
         self.assertEqual(LoopnetPanelSource.address(pin), "")
 
     def test_no_location_yields_empty_string(self) -> None:
-        self.assertEqual(LoopnetPanelSource.address(Pin(location=None)), "")
+        # Pin.location is a non-nullable FK - Pin(location=None) would raise
+        # accessing .location on an unsaved instance, so this uses a bare
+        # duck-typed stand-in rather than a real (impossible) Pin state.
+        stub_pin = SimpleNamespace(location=None)
+        self.assertEqual(LoopnetPanelSource.address(stub_pin), "")
 
 
 class GateTests(TestCase):
@@ -71,6 +76,7 @@ class FetchTests(TestCase):
 
     def test_fetch_stores_listings_from_the_resolved_parcel(self) -> None:
         with (
+            patch.object(RedataGateway, "__post_init__", lambda _self: None),
             patch.object(RedataGateway, "lookup_parcel_uuid", return_value="parcel-1") as mock_uuid,
             patch.object(RedataGateway, "lookup_listings", return_value={"results": [_LISTING], "refresh_queued": False}) as mock_listings,
             patch("urbanlens.dashboard.models.cache.location_cache.LocationCache.set") as mock_set,
@@ -84,6 +90,7 @@ class FetchTests(TestCase):
 
     def test_no_parcel_found_persists_empty(self) -> None:
         with (
+            patch.object(RedataGateway, "__post_init__", lambda _self: None),
             patch.object(RedataGateway, "lookup_parcel_uuid", return_value=None),
             patch("urbanlens.dashboard.models.cache.location_cache.LocationCache.set") as mock_set,
         ):
@@ -93,6 +100,7 @@ class FetchTests(TestCase):
 
     def test_no_listings_persists_empty(self) -> None:
         with (
+            patch.object(RedataGateway, "__post_init__", lambda _self: None),
             patch.object(RedataGateway, "lookup_parcel_uuid", return_value="parcel-1"),
             patch.object(RedataGateway, "lookup_listings", return_value={"results": [], "refresh_queued": True}),
             patch("urbanlens.dashboard.models.cache.location_cache.LocationCache.set") as mock_set,
@@ -103,6 +111,7 @@ class FetchTests(TestCase):
 
     def test_unavailable_gracefully_persists_empty(self) -> None:
         with (
+            patch.object(RedataGateway, "__post_init__", lambda _self: None),
             patch.object(RedataGateway, "lookup_parcel_uuid", side_effect=PropertyRecordsUnavailableError("source_error", "boom")),
             patch("urbanlens.dashboard.models.cache.location_cache.LocationCache.set") as mock_set,
         ):
@@ -118,13 +127,17 @@ class FetchTests(TestCase):
         self.assertEqual(data, {})
 
     def test_no_coordinates_persists_empty_without_calling_redata(self) -> None:
-        location = baker.make(Location, latitude=None, longitude=None, street_number="123", route="Main St", google_place=None)
-        pin = baker.make(Pin, profile=_make_profile(), location=location)
+        # Location.latitude/longitude are non-nullable at the DB level, so this
+        # (admittedly defensive-only, given the schema) branch is exercised
+        # with a duck-typed stand-in rather than a real, impossible-to-persist Location.
+        stub_location = SimpleNamespace(latitude=None, longitude=None)
+        stub_pin = MagicMock(location=stub_location)
         with (
+            patch.object(LoopnetPanelSource, "address", return_value="123 Main St"),
             patch.object(RedataGateway, "lookup_parcel_uuid") as mock_uuid,
             patch("urbanlens.dashboard.models.cache.location_cache.LocationCache.set") as mock_set,
         ):
-            LoopnetPanelSource().fetch(pin)
+            LoopnetPanelSource().fetch(stub_pin)
         mock_uuid.assert_not_called()
         data = mock_set.call_args[0][2]
         self.assertEqual(data, {})

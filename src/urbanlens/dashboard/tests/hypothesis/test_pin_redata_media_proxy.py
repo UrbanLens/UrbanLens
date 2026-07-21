@@ -33,6 +33,7 @@ class PinLoopnetPhotoViewTests(SimpleTestCase):
         with (
             patch("urbanlens.dashboard.controllers.pin.cache.get", return_value=None),
             patch("urbanlens.dashboard.controllers.pin.cache.set"),
+            patch.object(RedataGateway, "__post_init__", lambda _self: None),
             patch.object(RedataGateway, "download_listing_photo", return_value=(b"jpeg-bytes", "image/jpeg")),
         ):
             response = self.client.get(reverse("pin.loopnet.photo", args=["listing-1", 1]))
@@ -73,6 +74,7 @@ class PinCrisAttachmentViewTests(SimpleTestCase):
         with (
             patch("urbanlens.dashboard.controllers.pin.cache.get", return_value=None),
             patch("urbanlens.dashboard.controllers.pin.cache.set"),
+            patch.object(RedataGateway, "__post_init__", lambda _self: None),
             patch.object(RedataGateway, "download_cultural_resource_attachment", return_value=(b"pdf-bytes", "application/pdf")),
         ):
             response = self.client.get(reverse("pin.cris.attachment", args=["res-1", 5]))

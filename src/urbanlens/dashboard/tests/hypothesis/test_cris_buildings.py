@@ -11,7 +11,8 @@ attachments.
 
 from __future__ import annotations
 
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
 
 from model_bakery import baker
 
@@ -55,10 +56,13 @@ class PanelGateTests(TestCase):
             self.assertFalse(self.source.gate(pin))
 
     def test_gate_false_without_coordinates(self) -> None:
-        location = baker.make(Location, latitude=None, longitude=None, google_place=None)
-        pin = baker.make(Pin, profile=_make_profile(), location=location)
+        # Location.latitude/longitude are non-nullable at the DB level (pre-existing,
+        # unrelated to this plugin) - gate() only reads effective_latitude/longitude
+        # (Pin's own passthrough property), so a duck-typed stand-in exercises the
+        # same branch without needing a real, impossible-to-persist Location.
+        stub_pin = SimpleNamespace(effective_latitude=None, effective_longitude=None)
         with patch.object(CrisBuildingPanelSource, "geo_boundary", _NY_ISH):
-            self.assertFalse(self.source.gate(pin))
+            self.assertFalse(self.source.gate(stub_pin))
 
 
 _BUILDING_RESOURCE = {
@@ -80,6 +84,7 @@ class PanelFetchTests(TestCase):
 
     def test_fetch_flattens_attributes_and_stores_attachments(self) -> None:
         with (
+            patch.object(RedataGateway, "__post_init__", lambda _self: None),
             patch.object(RedataGateway, "lookup_cultural_resources", return_value=[_BUILDING_RESOURCE]),
             patch.object(RedataGateway, "fetch_cultural_resource_detail", return_value=_BUILDING_DETAIL) as mock_detail,
             patch("urbanlens.dashboard.models.cache.location_cache.LocationCache.set") as mock_set,
@@ -94,6 +99,7 @@ class PanelFetchTests(TestCase):
 
     def test_no_building_resource_found_persists_empty(self) -> None:
         with (
+            patch.object(RedataGateway, "__post_init__", lambda _self: None),
             patch.object(RedataGateway, "lookup_cultural_resources", return_value=[{"uuid": "r2", "resource_type": "archaeological_buffer_area"}]),
             patch("urbanlens.dashboard.models.cache.location_cache.LocationCache.set") as mock_set,
         ):
@@ -102,6 +108,7 @@ class PanelFetchTests(TestCase):
 
     def test_unavailable_gracefully_persists_empty(self) -> None:
         with (
+            patch.object(RedataGateway, "__post_init__", lambda _self: None),
             patch.object(RedataGateway, "lookup_cultural_resources", side_effect=PropertyRecordsUnavailableError("source_error", "boom")),
             patch("urbanlens.dashboard.models.cache.location_cache.LocationCache.set") as mock_set,
         ):
@@ -115,15 +122,18 @@ class PanelFetchTests(TestCase):
         mock_set.assert_called_once_with(self.location, "cris_building_usn", {}, query_key="42.65,-73.75")
 
     def test_no_coordinates_persists_empty_without_calling_redata(self) -> None:
-        location = baker.make(Location, latitude=None, longitude=None, google_place=None)
-        pin = baker.make(Pin, profile=_make_profile(), location=location)
+        # Location.latitude/longitude are non-nullable at the DB level, so this
+        # (admittedly defensive-only, given the schema) branch is exercised
+        # with a duck-typed stand-in rather than a real, impossible-to-persist Location.
+        stub_location = SimpleNamespace(latitude=None, longitude=None)
+        pin = MagicMock(location=stub_location)
         with (
             patch.object(RedataGateway, "lookup_cultural_resources") as mock_lookup,
             patch("urbanlens.dashboard.models.cache.location_cache.LocationCache.set") as mock_set,
         ):
             CrisBuildingPanelSource().fetch(pin)
         mock_lookup.assert_not_called()
-        mock_set.assert_called_once_with(location, "cris_building_usn", {}, query_key="")
+        mock_set.assert_called_once_with(stub_location, "cris_building_usn", {}, query_key="")
 
 
 class MediaItemsTests(SimpleTestCase):
@@ -185,7 +195,10 @@ class EnrichmentSourceTests(TestCase):
     def test_fetch_returns_flattened_payload_when_a_building_is_found(self) -> None:
         location = baker.make(Location, latitude="42.650000", longitude="-73.750000", google_place=None)
 
-        with patch.object(RedataGateway, "lookup_cultural_resources", return_value=[_BUILDING_RESOURCE]):
+        with (
+            patch.object(RedataGateway, "__post_init__", lambda _self: None),
+            patch.object(RedataGateway, "lookup_cultural_resources", return_value=[_BUILDING_RESOURCE]),
+        ):
             payload, query_key = CrisBuildingEnrichmentSource().fetch(location)
 
         assert payload is not None
