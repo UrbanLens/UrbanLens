@@ -413,6 +413,34 @@
     }
 }
 
+// Child/detail pin hero: the parent pin's name is the primary heading (it's
+// the recognizable "place"), styled as a link back to the parent's own detail
+// page; this pin's own editable name reads as a subtitle below it.
+.pin-detail-hero-parent-link {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    color: inherit;
+    text-decoration: none;
+    border-radius: 10px;
+    padding: .1rem .5rem;
+    transition: background .15s;
+
+    &:hover,
+    &:focus-visible {
+        background: var(--ul-grey-0a);
+        outline: none;
+        text-decoration: underline;
+    }
+}
+
+.pin-detail-hero-child-name {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: .3rem;
+}
+
 .pin-name-input {
     font: inherit;
     font-weight: inherit;

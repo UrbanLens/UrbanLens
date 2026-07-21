@@ -18,6 +18,22 @@ in context, plus the wiki/linking context used by the overview panel.
 {% endif %}
 <div class="pin-detail-hero-body">
     <div class="pin-detail-hero-main">
+        {% if pin.parent_pin %}
+        <p class="ul-page-hero__eyebrow">
+            <i class="material-symbols-outlined">subdirectory_arrow_right</i> Sub-pin
+        </p>
+        <h1 id="pin-detail-hero-title" class="ul-page-hero__title">
+            <a class="pin-detail-hero-parent-link" href="{% url 'pin.details' pin.parent_pin.slug|default:pin.parent_pin.uuid %}"
+               data-tooltip="Back to {{ pin.parent_pin.effective_name }}" data-tooltip-pos="bottom">
+                <i class="material-symbols-outlined">arrow_back</i>{{ pin.parent_pin.effective_name }}
+            </a>
+        </h1>
+        <p class="ul-page-hero__subtitle pin-detail-hero-child-name">
+            <i class="material-symbols-outlined">place</i>
+            <span class="pin-name-editable" tabindex="0" role="button"
+                  data-raw-name="{{ pin.effective_name }}" title="Click to rename">{{ pin.effective_name }}</span>
+        </p>
+        {% else %}
         <p class="ul-page-hero__eyebrow">
             <i class="material-symbols-outlined">place</i> Pin
         </p>
@@ -25,6 +41,7 @@ in context, plus the wiki/linking context used by the overview panel.
             <span class="pin-name-editable" tabindex="0" role="button"
                   data-raw-name="{{ pin.effective_name }}" title="Click to rename">{{ pin.effective_name }}</span>
         </h1>
+        {% endif %}
         {% if pin.location.address %}
         <p class="ul-page-hero__subtitle">
             <i class="material-symbols-outlined">location_on</i>
