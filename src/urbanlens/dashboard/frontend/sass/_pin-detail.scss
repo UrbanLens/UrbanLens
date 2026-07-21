@@ -4371,6 +4371,14 @@ body.page-location-details .pin-detail-grid {
             color: var(--ul-grey-5);
             font-size: .9rem;
 
+            // A class-based `display` always beats the browser's default
+            // `[hidden] { display: none }` UA rule on specificity, so the
+            // element stays visibly rendered (as `display: flex`) even while
+            // marked `hidden` unless this is spelled out explicitly.
+            &[hidden] {
+                display: none;
+            }
+
             .material-symbols-outlined { font-size: 2.5rem; }
         }
 
