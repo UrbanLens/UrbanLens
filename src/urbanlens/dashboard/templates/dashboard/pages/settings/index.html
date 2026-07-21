@@ -1941,7 +1941,7 @@ function applyGuidancePreview(level) {
     var _AUTO_ZOOM = 11;  // slightly wider - shows a whole pin cluster
 
     window.selectMapMode = function (mode) {
-        // Select the matching hidden radio input.
+        // Select the matching radio input.
         var radio = document.querySelector('input[name="map_center_mode"][value="' + mode + '"]');
         if (radio) radio.checked = true;
         applyMode(mode);
@@ -1962,6 +1962,14 @@ function applyGuidancePreview(level) {
             }
         }
         // Custom: keep whatever zoom the user last set.
+
+        // Setting .checked directly above does not fire a native "change"
+        // event, so the form's autosave listener (which only reacts to real
+        // "change" events) would otherwise never see this as a save-worthy
+        // edit and the choice would silently revert on the next page load.
+        // Dispatch one manually, after the mode-specific field updates above,
+        // so the autosave submits the fully-settled state.
+        if (radio) radio.dispatchEvent(new Event('change', { bubbles: true }));
     };
 
     // Geocode an address string and move the preview map there.
