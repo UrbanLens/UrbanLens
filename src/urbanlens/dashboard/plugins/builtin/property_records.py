@@ -246,10 +246,7 @@ def _render_available(data: dict[str, Any]) -> dict[str, Any]:
     if data.get("school_district"):
         meta.append({"label": "School district", "value": data["school_district"]})
 
-    field_sources = data.get("field_sources") or {}
-    distinct_tiers = {data["source"]["tier"], *field_sources.values()}
-    chips = [f"Tier {data['source']['tier']}"] if len(distinct_tiers) <= 1 else [f"Tiers {', '.join(str(t) for t in sorted(distinct_tiers))}"]
-    chips.append(f"{data['confidence']:.0%} confidence")
+    chips = []
     if data.get("field_mismatches"):
         chips.append("Sources disagree")
     if any(entry.get("delinquent") for entry in data.get("tax_history") or []):
