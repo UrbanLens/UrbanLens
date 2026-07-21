@@ -717,16 +717,18 @@
 }
 
 // The form column can grow very tall (score/date grids, region map, label
-// lists, custom fields, visits...) - left unbounded, its height drives the
-// height of the whole page-content grid, pushing the sticky footer far below
-// the viewport. Bound it to the viewport and let it scroll independently,
-// same "two independent panes" pattern as the sticky map column beside it.
-// Only applied at $breakpoint-lg+, where the map column is actually sticky -
-// below that, both columns stack in normal document flow.
+// lists, custom fields, visits...) - it used to be capped at `100vh` with its
+// own overflow-y: auto so its height wouldn't drive the whole page-content
+// grid's height. That gave it a second, independent scrollbar stacked on top
+// of the page's own scrollbar (and the 100vh cap didn't even account for the
+// header/hero/subnav space already consumed above it, so the page still
+// ended up taller than the viewport anyway) - removed in favor of just
+// letting this column flow naturally and scroll with the rest of the page,
+// same as every other page on the site. The map column beside it keeps its
+// own `position: sticky` (see .saved-filter-detail-map-col below), which
+// works the same regardless of whether this column has its own overflow.
 .saved-filter-detail-form-col {
     @include up($breakpoint-lg) {
-        max-height: calc(100vh - 2rem);
-        overflow-y: auto;
         padding-right: .25rem;
     }
 }
