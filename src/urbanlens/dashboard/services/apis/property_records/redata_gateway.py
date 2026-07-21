@@ -123,7 +123,17 @@ class RedataGateway(Gateway):
                 body = response.json()
             except ValueError as exc:
                 raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, "REData returned an unparseable response.") from exc
-            return dict(body.get("record_payload") or {})
+            payload = dict(body.get("record_payload") or {})
+            # parcel_geometry/building_geometry are also top-level fields on the
+            # Parcel response (alongside record_payload), already converted to
+            # standard GeoJSON server-side (REData's own
+            # core.services.geojson.esri_rings_to_geojson) - prefer these over
+            # record_payload's own copies, which are just whichever tier's raw,
+            # still-Esri-ring-shaped PropertyRecord snapshot was last written.
+            for key in ("parcel_geometry", "building_geometry"):
+                if key in body:
+                    payload[key] = body[key]
+            return payload
 
         if response.status_code in (404, 503):
             try:

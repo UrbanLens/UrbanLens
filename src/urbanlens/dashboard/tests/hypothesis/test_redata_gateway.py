@@ -93,6 +93,32 @@ class LookupParcelSuccessTests(SimpleTestCase):
         gateway = _gateway(session)
         self.assertEqual(gateway.lookup_parcel(42.65, -73.75), {})
 
+    def test_top_level_geojson_geometry_overrides_record_payloads_own_copy(self) -> None:
+        """The top-level Parcel fields are already-converted GeoJSON; record_payload's own
+        parcel_geometry/building_geometry are still the raw Esri-ring-shaped snapshot."""
+        session = MagicMock()
+        session.get.return_value = _response(
+            200,
+            json_body={
+                "record_payload": {"owner_name": ["Jane Smith"], "parcel_geometry": {"format": "esri_rings", "rings": [[[0.0, 0.0]]]}},
+                "parcel_geometry": {"type": "Polygon", "coordinates": [[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 0.0]]]},
+                "building_geometry": {"type": "Polygon", "coordinates": [[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 0.0]]]},
+            },
+        )
+        gateway = _gateway(session)
+        payload = gateway.lookup_parcel(42.65, -73.75)
+        self.assertEqual(payload["owner_name"], ["Jane Smith"])
+        self.assertEqual(payload["parcel_geometry"], {"type": "Polygon", "coordinates": [[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 0.0]]]})
+        self.assertEqual(payload["building_geometry"], {"type": "Polygon", "coordinates": [[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 0.0]]]})
+
+    def test_no_top_level_geometry_leaves_record_payload_untouched(self) -> None:
+        session = MagicMock()
+        session.get.return_value = _response(200, json_body={"record_payload": {"owner_name": ["Jane Smith"]}})
+        gateway = _gateway(session)
+        payload = gateway.lookup_parcel(42.65, -73.75)
+        self.assertNotIn("parcel_geometry", payload)
+        self.assertNotIn("building_geometry", payload)
+
     def test_unparseable_200_response_raises_source_error(self) -> None:
         session = MagicMock()
         session.get.return_value = _response(200, raise_on_json=True)

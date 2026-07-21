@@ -1,9 +1,14 @@
-"""Tests for esri_rings_to_polygon and RedataBoundaryProvider.
+"""Tests for esri_rings_to_polygon, geojson_polygon_to_geos, and RedataBoundaryProvider.
 
-esri_rings_to_polygon converts REData's raw Esri ring-list geometry
-(parcel_geometry/building_geometry) into GEOS polygons; RedataBoundaryProvider
-wraps that conversion behind the BoundaryProvider interface the rest of the
-boundary-provider chain (services.locations.boundaries) already uses.
+esri_rings_to_polygon converts Esri's raw ring-list geometry into GEOS
+polygons - still needed for sources that hand back that shape natively
+(Census TIGERweb, via geo_boundary.py). geojson_polygon_to_geos converts
+standard GeoJSON Polygon/MultiPolygon dicts the same way, but without any
+winding-order/hole-assignment fixing, since REData's API now converts its own
+parcel_geometry/building_geometry to correct GeoJSON server-side before
+RedataBoundaryProvider (which wraps whichever of the two the current source
+needs behind the BoundaryProvider interface the rest of the boundary-provider
+chain - services.locations.boundaries - already uses) ever sees it.
 """
 
 from __future__ import annotations
@@ -13,7 +18,7 @@ from unittest import mock
 from django.contrib.gis.geos import MultiPolygon, Point, Polygon
 
 from urbanlens.core.tests.testcase import SimpleTestCase
-from urbanlens.dashboard.services.apis.locations.base import esri_rings_to_polygon
+from urbanlens.dashboard.services.apis.locations.base import esri_rings_to_polygon, geojson_polygon_to_geos
 from urbanlens.dashboard.services.apis.locations.boundaries.redata import RedataBoundaryProvider
 from urbanlens.dashboard.services.apis.property_records.redata_gateway import REASON_SOURCE_ERROR, PropertyRecordsUnavailableError
 from urbanlens.UrbanLens.settings.app import settings
@@ -24,6 +29,13 @@ _SQUARE_CW = [[0.0, 0.0], [0.0, 10.0], [10.0, 10.0], [10.0, 0.0], [0.0, 0.0]]
 _HOLE_CCW = [[4.0, 4.0], [6.0, 4.0], [6.0, 6.0], [4.0, 6.0], [4.0, 4.0]]
 # A second, disjoint clockwise square (a separate shell).
 _SQUARE_CW_2 = [[20.0, 20.0], [20.0, 30.0], [30.0, 30.0], [30.0, 20.0], [20.0, 20.0]]
+
+# Standard GeoJSON (RFC 7946): exterior ring wound counter-clockwise.
+_GEOJSON_SQUARE = [[0.0, 0.0], [10.0, 0.0], [10.0, 10.0], [0.0, 10.0], [0.0, 0.0]]
+# A hole, wound clockwise (the opposite of its shell), already nested under it.
+_GEOJSON_HOLE = [[4.0, 4.0], [4.0, 6.0], [6.0, 6.0], [6.0, 4.0], [4.0, 4.0]]
+# A second, disjoint exterior ring for MultiPolygon tests.
+_GEOJSON_SQUARE_2 = [[20.0, 20.0], [30.0, 20.0], [30.0, 30.0], [20.0, 30.0], [20.0, 20.0]]
 
 
 class EsriRingsToPolygonTests(SimpleTestCase):
@@ -79,6 +91,46 @@ class EsriRingsToPolygonTests(SimpleTestCase):
         assert isinstance(result, Polygon)
 
 
+class GeojsonPolygonToGeosTests(SimpleTestCase):
+    def test_none_geometry_returns_none(self) -> None:
+        self.assertIsNone(geojson_polygon_to_geos(None))
+
+    def test_non_dict_returns_none(self) -> None:
+        self.assertIsNone(geojson_polygon_to_geos("not-a-dict"))  # type: ignore[arg-type]
+
+    def test_unsupported_type_returns_none(self) -> None:
+        self.assertIsNone(geojson_polygon_to_geos({"type": "Point", "coordinates": [0.0, 0.0]}))
+
+    def test_missing_coordinates_returns_none(self) -> None:
+        self.assertIsNone(geojson_polygon_to_geos({"type": "Polygon"}))
+
+    def test_empty_coordinates_returns_none(self) -> None:
+        self.assertIsNone(geojson_polygon_to_geos({"type": "Polygon", "coordinates": []}))
+
+    def test_simple_polygon_is_parsed_directly(self) -> None:
+        result = geojson_polygon_to_geos({"type": "Polygon", "coordinates": [_GEOJSON_SQUARE]})
+        assert isinstance(result, Polygon)
+        self.assertTrue(result.valid)
+        self.assertTrue(result.contains(Point(5.0, 5.0, srid=4326)))
+
+    def test_polygon_with_hole_is_parsed_directly(self) -> None:
+        """The hole is already the second ring - no reordering/point-in-polygon logic needed."""
+        result = geojson_polygon_to_geos({"type": "Polygon", "coordinates": [_GEOJSON_SQUARE, _GEOJSON_HOLE]})
+        assert isinstance(result, Polygon)
+        self.assertTrue(result.contains(Point(1.0, 1.0, srid=4326)))
+        self.assertFalse(result.contains(Point(5.0, 5.0, srid=4326)))
+
+    def test_multipolygon_is_parsed_into_a_geos_multipolygon(self) -> None:
+        result = geojson_polygon_to_geos({"type": "MultiPolygon", "coordinates": [[_GEOJSON_SQUARE], [_GEOJSON_SQUARE_2]]})
+        assert isinstance(result, MultiPolygon)
+        self.assertEqual(len(result), 2)
+
+    def test_multipolygon_with_a_single_valid_shell_collapses_to_a_polygon(self) -> None:
+        """Mirrors esri_rings_to_polygon's own behavior of never wrapping a lone shell."""
+        result = geojson_polygon_to_geos({"type": "MultiPolygon", "coordinates": [[_GEOJSON_SQUARE]]})
+        assert isinstance(result, Polygon)
+
+
 class RedataBoundaryProviderNotConfiguredTests(SimpleTestCase):
     def test_missing_url_and_key_returns_empty_dict(self) -> None:
         with mock.patch.object(settings, "redata_api_url", None), mock.patch.object(settings, "redata_api_key", None):
@@ -116,17 +168,17 @@ class RedataBoundaryProviderConfiguredTests(SimpleTestCase):
 
     def test_parcel_geometry_only_fills_the_property_slot(self) -> None:
         with mock.patch(self._GATEWAY_CLASS_PATH) as gw_cls:
-            gw_cls.return_value.lookup_parcel.return_value = {"parcel_geometry": {"format": "esri_rings", "rings": [_SQUARE_CW]}}
+            gw_cls.return_value.lookup_parcel.return_value = {"parcel_geometry": {"type": "Polygon", "coordinates": [_GEOJSON_SQUARE]}}
             result = RedataBoundaryProvider().get_typed_boundaries(42.65, -73.75)
         self.assertIsInstance(result["property"], Polygon)
         self.assertIsNone(result["building"])
 
     def test_both_geometries_fill_both_slots(self) -> None:
-        building_ring = [[4.0, 4.0], [4.0, 6.0], [6.0, 6.0], [6.0, 4.0], [4.0, 4.0]]
+        building_ring = [[4.0, 4.0], [6.0, 4.0], [6.0, 6.0], [4.0, 6.0], [4.0, 4.0]]
         with mock.patch(self._GATEWAY_CLASS_PATH) as gw_cls:
             gw_cls.return_value.lookup_parcel.return_value = {
-                "parcel_geometry": {"format": "esri_rings", "rings": [_SQUARE_CW]},
-                "building_geometry": {"format": "esri_rings", "rings": [building_ring]},
+                "parcel_geometry": {"type": "Polygon", "coordinates": [_GEOJSON_SQUARE]},
+                "building_geometry": {"type": "Polygon", "coordinates": [building_ring]},
             }
             result = RedataBoundaryProvider().get_typed_boundaries(42.65, -73.75)
         self.assertIsInstance(result["property"], Polygon)
@@ -140,7 +192,7 @@ class RedataBoundaryProviderConfiguredTests(SimpleTestCase):
 
     def test_get_boundary_reduces_a_multipolygon_to_its_largest_shell(self) -> None:
         with mock.patch(self._GATEWAY_CLASS_PATH) as gw_cls:
-            gw_cls.return_value.lookup_parcel.return_value = {"parcel_geometry": {"format": "esri_rings", "rings": [_SQUARE_CW, _SQUARE_CW_2]}}
+            gw_cls.return_value.lookup_parcel.return_value = {"parcel_geometry": {"type": "MultiPolygon", "coordinates": [[_GEOJSON_SQUARE], [_GEOJSON_SQUARE_2]]}}
             result = RedataBoundaryProvider().get_boundary(42.65, -73.75)
         self.assertIsInstance(result, Polygon)
 

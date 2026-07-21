@@ -324,9 +324,15 @@ def _close_ring(points: list) -> list[tuple[float, float]] | None:
 
 
 def esri_rings_to_polygon(geometry: dict | None) -> Polygon | MultiPolygon | None:
-    """Convert an Esri ring-list polygon geometry (REData's ``parcel_geometry``/
-    ``building_geometry`` shape - see ``schema.PropertyRecord.parcel_geometry``'s
-    docstring in REData for why it's not plain GeoJSON) into a GEOS polygon.
+    """Convert an Esri ring-list polygon geometry into a GEOS polygon.
+
+    Only still needed for sources that hand back Esri's native ring-list shape
+    directly - Census TIGERweb (``geo_boundary.py``) being the one remaining
+    caller. REData used to require this too, but its API now converts
+    ``parcel_geometry``/``building_geometry`` to standard GeoJSON server-side
+    (``core.services.geojson.esri_rings_to_geojson``, mirroring this exact
+    function) - see ``geojson_polygon_to_geos`` below for that shape instead,
+    used by ``RedataBoundaryProvider``.
 
     Esri's ring-winding convention is the opposite of GeoJSON's: a clockwise
     ring is an exterior shell, a counter-clockwise ring is a hole - and
@@ -403,3 +409,46 @@ def esri_rings_to_polygon(geometry: dict | None) -> Polygon | MultiPolygon | Non
     if len(final_polygons) == 1:
         return final_polygons[0]
     return MultiPolygon(final_polygons, srid=4326)
+
+
+def geojson_polygon_to_geos(geometry: dict | None) -> Polygon | MultiPolygon | None:
+    """Convert a standard GeoJSON ``Polygon``/``MultiPolygon`` dict into a GEOS geometry.
+
+    Unlike :func:`esri_rings_to_polygon`, the input here is already correct,
+    standard GeoJSON (RFC 7946 winding order, holes already nested under their
+    shell) - REData's API converts its internally-stored Esri ring-list shape
+    to this on the way out (``core.services.geojson.esri_rings_to_geojson``,
+    a pure-Python port of ``esri_rings_to_polygon``'s own algorithm), so this
+    is a direct structural translation rather than a geometry-fixing one:
+    GeoJSON's ``coordinates`` array for a ``Polygon`` (``[exterior_ring,
+    hole_ring, ...]``, each ring a list of ``[lon, lat]`` pairs) is exactly
+    the ring-list shape Django's own ``Polygon(*rings)`` constructor expects.
+
+    Args:
+        geometry: A dict of the shape ``{"type": "Polygon"|"MultiPolygon",
+            "coordinates": [...]}``, or None.
+
+    Returns:
+        A single ``Polygon``, a ``MultiPolygon`` when more than one shell was
+        present, or None when the geometry is missing, malformed, an
+        unsupported type (e.g. a bare ``Point``), or resolves to nothing valid.
+    """
+    if not isinstance(geometry, dict):
+        return None
+    geo_type = geometry.get("type")
+    coordinates = geometry.get("coordinates")
+    if geo_type not in ("Polygon", "MultiPolygon") or not isinstance(coordinates, list) or not coordinates:
+        return None
+
+    try:
+        if geo_type == "Polygon":
+            polygon = Polygon(*coordinates, srid=4326)
+            return polygon if polygon.valid and not polygon.empty else None
+
+        polygons = [polygon for poly_coords in coordinates if (polygon := Polygon(*poly_coords, srid=4326)).valid and not polygon.empty]
+    except (ValueError, GEOSException, TypeError):
+        return None
+
+    if not polygons:
+        return None
+    return polygons[0] if len(polygons) == 1 else MultiPolygon(polygons, srid=4326)

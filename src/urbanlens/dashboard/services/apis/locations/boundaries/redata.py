@@ -7,6 +7,14 @@ straight from the county assessor's own GIS layer - the same data
 just consumed for its ``parcel_geometry``/``building_geometry`` instead of its
 attribute fields. See ``docs/redata.md`` for the extraction this depends on.
 
+REData's own internal storage for these fields is still Esri's ring-list
+shape, but its API converts them to standard GeoJSON on the way out
+(``core.services.geojson.esri_rings_to_geojson`` on REData's side) - this
+provider parses that GeoJSON directly (``geojson_polygon_to_geos``) rather
+than running the Esri-ring-fixing conversion (``esri_rings_to_polygon``)
+itself, which is still needed only for providers that hand back genuine
+Esri rings natively (Census TIGERweb, via ``geo_boundary.py``).
+
 Coverage is real but partial: only jurisdictions REData has a Tier 1 ArcGIS
 endpoint configured for populate ``parcel_geometry`` at all (Socrata sources
 and any future Tier 2/3 scrape never do), and ``building_geometry`` only when
@@ -24,7 +32,7 @@ from typing import ClassVar
 
 from django.contrib.gis.geos import MultiPolygon, Polygon
 
-from urbanlens.dashboard.services.apis.locations.base import BoundaryProvider, esri_rings_to_polygon
+from urbanlens.dashboard.services.apis.locations.base import BoundaryProvider, geojson_polygon_to_geos
 from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError, RedataGateway
 from urbanlens.UrbanLens.settings.app import settings
 
@@ -83,6 +91,6 @@ class RedataBoundaryProvider(BoundaryProvider):
             return {"property": None, "building": None}
 
         return {
-            "property": esri_rings_to_polygon(payload.get("parcel_geometry")),
-            "building": esri_rings_to_polygon(payload.get("building_geometry")),
+            "property": geojson_polygon_to_geos(payload.get("parcel_geometry")),
+            "building": geojson_polygon_to_geos(payload.get("building_geometry")),
         }
