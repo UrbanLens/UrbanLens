@@ -149,10 +149,8 @@ function isCancellation(err: unknown): boolean {
 export interface RegisterConfig {
     optionsUrl: string;
     registerUrl: string;
-    /** Literal nickname to save, if the caller already collected one (e.g. via a prompt). Takes precedence over nameInputId. */
+    /** Optional nickname to save. Left blank, the server auto-generates one (e.g. "Passkey 2") - see webauthn.py. */
     name?: string;
-    /** Element id of an optional nickname text input, if the page has one instead. */
-    nameInputId?: string;
 }
 
 export interface WebAuthnResult {
@@ -180,7 +178,7 @@ export async function registerPasskey(cfg: RegisterConfig): Promise<WebAuthnResu
             return { ok: false, error: "Passkey creation was cancelled." };
         }
 
-        const name = cfg.name ?? (cfg.nameInputId ? ((document.getElementById(cfg.nameInputId) as HTMLInputElement | null)?.value ?? "") : "");
+        const name = cfg.name ?? "";
         const form = new URLSearchParams();
         form.set("credential", JSON.stringify(credentialToJSON(credential)));
         form.set("name", name);

@@ -137,6 +137,50 @@ class VerifyAndSaveRegistrationTests(TestCase):
         self.assertEqual(credential.transports, ["internal"])
         self.assertTrue(credential.backup_eligible)
 
+    def test_blank_name_gets_an_auto_generated_default(self) -> None:
+        """No naming prompt anymore (see docs/prompts/completed.md) - the server names it instead."""
+        user: User = baker.make(User)
+        request = _request_with_session()
+        webauthn_service.build_registration_options(request, user)
+        fake_parsed = SimpleNamespace(response=SimpleNamespace(transports=None))
+
+        with (
+            patch.object(webauthn_service, "verify_registration_response", return_value=_fake_verified_registration()),
+            patch.object(webauthn_service, "parse_registration_credential_json", return_value=fake_parsed),
+        ):
+            credential = webauthn_service.verify_and_save_registration(request, user, "{}")
+
+        self.assertEqual(credential.name, "Passkey 1")
+
+    def test_whitespace_only_name_also_gets_an_auto_generated_default(self) -> None:
+        user: User = baker.make(User)
+        request = _request_with_session()
+        webauthn_service.build_registration_options(request, user)
+        fake_parsed = SimpleNamespace(response=SimpleNamespace(transports=None))
+
+        with (
+            patch.object(webauthn_service, "verify_registration_response", return_value=_fake_verified_registration()),
+            patch.object(webauthn_service, "parse_registration_credential_json", return_value=fake_parsed),
+        ):
+            credential = webauthn_service.verify_and_save_registration(request, user, "{}", "   ")
+
+        self.assertEqual(credential.name, "Passkey 1")
+
+    def test_auto_generated_default_numbers_after_existing_passkeys(self) -> None:
+        user: User = baker.make(User)
+        baker.make(WebAuthnCredential, user=user, name="Existing One")
+        request = _request_with_session()
+        webauthn_service.build_registration_options(request, user)
+        fake_parsed = SimpleNamespace(response=SimpleNamespace(transports=None))
+
+        with (
+            patch.object(webauthn_service, "verify_registration_response", return_value=_fake_verified_registration()),
+            patch.object(webauthn_service, "parse_registration_credential_json", return_value=fake_parsed),
+        ):
+            credential = webauthn_service.verify_and_save_registration(request, user, "{}")
+
+        self.assertEqual(credential.name, "Passkey 2")
+
     def test_challenge_is_consumed_and_cannot_be_reused(self) -> None:
         user: User = baker.make(User)
         request = _request_with_session()

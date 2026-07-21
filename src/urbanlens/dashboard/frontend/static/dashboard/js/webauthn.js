@@ -163,7 +163,7 @@
       if (!credential) {
         return { ok: false, error: "Passkey creation was cancelled." };
       }
-      const name = cfg.name ?? (cfg.nameInputId ? document.getElementById(cfg.nameInputId)?.value ?? "" : "");
+      const name = cfg.name ?? "";
       const form = new URLSearchParams;
       form.set("credential", JSON.stringify(credentialToJSON(credential)));
       form.set("name", name);

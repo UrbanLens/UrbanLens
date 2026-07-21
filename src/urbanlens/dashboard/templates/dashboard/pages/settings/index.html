@@ -1551,13 +1551,10 @@
     document.addEventListener('click', function (e) {
         var addBtn = e.target.closest('#add-passkey-btn');
         if (!addBtn || !window.UrbanLensWebAuthn) return;
-        var name = window.prompt('Nickname for this passkey (e.g. Bitwarden, YubiKey):', '');
-        if (name === null) return;  // cancelled
         addBtn.disabled = true;
         UrbanLensWebAuthn.registerPasskey({
             optionsUrl: "{% url 'settings.security.passkeys.options' %}",
             registerUrl: "{% url 'settings.security.passkeys.register' %}",
-            name: name,
         }).then(function (result) {
             addBtn.disabled = false;
             if (result.ok) {

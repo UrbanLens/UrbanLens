@@ -124,14 +124,18 @@ def build_registration_options(request: HttpRequest, user: User) -> str:
     return options_to_json(options)
 
 
-def verify_and_save_registration(request: HttpRequest, user: User, credential_json: str, name: str) -> WebAuthnCredential:
+def verify_and_save_registration(request: HttpRequest, user: User, credential_json: str, name: str = "") -> WebAuthnCredential:
     """Verify a completed registration ceremony and persist the new credential.
 
     Args:
         request: The incoming request (holds the challenge stashed by ``build_registration_options``).
         user: The account enrolling the passkey.
         credential_json: The raw JSON produced by ``navigator.credentials.create()``'s response.
-        name: A user-supplied label for the new passkey (e.g. "Bitwarden").
+        name: A user-supplied label for the new passkey (e.g. "Bitwarden"). Registration no
+            longer prompts for one up front (see docs/prompts/completed.md), so this is normally
+            empty - in that case, an auto-generated "Passkey N" name is used instead, numbered
+            after the user's current passkey count. The user can still rename it afterward via
+            the existing inline rename field.
 
     Returns:
         The newly created WebAuthnCredential.
@@ -158,6 +162,10 @@ def verify_and_save_registration(request: HttpRequest, user: User, credential_js
     if WebAuthnCredential.objects.filter(credential_id=verified.credential_id).exists():
         raise WebAuthnError("That passkey is already registered.")
 
+    clean_name = (name or "").strip()[:100]
+    if not clean_name:
+        clean_name = f"Passkey {WebAuthnCredential.objects.filter(user=user).count() + 1}"
+
     return WebAuthnCredential.objects.create(
         user=user,
         credential_id=verified.credential_id,
@@ -167,7 +175,7 @@ def verify_and_save_registration(request: HttpRequest, user: User, credential_js
         backup_eligible=verified.credential_backed_up,
         device_type=verified.credential_device_type.value,
         transports=transports,
-        name=(name or "").strip()[:100] or "Passkey",
+        name=clean_name,
     )
 
 
