@@ -220,6 +220,8 @@ User-defined private fields for **pins**, **photos**, **people**, and **maps**. 
 
 - **Immich** — connect a self-hosted Immich instance (server URL + API key) to browse and import nearby photos linked to pins
 - **Google Photos** — OAuth import from a connected Google Photos library
+- **Flickr (personal library)** — connect your own Flickr account (OAuth1) in Settings, then search/import your own photos on a pin's Media tab (near this pin, on recorded visit dates, or all)
+- **Flickr (public album import)** — pin and wiki Media: paste the public URL of *any* Flickr user's album/photoset (no OAuth needed) to preview and import up to 100 of its photos, with the same confirm-grid + progress-bar workflow as the other importers
 
 ## Account & Auth
 

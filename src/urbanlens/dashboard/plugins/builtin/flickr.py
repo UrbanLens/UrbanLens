@@ -1,11 +1,12 @@
-"""Flickr plugin: rate-limit defaults for the per-user photo import integration.
+"""Flickr plugin: rate-limit defaults for both Flickr photo-import integrations.
 
-The integration itself (OAuth1 connect/disconnect, pin-detail search and
-import) lives in ``dashboard/services/apis/flickr/``,
-``dashboard/controllers/flickr.py``, and ``dashboard/tasks.py``; every call
-runs against the requesting user's own Flickr account using their stored
-OAuth1 token pair. This plugin registers the service's rate-limit defaults so
-calls are throttled and logged like every other external API.
+Two integrations share this one ``flickr`` service key and rate-limit budget:
+one user's own OAuth1-connected library (search/import on a pin's Media tab),
+and unauthenticated import of any public Flickr album/photoset by URL (pin or
+wiki Media). Both live under ``dashboard/services/apis/flickr/``,
+``dashboard/controllers/flickr.py``, and ``dashboard/tasks.py``. This plugin
+registers the shared rate-limit defaults so calls are throttled and logged
+like every other external API.
 """
 
 from __future__ import annotations
@@ -17,11 +18,14 @@ from urbanlens.dashboard.services.rate_limiter import ServiceDefaults
 
 
 class FlickrPlugin(UrbanLensPlugin):
-    """Flickr integration: per-user photo search and import."""
+    """Flickr integration: per-user photo search/import, plus public album import."""
 
     name: ClassVar[str] = "flickr"
     verbose_name: ClassVar[str] = "Flickr"
-    description: ClassVar[str] = "Searches a user's own Flickr photos near a pin (server-side geo radius) and imports selected ones."
+    description: ClassVar[str] = (
+        "Searches a user's own Flickr photos near a pin (server-side geo radius) and imports selected ones; "
+        "also imports any public Flickr album/photoset by URL onto a pin or wiki, no account connection required."
+    )
     author: ClassVar[str] = "UrbanLens"
     order: ClassVar[int] = 41
 

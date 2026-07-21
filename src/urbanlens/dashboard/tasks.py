@@ -1146,6 +1146,105 @@ def import_flickr_photos(self, pin_id: int, profile_id: int, photo_ids: list[str
 
 
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def import_flickr_album_photos(self, target_kind: str, target_id: int, profile_id: int, album_url: str, photo_ids: list[str]) -> dict[str, int]:
+    """Download selected photos from a *public* Flickr album/photoset onto a pin or wiki.
+
+    Unlike ``import_flickr_photos`` (one user's own OAuth-connected library),
+    this imports from any public album given its URL - no OAuth token
+    involved, just the site's Flickr API key. No ``log_visit_on_pin`` call:
+    these are someone else's public photos, not evidence the importing
+    profile visited in person.
+
+    Args:
+        target_kind: ``"pin"`` or ``"wiki"`` - which FK to set on the created
+            ``Image`` rows.
+        target_id: PK of the target pin or wiki.
+        profile_id: PK of the requesting profile.
+        album_url: The Flickr album URL as submitted in the lookup step -
+            re-resolved here (rather than trusting a client-supplied photo
+            list) so the download URLs are fresh and the selected ids are
+            verified against the real album.
+        photo_ids: Flickr photo ids selected in the preview grid.
+
+    Returns:
+        Counts of imported/skipped/failed photos, surfaced to the polling UI.
+    """
+    import io
+
+    from django.core.files.base import ContentFile
+
+    from urbanlens.dashboard.models.images.model import Image, ImageSource
+    from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.models.wiki.model import Wiki
+    from urbanlens.dashboard.services.apis.flickr.public import FlickrPublicGateway, photo_web_url
+    from urbanlens.dashboard.services.celery import safely_enqueue_task
+    from urbanlens.dashboard.services.gateway import GatewayRequestError
+    from urbanlens.dashboard.services.images import compute_checksum
+    from urbanlens.dashboard.services.storage import quota_error_for_upload
+
+    counts = {"imported": 0, "skipped": 0, "failed": 0}
+    profile = Profile.objects.filter(pk=profile_id).first()
+    pin = Pin.objects.select_related("location").filter(pk=target_id).first() if target_kind == "pin" else None
+    wiki = Wiki.objects.select_related("location").filter(pk=target_id).first() if target_kind == "wiki" else None
+    location = pin.location if pin is not None else (wiki.location if wiki is not None else None)
+    if profile is None or location is None or (pin is None and wiki is None):
+        update_task_progress(self, current=0, total=1, message="Import failed: the pin, wiki, or your profile no longer exists.")
+        return counts
+
+    try:
+        album = FlickrPublicGateway().get_album(album_url)
+    except (ValueError, GatewayRequestError) as exc:
+        update_task_progress(self, current=0, total=1, message=f"Import failed: {exc}")
+        return counts
+
+    photos_by_id = {photo.id: photo for photo in album.photos}
+    selected = [photos_by_id[photo_id] for photo_id in photo_ids if photo_id in photos_by_id]
+    dedupe_filter = {"pin": pin} if pin is not None else {"wiki": wiki}
+    total = len(selected)
+    for index, photo in enumerate(selected):
+        update_task_progress(self, current=index, total=total, message=f"Importing photo {index + 1} of {total}...")
+        try:
+            content, filename, _content_type = FlickrPublicGateway().download_photo(photo)
+        except GatewayRequestError:
+            logger.warning("import_flickr_album_photos: failed to download photo %s from album %s", photo.id, album_url, exc_info=True)
+            counts["failed"] += 1
+            continue
+
+        checksum = compute_checksum(io.BytesIO(content))
+        if Image.objects.filter(profile=profile, checksum=checksum, **dedupe_filter).exists():
+            counts["skipped"] += 1
+            continue
+        if quota_error_for_upload(profile, len(content)):
+            counts["failed"] += 1
+            continue
+
+        image = Image.objects.create(
+            image=ContentFile(content, name=filename),
+            pin=pin,
+            wiki=wiki,
+            location=location,
+            profile=profile,
+            source=ImageSource.FLICKR,
+            caption=photo.title or "",
+            author=photo.author,
+            source_url=photo_web_url(album.owner_nsid, photo.id),
+            checksum=checksum,
+            file_size=len(content),
+        )
+        safely_enqueue_task(process_image_upload, image.pk)
+        counts["imported"] += 1
+
+    summary = f"Imported {counts['imported']}"
+    if counts["skipped"]:
+        summary += f", skipped {counts['skipped']} duplicate(s)"
+    if counts["failed"]:
+        summary += f", {counts['failed']} failed"
+    update_task_progress(self, current=total, total=total, message=summary + ".")
+    return counts
+
+
+@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def import_google_photos(self, pin_id: int, profile_id: int, session_id: str, media_item_ids: list[str]) -> dict[str, int]:
     """Download selected Google Photos picker items and import them onto a pin.
 

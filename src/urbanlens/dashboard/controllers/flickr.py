@@ -1,13 +1,19 @@
 """Flickr integration controller.
 
-Two groups of views:
+Three groups of views:
 
 - Settings ("Connect Flickr"): ``FlickrSettingsView`` (read-only subsection
   partial), ``FlickrConnectView``/``FlickrCallbackView`` (OAuth 1.0a 3-legged
   flow), ``FlickrDisconnectView``.
-- Pin detail ("Import from Flickr"): server-side geo search (no thumbnail
-  proxy needed - Flickr's photo URLs are public, capability-scoped per photo)
-  and a Celery-backed import with progress polling.
+- Pin detail ("Import from Flickr"): server-side geo search over *one user's
+  own* OAuth-connected library (no thumbnail proxy needed - Flickr's photo
+  URLs are public, capability-scoped per photo) and a Celery-backed import
+  with progress polling.
+- Pin/wiki Media ("Import a Flickr Album"): given the public URL of *any*
+  Flickr user's public album/photoset (no OAuth involved - see
+  ``services.apis.flickr.public``), preview its photos and import selected
+  ones. Same picker + Celery-progress-polling shape as the section above,
+  parameterized over a pin or a wiki target.
 """
 
 from __future__ import annotations
@@ -30,12 +36,16 @@ from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile, _haversine_km
 from urbanlens.dashboard.services.apis.flickr.gateway import FlickrGateway, FlickrPhoto
-from urbanlens.dashboard.services.apis.flickr.oauth import FlickrNotConfiguredError, finish_authorization, start_authorization
+from urbanlens.dashboard.services.apis.flickr.oauth import FlickrNotConfiguredError, finish_authorization, is_configured as flickr_is_configured, start_authorization
+from urbanlens.dashboard.services.apis.flickr.public import MAX_ALBUM_PHOTOS, FlickrPublicGateway
 from urbanlens.dashboard.services.celery import get_task_progress, safely_enqueue_task
 from urbanlens.dashboard.services.gateway import GatewayRequestError
 from urbanlens.dashboard.services.photo_import import PhotoImportMode, visit_dates_for_pin
+from urbanlens.dashboard.services.wiki_access import resolve_visible_wiki
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from django.http import HttpRequest
 
 logger = logging.getLogger(__name__)
@@ -43,6 +53,8 @@ logger = logging.getLogger(__name__)
 _SETTINGS_PARTIAL = "dashboard/partials/settings/_flickr_account.html"
 _PICKER_PARTIAL = "dashboard/partials/pins/_flickr_picker_dialog.html"
 _PROGRESS_PARTIAL = "dashboard/partials/pins/_flickr_import_progress.html"
+_ALBUM_DIALOG_PARTIAL = "dashboard/partials/pins/_flickr_album_dialog.html"
+_ALBUM_PROGRESS_PARTIAL = "dashboard/partials/pins/_flickr_album_import_progress.html"
 _RADIUS_CHOICES_M = ((100, "100 m"), (250, "250 m"), (500, "500 m"), (1000, "1 km"), (2000, "2 km"), (5000, "5 km"))
 _DEFAULT_RADIUS_M = 500
 _REQUEST_TOKEN_CACHE_TTL = 600
@@ -256,3 +268,214 @@ class PinFlickrImportProgressView(LoginRequiredMixin, View):
         elif progress.state in {"FAILURE", "REVOKED"}:
             response["HX-Trigger"] = json.dumps({"showToast": {"level": "error", "message": progress.error or "Import failed."}})
         return response
+
+
+# -- Public Flickr album import (pin + wiki) ----------------------------------
+#
+# Shared logic lives in the module-level helpers below; each pin/wiki View
+# pair is a thin wrapper supplying its own target resolution + URL names
+# (mirroring how PinGalleryView/WikiGalleryView share _photo_gallery.html but
+# differ in permission checks and which FK gets set).
+
+
+def _album_base_context(*, target_kind: str, lookup_url: str, import_url: str) -> dict:
+    return {
+        "target_kind": target_kind,
+        "lookup_url": lookup_url,
+        "import_url": import_url,
+        "flickr_configured": flickr_is_configured(),
+        "max_photos": MAX_ALBUM_PHOTOS,
+    }
+
+
+def _album_lookup_response(request: HttpRequest, *, dedupe_urls: set[str], context: dict) -> HttpResponse:
+    """Shared POST handler: resolve a pasted album URL into a preview grid.
+
+    Args:
+        request: The POST request carrying ``album_url``.
+        dedupe_urls: The target's existing ``Image.source_url`` values, so
+            already-imported photos can be flagged/disabled in the grid.
+        context: The target-specific base context (URLs, target_kind, etc.).
+
+    Returns:
+        The rendered dialog body - either an error, or the preview grid.
+    """
+    album_url = (request.POST.get("album_url") or "").strip()
+    if not album_url:
+        return render(request, _ALBUM_DIALOG_PARTIAL, {**context, "error": "Paste a Flickr album URL first."})
+    if not flickr_is_configured():
+        return render(request, _ALBUM_DIALOG_PARTIAL, {**context, "error": "Flickr integration is not configured on this server."})
+
+    from urbanlens.dashboard.services.apis.flickr.public import photo_web_url
+
+    try:
+        album = FlickrPublicGateway().get_album(album_url)
+    except (ValueError, GatewayRequestError) as exc:
+        return render(request, _ALBUM_DIALOG_PARTIAL, {**context, "error": str(exc)})
+
+    assets = [
+        {"id": photo.id, "thumbnail_url": photo.thumbnail_url, "already_imported": photo_web_url(album.owner_nsid, photo.id) in dedupe_urls}
+        for photo in album.photos
+    ]
+    return render(request, _ALBUM_DIALOG_PARTIAL, {**context, "album": album, "album_url": album_url, "assets": assets})
+
+
+def _album_import_response(request: HttpRequest, *, target_kind: str, target_id: int, profile: Profile, album_url: str, photo_ids: list[str], progress_url_for: Callable[[str], str]) -> HttpResponse:
+    """Shared POST handler: enqueue the Celery import task for selected photos.
+
+    Args:
+        request: The submitting POST request.
+        target_kind: ``"pin"`` or ``"wiki"``.
+        target_id: PK of the pin or wiki.
+        profile: The requesting profile.
+        album_url: The album URL submitted with the form (re-resolved inside
+            the task rather than trusting a client-supplied photo list).
+        photo_ids: Selected Flickr photo ids.
+        progress_url_for: Builds the polling URL given a task id.
+
+    Returns:
+        The initial progress fragment, or a 503 fragment when the queue is
+        unavailable.
+    """
+    from urbanlens.dashboard.tasks import import_flickr_album_photos
+
+    result = safely_enqueue_task(import_flickr_album_photos, target_kind, target_id, profile.pk, album_url, photo_ids)
+    if result is None:
+        return render(request, _ALBUM_PROGRESS_PARTIAL, {"state": "FAILURE", "message": "Import queue is unavailable. Please try again later."}, status=503)
+    return render(request, _ALBUM_PROGRESS_PARTIAL, {"progress_url": progress_url_for(result.id), "state": "PENDING", "percent": 0, "message": "Starting import..."})
+
+
+def _album_progress_response(request: HttpRequest, *, task_id: str, progress_url: str) -> HttpResponse:
+    """Shared GET handler: poll a Celery task's progress and render the fragment.
+
+    Args:
+        request: The polling GET request (used only for ``render``'s context).
+        task_id: The Celery task id being polled.
+        progress_url: This same view's own URL (for the fragment's next poll).
+
+    Returns:
+        The progress fragment, with an ``HX-Trigger`` toast + gallery refresh
+        once the task settles.
+    """
+    progress = get_task_progress(task_id)
+    context = {"progress_url": progress_url, "state": progress.state, "percent": progress.percent, "message": progress.message, "error": progress.error}
+    response = render(request, _ALBUM_PROGRESS_PARTIAL, context)
+    if progress.state == "SUCCESS":
+        result = progress.result or {}
+        summary = f"Imported {result.get('imported', 0)} photo(s)" + (f", skipped {result.get('skipped')} duplicate(s)" if result.get("skipped") else "") + "."
+        response["HX-Trigger"] = json.dumps({"showToast": {"level": "success", "message": summary}, "refreshGallery": {}})
+    elif progress.state in {"FAILURE", "REVOKED"}:
+        response["HX-Trigger"] = json.dumps({"showToast": {"level": "error", "message": progress.error or "Import failed."}})
+    return response
+
+
+class PinFlickrAlbumDialogView(LoginRequiredMixin, View):
+    """GET pin/<slug>/flickr-album/ - the initial "paste an album URL" dialog body."""
+
+    def get(self, request: HttpRequest, pin_slug: str) -> HttpResponse:
+        pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
+        context = _album_base_context(
+            target_kind="pin",
+            lookup_url=reverse("pin.flickr_album.lookup", args=[pin.slug]),
+            import_url=reverse("pin.flickr_album.import", args=[pin.slug]),
+        )
+        return render(request, _ALBUM_DIALOG_PARTIAL, context)
+
+
+class PinFlickrAlbumLookupView(LoginRequiredMixin, View):
+    """POST pin/<slug>/flickr-album/lookup/ - resolve the URL and preview its photos."""
+
+    def post(self, request: HttpRequest, pin_slug: str) -> HttpResponse:
+        pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        dedupe_urls = set(Image.objects.filter(pin=pin, profile=profile, source_url__isnull=False).values_list("source_url", flat=True))
+        context = _album_base_context(
+            target_kind="pin",
+            lookup_url=reverse("pin.flickr_album.lookup", args=[pin.slug]),
+            import_url=reverse("pin.flickr_album.import", args=[pin.slug]),
+        )
+        return _album_lookup_response(request, dedupe_urls=dedupe_urls, context=context)
+
+
+class PinFlickrAlbumImportView(LoginRequiredMixin, View):
+    """POST pin/<slug>/flickr-album/import/ - enqueue import of the selected photos."""
+
+    def post(self, request: HttpRequest, pin_slug: str) -> HttpResponse:
+        pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        album_url = (request.POST.get("album_url") or "").strip()
+        photo_ids = request.POST.getlist("photo_ids")
+        if not photo_ids:
+            return HttpResponse('<p class="immich-picker-error">Select at least one photo to import.</p>', status=400)
+        return _album_import_response(
+            request,
+            target_kind="pin",
+            target_id=pin.pk,
+            profile=profile,
+            album_url=album_url,
+            photo_ids=photo_ids,
+            progress_url_for=lambda task_id: reverse("pin.flickr_album.import.progress", args=[pin.slug, task_id]),
+        )
+
+
+class PinFlickrAlbumImportProgressView(LoginRequiredMixin, View):
+    """GET pin/<slug>/flickr-album/import/<task_id>/progress/ - polled progress fragment."""
+
+    def get(self, request: HttpRequest, pin_slug: str, task_id: str) -> HttpResponse:
+        get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
+        return _album_progress_response(request, task_id=task_id, progress_url=reverse("pin.flickr_album.import.progress", args=[pin_slug, task_id]))
+
+
+class WikiFlickrAlbumDialogView(LoginRequiredMixin, View):
+    """GET location/<slug>/wiki/flickr-album/ - the initial dialog body."""
+
+    def get(self, request: HttpRequest, location_slug: str) -> HttpResponse:
+        location, _wiki, _profile = resolve_visible_wiki(request, location_slug)
+        context = _album_base_context(
+            target_kind="wiki",
+            lookup_url=reverse("location.wiki.flickr_album.lookup", args=[location.slug]),
+            import_url=reverse("location.wiki.flickr_album.import", args=[location.slug]),
+        )
+        return render(request, _ALBUM_DIALOG_PARTIAL, context)
+
+
+class WikiFlickrAlbumLookupView(LoginRequiredMixin, View):
+    """POST location/<slug>/wiki/flickr-album/lookup/ - resolve the URL and preview its photos."""
+
+    def post(self, request: HttpRequest, location_slug: str) -> HttpResponse:
+        location, wiki, profile = resolve_visible_wiki(request, location_slug)
+        dedupe_urls = set(Image.objects.filter(wiki=wiki, profile=profile, source_url__isnull=False).values_list("source_url", flat=True))
+        context = _album_base_context(
+            target_kind="wiki",
+            lookup_url=reverse("location.wiki.flickr_album.lookup", args=[location.slug]),
+            import_url=reverse("location.wiki.flickr_album.import", args=[location.slug]),
+        )
+        return _album_lookup_response(request, dedupe_urls=dedupe_urls, context=context)
+
+
+class WikiFlickrAlbumImportView(LoginRequiredMixin, View):
+    """POST location/<slug>/wiki/flickr-album/import/ - enqueue import of the selected photos."""
+
+    def post(self, request: HttpRequest, location_slug: str) -> HttpResponse:
+        location, wiki, profile = resolve_visible_wiki(request, location_slug)
+        album_url = (request.POST.get("album_url") or "").strip()
+        photo_ids = request.POST.getlist("photo_ids")
+        if not photo_ids:
+            return HttpResponse('<p class="immich-picker-error">Select at least one photo to import.</p>', status=400)
+        return _album_import_response(
+            request,
+            target_kind="wiki",
+            target_id=wiki.pk,
+            profile=profile,
+            album_url=album_url,
+            photo_ids=photo_ids,
+            progress_url_for=lambda task_id: reverse("location.wiki.flickr_album.import.progress", args=[location.slug, task_id]),
+        )
+
+
+class WikiFlickrAlbumImportProgressView(LoginRequiredMixin, View):
+    """GET location/<slug>/wiki/flickr-album/import/<task_id>/progress/ - polled progress fragment."""
+
+    def get(self, request: HttpRequest, location_slug: str, task_id: str) -> HttpResponse:
+        resolve_visible_wiki(request, location_slug)
+        return _album_progress_response(request, task_id=task_id, progress_url=reverse("location.wiki.flickr_album.import.progress", args=[location_slug, task_id]))

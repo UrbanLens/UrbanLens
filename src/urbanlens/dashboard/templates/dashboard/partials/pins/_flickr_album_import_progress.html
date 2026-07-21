@@ -1,0 +1,55 @@
+{% comment %}
+Flickr album import progress fragment - returned by PinFlickrAlbumImportView/
+WikiFlickrAlbumImportView and polled by their *ImportProgressView counterparts.
+Same shape as _flickr_import_progress.html, except the polling URL is passed
+in directly (progress_url) since this fragment is shared between a pin and a
+wiki target rather than always building a pin-scoped {% url %}.
+Context: progress_url, state, percent, message, error
+{% endcomment %}
+
+{% if state == "SUCCESS" %}
+<div class="immich-import-progress" id="flickr-album-import-progress">
+    <div class="immich-import-status-msg">
+        <i class="material-symbols-outlined" style="color: #388E3C;">check_circle</i>
+        <span>{{ message|default:"Import complete." }}</span>
+    </div>
+    <div class="form-actions">
+        <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Close</button>
+    </div>
+</div>
+
+{% elif state == "FAILURE" or state == "REVOKED" %}
+<div class="immich-import-progress" id="flickr-album-import-progress">
+    <div class="immich-import-error-msg">
+        <i class="material-symbols-outlined">error</i>
+        <span>{{ error|default:"Import failed. Please try again." }}</span>
+    </div>
+    <div class="form-actions">
+        <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Close</button>
+    </div>
+</div>
+
+{% else %}
+<div
+    class="immich-import-progress"
+    id="flickr-album-import-progress"
+    hx-get="{{ progress_url }}"
+    hx-trigger="load delay:1s"
+    hx-swap="outerHTML"
+>
+    <div class="immich-import-progress-label">
+        <span>{{ message|default:"Working..." }}</span>
+        <span class="immich-import-progress-pct">{{ percent|default:0 }}%</span>
+    </div>
+    <div class="immich-import-progress-track">
+        <div class="immich-import-progress-bar" style="width: {{ percent|default:0 }}%;"></div>
+    </div>
+    <div class="immich-import-status-msg">
+        <span class="htmx-indicator-spinner" style="display:inline-block; width:14px; height:14px; border:2px solid var(--ul-grey-4); border-top-color: #1976D2; border-radius:50%; animation: spin .7s linear infinite; flex-shrink:0;"></span>
+        <span>This may take a moment...</span>
+    </div>
+</div>
+<style>
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>
+{% endif %}

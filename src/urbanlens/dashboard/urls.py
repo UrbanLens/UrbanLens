@@ -625,6 +625,26 @@ urlpatterns = [
                                 name="pin.flickr.import.progress",
                             ),
                             path(
+                                "<slug:pin_slug>/flickr-album/",
+                                flickr.PinFlickrAlbumDialogView.as_view(),
+                                name="pin.flickr_album.dialog",
+                            ),
+                            path(
+                                "<slug:pin_slug>/flickr-album/lookup/",
+                                flickr.PinFlickrAlbumLookupView.as_view(),
+                                name="pin.flickr_album.lookup",
+                            ),
+                            path(
+                                "<slug:pin_slug>/flickr-album/import/",
+                                flickr.PinFlickrAlbumImportView.as_view(),
+                                name="pin.flickr_album.import",
+                            ),
+                            path(
+                                "<slug:pin_slug>/flickr-album/import/<str:task_id>/progress/",
+                                flickr.PinFlickrAlbumImportProgressView.as_view(),
+                                name="pin.flickr_album.import.progress",
+                            ),
+                            path(
                                 "<slug:pin_slug>/google-photos/",
                                 google_photos.PinGooglePhotosStartView.as_view(),
                                 name="pin.google_photos.start",
@@ -1100,6 +1120,26 @@ urlpatterns = [
                     "<slug:location_slug>/wiki/cover-photo/",
                     image_gallery.WikiCoverPhotoView.as_view(),
                     name="location.wiki.cover_photo",
+                ),
+                path(
+                    "<slug:location_slug>/wiki/flickr-album/",
+                    flickr.WikiFlickrAlbumDialogView.as_view(),
+                    name="location.wiki.flickr_album.dialog",
+                ),
+                path(
+                    "<slug:location_slug>/wiki/flickr-album/lookup/",
+                    flickr.WikiFlickrAlbumLookupView.as_view(),
+                    name="location.wiki.flickr_album.lookup",
+                ),
+                path(
+                    "<slug:location_slug>/wiki/flickr-album/import/",
+                    flickr.WikiFlickrAlbumImportView.as_view(),
+                    name="location.wiki.flickr_album.import",
+                ),
+                path(
+                    "<slug:location_slug>/wiki/flickr-album/import/<str:task_id>/progress/",
+                    flickr.WikiFlickrAlbumImportProgressView.as_view(),
+                    name="location.wiki.flickr_album.import.progress",
                 ),
                 path(
                     "<slug:location_slug>/wiki/stat/<str:field>/vote/",

@@ -237,6 +237,12 @@
                             onclick="document.getElementById('pin-import-photos-dialog').showModal(); var t = document.querySelector('#pin-import-photos-dialog .import-photos-tab'); if (t) t.click();">
                         <i class="material-symbols-outlined">add_photo_alternate</i>
                     </button>
+                    <button type="button" class="media-gallery-header-btn" title="Import a Flickr Album"
+                            hx-get="{% url 'pin.flickr_album.dialog' pin.slug %}"
+                            hx-target="#flickr-album-dialog" hx-swap="innerHTML"
+                            onclick="document.getElementById('flickr-album-dialog').showModal();">
+                        <i class="material-symbols-outlined">photo_camera</i>
+                    </button>
                     {% endif %}
                     <button type="button" class="media-gallery-header-btn" id="media-select-btn" title="Select media"
                             onclick="window.mediaDispatchSelect()">
@@ -769,6 +775,10 @@
 <dialog id="pin-import-photos-dialog" class="pin-import-photos-dialog ul-dialog">
     {% include "dashboard/partials/pins/_import_photos_dialog.html" %}
 </dialog>
+
+{# -- Import a public Flickr album by URL (distinct from the per-user OAuth #}
+{# "Flickr" tab above - see controllers/flickr.py's module docstring) ------ #}
+<dialog id="flickr-album-dialog" class="ul-dialog"></dialog>
 
 {# -- Add link dialog -------------------------------------------------------- #}
 <dialog id="pin-link-add-dialog" class="pin-link-add-dialog ul-dialog">
