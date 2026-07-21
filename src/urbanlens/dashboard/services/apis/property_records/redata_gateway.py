@@ -72,9 +72,11 @@ class RedataGateway(Gateway):
     def __post_init__(self) -> None:
         Gateway.__post_init__(self)
         if not self.base_url:
-            raise ValueError("REDATA_API_URL must be configured.")
+            raise ValueError("UL_REDATA_API_URL must be configured.")
+        if not self.base_url.startswith(("http://", "https://")):
+            self.base_url = f"https://{self.base_url}"
         if not self.api_key:
-            raise ValueError("REDATA_API_KEY must be configured.")
+            raise ValueError("UL_REDATA_API_KEY must be configured.")
 
     @property
     def _headers(self) -> dict[str, str]:
@@ -109,7 +111,7 @@ class RedataGateway(Gateway):
             # __post_init__ already validates this for the normal construction path;
             # this only guards a hypothetical bypass (e.g. object.__new__) and narrows
             # the type for mypy without resorting to assert (banned outside tests).
-            raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, "REDATA_API_URL is not configured.")
+            raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, "UL_REDATA_API_URL is not configured.")
         try:
             response = self.session.get(f"{base_url.rstrip('/')}/{path.lstrip('/')}", params=params, headers=self._headers, timeout=_REQUEST_TIMEOUT)
         except OSError as exc:
@@ -241,7 +243,7 @@ class RedataGateway(Gateway):
         """
         base_url = self.base_url
         if base_url is None:
-            raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, "REDATA_API_URL is not configured.")
+            raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, "UL_REDATA_API_URL is not configured.")
         try:
             response = self.session.get(f"{base_url.rstrip('/')}/api/v1/listings/{listing_uuid}/photos/{photo_id}/download/", headers=self._headers, timeout=_REQUEST_TIMEOUT)
         except OSError as exc:
@@ -302,7 +304,7 @@ class RedataGateway(Gateway):
         """
         base_url = self.base_url
         if base_url is None:
-            raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, "REDATA_API_URL is not configured.")
+            raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, "UL_REDATA_API_URL is not configured.")
         try:
             response = self.session.post(f"{base_url.rstrip('/')}/api/v1/cultural-resources/{resource_uuid}/fetch-detail/", headers=self._headers, timeout=_REQUEST_TIMEOUT)
         except OSError as exc:
@@ -340,7 +342,7 @@ class RedataGateway(Gateway):
         """
         base_url = self.base_url
         if base_url is None:
-            raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, "REDATA_API_URL is not configured.")
+            raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, "UL_REDATA_API_URL is not configured.")
         try:
             response = self.session.get(f"{base_url.rstrip('/')}/api/v1/cultural-resources/{resource_uuid}/attachments/{attachment_id}/download/", headers=self._headers, timeout=_REQUEST_TIMEOUT)
         except OSError as exc:

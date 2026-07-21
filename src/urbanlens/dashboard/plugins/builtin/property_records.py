@@ -358,7 +358,7 @@ class PropertyRecordsPlugin(UrbanLensPlugin):
         "jurisdiction resolution. Populates the pin/wiki Ownership and Sale History cards with OFFICIAL-sourced "
         "records and shows a details card on the pin detail page. Coverage depends on REData's own jurisdiction "
         "registry - counties it hasn't researched surface as 'not automatable' rather than failing silently. "
-        "USA only. Requires REDATA_API_URL/REDATA_API_KEY to be configured."
+        "USA only. Requires UL_REDATA_API_URL/UL_REDATA_API_KEY to be configured."
     )
     author: ClassVar[str] = "UrbanLens"
 
