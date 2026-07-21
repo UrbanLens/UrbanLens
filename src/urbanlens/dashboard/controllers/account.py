@@ -20,6 +20,7 @@ from django.core.exceptions import ValidationError
 from django.core.mail import EmailMultiAlternatives
 from django.db import DatabaseError
 from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
+from django.middleware.csrf import get_token
 from django.shortcuts import redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse, reverse_lazy
@@ -680,6 +681,14 @@ class LoginTwoFactorView(View):
         user = _pending_2fa_user(request)
         if user is None:
             return redirect("login")
+        # A passkey-only account (no TOTP/backup codes) never renders this
+        # page's one {% csrf_token %} tag (inside the code-fallback form), so
+        # Django would otherwise only set the csrftoken cookie here if an
+        # earlier page in the session happened to. runLogin()'s options/verify
+        # fetches need that cookie unconditionally - forcing it explicitly
+        # guarantees it regardless of how the user reached this page (password
+        # login or SSO).
+        get_token(request)
         return render(request, "registration/login_2fa.html", _two_factor_challenge_context(user))
 
 

@@ -66,7 +66,10 @@
     return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
   }
   function csrfToken() {
-    return window.csrftoken ?? "";
+    if (window.csrftoken)
+      return window.csrftoken;
+    const match = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
+    return match ? decodeURIComponent(match[1]) : "";
   }
   function creationOptionsFromJSON(json) {
     return {

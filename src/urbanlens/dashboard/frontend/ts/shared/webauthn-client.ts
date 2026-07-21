@@ -33,7 +33,19 @@ function bufferToBase64url(buffer: ArrayBuffer): string {
 }
 
 function csrfToken(): string {
-    return window.csrftoken ?? "";
+    // window.csrftoken is set by a page-level <script> on most dashboard pages,
+    // but not on the minimal auth_base.html layout the 2FA login challenge
+    // (login_2fa.html) uses - falling back to the csrftoken cookie directly
+    // (Django's own documented AJAX pattern) means this works regardless of
+    // which layout the calling page happens to use. Without this fallback,
+    // runLogin()'s fetch calls here sent an empty X-CSRFToken header on that
+    // page, which Django's CSRF middleware always rejected with a 403 HTML
+    // error page - silently swallowed by safeJson() into the generic
+    // "Could not start passkey sign-in." message, since there was no JSON
+    // body to read an error out of.
+    if (window.csrftoken) return window.csrftoken;
+    const match = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
+    return match ? decodeURIComponent(match[1]!) : "";
 }
 
 interface CredentialDescriptorJSON {
