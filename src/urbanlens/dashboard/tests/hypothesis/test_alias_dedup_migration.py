@@ -5,8 +5,10 @@ aliases (e.g. "Aloha Stadium" and "aloha stadium" on the same pin) predating
 the case-insensitive unique constraint that migration adds - without a
 cleanup step first, `AddConstraint` fails with a real IntegrityError
 ("could not create unique index... is duplicated"). These tests exercise the
-exact SQL the migration runs (imported directly from the migration module,
-so there's no risk of the test drifting from what actually ships) against
+exact SQL the migration runs (imported directly from the migration module -
+0072 itself was folded into the 0038-0092 squashed migration, but its RunSQL
+operations carried over unchanged, so there's no risk of the test drifting
+from what actually ships) against
 manually-inserted duplicate rows, since the constraint the migration adds is
 already active by the time any Django TestCase runs (migrations apply once,
 at test-database creation) - the constraint is dropped and duplicates are
@@ -28,7 +30,10 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.wiki.model import Wiki
 
-_migration = importlib.import_module("urbanlens.dashboard.migrations.0072_auto_removals_and_ci_alias_uniqueness")
+_migration = importlib.import_module(
+    "urbanlens.dashboard.migrations."
+    "0038_add_image_media_labels_squashed_0092_alter_notificationlog_notification_type"
+)
 
 
 def _dedup_sql(table: str) -> str:
