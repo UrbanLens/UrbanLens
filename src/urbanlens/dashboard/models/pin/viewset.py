@@ -61,6 +61,10 @@ class PinViewSet(mixins.DestroyModelMixin, viewsets.GenericViewSet):
 
         Coordinates live on ``Location`` (not ``Pin``), so this repoints
         ``instance.location`` rather than writing through the serializer.
+        Uses ``threshold_meters=0`` so a manual drag always lands on the
+        exact dropped point rather than snapping to whatever Location
+        happens to already exist within the default 50m dedup radius
+        (mirrors ``detail_pins._location_for_coords``).
 
         Args:
             instance: The pin being moved.
@@ -82,7 +86,7 @@ class PinViewSet(mixins.DestroyModelMixin, viewsets.GenericViewSet):
         if not (-90 <= latitude <= 90) or not (-180 <= longitude <= 180):
             return "latitude must be between -90 and 90, longitude between -180 and 180."
 
-        location, _created = Location.objects.get_nearby_or_create(latitude, longitude)
+        location, _created = Location.objects.get_nearby_or_create(latitude, longitude, threshold_meters=0)
         instance.location = location
         instance.save(update_fields=["location", "updated"])
         return None
