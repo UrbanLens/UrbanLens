@@ -39,6 +39,7 @@ from urbanlens.dashboard.services.enrichment import (
 )
 from urbanlens.dashboard.services.geo_boundary import USA
 from urbanlens.dashboard.services.rate_limiter import RateLimitExceededError
+from urbanlens.UrbanLens.environments.meta import EnvironmentTypes
 
 
 def _make_profile() -> Profile:
@@ -277,7 +278,14 @@ class RunEnrichmentCycleTests(TestCase):
         )
 
     def _run(self, source: EnrichmentSource, **kwargs):
-        with patch("urbanlens.dashboard.services.enrichment.enrichment_sources", return_value=[source]):
+        # The cycle only ever actually runs in production (see
+        # ProductionGateTests below) - everything else in this class is
+        # testing budget/window/cap logic, not the environment gate itself,
+        # so pin the effective environment to PRODUCTION here.
+        with (
+            patch("urbanlens.dashboard.services.enrichment.enrichment_sources", return_value=[source]),
+            patch.object(SiteSettings, "get_effective_environment_type", return_value=EnvironmentTypes.PRODUCTION),
+        ):
             return run_enrichment_cycle(sleep=lambda _seconds: None, **kwargs)
 
     def test_enriches_within_budget(self) -> None:
@@ -362,6 +370,51 @@ class RunEnrichmentCycleTests(TestCase):
             summary = self._run(source)
         mock_refresh.assert_called_once_with({location.pk})
         self.assertEqual(summary["names_refreshed"], 1)
+
+
+class EnrichmentCycleProductionGateTests(TestCase):
+    """run_enrichment_cycle must never spend real API quota outside production."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        ApiRateLimit.objects.create(service="svc_cycle", display_name="Cycle service", calls_per_minute=None, calls_per_day=100, calls_per_30_days=None)
+
+    def _run_with_environment(self, env_type: EnvironmentTypes, source: EnrichmentSource, **kwargs):
+        with (
+            patch("urbanlens.dashboard.services.enrichment.enrichment_sources", return_value=[source]),
+            patch.object(SiteSettings, "get_effective_environment_type", return_value=env_type),
+        ):
+            return run_enrichment_cycle(sleep=lambda _seconds: None, **kwargs)
+
+    def test_non_production_skips_the_cycle_entirely(self) -> None:
+        baker.make(Pin, profile=_make_profile(), location=_make_location())
+        source = _RecordingSource()
+        summary = self._run_with_environment(EnvironmentTypes.DEVELOPMENT, source)
+        self.assertEqual(summary.get("skipped"), "non_production")
+        self.assertEqual(source.enriched_pks, [])
+        self.assertEqual(summary["sources"], {})
+
+    def test_staging_also_skips_the_cycle(self) -> None:
+        baker.make(Pin, profile=_make_profile(), location=_make_location())
+        source = _RecordingSource()
+        summary = self._run_with_environment(EnvironmentTypes.STAGING, source)
+        self.assertEqual(summary.get("skipped"), "non_production")
+        self.assertEqual(source.enriched_pks, [])
+
+    def test_non_production_gate_is_not_bypassed_by_force(self) -> None:
+        """Unlike the enabled-toggle/run-window checks, force=True must not skip this gate."""
+        baker.make(Pin, profile=_make_profile(), location=_make_location())
+        source = _RecordingSource()
+        summary = self._run_with_environment(EnvironmentTypes.DEVELOPMENT, source, force=True)
+        self.assertEqual(summary.get("skipped"), "non_production")
+        self.assertEqual(source.enriched_pks, [])
+
+    def test_production_runs_the_cycle_normally(self) -> None:
+        baker.make(Pin, profile=_make_profile(), location=_make_location())
+        source = _RecordingSource()
+        summary = self._run_with_environment(EnvironmentTypes.PRODUCTION, source)
+        self.assertNotEqual(summary.get("skipped"), "non_production")
+        self.assertEqual(len(source.enriched_pks), 1)
 
 
 class EnrichmentSourceRegistryTests(SimpleTestCase):

@@ -525,9 +525,21 @@ def run_enrichment_cycle(*, force: bool = False, sleep: Callable[[float], None] 
     from django.utils import timezone
 
     from urbanlens.dashboard.models.site_settings.model import SiteSettings
+    from urbanlens.UrbanLens.environments.meta import EnvironmentTypes
 
     site_settings = SiteSettings.get_current()
     summary: dict[str, Any] = {"started": timezone.now().isoformat(), "sources": {}}
+
+    # Every source here calls a real external API and spends shared rate-limit
+    # quota (see compute_service_budget) - never worth doing outside
+    # production, where there's no real traffic to backfill for and no
+    # deployment depending on the result. Checked ahead of `force` (unlike the
+    # enabled-toggle/run-window checks below, which `force` deliberately
+    # bypasses for an admin's manual "run now") since this is a deployment
+    # safety rail, not a site-configurable preference.
+    if site_settings.get_effective_environment_type() != EnvironmentTypes.PRODUCTION:
+        summary["skipped"] = "non_production"
+        return summary
 
     if not force:
         if not site_settings.enrichment_enabled:
