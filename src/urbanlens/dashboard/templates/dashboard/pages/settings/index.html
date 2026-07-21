@@ -705,6 +705,7 @@
             <form class="settings-form" id="password-change-form"
                   data-has-password="{% if e2ee_has_password %}1{% else %}0{% endif %}"
                   data-username="{{ request.user.username }}">
+                <input type="text" name="username" value="{{ request.user.username }}" autocomplete="username" style="display:none" aria-hidden="true" tabindex="-1">
                 {% if e2ee_has_password %}
                 <div class="settings-field">
                     <label class="settings-label" for="password-current">Current password</label>
