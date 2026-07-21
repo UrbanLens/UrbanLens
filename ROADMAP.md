@@ -204,7 +204,6 @@ Features planned for future releases.
 * Import pins is a little clunky. [UL-386]
 * "Import my instagram" feature to port over photos you've posted. [UL-387]
 * Find a way to make it easy to identify and/or fix situations where you have other pins on the main map which fall within the boundaries of another one of your pins. [UL-388]
-* On user's profile page, show uploaded photos. Those photos will display to other users who have access to see them on something they're attached to. (e.g. photos uploaded to a wiki they also have).
 * When moving/promoting child pin: "You already have a top-level pin at that location". We should allow merging the top-level pin right from that dialog.
 
 ## Really Big Ideas / Features
