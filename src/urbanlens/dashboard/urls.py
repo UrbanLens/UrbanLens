@@ -254,6 +254,19 @@ urlpatterns = [
                                 pin.PinController.as_view({"post": "set_map_height"}),
                                 name="pin.map_height",
                             ),
+                            # Also registered before the <slug:pin_slug>/ catch-all, same reason -
+                            # these proxy a REData media file by listing/resource uuid, not by pin,
+                            # so there's no pin_slug segment for them to nest under at all.
+                            path(
+                                "loopnet/photo/<str:listing_uuid>/<int:photo_id>/",
+                                pin.PinLoopnetPhotoView.as_view(),
+                                name="pin.loopnet.photo",
+                            ),
+                            path(
+                                "cris/attachment/<str:resource_uuid>/<int:attachment_id>/",
+                                pin.PinCrisAttachmentView.as_view(),
+                                name="pin.cris.attachment",
+                            ),
                             path("<slug:pin_slug>/", pin.PinController.as_view({"get": "view"}), name="pin.details"),
                             path("<slug:pin_slug>/share/", pin_sharing.PinShareDialogView.as_view(), name="pin.share.dialog"),
                             path("<slug:pin_slug>/share/send/", pin_sharing.PinShareCreateView.as_view(), name="pin.share.send"),

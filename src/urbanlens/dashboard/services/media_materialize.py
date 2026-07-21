@@ -46,6 +46,7 @@ _DEFAULT_FILENAME = "photo.jpg"
 # (e.g. "smithsonian", "wikimedia", "yelp", "google_images", "google_maps").
 _PANEL_KEY_TO_IMAGE_SOURCE = {
     "loc": ImageSource.LIBRARY_OF_CONGRESS,
+    "cris_building": ImageSource.CRIS,
 }
 
 

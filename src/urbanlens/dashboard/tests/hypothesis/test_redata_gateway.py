@@ -16,15 +16,17 @@ from urbanlens.dashboard.services.apis.property_records.redata_gateway import (
 )
 
 
-def _response(status_code: int, *, json_body: dict | None = None, text: str = "", raise_on_json: bool = False) -> MagicMock:
+def _response(status_code: int, *, json_body: dict | list | None = None, text: str = "", raise_on_json: bool = False, content: bytes = b"", headers: dict | None = None) -> MagicMock:
     """Build a mock requests.Response."""
     resp = MagicMock()
     resp.status_code = status_code
     resp.text = text
+    resp.content = content
+    resp.headers = headers or {}
     if raise_on_json:
         resp.json.side_effect = ValueError("not json")
     else:
-        resp.json.return_value = json_body or {}
+        resp.json.return_value = json_body if json_body is not None else {}
     return resp
 
 
@@ -178,3 +180,164 @@ class LookupParcelErrorResponseTests(SimpleTestCase):
         with self.assertRaises(PropertyRecordsUnavailableError) as ctx:
             gateway.lookup_parcel(42.65, -73.75)
         self.assertEqual(ctx.exception.reason, REASON_SOURCE_ERROR)
+
+
+# -- lookup_parcel_uuid ------------------------------------------------------------
+
+
+class LookupParcelUuidTests(SimpleTestCase):
+    def test_returns_the_uuid(self) -> None:
+        session = MagicMock()
+        session.get.return_value = _response(200, json_body={"uuid": "3fae2b1c-0000-0000-0000-000000000000", "record_payload": {}})
+        gateway = _gateway(session)
+        self.assertEqual(gateway.lookup_parcel_uuid(42.65, -73.75), "3fae2b1c-0000-0000-0000-000000000000")
+
+    def test_missing_uuid_returns_none(self) -> None:
+        session = MagicMock()
+        session.get.return_value = _response(200, json_body={"record_payload": {}})
+        gateway = _gateway(session)
+        self.assertIsNone(gateway.lookup_parcel_uuid(42.65, -73.75))
+
+    def test_hits_the_same_lookup_endpoint(self) -> None:
+        session = MagicMock()
+        session.get.return_value = _response(200, json_body={"uuid": "x"})
+        gateway = _gateway(session)
+        gateway.lookup_parcel_uuid(42.65, -73.75, situs_address="123 Main St")
+        args, kwargs = session.get.call_args
+        self.assertEqual(args[0], "https://redata.example.test/api/v1/parcels/lookup/")
+        self.assertEqual(kwargs["params"]["situs_address"], "123 Main St")
+
+
+# -- lookup_listings / download_listing_photo ---------------------------------------
+
+
+class LookupListingsTests(SimpleTestCase):
+    def test_returns_the_full_body(self) -> None:
+        session = MagicMock()
+        session.get.return_value = _response(200, json_body={"results": [{"uuid": "l1", "title": "Retail Building"}], "refresh_queued": True})
+        gateway = _gateway(session)
+        body = gateway.lookup_listings("parcel-uuid")
+        self.assertEqual(body["refresh_queued"], True)
+        self.assertEqual(body["results"][0]["title"], "Retail Building")
+
+    def test_hits_the_parcel_scoped_endpoint(self) -> None:
+        session = MagicMock()
+        session.get.return_value = _response(200, json_body={"results": []})
+        gateway = _gateway(session)
+        gateway.lookup_listings("parcel-uuid")
+        args, _kwargs = session.get.call_args
+        self.assertEqual(args[0], "https://redata.example.test/api/v1/parcels/parcel-uuid/listings/")
+
+    def test_404_raises_unavailable(self) -> None:
+        session = MagicMock()
+        session.get.return_value = _response(404, json_body={"error": "no_situs_address"})
+        gateway = _gateway(session)
+        with self.assertRaises(PropertyRecordsUnavailableError):
+            gateway.lookup_listings("parcel-uuid")
+
+
+class DownloadListingPhotoTests(SimpleTestCase):
+    def test_returns_bytes_and_content_type(self) -> None:
+        session = MagicMock()
+        session.get.return_value = _response(200, content=b"jpeg-bytes", headers={"Content-Type": "image/jpeg"})
+        gateway = _gateway(session)
+        content, content_type = gateway.download_listing_photo("listing-uuid", 1)
+        self.assertEqual(content, b"jpeg-bytes")
+        self.assertEqual(content_type, "image/jpeg")
+
+    def test_hits_the_listing_photo_endpoint(self) -> None:
+        session = MagicMock()
+        session.get.return_value = _response(200, content=b"x")
+        gateway = _gateway(session)
+        gateway.download_listing_photo("listing-uuid", 7)
+        args, _kwargs = session.get.call_args
+        self.assertEqual(args[0], "https://redata.example.test/api/v1/listings/listing-uuid/photos/7/download/")
+
+    def test_404_raises_unavailable(self) -> None:
+        session = MagicMock()
+        session.get.return_value = _response(404, json_body={"error": "photo_unavailable"})
+        gateway = _gateway(session)
+        with self.assertRaises(PropertyRecordsUnavailableError):
+            gateway.download_listing_photo("listing-uuid", 1)
+
+
+# -- Cultural resources (CRIS) -------------------------------------------------------
+
+
+class LookupCulturalResourcesTests(SimpleTestCase):
+    def test_bare_array_response_is_returned_as_is(self) -> None:
+        session = MagicMock()
+        session.get.return_value = _response(200, json_body=[{"uuid": "r1", "resource_type": "building"}])
+        gateway = _gateway(session)
+        results = gateway.lookup_cultural_resources(42.65, -73.75)
+        self.assertEqual(results, [{"uuid": "r1", "resource_type": "building"}])
+
+    def test_results_wrapped_response_is_also_handled(self) -> None:
+        session = MagicMock()
+        session.get.return_value = _response(200, json_body={"results": [{"uuid": "r1"}]})
+        gateway = _gateway(session)
+        self.assertEqual(gateway.lookup_cultural_resources(42.65, -73.75), [{"uuid": "r1"}])
+
+    def test_empty_array_outside_coverage(self) -> None:
+        session = MagicMock()
+        session.get.return_value = _response(200, json_body=[])
+        gateway = _gateway(session)
+        self.assertEqual(gateway.lookup_cultural_resources(42.65, -73.75), [])
+
+    def test_hits_the_lookup_endpoint_with_radius(self) -> None:
+        session = MagicMock()
+        session.get.return_value = _response(200, json_body=[])
+        gateway = _gateway(session)
+        gateway.lookup_cultural_resources(42.65, -73.75, radius_meters=500)
+        args, kwargs = session.get.call_args
+        self.assertEqual(args[0], "https://redata.example.test/api/v1/cultural-resources/lookup/")
+        self.assertEqual(kwargs["params"], {"lat": 42.65, "lng": -73.75, "radius_meters": 500})
+
+
+class FetchCulturalResourceDetailTests(SimpleTestCase):
+    def test_returns_the_detail_body(self) -> None:
+        session = MagicMock()
+        session.post.return_value = _response(200, json_body={"uuid": "r1", "attachments": [{"id": 1, "kind": "PHOTO"}]})
+        gateway = _gateway(session)
+        detail = gateway.fetch_cultural_resource_detail("r1")
+        self.assertEqual(detail["attachments"][0]["kind"], "PHOTO")
+
+    def test_hits_the_fetch_detail_endpoint(self) -> None:
+        session = MagicMock()
+        session.post.return_value = _response(200, json_body={})
+        gateway = _gateway(session)
+        gateway.fetch_cultural_resource_detail("r1")
+        args, _kwargs = session.post.call_args
+        self.assertEqual(args[0], "https://redata.example.test/api/v1/cultural-resources/r1/fetch-detail/")
+
+    def test_400_no_detail_available_raises_unavailable(self) -> None:
+        session = MagicMock()
+        session.post.return_value = _response(400, json_body={"error": "no_detail_available"})
+        gateway = _gateway(session)
+        with self.assertRaises(PropertyRecordsUnavailableError):
+            gateway.fetch_cultural_resource_detail("r1")
+
+
+class DownloadCulturalResourceAttachmentTests(SimpleTestCase):
+    def test_returns_bytes_and_content_type(self) -> None:
+        session = MagicMock()
+        session.get.return_value = _response(200, content=b"pdf-bytes", headers={"Content-Type": "application/pdf"})
+        gateway = _gateway(session)
+        content, content_type = gateway.download_cultural_resource_attachment("r1", 5)
+        self.assertEqual(content, b"pdf-bytes")
+        self.assertEqual(content_type, "application/pdf")
+
+    def test_hits_the_attachment_download_endpoint(self) -> None:
+        session = MagicMock()
+        session.get.return_value = _response(200, content=b"x")
+        gateway = _gateway(session)
+        gateway.download_cultural_resource_attachment("r1", 5)
+        args, _kwargs = session.get.call_args
+        self.assertEqual(args[0], "https://redata.example.test/api/v1/cultural-resources/r1/attachments/5/download/")
+
+    def test_404_raises_unavailable(self) -> None:
+        session = MagicMock()
+        session.get.return_value = _response(404, json_body={"error": "attachment_unavailable"})
+        gateway = _gateway(session)
+        with self.assertRaises(PropertyRecordsUnavailableError):
+            gateway.download_cultural_resource_attachment("r1", 5)

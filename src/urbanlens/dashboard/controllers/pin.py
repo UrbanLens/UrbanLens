@@ -14,6 +14,7 @@ from django.core.exceptions import ValidationError
 from django.http import HttpRequest, HttpResponse, JsonResponse, StreamingHttpResponse
 from django.shortcuts import render
 from django.utils import timezone
+from django.views import View
 from rest_framework.decorators import action
 from rest_framework.exceptions import ParseError
 from rest_framework.viewsets import GenericViewSet
@@ -1897,3 +1898,62 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         sun_times = OpenMeteoGateway().get_sun_times(float(pin.location.latitude), float(pin.location.longitude))
 
         return render(request, "dashboard/pages/location/weather.html", {"forecast": forecast, "sun_times": sun_times})
+
+
+_REDATA_MEDIA_CACHE_TTL = 3600
+
+
+class PinLoopnetPhotoView(View):
+    """GET pin/loopnet/photo/<listing_uuid>/<photo_id>/ - proxies one LoopNet listing photo.
+
+    REData's API key must never reach the browser, so photo bytes are
+    fetched server-side (same reasoning as ``PinImmichThumbnailView``) and
+    cached briefly to avoid re-hitting REData on every gallery view. No
+    login required, unlike the Immich proxy: LoopNet listing photos are
+    public marketing material (not a specific user's private library), and
+    ``services.media_materialize.materialize_media_item`` downloads this same
+    URL server-side with no session of its own - it would 302 to the login
+    page and fail if this endpoint required one.
+    """
+
+    def get(self, request: HttpRequest, listing_uuid: str, photo_id: int) -> HttpResponse:
+        from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError, RedataGateway
+
+        cache_key = f"ul_loopnet_photo_{listing_uuid}_{photo_id}"
+        cached = cache.get(cache_key)
+        if cached is not None:
+            content, content_type = cached
+            return HttpResponse(content, content_type=content_type)
+
+        try:
+            content, content_type = RedataGateway().download_listing_photo(listing_uuid, photo_id)
+        except (PropertyRecordsUnavailableError, ValueError):
+            return HttpResponse(status=404)
+        cache.set(cache_key, (content, content_type), _REDATA_MEDIA_CACHE_TTL)
+        return HttpResponse(content, content_type=content_type)
+
+
+class PinCrisAttachmentView(View):
+    """GET pin/cris/attachment/<resource_uuid>/<attachment_id>/ - proxies one CRIS attachment/photo.
+
+    Same reasoning as ``PinLoopnetPhotoView`` - no login required (CRIS
+    documents/photos are public historic-preservation records, and
+    ``materialize_media_item`` needs an unauthenticated URL to re-download
+    this from).
+    """
+
+    def get(self, request: HttpRequest, resource_uuid: str, attachment_id: int) -> HttpResponse:
+        from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError, RedataGateway
+
+        cache_key = f"ul_cris_attachment_{resource_uuid}_{attachment_id}"
+        cached = cache.get(cache_key)
+        if cached is not None:
+            content, content_type = cached
+            return HttpResponse(content, content_type=content_type)
+
+        try:
+            content, content_type = RedataGateway().download_cultural_resource_attachment(resource_uuid, attachment_id)
+        except (PropertyRecordsUnavailableError, ValueError):
+            return HttpResponse(status=404)
+        cache.set(cache_key, (content, content_type), _REDATA_MEDIA_CACHE_TTL)
+        return HttpResponse(content, content_type=content_type)

@@ -1,9 +1,12 @@
-"""Tests for the CRIS Building USN Points plugin scaffold.
+"""Tests for the CRIS Building USN Points plugin.
 
-The plugin's actual data retrieval is deferred to REData (see the module
-docstring in plugins.builtin.cris_buildings) - these tests cover the
-infrastructure that's already wired: NY-only geo-gating, the empty-result
-stub fetch, and render_context against the intended final payload shape.
+Retrieval calls REData's cultural-resources endpoints (see the module
+docstring in plugins.builtin.cris_buildings) - RedataGateway itself is
+mocked, so no real network access occurs. Covers NY-only geo-gating,
+fetch()'s lookup -> fetch-detail -> flatten pipeline (and its graceful
+degradation when REData is unconfigured/unavailable), render_context against
+the flattened payload shape, and media_items() building proxy URLs for
+attachments.
 """
 
 from __future__ import annotations
@@ -20,6 +23,7 @@ from urbanlens.dashboard.plugins.builtin.cris_buildings import (
     CrisBuildingPanelSource,
     CrisBuildingsPlugin,
 )
+from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError, RedataGateway
 from urbanlens.dashboard.services.geo_boundary import GeoBoundary
 
 # A stand-in boundary covering roughly upstate NY, so tests don't hit TIGERweb.
@@ -57,15 +61,90 @@ class PanelGateTests(TestCase):
             self.assertFalse(self.source.gate(pin))
 
 
+_BUILDING_RESOURCE = {
+    "uuid": "res-1",
+    "resource_type": "building",
+    "attributes": {"USNNum": "12345", "USNName": "Old Mill", "HouseNum": "10", "StreetName": "Main St", "City": "Albany", "Zip": "12207", "EligibilityDesc": "Listed"},
+}
+_BUILDING_DETAIL = {
+    **_BUILDING_RESOURCE,
+    "attachments": [{"id": 1, "kind": "PHOTO", "name": "Front elevation"}, {"id": 2, "kind": "DOCUMENT", "attachment_type": "Building-Structure Inventory Form"}],
+}
+
+
 class PanelFetchTests(TestCase):
-    def test_fetch_persists_an_empty_marker(self) -> None:
-        location = baker.make(Location, latitude="42.650000", longitude="-73.750000", google_place=None)
-        pin = baker.make(Pin, profile=_make_profile(), location=location)
+    def setUp(self) -> None:
+        super().setUp()
+        self.location = baker.make(Location, latitude="42.650000", longitude="-73.750000", google_place=None)
+        self.pin = baker.make(Pin, profile=_make_profile(), location=self.location)
 
+    def test_fetch_flattens_attributes_and_stores_attachments(self) -> None:
+        with (
+            patch.object(RedataGateway, "lookup_cultural_resources", return_value=[_BUILDING_RESOURCE]),
+            patch.object(RedataGateway, "fetch_cultural_resource_detail", return_value=_BUILDING_DETAIL) as mock_detail,
+            patch("urbanlens.dashboard.models.cache.location_cache.LocationCache.set") as mock_set,
+        ):
+            CrisBuildingPanelSource().fetch(self.pin)
+
+        mock_detail.assert_called_once_with("res-1")
+        data = mock_set.call_args[0][2]
+        self.assertEqual(data["USNName"], "Old Mill")
+        self.assertEqual(data["resource_uuid"], "res-1")
+        self.assertEqual(len(data["attachments"]), 2)
+
+    def test_no_building_resource_found_persists_empty(self) -> None:
+        with (
+            patch.object(RedataGateway, "lookup_cultural_resources", return_value=[{"uuid": "r2", "resource_type": "archaeological_buffer_area"}]),
+            patch("urbanlens.dashboard.models.cache.location_cache.LocationCache.set") as mock_set,
+        ):
+            CrisBuildingPanelSource().fetch(self.pin)
+        mock_set.assert_called_once_with(self.location, "cris_building_usn", {}, query_key="42.65,-73.75")
+
+    def test_unavailable_gracefully_persists_empty(self) -> None:
+        with (
+            patch.object(RedataGateway, "lookup_cultural_resources", side_effect=PropertyRecordsUnavailableError("source_error", "boom")),
+            patch("urbanlens.dashboard.models.cache.location_cache.LocationCache.set") as mock_set,
+        ):
+            CrisBuildingPanelSource().fetch(self.pin)
+        mock_set.assert_called_once_with(self.location, "cris_building_usn", {}, query_key="42.65,-73.75")
+
+    def test_unconfigured_gateway_gracefully_persists_empty(self) -> None:
+        """RedataGateway() raises ValueError (not PropertyRecordsUnavailableError) when unconfigured."""
         with patch("urbanlens.dashboard.models.cache.location_cache.LocationCache.set") as mock_set:
-            CrisBuildingPanelSource().fetch(pin)
+            CrisBuildingPanelSource().fetch(self.pin)
+        mock_set.assert_called_once_with(self.location, "cris_building_usn", {}, query_key="42.65,-73.75")
 
+    def test_no_coordinates_persists_empty_without_calling_redata(self) -> None:
+        location = baker.make(Location, latitude=None, longitude=None, google_place=None)
+        pin = baker.make(Pin, profile=_make_profile(), location=location)
+        with (
+            patch.object(RedataGateway, "lookup_cultural_resources") as mock_lookup,
+            patch("urbanlens.dashboard.models.cache.location_cache.LocationCache.set") as mock_set,
+        ):
+            CrisBuildingPanelSource().fetch(pin)
+        mock_lookup.assert_not_called()
         mock_set.assert_called_once_with(location, "cris_building_usn", {}, query_key="")
+
+
+class MediaItemsTests(SimpleTestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.source = CrisBuildingPanelSource()
+
+    def test_builds_one_item_per_attachment(self) -> None:
+        data = {"resource_uuid": "res-1", "attachments": [{"id": 1, "kind": "PHOTO", "name": "Front elevation"}, {"id": 2, "kind": "DOCUMENT", "attachment_type": "Inventory Form"}]}
+        items = self.source.media_items(data)
+        self.assertEqual(len(items), 2)
+        self.assertEqual(items[0].caption, "Front elevation")
+        self.assertTrue(items[0].thumb_url)
+        self.assertEqual(items[1].caption, "Inventory Form")
+        self.assertEqual(items[1].thumb_url, "")  # documents get no thumbnail
+
+    def test_no_resource_uuid_yields_no_items(self) -> None:
+        self.assertEqual(self.source.media_items({"attachments": [{"id": 1, "kind": "PHOTO"}]}), [])
+
+    def test_no_attachments_yields_no_items(self) -> None:
+        self.assertEqual(self.source.media_items({"resource_uuid": "res-1"}), [])
 
 
 class RenderContextTests(SimpleTestCase):
@@ -103,7 +182,27 @@ class RenderContextTests(SimpleTestCase):
 
 
 class EnrichmentSourceTests(TestCase):
-    def test_fetch_returns_none_payload_and_a_query_key(self) -> None:
+    def test_fetch_returns_flattened_payload_when_a_building_is_found(self) -> None:
+        location = baker.make(Location, latitude="42.650000", longitude="-73.750000", google_place=None)
+
+        with patch.object(RedataGateway, "lookup_cultural_resources", return_value=[_BUILDING_RESOURCE]):
+            payload, query_key = CrisBuildingEnrichmentSource().fetch(location)
+
+        assert payload is not None
+        self.assertEqual(payload["USNName"], "Old Mill")
+        self.assertEqual(payload["resource_uuid"], "res-1")
+        self.assertEqual(query_key, "42.650000,-73.750000")
+
+    def test_fetch_returns_none_payload_when_unavailable(self) -> None:
+        location = baker.make(Location, latitude="42.650000", longitude="-73.750000", google_place=None)
+
+        with patch.object(RedataGateway, "lookup_cultural_resources", side_effect=PropertyRecordsUnavailableError("source_error", "boom")):
+            payload, query_key = CrisBuildingEnrichmentSource().fetch(location)
+
+        self.assertIsNone(payload)
+        self.assertEqual(query_key, "42.650000,-73.750000")
+
+    def test_fetch_returns_none_payload_when_unconfigured(self) -> None:
         location = baker.make(Location, latitude="42.650000", longitude="-73.750000", google_place=None)
 
         payload, query_key = CrisBuildingEnrichmentSource().fetch(location)

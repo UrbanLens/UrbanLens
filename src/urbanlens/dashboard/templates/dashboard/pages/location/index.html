@@ -367,6 +367,21 @@
             hx-swap="beforeend"
             hx-timeout="25000"
             hidden></div>
+        {# LoopNet listing photos and CRIS attachment photos/documents, via REData - see plugins.builtin.loopnet/cris_buildings. #}
+        <div class="media-provider-loader" id="media-loader-loopnet"
+            hx-get="{% url 'pin.media' pin.slug 'loopnet' %}"
+            hx-trigger="load"
+            hx-target="#media-gallery-grid"
+            hx-swap="beforeend"
+            hx-timeout="25000"
+            hidden></div>
+        <div class="media-provider-loader" id="media-loader-cris_building"
+            hx-get="{% url 'pin.media' pin.slug 'cris_building' %}"
+            hx-trigger="load"
+            hx-target="#media-gallery-grid"
+            hx-swap="beforeend"
+            hx-timeout="25000"
+            hidden></div>
     </div>{# end .pin-media-row #}
 
     {# -- Categories / aliases: same fill-the-gap behavior as above -- #}
@@ -1495,7 +1510,7 @@
         var TAB_LABELS = {
             smithsonian: 'Smithsonian', wikimedia: 'Wikimedia', wikipedia_media: 'Wikipedia', loc: 'Library of Congress',
             yelp: 'Yelp', google_images: 'Google Images', google_maps: 'Google Maps',
-            internet_archive: 'Internet Archive',
+            internet_archive: 'Internet Archive', loopnet: 'LoopNet', cris_building: 'NY Historic Preservation (CRIS)',
         };
 
         // Builds the single combined tab strip: All | Mine | <source tabs> |

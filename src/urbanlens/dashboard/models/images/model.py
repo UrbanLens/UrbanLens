@@ -38,6 +38,8 @@ class ImageSource(TextChoices):
     IMMICH = "immich", "Immich"
     FLICKR = "flickr", "Flickr"
     GOOGLE_PHOTOS = "google_photos", "Google Photos"
+    LOOPNET = "loopnet", "LoopNet"
+    CRIS = "cris", "NY Historic Preservation (CRIS)"
 
 
 class MediaKind(TextChoices):

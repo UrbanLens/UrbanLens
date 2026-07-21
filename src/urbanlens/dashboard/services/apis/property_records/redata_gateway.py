@@ -80,6 +80,67 @@ class RedataGateway(Gateway):
     def _headers(self) -> dict[str, str]:
         return {"Authorization": f"Bearer {self.api_key}", "Accept": "application/json"}
 
+    def _get_json(self, path: str, *, params: dict[str, Any] | None = None) -> Any:
+        """GET one REData endpoint and return its decoded JSON body.
+
+        Shared low-level helper for every read endpoint on this gateway -
+        callers translate REData's ``404``/``503`` error shape and any
+        network/parse failure into :class:`PropertyRecordsUnavailableError`
+        themselves, since what counts as "nothing found" vs. "REData is
+        having trouble" differs slightly per endpoint. Returns whatever JSON
+        type the endpoint actually uses (most are an object, but e.g. the
+        cultural-resources lookup returns a bare array) - callers know their
+        own endpoint's shape.
+
+        Args:
+            path: Path relative to ``base_url`` (leading slash optional).
+            params: Query-string parameters, if any.
+
+        Returns:
+            The raw decoded JSON body.
+
+        Raises:
+            PropertyRecordsUnavailableError: Network failure, a non-2xx
+                response REData didn't shape as one of its own structured
+                errors, or an unparseable body.
+        """
+        base_url = self.base_url
+        if base_url is None:
+            # __post_init__ already validates this for the normal construction path;
+            # this only guards a hypothetical bypass (e.g. object.__new__) and narrows
+            # the type for mypy without resorting to assert (banned outside tests).
+            raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, "REDATA_API_URL is not configured.")
+        try:
+            response = self.session.get(f"{base_url.rstrip('/')}/{path.lstrip('/')}", params=params, headers=self._headers, timeout=_REQUEST_TIMEOUT)
+        except OSError as exc:
+            raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, f"Could not reach REData: {exc}") from exc
+
+        if response.status_code == 200:
+            try:
+                return response.json()
+            except ValueError as exc:
+                raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, "REData returned an unparseable response.") from exc
+
+        if response.status_code in (404, 503):
+            try:
+                body = response.json()
+            except ValueError:
+                body = {}
+            reason = body.get("error") or REASON_SOURCE_ERROR
+            raise PropertyRecordsUnavailableError(reason, body.get("message", ""), links=body.get("links"))
+
+        logger.warning("REData request to %s failed (%s): %s", path, response.status_code, response.text[:500])
+        raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, f"REData request failed with status {response.status_code}.")
+
+    def _lookup_parcel_body(self, latitude: float, longitude: float, *, situs_address: str = "", apn: str = "") -> dict[str, Any]:
+        """Shared implementation for :meth:`lookup_parcel` and :meth:`lookup_parcel_uuid`."""
+        params: dict[str, Any] = {"lat": latitude, "lng": longitude}
+        if situs_address:
+            params["situs_address"] = situs_address
+        if apn:
+            params["apn"] = apn
+        return dict(self._get_json("/api/v1/parcels/lookup/", params=params) or {})
+
     def lookup_parcel(self, latitude: float, longitude: float, *, situs_address: str = "", apn: str = "") -> dict[str, Any]:
         """Look up (retrieving/refreshing as needed) the parcel record at a coordinate.
 
@@ -100,48 +161,197 @@ class RedataGateway(Gateway):
                 exception's own docstring for how to distinguish a permanent
                 "nothing here" from a transient outage via ``reason``).
         """
+        body = self._lookup_parcel_body(latitude, longitude, situs_address=situs_address, apn=apn)
+        payload = dict(body.get("record_payload") or {})
+        # parcel_geometry/building_geometry are also top-level fields on the
+        # Parcel response (alongside record_payload), already converted to
+        # standard GeoJSON server-side (REData's own
+        # core.services.geojson.esri_rings_to_geojson) - prefer these over
+        # record_payload's own copies, which are just whichever tier's raw,
+        # still-Esri-ring-shaped PropertyRecord snapshot was last written.
+        for key in ("parcel_geometry", "building_geometry"):
+            if key in body:
+                payload[key] = body[key]
+        return payload
+
+    def lookup_parcel_uuid(self, latitude: float, longitude: float, *, situs_address: str = "", apn: str = "") -> str | None:
+        """Resolve the REData parcel uuid at a coordinate, for uuid-keyed endpoints.
+
+        Endpoints outside the tiered property-records pipeline itself (e.g.
+        commercial listings) are keyed by REData's own parcel uuid rather than
+        a coordinate - this performs the same lookup as :meth:`lookup_parcel`
+        (REData resolves/caches it identically either way) but returns just
+        the uuid, without assuming anything about ``record_payload``'s shape.
+
+        Args:
+            latitude: WGS-84 latitude.
+            longitude: WGS-84 longitude.
+            situs_address: Already-known street address, passed through to
+                REData as a Tier 2/3 search key.
+            apn: Already-known parcel/APN, passed through the same way.
+
+        Returns:
+            The parcel's uuid, or None if REData's response didn't include one.
+
+        Raises:
+            PropertyRecordsUnavailableError: No parcel is available at this
+                coordinate, or the request to REData failed.
+        """
+        body = self._lookup_parcel_body(latitude, longitude, situs_address=situs_address, apn=apn)
+        return body.get("uuid") or None
+
+    def lookup_listings(self, parcel_uuid: str) -> dict[str, Any]:
+        """Return cached LoopNet commercial listings for a parcel.
+
+        Never fetches from LoopNet inline with the request, even on a cache
+        miss - see the endpoint's own documentation in REData's
+        ``docs/api-reference.md`` for why (LoopNet's bot-detection, REData's
+        strict outbound budget for it). ``refresh_queued`` in the response
+        signals whether this call also queued a background LoopNet fetch.
+
+        Args:
+            parcel_uuid: The parcel's REData uuid (see :meth:`lookup_parcel_uuid`).
+
+        Returns:
+            ``{"results": [...], "refresh_queued": bool}`` - see the module's
+            docs for each listing's fields, including its ``photos`` metadata
+            list (never the file bytes - see :meth:`download_listing_photo`).
+
+        Raises:
+            PropertyRecordsUnavailableError: The parcel has no known
+                ``situs_address`` for LoopNet to search by, or the request
+                to REData failed.
+        """
+        return dict(self._get_json(f"/api/v1/parcels/{parcel_uuid}/listings/") or {})
+
+    def download_listing_photo(self, listing_uuid: str, photo_id: int) -> tuple[bytes, str]:
+        """Download one LoopNet listing photo's actual file bytes.
+
+        Args:
+            listing_uuid: The listing's REData uuid (from :meth:`lookup_listings`).
+            photo_id: The photo's id within that listing.
+
+        Returns:
+            Tuple of (file bytes, content-type).
+
+        Raises:
+            PropertyRecordsUnavailableError: The photo was discovered but its
+                download failed (REData never retries this inline), or the
+                request to REData failed outright.
+        """
         base_url = self.base_url
         if base_url is None:
-            # __post_init__ already validates this for the normal construction path;
-            # this only guards a hypothetical bypass (e.g. object.__new__) and narrows
-            # the type for mypy without resorting to assert (banned outside tests).
             raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, "REDATA_API_URL is not configured.")
-
-        params: dict[str, Any] = {"lat": latitude, "lng": longitude}
-        if situs_address:
-            params["situs_address"] = situs_address
-        if apn:
-            params["apn"] = apn
-
         try:
-            response = self.session.get(f"{base_url.rstrip('/')}/api/v1/parcels/lookup/", params=params, headers=self._headers, timeout=_REQUEST_TIMEOUT)
+            response = self.session.get(f"{base_url.rstrip('/')}/api/v1/listings/{listing_uuid}/photos/{photo_id}/download/", headers=self._headers, timeout=_REQUEST_TIMEOUT)
         except OSError as exc:
             raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, f"Could not reach REData: {exc}") from exc
-
         if response.status_code == 200:
-            try:
-                body = response.json()
-            except ValueError as exc:
-                raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, "REData returned an unparseable response.") from exc
-            payload = dict(body.get("record_payload") or {})
-            # parcel_geometry/building_geometry are also top-level fields on the
-            # Parcel response (alongside record_payload), already converted to
-            # standard GeoJSON server-side (REData's own
-            # core.services.geojson.esri_rings_to_geojson) - prefer these over
-            # record_payload's own copies, which are just whichever tier's raw,
-            # still-Esri-ring-shaped PropertyRecord snapshot was last written.
-            for key in ("parcel_geometry", "building_geometry"):
-                if key in body:
-                    payload[key] = body[key]
-            return payload
-
-        if response.status_code in (404, 503):
+            return response.content, response.headers.get("Content-Type", "image/jpeg")
+        if response.status_code == 404:
             try:
                 body = response.json()
             except ValueError:
                 body = {}
-            reason = body.get("error") or REASON_SOURCE_ERROR
-            raise PropertyRecordsUnavailableError(reason, body.get("message", ""), links=body.get("links"))
+            raise PropertyRecordsUnavailableError(body.get("error") or REASON_SOURCE_ERROR, body.get("message", ""))
+        logger.warning("REData listing photo download failed (%s): %s", response.status_code, response.text[:500])
+        raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, f"REData request failed with status {response.status_code}.")
 
-        logger.warning("REData lookup failed (%s): %s", response.status_code, response.text[:500])
+    def lookup_cultural_resources(self, latitude: float, longitude: float, *, radius_meters: float = 200) -> list[dict[str, Any]]:
+        """Find (fetching/caching as needed) CRIS cultural/historic resources near a coordinate.
+
+        Only the fast, unauthenticated layer-query tier runs here - a
+        resource's full detail record (including its attachments) is a
+        separate, un-eager step, see :meth:`fetch_cultural_resource_detail`.
+
+        Args:
+            latitude: WGS-84 latitude.
+            longitude: WGS-84 longitude.
+            radius_meters: Search radius around the coordinate.
+
+        Returns:
+            A list of resource dicts (empty outside NY, CRIS's only current
+            coverage) - see the module docs for each resource's fields.
+
+        Raises:
+            PropertyRecordsUnavailableError: The request to REData failed.
+        """
+        body = self._get_json("/api/v1/cultural-resources/lookup/", params={"lat": latitude, "lng": longitude, "radius_meters": radius_meters})
+        if isinstance(body, list):
+            return list(body)
+        if isinstance(body, dict):
+            results = body.get("results")
+            if isinstance(results, list):
+                return list(results)
+        return []
+
+    def fetch_cultural_resource_detail(self, resource_uuid: str) -> dict[str, Any]:
+        """Fetch (and cache onto the resource) a CRIS resource's full detail record and attachments.
+
+        Args:
+            resource_uuid: The resource's REData uuid (from :meth:`lookup_cultural_resources`).
+
+        Returns:
+            The resource dict, now with ``detail_payload``/``detail_retrieved_at``
+            and ``attachments`` populated.
+
+        Raises:
+            PropertyRecordsUnavailableError: This resource type has no
+                detail-fetch path (e.g. ``archaeological_buffer_area``), or
+                the request to REData failed.
+        """
+        base_url = self.base_url
+        if base_url is None:
+            raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, "REDATA_API_URL is not configured.")
+        try:
+            response = self.session.post(f"{base_url.rstrip('/')}/api/v1/cultural-resources/{resource_uuid}/fetch-detail/", headers=self._headers, timeout=_REQUEST_TIMEOUT)
+        except OSError as exc:
+            raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, f"Could not reach REData: {exc}") from exc
+        if response.status_code == 200:
+            try:
+                return dict(response.json())
+            except ValueError as exc:
+                raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, "REData returned an unparseable response.") from exc
+        if response.status_code == 400:
+            try:
+                body = response.json()
+            except ValueError:
+                body = {}
+            raise PropertyRecordsUnavailableError(body.get("error") or REASON_SOURCE_ERROR, body.get("message", ""))
+        logger.warning("REData cultural-resource detail fetch failed (%s): %s", response.status_code, response.text[:500])
+        raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, f"REData request failed with status {response.status_code}.")
+
+    def download_cultural_resource_attachment(self, resource_uuid: str, attachment_id: int) -> tuple[bytes, str]:
+        """Download one CRIS attachment/photo's actual file bytes.
+
+        Unlike listing photos above, this fetches from CRIS on first request
+        if not already cached.
+
+        Args:
+            resource_uuid: The resource's REData uuid.
+            attachment_id: The attachment's id within that resource.
+
+        Returns:
+            Tuple of (file bytes, content-type).
+
+        Raises:
+            PropertyRecordsUnavailableError: CRIS no longer lists this
+                attachment, or the request to REData failed outright.
+        """
+        base_url = self.base_url
+        if base_url is None:
+            raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, "REDATA_API_URL is not configured.")
+        try:
+            response = self.session.get(f"{base_url.rstrip('/')}/api/v1/cultural-resources/{resource_uuid}/attachments/{attachment_id}/download/", headers=self._headers, timeout=_REQUEST_TIMEOUT)
+        except OSError as exc:
+            raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, f"Could not reach REData: {exc}") from exc
+        if response.status_code == 200:
+            return response.content, response.headers.get("Content-Type", "application/octet-stream")
+        if response.status_code == 404:
+            try:
+                body = response.json()
+            except ValueError:
+                body = {}
+            raise PropertyRecordsUnavailableError(body.get("error") or REASON_SOURCE_ERROR, body.get("message", ""))
+        logger.warning("REData cultural-resource attachment download failed (%s): %s", response.status_code, response.text[:500])
         raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, f"REData request failed with status {response.status_code}.")
