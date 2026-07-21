@@ -257,13 +257,12 @@ def _render_available(data: dict[str, Any]) -> dict[str, Any]:
     if data.get("parcel_geometry"):
         chips.append("Boundary available")
 
-    footer_link = {"url": data["source"]["url"], "label": f"View on {data['source']['provider']}"} if data["source"].get("url") else None
+    #footer_link = {"url": data["source"]["url"], "label": f"View on {data['source']['provider']}"} if data["source"].get("url") else None
 
     return {
         "heading_name": ", ".join(data.get("owner_name") or []) or None,
         "chips": chips,
         "meta": meta,
-        "footer_link": footer_link,
     }
 
 
