@@ -205,6 +205,16 @@ $inputs: (
 	&[disabled] {
 		@include btn-disabled;
 	}
+
+	// This mixin's own `display: inline-flex` above otherwise beats the
+	// browser's default `[hidden] { display: none }` UA rule on specificity -
+	// every button using btn-base (directly or via btn-primary/ghost/danger)
+	// would stay visibly rendered even while `hidden`. Hit in practice via the
+	// shared confirm-dialog's alt button, which every caller that doesn't pass
+	// an `altLabel` expects to stay actually hidden.
+	&[hidden] {
+		display: none;
+	}
 }
 
 // Filled primary button (uses --ul-button-* CSS custom properties so dark mode works).
