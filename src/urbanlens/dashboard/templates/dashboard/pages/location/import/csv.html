@@ -1201,6 +1201,23 @@ function handleProgressEvent(evt) {
                 evt.created + ' created · ' + evt.exists + ' existed · ' + evt.skipped + ' skipped',
                 'Import complete', { timeOut: 8000 }
             );
+            if (evt.created > 0) {
+                // On the main map page (window.forceRefreshPinCache only exists
+                // there - see findLocalPinNear's own comment above for why this
+                // shared dialog can't assume it), refresh the already-loaded pin
+                // store/cache from the server so newly-imported pins appear
+                // immediately instead of only after a manual reload (the dialog
+                // closing alone never touched the map's in-memory state).
+                if (typeof window.forceRefreshPinCache === 'function') {
+                    window.forceRefreshPinCache();
+                } else {
+                    // Some other page (e.g. Memories) reused this dialog - it
+                    // can't refresh the map itself, so flag the cache dirty the
+                    // same way the bulk Takeout importer does, for whenever the
+                    // user next visits the map.
+                    try { localStorage.setItem('ul_pins_dirty', '1'); } catch (_) {}
+                }
+            }
             break;
 
         case 'error':
