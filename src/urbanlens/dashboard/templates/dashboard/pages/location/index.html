@@ -619,7 +619,7 @@
                 onclick="window.articleSetSubTab(this, 'article')">
             <i class="material-symbols-outlined">article</i><span>Article</span>
         </button>
-        <button type="button" class="pin-plugin-tab-btn card-tab" role="tab" aria-selected="false"
+        <button type="button" id="article-subtab-btn-wikipedia" class="pin-plugin-tab-btn card-tab" role="tab" aria-selected="false"
                 onclick="window.articleSetSubTab(this, 'wikipedia')">
             <i class="material-symbols-outlined">menu_book</i><span>Wikipedia</span>
         </button>
@@ -635,7 +635,10 @@
         </div>
     </div>
     <div data-article-subtab="wikipedia" hidden>
+        {# data-ext-panel-204-hide-tab: no Wikipedia article means nothing to show #}
+        {# on this sub-tab at all - hide the tab button itself, not just this card. #}
         <div id="wikipedia-section" class="card card--secondary" data-ext-panel-204
+            data-ext-panel-204-hide-tab="article-subtab-btn-wikipedia"
             hx-get="{% url 'pin.wikipedia' pin.slug %}"
             hx-trigger="load[!window.ulSectionCollapsed('pin','wikipedia')], ul:unhide"
             hx-swap="outerHTML"
@@ -1308,6 +1311,24 @@
         document.body.addEventListener('htmx:afterOnLoad', function (evt) {
             var el = evt.detail && evt.detail.elt;
             if (isExtPanel204(el) && evt.detail.xhr.status === 204) {
+                // A panel that's also reachable via its own tab button (so far
+                // just Wikipedia, under the Article tab's sub-tab strip) names
+                // that button's id here - opt-in, so this stays a no-op for
+                // every other data-ext-panel-204 card. Hiding the button
+                // (rather than removing it) keeps element lookups elsewhere
+                // (querySelectorAll('.pin-plugin-tab-btn')) unaffected.
+                var tabBtnId = el.getAttribute('data-ext-panel-204-hide-tab');
+                if (tabBtnId) {
+                    var tabBtn = document.getElementById(tabBtnId);
+                    if (tabBtn) {
+                        var wasActive = tabBtn.classList.contains('active');
+                        tabBtn.hidden = true;
+                        if (wasActive) {
+                            var fallback = tabBtn.closest('.card-tabs').querySelector('.pin-plugin-tab-btn:not([hidden])');
+                            if (fallback) fallback.click();
+                        }
+                    }
+                }
                 el.remove();
             }
         });

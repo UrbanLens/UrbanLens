@@ -1625,6 +1625,14 @@
     .material-symbols-outlined {
         font-size: 1.05rem;
     }
+
+    // This class's own unconditional `display: flex` above otherwise beats
+    // the browser's default `[hidden] { display: none }` UA rule - a tab
+    // button hidden via JS (e.g. the Wikipedia sub-tab when no article
+    // exists) would stay visibly rendered anyway.
+    &[hidden] {
+        display: none;
+    }
 }
 
 .pin-plugin-tab-body {
