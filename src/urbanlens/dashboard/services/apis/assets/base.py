@@ -26,6 +26,10 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+#: Mirrors ``LocationCache.query_key``'s ``max_length``. Imported lazily
+#: everywhere else in this module to avoid a model import at module scope.
+_QUERY_KEY_MAX_LENGTH = 255
+
 
 @dataclass(frozen=True)
 class MediaItem:
@@ -124,8 +128,20 @@ class MediaProvider(Gateway, ABC):
         if (service_key := self.service_key) is None:
             raise RuntimeError(f"{type(self).__name__} has no service_key configured")
 
+        # Truncated to LocationCache.query_key's own max_length so the value
+        # compared below is the value that can actually be stored - otherwise
+        # an over-long key would never match what came back and every request
+        # would re-fetch, hammering the provider instead of caching.
+        query_key = " | ".join(term for term in search_terms if term)[:_QUERY_KEY_MAX_LENGTH]
         cached = LocationCache.get_fresh(location, service_key)
-        if cached is not None:
+        # A cache row is only a hit for the query that produced it.
+        # LocationCache.get_fresh answers "is this row still fresh?" by age
+        # alone, so without this check a provider whose query construction has
+        # been changed (e.g. tightened for relevance) keeps serving results
+        # fetched by the *old* query for the rest of the 7-day TTL - the fix
+        # would appear not to have worked. Comparing against the query_key the
+        # row was written with makes a query change invalidate its own cache.
+        if cached is not None and (cached.query_key or "") == query_key:
             return [MediaItem(**item) for item in (cached.data or {}).get("items", [])], True
 
         items: list[MediaItem] = []
@@ -145,10 +161,5 @@ class MediaProvider(Gateway, ABC):
                 # TODO: Catch specific exceptions
                 logger.exception("%s media lookup failed for %r", self.service_key, search_term)
 
-        LocationCache.set(
-            location,
-            service_key,
-            {"items": [asdict(item) for item in items]},
-            query_key=" | ".join(term for term in search_terms if term),
-        )
+        LocationCache.set(location, service_key, {"items": [asdict(item) for item in items]}, query_key=query_key)
         return items, False

@@ -355,6 +355,33 @@ def _house_numbers_are_compatible(candidate_range: tuple[int, int] | None, locat
     return low - _HOUSE_NUMBER_TOLERANCE <= location_number <= high + _HOUSE_NUMBER_TOLERANCE
 
 
+def contains_street_type_word(name: str | None) -> bool:
+    """Return True when any whole word in ``name`` is a street-type word.
+
+    A weaker signal than :func:`is_address_derived_name` (which needs the
+    location's address components to compare against): this only asks whether
+    the name *looks like* a street name at all. Useful for callers that have
+    no address to compare against but still need to know whether a name is
+    distinctive enough to stand on its own in an external search - "Summit
+    Road" names a road somewhere in every state, so a search for it without a
+    geographic qualifier matches unrelated places, whereas "Bannerman Castle"
+    is specific enough to search bare.
+
+    Matching is on whole casefolded tokens, so "St" matches but "Station" does
+    not.
+
+    Args:
+        name: The name to inspect; None/empty returns False.
+
+    Returns:
+        True when the name contains a street-type word.
+    """
+    if not name:
+        return False
+    tokens = {token.casefold() for token in _NAME_TOKEN_PATTERN.split(name) if token}
+    return bool(tokens & _STREET_TYPE_WORDS)
+
+
 def is_address_derived_name(name: str, location: Location) -> bool:
     """Return True when a candidate name is merely a fragment of the location's address.
 
@@ -401,9 +428,9 @@ def is_address_derived_name(name: str, location: Location) -> bool:
     if candidate_state and location_state and candidate_state == location_state:
         return True
 
-    tokens = {token.casefold() for token in _NAME_TOKEN_PATTERN.split(name) if token}
-    if not (tokens & _STREET_TYPE_WORDS):
+    if not contains_street_type_word(name):
         return False
+    tokens = {token.casefold() for token in _NAME_TOKEN_PATTERN.split(name) if token}
 
     normalized_address = normalize_name_for_comparison(location.address)
     if normalized_address and normalized in normalized_address:

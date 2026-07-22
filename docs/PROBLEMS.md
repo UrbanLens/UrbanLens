@@ -424,3 +424,40 @@ guess at without a live response to check against.
 **Suggested next step**: hit the live endpoint once with both the current param and a candidate
 `fq=online_media_type:"Images"` (or as a list) and diff the actual JSON responses to confirm which
 one server-side filters vs. is silently dropped.
+
+---
+
+## Internet Archive: `mediatype:texts` is excluded, but holds the best location material (found 2026-07-22)
+
+While fixing Internet Archive's search relevance (see `services/apis/assets/internet_archive.py`),
+confirmed against the live `advancedsearch.php` endpoint that the gateway's
+`mediatype:(image OR movies)` filter excludes the single richest source of on-topic material in the
+archive. A field-scoped query for `Eastern State Penitentiary` restricted to `image OR texts`
+returned the inspectors' annual reports (State Library of Pennsylvania), a Pennsylvania legislature
+committee report on the prison, `Historic landmarks of Philadelphia`, and `Pennsylvania ghost towns`
+- i.e. exactly the historical/architectural record this project wants - whereas the same query
+restricted to `image OR movies` returned a Ghost Adventures episode and a GeekBeat.TV review.
+`archive.org/services/img/{identifier}` generates a cover thumbnail for `texts` items, so they
+render as real gallery tiles rather than the empty-thumbnail fallback.
+
+**Why not fixed**: the reported bug was irrelevant results, and the existing filter's exclusion of
+books is a documented deliberate choice ("isn't useful in a photo gallery") - widening the media
+types the gallery shows is a product decision, not part of a relevance fix.
+
+**Suggested next step**: decide whether the Media gallery should carry document tiles at all (LOC
+already yields them, with no thumbnail); if yes, add `texts` to `_MEDIA_TYPE_FILTER` and re-check
+precision on a few pins.
+
+---
+
+## Internet Archive: uploader-supplied `subject` tags are a residual noise floor (found 2026-07-22)
+
+The relevance fix matches the location name against `title` OR `subject`. `subject` is
+uploader-supplied and unmoderated, so an item tagged with a landmark it isn't actually about still
+passes - a live search for `Eastern State Penitentiary` kept `WWE Studio Shots 2006` on a subject
+match. Precision is vastly better than before (the same pin previously returned Voice of America
+radio broadcasts via full-text matching), and dropping `subject` from `_NAME_FIELDS` would lose
+genuine untitled photographs, so this was accepted rather than tightened.
+
+**Suggested next step**: if it proves noisy in practice, rank title matches above subject-only
+matches rather than excluding the latter.
