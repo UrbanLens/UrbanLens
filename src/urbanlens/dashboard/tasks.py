@@ -1086,7 +1086,7 @@ def import_flickr_photos(self, pin_id: int, profile_id: int, photo_ids: list[str
     from django.core.files.base import ContentFile
 
     from urbanlens.dashboard.models.flickr.model import FlickrAccount
-    from urbanlens.dashboard.models.images.model import Image
+    from urbanlens.dashboard.models.images.model import Image, ImageSource
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.services.apis.flickr.gateway import FlickrGateway
@@ -1128,6 +1128,7 @@ def import_flickr_photos(self, pin_id: int, profile_id: int, photo_ids: list[str
             pin=pin,
             location=pin.location,
             profile=profile,
+            source=ImageSource.FLICKR,
             checksum=checksum,
             file_size=len(content),
             source_url=account.photo_web_url(photo_id),
