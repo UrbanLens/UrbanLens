@@ -2628,9 +2628,6 @@ dialog.tag-create-card.ul-dialog {
         background: var(--ul-surface-raised);
         color: inherit;
         outline: none;
-        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E");
-        background-repeat: no-repeat;
-        background-position: 11px center;
         transition: border-color .15s, box-shadow .15s;
     }
 
@@ -2647,44 +2644,12 @@ dialog.tag-create-card.ul-dialog {
         flex: 1;
     }
 
-    .org-filter-chip {
-        display: inline-flex;
-        align-items: center;
-        gap: 4px;
-        padding: 5px 11px;
-        border-radius: 999px;
-        background: var(--ul-surface-raised);
-        border: 1.5px solid var(--ul-surface-raised-border);
-        font-size: .75rem;
-        font-weight: 500;
-        cursor: pointer;
-        color: var(--ul-grey-6);
-        transition: background .13s, border-color .13s, color .13s, box-shadow .13s;
-        user-select: none;
-        white-space: nowrap;
-        box-shadow: 0 1px 2px rgba(0, 0, 0, .04);
-    }
-
-    .org-filter-chip:hover {
-        border-color: var(--ul-color-accent);
-        color: var(--ul-color-accent-fg);
-        background: var(--ul-color-accent-bg);
-        box-shadow: 0 1px 4px var(--ul-color-accent-ring);
-    }
-
     .org-filter-chip.active {
         background: var(--ul-color-accent-bg);
         border-color: var(--ul-color-accent);
         color: var(--ul-color-accent-fg);
         font-weight: 600;
         box-shadow: 0 0 0 2px var(--ul-color-accent-ring);
-    }
-
-    .org-filter-chip {
-        .material-symbols-outlined,
-        .material-icons {
-            font-size: .85rem;
-        }
     }
 
     .org-filter-color-row {

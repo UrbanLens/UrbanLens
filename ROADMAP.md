@@ -216,6 +216,10 @@ Features planned for future releases.
 * "Import my instagram" feature to port over photos you've posted. [UL-387]
 * Find a way to make it easy to identify and/or fix situations where you have other pins on the main map which fall within the boundaries of another one of your pins. [UL-388]
 * When moving/promoting child pin: "You already have a top-level pin at that location". We should allow merging the top-level pin right from that dialog.
+* The externally-accessible REST API currently has just one endpoint, which is to add a pin to a user's map. Add another endpoint which will do a similar thing, but instead of adding the pin, it will create a Pin Suggestion, which the user can accept or reject.
+* Add additional connection tests to the setup Integrations page (searxng, etc)
+* For text document upload, use claude haiku.
+* During pin import (main map page, pin import dialog), the user is given an opportunity to select a label to apply to everything in a group. However, the selection is just a plain dropdown, which is hard to use. Use the label picker ui we use in other areas of the application, which allows for searching, and multi-selection. That label picker should allow the user to create a new label directly from the picker if they wish.
 
 ## Really Big Ideas / Features
 * Native android / ios apps (allowing expansion into additional features). [UL-72]

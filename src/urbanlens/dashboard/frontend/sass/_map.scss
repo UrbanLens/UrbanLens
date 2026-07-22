@@ -1786,7 +1786,7 @@ img.leaflet-marker-icon.is-selected {
     }
 
     &:hover {
-        background: var(--ul-surface-0);
+        background: var(--ul-surface-2);
         color: var(--ul-grey-9);
     }
 
@@ -4777,6 +4777,15 @@ div.container .addr-search-bar {
         @include input-selectors {
             background-color: transparent;
             border-color: transparent;
+        }
+    }
+
+    .map-context-menu {
+        &__item {
+            &:hover {
+                background: rgba(0,0,0,0.2);
+                color: #fff;
+            }
         }
     }
 }
