@@ -77,7 +77,7 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         # limit governs our total load, not the load on any single instance.
         # Each logical lookup may spend more than one call when it fails over.
         calls_per_minute=240,
-        calls_per_day=240000,
+        calls_per_day=24_000,
         notes="Free API. Load is distributed across several public Overpass instances, and any instance that errors/times out is dropped until the next day. Each logical lookup may spend more than one call when it fails over.",
     ),
     "brave_search": ServiceDefaults(
