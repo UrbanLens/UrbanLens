@@ -546,3 +546,87 @@
         overflow-y: auto;
     }
 }
+// -- Buildings on this property ------------------------------------------------
+// Every structure known to stand on the parcel (see plugins.builtin.parcel_buildings),
+// on both the pin detail page and the wiki. Rows that already have a sub pin are
+// linked and flagged; the rest are what the import button below the list creates.
+.parcel-buildings {
+    .card__body {
+        padding: 0;
+    }
+
+    .parcel-buildings-import {
+        margin: .75rem 1.25rem 1rem;
+    }
+}
+
+.parcel-building-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    max-height: 26rem;
+    overflow-y: auto;
+}
+
+.parcel-building {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    padding: .5rem 1.25rem;
+    border-bottom: 1px solid rgba(128, 128, 128, .15);
+
+    &:last-child {
+        border-bottom: none;
+    }
+}
+
+// Building numbers are the identifiers people navigate a campus by, so they get
+// a fixed-width leading column and stay vertically aligned down the whole list.
+.parcel-building-number {
+    flex: 0 0 2.75rem;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    font-size: .85rem;
+    color: var(--ul-grey-7);
+    text-align: right;
+}
+
+.parcel-building-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: .1rem;
+}
+
+.parcel-building-name {
+    font-size: .9rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.parcel-building-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem;
+    font-size: .75rem;
+    color: var(--ul-grey-6);
+}
+
+.parcel-building-source {
+    opacity: .8;
+}
+
+.parcel-building-status {
+    font-size: 1rem;
+    color: var(--ul-primary-color);
+    flex-shrink: 0;
+}
+
+.parcel-building--unpinned {
+    .parcel-building-name,
+    .parcel-building-number {
+        opacity: .75;
+    }
+}

@@ -20,6 +20,14 @@ schema (NYS Office of Parks, Recreation and Historic Preservation) - REData's
 lookup response nests these under the resource's own ``attributes`` dict, so
 ``fetch`` flattens that dict onto the top level of the cached payload,
 keeping ``render_context`` unchanged.
+
+The same lookup also returns *site*-level resources (historic districts,
+National Register listings), cached under a separate ``district`` key. A pin
+covering a whole parcel renders that instead of a building record - see
+:meth:`CrisBuildingPanelSource.render_context` and
+``services.locations.site_scope``. The cache row itself stays scope-neutral
+(it is shared by every user pinning this place, whose own hierarchies differ),
+so only rendering branches on scope.
 """
 
 from __future__ import annotations
@@ -58,6 +66,34 @@ _DEMOLISHED_ELIGIBILITY = "Not Eligible - Demolished"
 #: archaeological-buffer-area) are out of scope for this specific plugin.
 _RESOURCE_TYPE = "building"
 
+#: Resource types that describe a whole *site* rather than one structure, in
+#: preference order - what a parcel-scope pin should show instead of an
+#: arbitrary building from the same lookup (see ``render_context``). The
+#: archaeological-buffer-area type is deliberately absent: it marks a
+#: sensitivity zone, not a description of the property. REData snake-cases
+#: these values (matching ``archaeological_buffer_area`` in its own responses).
+_SITE_RESOURCE_TYPES = ("district", "national_register_listing")
+
+
+def site_resource_attributes(resources: list[dict]) -> dict:
+    """Pick the best site-level CRIS resource from a lookup and flatten its attributes.
+
+    Args:
+        resources: The resource dicts from
+            :meth:`RedataGateway.lookup_cultural_resources`.
+
+    Returns:
+        The chosen resource's own ``attributes`` dict (the raw ArcGIS layer
+        fields, same shape the building record is flattened into), plus a
+        ``resource_type`` key; ``{}`` when the lookup returned no site-level
+        resource.
+    """
+    for resource_type in _SITE_RESOURCE_TYPES:
+        match = next((r for r in resources if r.get("resource_type") == resource_type), None)
+        if match is not None:
+            return {**(match.get("attributes") or {}), "resource_type": resource_type}
+    return {}
+
 #: A resource's real detail-fetch never runs on every page load - REData
 #: caches ``detail_payload``/``attachments`` on the resource itself once
 #: fetched, so this only needs to happen again after this TTL, exactly like
@@ -91,9 +127,12 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
         try:
             gateway = RedataGateway()
             resources = gateway.lookup_cultural_resources(lat, lng, radius_meters=_RADIUS_METERS)
+            district = site_resource_attributes(resources)
             building = next((r for r in resources if r.get("resource_type") == _RESOURCE_TYPE), None)
             if building is None:
-                LocationCache.set(pin.location, self.cache_source, {}, query_key=query_key)
+                # A location can sit inside a historic district without any
+                # surveyed building of its own - still worth caching.
+                LocationCache.set(pin.location, self.cache_source, {"district": district} if district else {}, query_key=query_key)
                 return
             resource_uuid = building.get("uuid")
             detail = gateway.fetch_cultural_resource_detail(resource_uuid) if resource_uuid else building
@@ -108,6 +147,12 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
         data = dict(detail.get("attributes") or {})
         data["resource_uuid"] = detail.get("uuid") or resource_uuid
         data["attachments"] = self._attachments_with_extracted_images(resource_uuid, detail.get("attachments") or [])
+        # Kept beside (not instead of) the flattened building fields: the same
+        # lookup already returned it, the name provider and media gallery both
+        # read the top level, and a parcel-scope pin needs the district record
+        # rather than whichever single building happened to match.
+        if district:
+            data["district"] = district
         LocationCache.set(pin.location, self.cache_source, data, query_key=query_key)
 
     @staticmethod
@@ -163,8 +208,19 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
 
         Field names match the live "Building USN Points" ArcGIS FeatureServer
         schema; see the module docstring.
+
+        A parcel-scope pin renders the *district* record from the same lookup
+        instead (see ``_SITE_RESOURCE_TYPES``), and nothing at all when CRIS
+        has no district here - "TOOL SHED (1937), Building Number 154" is a
+        true statement about one structure on a campus and a false one about
+        the campus, which is the whole reason scope exists.
         """
+        from urbanlens.dashboard.services.locations.site_scope import is_site_scope
+
         data = data or {}
+        if is_site_scope(pin):
+            data = data.get("district") or {}
+
         usn_name = data.get("USNName")
         if not usn_name:
             return None
@@ -248,12 +304,15 @@ class CrisBuildingEnrichmentSource(LocationCacheEnrichmentSource):
             resources = RedataGateway().lookup_cultural_resources(float(location.latitude), float(location.longitude), radius_meters=_RADIUS_METERS)
         except (PropertyRecordsUnavailableError, ValueError):
             return None, query_key
+        district = site_resource_attributes(resources)
         building = next((r for r in resources if r.get("resource_type") == _RESOURCE_TYPE), None)
         if building is None:
-            return None, query_key
+            return ({"district": district} if district else None), query_key
         data = dict(building.get("attributes") or {})
         data["resource_uuid"] = building.get("uuid")
         data["attachments"] = building.get("attachments") or []
+        if district:
+            data["district"] = district
         return data, query_key
 
 

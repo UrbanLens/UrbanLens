@@ -75,8 +75,16 @@ class OvertureBuildingAttributesPanelSource(InfoPanelSource):
         LocationCache.set(pin.location, self.cache_source, {**attributes, "nearby_places": nearby_places}, query_key=f"{lat:.5f},{lng:.5f}")
 
     def render_context(self, pin: Pin, data: dict) -> dict | None:
-        """Build the building-characteristics card from Overture's attribute + nearby-places lookup."""
-        if not data:
+        """Build the building-characteristics card from Overture's attribute + nearby-places lookup.
+
+        Suppressed for a parcel-scope pin: height, floor count, and roof shape
+        describe the one structure nearest the marker, which says nothing
+        useful about a site made of dozens of them (see
+        ``services.locations.site_scope``).
+        """
+        from urbanlens.dashboard.services.locations.site_scope import is_site_scope
+
+        if not data or is_site_scope(pin):
             return None
 
         chips = [data["subtype"].replace("_", " ").title()] if data.get("subtype") else []

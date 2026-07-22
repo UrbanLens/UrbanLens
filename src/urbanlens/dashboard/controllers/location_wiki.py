@@ -26,6 +26,7 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
 from urbanlens.dashboard.models.wiki_stat_vote import WikiStatField, WikiStatVote
+from urbanlens.dashboard.services.locations import site_scope
 from urbanlens.dashboard.services.text_limits import MAX_WIKI_DESCRIPTION_LENGTH, text_length_error
 from urbanlens.dashboard.services.undo.handlers.wiki import with_wiki_descendants
 from urbanlens.dashboard.services.undo.service import stash_for_undo
@@ -166,6 +167,7 @@ class LocationWikiView(LoginRequiredMixin, View):
                 "show_wiki_cover_photo": show_wiki_cover_photo,
                 "wiki_cover_candidates": wiki_cover_candidates,
                 "can_delete_wiki": wiki.can_be_deleted_by(profile),
+                "is_site_scope": site_scope.is_site_scope(wiki),
                 "wiki_comment_count": wiki.comments.count(),
                 "pin_count_display": pin_count_display,
                 "first_pinned": first_pinned,
@@ -210,7 +212,11 @@ class WikiBuildingAttributesPanelView(LoginRequiredMixin, View):
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
         from urbanlens.dashboard.plugins.builtin.redata_building_attributes import _render_building_attributes
 
-        location, _wiki, _profile = resolve_visible_wiki(request, location_slug)
+        location, wiki, _profile = resolve_visible_wiki(request, location_slug)
+        # A parcel-scope wiki describes grounds, not a structure - the buildings
+        # panel stands in for this card there (see services.locations.site_scope).
+        if site_scope.is_site_scope(wiki):
+            return HttpResponse(status=204)
         cached = LocationCache.get_fresh(location, "redata_building_attributes")
         if cached is None:
             return HttpResponse(status=204)
@@ -227,6 +233,44 @@ class WikiBuildingAttributesPanelView(LoginRequiredMixin, View):
                 "icon": "domain",
                 "title": "Building Attributes",
                 **context,
+            },
+        )
+
+
+class WikiParcelBuildingsPanelView(LoginRequiredMixin, View):
+    """GET: the wiki's shared list of every building standing on this property.
+
+    The community counterpart to ``PinController.parcel_buildings``, rendering
+    the same partial from the same location-scoped ``LocationCache`` row. Like
+    the Building Attributes card beside it, this never triggers a live fetch -
+    it shows whatever ``ParcelBuildingsEnrichmentSource``'s background cycle
+    (or a visiting pin's own panel fetch) already cached.
+
+    Rows never link anywhere: a child wiki is a marker on this page's own map,
+    not a page of its own.
+    """
+
+    def get(self, request: HttpRequest, location_slug: str) -> HttpResponse:
+        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+        from urbanlens.dashboard.plugins.builtin.parcel_buildings import building_rows
+
+        location, wiki, _profile = resolve_visible_wiki(request, location_slug)
+        cached = LocationCache.get_fresh(location, site_scope.PARCEL_BUILDINGS_CACHE_SOURCE)
+        if cached is None:
+            return HttpResponse(status=204)
+
+        buildings = (cached.data or {}).get("buildings") or []
+        if not buildings:
+            return HttpResponse(status=204)
+
+        return render(
+            request,
+            "dashboard/partials/pins/_parcel_buildings_panel.html",
+            {
+                "section_id": "location-parcel-buildings-panel",
+                "icon": "apartment",
+                "title": "Buildings on this Property",
+                "rows": building_rows(buildings, list(wiki.child_wikis.select_related("location"))),
             },
         )
 

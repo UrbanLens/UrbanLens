@@ -282,7 +282,17 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 return HttpResponse(f"Error: {e}", status=400)
 
             pin = result.pin
-            response = {"ok": True, "pin_slug": pin.slug or str(pin.uuid), "pin_uuid": str(pin.uuid)}
+            response = {
+                "ok": True,
+                "pin_slug": pin.slug or str(pin.uuid),
+                "pin_uuid": str(pin.uuid),
+                # Polled by the client after the pin lands: 204 for the ordinary
+                # single-building place, an "add pins for the buildings here?"
+                # prompt for a multi-building parcel. Never resolved inline -
+                # it needs a REData round-trip that pin creation must not wait
+                # on. See controllers.pin_buildings.PinBuildingOfferView.
+                "buildings_offer_url": reverse("pin.buildings.offer", kwargs={"pin_slug": pin.slug or str(pin.uuid)}),
+            }
             # When a coordinate falls inside multiple bounding boxes, tell the
             # client so it can offer the user a choice of which location to use.
             if len(result.all_locations) > 1:

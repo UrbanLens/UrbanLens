@@ -91,12 +91,14 @@ a sibling #map-annotations-config element, not from this partial).
         <div class="form-row">
             <label for="dp-type">Type</label>
             <select id="dp-type" name="pin_type">
+                <option value="">Auto (detect)</option>
                 {% for value, label in pin_type_choices %}
                 {% if value != "location" %}
                 <option value="{{ value }}">{{ label }}</option>
                 {% endif %}
                 {% endfor %}
             </select>
+            <p class="form-hint">Auto marks the pin as a building when it lands on a known building footprint.</p>
         </div>
         <div class="form-row">
             <label>Icon <span class="form-optional">(optional)</span></label>

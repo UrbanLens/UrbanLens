@@ -119,6 +119,48 @@ def generate_boundaries_for_location(location_id: int) -> bool:
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def classify_detail_marker(kind: str, marker_id: int) -> bool:
+    """Decide whether a newly placed child pin/wiki stands on a building.
+
+    Queued whenever a sub-marker is created or moved without the user
+    choosing a type themselves (see ``controllers.detail_pins``). Generating
+    the marker's own boundaries first is the whole point: the provider chain
+    only fills a location's ``BUILDING`` boundary when some provider has a
+    footprint polygon containing that exact point, which is precisely the
+    question being asked.
+
+    Runs on the default (prefork) queue rather than ``panel_fetch``: boundary
+    generation does real CPU-bound geometry work, and a campus import queues
+    one of these per building. See ``PanelSource.queue`` for the same reasoning.
+
+    Args:
+        kind: ``"pin"`` or ``"wiki"``.
+        marker_id: PK of the Pin or Wiki to classify.
+
+    Returns:
+        True when the marker was reclassified as a building.
+    """
+    from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.models.wiki.model import Wiki
+    from urbanlens.dashboard.services.locations.boundaries import boundary_generation_ran, generate_location_boundaries
+    from urbanlens.dashboard.services.locations.site_scope import classify_building_pin_type
+
+    model = Pin if kind == "pin" else Wiki
+    marker = model.objects.select_related("location").filter(pk=marker_id).first()
+    if marker is None:
+        logger.info("classify_detail_marker: %s %s no longer exists", kind, marker_id)
+        return False
+    if marker.pin_type_is_user_provided:
+        return False
+
+    location = marker.location
+    if location is not None and not boundary_generation_ran(location):
+        generate_location_boundaries(location)
+
+    return classify_building_pin_type(marker)
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def warm_saved_filter_cache(profile_id: int) -> int:
     """Precompute and cache a profile's saved-filter matching-pin uuid lists.
 

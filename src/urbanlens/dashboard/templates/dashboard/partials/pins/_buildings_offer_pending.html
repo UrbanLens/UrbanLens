@@ -1,0 +1,14 @@
+{% comment %}
+Invisible self-poller for the buildings offer: the parcel's building list is
+still being fetched, so there is nothing to show yet and nothing worth showing
+in its place (unlike a panel placeholder, this is an unsolicited prompt - a
+"Loading..." card for an offer the user may never be made would be noise).
+
+Replaces itself via outerHTML until the offer endpoint returns the real prompt
+or a 204. See controllers.pin_buildings.PinBuildingOfferView.
+{% endcomment %}
+<div hx-get="{{ poll_url }}?attempt={{ next_attempt }}"
+     hx-trigger="load delay:{{ poll_interval }}s"
+     hx-swap="outerHTML"
+     hx-timeout="25000"
+     hidden></div>

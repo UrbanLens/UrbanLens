@@ -13,7 +13,17 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   status, last-visited date, marker coordinates), separate from the shared **Location** record
   it points to (canonical name, address, coordinates, Google CID). See `docs/NOTES.md` for why
   this split exists.
-- Pin types: location, building, entrance, POI, danger, other
+- Pin types: location, parcel, building, entrance, POI, danger, other
+- **Parcel vs. building scope** — a pin (or wiki) with two or more child markers typed as
+  buildings describes the *grounds* those buildings sit on, not a structure, so its
+  building-level cards (CRIS Building USN Point, Building Attributes, Building Characteristics)
+  suppress themselves and a "Buildings on this Property" list stands in for them. Child markers
+  are typed automatically - the detail-pin dialog's Type select defaults to "Auto", and a marker
+  landing on a known building footprint becomes a building, while entrances and landmarks don't.
+  An explicitly chosen type always wins. See `docs/NOTES.md`.
+- **Add pins for the buildings here?** — dropping one pin on a multi-building parcel offers to
+  create a sub pin per building, named and numbered from REData (county GIS + NY SHPO CRIS) or
+  OpenStreetMap, mirrored as child wikis when the place already has a community wiki
 - Add pins by map click, coordinate entry, or place search/autocomplete; drag to reposition
 - Pin list view alongside the map (particularly useful while searching/filtering); "Add these pins to a list" bulk action from the pin list panel adds all currently-visible/filtered pins to a trip or saved collection at once
 - Bulk pin operations: multi-select, bulk edit (description, rating, labels, parent pin), bulk merge, bulk delete (with undo)
@@ -115,6 +125,11 @@ On-demand, cached lookups shown as panels on the pin detail page:
 - **Nominatim/OpenStreetMap** — reverse geocoding and place metadata (two panels: Nominatim structured data and Photon nearest-feature lookup)
 - **Regional Data** — US Census, Wildlife, Seismic, and EPA data loaded on demand per sub-tab
 - **Building Characteristics** — structured property/building data (appears for commercial and historic properties)
+- **Buildings on this Property** — every structure standing on the parcel, with names and building
+  numbers from REData (county GIS building-footprint layers plus NY SHPO CRIS), falling back to
+  OpenStreetMap footprints inside the property boundary. Each row links to the sub pin covering
+  that building, or offers to create the ones that have none (`plugins.builtin.parcel_buildings`).
+  Also shown on the wiki page
 - **News** — web news results scoped to the location (appears for notable locations)
 - **OpenWeatherMap** — weather forecast; appears on Trip detail pages (keyed to activity location) and on the pin detail page when weather data is available. Falls back to the free, keyless Open-Meteo API when OpenWeatherMap isn't configured or fails
 - **Sunrise/sunset & golden hour** — always via Open-Meteo (its 5-day/3-hour OpenWeatherMap counterpart has no sunrise/sunset field), shown alongside the pin detail page's weather panel; golden hour is approximated as the hour after sunrise / before sunset

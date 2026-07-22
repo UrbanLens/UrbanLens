@@ -148,8 +148,19 @@ class PanelFetchTests(TestCase):
         mock_set.assert_called_once_with(self.location, "cris_building_usn", {}, query_key="42.65,-73.75")
 
     def test_unconfigured_gateway_gracefully_persists_empty(self) -> None:
-        """RedataGateway() raises ValueError (not PropertyRecordsUnavailableError) when unconfigured."""
-        with patch("urbanlens.dashboard.models.cache.location_cache.LocationCache.set") as mock_set:
+        """RedataGateway() raises ValueError (not PropertyRecordsUnavailableError) when unconfigured.
+
+        The unconfigured state is simulated rather than left to the ambient
+        environment: an install that *does* configure REData would otherwise
+        reach the real API here instead of exercising this branch.
+        ``__post_init__`` is what raises that ValueError, and it's the only
+        patchable seam - RedataGateway is a slotted dataclass, so ``base_url``
+        itself is read-only on the class.
+        """
+        with (
+            patch.object(RedataGateway, "__post_init__", side_effect=ValueError("UL_REDATA_API_URL must be configured.")),
+            patch("urbanlens.dashboard.models.cache.location_cache.LocationCache.set") as mock_set,
+        ):
             CrisBuildingPanelSource().fetch(self.pin)
         mock_set.assert_called_once_with(self.location, "cris_building_usn", {}, query_key="42.65,-73.75")
 
@@ -207,11 +218,21 @@ class MediaItemsTests(SimpleTestCase):
         self.assertEqual(len(self.source.media_items(data)), 1)
 
 
+def _stub_pin(*, site_scope: bool = False):
+    """A duck-typed pin for render_context, which now consults parcel-vs-building scope.
+
+    ``is_site_scope`` short-circuits on the instance memo, so setting it
+    directly decides the answer without needing a database (these are
+    SimpleTestCases). The real scope rules are covered in test_site_scope.py.
+    """
+    return SimpleNamespace(_site_scope_cache=site_scope)
+
+
 class RenderContextTests(SimpleTestCase):
     def setUp(self) -> None:
         super().setUp()
         self.source = CrisBuildingPanelSource()
-        self.pin = None  # render_context doesn't use pin for this source.
+        self.pin = _stub_pin()
 
     def test_empty_data_yields_none(self) -> None:
         self.assertIsNone(self.source.render_context(self.pin, {}))
@@ -241,6 +262,97 @@ class RenderContextTests(SimpleTestCase):
         self.assertEqual(labels["Eligibility Status"], "Listed")
 
 
+class SiteScopeRenderTests(SimpleTestCase):
+    """A parcel-scope pin shows the district record, never a single building's.
+
+    "TOOL SHED (1937), Building Number 154" is a true statement about one
+    structure on a campus and a false one about the campus itself.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.source = CrisBuildingPanelSource()
+        self.building_data = {"USNName": "Tool Shed", "USNNum": "154", "EligibilityDesc": "Non-Contributing"}
+
+    def test_a_building_scope_pin_still_sees_the_building(self) -> None:
+        ctx = self.source.render_context(_stub_pin(site_scope=False), self.building_data)
+        assert ctx is not None
+        self.assertEqual(ctx["heading_name"], "Tool Shed")
+
+    def test_a_parcel_scope_pin_never_sees_the_building(self) -> None:
+        self.assertIsNone(self.source.render_context(_stub_pin(site_scope=True), self.building_data))
+
+    def test_a_parcel_scope_pin_sees_the_district_instead(self) -> None:
+        data = {**self.building_data, "district": {"USNName": "Hudson River State Hospital Historic District", "EligibilityDesc": "Listed"}}
+        ctx = self.source.render_context(_stub_pin(site_scope=True), data)
+        assert ctx is not None
+        self.assertEqual(ctx["heading_name"], "Hudson River State Hospital Historic District")
+
+    def test_media_items_are_unaffected_by_scope(self) -> None:
+        """Attachment photos are additive and source-labelled - a campus keeps them."""
+        data = {"resource_uuid": "res-1", "attachments": [{"id": 1, "kind": "PHOTO", "name": "Front"}]}
+        self.assertEqual(len(self.source.media_items(data)), 1)
+
+
+_DISTRICT_RESOURCE = {
+    "uuid": "res-9",
+    "resource_type": "district",
+    "attributes": {"USNName": "Hudson River State Hospital Historic District", "EligibilityDesc": "Listed"},
+}
+
+
+class DistrictPayloadTests(TestCase):
+    """fetch() caches any site-level resource alongside the building one."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.location = baker.make(Location, latitude="41.733150", longitude="-73.930370", google_place=None)
+        self.pin = baker.make(Pin, profile=_make_profile(), location=self.location)
+
+    def test_a_district_is_cached_beside_the_building(self) -> None:
+        with (
+            patch.object(RedataGateway, "__post_init__", lambda _self: None),
+            patch.object(RedataGateway, "lookup_cultural_resources", return_value=[_BUILDING_RESOURCE, _DISTRICT_RESOURCE]),
+            patch.object(RedataGateway, "fetch_cultural_resource_detail", return_value=_BUILDING_DETAIL),
+            patch.object(RedataGateway, "extract_cultural_resource_attachment", return_value={"extracted_images": []}),
+            patch("urbanlens.dashboard.models.cache.location_cache.LocationCache.set") as mock_set,
+        ):
+            CrisBuildingPanelSource().fetch(self.pin)
+        data = mock_set.call_args[0][2]
+        self.assertEqual(data["USNName"], "Old Mill", "the building record must stay at the top level")
+        self.assertEqual(data["district"]["USNName"], "Hudson River State Hospital Historic District")
+
+    def test_a_district_alone_is_still_cached(self) -> None:
+        with (
+            patch.object(RedataGateway, "__post_init__", lambda _self: None),
+            patch.object(RedataGateway, "lookup_cultural_resources", return_value=[_DISTRICT_RESOURCE]),
+            patch("urbanlens.dashboard.models.cache.location_cache.LocationCache.set") as mock_set,
+        ):
+            CrisBuildingPanelSource().fetch(self.pin)
+        self.assertEqual(mock_set.call_args[0][2]["district"]["USNName"], "Hudson River State Hospital Historic District")
+
+    def test_no_district_leaves_the_payload_shape_unchanged(self) -> None:
+        with (
+            patch.object(RedataGateway, "__post_init__", lambda _self: None),
+            patch.object(RedataGateway, "lookup_cultural_resources", return_value=[_BUILDING_RESOURCE]),
+            patch.object(RedataGateway, "fetch_cultural_resource_detail", return_value=_BUILDING_DETAIL),
+            patch.object(RedataGateway, "extract_cultural_resource_attachment", return_value={"extracted_images": []}),
+            patch("urbanlens.dashboard.models.cache.location_cache.LocationCache.set") as mock_set,
+        ):
+            CrisBuildingPanelSource().fetch(self.pin)
+        self.assertNotIn("district", mock_set.call_args[0][2])
+
+    def test_an_archaeological_buffer_is_not_treated_as_a_district(self) -> None:
+        """It marks a sensitivity zone, not a description of the property."""
+        with (
+            patch.object(RedataGateway, "__post_init__", lambda _self: None),
+            patch.object(RedataGateway, "lookup_cultural_resources", return_value=[{"uuid": "r2", "resource_type": "archaeological_buffer_area", "attributes": {"USNName": "Buffer"}}]),
+            patch("urbanlens.dashboard.models.cache.location_cache.LocationCache.set") as mock_set,
+        ):
+            CrisBuildingPanelSource().fetch(self.pin)
+        mock_set.assert_called_once_with(self.location, "cris_building_usn", {}, query_key="41.73315,-73.93037")
+
+
 class EnrichmentSourceTests(TestCase):
     def test_fetch_returns_flattened_payload_when_a_building_is_found(self) -> None:
         location = baker.make(Location, latitude="42.650000", longitude="-73.750000", google_place=None)
@@ -268,7 +380,8 @@ class EnrichmentSourceTests(TestCase):
     def test_fetch_returns_none_payload_when_unconfigured(self) -> None:
         location = baker.make(Location, latitude="42.650000", longitude="-73.750000", google_place=None)
 
-        payload, query_key = CrisBuildingEnrichmentSource().fetch(location)
+        with patch.object(RedataGateway, "__post_init__", side_effect=ValueError("UL_REDATA_API_URL must be configured.")):
+            payload, query_key = CrisBuildingEnrichmentSource().fetch(location)
 
         self.assertIsNone(payload)
         self.assertEqual(query_key, "42.650000,-73.750000")

@@ -257,8 +257,8 @@ function init(): void {
     })();
 
     // -- Detail pins layer ---------------------------------------------------
-    const detailPinColors: Record<string, string> = { building: "#6b7280", entrance: "#16a34a", poi: "#d97706", danger: "#dc2626", other: "#7c3aed", location: "#2563eb" };
-    const detailPinIcons: Record<string, string> = { building: "business", entrance: "door_front", poi: "star", danger: "warning", other: "info", location: "place" };
+    const detailPinColors: Record<string, string> = { parcel: "#0f766e", building: "#6b7280", entrance: "#16a34a", poi: "#d97706", danger: "#dc2626", other: "#7c3aed", location: "#2563eb" };
+    const detailPinIcons: Record<string, string> = { parcel: "crop_free", building: "business", entrance: "door_front", poi: "star", danger: "warning", other: "info", location: "place" };
     // Both sub-layers live inside detailsLayer so one toggle shows/hides everything.
     const detailPinLayer = L.layerGroup();
     const markupLayer = L.layerGroup();
@@ -1635,6 +1635,13 @@ function init(): void {
     let dpCreatedUuid: string | null = null;
     let dpAutoSaveTimer: ReturnType<typeof setTimeout> | undefined;
     let dpAutoSaveUuid: string | null = null;
+    // Whether the user picked a Type in this panel session. The select's first
+    // option is "Auto", meaning "work out whether this is a building from the
+    // footprint under it" (see services.locations.site_scope) - so pin_type is
+    // only ever submitted when it was deliberately chosen. Submitting it
+    // regardless would mark every autosave as a user decision and freeze (or
+    // overwrite) an automatic classification the server may have just made.
+    let dpTypeTouched = false;
 
     function currentDpIcon(): L.DivIcon {
         return detailIcon({
@@ -1654,10 +1661,9 @@ function init(): void {
     }
 
     function collectDpFormData(): Record<string, unknown> {
-        return {
+        const data: Record<string, unknown> = {
             name: (document.getElementById("dp-name") as HTMLInputElement).value.trim(),
             description: (document.getElementById("dp-description") as HTMLInputElement).value.trim(),
-            pin_type: (document.getElementById("dp-type") as HTMLInputElement).value,
             icon: (document.getElementById("dp-icon") as HTMLInputElement).value || null,
             color: (document.getElementById("dp-color") as HTMLInputElement).value || null,
             bg_color: (document.getElementById("dp-bg-color") as HTMLInputElement).value || null,
@@ -1667,6 +1673,8 @@ function init(): void {
             latitude: (document.getElementById("dp-lat") as HTMLInputElement).value,
             longitude: (document.getElementById("dp-lon") as HTMLInputElement).value,
         };
+        if (dpTypeTouched) data.pin_type = (document.getElementById("dp-type") as HTMLInputElement).value;
+        return data;
     }
 
     // Persists the new detail pin the instant it's first placed, so it survives
@@ -1747,6 +1755,7 @@ function init(): void {
 
     function resetDpForm(): void {
         (document.getElementById("detail-pin-form") as HTMLFormElement).reset();
+        dpTypeTouched = false;
         (document.getElementById("dp-lat") as HTMLInputElement).value = "";
         (document.getElementById("dp-lon") as HTMLInputElement).value = "";
         (document.getElementById("dp-icon") as HTMLInputElement).value = "";
@@ -1878,7 +1887,10 @@ function init(): void {
         document.getElementById("dp-border-opacity-val")!.textContent = this.value;
         updateDpMarkerIcon();
     });
-    document.getElementById("dp-type")?.addEventListener("change", updateDpMarkerIcon);
+    document.getElementById("dp-type")?.addEventListener("change", () => {
+        dpTypeTouched = true;
+        updateDpMarkerIcon();
+    });
     document.getElementById("dp-name")?.addEventListener("input", scheduleDpAutoSave);
     document.getElementById("dp-description")?.addEventListener("input", scheduleDpAutoSave);
 

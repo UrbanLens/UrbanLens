@@ -169,12 +169,19 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         ]
 
         from urbanlens.dashboard.services.debug_overlay import can_view_debug_overlay
+        from urbanlens.dashboard.services.locations.site_scope import is_site_scope
+
+        # Whether this pin covers a whole parcel/site rather than one building,
+        # in which case the building-level cards suppress themselves and the
+        # parcel's building list stands in for them. See services.locations.site_scope.
+        site_scope = is_site_scope(pin)
 
         # Page-wide "show sub pin details" toggle: when on (?children=1), the
         # map, photo gallery, and visit history all include content from this
         # pin's child pins (any depth). Off by default so the page stays
-        # simple for the majority of users who never nest pins.
-        include_children = request.GET.get("children") == "1"
+        # simple for the majority of users who never nest pins - except on a
+        # parcel pin, whose children *are* the content, so it defaults on there.
+        include_children = request.GET.get("children", "1" if site_scope else "0") == "1"
 
         from urbanlens.dashboard.models.pin_list.model import PinList
 
@@ -218,6 +225,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 "profile": profile,
                 "parent_pin": pin.parent_pin,
                 "has_child_pins": pin.detail_pins.exists(),
+                "is_site_scope": site_scope,
                 "include_children": include_children,
                 "can_view_debug_overlay": can_view_debug_overlay(request.user),
                 "google_maps_api_key": settings.google_unrestricted_api_key,
@@ -1682,6 +1690,58 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         from urbanlens.dashboard.services.ai.link_extraction import ai_extract_button_context
 
         return ai_extract_button_context(request.user, pin.profile, pin)
+
+    def parcel_buildings(self, request: HttpRequest, pin_slug: str):
+        """HTMX partial: every building standing on this pin's property.
+
+        The parcel-scope counterpart to the single-building cards (Building
+        Attributes, CRIS Building USN Point): rather than describing one
+        structure, this lists them all, links each to the child pin that
+        already covers it, and offers to create the ones that have none.
+
+        Bespoke markup (per-row links and create actions) keeps it out of the
+        generic ``panel_info`` dispatch, but it shares that path's whole
+        fetch/poll lifecycle via ``_pending_panel``.
+        """
+        from django.urls import reverse
+
+        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+        from urbanlens.dashboard.plugins.builtin.parcel_buildings import building_rows
+        from urbanlens.dashboard.services.external_data import get_panel_source
+        from urbanlens.dashboard.services.locations.site_scope import PARCEL_BUILDINGS_CACHE_SOURCE
+
+        try:
+            pin = Pin.objects.select_related("location", "profile").get(slug=pin_slug, profile__user=request.user)
+        except Pin.DoesNotExist:
+            return HttpResponse(status=404)
+
+        panel = get_panel_source(PARCEL_BUILDINGS_CACHE_SOURCE)
+        if panel is None or not panel.gate(pin):
+            return HttpResponse(status=204)
+
+        cached = LocationCache.get_fresh(pin.location, PARCEL_BUILDINGS_CACHE_SOURCE)
+        if cached is None:
+            return self._pending_panel(request, pin, PARCEL_BUILDINGS_CACHE_SOURCE)
+
+        buildings = (cached.data or {}).get("buildings") or []
+        if not buildings:
+            return HttpResponse(status=204)
+
+        children = list(pin.detail_pins.select_related("location"))
+        rows = building_rows(buildings, children, url_for=lambda child: reverse("pin.details", kwargs={"pin_slug": child.slug or child.uuid}))
+        return render(
+            request,
+            "dashboard/partials/pins/_parcel_buildings_panel.html",
+            {
+                "section_id": panel.section_id,
+                "icon": panel.icon,
+                "title": panel.title,
+                "pin": pin,
+                "rows": rows,
+                "unpinned_count": sum(1 for row in rows if not row["child_name"]),
+                "debug": self._debug_entry(request, PARCEL_BUILDINGS_CACHE_SOURCE, cached.query_key, from_cache=True, count=len(rows)),
+            },
+        )
 
     def panel_info(self, request: HttpRequest, pin_slug: str, panel_key: str):
         """

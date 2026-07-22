@@ -214,6 +214,21 @@
                 <div class="card__body wiki-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
             </div>
 
+            {# -- Buildings on this property (REData / OSM) --------------------- #}
+            <div hx-get="{% url 'location.wiki.buildings' location.slug %}"
+                 hx-trigger="load[!window.ulSectionCollapsed('wiki','parcel_buildings')], ul:unhide"
+                 hx-swap="outerHTML"
+                 id="location-parcel-buildings-panel"
+                 class="card wiki-card"
+                 data-ext-panel-204
+                 data-collapse-scope="wiki" data-collapse-section="parcel_buildings">
+                <div class="card-header">
+                    <i class="material-symbols-outlined">apartment</i>
+                    <span>Buildings on this Property</span>
+                </div>
+                <div class="card__body wiki-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
+            </div>
+
             {# -- Media (external providers + shared photos) -------------------- #}
             {# Combined Media section mirroring the pin detail page: one grid    #}
             {# with per-source tabs. External media (Wikimedia, Smithsonian, ... #}

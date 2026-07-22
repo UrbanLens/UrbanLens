@@ -574,8 +574,8 @@ function init() {
       document.addEventListener("pointerup", onPointerUp);
     });
   })();
-  const detailPinColors = { building: "#6b7280", entrance: "#16a34a", poi: "#d97706", danger: "#dc2626", other: "#7c3aed", location: "#2563eb" };
-  const detailPinIcons = { building: "business", entrance: "door_front", poi: "star", danger: "warning", other: "info", location: "place" };
+  const detailPinColors = { parcel: "#0f766e", building: "#6b7280", entrance: "#16a34a", poi: "#d97706", danger: "#dc2626", other: "#7c3aed", location: "#2563eb" };
+  const detailPinIcons = { parcel: "crop_free", building: "business", entrance: "door_front", poi: "star", danger: "warning", other: "info", location: "place" };
   const detailPinLayer = L.layerGroup();
   const markupLayer = L.layerGroup();
   const detailsLayer = L.layerGroup([detailPinLayer, markupLayer]).addTo(map);
@@ -1790,6 +1790,7 @@ function init() {
   let dpCreatedUuid = null;
   let dpAutoSaveTimer;
   let dpAutoSaveUuid = null;
+  let dpTypeTouched = false;
   function currentDpIcon() {
     return detailIcon({
       pin_type: document.getElementById("dp-type").value,
@@ -1806,10 +1807,9 @@ function init() {
     scheduleDpAutoSave();
   }
   function collectDpFormData() {
-    return {
+    const data = {
       name: document.getElementById("dp-name").value.trim(),
       description: document.getElementById("dp-description").value.trim(),
-      pin_type: document.getElementById("dp-type").value,
       icon: document.getElementById("dp-icon").value || null,
       color: document.getElementById("dp-color").value || null,
       bg_color: document.getElementById("dp-bg-color").value || null,
@@ -1819,6 +1819,9 @@ function init() {
       latitude: document.getElementById("dp-lat").value,
       longitude: document.getElementById("dp-lon").value
     };
+    if (dpTypeTouched)
+      data.pin_type = document.getElementById("dp-type").value;
+    return data;
   }
   function createDpImmediately(lat, lng) {
     const data = collectDpFormData();
@@ -1886,6 +1889,7 @@ function init() {
   }
   function resetDpForm() {
     document.getElementById("detail-pin-form").reset();
+    dpTypeTouched = false;
     document.getElementById("dp-lat").value = "";
     document.getElementById("dp-lon").value = "";
     document.getElementById("dp-icon").value = "";
@@ -1998,7 +2002,10 @@ function init() {
     document.getElementById("dp-border-opacity-val").textContent = this.value;
     updateDpMarkerIcon();
   });
-  document.getElementById("dp-type")?.addEventListener("change", updateDpMarkerIcon);
+  document.getElementById("dp-type")?.addEventListener("change", () => {
+    dpTypeTouched = true;
+    updateDpMarkerIcon();
+  });
   document.getElementById("dp-name")?.addEventListener("input", scheduleDpAutoSave);
   document.getElementById("dp-description")?.addEventListener("input", scheduleDpAutoSave);
   document.getElementById("detail-pin-form")?.addEventListener("submit", (e) => {

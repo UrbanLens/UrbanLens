@@ -51,7 +51,18 @@ def _normalize_for_dedup(text: str) -> str:
 
 
 class PinType(TextChoices):
+    """What a pin/wiki marker physically represents.
+
+    ``PARCEL`` and ``BUILDING`` are the two that drive scope: a parcel is the
+    grounds of a place (a campus, a lot) and is described by the buildings
+    nested under it, while a building is a single structure described by its
+    own building-level records. ``LOCATION_MARKER`` is the "unspecified"
+    default - a pin left on it is classified automatically (see
+    ``services.locations.site_scope``).
+    """
+
     LOCATION_MARKER = "location", "Location"
+    PARCEL = "parcel", "Property / Parcel"
     BUILDING = "building", "Building"
     ENTRANCE = "entrance", "Entrance"
     POINT_OF_INTEREST = "poi", "Point of Interest"
@@ -94,6 +105,17 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
     unlogged_visit_dismissed = BooleanField(default=False)
     custom_icon = ImageField(upload_to="pin_custom_icons/", null=True, blank=True)
     pin_type = CharField(choices=PinType.choices, default=PinType.LOCATION_MARKER, max_length=30)
+    # True when ``pin_type`` was explicitly chosen by the user, exactly like
+    # name_is_user_provided guards ``name``. Automatic classification (see
+    # services.locations.site_scope.classify_building_pin_type) only ever
+    # writes pin_type while this is False.
+    pin_type_is_user_provided = BooleanField(
+        default=False,
+        help_text="Prevents automatic building/parcel classification from overwriting a user-chosen pin type.",
+    )
+    # Set when the owner declines the "add pins for the buildings here?" offer
+    # for this pin, so a multi-building parcel stops re-asking on every visit.
+    buildings_offer_dismissed = BooleanField(default=False)
 
     # Direct hex color override for this pin (e.g. "#F44336"). Used by detail pins
     # when the user explicitly picks a color in the dialog.
@@ -195,6 +217,12 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
         wiki_id: int | None
 
     objects: PinManager = PinManager()  # pyright: ignore[reportIncompatibleVariableOverride]
+
+    #: Memoized parcel-vs-building scope for this instance, filled on first ask
+    #: (several independent panels ask during one page render, and the answer
+    #: can't change mid-request). Not a field - see
+    #: ``services.locations.site_scope.is_site_scope``.
+    _site_scope_cache: bool | None = None
 
     # ------------------------------------------------------------------
     # Name/alias invariant

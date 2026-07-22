@@ -289,6 +289,88 @@ class OverpassGateway(Gateway, BoundaryProvider):
         """Return OSM ways/relations likely to describe a real place boundary near a coordinate."""
         return self.nearby_features(latitude, longitude, radius_meters=radius_meters, include_nodes=False, include_geometry=True)
 
+    def buildings_within(self, polygon: Polygon | MultiPolygon) -> list[dict[str, Any]]:
+        """Return every OSM building whose footprint falls inside a polygon.
+
+        The open-data counterpart to REData's per-parcel building list: given a
+        property/parcel boundary, this answers "what structures stand on it?"
+        for jurisdictions REData has no county GIS coverage for.
+
+        Not routed through :meth:`nearby_features` on purpose - that helper
+        clamps its search radius to 250 m (see ``_nearby_features_query``),
+        which is smaller than the sites this is for. Overpass's own ``poly:``
+        filter takes the real boundary instead, so a 40-acre campus is queried
+        exactly, in one request.
+
+        Args:
+            polygon: The property boundary to search inside (WGS-84). A
+                MultiPolygon is queried by its largest ring.
+
+        Returns:
+            One dict per building - ``{"name", "latitude", "longitude",
+            "osm_id", "source"}`` - matching the record shape
+            ``plugins.builtin.parcel_buildings`` caches. Empty when the
+            polygon is unusable or Overpass found nothing.
+        """
+        ring = self._largest_exterior_ring(polygon)
+        if ring is None:
+            return []
+
+        # Overpass wants "lat lon lat lon ..." - the opposite order from GeoJSON.
+        poly_clause = " ".join(f"{lat:.7f} {lon:.7f}" for lon, lat in ring)
+        query = f"""
+[out:json][timeout:{self.ql_timeout}];
+(
+  way(poly:"{poly_clause}")["building"];
+  relation(poly:"{poly_clause}")["type"="multipolygon"]["building"];
+);
+out center tags;
+""".strip()
+
+        buildings: list[dict[str, Any]] = []
+        for element in self.elements_for_query(query):
+            center = element.get("center") or {}
+            lat, lon = center.get("lat"), center.get("lon")
+            if lat is None or lon is None:
+                continue
+            raw_tags = element.get("tags")
+            tags: dict[str, Any] = raw_tags if isinstance(raw_tags, dict) else {}
+            buildings.append(
+                {
+                    "name": tags.get("name") or "",
+                    "building_number": tags.get("ref") or tags.get("addr:housenumber") or "",
+                    "latitude": float(lat),
+                    "longitude": float(lon),
+                    "osm_id": element.get("id"),
+                    "source": "osm",
+                },
+            )
+        return buildings
+
+    @staticmethod
+    def _largest_exterior_ring(polygon: Polygon | MultiPolygon | None) -> list[tuple[float, float]] | None:
+        """The exterior ring of the largest part of a polygonal geometry, as (lon, lat) pairs.
+
+        Overpass's ``poly:`` filter accepts a single ring, so a MultiPolygon
+        (the shape every stored ``Boundary`` uses) has to be reduced to one -
+        its largest part is the parcel proper, any others being outbuildings
+        or slivers.
+
+        Args:
+            polygon: The geometry to reduce; None is tolerated.
+
+        Returns:
+            The ring's coordinates, or None when there is no usable ring.
+        """
+        if polygon is None:
+            return None
+        largest: GEOSGeometry | None = polygon
+        if isinstance(polygon, MultiPolygon):
+            largest = max(polygon, key=lambda part: part.area) if len(polygon) else None
+        if not isinstance(largest, Polygon) or largest.empty:
+            return None
+        return [(float(x), float(y)) for x, y in largest.exterior_ring.coords]
+
     def element(self, element_type: OsmElementType, osm_id: int, *, include_geometry: bool = True) -> dict[str, Any] | None:
         """Return a single OSM node, way, or relation by id via Overpass."""
         out_clause = "out tags geom;" if include_geometry else "out tags center;"

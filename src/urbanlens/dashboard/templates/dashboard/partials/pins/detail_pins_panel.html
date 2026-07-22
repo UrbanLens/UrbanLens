@@ -1,7 +1,7 @@
 <div id="detail-pins-panel" class="detail-pins-panel card">
     <div class="card-header">
-        <i class="material-symbols-outlined">push_pin</i>
-        <span>Detail Pins</span>
+        <i class="material-symbols-outlined">{% if is_site_scope %}apartment{% else %}push_pin{% endif %}</i>
+        <span>{% if is_site_scope %}Buildings &amp; Detail Pins{% else %}Detail Pins{% endif %}</span>
         <button type="button" class="btn btn--sm btn--primary" onclick="openAddPinDialog()">
             <i class="material-symbols-outlined">add</i>
         </button>

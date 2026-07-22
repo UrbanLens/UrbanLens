@@ -71,6 +71,13 @@ class Wiki(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addre
     date_last_active = DateField(null=True, blank=True)
 
     pin_type = CharField(choices=PinType.choices, default=PinType.LOCATION_MARKER, max_length=30)
+    # True when ``pin_type`` was explicitly chosen by an editor - mirrors
+    # Pin.pin_type_is_user_provided, and gates the same automatic
+    # building/parcel classification (see services.locations.site_scope).
+    pin_type_is_user_provided = BooleanField(
+        default=False,
+        help_text="Prevents automatic building/parcel classification from overwriting an editor-chosen type.",
+    )
 
     # Direct hex color override for this wiki's map marker (e.g. "#F44336").
     # Only meaningful for a child wiki (see parent_wiki below).
@@ -144,6 +151,10 @@ class Wiki(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addre
         markup_items: DjangoManager[PinMarkup]
 
     objects = WikiManager()
+
+    #: Memoized parcel-vs-building scope for this instance - mirrors
+    #: ``Pin._site_scope_cache``; see ``services.locations.site_scope.is_site_scope``.
+    _site_scope_cache: bool | None = None
 
     # ------------------------------------------------------------------
     # Name/alias invariant

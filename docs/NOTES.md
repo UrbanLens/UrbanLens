@@ -97,6 +97,43 @@ TODO NOTE From Jess: I could be mistaken, but I think there shouldn't be an exce
 for *display* only and is deliberately excluded from matching logic — otherwise a user could
 inflate their boundary to claim overlap with other pins/areas.
 
+## Parcel vs. building scope — counted from children, never from the parcel data
+
+A Pin (and its Wiki) has always doubled as both *the parcel* and *the building*, because for an
+ordinary place those are the same thing. On a campus they are not: the pin at
+`41.73315, -73.93037` was rendering "TOOL SHED (1937) — NON-CONTRIBUTING, Building Number 154"
+from NY SHPO's CRIS inventory, because `CrisBuildingPanelSource` took the *first*
+`resource_type == "building"` match inside a 200 m radius. `services/locations/site_scope.py`
+is the one place that decides which a marker is.
+
+Two rules, in order. **An explicit choice wins**: `pin_type_is_user_provided` marks a type the
+user actually picked, mirroring how `name_is_user_provided` guards `Pin.name`. **Otherwise, count
+the children typed as buildings** — two or more (`MULTI_BUILDING_THRESHOLD`) makes the parent a
+parcel.
+
+What is deliberately *not* a rule: "REData says this parcel has several buildings." That signal is
+real, and it drives the "would you like to add pins for the buildings here?" offer — but on its own
+it would silently reclassify a house with a detached garage, so it never flips scope by itself. The
+user accepting the offer creates the child pins, and *those* flip it.
+
+Consequences worth knowing:
+
+- **Suppression is render-side only.** The CRIS/REData/Overture cache rows are per-`Location` and
+  shared by every user pinning that place, whose own hierarchies differ — so `fetch()` caches the
+  same payload regardless of scope and only `render_context()` branches. CRIS additionally caches
+  any historic-district record under a `district` key, which a parcel-scope pin renders *instead
+  of* a building.
+- **CRIS media items are not suppressed.** Attachment photos are additive and clearly
+  source-labelled; dropping a campus's entire CRIS photo set would be a regression.
+- **Child markers classify themselves.** The detail-pin dialog's Type select defaults to "Auto"
+  (a blank submission). `classify_detail_marker` generates the marker's own boundaries first, and
+  a location with a generated `BoundaryType.BUILDING` polygon *is* on a building — the provider
+  chain only fills that row when some provider has a footprint containing that exact point. A
+  marker that isn't on one keeps its provisional Point of Interest type, which is right for the
+  entrances and hazards users also drop.
+- **The dialog only submits `pin_type` when it was touched.** Otherwise every autosave (a colour
+  tweak, a drag) would mark an automatic classification as a user decision and freeze it.
+
 ## Plugin system rules
 
 - Plugin classes (`dashboard/plugins/builtin/*.py`) are instantiated during `AppConfig.ready()`.

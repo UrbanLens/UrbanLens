@@ -87,8 +87,14 @@ def _nearest_building(buildings: list[dict[str, Any]], latitude: float, longitud
     return min(buildings, key=_distance)
 
 
-def _fetch_building_payload(latitude: float, longitude: float) -> dict[str, Any]:
+def _fetch_building_payload(latitude: float, longitude: float, *, location: Location | None = None) -> dict[str, Any]:
     """Resolve the parcel at a coordinate and return its nearest building's record.
+
+    Reuses ``plugins.builtin.parcel_buildings``' cached list for this parcel
+    when one exists - that plugin performs the identical
+    ``lookup_parcel_uuid``/``lookup_buildings`` pair, and on a campus the two
+    running independently would double REData's per-pin cost for no new data.
+    Only a cold cache falls through to fetching directly.
 
     Tolerates any failure to reach/resolve REData the same way
     ``plugins.builtin.loopnet``/``cris_buildings`` do (broad catch, cache an
@@ -100,12 +106,19 @@ def _fetch_building_payload(latitude: float, longitude: float) -> dict[str, Any]
     Args:
         latitude: WGS-84 latitude.
         longitude: WGS-84 longitude.
+        location: The Location whose cached parcel-buildings list may already
+            answer this, when the caller has one.
 
     Returns:
         The nearest ``BuildingRecord`` dict, or ``{}`` when REData has no
         parcel or no buildings at this coordinate.
     """
     from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError, RedataGateway
+    from urbanlens.dashboard.services.locations.site_scope import parcel_buildings
+
+    cached_buildings = parcel_buildings(location)
+    if cached_buildings is not None:
+        return _nearest_building(cached_buildings, latitude, longitude) or {}
 
     try:
         gateway = RedataGateway()
@@ -167,11 +180,22 @@ class RedataBuildingAttributesPanelSource(CoordinateGatedInfoPanelSource):
 
         lat = float(pin.effective_latitude or 0)
         lng = float(pin.effective_longitude or 0)
-        payload = _fetch_building_payload(lat, lng)
+        payload = _fetch_building_payload(lat, lng, location=pin.location)
         LocationCache.set(pin.location, self.cache_source, payload, query_key=f"{lat:.5f},{lng:.5f}")
 
     def render_context(self, pin: Pin, data: dict) -> dict | None:
-        """Render the chosen building's attributes, or nothing (204)."""
+        """Render the chosen building's attributes, or nothing (204).
+
+        A parcel-scope pin gets nothing: the nearest building to a campus's
+        own marker is one arbitrary structure out of dozens, and presenting
+        its number and year-built as the property's own is exactly the
+        confusion parcel scope exists to remove. Those pins show the full
+        building list instead (see ``plugins.builtin.parcel_buildings``).
+        """
+        from urbanlens.dashboard.services.locations.site_scope import is_site_scope
+
+        if is_site_scope(pin):
+            return None
         return _render_building_attributes(data or {})
 
 
@@ -188,7 +212,7 @@ class RedataBuildingAttributesEnrichmentSource(LocationCacheEnrichmentSource):
         """Resolve the location's nearest building and return it for caching."""
         lat = float(location.latitude or 0)
         lng = float(location.longitude or 0)
-        payload = _fetch_building_payload(lat, lng)
+        payload = _fetch_building_payload(lat, lng, location=location)
         return payload, f"{lat:.5f},{lng:.5f}"
 
 

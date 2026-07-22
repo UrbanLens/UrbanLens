@@ -461,3 +461,28 @@ genuine untitled photographs, so this was accepted rather than tightened.
 
 **Suggested next step**: if it proves noisy in practice, rank title matches above subject-only
 matches rather than excluding the latter.
+
+---
+
+## `schedule_panel_fetch` 500s the request when the Celery broker is unreachable (found 2026-07-22)
+
+`services/external_data.py:schedule_panel_fetch` calls `fetch_panel_source.apply_async(...)`
+unguarded. When the broker/result backend is down, Celery raises
+`RuntimeError: Retry limit exceeded while trying to reconnect to the Celery result store backend`
+*inside the request*, so the panel endpoint returns a 500 instead of a quiet 204 or a placeholder.
+Every `InfoPanelSource` panel shares this path, so a broker outage turns the whole pin detail page's
+external-data column into a wall of 500s rather than degrading to "no data yet".
+
+Surfaced while testing the new buildings-offer endpoint (`controllers/pin_buildings.py`), which
+reuses the same helper - not caused by it. Pre-existing.
+
+**Why not fixed**: the codebase already has `services.celery.safely_enqueue_task` for exactly this
+(it swallows broker failures), and switching `schedule_panel_fetch` to it is a one-line change - but
+it changes the failure semantics of every panel at once (a swallowed enqueue means the single-flight
+cache marker is set with no task behind it, so the panel would poll to exhaustion instead of
+erroring), which deserves its own change with its own test coverage rather than riding along with an
+unrelated feature.
+
+**Suggested next step**: route the dispatch through `safely_enqueue_task` and, on failure, delete
+the just-added `source.flight_key(pin)` marker so the next poll retries the enqueue rather than
+waiting out `FLIGHT_TTL_SECONDS` behind a task that was never queued.

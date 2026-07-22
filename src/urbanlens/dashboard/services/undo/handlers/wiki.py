@@ -15,6 +15,7 @@ _RESTORABLE_FIELDS = (
     "date_abandoned",
     "date_last_active",
     "pin_type",
+    "pin_type_is_user_provided",
     "color",
     "icon",
     "detail_bg_color",

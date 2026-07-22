@@ -44,6 +44,7 @@ from urbanlens.dashboard.controllers import (
     organize,
     photos,
     pin,
+    pin_buildings,
     pin_bulk,
     pin_edit,
     pin_lists,
@@ -578,6 +579,26 @@ urlpatterns = [
                                 name="pin.panel",
                             ),
                             path(
+                                "<slug:pin_slug>/buildings/",
+                                pin.PinController.as_view({"get": "parcel_buildings"}),
+                                name="pin.parcel_buildings",
+                            ),
+                            path(
+                                "<slug:pin_slug>/buildings/offer/",
+                                pin_buildings.PinBuildingOfferView.as_view(),
+                                name="pin.buildings.offer",
+                            ),
+                            path(
+                                "<slug:pin_slug>/buildings/dismiss/",
+                                pin_buildings.PinBuildingDismissView.as_view(),
+                                name="pin.buildings.dismiss",
+                            ),
+                            path(
+                                "<slug:pin_slug>/buildings/import/",
+                                pin_buildings.PinBuildingImportView.as_view(),
+                                name="pin.buildings.import",
+                            ),
+                            path(
                                 "<slug:pin_slug>/usgs-topo/",
                                 pin.PinController.as_view({"get": "usgs_topo_info"}),
                                 name="pin.usgs_topo",
@@ -1089,6 +1110,11 @@ urlpatterns = [
                     "<slug:location_slug>/wiki/building-attributes/",
                     location_wiki.WikiBuildingAttributesPanelView.as_view(),
                     name="location.wiki.building_attributes",
+                ),
+                path(
+                    "<slug:location_slug>/wiki/buildings/",
+                    location_wiki.WikiParcelBuildingsPanelView.as_view(),
+                    name="location.wiki.buildings",
                 ),
                 path(
                     "<slug:location_slug>/wiki/ownership/",

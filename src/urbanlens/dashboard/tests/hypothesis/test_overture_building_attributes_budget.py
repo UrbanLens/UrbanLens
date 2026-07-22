@@ -92,3 +92,29 @@ class OvertureBuildingAttributesBudgetTests(TestCase):
         assert cached is not None
         self.assertEqual(cached.data["subtype"], "commercial")
         self.assertEqual(cached.data["nearby_places"], [])
+
+
+class OvertureBuildingAttributesScopeTests(TestCase):
+    """Building characteristics describe one structure - not a whole parcel."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.source = OvertureBuildingAttributesPanelSource()
+        self.pin: Pin = baker.make_recipe(
+            "dashboard.pin",
+            profile=baker.make(User).profile,
+            location=baker.make("dashboard.Location", latitude=40.1, longitude=-74.1),
+        )
+        self.data = {"subtype": "commercial", "height_m": 12.0, "num_floors": 3}
+
+    def test_a_building_scope_pin_renders_its_characteristics(self) -> None:
+        ctx = self.source.render_context(self.pin, self.data)
+        assert ctx is not None
+        self.assertEqual(ctx["chips"], ["Commercial"])
+
+    def test_a_parcel_scope_pin_renders_nothing(self) -> None:
+        from urbanlens.dashboard.models.pin.model import PinType
+
+        self.pin.pin_type = PinType.PARCEL
+        self.pin.pin_type_is_user_provided = True
+        self.assertIsNone(self.source.render_context(self.pin, self.data))

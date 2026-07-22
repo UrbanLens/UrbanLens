@@ -78,8 +78,17 @@ class FetchBuildingPayloadTests(TestCase):
             self.assertEqual(_fetch_building_payload(42.65, -73.75), {})
 
     def test_unconfigured_gateway_gracefully_returns_empty_dict(self) -> None:
-        """RedataGateway() raises ValueError (not PropertyRecordsUnavailableError) when unconfigured."""
-        self.assertEqual(_fetch_building_payload(42.65, -73.75), {})
+        """RedataGateway() raises ValueError (not PropertyRecordsUnavailableError) when unconfigured.
+
+        The unconfigured state is simulated rather than left to the ambient
+        environment: an install that *does* configure REData (any dev machine
+        with UL_REDATA_API_URL set) would otherwise reach the real API here
+        instead of exercising this branch. ``__post_init__`` is what raises
+        that ValueError, and it's the only patchable seam - RedataGateway is a
+        slotted dataclass, so ``base_url`` itself is read-only on the class.
+        """
+        with patch.object(RedataGateway, "__post_init__", side_effect=ValueError("UL_REDATA_API_URL must be configured.")):
+            self.assertEqual(_fetch_building_payload(42.65, -73.75), {})
 
 
 class RenderBuildingAttributesTests(SimpleTestCase):
@@ -138,6 +147,30 @@ class PanelFetchTests(TestCase):
     def test_render_context_empty_data_yields_none(self) -> None:
         self.assertIsNone(RedataBuildingAttributesPanelSource().render_context(self.pin, {}))
 
+    def test_render_context_is_suppressed_for_a_parcel_scope_pin(self) -> None:
+        """The building nearest a campus marker is one arbitrary structure of dozens."""
+        from urbanlens.dashboard.models.pin.model import PinType
+
+        self.pin.pin_type = PinType.PARCEL
+        self.pin.pin_type_is_user_provided = True
+        self.assertIsNone(RedataBuildingAttributesPanelSource().render_context(self.pin, _NEAR_BUILDING))
+
+    def test_fetch_reuses_a_cached_parcel_building_list(self) -> None:
+        """The parcel_buildings plugin already made this exact REData call."""
+        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+        from urbanlens.dashboard.services.locations.site_scope import PARCEL_BUILDINGS_CACHE_SOURCE
+
+        LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": [_FAR_BUILDING, _NEAR_BUILDING]})
+        with (
+            patch.object(RedataGateway, "__post_init__", lambda _self: None),
+            patch.object(RedataGateway, "lookup_parcel_uuid") as mock_lookup,
+        ):
+            RedataBuildingAttributesPanelSource().fetch(self.pin)
+        mock_lookup.assert_not_called()
+        cached = LocationCache.get_fresh(self.location, "redata_building_attributes")
+        assert cached is not None
+        self.assertEqual(cached.data, _NEAR_BUILDING)
+
 
 class EnrichmentSourceTests(TestCase):
     def test_fetch_returns_the_nearest_building_and_query_key(self) -> None:
@@ -153,7 +186,8 @@ class EnrichmentSourceTests(TestCase):
 
     def test_fetch_returns_empty_dict_when_unconfigured(self) -> None:
         location = baker.make(Location, latitude="42.650000", longitude="-73.750000", google_place=None)
-        payload, _query_key = RedataBuildingAttributesEnrichmentSource().fetch(location)
+        with patch.object(RedataGateway, "__post_init__", side_effect=ValueError("UL_REDATA_API_URL must be configured.")):
+            payload, _query_key = RedataBuildingAttributesEnrichmentSource().fetch(location)
         self.assertEqual(payload, {})
 
 

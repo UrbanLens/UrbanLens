@@ -137,6 +137,17 @@
 <div class="pin-detail-grid">
     <div id="pin-detail-onboarding" class="page-onboarding" aria-live="polite"></div>
 
+    {# Offers to create a sub pin per building when this property has several #}
+    {# and none of them are pinned yet - see controllers.pin_buildings. 204s   #}
+    {# (and removes itself) in every other case. #}
+    {% if not parent_pin %}
+    <div id="buildings-offer-slot"
+         hx-get="{% url 'pin.buildings.offer' pin.slug %}"
+         hx-trigger="load"
+         hx-swap="outerHTML"
+         hx-timeout="25000"></div>
+    {% endif %}
+
     {% if parent_pin %}
     {# -- Child pin: obvious way back up to the parent -------------------- #}
     <a class="pin-parent-breadcrumb" href="{% url 'pin.details' parent_pin.slug|default:parent_pin.uuid %}"
@@ -544,6 +555,20 @@
             <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
         </div>
 
+        {# Every building on the parcel - see plugins.builtin.parcel_buildings. #}
+        <div id="parcel-buildings-section" class="card card--secondary" data-ext-panel-204
+            hx-get="{% url 'pin.parcel_buildings' pin.slug %}"
+            hx-trigger="load[!window.ulSectionCollapsed('pin','parcel_buildings')], ul:unhide, pinDetailPinsChanged from:body"
+            hx-swap="outerHTML"
+            hx-timeout="25000"
+            data-collapse-scope="pin" data-collapse-section="parcel_buildings">
+            <div class="card-header">
+                <i class="material-symbols-outlined">apartment</i>
+                <h3>Buildings on this Property</h3>
+            </div>
+            <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
+        </div>
+
         {% for panel in simple_info_panels %}
         <div id="{{ panel.section_id }}" class="card card--secondary" data-ext-panel-204
             hx-get="{% url 'pin.panel' pin.slug panel.key %}"
@@ -732,8 +757,11 @@
 <div class="pin-actions-fab" id="pin-actions-fab">
     <div class="pin-actions-menu" id="pin-actions-menu" hidden>
         {% if has_child_pins %}
+        {# Both directions are explicit: a parcel pin defaults the toggle ON      #}
+        {# (its children are the content), so a bare URL would no longer mean     #}
+        {# "off" and the toggle could never be turned off. See PinController.details. #}
         <a class="pin-actions-item{% if include_children %} is-active{% endif %}"
-           href="{% url 'pin.details' pin.slug %}{% if not include_children %}?children=1{% endif %}"
+           href="{% url 'pin.details' pin.slug %}?children={% if include_children %}0{% else %}1{% endif %}"
            title="Show everything from this pin's child pins on this page - map details, photos, and visit history">
             <i class="material-symbols-outlined">{% if include_children %}toggle_on{% else %}toggle_off{% endif %}</i>
             <span>Sub pin details</span>
