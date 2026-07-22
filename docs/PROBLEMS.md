@@ -486,3 +486,47 @@ unrelated feature.
 **Suggested next step**: route the dispatch through `safely_enqueue_task` and, on failure, delete
 the just-added `source.flight_key(pin)` marker so the next poll retries the enqueue rather than
 waiting out `FLIGHT_TTL_SECONDS` behind a task that was never queued.
+
+---
+
+## Pin-share notification still says "sub pin" after the Child Pins rename (found 2026-07-22)
+
+`test_child_pins.py::PinShareBundleTests::test_notification_mentions_sub_pins` asserts the bundled
+share notification contains `"2 child pins"`, but `controllers/pin_sharing.py` builds
+`f" It comes with {bundled_count} sub pin{'s' ...}"` - so the assertion can never pass. Confirmed
+pre-existing and unrelated to the parcel-scope work: `git log -L` shows the message string last
+changed in `b9b39354` (2026-07-11) and the test's expected wording in `d5413907` (2026-07-20,
+"Refactor 'Sub Pins' terminology to 'Child Pins' across the codebase") - the refactor updated the
+test but not the string it tests.
+
+**Why not fixed**: the rename is visibly half-done across user-facing copy (the pin detail page's
+floating menu still reads "Sub pin details", the map dialog still says "Add Detail Pin"), so picking
+a wording for this one notification in isolation is a product decision, not a bug fix - and it sits
+in a feature area unrelated to the change that surfaced it.
+
+**Suggested next step**: settle on one term and sweep the remaining user-facing strings together
+(notification message, FAB toggle label, detail-pin dialog title/hints), updating the tests that
+encode the old wording alongside them.
+
+---
+
+## `test_profile_photo_strip.py`'s `_location()` helper always collides (found 2026-07-22)
+
+`test_own_profile_page_shows_wiki_attached_photo_not_pin_only_one` calls the module's `_location()`
+helper twice, and that helper hardcodes `latitude=40.0, longitude=-74.0`. `Location` has a unique
+constraint on `(latitude, longitude)`, so the second call raises
+`IntegrityError: duplicate key value violates unique constraint
+"dashboard_locations_latitude_longitude_fdb6594d_uniq"` - deterministically, every run.
+
+Confirmed pre-existing and unrelated to the parcel-scope work: the file is untouched by that change,
+the test dates from `590d2a54` (2026-07-20, "Add profile page photo strip with privacy-scoped
+visibility"), and it fails identically with all parcel-scope changes stashed.
+
+**Why not fixed**: it is a one-line fix (give `_location()` a per-call coordinate offset, as
+`test_child_pins.py`'s own `_make_pin` already does), but it sits in an unrelated feature's test
+file, and the sibling tests in that class may be relying on the shared-coordinate behaviour in ways
+worth checking before changing the helper for all of them.
+
+**Suggested next step**: make `_location()` mint unique coordinates per call (module-level counter,
+mirroring `_make_pin` in `test_child_pins.py`), then re-run the whole file to confirm no sibling test
+depended on the collision.

@@ -12,7 +12,7 @@ exercise read the LocationCache directly.
 
 from __future__ import annotations
 
-from hypothesis import given, settings
+from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 from model_bakery import baker
 
@@ -87,7 +87,11 @@ class MetersBetweenTests(SimpleTestCase):
         lat_b=st.floats(min_value=-60, max_value=60, allow_nan=False),
         lng_b=st.floats(min_value=-179, max_value=179, allow_nan=False),
     )
-    @settings(max_examples=200)
+    # too_slow fires on Hypothesis's own first-draw warmup in a long test
+    # session, not on anything this strategy does - four plain float draws and
+    # a dozen arithmetic operations. Same suppression as the other property
+    # tests in this suite.
+    @settings(max_examples=200, suppress_health_check=[HealthCheck.too_slow])
     def test_is_symmetric_and_non_negative(self, lat_a: float, lng_a: float, lat_b: float, lng_b: float) -> None:
         forward = meters_between(lat_a, lng_a, lat_b, lng_b)
         self.assertGreaterEqual(forward, 0.0)
