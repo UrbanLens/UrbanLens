@@ -591,6 +591,75 @@ class PinShareBundleTests(TestCase):
         self.assertFalse(Pin.objects.filter(profile=self.recipient).exists())
 
 
+class PinShareSelectedChildrenTests(TestCase):
+    """Sharing a specific subset of sub pins - the detail page's multi-select
+    toolbar's "Share" action - rather than the "share every descendant" checkbox.
+    """
+
+    def setUp(self) -> None:
+        self.sender_user = baker.make(User)
+        self.sender = self.sender_user.profile
+        self.recipient_user = baker.make(User)
+        self.recipient = self.recipient_user.profile
+        Friendship.objects.create(from_profile=self.sender, to_profile=self.recipient, status=FriendshipStatus.ACCEPTED)
+        self.client.force_login(self.sender_user)
+        self.root = _make_pin(self.sender, name="Steel Works")
+        self.root.slug = self.root.ensure_slug()
+        self.child_a = _make_pin(self.sender, name="Blast Furnace", parent_pin=self.root)
+        self.child_b = _make_pin(self.sender, name="Rolling Mill", parent_pin=self.root)
+
+    def test_dialog_get_lists_exactly_the_requested_children(self) -> None:
+        response = self.client.get(reverse("pin.share.dialog", kwargs={"pin_slug": self.root.slug}), {"children": str(self.child_a.uuid)})
+        self.assertContains(response, "Blast Furnace")
+        self.assertNotContains(response, "Rolling Mill")
+
+    def test_dialog_get_without_children_param_shows_the_all_or_nothing_checkbox(self) -> None:
+        response = self.client.get(reverse("pin.share.dialog", kwargs={"pin_slug": self.root.slug}))
+        self.assertContains(response, "include_children")
+
+    def test_send_bundles_only_the_selected_child(self) -> None:
+        response = self.client.post(
+            reverse("pin.share.send", kwargs={"pin_slug": self.root.slug}),
+            {"profile_id": self.recipient.pk, "child_pin_uuids": [str(self.child_a.uuid)]},
+        )
+        self.assertEqual(response.status_code, 200)
+        root_share = PinShare.objects.get(pin=self.root)
+        bundled_pins = set(root_share.bundled_shares.values_list("pin_id", flat=True))
+        self.assertEqual(bundled_pins, {self.child_a.pk})
+
+    def test_selected_children_take_precedence_over_include_children(self) -> None:
+        """A submit can only ever carry one or the other in practice, but if both are
+        present the explicit selection must win, not silently union with "everything"."""
+        self.client.post(
+            reverse("pin.share.send", kwargs={"pin_slug": self.root.slug}),
+            {"profile_id": self.recipient.pk, "include_children": "1", "child_pin_uuids": [str(self.child_a.uuid)]},
+        )
+        root_share = PinShare.objects.get(pin=self.root)
+        bundled_pins = set(root_share.bundled_shares.values_list("pin_id", flat=True))
+        self.assertEqual(bundled_pins, {self.child_a.pk})
+
+    def test_a_uuid_belonging_to_someone_elses_pin_is_ignored(self) -> None:
+        other_pin = baker.make(Pin, profile=baker.make(User).profile, location=baker.make(Location, latitude=60.0, longitude=-90.0))
+        self.client.post(
+            reverse("pin.share.send", kwargs={"pin_slug": self.root.slug}),
+            {"profile_id": self.recipient.pk, "child_pin_uuids": [str(other_pin.uuid)]},
+        )
+        root_share = PinShare.objects.get(pin=self.root)
+        self.assertEqual(root_share.bundled_shares.count(), 0)
+
+    def test_accept_recreates_only_the_selected_child(self) -> None:
+        self.client.post(
+            reverse("pin.share.send", kwargs={"pin_slug": self.root.slug}),
+            {"profile_id": self.recipient.pk, "child_pin_uuids": [str(self.child_a.uuid)]},
+        )
+        root_share = PinShare.objects.get(pin=self.root)
+        self.client.force_login(self.recipient_user)
+        self.client.post(reverse("pin.share.respond", kwargs={"share_id": root_share.pk}), {"action": "accept"})
+
+        self.assertTrue(Pin.objects.filter(profile=self.recipient, name="Blast Furnace").exists())
+        self.assertFalse(Pin.objects.filter(profile=self.recipient, name="Rolling Mill").exists())
+
+
 class VisitedLabelPropagationTests(TestCase):
     """Adding the Visited status label to a child pin stamps all its ancestors."""
 

@@ -168,7 +168,7 @@ def _build_context(comments_qs, profile: Profile, request: HttpRequest, **extra)
     pinned = viewer_pinned_uuids(profile)
     top_level_qs = (
         comments_qs.filter(parent__isnull=True)
-        .select_related("profile__user", "markup_map")
+        .select_related("profile__user", "markup_map", "pin", "pin__location")
         .prefetch_related(
             "reactions__profile",
             "replies__reactions__profile",
@@ -264,6 +264,43 @@ def _build_context(comments_qs, profile: Profile, request: HttpRequest, **extra)
 # -- Pin comments --------------------------------------------------------------
 
 
+def _pin_comments_context(pin, profile: Profile, request: HttpRequest) -> dict:
+    """Build the Notes panel context for a pin, aggregating child pins' notes on ``?children=1``.
+
+    Mirrors the page-wide "show sub pin details" toggle already applied to the
+    map, photo gallery, and visit history (see ``controllers.visits._render_visit_history``)
+    - a note left on a child pin must not be invisible from the parent's own
+    Notes tab just because it happens to live on a nested row. Posting and
+    deleting still always act on the exact pin passed in; only the *listing*
+    aggregates.
+
+    Args:
+        pin: The pin whose Notes panel is being rendered.
+        profile: The viewing profile (always the pin's owner - notes are private).
+        request: The current request, read for the ``children`` flag and pagination.
+
+    Returns:
+        The context dict for ``comment_panel.html``.
+    """
+    from urbanlens.dashboard.models.pin.model import Pin
+
+    include_children = request.GET.get("children") == "1"
+    if include_children:
+        subtree = Pin.objects.filter(pk=pin.pk).with_descendants()
+        comments_qs = Comment.objects.filter(pin__in=subtree)
+    else:
+        comments_qs = pin.comments.all()
+    return _build_context(
+        comments_qs,
+        profile,
+        request,
+        pin=pin,
+        context_type="pin",
+        include_children=include_children,
+        extra_query="children=1" if include_children else "",
+    )
+
+
 class PinCommentsView(LoginRequiredMixin, View):
     """GET/POST comment panel for a Pin."""
 
@@ -272,7 +309,7 @@ class PinCommentsView(LoginRequiredMixin, View):
 
         pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         profile = _profile(request)
-        ctx = _build_context(pin.comments.all(), profile, request, pin=pin, context_type="pin")
+        ctx = _pin_comments_context(pin, profile, request)
         return _render_comments(request, ctx)
 
     def post(self, request, pin_slug):
@@ -304,7 +341,7 @@ class PinCommentsView(LoginRequiredMixin, View):
             attach_existing_comment_image(comment, existing_image_id, profile)
         if parent and parent.profile != profile:
             _notify_reply(profile, parent, reply=comment)
-        ctx = _build_context(pin.comments.all(), profile, request, pin=pin, context_type="pin")
+        ctx = _pin_comments_context(pin, profile, request)
         return _render_comments(request, ctx)
 
 
@@ -316,7 +353,11 @@ class PinCommentDeleteView(LoginRequiredMixin, View):
 
         pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         profile = _profile(request)
-        comment = get_object_or_404(Comment, id=comment_id, pin=pin)
+        # A deletable comment may live on any descendant, not just the exact
+        # pin in the URL - the aggregated view's delete buttons post back here
+        # for a note authored on a child pin.
+        subtree = Pin.objects.filter(pk=pin.pk).with_descendants()
+        comment = get_object_or_404(Comment, id=comment_id, pin__in=subtree)
         if comment.profile != profile:
             return HttpResponse("Forbidden", status=403)
         markup_map = comment.markup_map
@@ -327,7 +368,7 @@ class PinCommentDeleteView(LoginRequiredMixin, View):
         # orphaned top-level comments. Re-render the whole panel rather than just
         # removing the deleted <li>, so those replies stay visible in place
         # instead of disappearing until the next reload.
-        ctx = _build_context(pin.comments.all(), profile, request, pin=pin, context_type="pin")
+        ctx = _pin_comments_context(pin, profile, request)
         return _render_comments(request, ctx)
 
 

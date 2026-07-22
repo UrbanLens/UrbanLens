@@ -1,6 +1,7 @@
 import {
   confirmAction,
   getCsrfToken,
+  htmxProcess,
   toast
 } from "./article-wysiwyg-5jnnp4sj.js";
 import"./article-wysiwyg-2vd5xdaq.js";
@@ -456,6 +457,8 @@ function readConfig(el) {
     detailPinsJsonUrl: d.detailPinsJsonUrl || "",
     detailPinCreateUrl: d.detailPinCreateUrl || "",
     detailPinEditUrlTemplate: d.detailPinEditUrlTemplate || "",
+    pinShareDialogUrl: d.pinShareDialogUrl || "",
+    detailPinsSendToWikiUrl: d.detailPinsSendToWikiUrl || "",
     boundaryUrl: d.boundaryUrl || "",
     photoGalleryJsonUrl: d.photoGalleryJsonUrl || "",
     nearbyPinsJsonUrl: d.nearbyPinsJsonUrl || "",
@@ -1164,6 +1167,8 @@ function init() {
     const n = selectedDpUuids.size;
     window.ulBulkToolbar?.sync("detailpins", n, n ? {
       promote: doPromoteSelectedDp,
+      ...cfg.pinShareDialogUrl ? { share: doShareSelectedDp } : {},
+      ...cfg.detailPinsSendToWikiUrl ? { wiki: doSendSelectedDpToWiki } : {},
       delete: doDeleteSelectedDp,
       deselect: clearDpSelection
     } : {});
@@ -1189,6 +1194,53 @@ function init() {
       toast.warning(`${n - promoted} pin${n - promoted === 1 ? "" : "s"} could not be promoted (location conflict).`);
     clearDpSelection();
     loadDetailPins();
+  }
+  async function doShareSelectedDp() {
+    if (!cfg.pinShareDialogUrl)
+      return;
+    const uuids = Array.from(selectedDpUuids);
+    if (!uuids.length)
+      return;
+    const dialog = document.getElementById("pin-share-dialog");
+    if (!dialog)
+      return;
+    const url = `${cfg.pinShareDialogUrl}?children=${uuids.map(encodeURIComponent).join(",")}`;
+    const html = await fetch(url, { headers: { "X-Requested-With": "XMLHttpRequest" } }).then((r) => r.ok ? r.text() : "").catch(() => "");
+    if (!html) {
+      toast.error("Failed to open the share dialog.");
+      return;
+    }
+    dialog.innerHTML = html;
+    htmxProcess(dialog);
+    dialog.showModal();
+    clearDpSelection();
+  }
+  async function doSendSelectedDpToWiki() {
+    if (!cfg.detailPinsSendToWikiUrl)
+      return;
+    const uuids = Array.from(selectedDpUuids);
+    if (!uuids.length)
+      return;
+    const body = new URLSearchParams;
+    uuids.forEach((uuid) => body.append("child_pin_uuids", uuid));
+    const response = await fetch(cfg.detailPinsSendToWikiUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded", "X-CSRFToken": getCsrfToken() },
+      body
+    }).catch(() => null);
+    if (response?.ok) {
+      const trigger = response.headers.get("HX-Trigger");
+      if (trigger) {
+        try {
+          const parsed = JSON.parse(trigger);
+          if (parsed.showToast)
+            toast[parsed.showToast.level]?.(parsed.showToast.message);
+        } catch {}
+      }
+    } else {
+      toast.error("Failed to send sub pins to the wiki.");
+    }
+    clearDpSelection();
   }
   async function doDeleteSelectedDp() {
     const uuids = Array.from(selectedDpUuids);

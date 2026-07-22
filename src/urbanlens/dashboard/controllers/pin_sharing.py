@@ -32,6 +32,44 @@ def _recipient_existing_pin(profile: Profile, source: Pin) -> Pin | None:
     return find_profile_pin_near_location(profile.pk, source.location)
 
 
+def _bundle_children(sender: Profile, recipient: Profile, root_share: PinShare, children) -> int:
+    """Create one bundled child share per pin in ``children``, tied to ``root_share``.
+
+    Shared by both bundling paths on :class:`PinShareCreateView` - "share every
+    descendant" (``include_children``) and "share exactly these" (``child_pin_uuids``,
+    from the detail page's multi-select toolbar). A child that already has a
+    pending share to this recipient is skipped so the one-pending-share-per-
+    pin-and-recipient constraint holds.
+
+    Args:
+        sender: The profile sharing the pins.
+        recipient: The profile receiving them.
+        root_share: The already-created root :class:`PinShare` these bundle under.
+        children: The child pins to bundle.
+
+    Returns:
+        How many bundled shares were created.
+    """
+    children = list(children)
+    already_pending = set(PinShare.objects.pending_pin_ids_for(recipient, children))
+    bundled_count = 0
+    for child in children:
+        if child.pk in already_pending:
+            continue
+        child_share = PinShare.objects.create(
+            pin=child,
+            location=child.location,
+            from_profile=sender,
+            to_profile=recipient,
+            parent_share=resolve_and_stamp_origin_share(child),
+            bundled_with=root_share,
+            status=PinShareStatus.PENDING,
+        )
+        record_share_exposure(child_share)
+        bundled_count += 1
+    return bundled_count
+
+
 def _create_pin_from_share(share: PinShare, parent_pin: Pin | None = None) -> Pin:
     """Materialise a recipient-side Pin from an accepted share.
 
@@ -111,6 +149,16 @@ def _create_pin_from_share(share: PinShare, parent_pin: Pin | None = None) -> Pi
 class PinShareDialogView(LoginRequiredMixin, View):
     def get(self, request, pin_slug):
         pin = get_object_or_404(Pin, slug=pin_slug, profile=request.user.profile)
+
+        # ?children=<uuid>,<uuid>,... - the detail-page multi-select bulk
+        # toolbar's "Share" action opens this same dialog with a specific
+        # subset of child pins pre-chosen, rather than the plain "share
+        # everything nested under this pin" checkbox shown otherwise.
+        selected_child_pins: list[Pin] = []
+        if raw_uuids := request.GET.get("children"):
+            uuids = [u for u in raw_uuids.split(",") if u]
+            selected_child_pins = list(pin.descendants().filter(uuid__in=uuids).select_related("location"))
+
         return render(
             request,
             "dashboard/partials/pins/pin_share_dialog.html",
@@ -119,6 +167,7 @@ class PinShareDialogView(LoginRequiredMixin, View):
                 "friends": get_connections(request.user.profile),
                 "photos": pin.images.all(),
                 "child_pin_count": pin.descendants().count(),
+                "selected_child_pins": selected_child_pins,
                 "maps": MarkupMap.objects.for_profile(request.user.profile).order_by("-updated"),
             },
         )
@@ -203,27 +252,18 @@ class PinShareCreateView(LoginRequiredMixin, View):
         if attached_map is not None:
             share_markup_map_with_profile(sender, recipient, attached_map)
 
-        # Bundle the pin's child pins: each child pin gets its own share row
-        # (counting as a share of that pin), tied to the root share. Children
-        # that already have a pending share to this recipient are skipped so
-        # the one-pending-share-per-pin-and-recipient constraint holds.
-        bundled_count = 0
-        if request.POST.get("include_children"):
-            already_pending = set(PinShare.objects.pending_pin_ids_for(recipient, pin.descendants()))
-            for child in pin.descendants().select_related("location"):
-                if child.pk in already_pending:
-                    continue
-                child_share = PinShare.objects.create(
-                    pin=child,
-                    location=child.location,
-                    from_profile=sender,
-                    to_profile=recipient,
-                    parent_share=resolve_and_stamp_origin_share(child),
-                    bundled_with=share,
-                    status=PinShareStatus.PENDING,
-                )
-                record_share_exposure(child_share)
-                bundled_count += 1
+        # Bundle child pins: each gets its own share row (counting as a share
+        # of that pin), tied to the root share. A specific selection - from
+        # the detail page's multi-select toolbar - takes precedence over the
+        # dialog's own "share everything nested under this pin" checkbox; a
+        # pin can only ever come from one of the two paths in a single submit.
+        selected_uuids = [u for u in request.POST.getlist("child_pin_uuids") if u]
+        if selected_uuids:
+            bundled_count = _bundle_children(sender, recipient, share, pin.descendants().filter(uuid__in=selected_uuids).select_related("location"))
+        elif request.POST.get("include_children"):
+            bundled_count = _bundle_children(sender, recipient, share, pin.descendants().select_related("location"))
+        else:
+            bundled_count = 0
 
         base_message = f"{sender.username} shared {pin.display_label} with you."
         if bundled_count:

@@ -50,6 +50,7 @@ from urbanlens.dashboard.controllers import (
     pin_restructure,
     pin_sharing,
     pin_suggestions,
+    pin_wiki_sync,
     property_owner,
     region_search,
     safety,
@@ -387,6 +388,16 @@ urlpatterns = [
                                 "<slug:pin_slug>/detail-pins/json/",
                                 detail_pins.DetailPinJsonView.as_view(),
                                 name="pin.detail_pins.json",
+                            ),
+                            path(
+                                "<slug:pin_slug>/detail-pins/send-to-wiki/",
+                                pin_wiki_sync.PinSendToWikiView.as_view(),
+                                name="pin.detail_pins.send_to_wiki",
+                            ),
+                            path(
+                                "<slug:pin_slug>/detail-pins/pull-from-wiki/",
+                                pin_wiki_sync.PinPullFromWikiView.as_view(),
+                                name="pin.detail_pins.pull_from_wiki",
                             ),
                             path(
                                 "<slug:pin_slug>/detail-pins/<uuid:detail_pin_uuid>/",

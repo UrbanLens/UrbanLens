@@ -2,6 +2,13 @@
     <div class="card-header">
         <i class="material-symbols-outlined">{% if is_site_scope %}apartment{% else %}push_pin{% endif %}</i>
         <span>{% if is_site_scope %}Buildings &amp; Detail Pins{% else %}Detail Pins{% endif %}</span>
+        {% if has_wiki %}
+        <button type="button" class="btn btn--sm btn--ghost detail-pin-pull-wiki-btn" title="Add a sub pin for anything the community wiki already has that you don't"
+                hx-post="{% url 'pin.detail_pins.pull_from_wiki' pin.slug %}"
+                hx-swap="none">
+            <i class="material-symbols-outlined">public</i>
+        </button>
+        {% endif %}
         <button type="button" class="btn btn--sm btn--primary" onclick="openAddPinDialog()">
             <i class="material-symbols-outlined">add</i>
         </button>

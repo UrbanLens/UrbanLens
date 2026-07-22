@@ -30,6 +30,20 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   pin, even if new buildings turn up later), or don't show again (Settings → Map → Pin Organization
   Suggestions). Buildings you've already pinned are detected by their real footprint polygon, not a
   fixed radius, so a pin at the far end of a long hall still counts as covering it
+- **Notes (pin comments) are never hidden by nesting** — the pin detail page's "show sub pin
+  details" toggle (`?children=1`) aggregates a child pin's private notes into its parent's Notes
+  tab too, each labelled with a link back to the sub pin it was written on, alongside the map,
+  photo gallery, and visit history the toggle already covered
+- **Manual pin ↔ wiki sync** — from the detail-pins multi-select toolbar, "Send to wiki" creates a
+  matching child wiki for the selected sub pins (skipping ones the wiki already has, matched by
+  proximity); "Share with a friend" shares just the selected sub pins, not the pin's whole
+  hierarchy. A "pull from wiki" button creates a personal sub pin for anything the community wiki
+  already documents that you haven't pinned yourself. Neither direction ever creates the wiki
+  itself - only its child wikis
+- **Community wikis nest themselves automatically** — when two independently-created wikis'
+  boundaries turn out to nest (a building's wiki inside a campus's, once both have a real property
+  boundary), the smaller becomes a child of the bigger with no confirmation needed - re-parenting
+  only, nothing else moves, since a wiki's Location never changes. See `docs/NOTES.md`.
 - Add pins by map click, coordinate entry, or place search/autocomplete; drag to reposition
 - Pin list view alongside the map (particularly useful while searching/filtering); "Add these pins to a list" bulk action from the pin list panel adds all currently-visible/filtered pins to a trip or saved collection at once
 - Bulk pin operations: multi-select, bulk edit (description, rating, labels, parent pin), bulk merge, bulk delete (with undo)

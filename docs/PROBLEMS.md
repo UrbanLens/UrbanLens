@@ -583,3 +583,32 @@ was successful but wrong". The same benchmark found `private.coffee` (20/20 fail
 **Why not fixed here**: the scope of this session was benchmarking, and changing the production
 mirror pool is a deployment-affecting decision (which endpoint becomes primary depends on whether
 the self-hosted instance is considered production-ready).
+
+---
+
+## Deferred from this session: aliases/labels aggregation, and boundary voting (2026-07-22)
+
+The ROADMAP's "Pin Restructure" section asks for two more things this session's follow-up work
+did not attempt, deliberately:
+
+**Aliases and labels are not yet aggregated across child pins.** The parent detail page's "show
+sub pin details" toggle now aggregates map markers, the photo gallery, visit history, and (as of
+this session) Notes/comments - but `pin_alias_suggestions` (`controllers/pin.py`) and the
+category/tag/status membership panel (`controllers/labels.py`'s `LabelPinMembershipView` /
+`label_membership_panel.html`) are both strictly per-pin, with no descendant awareness. Unlike
+comments (a dedicated, pin-only view), both of these are shared generic components also used for
+Wiki and Image label/alias editing - bolting hierarchy-aware aggregation onto them risks either
+duplicating the template or polluting a generic component with a pin-specific concern, and
+deserved its own scoped pass rather than being rushed alongside everything else in this session.
+
+**Boundary-source voting (REData vs. Overpass, weighted by recency) was not started at all.** It
+needs a new model (`BoundaryVote` or similar), a weighting/tie-breaking algorithm, a comparison
+dialog with a side-by-side map, and a way to surface "cast a vote" once consensus already exists -
+a materially larger, standalone feature (see ROADMAP.md's "Pin Restructure" section, last bullet)
+that shouldn't be attempted as a rider on other work.
+
+**Suggested next step**: scope each as its own task. For aliases/labels, decide whether aggregation
+means read-only "also shown on sub pin X" listings (cheapest, matches what comments got) or genuine
+cross-pin editing before touching the shared templates. For boundary voting, the model/algorithm
+design is the right place to start - the ROADMAP entry already specifies the weighting rule in
+detail.

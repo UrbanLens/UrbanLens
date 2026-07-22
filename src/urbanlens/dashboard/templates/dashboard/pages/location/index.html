@@ -723,7 +723,7 @@
 {# -- Notes tab (backend: pin comments, private to the pin's owner) --------- #}
 <section class="page-tab-panel" data-tab-panel="comments" hidden>
     <div id="comment-panel" class="card"
-         hx-get="{% url 'pin.comments' pin.slug %}"
+         hx-get="{% url 'pin.comments' pin.slug %}{% if include_children %}?children=1{% endif %}"
          hx-trigger="load"
          hx-swap="outerHTML">
         <div class="card-header">
@@ -1045,6 +1045,7 @@
 {% url 'boundary.pin' pin.slug as boundary_url %}
 {% url 'pin.gallery.json' pin.slug as photo_gallery_json_url %}
 {% url 'pin.nearby_pins.json' pin.slug as nearby_pins_json_url %}
+{% url 'pin.share.dialog' pin.slug as pin_share_dialog_url %}
 <div id="map-annotations-config" hidden
      data-map-center-lat="{{ pin.effective_latitude|default:"42.6525" }}"
      data-map-center-lng="{{ pin.effective_longitude|default:"-73.7579" }}"
@@ -1061,6 +1062,8 @@
      data-boundary-url="{{ boundary_url }}"
      data-photo-gallery-json-url="{{ photo_gallery_json_url }}{% if include_children %}?children=1{% endif %}"
      data-nearby-pins-json-url="{{ nearby_pins_json_url }}"
+     data-pin-share-dialog-url="{{ pin_share_dialog_url }}"
+     data-detail-pins-send-to-wiki-url="{% url 'pin.detail_pins.send_to_wiki' pin.slug %}"
      data-media-relevance-url="{% url 'pin.media.relevance' pin.slug %}"
      data-markup-fill-opacity="{{ markup_fill_opacity|default:87 }}"
      data-markup-border-opacity="{{ markup_border_opacity|default:100 }}"

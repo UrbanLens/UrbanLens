@@ -20,6 +20,12 @@
     <a href="{{ comment.profile.display_profile_url }}" class="comment-author comment-author--link">{{ comment.profile.display_name }}</a>
     {% endif %}
     <span class="comment-date">{{ comment.created|human_timesince }}</span>
+    {% if include_children and context_type == "pin" and comment.pin_id != pin.id %}
+    <a class="comment-child-chip" href="{% url 'pin.details' comment.pin.slug|default:comment.pin.uuid %}"
+       title="Written on the sub pin {{ comment.pin.effective_name }}">
+        <i class="material-symbols-outlined">subdirectory_arrow_right</i>{{ comment.pin.effective_name }}
+    </a>
+    {% endif %}
     {% if comment.profile == profile %}
     <button type="button" class="comment-delete-btn" title="Delete"
             {% if context_type == "pin" %}

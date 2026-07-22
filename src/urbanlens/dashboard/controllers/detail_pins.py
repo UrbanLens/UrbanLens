@@ -109,6 +109,7 @@ class DetailPinPanelView(LoginRequiredMixin, View):
                 "detail_pins": detail_pins,
                 "pin_type_choices": PinType.choices,
                 "is_site_scope": is_site_scope(pin),
+                "has_wiki": Wiki.objects.get_for_location(pin.location) is not None,
             },
         )
 

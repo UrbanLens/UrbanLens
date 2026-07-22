@@ -41,7 +41,22 @@
                     placeholder="Let them know why you're sharing this place..."></textarea>
         </div>
 
-        {% if child_pin_count %}
+        {% if selected_child_pins %}
+        {# Opened from the detail page's multi-select toolbar with a specific #}
+        {# set of sub pins already chosen - share exactly those, no checkbox. #}
+        <section class="pin-share-section">
+          <h3 class="pin-share-section-title"><i class="material-symbols-outlined">subdirectory_arrow_right</i> Selected sub pins</h3>
+          <ul class="pin-share-bundle-list">
+            {% for cp in selected_child_pins %}
+            <li class="pin-share-bundle-item">
+              <i class="material-symbols-outlined">subdirectory_arrow_right</i>{{ cp.effective_name }}
+              <input type="hidden" name="child_pin_uuids" value="{{ cp.uuid }}">
+            </li>
+            {% endfor %}
+          </ul>
+          <p class="pin-share-section-hint">These {{ selected_child_pins|length }} sub pin{{ selected_child_pins|pluralize }} will be shared along with {{ pin.display_label }}.</p>
+        </section>
+        {% elif child_pin_count %}
         <section class="pin-share-section">
           <h3 class="pin-share-section-title"><i class="material-symbols-outlined">subdirectory_arrow_right</i> Child pins</h3>
           <label class="pin-share-children-row">

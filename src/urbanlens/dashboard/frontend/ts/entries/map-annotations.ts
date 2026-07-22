@@ -10,7 +10,7 @@
  * (see templates/dashboard/pages/location/index.html and wiki.html).
  */
 import { getCsrfToken } from "../shared/csrf";
-import { toast, confirmAction } from "../shared/dialogs";
+import { toast, confirmAction, htmxProcess } from "../shared/dialogs";
 import { createMapLayers } from "../shared/map-layers";
 import type { MarkupItem, MarkupToolbar } from "../shared/markup-toolbar";
 
@@ -84,6 +84,8 @@ function readConfig(el: HTMLElement) {
         detailPinsJsonUrl: d.detailPinsJsonUrl || "",
         detailPinCreateUrl: d.detailPinCreateUrl || "",
         detailPinEditUrlTemplate: d.detailPinEditUrlTemplate || "",
+        pinShareDialogUrl: d.pinShareDialogUrl || "",
+        detailPinsSendToWikiUrl: d.detailPinsSendToWikiUrl || "",
         boundaryUrl: d.boundaryUrl || "",
         photoGalleryJsonUrl: d.photoGalleryJsonUrl || "",
         nearbyPinsJsonUrl: d.nearbyPinsJsonUrl || "",
@@ -921,6 +923,11 @@ function init(): void {
             n
                 ? {
                       promote: doPromoteSelectedDp,
+                      // "Share" and "Send to wiki" are pin-only - the wiki page shares
+                      // this same module for its own (community) child-wiki toolbar,
+                      // which has neither concept.
+                      ...(cfg.pinShareDialogUrl ? { share: doShareSelectedDp } : {}),
+                      ...(cfg.detailPinsSendToWikiUrl ? { wiki: doSendSelectedDpToWiki } : {}),
                       delete: doDeleteSelectedDp,
                       deselect: clearDpSelection,
                   }
@@ -947,6 +954,53 @@ function init(): void {
         if (promoted < n) toast.warning(`${n - promoted} pin${n - promoted === 1 ? "" : "s"} could not be promoted (location conflict).`);
         clearDpSelection();
         loadDetailPins();
+    }
+
+    async function doShareSelectedDp(): Promise<void> {
+        if (!cfg.pinShareDialogUrl) return;
+        const uuids = Array.from(selectedDpUuids);
+        if (!uuids.length) return;
+        const dialog = document.getElementById("pin-share-dialog") as HTMLDialogElement | null;
+        if (!dialog) return;
+        const url = `${cfg.pinShareDialogUrl}?children=${uuids.map(encodeURIComponent).join(",")}`;
+        const html = await fetch(url, { headers: { "X-Requested-With": "XMLHttpRequest" } })
+            .then((r) => (r.ok ? r.text() : ""))
+            .catch(() => "");
+        if (!html) {
+            toast.error("Failed to open the share dialog.");
+            return;
+        }
+        dialog.innerHTML = html;
+        htmxProcess(dialog);
+        dialog.showModal();
+        clearDpSelection();
+    }
+
+    async function doSendSelectedDpToWiki(): Promise<void> {
+        if (!cfg.detailPinsSendToWikiUrl) return;
+        const uuids = Array.from(selectedDpUuids);
+        if (!uuids.length) return;
+        const body = new URLSearchParams();
+        uuids.forEach((uuid) => body.append("child_pin_uuids", uuid));
+        const response = await fetch(cfg.detailPinsSendToWikiUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded", "X-CSRFToken": getCsrfToken() },
+            body,
+        }).catch(() => null);
+        if (response?.ok) {
+            const trigger = response.headers.get("HX-Trigger");
+            if (trigger) {
+                try {
+                    const parsed = JSON.parse(trigger) as { showToast?: { level: string; message: string } };
+                    if (parsed.showToast) toast[parsed.showToast.level as "success" | "info" | "warning" | "error"]?.(parsed.showToast.message);
+                } catch {
+                    /* malformed trigger header - nothing to show */
+                }
+            }
+        } else {
+            toast.error("Failed to send sub pins to the wiki.");
+        }
+        clearDpSelection();
     }
 
     async function doDeleteSelectedDp(): Promise<void> {

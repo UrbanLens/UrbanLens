@@ -225,4 +225,16 @@ def generate_location_boundaries(location: Location, *, name: str | None = None)
         if polygon is not None and row.generated_polygon is None:
             updates["generated_polygon"] = polygon
         Boundary.objects.filter(pk=row.pk).update(**updates)
+
+    # A wiki's property polygon can only newly exist or change right here -
+    # this is the single choke point every boundary-generation call site
+    # (wiki creation, the pin detail page's boundary panel, the wiki page's
+    # own scheduler) funnels through, so it is also the right place to check
+    # whether this location's wiki (if any) now nests under - or now contains
+    # - another one. A no-op for the overwhelming majority of locations, which
+    # have no wiki at all.
+    from urbanlens.dashboard.services.wiki_merge import reconcile_wiki_nesting_for_location
+
+    reconcile_wiki_nesting_for_location(location)
+
     return resolved

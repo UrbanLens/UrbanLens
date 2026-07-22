@@ -166,6 +166,58 @@ Load-bearing details:
 - The "Buildings on this Property" panel keeps its own buildings-only import button, which ignores
   the dismissal entirely — that one is an action the user went looking for, not an interruption.
 
+## Wiki-to-wiki auto-merge is the one hierarchy change with no confirmation dialog
+
+`services/wiki_merge.py` is the exception to this codebase's usual "ask first" pattern for
+structural changes. Two community wikis are independent, user-initiated pages - nothing stops
+someone wiki-ing a building before anyone's wiki-ed the campus it sits on. Once both have a real
+property boundary, `reconcile_wiki_nesting` re-parents the smaller under the bigger automatically,
+per the ROADMAP's explicit "without needing user confirmation." It runs from the single choke
+point every boundary-generation call site shares (`services.locations.boundaries.
+generate_location_boundaries`), checking both directions - does a bigger wiki now contain me, and
+do any smaller ones now sit inside me - so it converges regardless of creation order.
+
+Load-bearing details:
+
+- **Merging is only ever `parent_wiki = X`.** `Wiki.location` is a OneToOne that never moves, so no
+  Pin, Article, comment, or WikiEdit history needs to follow - unlike a pin-hierarchy change, there
+  is nothing else to touch.
+- **A synthesized circle boundary can never trigger it** - `wiki_property_polygon` rejects
+  `Boundary.objects.resolve_for_wiki`'s `"circle"` source, exactly like `pin_restructure.
+  property_polygon` does for the pin-nesting suggestion. Otherwise every wiki within 50 m of a
+  bigger one would silently become its child.
+- **The candidate parent search is root-wikis-only** (`parent_wiki__isnull=True`), not "any
+  ancestor" - this is what keeps the cycle check trivial (a root candidate can never be a
+  descendant of the wiki being reconciled). The multi-level case (building → wing → campus) still
+  resolves to the tightest fit in one pass, because reconciling the *middle* wiki's own boundary
+  runs both directions at once: it finds the campus as its own container, and finds the building
+  already sitting inside its own polygon, in the same call.
+- **The wiki object is re-fetched at the top of `reconcile_wiki_nesting`**, never trusted from the
+  caller - a stale in-memory `parent_wiki_id` (e.g. set moments earlier by a *different* wiki's own
+  reconciliation absorbing this one) would otherwise let direction 1 re-run and silently overwrite
+  a just-established, tighter parent with an outer one. Every real call site already passes a
+  freshly loaded wiki, so this is a no-op extra read in production and a guard against a future
+  caller that doesn't.
+- **No admin UI to reverse a merge yet** - it's an audit trail only (`WikiEdit` on the parent,
+  `editor=None`). See `docs/PROBLEMS.md`.
+
+## Sub-pin data is never hidden by nesting - but each surface aggregates independently
+
+The pin detail page's "show sub pin details" toggle (`?children=1`) is not one mechanism - every
+aggregating view (map markers, photo gallery, visit history, and now Notes/comments) independently
+swaps its own queryset from `pin.<related>` to `<Model>.objects.filter(pin__in=Pin.objects.
+filter(pk=pin.pk).with_descendants())` when the flag is set, and independently threads
+`extra_query="children=1"` through its own pagination. There is no shared helper - see
+`controllers.comments._pin_comments_context` for the newest one, modelled directly on
+`controllers.visits._render_visit_history`. `services.pin_restructure`/`services.pin_wiki_sync`
+cover pin ↔ external-data and pin ↔ wiki *hierarchy* fixes; this is purely about *display* -
+aliases and labels are not yet aggregated this way (tracked in `docs/PROBLEMS.md`).
+
+A comment/note's delete button always posts back to the **top-level pin's** URL regardless of which
+descendant it actually lives on (see `_comment_body.html`'s `{% url 'pin.comment.delete' pin.slug
+comment.id %}`), so `PinCommentDeleteView.delete` resolves the comment by searching the whole
+subtree, not just the exact pin in the URL - otherwise deleting an aggregated child's note 404s.
+
 ## Plugin system rules
 
 - Plugin classes (`dashboard/plugins/builtin/*.py`) are instantiated during `AppConfig.ready()`.

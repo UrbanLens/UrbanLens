@@ -12,6 +12,7 @@ Features planned for this release.
 * Ensure proper attribution in the smaller maps we're showing around the site (main map should be correct already. Others may or may not need work, though.) [UL-264]
 * Better selection UX for organize page (clicking row selects it, hide select boxes until hover or one row is selected, etc) [UL-265]
 * Main map > Edit pin dialog should have link to view full pin details. [UL-266]
+* On the pin details page, and on the wiki page, sections named "Media" should be named "Photos and Media" instead.
 
 ## Medium Features
 * Audit the import process for security (unzip, etc) [UL-268]
