@@ -612,3 +612,39 @@ means read-only "also shown on sub pin X" listings (cheapest, matches what comme
 cross-pin editing before touching the shared templates. For boundary voting, the model/algorithm
 design is the right place to start - the ROADMAP entry already specifies the weighting rule in
 detail.
+
+---
+
+## Test suite's localhost-only network guard trips on the dev docker-compose network (2026-07-22)
+
+Found while re-verifying the dev environment (`/projects/environments/dev/s1/UrbanLens`) and
+updating `CLAUDE.md`'s environment section. Running pytest inside the `app` container against the
+already-running dev compose stack (`docker exec urbanlens_devs1_app /app/.venv/bin/python -m
+pytest ...`) currently fails 2 tests:
+
+- `test_profile_photo_strip.py::ProfilePageShowsPhotoStripTests::test_other_viewer_without_wiki_access_sees_no_strip_at_all`
+- `test_wiki_access_boundary_mates.py::LocationVisibleToBoundaryMateTests::test_wiki_page_reachable_via_boundary_mate_pin`
+
+Both fail with `RuntimeError: External network access is disabled during tests. Attempted to
+connect to '<container-bridge-ip>'` from `core/testing_network.py`'s `LocalhostOnlyNetwork` guard,
+raised from a Redis/valkey socket connect. The guard (by design, per its docstring) only allows
+`localhost`/`127.0.0.1`/`::1`. But this compose stack's `UL_VALKEY_URL` (`docker-compose.yml`)
+defaults to `redis://urbanlens_valkey:6379/0`, which resolves to a container bridge IP on this
+network - never `localhost` - so any code path that opens its own Redis socket directly (rather
+than through whatever connection path the guard already exempts) trips it, even though the
+connection is legitimate same-stack traffic, not a real external call.
+
+**Why not fixed**: this is a structural mismatch between "run tests against the already-running
+dev compose stack via `docker exec`" and the test/network guard's assumption that Redis/Postgres
+are reachable on localhost (true in whatever CI/test setup the guard was originally written for,
+false in this multi-container topology). Fixing it means either (a) deciding tests should run in a
+dedicated topology where valkey/db are localhost-reachable (e.g. `network_mode: service:app` for a
+test-runner service, or exposing valkey/db ports to the host and running pytest bare - which then
+hits the *other* known gap, no system GDAL on the bare host, see `CLAUDE.md`), or (b) widening the
+guard to also allow the compose network's service IPs/hostnames, which risks quietly weakening a
+guard that's deliberately strict. Neither is a small, obviously-correct change, so it wasn't
+attempted blind.
+
+**Suggested next step**: decide on a dedicated test-running topology (option (a) above) rather than
+patching the guard - it's the only fix that doesn't touch code whose entire job is to fail loud on
+anything that isn't provably local.
