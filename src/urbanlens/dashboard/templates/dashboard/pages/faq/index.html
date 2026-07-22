@@ -17,16 +17,18 @@
 </section>
 
 {# -- Quick jump nav --------------------------------------------------------- #}
-<nav class="faq-jump" aria-label="FAQ categories">
-    <div class="faq-jump-inner">
-        <a href="#getting-started" class="faq-jump-link">Getting started</a>
-        <a href="#privacy-sharing" class="faq-jump-link">Privacy &amp; sharing</a>
-        <a href="#features" class="faq-jump-link">Features</a>
-        <a href="#safety" class="faq-jump-link">Safety</a>
-        <a href="#account-data" class="faq-jump-link">Account &amp; data</a>
-        <a href="#external-connections" class="faq-jump-link">External connections</a>
+<div class="ul-page-subnav">
+    <div class="ul-page-subnav__inner">
+        <nav class="ul-subnav-tabs" aria-label="FAQ categories">
+            <a href="#getting-started" class="ul-subnav-tab" data-faq-tab>Getting started</a>
+            <a href="#privacy-sharing" class="ul-subnav-tab" data-faq-tab>Privacy &amp; sharing</a>
+            <a href="#features" class="ul-subnav-tab" data-faq-tab>Features</a>
+            <a href="#safety" class="ul-subnav-tab" data-faq-tab>Safety</a>
+            <a href="#account-data" class="ul-subnav-tab" data-faq-tab>Account &amp; data</a>
+            <a href="#external-connections" class="ul-subnav-tab" data-faq-tab>External connections</a>
+        </nav>
     </div>
-</nav>
+</div>
 
 {# -- Getting started -------------------------------------------------------- #}
 <section class="faq-section" id="getting-started">
@@ -580,6 +582,28 @@
     }
     document.addEventListener('DOMContentLoaded', openHashTarget);
     window.addEventListener('hashchange', openHashTarget);
+
+    // Highlight the quick-jump tab for whichever section is in view, matching
+    // the .is-active/.active treatment every other page's .ul-subnav-tab gets -
+    // this page has no separate "current page" to mark server-side since the
+    // tabs are same-page anchors, so track it client-side instead.
+    var tabs = document.querySelectorAll('[data-faq-tab]');
+    var sections = [];
+    tabs.forEach(function (tab) {
+        var section = document.getElementById(tab.getAttribute('href').slice(1));
+        if (section) sections.push({ tab: tab, section: section });
+    });
+    if (sections.length && 'IntersectionObserver' in window) {
+        var observer = new IntersectionObserver(function (entries) {
+            entries.forEach(function (entry) {
+                if (!entry.isIntersecting) return;
+                sections.forEach(function (pair) {
+                    pair.tab.classList.toggle('active', pair.section === entry.target);
+                });
+            });
+        }, { rootMargin: '-45% 0px -50% 0px' });
+        sections.forEach(function (pair) { observer.observe(pair.section); });
+    }
 }());
 </script>
 {% endblock %}

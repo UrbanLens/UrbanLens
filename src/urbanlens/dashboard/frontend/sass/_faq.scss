@@ -11,8 +11,7 @@ body.page-faq {
 
     // Shared inner width
     .faq-section-inner,
-    .faq-cta-inner,
-    .faq-jump-inner {
+    .faq-cta-inner {
         max-width: 90rem;
         margin: 0 auto;
         padding: 0 1.5rem;
@@ -69,65 +68,19 @@ body.page-faq {
         margin: 0 auto;
     }
 
-    // -- Quick jump nav ----------------------------------------------------------
-    .faq-jump {
-        background: var(--ul-surface-raised);
-        border-bottom: 1px solid var(--ul-surface-raised-border);
-        position: sticky;
-        top: 0;
-        z-index: 5;
-        box-shadow: 0 4px 16px -12px rgba(0, 0, 0, .25);
-    }
-
-    .faq-jump-inner {
-        display: flex;
-        align-items: center;
-        justify-content: flex-start;
-        gap: .4rem;
-        padding: .7rem 1.5rem;
-        overflow-x: auto;
+    // Quick jump nav now uses the shared .ul-page-subnav/.ul-subnav-tabs/
+    // .ul-subnav-tab component (see _page_hero.scss) instead of bespoke pill
+    // styling, so its look matches every other page's subnav (Safety, Trips,
+    // Profile, Memories, Settings, ...). Smooth-scroll the same way every
+    // other in-page anchor on this page already does.
+    .ul-page-subnav .ul-subnav-tabs {
         scroll-behavior: smooth;
-        scrollbar-width: none;
-
-        &::-webkit-scrollbar {
-            display: none;
-        }
-
-        @include up($breakpoint-sm) {
-            justify-content: center;
-            flex-wrap: wrap;
-        }
-    }
-
-    .faq-jump-link {
-        font-size: .82rem;
-        font-weight: 600;
-        color: var(--ul-grey-6);
-        padding: .45rem .95rem;
-        border-radius: 999px;
-        border: 1px solid transparent;
-        text-decoration: none;
-        white-space: nowrap;
-        flex-shrink: 0;
-        transition: background .15s ease, color .15s ease, border-color .15s ease;
-
-        &:hover {
-            background: rgba($primary-color, .08);
-            border-color: rgba($primary-color, .2);
-            color: var(--primary-color);
-        }
-
-        &:focus-visible {
-            outline: 2px solid var(--primary-color);
-            outline-offset: 2px;
-        }
     }
 
     // -- Shared section chrome -------------------------------------------------
     .faq-section {
         padding: 4.5rem 0;
         background: var(--ul-grey-0);
-        scroll-margin-top: 3.5rem;
 
         &--alt {
             background: var(--ul-grey-0b);
