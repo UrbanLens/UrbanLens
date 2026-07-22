@@ -1,7 +1,7 @@
 @use "sass:color";
 @use 'variables' as *;
 
-.page-map-view {
+body.page-map-view {
     > div.container {
         max-width: 100%;
         min-height: calc(100vh - 4rem - 4rem);
