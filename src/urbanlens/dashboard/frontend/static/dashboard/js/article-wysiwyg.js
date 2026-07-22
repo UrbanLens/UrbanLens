@@ -34970,6 +34970,21 @@ function referenceDefinitionStub(n, currentContent) {
 [^${n}]: `;
 }
 
+// src/urbanlens/dashboard/frontend/ts/shared/article-toc-anchors.ts
+var SLUG_STRIP = /[^\p{L}\p{N}_\s-]/gu;
+var SLUG_DASH = /[\s_-]+/gu;
+function anchorSlug(title, used) {
+  const base3 = title.trim().toLowerCase().replace(SLUG_STRIP, "").replace(SLUG_DASH, "-").replace(/^-+|-+$/g, "") || "section";
+  let candidate = base3;
+  let counter = 2;
+  while (used.has(candidate)) {
+    candidate = `${base3}-${counter}`;
+    counter += 1;
+  }
+  used.add(candidate);
+  return candidate;
+}
+
 // src/urbanlens/dashboard/frontend/ts/entries/article-wysiwyg.ts
 var editors = new Map;
 function editorRoot(el) {
@@ -35292,6 +35307,29 @@ function buildFloatingPlusElement(box) {
   button.addEventListener("click", () => box.current?.chain().focus().insertContent("/").run());
   return button;
 }
+var HeadingAnchors = Extension.create({
+  name: "headingAnchors",
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        key: new PluginKey("headingAnchors"),
+        props: {
+          decorations(state) {
+            const used = new Set;
+            const decorations = [];
+            state.doc.descendants((node, pos) => {
+              if (node.type.name !== "heading")
+                return;
+              const id = anchorSlug(node.textContent.trim() || "section", used);
+              decorations.push(Decoration.node(pos, pos + node.nodeSize, { id }));
+            });
+            return DecorationSet.create(state.doc, decorations);
+          }
+        }
+      })
+    ];
+  }
+});
 function mountEditor(root) {
   if (editors.has(root))
     return;
@@ -35313,6 +35351,7 @@ function mountEditor(root) {
       TableKit.configure({ table: { resizable: false } }),
       Placeholder.configure({ placeholder: "Start writing, or type “/” to insert a block…" }),
       Markdown.configure({ html: false, linkify: true, transformPastedText: true }),
+      HeadingAnchors,
       SlashCommand.configure({ root }),
       BubbleMenu.configure({ element: bubbleMenu.element }),
       FloatingMenu.configure({ element: floatingPlus })

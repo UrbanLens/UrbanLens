@@ -41,10 +41,13 @@ import { FloatingMenu } from "@tiptap/extension-floating-menu";
 import { Image } from "@tiptap/extension-image";
 import { Placeholder } from "@tiptap/extension-placeholder";
 import { TableKit } from "@tiptap/extension-table";
+import { Plugin, PluginKey } from "@tiptap/pm/state";
+import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import StarterKit from "@tiptap/starter-kit";
 import Suggestion, { type SuggestionProps } from "@tiptap/suggestion";
 import { Markdown } from "tiptap-markdown";
 import { nextReferenceNumber, referenceDefinitionStub } from "../shared/article-footnotes";
+import { anchorSlug } from "../shared/article-toc-anchors";
 import { getCsrfToken } from "../shared/csrf";
 import { confirmAction } from "../shared/dialogs";
 
@@ -485,6 +488,37 @@ function buildFloatingPlusElement(box: EditorBox): HTMLElement {
     return button;
 }
 
+/**
+ * Gives every heading in the canvas the same `id` the server assigned it in
+ * `article.toc` (see `_anchor_slug` in services/articles.py) - the TOC nav
+ * (`_article_panel.html`) links to those anchors, but TipTap renders headings
+ * from raw Markdown with no id of its own, so without this the TOC links had
+ * nothing to scroll to.
+ */
+const HeadingAnchors = Extension.create({
+    name: "headingAnchors",
+
+    addProseMirrorPlugins() {
+        return [
+            new Plugin({
+                key: new PluginKey("headingAnchors"),
+                props: {
+                    decorations(state) {
+                        const used = new Set<string>();
+                        const decorations: Decoration[] = [];
+                        state.doc.descendants((node, pos) => {
+                            if (node.type.name !== "heading") return;
+                            const id = anchorSlug(node.textContent.trim() || "section", used);
+                            decorations.push(Decoration.node(pos, pos + node.nodeSize, { id }));
+                        });
+                        return DecorationSet.create(state.doc, decorations);
+                    },
+                },
+            }),
+        ];
+    },
+});
+
 function mountEditor(root: HTMLElement): void {
     if (editors.has(root)) return;
     const textarea = textareaOf(root);
@@ -506,6 +540,7 @@ function mountEditor(root: HTMLElement): void {
             TableKit.configure({ table: { resizable: false } }),
             Placeholder.configure({ placeholder: "Start writing, or type “/” to insert a block…" }),
             Markdown.configure({ html: false, linkify: true, transformPastedText: true }),
+            HeadingAnchors,
             SlashCommand.configure({ root }),
             BubbleMenu.configure({ element: bubbleMenu.element }),
             FloatingMenu.configure({ element: floatingPlus }),
