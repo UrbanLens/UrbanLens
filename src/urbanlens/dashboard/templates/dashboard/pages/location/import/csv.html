@@ -493,7 +493,7 @@
                 {% else %}
                 Import data from another app. Many apps are supported.
                 {% endif %}
-                We accept KML, KMZ, GeoJSON, GPX, OSM XML, WKT, WKB, CSV, and Google Takeout's My Activity (Maps) HTML export - or a ZIP / TGZ containing any of the above. Shapefiles (.shp/.dbf/.shx) must be uploaded zipped. {% if can_use_ai_features and profile.ai_enabled %}Plain text (.txt), and Word documents (.docx) must be uploaded directly, not within a zip.{% endif %} Multiple files accepted. See the <a href="{% url 'help.import_pins' %}" target="_blank" rel="noopener noreferrer">import help page</a> for more info.
+                We accept KML, KMZ, GeoJSON, GPX, OSM XML, WKT, WKB, CSV, and Google Takeout - or a ZIP / TGZ containing any of the above. Shapefiles (.shp/.dbf/.shx) must be uploaded zipped. {% if can_use_ai_features and profile.ai_enabled %}Plain text (.txt), and Word documents (.docx) must be uploaded directly, not within a zip.{% endif %} Multiple files accepted. See the <a href="{% url 'help.import_pins' %}" target="_blank" rel="noopener noreferrer">import help page</a> for more info.
                 {% if import_variant != "memories" %}You can also drop in photos{% if can_upload_videos %} or videos{% endif %} here - they're added to your library and matched to pins by location automatically.{% endif %}
             </p>
             {% if can_use_ai_features and profile.ai_enabled %}
