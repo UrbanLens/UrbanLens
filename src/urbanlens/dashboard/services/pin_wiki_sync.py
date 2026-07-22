@@ -20,11 +20,13 @@ know about) as part of the one-time "organize this property?" suggestion.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
+from django.contrib.gis.geos import Point
 from django.db import transaction
 
-from urbanlens.dashboard.models.pin.model import Pin
+from urbanlens.dashboard.models.pin.model import Pin, PinType
+from urbanlens.dashboard.services import pin_restructure
 from urbanlens.dashboard.services.locations import site_scope
 
 if TYPE_CHECKING:
@@ -54,14 +56,16 @@ class _Located(Protocol):
     def latitude(self) -> Decimal: ...
     @property
     def longitude(self) -> Decimal: ...
+    @property
+    def pin_type(self) -> str: ...
 
 
 def _nearest_uncovered[T: _Located](marker: _Located, candidates: list[T]) -> T | None:
     """The candidate closest to ``marker``, within building-match range - or None.
 
-    Neither a child pin nor a child wiki publishes a footprint polygon the way
-    a REData building record can, so this is proximity-only (unlike
-    ``pin_restructure.marker_covers_building``).
+    The proximity-only fallback: for anything not typed as a building (an
+    entrance, a POI, a hazard - see :func:`_find_existing_match`), or when no
+    REData footprint data settles it.
 
     Args:
         marker: A pin or wiki to find a match for.
@@ -79,6 +83,60 @@ def _nearest_uncovered[T: _Located](marker: _Located, candidates: list[T]) -> T 
 
     nearest = min(candidates, key=distance)
     return nearest if distance(nearest) <= site_scope.BUILDING_MATCH_METERS else None
+
+
+def _building_containing(marker: _Located, buildings: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """The first REData building record whose real footprint contains ``marker``'s point.
+
+    Args:
+        marker: A pin or wiki to locate.
+        buildings: Cached REData building records for the parcel (see
+            ``plugins.builtin.parcel_buildings``); records with no footprint
+            (a bare point, or nothing parseable) never match here.
+
+    Returns:
+        The containing building record, or None.
+    """
+    point = Point(float(marker.longitude), float(marker.latitude), srid=4326)
+    for building in buildings:
+        footprint = pin_restructure.building_footprint(building)
+        if footprint is not None and (footprint.contains(point) or footprint.touches(point)):
+            return building
+    return None
+
+
+def _find_existing_match[T: _Located](marker: _Located, candidates: list[T], buildings: list[dict[str, Any]]) -> T | None:
+    """The candidate that already covers ``marker``.
+
+    Two building-typed markers are matched by REData's real footprint when
+    it's known, before falling back to proximity: a building pin shared from
+    one end of a long hall and the receiving side's own pin for the same
+    building placed at the other end can easily sit farther apart than
+    ``site_scope.BUILDING_MATCH_METERS``, yet the parcel's own building
+    footprint settles unambiguously that they're the same structure - which
+    is exactly the distinction a fixed radius gets wrong on a dense campus.
+    Everything else (entrances, POIs, hazards - anything with no "which
+    building" concept) is always proximity-matched.
+
+    Args:
+        marker: The pin or wiki being matched.
+        candidates: Markers of the other kind, not yet matched to anything.
+        buildings: The parcel's cached REData building records (``[]`` when
+            none have ever been fetched for this location).
+
+    Returns:
+        The matching candidate, or None.
+    """
+    if marker.pin_type == PinType.BUILDING and buildings:
+        containing = _building_containing(marker, buildings)
+        if containing is not None:
+            same_building = next(
+                (candidate for candidate in candidates if candidate.pin_type == PinType.BUILDING and _building_containing(candidate, buildings) is containing),
+                None,
+            )
+            if same_building is not None:
+                return same_building
+    return _nearest_uncovered(marker, candidates)
 
 
 def send_pins_to_wiki(parent_pin: Pin, children: list[Pin], profile: Profile) -> int:
@@ -104,11 +162,12 @@ def send_pins_to_wiki(parent_pin: Pin, children: list[Pin], profile: Profile) ->
     if wiki is None:
         return 0
 
+    buildings = site_scope.parcel_buildings(parent_pin.location) or []
     unmatched_wikis = list(wiki.child_wikis.select_related("location"))
     created = 0
     with transaction.atomic():
         for child in children[:MAX_SYNC_ITEMS]:
-            existing = _nearest_uncovered(child, unmatched_wikis)
+            existing = _find_existing_match(child, unmatched_wikis, buildings)
             if existing is not None:
                 unmatched_wikis.remove(existing)
                 continue
@@ -159,11 +218,12 @@ def pull_children_from_wiki(parent_pin: Pin) -> int:
     if not child_wikis:
         return 0
 
+    buildings = site_scope.parcel_buildings(parent_pin.location) or []
     unmatched_pins = list(parent_pin.detail_pins.select_related("location"))
     created = 0
     with transaction.atomic():
         for cw in child_wikis[:MAX_SYNC_ITEMS]:
-            existing = _nearest_uncovered(cw, unmatched_pins)
+            existing = _find_existing_match(cw, unmatched_pins, buildings)
             if existing is not None:
                 unmatched_pins.remove(existing)
                 continue

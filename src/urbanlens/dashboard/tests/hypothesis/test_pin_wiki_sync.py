@@ -3,9 +3,10 @@
 
 Two hierarchies can drift apart even when both exist: a hand-placed child pin
 nobody's documented on the wiki yet, or a wiki child nobody's personally
-pinned. Covers both directions, proximity-based dedup (neither side publishes
-a footprint polygon, unlike REData buildings), and that neither direction ever
-creates a wiki that doesn't already exist.
+pinned. Covers both directions, dedup (REData building-footprint containment
+for two building-typed markers when the parcel's buildings are known -
+proximity otherwise, and always for non-building markers), and that neither
+direction ever creates a wiki that doesn't already exist.
 """
 
 from __future__ import annotations
@@ -15,13 +16,24 @@ from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.models.cache.location_cache import LocationCache
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin, PinType
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
+from urbanlens.dashboard.services.locations.site_scope import PARCEL_BUILDINGS_CACHE_SOURCE
 from urbanlens.dashboard.services.pin_wiki_sync import pull_children_from_wiki, send_pins_to_wiki
 
 _coord_counter = 0
+
+#: A long, thin footprint (~130 m end to end) - big enough that two points at
+#: opposite ends sit well outside site_scope.BUILDING_MATCH_METERS (15 m) from
+#: each other, the way a real dormitory hall would, while both still fall
+#: inside the same building record's own polygon.
+_HALL_FOOTPRINT = {
+    "type": "Polygon",
+    "coordinates": [[[-91.60060, 48.59990], [-91.59940, 48.59990], [-91.59940, 48.60010], [-91.60060, 48.60010], [-91.60060, 48.59990]]],
+}
 
 
 def _make_location(**kwargs) -> Location:
@@ -97,6 +109,143 @@ class SendPinsToWikiTests(TestCase):
         wiki = baker.make(Wiki, location=self.location, name="Campus")
         self.assertEqual(send_pins_to_wiki(self.parent, [], self.profile), 0)
         self.assertFalse(WikiEdit.objects.filter(wiki=wiki).exists())
+
+
+class BuildingFootprintMatchingTests(TestCase):
+    """Two building-typed markers match by REData's real footprint, not just proximity.
+
+    A building pin shared from one end of a long hall and the receiving
+    side's own pin for the same building at the other end can easily sit
+    farther apart than site_scope.BUILDING_MATCH_METERS - but the parcel's
+    building footprint settles unambiguously that they're the same structure.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.profile = baker.make("dashboard.Profile")
+        self.location = _make_location()
+        self.parent = baker.make(Pin, profile=self.profile, location=self.location, slug="campus")
+        self.wiki = baker.make(Wiki, location=self.location, name="Campus")
+        LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": [{"name": "Dorm Hall", "geometry": _HALL_FOOTPRINT, "latitude": 48.60000, "longitude": -91.60000}]})
+
+    def test_send_skips_a_far_apart_pin_inside_the_same_building_footprint(self) -> None:
+        baker.make(
+            Wiki,
+            location=baker.make(Location, latitude="48.599950", longitude="-91.600550", google_place=None),
+            parent_wiki=self.wiki,
+            name="Dorm Hall (west wing)",
+            pin_type=PinType.BUILDING,
+        )
+        other_end = baker.make(
+            Pin,
+            profile=self.profile,
+            parent_pin=self.parent,
+            location=baker.make(Location, latitude="48.600050", longitude="-91.599450", google_place=None),
+            name="Dorm Hall (east wing)",
+            pin_type=PinType.BUILDING,
+        )
+        # Sanity check the fixture: the two ends really are farther apart than
+        # a fixed-radius proximity match would ever bridge.
+        from urbanlens.dashboard.services.locations.site_scope import BUILDING_MATCH_METERS, meters_between
+
+        self.assertGreater(meters_between(48.599950, -91.600550, 48.600050, -91.599450), BUILDING_MATCH_METERS)
+
+        created = send_pins_to_wiki(self.parent, [other_end], self.profile)
+
+        self.assertEqual(created, 0, "the footprint match must skip creating a duplicate")
+        self.assertEqual(self.wiki.child_wikis.count(), 1)
+
+    def test_pull_skips_a_far_apart_wiki_inside_the_same_building_footprint(self) -> None:
+        baker.make(
+            Pin,
+            profile=self.profile,
+            parent_pin=self.parent,
+            location=baker.make(Location, latitude="48.599950", longitude="-91.600550", google_place=None),
+            name="Dorm Hall (west wing)",
+            pin_type=PinType.BUILDING,
+        )
+        baker.make(
+            Wiki,
+            location=baker.make(Location, latitude="48.600050", longitude="-91.599450", google_place=None),
+            parent_wiki=self.wiki,
+            name="Dorm Hall (east wing)",
+            pin_type=PinType.BUILDING,
+        )
+
+        created = pull_children_from_wiki(self.parent)
+
+        self.assertEqual(created, 0, "the footprint match must skip creating a duplicate")
+        self.assertEqual(self.parent.detail_pins.count(), 1)
+
+    def test_only_building_typed_markers_use_footprint_matching(self) -> None:
+        """A non-building marker at the same far-apart coordinates is never footprint-matched -
+        it's proximity-only, so it still gets created as its own separate marker."""
+        baker.make(
+            Wiki,
+            location=baker.make(Location, latitude="48.599950", longitude="-91.600550", google_place=None),
+            parent_wiki=self.wiki,
+            name="West Entrance",
+            pin_type=PinType.ENTRANCE,
+        )
+        other_end = baker.make(
+            Pin,
+            profile=self.profile,
+            parent_pin=self.parent,
+            location=baker.make(Location, latitude="48.600050", longitude="-91.599450", google_place=None),
+            name="East Entrance",
+            pin_type=PinType.ENTRANCE,
+        )
+
+        created = send_pins_to_wiki(self.parent, [other_end], self.profile)
+
+        self.assertEqual(created, 1, "non-building markers are proximity-only and these are far apart")
+        self.assertEqual(self.wiki.child_wikis.count(), 2)
+
+    def test_a_building_pin_at_a_different_building_is_not_matched(self) -> None:
+        """Footprint matching still respects "different building" - only markers inside
+        the SAME footprint are treated as duplicates."""
+        baker.make(
+            Wiki,
+            location=baker.make(Location, latitude="48.599950", longitude="-91.600550", google_place=None),
+            parent_wiki=self.wiki,
+            name="Dorm Hall",
+            pin_type=PinType.BUILDING,
+        )
+        elsewhere = baker.make(
+            Pin,
+            profile=self.profile,
+            parent_pin=self.parent,
+            location=baker.make(Location, latitude="48.700000", longitude="-91.700000", google_place=None),
+            name="Unrelated Building",
+            pin_type=PinType.BUILDING,
+        )
+
+        created = send_pins_to_wiki(self.parent, [elsewhere], self.profile)
+
+        self.assertEqual(created, 1)
+        self.assertEqual(self.wiki.child_wikis.count(), 2)
+
+    def test_no_cached_buildings_falls_back_to_proximity(self) -> None:
+        LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {})
+        baker.make(
+            Wiki,
+            location=baker.make(Location, latitude="48.599950", longitude="-91.600550", google_place=None),
+            parent_wiki=self.wiki,
+            name="Dorm Hall (west wing)",
+            pin_type=PinType.BUILDING,
+        )
+        far_end = baker.make(
+            Pin,
+            profile=self.profile,
+            parent_pin=self.parent,
+            location=baker.make(Location, latitude="48.600050", longitude="-91.599450", google_place=None),
+            name="Dorm Hall (east wing)",
+            pin_type=PinType.BUILDING,
+        )
+
+        created = send_pins_to_wiki(self.parent, [far_end], self.profile)
+
+        self.assertEqual(created, 1, "with no building data cached, proximity is the only signal, and these are far apart")
 
 
 class PullChildrenFromWikiTests(TestCase):

@@ -35,11 +35,16 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   tab too, each labelled with a link back to the sub pin it was written on, alongside the map,
   photo gallery, and visit history the toggle already covered
 - **Manual pin ↔ wiki sync** — from the detail-pins multi-select toolbar, "Send to wiki" creates a
-  matching child wiki for the selected sub pins (skipping ones the wiki already has, matched by
-  proximity); "Share with a friend" shares just the selected sub pins, not the pin's whole
-  hierarchy. A "pull from wiki" button creates a personal sub pin for anything the community wiki
-  already documents that you haven't pinned yourself. Neither direction ever creates the wiki
-  itself - only its child wikis
+  matching child wiki for the selected sub pins, skipping ones the wiki already has; "Share with a
+  friend" shares just the selected sub pins, not the pin's whole hierarchy. A "pull from wiki"
+  button creates a personal sub pin for anything the community wiki already documents that you
+  haven't pinned yourself. Neither direction ever creates the wiki itself - only its child wikis.
+  Two building-typed markers are matched by REData's real building footprint when the parcel's
+  buildings are known, not just proximity - a building pin shared from one end of a long hall and
+  the receiving side's own pin at the other end still dedupe correctly, since both fall inside the
+  same footprint even though they're farther apart than the fallback proximity radius covers.
+  Non-building markers (entrances, hazards, POIs) are always proximity-matched
+- **Community wikis nest themselves automatically** — when two independently-created wikis'
 - **Community wikis nest themselves automatically** — when two independently-created wikis'
   boundaries turn out to nest (a building's wiki inside a campus's, once both have a real property
   boundary), the smaller becomes a child of the bigger with no confirmation needed - re-parenting
