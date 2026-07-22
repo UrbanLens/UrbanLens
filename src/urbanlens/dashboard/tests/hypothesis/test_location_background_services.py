@@ -312,6 +312,15 @@ class BoundaryProviderChainTests(SimpleTestCase):
 class OverpassGatewayTests(SimpleTestCase):
     """Overpass helpers build bounded, reusable API requests."""
 
+    def setUp(self) -> None:
+        # Down-endpoint flags live in the shared Django cache; clear it so one
+        # test's simulated outages never leak into the next.
+        from django.core.cache import cache
+
+        super().setUp()
+        cache.clear()
+        self.addCleanup(cache.clear)
+
     def test_nearby_features_query_can_include_nodes_without_geometry(self) -> None:
         from urbanlens.dashboard.services.apis.locations.boundaries.overpass import OverpassGateway
 
@@ -385,8 +394,20 @@ class OverpassGatewayTests(SimpleTestCase):
         response.json.return_value = {} if payload is None else payload
         return response
 
-    def test_query_fails_over_to_a_mirror_on_a_transient_504(self) -> None:
-        """A 504 from the primary instance retries the next mirror instead of failing."""
+    @staticmethod
+    def _no_shuffle():
+        """Patch the gateway's load-balancing shuffle to a no-op for deterministic order."""
+        return mock.patch(
+            "urbanlens.dashboard.services.apis.locations.boundaries.overpass.random.shuffle",
+            side_effect=lambda seq: None,
+        )
+
+    @staticmethod
+    def _no_sleep():
+        return mock.patch("urbanlens.dashboard.services.apis.locations.boundaries.overpass.time.sleep")
+
+    def test_query_fails_over_to_next_endpoint_on_a_transient_504(self) -> None:
+        """A 504 from one instance retries the next healthy one instead of failing."""
         from urbanlens.dashboard.services.apis.locations.boundaries.overpass import OverpassGateway
 
         gateway = OverpassGateway(session=mock.Mock())
@@ -395,17 +416,52 @@ class OverpassGatewayTests(SimpleTestCase):
             self._fake_response(200, {"elements": [{"id": 1}]}),
         ]
 
-        with mock.patch("urbanlens.dashboard.services.apis.locations.boundaries.overpass.time.sleep"):
+        with self._no_shuffle(), self._no_sleep():
             payload = gateway.query("[out:json];node(1);out;")
 
         self.assertEqual(payload, {"elements": [{"id": 1}]})
         self.assertEqual(gateway.session.post.call_count, 2)
-        # The retry targeted the first configured mirror, not the failed primary.
+        # The retry targeted the next configured endpoint, not the failed one.
         self.assertEqual(gateway.session.post.call_args_list[0].args[0], gateway.base_url)
         self.assertEqual(gateway.session.post.call_args_list[1].args[0], gateway.mirrors[0])
 
-    def test_query_reraises_when_every_endpoint_is_overloaded(self) -> None:
-        """If all mirrors 504, the last error propagates (caller degrades to [])."""
+    def test_failing_endpoint_is_dropped_from_rotation_on_the_next_query(self) -> None:
+        """An endpoint that 504s is flagged down and skipped by the following query."""
+        from urbanlens.dashboard.services.apis.locations.boundaries.overpass import OverpassGateway, _endpoint_is_down
+
+        gateway = OverpassGateway(session=mock.Mock())
+        gateway.session.post.side_effect = [
+            self._fake_response(504),  # first query: primary fails...
+            self._fake_response(200, {"elements": []}),  # ...second endpoint answers
+            self._fake_response(200, {"elements": []}),  # second query: primary is skipped
+        ]
+
+        with self._no_shuffle(), self._no_sleep():
+            gateway.query("[out:json];node(1);out;")
+            second_call_index = gateway.session.post.call_count
+            gateway.query("[out:json];node(1);out;")
+
+        self.assertTrue(_endpoint_is_down(gateway.base_url))
+        # The second query went straight to a healthy mirror - the downed primary
+        # was never contacted again.
+        followup_url = gateway.session.post.call_args_list[second_call_index].args[0]
+        self.assertNotEqual(followup_url, gateway.base_url)
+
+    def test_query_returns_empty_when_every_endpoint_is_down(self) -> None:
+        """With the whole pool flagged down, the query is skipped entirely - no HTTP call."""
+        from urbanlens.dashboard.services.apis.locations.boundaries.overpass import OverpassGateway, _mark_endpoint_down
+
+        gateway = OverpassGateway(session=mock.Mock())
+        for url in gateway._endpoints():
+            _mark_endpoint_down(url)
+
+        payload = gateway.query("[out:json];node(1);out;")
+
+        self.assertEqual(payload, {})
+        gateway.session.post.assert_not_called()
+
+    def test_query_reraises_when_every_available_endpoint_is_overloaded(self) -> None:
+        """If all healthy instances 504, the last error propagates (caller degrades to [])."""
         import requests
 
         from urbanlens.dashboard.services.apis.locations.boundaries.overpass import OverpassGateway
@@ -413,13 +469,27 @@ class OverpassGatewayTests(SimpleTestCase):
         gateway = OverpassGateway(session=mock.Mock())
         gateway.session.post.side_effect = [self._fake_response(504) for _ in gateway._endpoints()]
 
-        with (
-            mock.patch("urbanlens.dashboard.services.apis.locations.boundaries.overpass.time.sleep"),
-            self.assertRaises(requests.HTTPError),
-        ):
+        with self._no_shuffle(), self._no_sleep(), self.assertRaises(requests.HTTPError):
             gateway.query("[out:json];node(1);out;")
 
         self.assertEqual(gateway.session.post.call_count, len(gateway._endpoints()))
+
+    def test_malformed_query_raises_immediately_without_downing_the_endpoint(self) -> None:
+        """A 400 is our bug, identical on every mirror - fail fast, keep the pool healthy."""
+        import requests
+
+        from urbanlens.dashboard.services.apis.locations.boundaries.overpass import OverpassGateway, _endpoint_is_down
+
+        gateway = OverpassGateway(session=mock.Mock())
+        bad = self._fake_response(400)
+        bad.raise_for_status.side_effect = requests.HTTPError("400 Bad Request", response=bad)
+        gateway.session.post.side_effect = [bad, self._fake_response(200, {"elements": []})]
+
+        with self._no_shuffle(), self._no_sleep(), self.assertRaises(requests.HTTPError):
+            gateway.query("[out:json];bogus;out;")
+
+        self.assertEqual(gateway.session.post.call_count, 1)
+        self.assertFalse(_endpoint_is_down(gateway.base_url))
 
     def test_query_does_not_fail_over_on_our_own_rate_limit(self) -> None:
         """A local rate-limit block short-circuits: failing over would only burn budget."""

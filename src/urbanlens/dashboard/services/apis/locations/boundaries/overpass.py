@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import timedelta
 import json
 import logging
+import random
 import re
 import time
 from typing import Any, ClassVar, Literal, Protocol
 
 from django.contrib.gis.geos import GEOSGeometry, MultiPolygon, Point, Polygon
+from django.core.cache import cache
+from django.utils import timezone
 import requests
 
 from urbanlens.dashboard.services.apis.locations.base import BoundaryProvider, _is_reasonable_default, best_polygon_from_geometry
@@ -19,20 +23,62 @@ from urbanlens.dashboard.services.rate_limiter import RateLimitExceededError
 logger = logging.getLogger(__name__)
 
 _API_URL = "https://overpass-api.de/api/interpreter"
-# Fallback mirrors, tried in order when the primary returns a transient
-# overload response. All run the same OSM3S/Overpass API software, so an
-# identical query works against any of them; see
-# https://wiki.openstreetmap.org/wiki/Overpass_API#Public_Overpass_API_instances
+# Load is spread across this whole pool (see `OverpassGateway.query`): every
+# instance runs the same OSM3S/Overpass API software, so an identical query works
+# against any of them. The canonical overpass-api.de is chronically overloaded;
+# the community mirrors below routinely answer the same query in well under a
+# second, so treating them as equal peers rather than fallbacks is deliberate.
+# See https://wiki.openstreetmap.org/wiki/Overpass_API#Public_Overpass_API_instances
 _API_MIRRORS: tuple[str, ...] = (
     "https://overpass.private.coffee/api/interpreter",
     "https://overpass.kumi.systems/api/interpreter",
+    "https://overpass.osm.ch/api/interpreter",
+    "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
 )
-# HTTP statuses that mean "this instance is overloaded right now" rather than
-# "your query is wrong" - safe to retry against another mirror. 429 is the
-# per-IP slot/quota limit; 502/503/504 are the dispatcher-busy family.
+# HTTP statuses that mean "this instance is overloaded/unhealthy right now"
+# rather than "your query is wrong". 429 is the per-IP slot/quota limit;
+# 502/503/504 are the dispatcher-busy family. These, plus network timeouts,
+# take an instance out of rotation until the next day (see `_mark_endpoint_down`).
 _RETRYABLE_STATUS = frozenset({429, 502, 503, 504})
 _RETRY_BACKOFF_SECONDS = 0.5
+# Cache key namespace for the "this endpoint is down" flags. Backed by the
+# shared Django cache (Valkey/Redis in deployed environments) so a down mark set
+# by one worker keeps every other worker off that instance too.
+_DOWN_CACHE_KEY = "overpass:endpoint_down:{}"
 _USER_AGENT = "UrbanLens/1.0 (https://github.com/urbanlens/urbanlens; hello@urbanlens.org) python-requests/2.x"
+
+
+def _seconds_until_next_day() -> int:
+    """Seconds from now until the next UTC midnight.
+
+    Used as the TTL for a downed-endpoint flag so a failed instance is retried
+    at the start of the next day. The project runs in UTC (``TIME_ZONE``), so
+    "the next day" is the next UTC calendar day.
+    """
+    now = timezone.now()
+    next_midnight = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    return max(1, int((next_midnight - now).total_seconds()))
+
+
+def _mark_endpoint_down(url: str) -> None:
+    """Take an Overpass endpoint out of rotation until the next day.
+
+    Cache failures are swallowed: if the shared cache is unavailable we simply
+    can't remember the outage, which is safe (the endpoint just gets tried
+    again) and must never break a boundary lookup.
+    """
+    try:
+        cache.set(_DOWN_CACHE_KEY.format(url), 1, timeout=_seconds_until_next_day())
+    except Exception:
+        logger.debug("Could not record Overpass endpoint %s as down", url, exc_info=True)
+
+
+def _endpoint_is_down(url: str) -> bool:
+    """Whether an endpoint is currently flagged down. Fails open on cache errors."""
+    try:
+        return cache.get(_DOWN_CACHE_KEY.format(url)) is not None
+    except Exception:
+        return False
 # Overpass QL has no OR operator to chain bracket filters within one statement, so
 # each top-level `|`-separated clause here becomes its own unioned statement per
 # element type (see `_TAG_FILTER_CLAUSE_SPLIT` / `_nearby_features_query`). The
@@ -121,23 +167,38 @@ class OverpassGateway(Gateway, BoundaryProvider):
         self.session.headers.update({"User-Agent": _USER_AGENT})
 
     def _endpoints(self) -> list[str]:
-        """Ordered, de-duplicated list of Overpass endpoints to try."""
+        """Ordered, de-duplicated list of every configured Overpass endpoint."""
         endpoints: list[str] = []
         for url in (self.base_url, *self.mirrors):
             if url not in endpoints:
                 endpoints.append(url)
         return endpoints
 
+    def _available_endpoints(self) -> list[str]:
+        """Configured endpoints not currently flagged down, in randomised order.
+
+        Shuffling spreads load evenly across the healthy pool: each query starts
+        at a different instance rather than always hammering the primary, and any
+        endpoint that then fails is the next-in-line to be retried.
+        """
+        available = [url for url in self._endpoints() if not _endpoint_is_down(url)]
+        random.shuffle(available)
+        return available
+
     def query(self, query: str, *, timeout: int | None = None) -> dict[str, Any]:
         """Run a raw Overpass QL query and return the decoded JSON payload.
 
-        Tries each configured endpoint in turn, failing over to the next mirror
-        on the transient overload responses (429/502/503/504) and connection
-        timeouts that the free public instances routinely return. A non-retryable
-        HTTP error (e.g. 400 for a malformed query) is raised immediately, as is
-        our own :class:`RateLimitExceededError` - failing over would only burn
-        more of the shared budget. If every endpoint fails transiently, the last
-        error is re-raised.
+        Load is distributed across the pool of public Overpass instances: a
+        random healthy endpoint is tried first, failing over to the next on the
+        transient overload responses (429/502/503/504) and connection timeouts
+        the free instances routinely return. Any endpoint that fails that way is
+        taken out of rotation until the next day (:func:`_mark_endpoint_down`),
+        so a chronically overloaded instance stops being tried at all.
+
+        A non-retryable HTTP error (e.g. 400 for a malformed query) is raised
+        immediately without downing the endpoint - that is our bug, not the
+        instance's, and every mirror would reject it identically. Our own
+        :class:`RateLimitExceededError` likewise propagates untouched.
 
         Args:
             query: The Overpass QL program to execute.
@@ -146,17 +207,20 @@ class OverpassGateway(Gateway, BoundaryProvider):
 
         Returns:
             The decoded JSON payload, or an empty dict if the response was not a
-            JSON object.
+            JSON object or every endpoint is currently down.
 
         Raises:
-            requests.RequestException: If every endpoint fails, or on the first
-                non-retryable HTTP error.
+            requests.RequestException: If every available endpoint fails
+                transiently, or on the first non-retryable HTTP error.
             RateLimitExceededError: If our own rate limiter blocks the call.
         """
         http_timeout = timeout or self.timeout
-        endpoints = self._endpoints()
+        candidates = self._available_endpoints()
+        if not candidates:
+            logger.warning("All Overpass endpoints are flagged down until the next day; skipping query")
+            return {}
         last_error: requests.RequestException | None = None
-        for attempt, url in enumerate(endpoints):
+        for attempt, url in enumerate(candidates):
             if attempt:
                 time.sleep(_RETRY_BACKOFF_SECONDS)
             try:
@@ -165,12 +229,16 @@ class OverpassGateway(Gateway, BoundaryProvider):
                 raise
             except (requests.Timeout, requests.ConnectionError) as exc:
                 last_error = exc
-                logger.debug("Overpass endpoint %s unreachable, trying next mirror", url, exc_info=True)
+                _mark_endpoint_down(url)
+                logger.debug("Overpass endpoint %s unreachable; marked down, trying next", url, exc_info=True)
                 continue
             if response.status_code in _RETRYABLE_STATUS:
                 last_error = requests.HTTPError(f"{response.status_code} Server Error from {url}", response=response)
-                logger.debug("Overpass endpoint %s returned %d, trying next mirror", url, response.status_code)
+                _mark_endpoint_down(url)
+                logger.debug("Overpass endpoint %s returned %d; marked down, trying next", url, response.status_code)
                 continue
+            # Any remaining non-2xx (e.g. 400) is a query-level error identical
+            # across every mirror - surface it without downing this endpoint.
             response.raise_for_status()
             payload = response.json()
             return payload if isinstance(payload, dict) else {}
