@@ -1957,3 +1957,27 @@ class PinCrisAttachmentView(View):
             return HttpResponse(status=404)
         cache.set(cache_key, (content, content_type), _REDATA_MEDIA_CACHE_TTL)
         return HttpResponse(content, content_type=content_type)
+
+
+class PinCrisExtractedImageView(View):
+    """GET pin/cris/attachment/<resource_uuid>/<attachment_id>/extracted/<image_id>/ - proxies
+    one photo OCR/AI-extracted from a CRIS document attachment.
+
+    Same reasoning as ``PinCrisAttachmentView`` - no login required.
+    """
+
+    def get(self, request: HttpRequest, resource_uuid: str, attachment_id: int, image_id: int) -> HttpResponse:
+        from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError, RedataGateway
+
+        cache_key = f"ul_cris_extracted_image_{resource_uuid}_{attachment_id}_{image_id}"
+        cached = cache.get(cache_key)
+        if cached is not None:
+            content, content_type = cached
+            return HttpResponse(content, content_type=content_type)
+
+        try:
+            content, content_type = RedataGateway().download_extracted_image(resource_uuid, attachment_id, image_id)
+        except (PropertyRecordsUnavailableError, ValueError):
+            return HttpResponse(status=404)
+        cache.set(cache_key, (content, content_type), _REDATA_MEDIA_CACHE_TTL)
+        return HttpResponse(content, content_type=content_type)

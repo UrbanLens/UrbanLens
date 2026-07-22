@@ -341,3 +341,104 @@ class DownloadCulturalResourceAttachmentTests(SimpleTestCase):
         gateway = _gateway(session)
         with self.assertRaises(PropertyRecordsUnavailableError):
             gateway.download_cultural_resource_attachment("r1", 5)
+
+
+# -- lookup_buildings ---------------------------------------------------------------
+
+
+class LookupBuildingsTests(SimpleTestCase):
+    def test_returns_the_building_list(self) -> None:
+        session = MagicMock()
+        session.get.return_value = _response(200, json_body=[{"source": "cris", "name": "Reality House", "building_number": "72", "year_built": 1937}])
+        gateway = _gateway(session)
+        buildings = gateway.lookup_buildings("parcel-uuid")
+        self.assertEqual(buildings[0]["name"], "Reality House")
+
+    def test_hits_the_parcel_scoped_buildings_endpoint(self) -> None:
+        session = MagicMock()
+        session.get.return_value = _response(200, json_body=[])
+        gateway = _gateway(session)
+        gateway.lookup_buildings("parcel-uuid")
+        args, _kwargs = session.get.call_args
+        self.assertEqual(args[0], "https://redata.example.test/api/v1/parcels/parcel-uuid/buildings/")
+
+    def test_non_list_body_returns_empty_list(self) -> None:
+        session = MagicMock()
+        session.get.return_value = _response(200, json_body={"unexpected": "shape"})
+        gateway = _gateway(session)
+        self.assertEqual(gateway.lookup_buildings("parcel-uuid"), [])
+
+    def test_network_error_raises_unavailable(self) -> None:
+        session = MagicMock()
+        session.get.side_effect = ConnectionError("connection refused")
+        gateway = _gateway(session)
+        with self.assertRaises(PropertyRecordsUnavailableError):
+            gateway.lookup_buildings("parcel-uuid")
+
+
+# -- extract_cultural_resource_attachment / download_extracted_image ----------------
+
+
+class ExtractCulturalResourceAttachmentTests(SimpleTestCase):
+    def test_returns_the_extraction_body(self) -> None:
+        session = MagicMock()
+        session.post.return_value = _response(200, json_body={"id": 12, "extracted_data": {"building_number": "166"}, "extracted_images": [{"id": 3}]})
+        gateway = _gateway(session)
+        result = gateway.extract_cultural_resource_attachment("r1", 12)
+        self.assertEqual(result["extracted_images"], [{"id": 3}])
+
+    def test_hits_the_extract_endpoint(self) -> None:
+        session = MagicMock()
+        session.post.return_value = _response(200, json_body={})
+        gateway = _gateway(session)
+        gateway.extract_cultural_resource_attachment("r1", 12)
+        args, _kwargs = session.post.call_args
+        self.assertEqual(args[0], "https://redata.example.test/api/v1/cultural-resources/r1/attachments/12/extract/")
+
+    def test_400_not_extractable_raises_unavailable(self) -> None:
+        session = MagicMock()
+        session.post.return_value = _response(400, json_body={"error": "not_extractable"})
+        gateway = _gateway(session)
+        with self.assertRaises(PropertyRecordsUnavailableError) as ctx:
+            gateway.extract_cultural_resource_attachment("r1", 12)
+        self.assertEqual(ctx.exception.reason, "not_extractable")
+
+    def test_503_extraction_unavailable_raises_unavailable(self) -> None:
+        session = MagicMock()
+        session.post.return_value = _response(503, json_body={"error": "extraction_unavailable"})
+        gateway = _gateway(session)
+        with self.assertRaises(PropertyRecordsUnavailableError) as ctx:
+            gateway.extract_cultural_resource_attachment("r1", 12)
+        self.assertEqual(ctx.exception.reason, "extraction_unavailable")
+
+    def test_network_error_raises_unavailable(self) -> None:
+        session = MagicMock()
+        session.post.side_effect = ConnectionError("connection refused")
+        gateway = _gateway(session)
+        with self.assertRaises(PropertyRecordsUnavailableError):
+            gateway.extract_cultural_resource_attachment("r1", 12)
+
+
+class DownloadExtractedImageTests(SimpleTestCase):
+    def test_returns_bytes_and_content_type(self) -> None:
+        session = MagicMock()
+        session.get.return_value = _response(200, content=b"jpeg-bytes", headers={"Content-Type": "image/jpeg"})
+        gateway = _gateway(session)
+        content, content_type = gateway.download_extracted_image("r1", 12, 3)
+        self.assertEqual(content, b"jpeg-bytes")
+        self.assertEqual(content_type, "image/jpeg")
+
+    def test_hits_the_extracted_image_download_endpoint(self) -> None:
+        session = MagicMock()
+        session.get.return_value = _response(200, content=b"x")
+        gateway = _gateway(session)
+        gateway.download_extracted_image("r1", 12, 3)
+        args, _kwargs = session.get.call_args
+        self.assertEqual(args[0], "https://redata.example.test/api/v1/cultural-resources/r1/attachments/12/extracted-images/3/download/")
+
+    def test_404_raises_unavailable(self) -> None:
+        session = MagicMock()
+        session.get.return_value = _response(404, json_body={"error": "image_unavailable"})
+        gateway = _gateway(session)
+        with self.assertRaises(PropertyRecordsUnavailableError):
+            gateway.download_extracted_image("r1", 12, 3)

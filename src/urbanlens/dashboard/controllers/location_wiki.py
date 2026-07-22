@@ -13,7 +13,7 @@ import logging
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.gis.geos import GEOSGeometry, MultiPolygon, Polygon
-from django.http import Http404, HttpResponse, JsonResponse
+from django.http import Http404, HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.template.loader import render_to_string
 from django.urls import reverse
@@ -192,6 +192,41 @@ class LocationWikiView(LoginRequiredMixin, View):
                     ("locked", "Locked", wiki.locked),
                 ],
                 "show_map_footer": True,
+            },
+        )
+
+
+class WikiBuildingAttributesPanelView(LoginRequiredMixin, View):
+    """GET: the wiki's shared Building Attributes card (REData building number/name/year built).
+
+    Location-scoped (``LocationCache``, not a Pin), so this reads whatever
+    ``RedataBuildingAttributesEnrichmentSource``'s background enrichment cycle
+    (or a visiting pin's own on-demand panel fetch) already cached - the wiki
+    page never triggers a live REData fetch itself, mirroring how the
+    Ownership card only ever shows already-known ``WikiOwner`` rows.
+    """
+
+    def get(self, request: HttpRequest, location_slug: str) -> HttpResponse:
+        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+        from urbanlens.dashboard.plugins.builtin.redata_building_attributes import _render_building_attributes
+
+        location, _wiki, _profile = resolve_visible_wiki(request, location_slug)
+        cached = LocationCache.get_fresh(location, "redata_building_attributes")
+        if cached is None:
+            return HttpResponse(status=204)
+
+        context = _render_building_attributes(cached.data or {})
+        if context is None:
+            return HttpResponse(status=204)
+
+        return render(
+            request,
+            "dashboard/partials/pins/_simple_info_panel.html",
+            {
+                "section_id": "location-building-attributes-panel",
+                "icon": "domain",
+                "title": "Building Attributes",
+                **context,
             },
         )
 

@@ -268,6 +268,11 @@ urlpatterns = [
                                 pin.PinCrisAttachmentView.as_view(),
                                 name="pin.cris.attachment",
                             ),
+                            path(
+                                "cris/attachment/<str:resource_uuid>/<int:attachment_id>/extracted/<int:image_id>/",
+                                pin.PinCrisExtractedImageView.as_view(),
+                                name="pin.cris.extracted_image",
+                            ),
                             path("<slug:pin_slug>/", pin.PinController.as_view({"get": "view"}), name="pin.details"),
                             path("<slug:pin_slug>/share/", pin_sharing.PinShareDialogView.as_view(), name="pin.share.dialog"),
                             path("<slug:pin_slug>/share/send/", pin_sharing.PinShareCreateView.as_view(), name="pin.share.send"),
@@ -1079,6 +1084,11 @@ urlpatterns = [
                     "<slug:location_slug>/wiki/aliases/<int:alias_id>/toggle-nickname/",
                     aliases.LocationAliasToggleNicknameView.as_view(),
                     name="location.wiki.alias.toggle_nickname",
+                ),
+                path(
+                    "<slug:location_slug>/wiki/building-attributes/",
+                    location_wiki.WikiBuildingAttributesPanelView.as_view(),
+                    name="location.wiki.building_attributes",
                 ),
                 path(
                     "<slug:location_slug>/wiki/ownership/",

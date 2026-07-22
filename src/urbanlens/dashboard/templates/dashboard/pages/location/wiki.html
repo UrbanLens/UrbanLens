@@ -199,6 +199,21 @@
                 <div class="card__body wiki-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
             </div>
 
+            {# -- Building Attributes (REData building number/name/year built) -- #}
+            <div hx-get="{% url 'location.wiki.building_attributes' location.slug %}"
+                 hx-trigger="load[!window.ulSectionCollapsed('wiki','building_attributes')], ul:unhide"
+                 hx-swap="outerHTML"
+                 id="location-building-attributes-panel"
+                 class="card wiki-card"
+                 data-ext-panel-204
+                 data-collapse-scope="wiki" data-collapse-section="building_attributes">
+                <div class="card-header">
+                    <i class="material-symbols-outlined">domain</i>
+                    <span>Building Attributes</span>
+                </div>
+                <div class="card__body wiki-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
+            </div>
+
             {# -- Media (external providers + shared photos) -------------------- #}
             {# Combined Media section mirroring the pin detail page: one grid    #}
             {# with per-source tabs. External media (Wikimedia, Smithsonian, ... #}
@@ -424,6 +439,20 @@
      data-markup-border-opacity="{{ markup_border_opacity|default:100 }}"
      data-show-onboarding-tips="{{ request.user.profile.show_onboarding_tips|yesno:'1,' }}"></div>
 <script type="module" src="{% static 'dashboard/js/map-annotations.js' %}"></script>
+<script>
+    // -- External-data panels: handle 204 (no data) --------------------------
+    // HTMX does not perform a swap for 204 No Content responses, so a
+    // "Loading..." placeholder would otherwise stay visible forever - remove
+    // it explicitly. Mirrors the same data-ext-panel-204 handling on the pin
+    // detail page (dashboard/pages/location/index.html); only the Building
+    // Attributes card uses this on the wiki page today.
+    document.body.addEventListener('htmx:afterOnLoad', function (evt) {
+        var el = evt.detail && evt.detail.elt;
+        if (el && el.hasAttribute && el.hasAttribute('data-ext-panel-204') && evt.detail.xhr.status === 204) {
+            el.remove();
+        }
+    });
+</script>
 <script>
 (function () {
     try {

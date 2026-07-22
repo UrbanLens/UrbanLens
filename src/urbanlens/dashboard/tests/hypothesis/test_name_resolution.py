@@ -20,6 +20,7 @@ from urbanlens.dashboard.services.locations.name_resolution import (
     NameCandidate,
     NameProvider,
     RuleBasedNameResolver,
+    default_name_resolver,
 )
 from urbanlens.dashboard.services.locations.naming import (
     external_name_candidates_for_location,
@@ -220,6 +221,70 @@ class RuleBasedNameResolverTests(SimpleTestCase):
     def test_winner_is_always_one_of_the_candidates(self, names: list[str]) -> None:
         candidates = [NameCandidate(name=name, source=f"src{index}") for index, name in enumerate(names)]
         self.assertIn(self._resolve(candidates, ["src0"]), candidates)
+
+
+class RuleBasedNameResolverOverrideSourceTests(SimpleTestCase):
+    """override_source wins outright, even against a two-source agreement."""
+
+    def test_override_source_wins_against_agreement(self) -> None:
+        candidates = [
+            NameCandidate(name="Agreed Name", source="wikipedia"),
+            NameCandidate(name="AGREED-name!", source="nps"),
+            NameCandidate(name="REData Name", source="redata_building"),
+        ]
+        resolver = RuleBasedNameResolver(["wikipedia", "nps"], override_source="redata_building")
+        self.assertEqual(resolver.resolve(candidates, _location()).name, "REData Name")
+
+    def test_override_source_absent_falls_back_to_normal_ranking(self) -> None:
+        candidates = [
+            NameCandidate(name="Agreed Name", source="wikipedia"),
+            NameCandidate(name="AGREED-name!", source="nps"),
+        ]
+        resolver = RuleBasedNameResolver(["wikipedia", "nps"], override_source="redata_building")
+        self.assertEqual(resolver.resolve(candidates, _location()).name, "Agreed Name")
+
+    def test_no_override_source_configured_is_a_no_op(self) -> None:
+        candidates = [NameCandidate(name="Only", source="wikipedia")]
+        resolver = RuleBasedNameResolver([])
+        self.assertEqual(resolver.resolve(candidates, _location()).name, "Only")
+
+
+class DefaultNameResolverChildPinOverrideTests(TestCase):
+    """default_name_resolver only activates the REData-building override for a child pin's location."""
+
+    def _make_location_with_pin(self, *, parent_pin=None) -> Location:
+        profile = baker.make("dashboard.Profile")
+        location = baker.make(Location, latitude="42.65", longitude="-73.75", google_place=None)
+        baker.make(Pin, profile=profile, location=location, parent_pin=parent_pin)
+        return location
+
+    def test_no_override_for_a_root_pins_location(self) -> None:
+        location = self._make_location_with_pin(parent_pin=None)
+        resolver = default_name_resolver(location=location)
+        candidates = [NameCandidate(name="Agreed", source="wikipedia"), NameCandidate(name="AGREED!", source="nps"), NameCandidate(name="REData", source="redata_building")]
+        self.assertEqual(resolver.resolve(candidates, location).name, "Agreed")
+
+    def test_override_for_a_child_pins_location(self) -> None:
+        profile = baker.make("dashboard.Profile")
+        parent_location = baker.make(Location, latitude="42.00", longitude="-73.00", google_place=None)
+        parent = baker.make(Pin, profile=profile, location=parent_location, parent_pin=None)
+        location = self._make_location_with_pin(parent_pin=parent)
+        resolver = default_name_resolver(location=location)
+        candidates = [NameCandidate(name="Agreed", source="wikipedia"), NameCandidate(name="AGREED!", source="nps"), NameCandidate(name="REData", source="redata_building")]
+        self.assertEqual(resolver.resolve(candidates, location).name, "REData")
+
+    def test_no_location_given_is_a_no_op(self) -> None:
+        resolver = default_name_resolver()
+        candidates = [NameCandidate(name="Agreed", source="wikipedia"), NameCandidate(name="AGREED!", source="nps"), NameCandidate(name="REData", source="redata_building")]
+        self.assertEqual(resolver.resolve(candidates, _location()).name, "Agreed")
+
+    def test_unsaved_location_is_a_no_op(self) -> None:
+        resolver = default_name_resolver(location=_location())
+        candidates = [NameCandidate(name="Only", source="redata_building")]
+        # An unsaved (no pk) location can't have any pins - override_source
+        # stays unset, so this still resolves via the normal ranking, not a
+        # crash from querying an unsaved instance's `.pins`.
+        self.assertEqual(resolver.resolve(candidates, _location()).name, "Only")
 
 
 class NameSourcePriorityListTests(SimpleTestCase):

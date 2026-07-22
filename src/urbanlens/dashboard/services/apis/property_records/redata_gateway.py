@@ -259,6 +259,28 @@ class RedataGateway(Gateway):
         logger.warning("REData listing photo download failed (%s): %s", response.status_code, response.text[:500])
         raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, f"REData request failed with status {response.status_code}.")
 
+    def lookup_buildings(self, parcel_uuid: str) -> list[dict[str, Any]]:
+        """Return every building REData can find for a parcel, combined across sources.
+
+        Never fetches/caches a *new* parcel - this only reads buildings for a
+        parcel REData already resolved (see :meth:`lookup_parcel_uuid`).
+
+        Args:
+            parcel_uuid: The parcel's REData uuid.
+
+        Returns:
+            A list of ``BuildingRecord`` dicts (possibly empty) - each carries
+            at least a coordinate; ``geometry`` is standard GeoJSON (a
+            ``Point`` when no boundary is available). ``building_number``/
+            ``year_built`` are only ever populated for a ``"cris"``-sourced
+            entry today - see REData's own ``docs/api-reference.md``.
+
+        Raises:
+            PropertyRecordsUnavailableError: The request to REData failed.
+        """
+        body = self._get_json(f"/api/v1/parcels/{parcel_uuid}/buildings/")
+        return list(body) if isinstance(body, list) else []
+
     def lookup_cultural_resources(self, latitude: float, longitude: float, *, radius_meters: float = 200) -> list[dict[str, Any]]:
         """Find (fetching/caching as needed) CRIS cultural/historic resources near a coordinate.
 
@@ -356,4 +378,92 @@ class RedataGateway(Gateway):
                 body = {}
             raise PropertyRecordsUnavailableError(body.get("error") or REASON_SOURCE_ERROR, body.get("message", ""))
         logger.warning("REData cultural-resource attachment download failed (%s): %s", response.status_code, response.text[:500])
+        raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, f"REData request failed with status {response.status_code}.")
+
+    def extract_cultural_resource_attachment(self, resource_uuid: str, attachment_id: int) -> dict[str, Any]:
+        """OCR/AI-extract a downloaded document attachment's fields and any embedded photos.
+
+        Only meaningful for a ``document``-kind attachment (typically a
+        scanned Building-Structure Inventory Form) that's already been
+        downloaded at least once (see :meth:`download_cultural_resource_attachment`).
+
+        Args:
+            resource_uuid: The resource's REData uuid.
+            attachment_id: The attachment's id within that resource.
+
+        Returns:
+            The attachment dict with ``extracted_data``/``extracted_at``/
+            ``extracted_images`` populated - see REData's own
+            ``docs/api-reference.md`` for the shape.
+
+        Raises:
+            PropertyRecordsUnavailableError: The attachment isn't a
+                downloaded document yet (``"not_extractable"``), neither the
+                text nor image extraction found anything at all
+                (``"extraction_unavailable"``), or the request to REData
+                failed outright.
+        """
+        base_url = self.base_url
+        if base_url is None:
+            raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, "UL_REDATA_API_URL is not configured.")
+        try:
+            response = self.session.post(
+                f"{base_url.rstrip('/')}/api/v1/cultural-resources/{resource_uuid}/attachments/{attachment_id}/extract/",
+                headers=self._headers,
+                timeout=_REQUEST_TIMEOUT,
+            )
+        except OSError as exc:
+            raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, f"Could not reach REData: {exc}") from exc
+        if response.status_code == 200:
+            try:
+                return dict(response.json())
+            except ValueError as exc:
+                raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, "REData returned an unparseable response.") from exc
+        if response.status_code in (400, 503):
+            try:
+                body = response.json()
+            except ValueError:
+                body = {}
+            raise PropertyRecordsUnavailableError(body.get("error") or REASON_SOURCE_ERROR, body.get("message", ""))
+        logger.warning("REData cultural-resource attachment extraction failed (%s): %s", response.status_code, response.text[:500])
+        raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, f"REData request failed with status {response.status_code}.")
+
+    def download_extracted_image(self, resource_uuid: str, attachment_id: int, image_id: int) -> tuple[bytes, str]:
+        """Download one image extracted from a document attachment's actual file bytes.
+
+        Every row here already has its file saved at extraction time (see
+        :meth:`extract_cultural_resource_attachment`) - no lazy-fetch
+        fallback, unlike :meth:`download_cultural_resource_attachment`.
+
+        Args:
+            resource_uuid: The resource's REData uuid.
+            attachment_id: The attachment's id within that resource.
+            image_id: The extracted image's id within that attachment.
+
+        Returns:
+            Tuple of (file bytes, content-type).
+
+        Raises:
+            PropertyRecordsUnavailableError: The request to REData failed.
+        """
+        base_url = self.base_url
+        if base_url is None:
+            raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, "UL_REDATA_API_URL is not configured.")
+        try:
+            response = self.session.get(
+                f"{base_url.rstrip('/')}/api/v1/cultural-resources/{resource_uuid}/attachments/{attachment_id}/extracted-images/{image_id}/download/",
+                headers=self._headers,
+                timeout=_REQUEST_TIMEOUT,
+            )
+        except OSError as exc:
+            raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, f"Could not reach REData: {exc}") from exc
+        if response.status_code == 200:
+            return response.content, response.headers.get("Content-Type", "image/jpeg")
+        if response.status_code == 404:
+            try:
+                body = response.json()
+            except ValueError:
+                body = {}
+            raise PropertyRecordsUnavailableError(body.get("error") or REASON_SOURCE_ERROR, body.get("message", ""))
+        logger.warning("REData extracted-image download failed (%s): %s", response.status_code, response.text[:500])
         raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, f"REData request failed with status {response.status_code}.")

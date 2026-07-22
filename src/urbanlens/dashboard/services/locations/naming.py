@@ -551,7 +551,7 @@ def best_external_name_for_location(
     from urbanlens.dashboard.services.locations.name_resolution import default_name_resolver
 
     candidates = external_name_candidates_for_location(location, extra_candidates=extra_candidates)
-    resolved = default_name_resolver(profile).resolve(candidates, location)
+    resolved = default_name_resolver(profile, location=location).resolve(candidates, location)
     if resolved is None:
         return None
     return resolved.name, resolved.source
@@ -723,7 +723,7 @@ def update_location_name_from_external_sources(
     aliases_changed = _add_wiki_aliases(wiki, candidates)
     aliases_changed = _add_pin_aliases(location, candidates) or aliases_changed
 
-    resolved = default_name_resolver(profile).resolve(candidates, location)
+    resolved = default_name_resolver(profile, location=location).resolve(candidates, location)
     changed_fields: set[str] = set()
     wiki_changed = False
     if resolved is not None:

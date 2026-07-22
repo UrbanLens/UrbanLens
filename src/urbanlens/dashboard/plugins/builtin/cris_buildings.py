@@ -107,8 +107,56 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
         # level, matching what render_context already expects.
         data = dict(detail.get("attributes") or {})
         data["resource_uuid"] = detail.get("uuid") or resource_uuid
-        data["attachments"] = detail.get("attachments") or []
+        data["attachments"] = self._attachments_with_extracted_images(resource_uuid, detail.get("attachments") or [])
         LocationCache.set(pin.location, self.cache_source, data, query_key=query_key)
+
+    @staticmethod
+    def _attachments_with_extracted_images(resource_uuid: str | None, attachments: list[dict]) -> list[dict]:
+        """Best-effort OCR/AI-extract each document attachment's embedded photos.
+
+        A scanned "Building-Structure Inventory Form" often has one or more
+        embedded photos alongside its text fields - REData's extract endpoint
+        surfaces those independently of whether the text extraction found
+        anything (see ``RedataGateway.extract_cultural_resource_attachment``'s
+        own docstring). One attachment's extraction failing (not extractable
+        yet, or REData/the AI provider being unavailable) must not drop the
+        others - each is attempted independently and just keeps
+        ``extracted_images: []`` on failure.
+
+        Args:
+            resource_uuid: The resource's REData uuid, or None when it
+                couldn't be resolved (skips extraction entirely - the
+                attachments are still returned unmodified).
+            attachments: The resource's raw attachment list (photo + document kinds).
+
+        Returns:
+            The same attachments, each document-kind entry augmented with an
+            ``extracted_images`` list (possibly empty) when ``resource_uuid``
+            is known.
+        """
+        from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError, RedataGateway
+
+        if not resource_uuid:
+            return list(attachments)
+
+        gateway = RedataGateway()
+        result: list[dict] = []
+        for raw_attachment in attachments:
+            attachment = dict(raw_attachment)
+            attachment_id = attachment.get("id")
+            # Matches this module's own is_photo check in media_items() below
+            # ("PHOTO"/"DOCUMENT", uppercase) - the live kind values this
+            # plugin has actually observed from REData, not the lowercase
+            # "document" shown in REData's own docs/api-reference.md example.
+            if attachment.get("kind") == "DOCUMENT" and attachment_id is not None:
+                try:
+                    extracted = gateway.extract_cultural_resource_attachment(resource_uuid, attachment_id)
+                    attachment["extracted_images"] = extracted.get("extracted_images") or []
+                except PropertyRecordsUnavailableError:
+                    logger.debug("CrisBuildingPanelSource: extraction unavailable for attachment %s of resource %s", attachment_id, resource_uuid, exc_info=True)
+                    attachment["extracted_images"] = []
+            result.append(attachment)
+        return result
 
     def render_context(self, pin: Pin, data: dict) -> dict | None:
         """Build the Building USN Point card from a cached CRIS payload.
@@ -133,7 +181,7 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
         return {"heading_name": usn_name, "meta": meta, "nested": True}
 
     def media_items(self, data: dict) -> list[MediaItem]:
-        """Turn cached CRIS attachments (photos and documents) into gallery items.
+        """Turn cached CRIS attachments (photos, documents, and extracted images) into gallery items.
 
         Args:
             data: This source's cached payload (see :meth:`fetch`), including
@@ -144,7 +192,10 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
             ``PinCrisAttachmentView`` (never a raw REData URL). Document-kind
             attachments get an empty ``thumb_url`` - the Media gallery
             already renders a fallback icon tile for those (see
-            ``MediaItem.thumb_url``'s own docstring).
+            ``MediaItem.thumb_url``'s own docstring). Plus one item per photo
+            OCR/AI-extracted from a document attachment (see
+            :meth:`_attachments_with_extracted_images`), proxied through
+            ``PinCrisExtractedImageView``.
         """
         from django.urls import reverse
 
@@ -163,6 +214,13 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
             is_photo = attachment.get("kind") == "PHOTO"
             caption = attachment.get("name") or attachment.get("attachment_type") or ""
             items.append(MediaItem(url=proxy_url, thumb_url=proxy_url if is_photo else "", caption=caption, source="NY Historic Preservation (CRIS)"))
+
+            for image in attachment.get("extracted_images") or []:
+                image_id = image.get("id")
+                if image_id is None:
+                    continue
+                image_proxy_url = reverse("pin.cris.extracted_image", args=[resource_uuid, attachment_id, image_id])
+                items.append(MediaItem(url=image_proxy_url, thumb_url=image_proxy_url, caption=caption, source="NY Historic Preservation (CRIS)"))
         return items
 
 

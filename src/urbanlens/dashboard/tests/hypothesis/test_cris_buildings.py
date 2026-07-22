@@ -87,6 +87,7 @@ class PanelFetchTests(TestCase):
             patch.object(RedataGateway, "__post_init__", lambda _self: None),
             patch.object(RedataGateway, "lookup_cultural_resources", return_value=[_BUILDING_RESOURCE]),
             patch.object(RedataGateway, "fetch_cultural_resource_detail", return_value=_BUILDING_DETAIL) as mock_detail,
+            patch.object(RedataGateway, "extract_cultural_resource_attachment", return_value={"extracted_images": []}),
             patch("urbanlens.dashboard.models.cache.location_cache.LocationCache.set") as mock_set,
         ):
             CrisBuildingPanelSource().fetch(self.pin)
@@ -96,6 +97,37 @@ class PanelFetchTests(TestCase):
         self.assertEqual(data["USNName"], "Old Mill")
         self.assertEqual(data["resource_uuid"], "res-1")
         self.assertEqual(len(data["attachments"]), 2)
+
+    def test_fetch_extracts_images_from_document_attachments_only(self) -> None:
+        with (
+            patch.object(RedataGateway, "__post_init__", lambda _self: None),
+            patch.object(RedataGateway, "lookup_cultural_resources", return_value=[_BUILDING_RESOURCE]),
+            patch.object(RedataGateway, "fetch_cultural_resource_detail", return_value=_BUILDING_DETAIL),
+            patch.object(RedataGateway, "extract_cultural_resource_attachment", return_value={"extracted_images": [{"id": 9}]}) as mock_extract,
+            patch("urbanlens.dashboard.models.cache.location_cache.LocationCache.set") as mock_set,
+        ):
+            CrisBuildingPanelSource().fetch(self.pin)
+
+        mock_extract.assert_called_once_with("res-1", 2)  # only the DOCUMENT-kind attachment (id=2)
+        data = mock_set.call_args[0][2]
+        attachments_by_id = {a["id"]: a for a in data["attachments"]}
+        self.assertEqual(attachments_by_id[2]["extracted_images"], [{"id": 9}])
+        self.assertNotIn("extracted_images", attachments_by_id[1])
+
+    def test_fetch_tolerates_extraction_failure_for_one_attachment(self) -> None:
+        with (
+            patch.object(RedataGateway, "__post_init__", lambda _self: None),
+            patch.object(RedataGateway, "lookup_cultural_resources", return_value=[_BUILDING_RESOURCE]),
+            patch.object(RedataGateway, "fetch_cultural_resource_detail", return_value=_BUILDING_DETAIL),
+            patch.object(RedataGateway, "extract_cultural_resource_attachment", side_effect=PropertyRecordsUnavailableError("not_extractable", "boom")),
+            patch("urbanlens.dashboard.models.cache.location_cache.LocationCache.set") as mock_set,
+        ):
+            CrisBuildingPanelSource().fetch(self.pin)
+
+        data = mock_set.call_args[0][2]
+        attachments_by_id = {a["id"]: a for a in data["attachments"]}
+        self.assertEqual(attachments_by_id[2]["extracted_images"], [])
+        self.assertEqual(len(data["attachments"]), 2)  # the PHOTO attachment survives too
 
     def test_no_building_resource_found_persists_empty(self) -> None:
         with (
@@ -155,6 +187,24 @@ class MediaItemsTests(SimpleTestCase):
 
     def test_no_attachments_yields_no_items(self) -> None:
         self.assertEqual(self.source.media_items({"resource_uuid": "res-1"}), [])
+
+    def test_extracted_images_yield_additional_items(self) -> None:
+        data = {
+            "resource_uuid": "res-1",
+            "attachments": [
+                {"id": 2, "kind": "DOCUMENT", "attachment_type": "Inventory Form", "extracted_images": [{"id": 9}, {"id": 10}]},
+            ],
+        }
+        items = self.source.media_items(data)
+        self.assertEqual(len(items), 3)  # the document attachment itself + 2 extracted images
+        self.assertEqual(items[1].caption, "Inventory Form")
+        self.assertTrue(items[1].thumb_url)
+        self.assertEqual(items[2].caption, "Inventory Form")
+        self.assertTrue(items[2].thumb_url)
+
+    def test_attachment_with_no_extracted_images_yields_no_extra_items(self) -> None:
+        data = {"resource_uuid": "res-1", "attachments": [{"id": 1, "kind": "PHOTO", "name": "Front", "extracted_images": []}]}
+        self.assertEqual(len(self.source.media_items(data)), 1)
 
 
 class RenderContextTests(SimpleTestCase):
