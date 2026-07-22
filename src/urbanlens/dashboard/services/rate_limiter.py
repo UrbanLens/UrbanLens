@@ -72,9 +72,14 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
     ),
     "overpass": ServiceDefaults(
         display_name="Overpass API (OpenStreetMap)",
-        calls_per_minute=2,
+        # A single logical boundary lookup may make several HTTP calls when it
+        # fails over across mirrors (OverpassGateway retries 429/5xx on the next
+        # instance), and each attempt is counted here. Keep this above 2 so one
+        # user request that has to fail over doesn't instantly self-throttle the
+        # next one; still conservative, spread across several shared instances.
+        calls_per_minute=6,
         calls_per_day=500,
-        notes="Free API. Be conservative; public Overpass instances are shared community infrastructure.",
+        notes="Free API. Be conservative; public Overpass instances are shared community infrastructure. Requests fail over across mirrors, so each logical lookup may spend more than one call.",
     ),
     "brave_search": ServiceDefaults(
         display_name="Brave Search API",

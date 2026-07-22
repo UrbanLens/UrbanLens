@@ -122,6 +122,75 @@ class SearxngHTTPTests(SimpleTestCase):
         self.assertEqual(len(result), 1)
 
 
+class SearxngImageSearchTests(SimpleTestCase):
+    """search_images() restricts to the images category and normalises image results."""
+
+    def _gw_with_response(self, status: int = 200, body: dict | None = None) -> tuple[SearxngGateway, MagicMock]:
+        gw = _make_gw()
+        mock_resp = MagicMock()
+        mock_resp.status_code = status
+        mock_resp.json.return_value = body or {}
+        if status >= 400:
+            mock_resp.raise_for_status.side_effect = HTTPError(f"{status} error")
+        else:
+            mock_resp.raise_for_status.return_value = None
+        gw.session.get.return_value = mock_resp
+        return gw, mock_resp
+
+    def test_requests_images_category(self):
+        gw, _ = self._gw_with_response()
+        gw.search_images("abandoned hospital")
+        params = gw.session.get.call_args[1]["params"]
+        self.assertEqual(params["categories"], "images")
+        self.assertEqual(params["format"], "json")
+
+    def test_passes_configured_engines_comma_joined(self):
+        gw, _ = self._gw_with_response()
+        gw.search_images("q", engines=["flickr", "imgur"])
+        params = gw.session.get.call_args[1]["params"]
+        self.assertEqual(params["engines"], "flickr,imgur")
+
+    def test_parses_img_src_into_url(self):
+        body = {"results": [{"img_src": "https://c.com/a.jpg", "thumbnail_src": "https://c.com/t.jpg", "title": "A", "url": "https://c.com/page", "source": "Flickr"}]}
+        gw, _ = self._gw_with_response(body=body)
+        result = gw.search_images("q")
+        self.assertEqual(result[0]["url"], "https://c.com/a.jpg")
+        self.assertEqual(result[0]["thumbnail"], "https://c.com/t.jpg")
+        self.assertEqual(result[0]["page_url"], "https://c.com/page")
+        self.assertEqual(result[0]["source"], "Flickr")
+
+    def test_results_without_an_image_are_dropped(self):
+        body = {"results": [{"title": "no image", "url": "https://c.com/page"}]}
+        gw, _ = self._gw_with_response(body=body)
+        self.assertEqual(gw.search_images("q"), [])
+
+    def test_relative_image_url_is_made_absolute(self):
+        body = {"results": [{"img_src": "/image_proxy?url=x", "url": "https://c.com/page"}]}
+        gw, _ = self._gw_with_response(body=body)
+        result = gw.search_images("q")
+        self.assertEqual(result[0]["url"], "https://searx.example.com/image_proxy?url=x")
+
+    def test_thumbnail_defaults_to_full_image(self):
+        body = {"results": [{"img_src": "https://c.com/a.jpg", "url": "https://c.com/page"}]}
+        gw, _ = self._gw_with_response(body=body)
+        result = gw.search_images("q")
+        self.assertEqual(result[0]["thumbnail"], "https://c.com/a.jpg")
+
+    def test_truncates_to_max_results(self):
+        items = [{"img_src": f"https://c.com/{i}.jpg", "url": "https://c.com/p"} for i in range(10)]
+        gw, _ = self._gw_with_response(body={"results": items})
+        self.assertEqual(len(gw.search_images("q", max_results=3)), 3)
+
+    def test_500_raises_searxng_error(self):
+        gw, _ = self._gw_with_response(status=500)
+        with self.assertRaises(SearxngError):
+            gw.search_images("q")
+
+    def test_missing_base_url_raises(self):
+        with self.assertRaises(SearxngError):
+            _make_gw(None).search_images("q")
+
+
 class SearxngRateLimitDefaultsTests(SimpleTestCase):
     """SearXNG is self-hosted infrastructure, not a metered third-party quota."""
 

@@ -358,6 +358,82 @@ class OverpassGatewayTests(SimpleTestCase):
         with mock.patch.object(gateway, "elements_for_query", return_value=[{"type": "way", "id": 123}]):
             self.assertEqual(gateway.element("way", 123), {"type": "way", "id": 123})
 
+    def test_nearby_features_query_uses_configured_ql_timeout(self) -> None:
+        """The server-side ``[timeout:N]`` reflects the gateway's ``ql_timeout``.
+
+        A low value made the busy public instances 504 while merely waiting for a
+        dispatcher slot, so this must be tunable rather than hardcoded low.
+        """
+        from urbanlens.dashboard.services.apis.locations.boundaries.overpass import OverpassGateway
+
+        query = OverpassGateway._nearby_features_query(
+            40.0,
+            -74.0,
+            radius_meters=100,
+            tag_filter='["historic"]',
+            include_nodes=True,
+            include_geometry=False,
+            ql_timeout=17,
+        )
+
+        self.assertIn("[timeout:17]", query)
+
+    @staticmethod
+    def _fake_response(status_code: int, payload: dict | None = None) -> mock.Mock:
+        response = mock.Mock()
+        response.status_code = status_code
+        response.json.return_value = {} if payload is None else payload
+        return response
+
+    def test_query_fails_over_to_a_mirror_on_a_transient_504(self) -> None:
+        """A 504 from the primary instance retries the next mirror instead of failing."""
+        from urbanlens.dashboard.services.apis.locations.boundaries.overpass import OverpassGateway
+
+        gateway = OverpassGateway(session=mock.Mock())
+        gateway.session.post.side_effect = [
+            self._fake_response(504),
+            self._fake_response(200, {"elements": [{"id": 1}]}),
+        ]
+
+        with mock.patch("urbanlens.dashboard.services.apis.locations.boundaries.overpass.time.sleep"):
+            payload = gateway.query("[out:json];node(1);out;")
+
+        self.assertEqual(payload, {"elements": [{"id": 1}]})
+        self.assertEqual(gateway.session.post.call_count, 2)
+        # The retry targeted the first configured mirror, not the failed primary.
+        self.assertEqual(gateway.session.post.call_args_list[0].args[0], gateway.base_url)
+        self.assertEqual(gateway.session.post.call_args_list[1].args[0], gateway.mirrors[0])
+
+    def test_query_reraises_when_every_endpoint_is_overloaded(self) -> None:
+        """If all mirrors 504, the last error propagates (caller degrades to [])."""
+        import requests
+
+        from urbanlens.dashboard.services.apis.locations.boundaries.overpass import OverpassGateway
+
+        gateway = OverpassGateway(session=mock.Mock())
+        gateway.session.post.side_effect = [self._fake_response(504) for _ in gateway._endpoints()]
+
+        with (
+            mock.patch("urbanlens.dashboard.services.apis.locations.boundaries.overpass.time.sleep"),
+            self.assertRaises(requests.HTTPError),
+        ):
+            gateway.query("[out:json];node(1);out;")
+
+        self.assertEqual(gateway.session.post.call_count, len(gateway._endpoints()))
+
+    def test_query_does_not_fail_over_on_our_own_rate_limit(self) -> None:
+        """A local rate-limit block short-circuits: failing over would only burn budget."""
+        from urbanlens.dashboard.services.apis.locations.boundaries.overpass import OverpassGateway
+        from urbanlens.dashboard.services.rate_limiter import RateLimitExceededError
+
+        gateway = OverpassGateway(session=mock.Mock())
+        gateway.session.post.side_effect = RateLimitExceededError("overpass")
+
+        with self.assertRaises(RateLimitExceededError):
+            gateway.query("[out:json];node(1);out;")
+
+        self.assertEqual(gateway.session.post.call_count, 1)
+
     def test_query_failure_degrades_to_empty_list_without_a_traceback(self) -> None:
         """The public overpass-api.de instance routinely times out/429s/504s under
         normal load (shared community infrastructure, per its own ServiceDefaults

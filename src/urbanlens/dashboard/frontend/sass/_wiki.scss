@@ -831,3 +831,184 @@
         }
     }
 }
+// -- Wiki Media gallery (external providers + shared photos, with voting) -------
+// The pin detail page's Media tiles are styled under
+// `body.page-location-details .pin-detail-grid` and don't reach the wiki, so
+// the same class names are re-styled here for the wiki's own Media section
+// (see pages/location/wiki.html + controllers/wiki_media.py). Unlike the pin
+// page, down-voted items are NOT hidden: the wiki ranks by net vote score and
+// keeps everything visible, so there is deliberately no
+// `.media-item--not-relevant { display: none }` rule here.
+.wiki-media {
+    .media-view-panel[hidden] { display: none; }
+
+    .media-gallery-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 108px), 1fr));
+        gap: clamp(.5rem, 1.5vw, .85rem);
+        padding: .75rem;
+        min-height: 8rem;
+        max-height: 40rem;
+        overflow: auto;
+    }
+
+    .media-gallery-empty {
+        grid-column: 1 / -1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: .4rem;
+        padding: 2rem;
+        color: var(--ul-grey-5);
+        font-size: .9rem;
+
+        &[hidden] { display: none; }
+        .material-symbols-outlined { font-size: 2.5rem; }
+    }
+
+    .media-item {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+        max-width: 24rem;
+        margin-inline: auto;
+        text-decoration: none;
+        color: inherit;
+        background: var(--ul-surface-raised);
+        border: 1px solid var(--ul-surface-raised-border);
+        border-radius: 10px;
+        overflow: hidden;
+        box-shadow: 0 1px 2px rgba(15, 23, 42, .05), 0 1px 3px rgba(15, 23, 42, .04);
+        transition: transform .2s cubic-bezier(.22, 1, .36, 1), box-shadow .2s ease;
+
+        &[hidden] { display: none; }
+
+        &:hover,
+        &:focus-within {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(15, 23, 42, .08), 0 2px 4px rgba(15, 23, 42, .06);
+        }
+    }
+    // Excluded by the active source tab - actually hide (matches pin behavior).
+    .media-item.media-tab-excluded { display: none !important; }
+
+    .media-item-source {
+        position: absolute;
+        top: .4rem;
+        left: .4rem;
+        z-index: 1;
+        padding: .15rem .5rem;
+        font-size: .65rem;
+        font-weight: 600;
+        color: #fff;
+        background: rgba(15, 23, 42, .72);
+        border-radius: 999px;
+    }
+
+    .media-item-thumb-btn {
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+        padding: 0;
+        border: none;
+        background: none;
+        font: inherit;
+        color: inherit;
+        text-align: inherit;
+        cursor: pointer;
+    }
+
+    .media-item-thumb {
+        display: block;
+        width: 100%;
+        min-height: 96px;
+        max-height: 220px;
+        aspect-ratio: 4 / 5;
+        object-fit: cover;
+        object-position: top center;
+        background: linear-gradient(145deg, var(--ul-surface-raised) 0%, var(--ul-surface-raised-border) 100%);
+    }
+
+    .media-item-thumb-fallback {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 96px;
+        color: var(--ul-grey-4, #94a3b8);
+
+        .material-symbols-outlined,
+        .material-icons { font-size: 2rem; }
+    }
+
+    .media-item-caption {
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        padding: .5rem .6rem .6rem;
+        font-size: .72rem;
+        font-weight: 500;
+        line-height: 1.45;
+        color: var(--ul-grey-7, #475569);
+        background: var(--ul-surface-raised-border);
+    }
+
+    // -- Vote actions: kept always-visible (the score is the point, and the
+    // buttons must be reachable on touch devices with no hover).
+    .media-item-actions--wiki {
+        position: absolute;
+        right: .35rem;
+        bottom: .35rem;
+        z-index: 2;
+        display: flex;
+        align-items: center;
+        gap: .25rem;
+    }
+
+    .media-item-action-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 1.7rem;
+        height: 1.7rem;
+        padding: 0;
+        border: none;
+        border-radius: 50%;
+        background: rgba(15, 23, 42, .72);
+        color: #fff;
+        cursor: pointer;
+        backdrop-filter: blur(2px);
+        transition: background .12s ease, transform .12s ease;
+
+        .material-symbols-outlined { font-size: 1rem; }
+
+        &:hover { background: rgba(15, 23, 42, .9); transform: scale(1.08); }
+        &.is-active { background: var(--ul-primary-color); }
+    }
+    .media-item-vote-down-btn.is-active { background: var(--ul-danger, #dc2626); }
+
+    // Net community score chip between the up/down buttons.
+    .media-item-votes {
+        min-width: 1.4rem;
+        padding: 0 .3rem;
+        font-size: .72rem;
+        font-weight: 700;
+        text-align: center;
+        color: #fff;
+        background: rgba(15, 23, 42, .72);
+        border-radius: 999px;
+        backdrop-filter: blur(2px);
+    }
+
+    // Source-tab count pill (.card-tab / .card-tabs base styling is global).
+    .media-tab-count {
+        margin-left: .35rem;
+        padding: 0 .4rem;
+        font-size: .68rem;
+        font-weight: 700;
+        border-radius: 999px;
+        background: var(--ul-surface-sunken, rgba(0, 0, 0, .06));
+    }
+}

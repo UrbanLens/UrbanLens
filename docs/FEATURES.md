@@ -65,6 +65,14 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
 - **Wiki** — opt-in, community-editable page for a Location: description, aliases, community
   danger/vulnerability/rating stat voting (`WikiStatVote`, fuzzed community counts for privacy),
   edit history with revert (`WikiEdit`)
+- **Wiki Media gallery** — the pin detail page's combined Media section, mirrored on the wiki
+  (`controllers/wiki_media.py`): the same external providers (Wikimedia, Smithsonian, Library of
+  Congress, Internet Archive, Web Images (SearXNG), Yelp, Google Images/Maps, LoopNet, CRIS, …)
+  appear automatically
+  from the shared per-Location cache, alongside a "Photos" tab of images intentionally shared to
+  the wiki (`Image.wiki`) and a "Manage" tab for uploads. Thumbs-up/down are **community votes**
+  (net score up − down, highest ranked first); because relevance is stored per-Location
+  (`MediaRelevance`), a relevance mark made on any user's pin detail page already counts here
 - **Wiki article auto-seeding** — a wiki with no article yet is automatically started from a
   confidently-matched Wikipedia article the first time one is cached for its location (converted
   to Markdown, with a required CC BY-SA attribution footer linking back to the source) - never
@@ -87,6 +95,11 @@ On-demand, cached lookups shown as panels on the pin detail page:
 
 - **Wikipedia** — best-matching article
 - **Wikimedia Commons**, **Smithsonian Open Access**, **Library of Congress** — archival photos/media
+- **Web Images (SearXNG)** — broad web-image search across many engines (Flickr, imgur, Pinterest,
+  DeviantArt, Openverse, Unsplash, …) via a self-hosted SearXNG instance, using an aggressive
+  three-clause relevance query (all non-nickname aliases · state/country + municipality · the site's
+  urbex/abandoned subject vocabulary) so a same-named place or operating business elsewhere is
+  excluded; requires `UL_SEARXNG_BASE_URL` (`plugins.builtin.searxng_images`)
 - **National Park Service** (USA) — nearby park info
 - **LoopNet** (USA) — commercial real-estate listings
 - **Property Records** (USA) — county parcel ownership/tax/sale-history lookup, retrieved from

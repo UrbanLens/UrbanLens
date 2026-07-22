@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 import json
 import logging
 import re
+import time
 from typing import Any, ClassVar, Literal, Protocol
 
 from django.contrib.gis.geos import GEOSGeometry, MultiPolygon, Point, Polygon
@@ -13,10 +14,24 @@ import requests
 
 from urbanlens.dashboard.services.apis.locations.base import BoundaryProvider, _is_reasonable_default, best_polygon_from_geometry
 from urbanlens.dashboard.services.gateway import Gateway
+from urbanlens.dashboard.services.rate_limiter import RateLimitExceededError
 
 logger = logging.getLogger(__name__)
 
 _API_URL = "https://overpass-api.de/api/interpreter"
+# Fallback mirrors, tried in order when the primary returns a transient
+# overload response. All run the same OSM3S/Overpass API software, so an
+# identical query works against any of them; see
+# https://wiki.openstreetmap.org/wiki/Overpass_API#Public_Overpass_API_instances
+_API_MIRRORS: tuple[str, ...] = (
+    "https://overpass.private.coffee/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter",
+)
+# HTTP statuses that mean "this instance is overloaded right now" rather than
+# "your query is wrong" - safe to retry against another mirror. 429 is the
+# per-IP slot/quota limit; 502/503/504 are the dispatcher-busy family.
+_RETRYABLE_STATUS = frozenset({429, 502, 503, 504})
+_RETRY_BACKOFF_SECONDS = 0.5
 _USER_AGENT = "UrbanLens/1.0 (https://github.com/urbanlens/urbanlens; hello@urbanlens.org) python-requests/2.x"
 # Overpass QL has no OR operator to chain bracket filters within one statement, so
 # each top-level `|`-separated clause here becomes its own unioned statement per
@@ -90,33 +105,92 @@ class OverpassGateway(Gateway, BoundaryProvider):
     paid_service: ClassVar[bool] = False
 
     base_url: str = _API_URL
-    timeout: int = 12
+    mirrors: tuple[str, ...] = _API_MIRRORS
+    #: Server-side Overpass QL ``[timeout:N]``. Overpass charges the time spent
+    #: waiting for a free dispatcher slot against this budget, so a low value
+    #: makes the busy public instances 504 ("Dispatcher_Client ... timeout")
+    #: before the (usually sub-second) query even starts. Keep it generous; the
+    #: HTTP ``timeout`` below must stay strictly larger so the socket does not
+    #: abort a query the server is still willing to run.
+    ql_timeout: int = 25
+    timeout: int = 30
     radius_meters: int = 100
 
     def __post_init__(self) -> None:
         Gateway.__post_init__(self)
         self.session.headers.update({"User-Agent": _USER_AGENT})
 
+    def _endpoints(self) -> list[str]:
+        """Ordered, de-duplicated list of Overpass endpoints to try."""
+        endpoints: list[str] = []
+        for url in (self.base_url, *self.mirrors):
+            if url not in endpoints:
+                endpoints.append(url)
+        return endpoints
+
     def query(self, query: str, *, timeout: int | None = None) -> dict[str, Any]:
-        """Run a raw Overpass QL query and return the decoded JSON payload."""
-        response = self.session.post(self.base_url, data={"data": query}, timeout=timeout or self.timeout)
-        response.raise_for_status()
-        payload = response.json()
-        return payload if isinstance(payload, dict) else {}
+        """Run a raw Overpass QL query and return the decoded JSON payload.
+
+        Tries each configured endpoint in turn, failing over to the next mirror
+        on the transient overload responses (429/502/503/504) and connection
+        timeouts that the free public instances routinely return. A non-retryable
+        HTTP error (e.g. 400 for a malformed query) is raised immediately, as is
+        our own :class:`RateLimitExceededError` - failing over would only burn
+        more of the shared budget. If every endpoint fails transiently, the last
+        error is re-raised.
+
+        Args:
+            query: The Overpass QL program to execute.
+            timeout: Optional HTTP timeout override in seconds; defaults to
+                ``self.timeout``.
+
+        Returns:
+            The decoded JSON payload, or an empty dict if the response was not a
+            JSON object.
+
+        Raises:
+            requests.RequestException: If every endpoint fails, or on the first
+                non-retryable HTTP error.
+            RateLimitExceededError: If our own rate limiter blocks the call.
+        """
+        http_timeout = timeout or self.timeout
+        endpoints = self._endpoints()
+        last_error: requests.RequestException | None = None
+        for attempt, url in enumerate(endpoints):
+            if attempt:
+                time.sleep(_RETRY_BACKOFF_SECONDS)
+            try:
+                response = self.session.post(url, data={"data": query}, timeout=http_timeout)
+            except RateLimitExceededError:
+                raise
+            except (requests.Timeout, requests.ConnectionError) as exc:
+                last_error = exc
+                logger.debug("Overpass endpoint %s unreachable, trying next mirror", url, exc_info=True)
+                continue
+            if response.status_code in _RETRYABLE_STATUS:
+                last_error = requests.HTTPError(f"{response.status_code} Server Error from {url}", response=response)
+                logger.debug("Overpass endpoint %s returned %d, trying next mirror", url, response.status_code)
+                continue
+            response.raise_for_status()
+            payload = response.json()
+            return payload if isinstance(payload, dict) else {}
+        if last_error is not None:
+            raise last_error
+        return {}
 
     def elements_for_query(self, query: str, *, timeout: int | None = None) -> list[dict[str, Any]]:
         """Run Overpass QL and return the element list, logging failures as empty results."""
         try:
             payload = self.query(query, timeout=timeout)
         except (requests.RequestException, ValueError):
-            # Expected, not a bug: overpass-api.de is free, shared community
-            # infrastructure that routinely 429s/504s/times out under normal
-            # load regardless of how conservative our own throttling is (see
-            # its calls_per_minute=2 note in rate_limiter.SERVICE_REGISTRY).
-            # logger.warning (not .exception) so it doesn't read as a crash -
-            # matches GDELT's gateway, which treats its own routine external
-            # failures the same way.
-            logger.warning("Overpass query failed", exc_info=True)
+            # Reached only after `query` has already failed over across every
+            # configured mirror (see `OverpassGateway.query`), so this is a genuine
+            # all-instances-unavailable event, not the routine single-instance 504
+            # it used to swallow. Still non-fatal - callers treat an empty result
+            # as "no boundary data" - but a sustained run of these now warrants a
+            # look. logger.warning (not .exception) so it doesn't read as a crash,
+            # matching GDELT's gateway, which handles its external failures the same.
+            logger.warning("Overpass query failed on all endpoints", exc_info=True)
             return []
         elements = payload.get("elements")
         return elements if isinstance(elements, list) else []
@@ -139,6 +213,7 @@ class OverpassGateway(Gateway, BoundaryProvider):
             tag_filter=tag_filter,
             include_nodes=include_nodes,
             include_geometry=include_geometry,
+            ql_timeout=self.ql_timeout,
         )
         return self.elements_for_query(query)
 
@@ -150,7 +225,7 @@ class OverpassGateway(Gateway, BoundaryProvider):
         """Return a single OSM node, way, or relation by id via Overpass."""
         out_clause = "out tags geom;" if include_geometry else "out tags center;"
         query = f"""
-[out:json][timeout:8];
+[out:json][timeout:{self.ql_timeout}];
 {element_type}({int(osm_id)});
 {out_clause}
 """.strip()
@@ -166,12 +241,16 @@ class OverpassGateway(Gateway, BoundaryProvider):
         tag_filter: str,
         include_nodes: bool,
         include_geometry: bool,
+        ql_timeout: int = 25,
     ) -> str:
         """Build an Overpass QL query constrained to useful place tags.
 
         ``tag_filter`` may contain multiple ``|``-separated Overpass filter clauses;
         each becomes its own unioned statement per element type, since Overpass QL
         has no OR operator for chaining bracket filters within a single statement.
+
+        ``ql_timeout`` sets the server-side ``[timeout:N]``; see the
+        :class:`OverpassGateway.ql_timeout` field for why it must be generous.
         """
         radius = max(10, min(int(radius_meters), 250))
         lat = float(latitude)
@@ -189,7 +268,7 @@ class OverpassGateway(Gateway, BoundaryProvider):
             )
         out_clause = "out tags geom qt;" if include_geometry else "out center tags qt;"
         return f"""
-[out:json][timeout:8];
+[out:json][timeout:{ql_timeout}];
 (
 {chr(10).join(selectors)}
 );

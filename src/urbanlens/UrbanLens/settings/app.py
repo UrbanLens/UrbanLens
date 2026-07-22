@@ -167,6 +167,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     mapillary_access_token: str | None = Field(default=None, description="The Mapillary client access token")
     brave_search_api_key: str | None = Field(default=None, description="The Brave Search API key")
     searxng_base_url: str | None = Field(default=None, description="Base URL of a self-hosted or trusted SearXNG instance (e.g. https://searx.example.com), no API key required")
+    searxng_image_engines: Annotated[list[str], NoDecode] = Field(default_factory=list, description="Override the SearXNG image engines queried by the Web Images media provider (comma-separated engine names as configured in the instance's settings.yml); empty uses the built-in default list")
     mojeek_api_key: str | None = Field(default=None, description="The Mojeek Search API key")
     marginalia_api_key: str | None = Field(default=None, description="The Marginalia Search API key ('public' is Marginalia's own shared testing key when unset)")
     smithsonian_api_key: str | None = Field(default=None, description="The smithsonian key")
@@ -263,7 +264,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     def django(self) -> LazySettings:
         return conf.settings
 
-    @field_validator("allowed_hosts", "plugin_modules", "disabled_plugins", mode="before")
+    @field_validator("allowed_hosts", "plugin_modules", "disabled_plugins", "searxng_image_engines", mode="before")
     @classmethod
     def _split_comma_separated(cls, value: Any) -> Any:
         """Allow list-valued settings to be provided as comma-separated strings via env vars."""

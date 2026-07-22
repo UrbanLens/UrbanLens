@@ -18,12 +18,13 @@
      data-media-page-url="{{ item.page_url|default:item.url }}"
      data-media-caption="{{ item.caption }}"
      data-media-relevant="{% if entry.is_relevant == True %}true{% elif entry.is_relevant == False %}false{% else %}{% endif %}"
+     data-vote-score="{{ entry.vote_score|default:0 }}"
      data-image-id="{{ entry.image_id|default:"" }}"
      data-lat="{{ entry.lat|default:"" }}"
      data-lng="{{ entry.lng|default:"" }}"
-     {% if source_key != "photos" %}draggable="true" ondragstart="window.mediaItemDragStart(event, this)"{% endif %}
+     {% if not wiki_mode and source_key != "photos" %}draggable="true" ondragstart="window.mediaItemDragStart(event, this)"{% endif %}
      title="{{ item.caption }}">
-    {% if source_key != "photos" %}
+    {% if not wiki_mode and source_key != "photos" %}
     <button type="button" class="media-item-select-check" title="Select photo" onclick="window.mediaToggleSelect(event, this)" hidden>
         <i class="material-symbols-outlined">check_circle</i>
     </button>
@@ -42,7 +43,25 @@
         <span class="media-item-caption">{{ item.caption|truncatechars:80 }}</span>
         {% endif %}
     </button>
-    {% if source_key != "photos" %}
+    {% if wiki_mode %}
+    {# Community wiki: thumbs are votes (net score shown), applied to every #}
+    {# source including shared photos. See controllers/wiki_media.py. #}
+    <div class="media-item-actions media-item-actions--wiki">
+        <a class="media-item-action-btn media-item-open-source" href="{{ item.page_url|default:item.url }}"
+           target="_blank" rel="noopener noreferrer" title="Open source" onclick="event.stopPropagation()">
+            <i class="material-symbols-outlined">open_in_new</i>
+        </a>
+        <button type="button" class="media-item-action-btn media-item-vote-up-btn{% if entry.is_relevant == True %} is-active{% endif %}"
+                title="Upvote" onclick="event.stopPropagation(); window.wikiMediaVote(this.closest('.media-item'), true)">
+            <i class="material-symbols-outlined">thumb_up</i>
+        </button>
+        <span class="media-item-votes" title="Community score">{{ entry.vote_score|default:0 }}</span>
+        <button type="button" class="media-item-action-btn media-item-vote-down-btn{% if entry.is_relevant == False %} is-active{% endif %}"
+                title="Downvote" onclick="event.stopPropagation(); window.wikiMediaVote(this.closest('.media-item'), false)">
+            <i class="material-symbols-outlined">thumb_down</i>
+        </button>
+    </div>
+    {% elif source_key != "photos" %}
     <div class="media-item-actions">
         <a class="media-item-action-btn media-item-open-source" href="{{ item.page_url|default:item.url }}"
            target="_blank" rel="noopener noreferrer" title="Open source" onclick="event.stopPropagation()">

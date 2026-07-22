@@ -67,6 +67,7 @@ from urbanlens.dashboard.controllers import (
     visits,
     webauthn,
     wiki_create,
+    wiki_media,
 )
 from urbanlens.dashboard.controllers.index import HomeOverviewView, HomeWidgetLayoutSaveView, IndexController
 from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_STATUS, KIND_TAG, KIND_USER
@@ -1158,6 +1159,18 @@ urlpatterns = [
                     "<slug:location_slug>/wiki/stat/<str:field>/vote/",
                     location_wiki.WikiStatVoteView.as_view(),
                     name="location.wiki.stat_vote",
+                ),
+                # Media gallery: the vote endpoint must precede the catch-all
+                # media/<source>/ loader so "vote" isn't captured as a source.
+                path(
+                    "<slug:location_slug>/wiki/media/vote/",
+                    wiki_media.WikiMediaVoteView.as_view(),
+                    name="location.wiki.media.vote",
+                ),
+                path(
+                    "<slug:location_slug>/wiki/media/<str:source>/",
+                    wiki_media.WikiMediaProviderView.as_view(),
+                    name="location.wiki.media",
                 ),
             ],
         ),

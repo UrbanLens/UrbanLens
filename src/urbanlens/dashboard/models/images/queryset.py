@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Self
 
-from django.db.models import Q
+from django.db.models import Case, IntegerField, Q, Sum, Value, When
 
 from urbanlens.dashboard.models import abstract
 
@@ -231,6 +231,32 @@ class MediaRelevanceQuerySet(abstract.DashboardQuerySet):
             Matching marks; chain ``.filter(item_key=...)`` for a single item.
         """
         return self.filter(profile=profile, location=location, source=source)
+
+    def vote_scores(self, location: Location, source: str) -> dict[str, int]:
+        """Net community vote score per item for one provider's gallery at a location.
+
+        On the community wiki, a relevance mark is read as a vote: every
+        ``is_relevant=True`` row counts ``+1`` and every ``is_relevant=False``
+        row counts ``-1``, summed across all contributing profiles. Because
+        :class:`MediaRelevance` is keyed by Location (not Pin), a relevance
+        mark made on any user's pin detail page for this place is already part
+        of this aggregate - that's how a pin-detail thumbs-up "carries over" to
+        the wiki with no extra bookkeeping.
+
+        Args:
+            location: The location whose Media gallery is being scored.
+            source: The provider key (e.g. ``"wikimedia"``, ``"photos"``).
+
+        Returns:
+            Mapping of ``item_key`` to its net score. Items with no marks at
+            all are simply absent (treat a missing key as ``0``).
+        """
+        rows = (
+            self.filter(location=location, source=source)
+            .values("item_key")
+            .annotate(score=Sum(Case(When(is_relevant=True, then=Value(1)), default=Value(-1), output_field=IntegerField())))
+        )
+        return {row["item_key"]: row["score"] or 0 for row in rows}
 
 
 class MediaRelevanceManager(abstract.DashboardManager.from_queryset(MediaRelevanceQuerySet)):
