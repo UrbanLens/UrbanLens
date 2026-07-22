@@ -113,9 +113,12 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
         default=False,
         help_text="Prevents automatic building/parcel classification from overwriting a user-chosen pin type.",
     )
-    # Set when the owner declines the "add pins for the buildings here?" offer
-    # for this pin, so a multi-building parcel stops re-asking on every visit.
-    buildings_offer_dismissed = BooleanField(default=False)
+    # Set when the owner declines this pin's restructure suggestion (create
+    # child pins for the buildings here / nest the top-level pins that fall
+    # inside this property). Permanent per pin: a "no" means no even if new
+    # buildings or new matching top-level pins turn up later, so a declined
+    # suggestion can never come back on its own.
+    restructure_offer_dismissed = BooleanField(default=False)
 
     # Direct hex color override for this pin (e.g. "#F44336"). Used by detail pins
     # when the user explicitly picks a color in the dialog.

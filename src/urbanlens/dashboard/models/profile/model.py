@@ -348,6 +348,14 @@ class Profile(abstract.PublicDashboardModel):
     # are private to a pin's owner, community wikis are not).
     auto_create_pin_article_from_wikipedia = BooleanField(default=True, help_text="When a Wikipedia article is matched to one of your pins, automatically start that pin's article from it (if it doesn't have one yet).")
 
+    # Whether pin detail pages may suggest reorganizing a pin's hierarchy -
+    # creating a child pin per building on a multi-building property, and
+    # nesting existing top-level pins that fall inside the property boundary.
+    # Off silences the suggestion everywhere at once; declining it on a single
+    # pin instead is per-pin and permanent (Pin.restructure_offer_dismissed).
+    # See services.pin_restructure.
+    suggest_pin_restructure = BooleanField(default=True, help_text="Offer to organize pins into buildings and sub pins when you open a property that has several.")
+
     # Default ordering for the pin detail page's Media gallery. "relevant"
     # surfaces items this user has explicitly marked relevant first (falling
     # back to arrival order); "recent" ignores relevance marks entirely.

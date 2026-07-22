@@ -134,6 +134,38 @@ Consequences worth knowing:
 - **The dialog only submits `pin_type` when it was touched.** Otherwise every autosave (a colour
   tweak, a drag) would mark an automatic classification as a user decision and freeze it.
 
+## The restructure suggestion is one dialog, and it is offered exactly once
+
+`services/pin_restructure.py` answers two questions that are really one — "this pin's hierarchy
+doesn't match the ground" — so they share a single prompt on the pin detail page rather than
+interrupting twice:
+
+1. buildings on this property with no child pin yet, and
+2. the owner's own *top-level* pins standing inside the property boundary, which is what a map built
+   before child pins existed looks like.
+
+Load-bearing details:
+
+- **Matching an existing marker to a building prefers the footprint polygon**, not a radius. REData
+  publishes real outlines (`geometry`) for most buildings it knows; a 15 m radius from the centroid
+  both misses a pin at the far end of a long hall and wrongly claims one standing on the neighbour.
+  `site_scope.BUILDING_MATCH_METERS` is now only the fallback for sources publishing a bare centroid.
+- **Nesting requires a *real* property boundary.** `Boundary.effective_polygon_for_pin` synthesizes a
+  50 m circle when nothing is known, and suggesting that every pin within a city block belongs to a
+  house would be worse than suggesting nothing — hence `property_polygon()` rejecting `source ==
+  "circle"`.
+- **Three answers, two scopes.** "No" sets `Pin.restructure_offer_dismissed` permanently for that pin
+  (new buildings or new matching top-level pins never revive it). "Don't show again" *also* clears
+  `Profile.suggest_pin_restructure`, and still marks the pin — so turning the setting back on later
+  doesn't resurrect the prompt on the one pin they explicitly declined.
+- **The plan is recomputed on apply**, never trusted from the rendered page, so anything pinned or
+  nested between render and click is simply skipped.
+- **A spent poll budget still offers what's known.** The nesting half doesn't depend on the REData
+  lookup, so a slow/unavailable parcel fetch degrades to "offer the nesting" rather than hiding the
+  whole suggestion.
+- The "Buildings on this Property" panel keeps its own buildings-only import button, which ignores
+  the dismissal entirely — that one is an action the user went looking for, not an interruption.
+
 ## Plugin system rules
 
 - Plugin classes (`dashboard/plugins/builtin/*.py`) are instantiated during `AppConfig.ready()`.

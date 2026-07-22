@@ -26,8 +26,8 @@ from urbanlens.dashboard.plugins.builtin.parcel_buildings import (
     ParcelBuildingsPlugin,
     building_rows,
     fetch_parcel_buildings,
-    match_child_marker,
 )
+from urbanlens.dashboard.services.pin_restructure import match_marker
 from urbanlens.dashboard.services.apis.locations.boundaries.overpass import OverpassGateway
 from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError, RedataGateway
 from urbanlens.dashboard.services.locations.site_scope import PARCEL_BUILDINGS_CACHE_SOURCE
@@ -183,6 +183,8 @@ class EnrichmentSourceTests(TestCase):
 
 
 class MatchChildMarkerTests(TestCase):
+    """The panel's "already pinned?" check, delegated to pin_restructure."""
+
     def setUp(self) -> None:
         super().setUp()
         self.profile = baker.make("dashboard.Profile")
@@ -192,15 +194,15 @@ class MatchChildMarkerTests(TestCase):
 
     def test_matches_a_marker_standing_on_the_building(self) -> None:
         pin = self._pin_at(41.733200, -73.930400)
-        self.assertEqual(match_child_marker(_REDATA_BUILDINGS[0], [pin]), pin)
+        self.assertEqual(match_marker(_REDATA_BUILDINGS[0], [pin]), pin)
 
     def test_does_not_match_a_marker_at_another_building(self) -> None:
         pin = self._pin_at(41.733000, -73.930000)
-        self.assertIsNone(match_child_marker(_REDATA_BUILDINGS[0], [pin]))
+        self.assertIsNone(match_marker(_REDATA_BUILDINGS[0], [pin]))
 
     def test_a_building_without_coordinates_matches_nothing(self) -> None:
         pin = self._pin_at(41.733200, -73.930400)
-        self.assertIsNone(match_child_marker({"name": "Unlocated"}, [pin]))
+        self.assertIsNone(match_marker({"name": "Unlocated"}, [pin]))
 
 
 class BuildingRowsTests(TestCase):

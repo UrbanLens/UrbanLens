@@ -530,3 +530,56 @@ worth checking before changing the helper for all of them.
 **Suggested next step**: make `_location()` mint unique coordinates per call (module-level counter,
 mirroring `_make_pin` in `test_child_pins.py`), then re-run the whole file to confirm no sibling test
 depended on the collision.
+
+---
+
+## UL-355: `osm.ch` in the Overpass mirror pool is a Switzerland-only extract, silently returning "no data" worldwide
+
+Found while benchmarking the new self-hosted Overpass instance (full results and method:
+`docs/overpass-mirror-test.md`, run 2026-07-22).
+
+`https://overpass.osm.ch/api/interpreter` is listed as an equal peer in `_API_MIRRORS`
+(`services/apis/locations/boundaries/overpass.py:35`), but it does **not** carry global OSM data -
+it is a regional extract. Direct coverage probe:
+
+| Probe | osm.ch | a global instance |
+|---|---|---|
+| Zürich HB (CH) | 1 element, `Zürich Hauptbahnhof` | 1 element, same |
+| Grand Central (US) | **0 elements** | 4 elements |
+| Berlin Hbf (DE) | **0 elements** | 4 elements |
+
+Across a 10-query benchmark it returned 0 elements for 9 of 10 queries; the sole exception was a
+Germany-wide bbox that clips Swiss territory (268 elements, vs 10,454 from a global mirror).
+
+**Why this is a correctness bug, not just a slow mirror**: it answers **HTTP 200, fast, with an
+empty `elements` list**. `OverpassGateway.query` only fails over on 429/502/503/504 and network
+errors, and `elements_for_query` treats any successful response as authoritative. Because
+`_available_endpoints()` shuffles the pool and picks a random starting endpoint, roughly **1 in 6
+boundary/enrichment/parcel-building lookups outside Switzerland resolves to "no features found"** -
+with no exception, no retry against another mirror, and no log line. Downstream that is
+indistinguishable from OSM genuinely having no data: a pin gets no boundary, a parcel reports no
+buildings, `get_typed_boundaries` returns `{building: None, property: None}`.
+
+This also means the existing `LocationCache` may hold empty-result entries that were caused by
+this mirror rather than by real absence of data.
+
+**Repro**: 
+```
+POST https://overpass.osm.ch/api/interpreter
+data=[out:json][timeout:60];node(around:300,40.7527,-73.9772)["railway"="station"];out tags;
+-> 200 OK, {"elements": []}     # Grand Central; a global instance returns 4
+```
+
+**Fix**: remove the `osm.ch` entry from `_API_MIRRORS` (`overpass.py:35`). One line.
+
+**Worth considering alongside it** (larger, hence not bundled): the pool has no notion of an
+endpoint that lies by omission. A pool member that consistently returns 0 elements where others
+return data is detectable, and `overpass.py`'s failover currently cannot express "this response
+was successful but wrong". The same benchmark found `private.coffee` (20/20 failures) and
+`kumi.systems` (19/20) are also effectively dead, and that the equal-peer shuffle premise in the
+`_API_MIRRORS` comment ("routinely answer the same query in well under a second") no longer holds
+- see the recommendations section of `docs/overpass-mirror-test.md`.
+
+**Why not fixed here**: the scope of this session was benchmarking, and changing the production
+mirror pool is a deployment-affecting decision (which endpoint becomes primary depends on whether
+the self-hosted instance is considered production-ready).

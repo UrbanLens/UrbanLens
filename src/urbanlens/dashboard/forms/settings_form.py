@@ -336,10 +336,16 @@ class MapDisplayForm(forms.ModelForm):
         label="Local Storage",
         help_text=("Cache pins in your browser for instant map loads. Disabling this will make the map feel sluggish."),
     )
+    suggest_pin_restructure = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "settings-checkbox"}),
+        label="Pin Organization Suggestions",
+        help_text="When you open a property with several buildings, offer to add a sub pin for each one and to nest any of your existing pins that stand inside it.",
+    )
 
     class Meta:
         model = Profile
-        fields = ["default_map_view", "cluster_radius", "use_pin_cache"]
+        fields = ["default_map_view", "cluster_radius", "use_pin_cache", "suggest_pin_restructure"]
 
 
 class MapCenterForm(forms.ModelForm):

@@ -121,29 +121,6 @@ def _overpass_buildings(location: Location) -> list[dict[str, Any]]:
         return []
 
 
-def match_child_marker(building: dict[str, Any], candidates: list) -> Any | None:
-    """The child marker standing at a building, if one already does.
-
-    Args:
-        building: A cached building record with ``latitude``/``longitude``.
-        candidates: Child markers (pins or wikis) not yet matched to a building.
-
-    Returns:
-        The nearest candidate within ``BUILDING_MATCH_METERS``, or None.
-    """
-    from urbanlens.dashboard.services.locations.site_scope import BUILDING_MATCH_METERS, meters_between
-
-    lat, lng = building.get("latitude"), building.get("longitude")
-    if lat is None or lng is None or not candidates:
-        return None
-
-    def distance(candidate) -> float:
-        return meters_between(float(candidate.effective_latitude), float(candidate.effective_longitude), float(lat), float(lng))
-
-    nearest = min(candidates, key=distance)
-    return nearest if distance(nearest) <= BUILDING_MATCH_METERS else None
-
-
 def building_rows(buildings: list[dict[str, Any]], children: list, url_for=None) -> list[dict[str, Any]]:
     """Pair each known building with the child marker that already covers it.
 
@@ -151,6 +128,10 @@ def building_rows(buildings: list[dict[str, Any]], children: list, url_for=None)
     render identically from the same cached data - the only difference being
     whether ``children`` are child pins or child wikis, which both expose the
     same ``effective_latitude``/``effective_longitude``/``pin_type`` surface.
+
+    Matching is delegated to ``services.pin_restructure.match_marker`` so this
+    panel's idea of "already pinned" can never drift from what the restructure
+    suggestion would actually create.
 
     Args:
         buildings: Cached building records (see :func:`fetch_parcel_buildings`).
@@ -165,10 +146,12 @@ def building_rows(buildings: list[dict[str, Any]], children: list, url_for=None)
         ``latitude``, ``longitude``, ``child_name``, and ``child_url`` - the
         last two empty when this building has no marker yet.
     """
+    from urbanlens.dashboard.services.pin_restructure import match_marker
+
     rows: list[dict[str, Any]] = []
     unmatched = list(children)
     for building in buildings:
-        child = match_child_marker(building, unmatched)
+        child = match_marker(building, unmatched)
         if child is not None:
             # One child can only stand for one building - on a dense campus
             # the same pin would otherwise claim several neighbouring

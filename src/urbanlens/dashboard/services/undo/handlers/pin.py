@@ -23,7 +23,7 @@ _RESTORABLE_FIELDS = (
     "unlogged_visit_dismissed",
     "pin_type",
     "pin_type_is_user_provided",
-    "buildings_offer_dismissed",
+    "restructure_offer_dismissed",
     "color",
     "detail_bg_color",
     "detail_bg_opacity",

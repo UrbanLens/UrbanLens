@@ -137,12 +137,14 @@
 <div class="pin-detail-grid">
     <div id="pin-detail-onboarding" class="page-onboarding" aria-live="polite"></div>
 
-    {# Offers to create a sub pin per building when this property has several #}
-    {# and none of them are pinned yet - see controllers.pin_buildings. 204s   #}
-    {# (and removes itself) in every other case. #}
+    {# The one-time "organize this property?" suggestion: sub pins for the     #}
+    {# buildings here, plus nesting any top-level pins that stand inside it.   #}
+    {# 204s (and removes itself) whenever there's nothing to suggest, the      #}
+    {# owner has declined for this pin, or they've turned suggestions off.     #}
+    {# See controllers.pin_restructure. #}
     {% if not parent_pin %}
-    <div id="buildings-offer-slot"
-         hx-get="{% url 'pin.buildings.offer' pin.slug %}"
+    <div id="pin-restructure-slot"
+         hx-get="{% url 'pin.restructure.offer' pin.slug %}"
          hx-trigger="load"
          hx-swap="outerHTML"
          hx-timeout="25000"></div>

@@ -22,10 +22,10 @@ Two rules, in order:
 
 Deliberately *not* a rule: "the parcel at these coordinates has several
 buildings according to REData". That signal is real, and it does drive the
-"would you like to add pins for the buildings here?" offer (see
-``controllers.pin_buildings``) - but on its own it would silently reclassify
-a house with a detached garage, so it never flips scope by itself. The user
-opting into the offer creates the child pins, and *those* flip it.
+"organize this property?" suggestion (see ``services.pin_restructure``) - but
+on its own it would silently reclassify a house with a detached garage, so it
+never flips scope by itself. The user accepting the suggestion creates the
+child pins, and *those* flip it.
 
 Child markers are classified automatically (:func:`classify_building_pin_type`)
 so none of this asks the user to do extra work: a pin dropped on a building

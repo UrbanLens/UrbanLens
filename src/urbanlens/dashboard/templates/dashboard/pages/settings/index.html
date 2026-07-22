@@ -1034,6 +1034,20 @@
                 {% endif %}
             </div>
 
+            <div class="settings-field settings-field--checkbox">
+                <label class="settings-checkbox-label">
+                    {{ map_display_form.suggest_pin_restructure }}
+                    <span class="settings-checkbox-materialize"></span>
+                    <span>
+                        <span class="settings-label">{{ map_display_form.suggest_pin_restructure.label }}</span>
+                        <p class="settings-help">{{ map_display_form.suggest_pin_restructure.help_text }}</p>
+                    </span>
+                </label>
+                {% if map_display_form.suggest_pin_restructure.errors %}
+                <p class="settings-error">{{ map_display_form.suggest_pin_restructure.errors|join:", " }}</p>
+                {% endif %}
+            </div>
+
             <div class="settings-actions">
                 <button type="submit" class="settings-save-btn">Save</button>
             </div>

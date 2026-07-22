@@ -21,9 +21,15 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   are typed automatically - the detail-pin dialog's Type select defaults to "Auto", and a marker
   landing on a known building footprint becomes a building, while entrances and landmarks don't.
   An explicitly chosen type always wins. See `docs/NOTES.md`.
-- **Add pins for the buildings here?** — dropping one pin on a multi-building parcel offers to
-  create a sub pin per building, named and numbered from REData (county GIS + NY SHPO CRIS) or
-  OpenStreetMap, mirrored as child wikis when the place already has a community wiki
+- **"Organize this property?"** — one suggestion, shown once the first time you open a pin's detail
+  page, covering both halves of the same question: create a sub pin per building here (named and
+  numbered from REData's county GIS + NY SHPO CRIS, or OpenStreetMap, and mirrored as child wikis
+  when the place already has a community wiki), and nest any of your existing *top-level* pins that
+  stand inside the property boundary — useful for maps built before child pins existed. Nesting only
+  re-parents; nothing is merged, renamed, or deleted. Three answers: yes, no (permanent for that
+  pin, even if new buildings turn up later), or don't show again (Settings → Map → Pin Organization
+  Suggestions). Buildings you've already pinned are detected by their real footprint polygon, not a
+  fixed radius, so a pin at the far end of a long hall still counts as covering it
 - Add pins by map click, coordinate entry, or place search/autocomplete; drag to reposition
 - Pin list view alongside the map (particularly useful while searching/filtering); "Add these pins to a list" bulk action from the pin list panel adds all currently-visible/filtered pins to a trip or saved collection at once
 - Bulk pin operations: multi-select, bulk edit (description, rating, labels, parent pin), bulk merge, bulk delete (with undo)

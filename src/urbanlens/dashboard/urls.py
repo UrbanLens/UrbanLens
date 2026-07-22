@@ -44,10 +44,10 @@ from urbanlens.dashboard.controllers import (
     organize,
     photos,
     pin,
-    pin_buildings,
     pin_bulk,
     pin_edit,
     pin_lists,
+    pin_restructure,
     pin_sharing,
     pin_suggestions,
     property_owner,
@@ -584,19 +584,24 @@ urlpatterns = [
                                 name="pin.parcel_buildings",
                             ),
                             path(
-                                "<slug:pin_slug>/buildings/offer/",
-                                pin_buildings.PinBuildingOfferView.as_view(),
-                                name="pin.buildings.offer",
-                            ),
-                            path(
-                                "<slug:pin_slug>/buildings/dismiss/",
-                                pin_buildings.PinBuildingDismissView.as_view(),
-                                name="pin.buildings.dismiss",
-                            ),
-                            path(
                                 "<slug:pin_slug>/buildings/import/",
-                                pin_buildings.PinBuildingImportView.as_view(),
+                                pin_restructure.PinBuildingImportView.as_view(),
                                 name="pin.buildings.import",
+                            ),
+                            path(
+                                "<slug:pin_slug>/restructure/offer/",
+                                pin_restructure.PinRestructureOfferView.as_view(),
+                                name="pin.restructure.offer",
+                            ),
+                            path(
+                                "<slug:pin_slug>/restructure/dismiss/",
+                                pin_restructure.PinRestructureDismissView.as_view(),
+                                name="pin.restructure.dismiss",
+                            ),
+                            path(
+                                "<slug:pin_slug>/restructure/apply/",
+                                pin_restructure.PinRestructureApplyView.as_view(),
+                                name="pin.restructure.apply",
                             ),
                             path(
                                 "<slug:pin_slug>/usgs-topo/",

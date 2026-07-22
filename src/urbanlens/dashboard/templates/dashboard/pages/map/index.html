@@ -6005,10 +6005,6 @@
                 if (data && data.conflicting_locations && data.conflicting_locations.length > 1) {
                     _showLocationConflictPicker(data.pin_slug, data.pin_uuid, data.conflicting_locations);
                 }
-                // On a multi-building parcel, offer to pin each building.
-                if (data && data.buildings_offer_url) {
-                    _offerBuildingPins(data.buildings_offer_url);
-                }
                 // Remove the external-source marker that the user pinned - the user's
                 // own pin now represents this place, so showing both would be redundant.
                 if (submittedPlaceId) {
@@ -6021,39 +6017,6 @@
             })
             .catch(err => toastr.error('Failed to add pin: ' + err))
             .finally(() => { this.disabled = false; this.textContent = 'Add Pin'; });
-        }
-    });
-
-    // -- "Add pins for the buildings here?" offer --------------------------------
-    // The endpoint answers 204 for the ordinary case (one building, or the
-    // buildings already pinned), so nothing is shown unless there's a real
-    // multi-building parcel here. While the building lookup is still in flight
-    // it answers with an invisible self-poller instead, which htmx keeps
-    // retrying inside the (still closed) dialog body until a real answer lands
-    // - hence htmx.process() on the injected markup, and opening the dialog
-    // only once something visible actually arrives.
-    function _offerBuildingPins(offerUrl) {
-        var dlg = document.getElementById('buildings-offer-dialog');
-        var body = document.getElementById('buildings-offer-dialog-body');
-        if (!dlg || !body) return;
-
-        fetch(offerUrl, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
-            .then(r => (r.status === 204 ? '' : r.text()))
-            .then(html => {
-                if (!html.trim()) return;
-                body.innerHTML = html;
-                if (window.htmx) htmx.process(body);
-                if (body.querySelector('#buildings-offer')) dlg.showModal();
-            })
-            .catch(() => { /* An offer is a nicety - never surface its failure. */ });
-    }
-
-    // Both offer buttons swap themselves away; once the prompt is gone there is
-    // nothing left to show, so the dialog closes itself.
-    document.getElementById('buildings-offer-dialog-body')?.addEventListener('htmx:afterSwap', function () {
-        if (!this.querySelector('#buildings-offer')) {
-            document.getElementById('buildings-offer-dialog').close();
-            window.invalidatePinCache?.();
         }
     });
 
@@ -6182,21 +6145,6 @@
             <button type="button" id="loc-conflict-cancel-btn" class="btn btn--ghost btn--sm">Cancel pin creation</button>
         </div>
     </div>
-</dialog>
-
-{# -- "Add pins for the buildings here?" dialog -------------------------------- #}
-{# Body is fetched from the new pin's own offer endpoint, which 204s for an     #}
-{# ordinary single-building place - so this only ever opens on a real           #}
-{# multi-building parcel. See controllers.pin_buildings.                        #}
-<dialog id="buildings-offer-dialog" class="ul-dialog">
-    <div class="dialog-header">
-        <i class="material-symbols-outlined">apartment</i>
-        <span>Buildings on this property</span>
-        <button type="button" class="dialog-close" onclick="document.getElementById('buildings-offer-dialog').close()">
-            <i class="material-symbols-outlined">close</i>
-        </button>
-    </div>
-    <div id="buildings-offer-dialog-body"></div>
 </dialog>
 
 {% endblock %}
