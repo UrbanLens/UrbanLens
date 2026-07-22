@@ -17,6 +17,7 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.services.apis.assets.base import MediaItem, MediaProvider
 from urbanlens.dashboard.services.apis.assets.internet_archive import InternetArchiveGateway
 from urbanlens.dashboard.services.apis.assets.loc import LOCJsonGateway
+from urbanlens.dashboard.services.apis.assets.smithsonian import SmithsonianGateway
 from urbanlens.dashboard.services.external_data import MediaPanelSource
 
 if TYPE_CHECKING:
@@ -128,3 +129,31 @@ class InternetArchiveGatewayRelevanceFlagsTests(SimpleTestCase):
         self.assertNotEqual(terms, [])
         self.assertIn("Summit Road", terms[0])
         self.assertNotIn("I-75", terms[0])
+
+
+class SmithsonianGatewayRelevanceFlagsTests(SimpleTestCase):
+    """Regression guard: Smithsonian returned irrelevant nationwide results
+    for the same word-independent-OR relevance ranking reason as LOC/Internet
+    Archive, compounded by an unquoted "United States" contributing noise as
+    its own free-standing term across a ~19M-object US federal collection."""
+
+    def test_reject_address_derived_names_is_enabled(self) -> None:
+        self.assertTrue(SmithsonianGateway.reject_address_derived_names)
+
+    def test_include_address_is_disabled(self) -> None:
+        self.assertFalse(SmithsonianGateway.include_address)
+
+    def test_search_with_country_is_disabled(self) -> None:
+        self.assertFalse(SmithsonianGateway.search_with_country)
+
+    def test_quote_name_is_enabled(self) -> None:
+        self.assertTrue(SmithsonianGateway.quote_name)
+
+    def test_quote_locality_is_enabled(self) -> None:
+        self.assertTrue(SmithsonianGateway.quote_locality)
+
+    def test_query_is_quoted_name_and_locality_without_address_or_country(self) -> None:
+        loc = _location(street_number="1000", route="I-75 Nb Expy", locality="Cincinnati", administrative_area_level_1="OH", official_name="Summit Road")
+        pin = _pin(loc)
+        terms = MediaPanelSource.search_terms(pin, SmithsonianGateway(api_key="test-key"))
+        self.assertEqual(terms, ['"Summit Road" "Cincinnati OH"'])

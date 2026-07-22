@@ -356,12 +356,22 @@ class MediaPanelSource(GalleryMediaSource):
             if fallback_name and is_address_derived_name(fallback_name, pin.location):
                 return []
 
-        search_term = pin.get_unique_search_name(include_country=gateway.search_with_country, quote_name=gateway.quote_name, include_address=gateway.include_address)
+        search_term = pin.get_unique_search_name(
+            include_country=gateway.search_with_country,
+            quote_name=gateway.quote_name,
+            include_address=gateway.include_address,
+            quote_locality=gateway.quote_locality,
+        )
         if not search_term:
             return []
         terms = [search_term]
         if gateway.multi_query:
-            narrow_term = pin.get_unique_search_name(include_country=gateway.search_with_country, quote_name=gateway.quote_name, include_address=False)
+            narrow_term = pin.get_unique_search_name(
+                include_country=gateway.search_with_country,
+                quote_name=gateway.quote_name,
+                include_address=False,
+                quote_locality=gateway.quote_locality,
+            )
             if narrow_term and narrow_term not in terms:
                 terms.append(narrow_term)
         return terms

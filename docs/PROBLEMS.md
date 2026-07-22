@@ -399,3 +399,28 @@ small, deliberate change: add the guard to `btn-base` once, then grep for other 
 elements toggled via a bare `.hidden = ...` (as opposed to `hidden` attribute template conditionals,
 which never render the element in the first place and aren't affected) to confirm nothing else is
 silently broken the same way.
+
+---
+
+## `SmithsonianGateway`'s `online_media_type` filter param is unverified against the live API (found 2026-07-22)
+
+While tightening Smithsonian's search relevance (see `services/apis/assets/smithsonian.py` -
+`quote_name`/`quote_locality`/`include_address`/`search_with_country`/`reject_address_derived_names`,
+same fix class as `LOCJsonGateway`), noticed `get_data()` sends `online_media_type: "Images"` as a
+bare top-level GET param. Secondary research (couldn't reach `edan.si.edu/openaccess/apidocs/` - it's
+a JS-rendered SPA `WebFetch` can't execute, and `si.edu/openaccess/*` pages 403 to fetchers) turned up
+one indirect data point: a third-party EDAN client uses `fq=["online_media_type:\"Images\""]` (a
+filter-query array with `field:"value"` syntax), not a bare top-level param - suggesting the current
+param name/shape may be silently ignored by the live `/search` endpoint (unknown GET params are
+typically no-ops on REST APIs, not errors, so this wouldn't be visible as a failure).
+
+**Why not fixed**: doesn't explain the reported symptom (irrelevant *subject matter*, not irrelevant
+*media type* - `parse_response()`/`_generate_media()` already drop rows with no media URL regardless
+of whether server-side filtering happened), so it's out of scope for that fix. And the one candidate
+correct syntax (`fq=[...]`) comes from a third-party client inferring EDAN's *internal* API, not
+confirmed against the public `api.si.edu/openaccess/api/v1.0/search` endpoint specifically - risky to
+guess at without a live response to check against.
+
+**Suggested next step**: hit the live endpoint once with both the current param and a candidate
+`fq=online_media_type:"Images"` (or as a list) and diff the actual JSON responses to confirm which
+one server-side filters vs. is silently dropped.

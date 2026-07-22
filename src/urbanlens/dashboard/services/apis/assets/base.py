@@ -62,6 +62,13 @@ class MediaProvider(Gateway, ABC):
     geo_boundary: ClassVar[GeoBoundary | None] = None
     search_with_country: ClassVar[bool] = True
     quote_name: ClassVar[bool] = False
+    # Whether "city state" is wrapped as one quoted phrase instead of two
+    # loose keywords. Same rationale as ``quote_name``: a provider whose
+    # relevance ranking treats query words as independent OR terms will
+    # otherwise let a bare city or state name (e.g. "Ohio") surface unrelated
+    # nationwide records - see the general web-search panel, which pioneered
+    # this flag on ``Pin.get_unique_search_name``.
+    quote_locality: ClassVar[bool] = False
     multi_query: ClassVar[bool] = False
     # Whether the street address is included in the search query at all. A
     # provider whose full-text relevance ranking treats every word as an
