@@ -12,90 +12,142 @@ UrbanLens is a Django-based web mapping application for photographers and urban 
 
 ## Development Environment
 
-- **Development machine**: Windows. Use **PowerShell** for all terminal commands requiring access to project files - the Bash
-  tool's WSL sandbox does not have the Windows filesystem mounted (`/mnt/c/` is inaccessible).
-- **Production**: Ubuntu via Docker, managed through Portainer
-- **Docker-compose** is the canonical way to run the full stack locally
+This checkout lives at `/projects/environments/dev/s1/UrbanLens` on a Linux (Ubuntu 24.04-based,
+kernel 6.8) host that runs Docker natively - **not Windows**, and no SSH hop to a separate box is
+needed. The host's own address (`10.2.0.244`) is the machine older docs referred to as a remote
+dev VM; if you're working in this checkout, you're already on it.
 
-### Virtual environment
+This is one of several parallel checkouts under `/projects/environments/{dev,staging,prod,test}/`
+(this one is dev slot `s1`). `/projects/UrbanLens` (owned by a different local user, `snow`) is a
+**separate, unrelated checkout** - don't assume changes here are visible there or vice versa.
 
-The Windows venv lives at `.venv_windows\` (not `.venv`). Always prefix tool invocations with
-the full path to the venv executable:
+None of Python, Node/bun, `uv`, or `pyright` come preinstalled - only `python3` (3.12.3), `node`
+(v18.19.1, old - see the sass gotcha below), `docker`, `pipx`, and `git`. No passwordless `sudo`,
+so system package installs (`apt install ...`) require the user's password; work around missing
+system libraries rather than assuming you can install them.
 
-```powershell
-.venv_windows\Scripts\python.exe  # Python interpreter
-.venv_windows\Scripts\ruff.exe --fix # Linter
-.venv_windows\Scripts\bandit.exe -c pyproject.toml -r src
+### Python environment (uv)
+
+Install `uv` once per environment (persists under `~/.local/bin`, add it to `PATH`):
+
+```bash
+pipx install uv   # or: curl -LsSf https://astral.sh/uv/install.sh | sh
+export PATH="$HOME/.local/bin:$PATH"
 ```
-Type checking (mypy) and pytest work on Windows - GeoDjango's GDAL/GEOS
-dependency is satisfied via DLLs vendored by `geopandas`'s `pyogrio` dependency, resolved in
-`settings/_gdal_windows.py` and applied from `settings/local.py`/`settings/test.py` only when
-`UL_ENVIRONMENT` is `local` (the default) - never in Docker/CI/production.
 
-Sass compiles on Windows via `bun` (installed at `~\.bun\bin\bun.exe`):
+Then create the project venv - this also installs the `dev` dependency group (ruff, mypy, pytest,
+pre-commit, etc.) into `.venv/`:
 
-```powershell
-& "$env:USERPROFILE\.bun\bin\bun.exe" run sass
+```bash
+uv sync
+uv run ruff check --fix src/urbanlens   # works directly on this host
+uv run pre-commit run --all-files       # works directly on this host
 ```
+
+**mypy and pytest do NOT work directly on this host.** Both eventually import
+`django.contrib.gis`, which requires a system GDAL/GEOS install; this host has neither `gdal-bin`
+installed nor passwordless sudo to install it (unlike the Windows setup this doc used to describe,
+there's no bundled-DLL fallback wired up for Linux - `settings/_gdal_windows.py` only activates on
+`os.name == "nt"`). Run anything that touches GeoDjango models **inside the `app` container**
+instead, where the Dockerfile installs real `libgdal-dev`:
+
+```bash
+docker exec -e UL_TEST_DB_NAME=some_unique_name urbanlens_devs1_app \
+  /app/.venv/bin/python -m pytest src/urbanlens/dashboard/tests -k "..."
+docker exec urbanlens_devs1_app /app/.venv/bin/python -m mypy src/urbanlens
+```
+
+(Container names follow `urbanlens_<UL_CONTAINER_NAME>_<service>` - check `docker compose ps` for
+the current slot's names; this environment's is `devs1`.)
+
+Gotcha discovered running this: pytest run this way is attached to the dev compose network, where
+`UL_VALKEY_URL`/`UL_DB_HOST` resolve to container bridge IPs, not `localhost`. The test suite's
+network guard (`core/testing_network.py`) only allows localhost connections, so any test that
+opens its own Redis/Postgres socket directly (rather than through Django's normal connection
+pooling, which is exempted) fails with `RuntimeError: External network access is disabled during
+tests`. This is a structural mismatch between "run tests against the already-running dev compose
+stack" and the test suite's localhost-only assumption - don't try to silently work around it
+(e.g. by weakening the guard); treat it as a known limitation of testing this way.
+
+### JS/frontend environment (bun)
+
+Bun isn't preinstalled either:
+
+```bash
+curl -fsSL https://bun.sh/install | bash   # installs to ~/.bun/bin
+export PATH="$HOME/.bun/bin:$PATH"
+bun install
+bun run typecheck   # tsc --noEmit - works fine
+bun run test:ts     # bun test - works fine
+```
+
+**`bun run sass` (and `npm run sass`) crashes on this host** with `Error [ERR_REQUIRE_ESM]:
+require() of ES Module .../node_modules/chokidar/index.js`. `bun run <script>` resolves `sass`
+from `node_modules/.bin/sass`, whose shebang (`#!/usr/bin/env node`) hands execution to this
+host's system Node 18.19.1, which can't `require()` the ESM-only `chokidar` bundled by the
+installed `sass` package version. The container has no `node` binary at all and never hits this
+path. Workaround: invoke the same script directly through Bun's own runtime instead of via the
+shebang:
+
+```bash
+bun node_modules/.bin/sass --style=expanded --no-source-map \
+  src/urbanlens/dashboard/frontend/sass/style.scss \
+  src/urbanlens/dashboard/frontend/static/dashboard/style.css
+```
+
+`package.json`'s `lint` script (`pyright src/urbanlens`) doesn't work out of the box either -
+`pyright` isn't installed by `uv sync` or `bun install` in this repo. Use `ruff`/`mypy` instead,
+per the Linting section below.
+
+### Docker / docker-compose
+
+Docker works directly - `docker compose up --build -d` (or targeting one service, e.g. `... app`)
+brings up the full stack: `app`, `app-ws` (Daphne, WebSockets), `nginx`, `celery-beat`,
+`celery-worker`, `celery-worker-panels`, `db` (PostGIS), `valkey`, `clamav`. Once `nginx` is
+healthy, the site is reachable at `http://localhost:${UL_APP_PORT}` - **check this environment's
+own `.env` for the actual port** (this slot's is `21811`, not the `21800` default other docs may
+reference; each parallel dev slot gets its own port to avoid collisions).
+
+`app`/`app-ws`/`nginx` all wait on `app`'s healthcheck, which doesn't pass until after migrations,
+`collectstatic`, and the sass/bun frontend build finish - allow a couple of minutes on first boot,
+don't assume "unhealthy" shortly after start means something is actually broken.
 
 ## Quick Start
 
 ### Running the Project
 
 ```bash
-docker-compose up --build
+docker compose up --build -d
 ```
-Full stack: Django app on port 21800, Nginx on 21080, PostgreSQL/PostGIS.
-
-Local Windows dev cannot run Docker directly - use the remote dev server below instead.
-
-### Remote dev server (Docker/Docker Compose)
-Claude has SSH access to a dedicated Ubuntu dev VM (hostname `chiron`) that can run Docker and
-docker-compose, since the local Windows environment cannot. Details:
-
-- **Host**: `10.2.0.244`, **user**: `claude`, **key**: `docs/prompts/id_ed25519`
-  ```powershell
-  ssh -i docs/prompts/id_ed25519 -o IdentitiesOnly=yes claude@10.2.0.244 "<command>"
-  ```
-- The project is checked out on the server at `/projects/UrbanLens`, symlinked into the `claude`
-  user's home as `~/UrbanLens`. It's owned by a different local user (`snow`), so git will refuse
-  to operate on it until you run (once per session/container, harmless to repeat):
-  ```bash
-  git config --global --add safe.directory /projects/UrbanLens
-  ```
-- **The remote checkout is a separate filesystem from this local working directory.** Local edits
-  are not visible there automatically. Workflow to test a change on the dev server:
-  1. Commit and push the branch from local (or otherwise get the commits to the remote's git
-     remote).
-  2. `ssh` in and `git pull` (or fetch/checkout the right branch/commit) inside `~/UrbanLens`.
-  3. Run `docker compose up --build -d` (or `down`/restart individual services) there to pick up
-     the change.
-- Once running, the stack is reachable at **https://dev.urbanlens.org**.
+Full stack reachable at `http://localhost:$(grep ^UL_APP_PORT .env | cut -d= -f2)` once healthy.
 
 ### Linting & Type Checking
 
-**Ruff (linting) - works on Windows:**
-```powershell
-.venv_windows\Scripts\ruff.exe check --fix src/urbanlens
+**Ruff (linting) - works directly:**
+```bash
+uv run ruff check --fix src/urbanlens
 ```
 Note: `migrations/`, `settings/`, `tests/`, and `__init__.py` are excluded from ruff by the
 config in `pyproject.toml`.
 
 Always run it with --fix, so you don't waste time looking at minor issues that ruff can address on its own.
 
-**Syntax checking a single file - works on Windows:**
-```powershell
-.venv_windows\Scripts\python.exe -m py_compile path/to/file.py
+**Syntax checking a single file - works directly:**
+```bash
+uv run python -m py_compile path/to/file.py
 ```
 
-**MyPy**
+**MyPy** - needs the `app` container (see GDAL note above):
+```bash
+docker exec urbanlens_devs1_app /app/.venv/bin/python -m mypy src/urbanlens
+```
 When examining mypy output, never use cast or similar solutions. Remember that the purpose of mypy is to find real errors and improve code quality, not to silence warnings. This will sometimes require going back to the origin of the call and adjusting types, rather than trying to paper over it at the point of failure. If the code at the origin is making a false assumption, fix the bug. Doing things like implementing generics is needed to address some types of mypy warnings. If you're unsure, mark it as a TODO instead of doing things to silence the warning.
 
 **pre-commit:**
-```powershell
-& "$env:USERPROFILE\.bun\bin\bun.exe" run pre-commit
+```bash
+uv run pre-commit run --all-files
 ```
-This script runs pre-commit twice (first pass silent) so formatting fixes are applied before real failures are output.
+Run it twice if you want silent auto-fixing on the first pass before real failures show up, mirroring what the old `bun run pre-commit` script did.
 
 > Common development commands should be consolidated into `pyproject.toml` scripts, `package.json`, and/or VSCode tasks - add new ones there rather than leaving them undocumented.
 
@@ -226,7 +278,7 @@ settings, site-admin, etc.).
 
 **HTMX is the preferred approach for all interactivity.** New features should use HTMX (hx-get, hx-post, hx-swap, etc.) to request server-rendered HTML fragments, minimizing hand-written JavaScript. Reach for JavaScript only when HTMX cannot accomplish the interaction (e.g., Leaflet map manipulation, drag-and-drop, real-time updates). Every existing JS-heavy interaction is a candidate for HTMX refactoring.
 
-- SCSS source: `src/urbanlens/dashboard/frontend/sass/style.scss` → compile with `bun run sass` (works directly on Windows)
+- SCSS source: `src/urbanlens/dashboard/frontend/sass/style.scss` → compile with `bun run sass` (see the sass/Node gotcha above if this crashes on your host)
 - Templates in `src/urbanlens/dashboard/templates/dashboard/`
 
 ### API Integrations
@@ -263,6 +315,11 @@ Do not create unit tests for trivial code, such as __init__.py, or to test that 
   test rendering a full page template hits a staticfiles-manifest 500.
 - **Always set `UL_TEST_DB_NAME`** to a unique value when running pytest, so parallel agent
   sessions don't collide on the test database.
+- **This host has no system GDAL/GEOS** and no passwordless sudo to install it - run pytest
+  inside the `app` container instead of via a bare `uv run pytest` (see the Python environment
+  section above for the exact command). Running it that way attaches to the dev compose network,
+  which trips the test suite's localhost-only network guard for a couple of tests that open their
+  own Redis socket directly - a known limitation of this setup, not a bug to paper over.
 - **Hypothesis `@given` and `self.client` don't mix** in this repo's TestCase - the test client
   keeps state across generated examples. Use `@given` for pure logic; use plain tests for views.
 - When a user reports a bug you plan to fix, first reproduce it with a failing unit test (TDD),
@@ -312,6 +369,11 @@ These are planned features - treat any missing implementation as a gap to fill, 
   `NodeNotFoundError` once pushed, since the dependency doesn't exist there. Run `git status
   src/urbanlens/dashboard/migrations/` before trusting a new migration's dependency, and repoint it
   at the actual latest *committed* migration if the auto-picked one is untracked.
+- Migrations were squashed/renumbered down to `0001`-`0011` at some point - if you find code or
+  tests referencing an old squashed-migration module name (e.g. a `NNNN_..._squashed_MMMM_...`
+  pattern) that no longer exists on disk, the RunSQL/logic it needs almost certainly survived
+  inside whichever new migration covers that model change; grep for the distinctive SQL/table name
+  across `migrations/*.py` rather than assuming the logic was lost.
 
 **Templates & HTMX**
 - `htmx:afterSwap` fires before `showModal()` - initialize Leaflet maps inside dialogs from the
@@ -342,13 +404,20 @@ These are planned features - treat any missing implementation as a gap to fill, 
   (`curl "https://dev.urbanlens.org/static/dashboard/style.css?cb=$(date +%s)"`) to force
   `cf-cache-status: MISS` and confirm what's actually at the origin, or use Chrome DevTools
   Protocol's `CSS.getMatchedStylesForNode` (via a Playwright CDP session) to see which rule a
-  live page actually applied if a rendered value looks unexpectedly stale.
+  live page actually applied if a rendered value looks unexpectedly stale. (This applies to the
+  public dev/staging/prod deployments, not the local docker-compose stack described above, which
+  isn't behind Cloudflare.)
 
 **Other**
 - Any new pin/location share path must call `resolve_origin_share` + `record_share_exposure` to
   keep the `LocationExposure` provenance chain intact.
 - `EncryptedTextField` derives its key from Django `SECRET_KEY` - changing it corrupts all
   encrypted data (Immich tokens, etc.).
+- `AppSettings.model_config` needs `env_ignore_empty=True` - several optional AI-endpoint settings
+  are typed `Url | None = Field(default=None)`, but pydantic-settings otherwise treats a blank env
+  var (`UL_CLOUDFLARE_AI_ENDPOINT=`, as ships in `.env-sample`) as an explicit empty string rather
+  than "unset", which fails `Url` validation and crash-loops every process that imports Django
+  settings (app, celery-beat, celery-worker, celery-worker-panels).
 
 ## Additional Notes
 Keep in mind that the application is in a beta state, and if you notice quirks, bugs, or poorly implemented code, it should not be assumed that this is by design. Investigate and fix problems that you identify. If you can't fix or investigate a problem in the current scope of your work, immediately note the problem in a file docs/PROBLEMS.md to investigate and address later.

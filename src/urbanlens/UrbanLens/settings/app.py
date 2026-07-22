@@ -198,6 +198,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         env_file=_ENV_FILE_PATHS,
         env_prefix="UL_",
         str_strip_whitespace=True,
+        env_ignore_empty=True,
         extra="ignore",
     )
 

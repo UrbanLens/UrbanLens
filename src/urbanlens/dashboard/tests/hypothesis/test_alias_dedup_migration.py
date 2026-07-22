@@ -1,19 +1,16 @@
-"""Tests for migration 0072's alias-deduplication step.
+"""Tests for the alias-deduplication step carried by migration 0008.
 
 Production/staging databases can already have case-insensitive duplicate
 aliases (e.g. "Aloha Stadium" and "aloha stadium" on the same pin) predating
 the case-insensitive unique constraint that migration adds - without a
 cleanup step first, `AddConstraint` fails with a real IntegrityError
 ("could not create unique index... is duplicated"). These tests exercise the
-exact SQL the migration runs (imported directly from the migration module -
-0072 itself was folded into the 0038-0092 squashed migration, but its RunSQL
-operations carried over unchanged, so there's no risk of the test drifting
-from what actually ships) against
-manually-inserted duplicate rows, since the constraint the migration adds is
-already active by the time any Django TestCase runs (migrations apply once,
-at test-database creation) - the constraint is dropped and duplicates are
-inserted via raw SQL first, both automatically undone by TestCase's
-per-test transaction rollback.
+exact SQL the migration runs (imported directly from the migration module)
+against manually-inserted duplicate rows, since the constraint the migration
+adds is already active by the time any Django TestCase runs (migrations
+apply once, at test-database creation) - the constraint is dropped and
+duplicates are inserted via raw SQL first, both automatically undone by
+TestCase's per-test transaction rollback.
 """
 
 from __future__ import annotations
@@ -30,18 +27,15 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.wiki.model import Wiki
 
-_migration = importlib.import_module(
-    "urbanlens.dashboard.migrations."
-    "0038_add_image_media_labels_squashed_0092_alter_notificationlog_notification_type"
-)
+_migration = importlib.import_module("urbanlens.dashboard.migrations.0008_add_image_media_labels")
 
 
 def _dedup_sql(table: str) -> str:
-    """The exact RunSQL statement migration 0072 runs for one alias table."""
+    """The exact RunSQL statement migration 0008 runs for one alias table."""
     for op in _migration.Migration.operations:
         if op.__class__.__name__ == "RunSQL" and table in op.sql:
             return op.sql
-    raise AssertionError(f"No RunSQL operation found touching {table!r} - has migration 0072 changed?")
+    raise AssertionError(f"No RunSQL operation found touching {table!r} - has migration 0008 changed?")
 
 
 class PinAliasDedupMigrationTests(TestCase):
