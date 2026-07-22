@@ -333,7 +333,7 @@ ul:not(.browser-default) > li {
 }
 
 // -- Bare <nav> baseline -------------------------------------------------------
-// Every real nav bar in the app (.app-nav, .ul-subnav-tabs, .faq-jump,
+// Every real nav bar in the app (.app-nav, .ul-subnav-tabs,
 // .help-import-toc-nav) sets its own background/height/color, but they rely on
 // this baseline for the properties they don't re-declare.
 nav {
