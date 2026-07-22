@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import json
 import logging
 import re
-import sys
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from django.db import DatabaseError
@@ -88,16 +87,18 @@ class GoogleGeocodingGateway(Gateway):
     service_key: ClassVar[str] = "google_geocoding"
     paid_service: ClassVar[bool] = True
 
-    api_key: str | None = settings.google_unrestricted_api_key
+    api_key: str | None = field(default_factory=lambda: settings.google_unrestricted_api_key)
     base_url: str = "https://maps.googleapis.com/maps/api/geocode/json"
 
     def __post_init__(self) -> None:
         Gateway.__post_init__(self)
         if not self.api_key:
-            # TODO: Build k=>v pairs for all settings to help logging (temporarily for debugging)
-            settings_dict = {k: v for k, v in settings.__dict__.items() if not k.startswith("_")}
-            logger.error("Settings that are missing the api key: %s", settings_dict)
-            raise ValueError("Google Geocoding Gateway requires an API Key.")
+            # Deliberately does not raise - most callers (e.g. pin import's CSV/URL
+            # parsing) construct this gateway before knowing whether any row will
+            # actually need a live Google lookup (S2-cell CID decoding and plain
+            # lat/lon columns never do). The network-calling methods below each
+            # check self.api_key themselves and degrade gracefully instead.
+            logger.debug("GoogleGeocodingGateway constructed with no API key configured - geocoding calls will be skipped.")
 
     def decode_place_name(self, place_name: str) -> str:
         """
@@ -124,8 +125,11 @@ class GoogleGeocodingGateway(Gateway):
 
                 # Remove it from the cache
                 geocoded_location.delete()
-                sys.exit()
                 return None
+
+        if not self.api_key:
+            logger.debug("Skipping Google geocoding for %r - no API key configured.", place_name)
+            return None
 
         params = {
             "address": place_name,
@@ -159,8 +163,11 @@ class GoogleGeocodingGateway(Gateway):
                 logger.exception("json_response: %s", geocoded_location.json_response)
                 # Remove it from the cache
                 geocoded_location.delete()
-                sys.exit()
                 return None
+
+        if not self.api_key:
+            logger.debug("Skipping Google geocoding for %s, %s - no API key configured.", redact_coordinate(latitude), redact_coordinate(longitude))
+            return None
 
         params = {
             "latlng": f"{latitude},{longitude}",
@@ -313,6 +320,10 @@ class GoogleGeocodingGateway(Gateway):
                         return float(lat), float(lng)
             except (json.JSONDecodeError, TypeError):
                 cached.delete()
+
+        if not self.api_key:
+            logger.debug("Skipping Places Details lookup for CID %d - no API key configured.", cid)
+            return None, None
 
         params = {"cid": str(cid), "fields": "geometry", "key": self.api_key}
         response = self.session.get(

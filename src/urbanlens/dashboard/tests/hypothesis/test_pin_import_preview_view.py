@@ -11,6 +11,7 @@ of what the user actually named the .kmz.
 from __future__ import annotations
 
 import io
+from unittest import mock
 import zipfile
 
 from django.contrib.auth.models import User
@@ -87,3 +88,17 @@ class ParseForPreviewStemTests(TestCase):
         lists = self._post("Takeout.zip", buf.getvalue())
         stems = sorted(entry["stem"] for entry in lists)
         self.assertEqual(stems, ["Other Sites", "doc"])
+
+    def test_preview_works_with_no_google_api_key_configured(self) -> None:
+        """Regression test: this endpoint used to build a `GoogleMapsGateway()`
+        unconditionally to reach its file-parsing methods, and that gateway
+        raised ValueError the instant it was constructed with no API key -
+        crashing every import preview (KML/GeoJSON/GPX/shapefile/... included)
+        for any deployment that hasn't configured Google Maps, even though none
+        of those formats ever call out to Google. Explicitly force a blank key
+        here rather than relying on this environment's own `.env` happening to
+        leave it unset."""
+        with mock.patch("urbanlens.dashboard.services.apis.locations.google.maps.settings.google_unrestricted_api_key", ""):
+            lists = self._post("Urbex Sites.kml", _KML_TEMPLATE.encode())
+        self.assertEqual(len(lists), 1)
+        self.assertEqual(lists[0]["stem"], "Urbex Sites")

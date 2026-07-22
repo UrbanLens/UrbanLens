@@ -135,11 +135,15 @@ logger = logging.getLogger(__name__)
 
 def _google_maps_api_key() -> str:
     """
-    Enforces that the Google Maps API key is set.
+    Reads the configured Google Maps API key, if any.
+
+    Deliberately does not raise when unset - most of GoogleMapsGateway's own
+    methods (file-format parsing in particular) never touch the network, and
+    the ones that do (e.g. ``_generate_satellite_slides``) already check
+    ``self.api_key`` themselves before making a request, matching how
+    BingMapsGateway/MapboxGateway treat their own optional keys.
     """
-    if not settings.google_unrestricted_api_key:
-        raise ValueError("Google Maps API key is not set")
-    return settings.google_unrestricted_api_key
+    return settings.google_unrestricted_api_key or ""
 
 
 @dataclass(kw_only=True)
