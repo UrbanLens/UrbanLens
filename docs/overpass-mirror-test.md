@@ -112,11 +112,43 @@ confirms the backend is working fine and just needs longer than the proxy allows
 Overpass `[timeout:N]` ceiling you intend to support. Until then, any query needing >90 s is
 impossible on this instance no matter what the QL says.
 
+Note the two self-hosted failures are not the same thing. The New York State scan is **purely the
+60 s client cap** - uncapped it completes normally (69.19 s, 14,751 elements, matching the 14,792
+a global mirror returns). The Germany scan is blocked by the **server's own 90 s proxy cap**, so
+its true runtime is still unknown - only that it exceeds 90 s where mail.ru needs 50 s. Neither
+is a data or capability gap; see
+[Functional completeness](#functional-completeness-of-the-self-hosted-instance).
+
 **Honest caveat**: even with the cap lifted, the self-hosted box is genuinely **slower than
 `maps.mail.ru` on country-scale scans** (69 s vs 42 s on NY State; still >90 s vs 50 s on
 Germany). It wins decisively on everything smaller. If wide-area scans become a product feature,
 that gap is worth investigating - likely disk IO on the area index, and possibly still settling
 after the initial clone.
+
+### Functional completeness of the self-hosted instance
+
+The wide-area scan failures above are timeouts, not capability gaps. Checked explicitly, because
+a freshly built instance commonly lacks generated **areas** (they are not part of the raw OSM
+data - they are built by a separate generation pass, and without them every `area[...]` /
+`node(area.a)` query silently returns nothing):
+
+| Capability | self-hosted | maps.mail.ru |
+|---|---|---|
+| `area["name"="Berlin"]["admin_level"="4"]` | 1 element (10.42 s) | 1 element (2.55 s) |
+| `node(area.a)["amenity"="cafe"]` (area-scoped) | 5 elements (3.31 s) | 5 elements (0.83 s) |
+| `[date:"2024-01-01T00:00:00Z"]` (attic/history) | **unsupported** | 1 element (2.25 s) |
+
+Areas are generated and working. The one genuine gap is **attic (history) data**, which is not
+loaded:
+
+```
+runtime error: Tried to use museum file but no museum files available on this instance.
+```
+
+UrbanLens issues no `[date:...]` or `[adiff:...]` queries today, so nothing is currently broken.
+It does rule out time-travel queries ("what stood on this site in 2015?"), which is a plausible
+future want for an urbex application - loading the full-history planet is the (large) fix if that
+feature is ever wanted.
 
 ### osm.ch is a Switzerland-only extract
 
