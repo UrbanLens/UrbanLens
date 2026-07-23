@@ -11,13 +11,13 @@ Usage:
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import asdict, dataclass
 import json
 import random
 import sys
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
-from dataclasses import asdict, dataclass
 from typing import Any
 
 import requests
@@ -162,7 +162,7 @@ out center tags;
         label="Recurse down a large admin relation (Berlin boundary)",
         weight="heavy",
         note="Relation -> way -> node recursion, then full geometry. Stresses the recursion path rather than area indexing.",
-        ql='[out:json][timeout:180];rel(62422);out geom;',
+        ql="[out:json][timeout:180];rel(62422);out geom;",
         rounds=2,
     ),
 ]
@@ -233,13 +233,7 @@ def main() -> int:
         session.headers.update({"User-Agent": USER_AGENT})
         sessions[name] = session
 
-    selected = [
-        q
-        for q in QUERIES
-        if args.only == "all"
-        or (args.only == "nonheavy" and q.weight != "heavy")
-        or q.weight == args.only
-    ]
+    selected = [q for q in QUERIES if args.only == "all" or (args.only == "nonheavy" and q.weight != "heavy") or q.weight == args.only]
 
     results: list[Result] = []
     print_lock = threading.Lock()
@@ -248,11 +242,7 @@ def main() -> int:
         ok, info = run_one(sessions[name], url, query.ql, http_timeout)
         with print_lock:
             took = info.get("total") or 0.0
-            detail = (
-                f"{info.get('elements')} el {(info.get('bytes') or 0) / 1024:.0f} KiB"
-                if ok
-                else (info.get("error") or "")[:110]
-            )
+            detail = f"{info.get('elements')} el {(info.get('bytes') or 0) / 1024:.0f} KiB" if ok else (info.get("error") or "")[:110]
             print(f"[{query.key} r{round_index}] {name:<24} {'OK  ' if ok else 'FAIL'} {took:7.2f}s  {detail}", file=sys.stderr, flush=True)
         return Result(query=query.key, endpoint=name, round=round_index, ok=ok, **info)
 

@@ -68,9 +68,7 @@ def _root_wikis_inside(polygon, *, exclude_pk: int):
     from urbanlens.dashboard.models.wiki.model import Wiki
 
     return list(
-        Wiki.objects.filter(parent_wiki__isnull=True, location__point__within=polygon)
-        .exclude(pk=exclude_pk)
-        .select_related("location"),
+        Wiki.objects.filter(parent_wiki__isnull=True, location__point__within=polygon).exclude(pk=exclude_pk).select_related("location"),
     )
 
 

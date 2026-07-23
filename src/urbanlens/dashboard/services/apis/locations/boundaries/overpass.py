@@ -79,6 +79,8 @@ def _endpoint_is_down(url: str) -> bool:
         return cache.get(_DOWN_CACHE_KEY.format(url)) is not None
     except Exception:
         return False
+
+
 # Overpass QL has no OR operator to chain bracket filters within one statement, so
 # each top-level `|`-separated clause here becomes its own unioned statement per
 # element type (see `_TAG_FILTER_CLAUSE_SPLIT` / `_nearby_features_query`). The

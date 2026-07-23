@@ -313,10 +313,7 @@ def _album_lookup_response(request: HttpRequest, *, dedupe_urls: set[str], conte
     except (ValueError, GatewayRequestError) as exc:
         return render(request, _ALBUM_DIALOG_PARTIAL, {**context, "error": str(exc)})
 
-    assets = [
-        {"id": photo.id, "thumbnail_url": photo.thumbnail_url, "already_imported": photo_web_url(album.owner_nsid, photo.id) in dedupe_urls}
-        for photo in album.photos
-    ]
+    assets = [{"id": photo.id, "thumbnail_url": photo.thumbnail_url, "already_imported": photo_web_url(album.owner_nsid, photo.id) in dedupe_urls} for photo in album.photos]
     return render(request, _ALBUM_DIALOG_PARTIAL, {**context, "album": album, "album_url": album_url, "assets": assets})
 
 

@@ -251,11 +251,7 @@ class MediaRelevanceQuerySet(abstract.DashboardQuerySet):
             Mapping of ``item_key`` to its net score. Items with no marks at
             all are simply absent (treat a missing key as ``0``).
         """
-        rows = (
-            self.filter(location=location, source=source)
-            .values("item_key")
-            .annotate(score=Sum(Case(When(is_relevant=True, then=Value(1)), default=Value(-1), output_field=IntegerField())))
-        )
+        rows = self.filter(location=location, source=source).values("item_key").annotate(score=Sum(Case(When(is_relevant=True, then=Value(1)), default=Value(-1), output_field=IntegerField())))
         return {row["item_key"]: row["score"] or 0 for row in rows}
 
 

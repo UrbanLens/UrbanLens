@@ -94,6 +94,7 @@ def site_resource_attributes(resources: list[dict]) -> dict:
             return {**(match.get("attributes") or {}), "resource_type": resource_type}
     return {}
 
+
 #: A resource's real detail-fetch never runs on every page load - REData
 #: caches ``detail_payload``/``attachments`` on the resource itself once
 #: fetched, so this only needs to happen again after this TTL, exactly like
@@ -321,10 +322,7 @@ class CrisBuildingsPlugin(UrbanLensPlugin):
 
     name: ClassVar[str] = "cris_buildings"
     verbose_name: ClassVar[str] = "NY Historic Preservation (CRIS)"
-    description: ClassVar[str] = (
-        "Building USN Point data (National Register eligibility, historic districts) and its photos/documents, "
-        "from NY SHPO's Cultural Resource Information System, via REData. New York State only."
-    )
+    description: ClassVar[str] = "Building USN Point data (National Register eligibility, historic districts) and its photos/documents, from NY SHPO's Cultural Resource Information System, via REData. New York State only."
     author: ClassVar[str] = "UrbanLens"
 
     # No get_service_defaults() override - this plugin calls REData's own API
