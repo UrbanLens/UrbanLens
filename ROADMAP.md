@@ -16,6 +16,7 @@ Features planned for this release.
 
 ## Medium Features
 * Audit the import process for security (unzip, etc) [UL-268]
+* Ensure PinVisit details, routes, any any other data regarding when a user visited a location is fully encrypted in a way that cannot be brute-forced if an attacker had full access to the server, but not anything on the user's devices. It must still be searchable for the user when they are logged in... but completely inaccessible when they are not. It is acceptable that they lose that information if they lose their password and backup codes, encryption keys, etc.
 
 ## Larger Features
 * Reduce duplicate code, remove legacy code, simplify codebase. [UL-30]

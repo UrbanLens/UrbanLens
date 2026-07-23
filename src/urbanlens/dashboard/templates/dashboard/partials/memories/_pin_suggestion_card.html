@@ -34,7 +34,7 @@ Context:
             <span class="pin-suggestion-card-count">{{ suggestion.hit_count }} photo{{ suggestion.hit_count|pluralize }}</span>
         </div>
 
-        {% if suggestion.origin == "local_scan" %}
+        {% if suggestion.origin == "local_scan" or suggestion.origin == "external_api" %}
         {% with photos=suggestion.candidate_images.all %}
         {% if photos %}
         <div class="pin-suggestion-photos">
@@ -90,6 +90,30 @@ Context:
         <p class="pin-suggestion-card-dates">
             {{ suggestion.visit_dates|slice:":5"|join:", " }}{% if suggestion.visit_dates|length > 5 %}, +{{ suggestion.visit_dates|length|add:"-5" }} more{% endif %}
         </p>
+        {% endif %}
+
+        {% if suggestion.suggested_description or suggestion.suggested_pin_type or suggestion.suggested_aliases or suggestion.suggested_links %}
+        <div class="pin-suggestion-card-details">
+            {% if suggestion.suggested_pin_type %}
+            <span class="badge badge--muted">{{ suggestion.get_suggested_pin_type_display }}</span>
+            {% endif %}
+            {% if suggestion.suggested_description %}
+            <p class="pin-suggestion-card-description">{{ suggestion.suggested_description|truncatewords:40 }}</p>
+            {% endif %}
+            {% if suggestion.suggested_aliases %}
+            <p class="pin-suggestion-card-aliases">
+                <i class="material-symbols-outlined" aria-hidden="true">label</i>
+                {{ suggestion.suggested_aliases|join:", " }}
+            </p>
+            {% endif %}
+            {% if suggestion.suggested_links %}
+            <ul class="pin-suggestion-card-links">
+                {% for link in suggestion.suggested_links %}
+                <li><a href="{{ link.url }}" target="_blank" rel="noopener noreferrer nofollow">{{ link.name|default:link.url }}</a></li>
+                {% endfor %}
+            </ul>
+            {% endif %}
+        </div>
         {% endif %}
 
         <div class="pin-suggestion-card-actions">

@@ -21,13 +21,23 @@ from dataclasses import dataclass, field
 import datetime
 import logging
 from typing import TYPE_CHECKING
+from urllib.parse import urljoin, urlparse
 
+from django.core.files.base import ContentFile
+from django.db import IntegrityError
+import requests
+
+from urbanlens.dashboard.models.aliases.model import AliasType, PinAlias
 from urbanlens.dashboard.models.boundary.queryset import DEFAULT_RADIUS_METERS
-from urbanlens.dashboard.models.images.model import Image
+from urbanlens.dashboard.models.images.model import Image, ImageSource
+from urbanlens.dashboard.models.links.model import PinLink
 from urbanlens.dashboard.models.pin.model import Pin
-from urbanlens.dashboard.models.pin_suggestions.model import MAX_STORED_VISIT_DATES, MAX_SUGGESTION_PHOTOS, PinSuggestion, PinSuggestionStatus
+from urbanlens.dashboard.models.pin_suggestions.model import MAX_STORED_VISIT_DATES, MAX_SUGGESTION_ALIASES, MAX_SUGGESTION_LINKS, MAX_SUGGESTION_PHOTOS, PinSuggestion, PinSuggestionStatus
 from urbanlens.dashboard.models.profile.model import _haversine_km
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
+from urbanlens.dashboard.services.images import compute_checksum
+from urbanlens.dashboard.services.storage import quota_error_for_upload
+from urbanlens.dashboard.services.url_safety import UnsafeUrlError, ensure_public_http_url
 from urbanlens.dashboard.services.visits import add_visited_status, find_pin_containing_point, resolve_location_for_point, sync_last_visited, visit_logging_allowed
 
 if TYPE_CHECKING:
@@ -77,6 +87,22 @@ class LocationHit:
             covers, beyond ``taken_at`` itself - lets one representative hit
             still carry a whole cluster's full date spread into
             ``visit_dates`` (see ``_dates_from_hits``).
+        description: Optional free-text description, offered as
+            ``PinSuggestion.suggested_description`` - external-API hits only.
+        pin_type: Optional ``PinType`` value, offered as
+            ``PinSuggestion.suggested_pin_type`` - external-API hits only.
+        aliases: Alternate names, merged into ``PinSuggestion.suggested_aliases`` -
+            external-API hits only.
+        links: ``(name, url)`` pairs, merged into ``PinSuggestion.suggested_links`` -
+            external-API hits only.
+        implies_visit: Whether ``taken_at``/``extra_dates`` represent an actual
+            visit (a photo really was taken there, on that date) rather than
+            just a discovered place. Immich/local-scan hits are always real
+            capture evidence (default True); an external "discovery" app
+            proposes a place without asserting the user was ever there, so
+            its hits set this False - ``_dates_from_hits`` then excludes them,
+            and accepting the resulting suggestion creates the pin without
+            fabricating a ``PinVisit`` for a visit that may never have happened.
     """
 
     latitude: float
@@ -86,7 +112,12 @@ class LocationHit:
     asset_id: str | None = None
     source_key: str | None = None
     weight: int = 1
+    description: str | None = None
+    pin_type: str | None = None
+    aliases: tuple[str, ...] = ()
+    links: tuple[tuple[str, str], ...] = ()
     extra_dates: tuple[str, ...] = ()
+    implies_visit: bool = True
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,9 +134,14 @@ class IngestSummary:
 
 
 def _dates_from_hits(hits: list[LocationHit]) -> list[str]:
-    """Return the distinct, sorted, capped ISO dates among a list of hits."""
-    dates = {hit.taken_at.date().isoformat() for hit in hits}
-    dates.update(*(hit.extra_dates for hit in hits))
+    """Return the distinct, sorted, capped ISO dates among hits that imply an actual visit.
+
+    Hits with ``implies_visit=False`` (external-app discoveries, not photo
+    evidence) never contribute a date - see ``LocationHit.implies_visit``.
+    """
+    visit_hits = [hit for hit in hits if hit.implies_visit]
+    dates = {hit.taken_at.date().isoformat() for hit in visit_hits}
+    dates.update(*(hit.extra_dates for hit in visit_hits))
     return sorted(dates)[:MAX_STORED_VISIT_DATES]
 
 
@@ -161,6 +197,50 @@ def _merge_sample_assets(existing: list[dict[str, str]], hits: list[LocationHit]
         if hit.asset_id and hit.asset_id not in seen:
             merged.append({"asset_id": hit.asset_id, "taken_at": hit.taken_at.date().isoformat()})
             seen.add(hit.asset_id)
+    return merged
+
+
+def _description_from_hits(hits: list[LocationHit]) -> str:
+    """Return the first non-empty hit description, or an empty string."""
+    for hit in hits:
+        if hit.description:
+            return hit.description
+    return ""
+
+
+def _pin_type_from_hits(hits: list[LocationHit]) -> str:
+    """Return the first non-empty hit pin_type, or an empty string."""
+    for hit in hits:
+        if hit.pin_type:
+            return hit.pin_type
+    return ""
+
+
+def _merge_aliases(existing: list[str], hits: list[LocationHit]) -> list[str]:
+    """Return existing aliases plus any new ones from hits, deduped (case-insensitive) and capped."""
+    seen = {alias.casefold() for alias in existing}
+    merged = list(existing)
+    for hit in hits:
+        for alias in hit.aliases:
+            if len(merged) >= MAX_SUGGESTION_ALIASES:
+                return merged
+            if alias and alias.casefold() not in seen:
+                merged.append(alias)
+                seen.add(alias.casefold())
+    return merged
+
+
+def _merge_links(existing: list[dict[str, str]], hits: list[LocationHit]) -> list[dict[str, str]]:
+    """Return existing links plus any new ones from hits, deduped by url and capped."""
+    seen = {link["url"] for link in existing}
+    merged = list(existing)
+    for hit in hits:
+        for name, url in hit.links:
+            if len(merged) >= MAX_SUGGESTION_LINKS:
+                return merged
+            if url and url not in seen:
+                merged.append({"name": name, "url": url})
+                seen.add(url)
     return merged
 
 
@@ -254,7 +334,24 @@ def _upsert_matched_suggestion(profile: Profile, pin: Pin, hits: list[LocationHi
         existing.visit_dates = _merge_dates(existing.visit_dates, dates)
         existing.hit_count += _weight_of(hits)
         existing.sample_assets = _merge_sample_assets(existing.sample_assets, hits)
-        existing.save(update_fields=["visit_dates", "hit_count", "sample_assets", "updated"])
+        existing.suggested_aliases = _merge_aliases(existing.suggested_aliases, hits)
+        existing.suggested_links = _merge_links(existing.suggested_links, hits)
+        if not existing.suggested_description:
+            existing.suggested_description = _description_from_hits(hits)
+        if not existing.suggested_pin_type:
+            existing.suggested_pin_type = _pin_type_from_hits(hits)
+        existing.save(
+            update_fields=[
+                "visit_dates",
+                "hit_count",
+                "sample_assets",
+                "suggested_aliases",
+                "suggested_links",
+                "suggested_description",
+                "suggested_pin_type",
+                "updated",
+            ]
+        )
         return existing
     return PinSuggestion.objects.create(
         profile=profile,
@@ -265,6 +362,10 @@ def _upsert_matched_suggestion(profile: Profile, pin: Pin, hits: list[LocationHi
         visit_dates=dates,
         hit_count=_weight_of(hits),
         sample_assets=_merge_sample_assets([], hits),
+        suggested_description=_description_from_hits(hits),
+        suggested_pin_type=_pin_type_from_hits(hits),
+        suggested_aliases=_merge_aliases([], hits),
+        suggested_links=_merge_links([], hits),
     )
 
 
@@ -277,9 +378,27 @@ def _upsert_new_pin_suggestion(profile: Profile, cluster: list[LocationHit], ori
         existing.visit_dates = _merge_dates(existing.visit_dates, dates)
         existing.hit_count += _weight_of(cluster)
         existing.sample_assets = _merge_sample_assets(existing.sample_assets, cluster)
+        existing.suggested_aliases = _merge_aliases(existing.suggested_aliases, cluster)
+        existing.suggested_links = _merge_links(existing.suggested_links, cluster)
         if not existing.suggested_name:
             existing.suggested_name = _label_from_hits(cluster)
-        existing.save(update_fields=["visit_dates", "hit_count", "sample_assets", "suggested_name", "updated"])
+        if not existing.suggested_description:
+            existing.suggested_description = _description_from_hits(cluster)
+        if not existing.suggested_pin_type:
+            existing.suggested_pin_type = _pin_type_from_hits(cluster)
+        existing.save(
+            update_fields=[
+                "visit_dates",
+                "hit_count",
+                "sample_assets",
+                "suggested_name",
+                "suggested_description",
+                "suggested_pin_type",
+                "suggested_aliases",
+                "suggested_links",
+                "updated",
+            ]
+        )
         return existing
     return PinSuggestion.objects.create(
         profile=profile,
@@ -291,6 +410,10 @@ def _upsert_new_pin_suggestion(profile: Profile, cluster: list[LocationHit], ori
         hit_count=_weight_of(cluster),
         suggested_name=_label_from_hits(cluster),
         sample_assets=_merge_sample_assets([], cluster),
+        suggested_description=_description_from_hits(cluster),
+        suggested_pin_type=_pin_type_from_hits(cluster),
+        suggested_aliases=_merge_aliases([], cluster),
+        suggested_links=_merge_links([], cluster),
     )
 
 
@@ -349,6 +472,107 @@ def _delete_image_with_file(image: Image) -> None:
     image.delete()
 
 
+#: Photo download bounds for attach_suggestion_photos - same order of
+#: magnitude as services.media_materialize's own (a candidate preview photo,
+#: not a multi-megapixel original), kept as separate constants since the two
+#: modules have no reason to share private config.
+_PHOTO_DOWNLOAD_TIMEOUT = 15
+_MAX_PHOTO_DOWNLOAD_BYTES = 20 * 1024 * 1024
+_MAX_PHOTO_REDIRECTS = 5
+_DEFAULT_PHOTO_FILENAME = "photo.jpg"
+
+
+class SuggestionPhotoError(RuntimeError):
+    """Raised when a submitted suggestion photo url can't be downloaded or stored."""
+
+
+def _filename_from_url(url: str) -> str:
+    """Best-effort filename for a downloaded photo, defaulting when unclear."""
+    name = urlparse(url).path.rsplit("/", 1)[-1]
+    return name[:100] if name and "." in name else _DEFAULT_PHOTO_FILENAME
+
+
+def _download_photo_bytes(url: str) -> bytes:
+    """Follow redirects (each hop re-validated) and return the downloaded bytes.
+
+    Factored out of ``attach_suggestion_photos`` so its own raised
+    ``SuggestionPhotoError`` doesn't get caught by the same except clause
+    that handles network/SSRF failures - see that function's try/except.
+    """
+    fetch_url = url
+    for _hop in range(_MAX_PHOTO_REDIRECTS + 1):
+        fetch_url = ensure_public_http_url(fetch_url)
+        response = requests.get(fetch_url, timeout=_PHOTO_DOWNLOAD_TIMEOUT, stream=True, allow_redirects=False)
+        if response.is_redirect:
+            redirect_target = response.headers.get("Location")
+            response.close()
+            if not redirect_target:
+                raise SuggestionPhotoError(f"{url} redirected with no target.")
+            fetch_url = urljoin(fetch_url, redirect_target)
+            continue
+        break
+    else:
+        raise SuggestionPhotoError(f"{url} redirects too many times.")
+    response.raise_for_status()
+    return response.raw.read(_MAX_PHOTO_DOWNLOAD_BYTES + 1, decode_content=True)
+
+
+def attach_suggestion_photos(suggestion: PinSuggestion, photo_urls: list[str], profile: Profile) -> list[Image]:
+    """Download submitted photo urls and stage them as candidate images on a suggestion.
+
+    Mirrors ``services.media_materialize.materialize_media_item``'s
+    download/redirect/quota handling (manual redirect-following so every hop
+    is re-validated by ``services.url_safety.ensure_public_http_url``, closing
+    the DNS-rebind window between check and connect), but stages the result
+    against a ``PinSuggestion`` (candidate, not yet a real gallery photo)
+    instead of a Pin/Wiki gallery. Stops once ``MAX_SUGGESTION_PHOTOS`` is
+    reached; urls beyond the cap are silently dropped, same as an Immich
+    cluster's ``sample_assets``.
+
+    Args:
+        suggestion: The pending suggestion to attach photos to.
+        photo_urls: Candidate photo urls, as submitted by the external caller.
+        profile: The suggestion's owner - pays the download's storage-quota cost.
+
+    Returns:
+        The newly-created candidate ``Image`` rows (may be shorter than
+        ``photo_urls`` - unreachable, oversized, or over-quota urls are
+        skipped rather than failing the whole batch).
+    """
+    room = MAX_SUGGESTION_PHOTOS - Image.objects.filter(pin_suggestion=suggestion).count()
+    created: list[Image] = []
+    for url in photo_urls:
+        if room <= 0:
+            break
+        try:
+            content = _download_photo_bytes(url)
+        except (requests.RequestException, OSError, UnsafeUrlError, SuggestionPhotoError) as exc:
+            logger.warning("Could not download suggestion photo %s: %s", url, exc)
+            continue
+        if not content or len(content) > _MAX_PHOTO_DOWNLOAD_BYTES:
+            logger.warning("Suggestion photo %s was empty or too large - skipped.", url)
+            continue
+        if quota_error_for_upload(profile, len(content)):
+            logger.info("Skipped suggestion photo %s - profile %s is over its storage quota.", url, profile.pk)
+            break
+
+        file_obj = ContentFile(content, name=_filename_from_url(url))
+        checksum = compute_checksum(file_obj)
+        file_obj.seek(0)
+        image = Image.objects.create(
+            image=file_obj,
+            profile=profile,
+            source=ImageSource.EXTERNAL_API,
+            source_url=url,
+            checksum=checksum,
+            file_size=len(content),
+            pin_suggestion=suggestion,
+        )
+        created.append(image)
+        room -= 1
+    return created
+
+
 @dataclass(frozen=True, slots=True)
 class AcceptResult:
     """What accepting a suggestion produced.
@@ -368,6 +592,53 @@ class AcceptResult:
     pin: Pin
     visits: list[PinVisit]
     immich_import_visits: dict[str, int]
+
+
+def _apply_suggested_enrichment(pin: Pin, suggestion: PinSuggestion) -> None:
+    """Enrich ``pin`` with a suggestion's description/pin_type/aliases/links, additively.
+
+    Unlike ``suggested_name`` (only ever applied through the two branches in
+    ``accept_pin_suggestion`` that resolve ``pin`` in the first place), this
+    runs for both a brand-new pin and one that already matched the
+    suggestion's cluster - gaining a newly-discovered alias or link is safe
+    even for a pin the user already fully set up themselves, since it never
+    overwrites anything already there.
+
+    Args:
+        pin: The reused or newly-created pin (already saved).
+        suggestion: The suggestion being accepted.
+    """
+    update_fields = []
+    if suggestion.suggested_description and not pin.description:
+        pin.description = suggestion.suggested_description
+        update_fields.append("description")
+    if suggestion.suggested_pin_type and not pin.pin_type_is_user_provided:
+        pin.pin_type = suggestion.suggested_pin_type
+        pin.pin_type_is_user_provided = True
+        update_fields.extend(["pin_type", "pin_type_is_user_provided"])
+    if update_fields:
+        pin.save(update_fields=[*update_fields, "updated"])
+
+    if suggestion.suggested_aliases:
+        existing_alias_names = {alias.name.casefold() for alias in pin.aliases.all()}
+        for alias_name in suggestion.suggested_aliases:
+            if not alias_name or alias_name.casefold() in existing_alias_names:
+                continue
+            try:
+                PinAlias.objects.create(pin=pin, name=alias_name, kind=AliasType.ALTERNATE, source="external_api")
+            except IntegrityError:
+                logger.debug("Skipped duplicate alias %r for pin %s", alias_name, pin.pk)
+            else:
+                existing_alias_names.add(alias_name.casefold())
+
+    if suggestion.suggested_links:
+        existing_urls = set(pin.links.values_list("url", flat=True))
+        for link in suggestion.suggested_links:
+            url = link.get("url")
+            if not url or url in existing_urls:
+                continue
+            PinLink.objects.create(pin=pin, name=link.get("name", ""), url=url)
+            existing_urls.add(url)
 
 
 def _resolve_visit(visit_by_date: dict[datetime.date, PinVisit], day: datetime.date | None, fallback: PinVisit | None) -> PinVisit | None:
@@ -417,6 +688,12 @@ def accept_pin_suggestion(
     their stored files, since they have no further purpose once the
     suggestion is resolved.
 
+    An external-API suggestion's ``suggested_description``/``suggested_pin_type``
+    are also applied (only when the pin doesn't already have one of its own -
+    see ``_apply_suggested_enrichment``), and its ``suggested_aliases``/
+    ``suggested_links`` become ``PinAlias``/``PinLink`` rows unconditionally -
+    this enrichment runs for a matched existing pin too, not just a new one.
+
     Args:
         suggestion: The pending suggestion being accepted.
         profile: The accepting profile (must be suggestion.profile).
@@ -458,6 +735,8 @@ def accept_pin_suggestion(
             valid_labels = Label.objects.visible_to(profile).filter(id__in=label_ids, kind__in=(KIND_TAG, KIND_CATEGORY, KIND_STATUS))
             pin.labels.add(*valid_labels)
         suggestion.location = location
+
+    _apply_suggested_enrichment(pin, suggestion)
 
     visits: list[PinVisit] = []
     if visit_logging_allowed(profile):

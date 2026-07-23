@@ -426,3 +426,38 @@ class PinCreateIdempotencyTests(TestCase):
         duplicate = self._post({"name": "Old Mill again", "latitude": 42.5, "longitude": -73.5})
         self.assertEqual(duplicate.status_code, 400)
         self.assertIn("already have a pin", duplicate.json()["error"])
+
+
+class PinCreateFieldTests(TestCase):
+    """The field-capture payload: description and pin_type on POST pins/."""
+
+    def setUp(self) -> None:
+        baker.make(User)  # first user auto-promoted to bootstrap site admin
+        self.user = baker.make(User)
+        self.profile = Profile.objects.get(user=self.user)
+        self.url = reverse("external_api:pins")
+        _api_key, self.raw_key = generate_api_key(self.user, "Capture client")
+
+    def _post(self, payload: dict):
+        return self.client.post(self.url, data=payload, content_type="application/json", **_bearer(self.raw_key))
+
+    def test_description_and_pin_type_are_stored(self) -> None:
+        response = self._post({"name": "Boiler house", "latitude": 42.5, "longitude": -73.5, "description": "Rusted catwalks, watch the floor.", "pin_type": "building"})
+        self.assertEqual(response.status_code, 201, response.content)
+        pin = Pin.objects.get(uuid=response.json()["uuid"])
+        self.assertEqual(pin.description, "Rusted catwalks, watch the floor.")
+        self.assertEqual(pin.pin_type, "building")
+        self.assertTrue(pin.pin_type_is_user_provided)
+
+    def test_omitted_pin_type_keeps_the_classifiable_default(self) -> None:
+        """No explicit type must leave the pin eligible for automatic classification."""
+        response = self._post({"name": "Somewhere", "latitude": 42.5, "longitude": -73.5})
+        self.assertEqual(response.status_code, 201, response.content)
+        pin = Pin.objects.get(uuid=response.json()["uuid"])
+        self.assertEqual(pin.pin_type, "location")
+        self.assertFalse(pin.pin_type_is_user_provided)
+
+    def test_unknown_pin_type_is_rejected(self) -> None:
+        response = self._post({"name": "Bad type", "latitude": 42.5, "longitude": -73.5, "pin_type": "spaceship"})
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(Pin.objects.filter(name="Bad type").exists())

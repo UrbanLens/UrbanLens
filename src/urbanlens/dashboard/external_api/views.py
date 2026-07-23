@@ -11,6 +11,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, ClassVar
 
+from django.urls import reverse
+from django.utils import timezone
 from drf_spectacular.utils import extend_schema
 from oauth2_provider.contrib.rest_framework import OAuth2Authentication
 from rest_framework.response import Response
@@ -22,6 +24,8 @@ from urbanlens.dashboard.external_api.serializers import (
     ErrorSerializer,
     PinCreateResponseSerializer,
     PinCreateSerializer,
+    PinSuggestionCreateResponseSerializer,
+    PinSuggestionCreateSerializer,
     PinSyncQuerySerializer,
     PinSyncResponseSerializer,
     PushDeviceRegisterSerializer,
@@ -32,9 +36,13 @@ from urbanlens.dashboard.external_api.serializers import (
 )
 from urbanlens.dashboard.external_api.throttling import ApiKeyRateThrottle
 from urbanlens.dashboard.models.account.model import ApiKeyScope
+from urbanlens.dashboard.models.pin_suggestions.model import PinSuggestion, PinSuggestionOrigin
+from urbanlens.dashboard.services.locations.geocoding import get_pin_by_address
 from urbanlens.dashboard.services.pin_creation import PinCreationError, PinCreationForbiddenError, create_pin_for_profile
+from urbanlens.dashboard.services.pin_suggestions import LocationHit, attach_suggestion_photos, ingest_location_hits
 from urbanlens.dashboard.services.pin_sync import InvalidSyncCursorError, sync_pins_page, sync_tombstones_page
 from urbanlens.dashboard.services.push import PushRegistrationError, register_device, unregister_device
+from urbanlens.dashboard.services.visits import visit_logging_allowed
 
 if TYPE_CHECKING:
     from uuid import UUID
@@ -42,6 +50,11 @@ if TYPE_CHECKING:
     from rest_framework.request import Request
 
 logger = logging.getLogger(__name__)
+
+#: Fixed source_key for the single hit a pin-suggestion POST produces - this
+#: endpoint is one discovered place per call (mirrors PinsView.post), so there's
+#: never more than one id to look up in IngestSummary.suggestion_ids_by_key.
+_SUGGESTION_SOURCE_KEY = "external_api_submission"
 
 
 class ExternalApiView(APIView):
@@ -153,6 +166,8 @@ class PinsView(ExternalApiView):
                 address=data.get("address"),
                 icon=data.get("icon"),
                 color=data.get("color"),
+                description=data.get("description"),
+                pin_type=data.get("pin_type"),
                 client_uuid=data.get("uuid"),
             )
         except PinCreationForbiddenError as exc:
@@ -175,6 +190,84 @@ class PinsView(ExternalApiView):
                 "created": result.created,
             },
             status=201 if result.created else 200,
+        )
+
+
+class PinSuggestionsView(ExternalApiView):
+    """POST: submit a discovered place as a pending suggestion, not a real pin.
+
+    Unlike ``PinsView.post``, nothing is created on the map immediately - the
+    submission is staged as a ``PinSuggestion`` (see
+    ``services.pin_suggestions.ingest_location_hits``) that the key's owner
+    must explicitly accept or reject from the Memories -> Locations review
+    queue before anything appears. An external "discovery" app that finds
+    candidate places autonomously (rather than acting on the user's own
+    behalf, like the mobile app's offline outbox does for ``PinsView``)
+    should use this endpoint instead.
+
+    A submission near one of the owner's existing pins, or another pending
+    suggestion, merges into it exactly like an Immich/local-scan hit would -
+    this is the same clustering/matching pipeline, just a third kind of hit.
+    """
+
+    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "POST": frozenset({ApiKeyScope.PINS_WRITE}),
+    }
+
+    @extend_schema(
+        request=PinSuggestionCreateSerializer,
+        responses={201: PinSuggestionCreateResponseSerializer, 400: ErrorSerializer, 403: ErrorSerializer},
+    )
+    def post(self, request: Request) -> Response:
+        """Validate the payload and stage a pending PinSuggestion for the key's user."""
+        serializer = PinSuggestionCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        profile = request.user.profile
+
+        # A PinSuggestion is itself a location-history trail (see
+        # ingest_location_hits) - fail closed exactly like the local-scan
+        # upload endpoint does, rather than silently accepting and dropping it.
+        if not visit_logging_allowed(profile):
+            return Response({"error": "Visit-history tracking is turned off in your settings."}, status=403)
+
+        latitude = data.get("latitude")
+        longitude = data.get("longitude")
+        address = data.get("address")
+        if latitude is None or longitude is None:
+            if not profile.external_apis_enabled:
+                return Response({"error": "External lookups are turned off in your settings - drop a pin on the map instead."}, status=403)
+            latitude, longitude = get_pin_by_address(address)
+            if latitude is None or longitude is None:
+                return Response({"error": "Unable to convert address to lat/lng."}, status=400)
+
+        hit = LocationHit(
+            latitude=float(latitude),
+            longitude=float(longitude),
+            # Never surfaced: _dates_from_hits skips non-visit hits entirely.
+            taken_at=timezone.now(),
+            label=data.get("name") or None,
+            source_key=_SUGGESTION_SOURCE_KEY,
+            description=data.get("description") or None,
+            pin_type=data.get("pin_type") or None,
+            aliases=tuple(data.get("aliases") or ()),
+            links=tuple((link["name"], link["url"]) for link in data.get("links") or ()),
+            implies_visit=False,
+        )
+        summary = ingest_location_hits(profile, [hit], origin=PinSuggestionOrigin.EXTERNAL_API)
+        suggestion = PinSuggestion.objects.get(pk=summary.suggestion_ids_by_key[_SUGGESTION_SOURCE_KEY])
+        photos = data.get("photos") or []
+        attached = attach_suggestion_photos(suggestion, photos, profile) if photos else []
+
+        return Response(
+            {
+                "suggestion_id": suggestion.pk,
+                "status": suggestion.status,
+                "matched_existing_pin": not suggestion.is_new_pin,
+                "photos_attached": len(attached),
+                "review_url": reverse("memories.locations"),
+            },
+            status=201,
         )
 
 

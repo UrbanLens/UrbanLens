@@ -1,8 +1,5 @@
 # UrbanLens Companion App — Language & Technology Stack (r2)
 
-> Intended location: `docs/designs/mobile-app-stack-r2.md` (that directory is
-> root-owned; move this file there). Revises `designs/mobile-app-stack.md`.
-
 Revises `mobile-app-stack.md` (decided 2026-07-23). This revision reconciles
 the plan with two things that now exist: the Flutter client in the
 `android/` repo (feature status: `android/docs/PARITY.md`; assumed server

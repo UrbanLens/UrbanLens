@@ -72,6 +72,8 @@ def create_pin_for_profile(
     address: str | None = None,
     icon: str | None = None,
     color: str | None = None,
+    description: str | None = None,
+    pin_type: str | None = None,
     custom_icon: UploadedFile | None = None,
     label_ids: Sequence[str] = (),
     tag_ids: Sequence[str] = (),
@@ -99,6 +101,10 @@ def create_pin_for_profile(
         address: Free-text address to geocode when coordinates aren't given.
         icon: Icon key/emoji override.
         color: Hex color override.
+        description: Personal notes to store on the pin, if any.
+        pin_type: A ``PinType`` value; when given, the pin is marked
+            user-classified (``pin_type_is_user_provided``) so automatic
+            classification won't overwrite it - mirroring ``name``'s handling.
         custom_icon: An uploaded custom icon image.
         label_ids: Label ids to attach directly (takes precedence over tag_ids/category_ids).
         tag_ids: Tag-kind label ids to attach when ``label_ids`` wasn't given.
@@ -167,6 +173,11 @@ def create_pin_for_profile(
         "color": color,
         "profile": profile,
     }
+    if description is not None and description.strip():
+        create_kwargs["description"] = description
+    if pin_type:
+        create_kwargs["pin_type"] = pin_type
+        create_kwargs["pin_type_is_user_provided"] = True
     if client_uuid is not None:
         # uuid is editable=False on the abstract base, so it must be passed
         # explicitly at the ORM layer - serializers/forms never bind it.

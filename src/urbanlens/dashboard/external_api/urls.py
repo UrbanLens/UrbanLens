@@ -19,6 +19,7 @@ urlpatterns = [
     path("whoami/", views.WhoAmIView.as_view(), name="whoami"),
     path("pins/", views.PinsView.as_view(), name="pins"),
     path("pins/deleted/", views.PinTombstonesView.as_view(), name="pins.deleted"),
+    path("pin-suggestions/", views.PinSuggestionsView.as_view(), name="pin_suggestions"),
     path("push-devices/", views.PushDevicesView.as_view(), name="push_devices"),
     path("push-devices/<uuid:device_uuid>/", views.PushDeviceDetailView.as_view(), name="push_devices.detail"),
     # The machine-readable contract (and a browsable view of it) for exactly

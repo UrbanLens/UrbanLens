@@ -30,18 +30,32 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.controllers.pin_suggestions import _PAGE_SIZE
-from urbanlens.dashboard.models.images.model import Image
+from urbanlens.dashboard.models.aliases.model import PinAlias
+from urbanlens.dashboard.models.images.model import Image, ImageSource
 from urbanlens.dashboard.models.immich.model import ImmichAccount
+from urbanlens.dashboard.models.links.model import PinLink
 from urbanlens.dashboard.models.pin.model import Pin
-from urbanlens.dashboard.models.pin_suggestions.model import MAX_SUGGESTION_PHOTOS, PinSuggestion, PinSuggestionOrigin, PinSuggestionStatus
+from urbanlens.dashboard.models.pin_suggestions.model import MAX_SUGGESTION_ALIASES, MAX_SUGGESTION_LINKS, MAX_SUGGESTION_PHOTOS, PinSuggestion, PinSuggestionOrigin, PinSuggestionStatus
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
-from urbanlens.dashboard.services.pin_suggestions import LocationHit, accept_pin_suggestion, ingest_location_hits, reject_pin_suggestion
+from urbanlens.dashboard.services.pin_suggestions import LocationHit, accept_pin_suggestion, attach_suggestion_photos, ingest_location_hits, reject_pin_suggestion
 
 _PIN_LAT = Decimal("40.000000")
 _PIN_LON = Decimal("-74.000000")
 
 
-def _hit(lat: float, lon: float, day: str, label: str | None = None, asset_id: str | None = None, source_key: str | None = None) -> LocationHit:
+def _hit(
+    lat: float,
+    lon: float,
+    day: str,
+    label: str | None = None,
+    asset_id: str | None = None,
+    source_key: str | None = None,
+    description: str | None = None,
+    pin_type: str | None = None,
+    aliases: tuple[str, ...] = (),
+    links: tuple[tuple[str, str], ...] = (),
+    implies_visit: bool = True,
+) -> LocationHit:
     return LocationHit(
         latitude=lat,
         longitude=lon,
@@ -49,6 +63,11 @@ def _hit(lat: float, lon: float, day: str, label: str | None = None, asset_id: s
         label=label,
         asset_id=asset_id,
         source_key=source_key,
+        description=description,
+        pin_type=pin_type,
+        aliases=aliases,
+        links=links,
+        implies_visit=implies_visit,
     )
 
 
@@ -864,3 +883,323 @@ class PinSuggestionQueuePaginationTests(TestCase):
     def test_out_of_range_page_clamps_instead_of_500ing(self) -> None:
         response = self.client.get(reverse("memories.locations"), {"page": 999})
         self.assertEqual(response.status_code, 200)
+
+
+class ExternalApiHitFieldsTests(TestCase):
+    """description/pin_type/aliases/links carried by external-API hits merge into
+    PinSuggestion exactly like suggested_name/sample_assets already do."""
+
+    def setUp(self) -> None:
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+
+    def test_new_pin_suggestion_captures_description_pin_type_aliases_and_links(self) -> None:
+        hit = _hit(
+            41.0,
+            -76.0,
+            "2024-02-01",
+            description="An old sawmill by the creek.",
+            pin_type="building",
+            aliases=("The Sawmill", "Old Mill"),
+            links=(("Historical society", "https://example.test/mill"),),
+            implies_visit=False,
+        )
+        ingest_location_hits(self.profile, [hit], origin=PinSuggestionOrigin.EXTERNAL_API)
+        suggestion = PinSuggestion.objects.get()
+        self.assertEqual(suggestion.suggested_description, "An old sawmill by the creek.")
+        self.assertEqual(suggestion.suggested_pin_type, "building")
+        self.assertEqual(suggestion.suggested_aliases, ["The Sawmill", "Old Mill"])
+        self.assertEqual(suggestion.suggested_links, [{"name": "Historical society", "url": "https://example.test/mill"}])
+
+    def test_implies_visit_false_contributes_no_visit_dates(self) -> None:
+        """A discovery submission isn't evidence anyone actually visited - it must
+        never fabricate a visit date that accept_pin_suggestion would turn into
+        a PinVisit."""
+        hit = _hit(41.0, -76.0, "2024-02-01", implies_visit=False)
+        ingest_location_hits(self.profile, [hit], origin=PinSuggestionOrigin.EXTERNAL_API)
+        suggestion = PinSuggestion.objects.get()
+        self.assertEqual(suggestion.visit_dates, [])
+
+    def test_merging_hits_dedupes_aliases_case_insensitively_and_caps(self) -> None:
+        first = _hit(41.0, -76.0, "2024-02-01", aliases=("Old Mill",), implies_visit=False)
+        second = _hit(41.00005, -76.00005, "2024-02-02", aliases=("old mill", *[f"Alias {i}" for i in range(MAX_SUGGESTION_ALIASES)]), implies_visit=False)
+        ingest_location_hits(self.profile, [first], origin=PinSuggestionOrigin.EXTERNAL_API)
+        ingest_location_hits(self.profile, [second], origin=PinSuggestionOrigin.EXTERNAL_API)
+        suggestion = PinSuggestion.objects.get()
+        self.assertEqual(suggestion.suggested_aliases.count("Old Mill"), 1)
+        self.assertLessEqual(len(suggestion.suggested_aliases), MAX_SUGGESTION_ALIASES)
+
+    def test_merging_hits_dedupes_links_by_url_and_caps(self) -> None:
+        first = _hit(41.0, -76.0, "2024-02-01", links=(("A", "https://example.test/a"),), implies_visit=False)
+        second_links = (("A dup", "https://example.test/a"), *[(f"L{i}", f"https://example.test/{i}") for i in range(MAX_SUGGESTION_LINKS)])
+        second = _hit(41.00005, -76.00005, "2024-02-02", links=second_links, implies_visit=False)
+        ingest_location_hits(self.profile, [first], origin=PinSuggestionOrigin.EXTERNAL_API)
+        ingest_location_hits(self.profile, [second], origin=PinSuggestionOrigin.EXTERNAL_API)
+        suggestion = PinSuggestion.objects.get()
+        urls = [link["url"] for link in suggestion.suggested_links]
+        self.assertEqual(len(urls), len(set(urls)))
+        self.assertLessEqual(len(suggestion.suggested_links), MAX_SUGGESTION_LINKS)
+
+    def test_existing_description_is_not_overwritten_by_a_later_merge(self) -> None:
+        first = _hit(41.0, -76.0, "2024-02-01", description="First description", implies_visit=False)
+        second = _hit(41.00005, -76.00005, "2024-02-02", description="Second description", implies_visit=False)
+        ingest_location_hits(self.profile, [first], origin=PinSuggestionOrigin.EXTERNAL_API)
+        ingest_location_hits(self.profile, [second], origin=PinSuggestionOrigin.EXTERNAL_API)
+        suggestion = PinSuggestion.objects.get()
+        self.assertEqual(suggestion.suggested_description, "First description")
+
+    def test_hit_matched_to_an_existing_pin_still_captures_suggested_fields(self) -> None:
+        location = baker.make_recipe("dashboard.location", latitude=_PIN_LAT, longitude=_PIN_LON)
+        baker.make_recipe("dashboard.pin", profile=self.profile, location=location)
+        hit = _hit(40.0001, -74.0, "2024-01-01", description="Matched place notes", aliases=("Alt name",), implies_visit=False)
+        ingest_location_hits(self.profile, [hit], origin=PinSuggestionOrigin.EXTERNAL_API)
+        suggestion = PinSuggestion.objects.get()
+        self.assertIsNotNone(suggestion.pin_id)
+        self.assertEqual(suggestion.suggested_description, "Matched place notes")
+        self.assertEqual(suggestion.suggested_aliases, ["Alt name"])
+
+
+class AcceptPinSuggestionEnrichmentTests(TestCase):
+    """accept_pin_suggestion copies suggested_description/pin_type (only when
+    blank) and always creates PinAlias/PinLink rows from suggested_aliases/links -
+    for both a brand-new pin and one that already matched the suggestion."""
+
+    def setUp(self) -> None:
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+        self.location = baker.make_recipe("dashboard.location", latitude=_PIN_LAT, longitude=_PIN_LON)
+        self.pin = baker.make_recipe("dashboard.pin", profile=self.profile, location=self.location)
+
+    def test_new_pin_gains_suggested_description_and_pin_type(self) -> None:
+        suggestion = PinSuggestion.objects.create(
+            profile=self.profile,
+            pin=None,
+            latitude=Decimal("41.000000"),
+            longitude=Decimal("-76.000000"),
+            origin=PinSuggestionOrigin.EXTERNAL_API,
+            visit_dates=[],
+            suggested_name="Old Mill",
+            suggested_description="An old sawmill.",
+            suggested_pin_type="building",
+        )
+        with mock.patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None):
+            result = accept_pin_suggestion(suggestion, self.profile)
+
+        self.assertEqual(result.pin.description, "An old sawmill.")
+        self.assertEqual(result.pin.pin_type, "building")
+        self.assertTrue(result.pin.pin_type_is_user_provided)
+
+    def test_matched_pin_gains_description_and_pin_type_only_when_blank(self) -> None:
+        suggestion = PinSuggestion.objects.create(
+            profile=self.profile,
+            pin=self.pin,
+            latitude=_PIN_LAT,
+            longitude=_PIN_LON,
+            origin=PinSuggestionOrigin.EXTERNAL_API,
+            visit_dates=[],
+            suggested_description="Discovered description.",
+            suggested_pin_type="building",
+        )
+        result = accept_pin_suggestion(suggestion, self.profile)
+
+        self.assertEqual(result.pin.pk, self.pin.pk)
+        self.assertEqual(result.pin.description, "Discovered description.")
+        self.assertEqual(result.pin.pin_type, "building")
+
+    def test_matched_pin_with_existing_description_is_not_overwritten(self) -> None:
+        self.pin.description = "My own notes."
+        self.pin.pin_type = "poi"
+        self.pin.pin_type_is_user_provided = True
+        self.pin.save(update_fields=["description", "pin_type", "pin_type_is_user_provided"])
+        suggestion = PinSuggestion.objects.create(
+            profile=self.profile,
+            pin=self.pin,
+            latitude=_PIN_LAT,
+            longitude=_PIN_LON,
+            origin=PinSuggestionOrigin.EXTERNAL_API,
+            visit_dates=[],
+            suggested_description="Should not apply.",
+            suggested_pin_type="building",
+        )
+        result = accept_pin_suggestion(suggestion, self.profile)
+
+        self.assertEqual(result.pin.description, "My own notes.")
+        self.assertEqual(result.pin.pin_type, "poi")
+
+    def test_suggested_aliases_and_links_become_rows_on_a_matched_pin(self) -> None:
+        suggestion = PinSuggestion.objects.create(
+            profile=self.profile,
+            pin=self.pin,
+            latitude=_PIN_LAT,
+            longitude=_PIN_LON,
+            origin=PinSuggestionOrigin.EXTERNAL_API,
+            visit_dates=[],
+            suggested_aliases=["Old Mill", "The Sawmill"],
+            suggested_links=[{"name": "Historical society", "url": "https://example.test/mill"}],
+        )
+        accept_pin_suggestion(suggestion, self.profile)
+
+        self.assertEqual(set(PinAlias.objects.filter(pin=self.pin).values_list("name", flat=True)), {"Old Mill", "The Sawmill"})
+        link = PinLink.objects.get(pin=self.pin)
+        self.assertEqual(link.name, "Historical society")
+        self.assertEqual(link.url, "https://example.test/mill")
+
+    def test_alias_matching_an_existing_one_case_insensitively_is_not_duplicated(self) -> None:
+        PinAlias.objects.create(pin=self.pin, name="Old Mill")
+        suggestion = PinSuggestion.objects.create(
+            profile=self.profile,
+            pin=self.pin,
+            latitude=_PIN_LAT,
+            longitude=_PIN_LON,
+            origin=PinSuggestionOrigin.EXTERNAL_API,
+            visit_dates=[],
+            suggested_aliases=["old mill"],
+        )
+        accept_pin_suggestion(suggestion, self.profile)
+
+        self.assertEqual(PinAlias.objects.filter(pin=self.pin).count(), 1)
+
+    def test_link_matching_an_existing_url_is_not_duplicated(self) -> None:
+        PinLink.objects.create(pin=self.pin, name="Existing", url="https://example.test/mill")
+        suggestion = PinSuggestion.objects.create(
+            profile=self.profile,
+            pin=self.pin,
+            latitude=_PIN_LAT,
+            longitude=_PIN_LON,
+            origin=PinSuggestionOrigin.EXTERNAL_API,
+            visit_dates=[],
+            suggested_links=[{"name": "New name", "url": "https://example.test/mill"}],
+        )
+        accept_pin_suggestion(suggestion, self.profile)
+
+        self.assertEqual(PinLink.objects.filter(pin=self.pin).count(), 1)
+
+    def test_no_visit_is_created_when_suggestion_has_no_visit_dates(self) -> None:
+        """The correctness invariant that motivated implies_visit=False: accepting
+        a discovery suggestion must never fabricate a PinVisit."""
+        suggestion = PinSuggestion.objects.create(
+            profile=self.profile,
+            pin=self.pin,
+            latitude=_PIN_LAT,
+            longitude=_PIN_LON,
+            origin=PinSuggestionOrigin.EXTERNAL_API,
+            visit_dates=[],
+            suggested_description="Just a discovery.",
+        )
+        result = accept_pin_suggestion(suggestion, self.profile)
+
+        self.assertEqual(result.visits, [])
+        self.assertFalse(PinVisit.objects.filter(pin=self.pin).exists())
+
+
+def _ok_photo_response(content: bytes = b"fake-jpeg-bytes") -> mock.Mock:
+    response = mock.Mock()
+    response.raise_for_status = mock.Mock()
+    response.raw.read.return_value = content
+    response.is_redirect = False
+    return response
+
+
+#: These tests fetch "https://example.test/..." (RFC 2606 non-resolving), so
+#: the SSRF guard's hostname resolution is mocked to a fixed public IP - the
+#: guard itself is exercised directly by the rejection tests below.
+_FAKE_DNS_RESULT = [(2, 1, 6, "", ("93.184.216.34", 0))]
+
+
+class AttachSuggestionPhotosTests(TestCase):
+    """Downloads submitted photo urls and stages them as PinSuggestion candidate images."""
+
+    def setUp(self) -> None:
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+        self.suggestion = PinSuggestion.objects.create(
+            profile=self.profile, pin=None, latitude=_PIN_LAT, longitude=_PIN_LON, origin=PinSuggestionOrigin.EXTERNAL_API, visit_dates=[],
+        )
+        self._dns_patch = mock.patch("socket.getaddrinfo", return_value=_FAKE_DNS_RESULT)
+        self._dns_patch.start()
+        self.addCleanup(self._dns_patch.stop)
+
+    def test_downloads_and_stages_candidate_images(self) -> None:
+        with mock.patch("urbanlens.dashboard.services.pin_suggestions.requests.get", return_value=_ok_photo_response()):
+            created = attach_suggestion_photos(self.suggestion, ["https://example.test/photo.jpg"], self.profile)
+
+        self.assertEqual(len(created), 1)
+        image = Image.objects.get(pin_suggestion=self.suggestion)
+        self.assertEqual(image.source, ImageSource.EXTERNAL_API)
+        self.assertEqual(image.profile_id, self.profile.pk)
+        self.assertIsNone(image.pin_id)
+        self.assertTrue(image.checksum)
+
+    def test_never_exceeds_max_suggestion_photos(self) -> None:
+        urls = [f"https://example.test/photo-{i}.jpg" for i in range(MAX_SUGGESTION_PHOTOS + 5)]
+        with mock.patch("urbanlens.dashboard.services.pin_suggestions.requests.get", return_value=_ok_photo_response()):
+            created = attach_suggestion_photos(self.suggestion, urls, self.profile)
+
+        self.assertEqual(len(created), MAX_SUGGESTION_PHOTOS)
+        self.assertEqual(Image.objects.filter(pin_suggestion=self.suggestion).count(), MAX_SUGGESTION_PHOTOS)
+
+    def test_respects_photos_already_attached_from_a_prior_call(self) -> None:
+        baker.make(Image, profile=self.profile, pin=None, pin_suggestion=self.suggestion, checksum="already-here")
+        urls = [f"https://example.test/photo-{i}.jpg" for i in range(MAX_SUGGESTION_PHOTOS)]
+        with mock.patch("urbanlens.dashboard.services.pin_suggestions.requests.get", return_value=_ok_photo_response()):
+            created = attach_suggestion_photos(self.suggestion, urls, self.profile)
+
+        self.assertEqual(len(created), MAX_SUGGESTION_PHOTOS - 1)
+
+    def test_a_download_failure_skips_that_url_without_failing_the_batch(self) -> None:
+        import requests
+
+        with mock.patch(
+            "urbanlens.dashboard.services.pin_suggestions.requests.get",
+            side_effect=[requests.exceptions.ConnectionError("boom"), _ok_photo_response()],
+        ):
+            created = attach_suggestion_photos(self.suggestion, ["https://example.test/broken.jpg", "https://example.test/ok.jpg"], self.profile)
+
+        self.assertEqual(len(created), 1)
+
+    def test_an_oversized_download_is_skipped(self) -> None:
+        huge = b"x" * (20 * 1024 * 1024 + 1)
+        with mock.patch("urbanlens.dashboard.services.pin_suggestions.requests.get", return_value=_ok_photo_response(huge)):
+            created = attach_suggestion_photos(self.suggestion, ["https://example.test/huge.jpg"], self.profile)
+
+        self.assertEqual(created, [])
+        self.assertFalse(Image.objects.filter(pin_suggestion=self.suggestion).exists())
+
+    def test_over_quota_stops_the_batch(self) -> None:
+        with (
+            mock.patch("urbanlens.dashboard.services.pin_suggestions.quota_error_for_upload", return_value="Over quota"),
+            mock.patch("urbanlens.dashboard.services.pin_suggestions.requests.get", return_value=_ok_photo_response()) as mocked,
+        ):
+            created = attach_suggestion_photos(self.suggestion, ["https://example.test/a.jpg", "https://example.test/b.jpg"], self.profile)
+
+        self.assertEqual(created, [])
+        mocked.assert_called_once()
+
+
+class AttachSuggestionPhotosSsrfTests(TestCase):
+    """A submitted photo url is untrusted external-API input - it must never let
+    a caller direct the server's download at an internal address, either
+    directly or via a redirect. Mirrors MaterializeMediaItemSsrfTests."""
+
+    def setUp(self) -> None:
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+        self.suggestion = PinSuggestion.objects.create(
+            profile=self.profile, pin=None, latitude=_PIN_LAT, longitude=_PIN_LON, origin=PinSuggestionOrigin.EXTERNAL_API, visit_dates=[],
+        )
+
+    def test_a_literal_private_ip_target_is_rejected(self) -> None:
+        with mock.patch("urbanlens.dashboard.services.pin_suggestions.requests.get") as mocked:
+            created = attach_suggestion_photos(self.suggestion, ["http://169.254.169.254/latest/meta-data/"], self.profile)
+        mocked.assert_not_called()
+        self.assertEqual(created, [])
+
+    def test_a_redirect_to_a_private_ip_is_rejected(self) -> None:
+        redirect_response = mock.Mock(status_code=302, headers={"Location": "http://127.0.0.1/internal"}, is_redirect=True)
+        with (
+            mock.patch("socket.getaddrinfo", return_value=[(2, 1, 6, "", ("93.184.216.34", 0))]),
+            mock.patch("urbanlens.dashboard.services.pin_suggestions.requests.get", return_value=redirect_response),
+        ):
+            created = attach_suggestion_photos(self.suggestion, ["https://example.test/photo.jpg"], self.profile)
+        self.assertEqual(created, [])
+        self.assertFalse(Image.objects.filter(pin_suggestion=self.suggestion).exists())

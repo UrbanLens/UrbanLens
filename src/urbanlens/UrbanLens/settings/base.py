@@ -548,10 +548,14 @@ SPECTACULAR_SETTINGS = {
 # with the same required_scopes declarations.
 OAUTH2_PROVIDER = {
     "PKCE_REQUIRED": True,
+    # The native app's redirect targets: its custom scheme on Android/iOS, and
+    # RFC 8252 loopback (any port - django-oauth-toolkit matches loopback IPs
+    # port-insensitively) on desktop. "https" stays for any future web client.
+    "ALLOWED_REDIRECT_URI_SCHEMES": ["https", "http", "urbanlens"],
     "SCOPES": {
         "profile:read": "Read your profile UUID",
         "pins:read": "Read your pins (including deletions, for sync)",
-        "pins:write": "Create pins on your behalf",
+        "pins:write": "Create or suggest pins on your behalf",
         "push:manage": "Register and remove this device's push notifications",
     },
     "DEFAULT_SCOPES": ["profile:read", "pins:read", "pins:write", "push:manage"],

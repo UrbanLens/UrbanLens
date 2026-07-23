@@ -19,11 +19,14 @@ class ImageSource(TextChoices):
     """Where a photo originated - drives the Media section's per-source tabs.
 
     ``UPLOAD`` is the default for ordinary user uploads (personal galleries).
-    The external values are set only on rows materialized from the Media
+    Most external values are set only on rows materialized from the Media
     gallery's transient provider results (see ``services.external_data`` and
     ``services.media_materialize``) when a user sends one to a wiki or sets it
     as a cover photo - the Media gallery itself renders straight from each
     provider's live results without persisting an ``Image`` row per item.
+    ``EXTERNAL_API`` is the exception: it's set on candidate photos an
+    external-app pin suggestion submits (see ``services.pin_suggestions.attach_suggestion_photos``),
+    staged against a ``PinSuggestion`` rather than materialized from the Media gallery.
     """
 
     UPLOAD = "upload", "Upload"
@@ -40,6 +43,7 @@ class ImageSource(TextChoices):
     GOOGLE_PHOTOS = "google_photos", "Google Photos"
     LOOPNET = "loopnet", "LoopNet"
     CRIS = "cris", "NY Historic Preservation (CRIS)"
+    EXTERNAL_API = "external_api", "External app"
 
 
 class MediaKind(TextChoices):

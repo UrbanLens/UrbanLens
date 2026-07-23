@@ -4,10 +4,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from django.db.models import CASCADE, SET_NULL, CharField, DecimalField, ForeignKey, Index, JSONField, PositiveIntegerField
+from django.core.validators import MaxLengthValidator
+from django.db.models import CASCADE, SET_NULL, CharField, DecimalField, ForeignKey, Index, JSONField, PositiveIntegerField, TextField
 
 from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.pin.model import PinType
 from urbanlens.dashboard.models.pin_suggestions.queryset import PinSuggestionManager
+from urbanlens.dashboard.services.text_limits import MAX_PIN_DESCRIPTION_LENGTH
 
 #: Distinct visit dates kept per suggestion - a sanity cap on storage/UI size,
 #: not an API-call budget like ``services.photo_import.MAX_VISIT_DATES``.
@@ -18,12 +21,21 @@ MAX_STORED_VISIT_DATES = 30
 #: cluster.
 MAX_SUGGESTION_PHOTOS = 3
 
+#: Proposed alternate names kept per suggestion - mirrors MAX_SUGGESTION_PHOTOS's
+#: role as a sanity cap on an externally-submitted list, not a meaningful limit
+#: on how many aliases a place could really have.
+MAX_SUGGESTION_ALIASES = 10
+
+#: Proposed external links kept per suggestion - same rationale as MAX_SUGGESTION_ALIASES.
+MAX_SUGGESTION_LINKS = 10
+
 
 class PinSuggestionOrigin(abstract.TextChoices):
-    """What kind of batch scan raised a PinSuggestion."""
+    """What kind of batch scan or external submission raised a PinSuggestion."""
 
     IMMICH = "immich", "Immich library scan"
     LOCAL_SCAN = "local_scan", "Local folder scan"
+    EXTERNAL_API = "external_api", "External app"
 
 
 class PinSuggestionStatus(abstract.TextChoices):
@@ -67,6 +79,20 @@ class PinSuggestion(abstract.DashboardModel):
             that fed this cluster, as ``{"asset_id": str, "taken_at": "YYYY-MM-DD"}``
             dicts. Immich-origin suggestions only - local-scan photos never reach
             the server unless the user opts in during the scan (see ``Image.pin_suggestion``).
+        suggested_description: Free-text description offered for a new pin,
+            submitted by an external-app suggestion (see ``PinSuggestionOrigin.EXTERNAL_API``).
+            Only applied on accept, and only when the target pin has no
+            description of its own yet - mirrors ``suggested_name``.
+        suggested_pin_type: A proposed ``PinType`` value for a new pin,
+            external-API suggestions only. Only applied on accept, and only
+            when the target pin's type isn't already user-provided.
+        suggested_aliases: Alternate names proposed for the place, capped at
+            ``MAX_SUGGESTION_ALIASES``. Applied on accept as ``PinAlias`` rows
+            regardless of whether the pin is new or existing - an
+            already-named pin can still gain new aliases.
+        suggested_links: External links proposed for the place, as
+            ``{"name": str, "url": str}`` dicts, capped at ``MAX_SUGGESTION_LINKS``.
+            Applied on accept as ``PinLink`` rows, same as aliases.
     """
 
     latitude = DecimalField(max_digits=9, decimal_places=6)
@@ -77,6 +103,10 @@ class PinSuggestion(abstract.DashboardModel):
     hit_count = PositiveIntegerField(default=1)
     suggested_name = CharField(max_length=255, blank=True, default="")
     sample_assets = JSONField(default=list)
+    suggested_description = TextField(blank=True, default="", max_length=MAX_PIN_DESCRIPTION_LENGTH, validators=[MaxLengthValidator(MAX_PIN_DESCRIPTION_LENGTH)])
+    suggested_pin_type = CharField(max_length=30, choices=PinType.choices, blank=True, default="")
+    suggested_aliases = JSONField(default=list)
+    suggested_links = JSONField(default=list)
 
     profile = ForeignKey("dashboard.Profile", on_delete=CASCADE, related_name="pin_suggestions")
     pin = ForeignKey("dashboard.Pin", on_delete=CASCADE, null=True, blank=True, related_name="pin_suggestions")

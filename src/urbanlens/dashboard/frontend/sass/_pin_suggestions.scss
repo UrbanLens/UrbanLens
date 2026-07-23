@@ -60,6 +60,47 @@
     color: var(--ul-grey-6);
 }
 
+// -- Suggested details (external-app submissions: description/type/aliases/links) --
+
+.pin-suggestion-card-details {
+    display: flex;
+    flex-direction: column;
+    gap: $space-xs;
+}
+
+.pin-suggestion-card-description {
+    margin: 0;
+    font-size: .85rem;
+    color: var(--ul-grey-7);
+}
+
+.pin-suggestion-card-aliases {
+    display: flex;
+    align-items: center;
+    gap: .3rem;
+    margin: 0;
+    font-size: .78rem;
+    color: var(--ul-grey-6);
+
+    .material-symbols-outlined {
+        font-size: 16px;
+    }
+}
+
+.pin-suggestion-card-links {
+    display: flex;
+    flex-direction: column;
+    gap: .2rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: .78rem;
+
+    a {
+        color: var(--ul-primary-color);
+    }
+}
+
 .pin-suggestion-card-actions {
     display: flex;
     gap: $space-sm;
