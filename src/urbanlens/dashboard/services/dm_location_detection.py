@@ -35,6 +35,7 @@ from django.db import DatabaseError
 
 from urbanlens.dashboard.models.direct_messages.location_mention import DirectMessageLocationMention, LocationMentionKind
 from urbanlens.dashboard.models.pin_share import PinShare, PinShareOrigin, PinShareStatus
+from urbanlens.dashboard.services.text_limits import MAX_DIRECT_MESSAGE_LENGTH
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.direct_messages.model import DirectMessage
@@ -45,6 +46,15 @@ logger = logging.getLogger(__name__)
 #: Cap on how many distinct places one message can produce, so a pasted wall
 #: of coordinates can't mass-create Locations/shares.
 MAX_MENTIONS_PER_MESSAGE = 5
+
+#: Defense-in-depth cap on how much text the coordinate/address regexes below
+#: ever scan. DM bodies are already capped at MAX_DIRECT_MESSAGE_LENGTH by
+#: create_direct_message()/GroupMessage validation, so this should never
+#: actually trim anything in practice - it just guarantees these regexes
+#: never run over unbounded text if some other caller (or a future refactor)
+#: skips that validation. Independent of (not a substitute for) making the
+#: patterns themselves immune to catastrophic backtracking, below.
+_MAX_SCAN_LENGTH = MAX_DIRECT_MESSAGE_LENGTH
 
 
 class CoordinateMatch(NamedTuple):
@@ -60,17 +70,33 @@ class CoordinateMatch(NamedTuple):
 _DECIMAL_PAIR_RE = re.compile(r"(?<![\d.-])(-?\d{1,2}\.\d{3,})\s*,\s*(-?\d{1,3}\.\d{3,})(?![\d.])")
 
 # "40.7128 N, 74.0060 W" / "40.7128°N 74.0060°W" - hemisphere letters carry the sign.
+#
+# The `\s*°?\s*` runs are wrapped in an atomic group `(?>...)`: whitespace and
+# `°` are disjoint character classes, so there is only ever one way to split
+# them for a *successful* match - the atomic group just stops the engine from
+# also re-exploring all the other (doomed) splits when the match ultimately
+# fails, which is what let adversarial runs of whitespace-with-no-hemisphere-
+# letter cause polynomial backtracking (py/polynomial-redos).
 _DECIMAL_HEMI_RE = re.compile(
-    r"(\d{1,2}\.\d+)\s*°?\s*([NS])[,;\s]+(\d{1,3}\.\d+)\s*°?\s*([EW])",
+    r"(\d{1,2}\.\d+)(?>\s*°?\s*)([NS])[,;\s]+(\d{1,3}\.\d+)(?>\s*°?\s*)([EW])",
     re.IGNORECASE,
 )
 
 # DMS ("40°42'46\"N") and degrees-decimal-minutes ("40°42.767'N") in one
 # pattern - seconds are optional, minutes may carry decimals.
+#
+# Same atomic-group treatment as _DECIMAL_HEMI_RE above for the `\s*[deg]\s*`
+# and `\s*[apostrophe/prime/m]?\s*` runs, plus the whole optional seconds group
+# `(?:...)?` is itself wrapped atomically: once the engine has decided
+# whether a seconds component is present, it commits to that choice instead
+# of retrying every combination of "consume some of it" x "split the
+# whitespace around it" when the following [NS]/[EW] fails to match.
 _DMS_RE = re.compile(
-    r"(\d{1,3})\s*[°d]\s*(\d{1,2}(?:\.\d+)?)\s*['′m]?\s*(?:(\d{1,2}(?:\.\d+)?)\s*[\"″s]\s*)?([NS])"
+    r"(\d{1,3})(?>\s*[°d]\s*)(\d{1,2}(?:\.\d+)?)(?>\s*['′m]?\s*)"
+    r"(?>(?:(\d{1,2}(?:\.\d+)?)(?>\s*[\"″s]\s*))?)([NS])"
     r"[,;\s]+"
-    r"(\d{1,3})\s*[°d]\s*(\d{1,2}(?:\.\d+)?)\s*['′m]?\s*(?:(\d{1,2}(?:\.\d+)?)\s*[\"″s]\s*)?([EW])",
+    r"(\d{1,3})(?>\s*[°d]\s*)(\d{1,2}(?:\.\d+)?)(?>\s*['′m]?\s*)"
+    r"(?>(?:(\d{1,2}(?:\.\d+)?)(?>\s*[\"″s]\s*))?)([EW])",
     re.IGNORECASE,
 )
 
@@ -117,6 +143,7 @@ def parse_coordinates(text: str) -> list[CoordinateMatch]:
     Returns:
         In-order unique matches, capped at :data:`MAX_MENTIONS_PER_MESSAGE`.
     """
+    text = text[:_MAX_SCAN_LENGTH]
     matches: list[tuple[int, int, CoordinateMatch]] = []
 
     def _claim(start: int, end: int, latitude: float, longitude: float, matched_text: str) -> None:
@@ -164,6 +191,7 @@ def parse_addresses(text: str) -> list[str]:
     Returns:
         In-order unique candidates, capped at :data:`MAX_MENTIONS_PER_MESSAGE`.
     """
+    text = text[:_MAX_SCAN_LENGTH]
     seen: set[str] = set()
     results: list[str] = []
     for match in _ADDRESS_RE.finditer(text):
