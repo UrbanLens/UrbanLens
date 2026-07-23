@@ -23,48 +23,66 @@ is the starting point.
 
 ---
 
-## PR #111 (v0.5.0b0 release): CodeQL flagged 60 "new" alerts, mostly pre-existing debt attributed to an oversized diff (found 2026-07-23)
+## PR #111 (v0.5.0b0 release): CodeQL's 63 alerts triaged and resolved (2026-07-23)
 
 Merging the `@features/v0.5.0` branch into `main` (PR #111) is a 300+-file diff, large enough that
-GitHub's own CodeQL check flags every finding across it as "new to this PR" - its own output says
-so directly: *"Alerts not introduced by this pull request might have been detected because the
-code changes were too large."* One was a genuine, directly-fixable critical: `fetch_page_text`
-(`services/ai/link_extraction.py`) auto-followed redirects and only validated hostnames at
-submission time, so a hostile page could 302 the fetch to an internal address, or a DNS-rebind
-could flip a hostname to a private IP in the gap before the Celery task ran - **fixed** same session
-(manual bounded redirect-following with per-hop revalidation, plus resolving hostnames at validate
-time instead of only checking literal IPs).
+GitHub's CodeQL check initially flagged 63 findings across it - its own output noted *"Alerts not
+introduced by this pull request might have been detected because the code changes were too
+large."* Two were genuine, distinct SSRFs (both critical/high in practice, one flagged critical by
+CodeQL, the other found only by an independent Codex review pass - CodeQL's own SSRF query didn't
+catch it):
 
-The other ~59 (18 high, 41 medium) were not worked through individually - two spot-checks turned up
-false positives from this exact "oversized diff" effect, not real bugs:
+- `fetch_page_text` (`services/ai/link_extraction.py`) auto-followed redirects and only validated
+  hostnames at submission time, so a hostile page could 302 the fetch to an internal address, or a
+  DNS-rebind could flip a hostname to a private IP before the Celery task ran.
+- `materialize_media_item` (`services/media_materialize.py`) had **no validation at all** on a
+  fully user-controlled url (straight from `PinController.media_relevance`/`media_send_to_wiki`'s
+  request body) - any authenticated user could direct the server to fetch and persist arbitrary
+  internal content as a stored Image.
 
-- `services/apis/security/hibp.py:55`'s "weak sensitive data hashing" flags a `hashlib.sha1(...,
-  usedforsecurity=False)` call - required by HIBP's k-anonymity Pwned Passwords API protocol itself
-  (SHA-1 prefix lookup is the documented API contract, not an app-chosen algorithm), already marked
-  `usedforsecurity=False` to say exactly that to scanners.
-- `_notification_push.html:82,97`'s "xss"/"client-side-unvalidated-url-redirection" flags
-  `window.location = n.url` - already gated behind a custom `isSafeUrl()` (same-origin-only,
-  rejects `javascript:`/scheme-relative) with an explanatory comment. CodeQL's JS taint tracking
-  doesn't model bespoke app sanitizer functions as a barrier, so this is very likely a false
-  positive too, though not re-verified with the same rigor as the SSRF fix.
+**Both fixed**: extracted a shared guard into `services/url_safety.py`
+(`ensure_public_http_url`/`UnsafeUrlError` - resolves hostnames and rejects
+private/loopback/link-local/reserved/multicast targets) and applied it to both call sites, each
+now manually following redirects (capped, revalidating every hop) instead of `requests`' default
+auto-follow. Regression tests added for literal-private-IP, DNS-resolved-private-IP, and
+redirect-to-private-IP cases in both `test_link_extraction.py` and `test_media_materialize.py`.
 
-**Why the rest weren't triaged individually**: 59 alerts spanning dozens of files (stack-trace
-exposure across ~15 controllers, more XSS/redirect sites, clear-text-logging claims in files that -
-per `git log` - were already refactored specifically to redact sensitive values via
-`redact_coordinate`/`redact_params` helpers, `py/bad-tag-filter` in four hypothesis test files) is a
-full security-audit-scale task, not a PR-merge-blocking-CI-error-scale one, and this branch has
-already been through many rounds of exactly this kind of security hardening (see this file's other
-entries and `docs/prompts/completed.md`) - blind bulk-fixing without individually verifying each
-against current (often already-hardened) code risks both false "fixes" for things already correct
-and, worse, introducing new bugs across files this session never otherwise touched.
+**The remaining 61 were individually triaged and dismissed as false positives** (via the GitHub
+code-scanning alerts API, each with a specific justification comment - see the PR's Security tab
+dismissal history for the exact reasoning per alert):
 
-**Suggested next step**: pull the full alert list (`gh api "repos/UrbanLens/UrbanLens/code-scanning/alerts?ref=refs/pull/111/merge&state=open"`
-while the PR is still open, or `state=open` against `main` after merge) and work through the
-`py/stack-trace-exposure` cluster first - it's the largest single group (~28 instances across
-`account.py`, `boundary.py`, `calendar_sync.py`, `direct_message_shares.py`, `direct_messages.py`,
-`group_chats.py`, `maps.py`, `pin.py`, `pin_edit.py`, `pin_lists.py`, `safety.py`, `webauthn.py`,
-`external_api/views.py`) and the most mechanically fixable if each is confirmed to actually return
-`str(exc)`/traceback content in an HTTP response rather than just logging it server-side.
+- **`py/stack-trace-exposure` (41 alerts, the largest cluster)** - every instance across 13 files
+  (`account.py`, `boundary.py`, `calendar_sync.py`, `direct_message_shares.py`,
+  `direct_messages.py`, `external_api/views.py`, `group_chats.py`, `maps.py`, `pin.py`,
+  `pin_edit.py`, `pin_lists.py`, `safety.py`, `webauthn.py`) follows the same deliberate codebase
+  convention: `str(exc)` on a typed application exception (`WebAuthnError`, `PermissionError`,
+  `ValueError`, `PinCreationError`, `MaterializeError`, `GatewayRequestError`, ...) that is *always*
+  raised with a fixed, developer-authored message, never a raw traceback. Two sites
+  (`direct_messages.py:342`, `safety.py:1236`) already carried an inline
+  `# lgtm[py/stack-trace-exposure]` from a prior session reaching the identical conclusion -
+  strong independent corroboration this whole cluster is the same false-positive class.
+- **`py/clear-text-logging-sensitive-data` (8 alerts, `parcel_buildings.py`, `nps/parks.py`,
+  `redata_building_attributes.py`)** - each logs coordinates rounded to `%.2f` (~1km precision),
+  matching the same redaction convention as `google/geocoding.py`'s `redact_coordinate` helper.
+- **`py/bad-tag-filter` (4 alerts, 4 profile hypothesis test files)** - a test-only
+  `_strip_scripts()` helper that post-processes already-rendered HTML purely to make substring
+  assertions precise; never used as an actual sanitization boundary.
+- **`js/xss` / `js/client-side-unvalidated-url-redirection` (6 alerts, `_notification_push.html`,
+  `messages/index.html`)** - `window.location` sinks already gated behind a custom `isSafeUrl()`
+  (same-origin http/https only, rejects `javascript:`); `<img>.src` assignments for DM image
+  attachments (not a script-execution or navigation sink). CodeQL's taint model doesn't recognize
+  the bespoke sanitizer as a barrier.
+- **`js/xss-through-dom` (2 alerts, `base.html`, `saved_filter_detail.html`)** - a browser-native
+  `URL.createObjectURL()` blob url from a locally-picked `File`, and an `href` built from a fixed
+  same-origin path prefix that can never become external/`javascript:` regardless of the
+  interpolated value.
+- **`py/weak-sensitive-data-hashing` (1 alert, `hibp.py`)** - SHA-1 is required by HIBP's
+  k-anonymity Pwned Passwords API protocol itself, not an app choice; already marked
+  `usedforsecurity=False`.
+- **`py/url-redirection` (1 alert, `calendar_sync.py`)** - redirects to `GOOGLE_AUTH_URL`, a
+  hardcoded constant; only query-string params are dynamic, never the target host.
+
+All 63 alerts are now closed (2 fixed, 61 dismissed) and the native GitHub CodeQL check is green.
 
 ---
 
