@@ -96,6 +96,14 @@ class PinCreateViewTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertFalse(Pin.objects.filter(name="Nowhere").exists())
 
+    def test_zero_latitude_and_longitude_are_valid_coordinates(self) -> None:
+        """0/0.0 (equator, prime meridian) must not be treated as a missing coordinate."""
+        response = self._post({"name": "Null Island", "latitude": 0, "longitude": 0})
+        self.assertEqual(response.status_code, 201, response.content)
+        pin = Pin.objects.get(uuid=response.json()["uuid"])
+        self.assertAlmostEqual(float(pin.location.latitude), 0.0, places=3)
+        self.assertAlmostEqual(float(pin.location.longitude), 0.0, places=3)
+
     def test_out_of_range_latitude_is_rejected(self) -> None:
         response = self._post({"latitude": 200, "longitude": -73.5})
         self.assertEqual(response.status_code, 400)

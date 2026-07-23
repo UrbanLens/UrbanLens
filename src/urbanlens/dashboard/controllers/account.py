@@ -103,6 +103,68 @@ def _clear_login_attempts(username: str) -> None:
     cache.delete(_lockout_key(username))
 
 
+# -- Two-factor code rate limiting ------------------------------------------
+
+
+def _two_factor_attempts_key(user_id: int) -> str:
+    """Cache key for the failed TOTP/backup-code counter for a given user."""
+    return f"2fa_code_attempts:{user_id}"
+
+
+def _two_factor_lockout_key(user_id: int) -> str:
+    """Cache key for the TOTP/backup-code lockout flag for a given user."""
+    return f"2fa_code_lockout:{user_id}"
+
+
+def _is_two_factor_locked_out(user_id: int) -> bool:
+    """Return True if ``user_id`` is currently locked out of the code fallback."""
+    return bool(cache.get(_two_factor_lockout_key(user_id)))
+
+
+def _record_two_factor_failure(user_id: int) -> int:
+    """Increment the 2FA code failure counter; lock out once the limit is reached.
+
+    Reuses ``SiteSettings.login_max_attempts``/``login_lockout_minutes`` so a
+    password-verified attacker can't brute-force the TOTP/backup-code fallback
+    within a single session.
+
+    Args:
+        user_id: Primary key of the user mid-2FA-challenge.
+
+    Returns:
+        The updated failure count (after incrementing).
+    """
+    from urbanlens.dashboard.models.site_settings import SiteSettings
+
+    settings = SiteSettings.get_current()
+    max_attempts = settings.login_max_attempts
+    lockout_seconds = settings.login_lockout_minutes * 60
+
+    if max_attempts <= 0:
+        return 0
+
+    key = _two_factor_attempts_key(user_id)
+    attempts: int = (cache.get(key) or 0) + 1
+    cache.set(key, attempts, timeout=lockout_seconds)
+
+    if attempts >= max_attempts:
+        cache.set(_two_factor_lockout_key(user_id), 1, timeout=lockout_seconds)
+        cache.delete(key)
+        logger.warning("2FA code entry locked out for user id %r after %d failed attempts", user_id, attempts)
+
+    return attempts
+
+
+def _clear_two_factor_attempts(user_id: int) -> None:
+    """Remove 2FA code failure tracking after a successful verification.
+
+    Args:
+        user_id: Primary key of the user who just verified successfully.
+    """
+    cache.delete(_two_factor_attempts_key(user_id))
+    cache.delete(_two_factor_lockout_key(user_id))
+
+
 # -- Registration form -----------------------------------------------------
 
 
@@ -736,13 +798,19 @@ class LoginTwoFactorCodeView(View):
         if user is None:
             return redirect("login")
 
+        if _is_two_factor_locked_out(user.pk):
+            context = _two_factor_challenge_context(user, code_error="Too many incorrect attempts. Please wait before trying again.")
+            return render(request, "registration/login_2fa.html", context, status=429)
+
         from urbanlens.dashboard.services.two_factor import verify_login_code
 
         code = request.POST.get("code", "")
         if not verify_login_code(user, code):
+            _record_two_factor_failure(user.pk)
             context = _two_factor_challenge_context(user, code_error="That code didn't work. Please try again.")
             return render(request, "registration/login_2fa.html", context, status=400)
 
+        _clear_two_factor_attempts(user.pk)
         redirect_to = _complete_two_factor_login(request, user)
         return HttpResponseRedirect(redirect_to)
 

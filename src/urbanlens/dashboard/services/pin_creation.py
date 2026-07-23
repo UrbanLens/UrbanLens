@@ -108,13 +108,21 @@ def create_pin_for_profile(
         PinCreationForbiddenError: An address needed geocoding but external lookups
             are turned off for this profile.
     """
-    if not latitude or not longitude:
+    # An unset coordinate arrives as None or "" (e.g. the map's blank hidden
+    # input) - normalize both to None so the checks below can use `is None`
+    # without treating a valid 0/0.0 coordinate (equator, prime meridian) as missing.
+    if isinstance(latitude, str) and latitude.strip() == "":
+        latitude = None
+    if isinstance(longitude, str) and longitude.strip() == "":
+        longitude = None
+
+    if latitude is None or longitude is None:
         if not address:
             raise PinCreationError("No address or lat/lon provided.")
         if not profile.external_apis_enabled:
             raise PinCreationForbiddenError("External lookups are turned off in your settings - drop a pin on the map instead.")
         latitude, longitude = get_pin_by_address(address)
-        if not latitude or not longitude:
+        if latitude is None or longitude is None:
             raise PinCreationError("Unable to convert address to lat/lng.")
 
     lat_f = float(latitude)

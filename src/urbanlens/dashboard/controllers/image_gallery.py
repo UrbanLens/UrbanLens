@@ -332,7 +332,7 @@ class WikiCoverPhotoView(LoginRequiredMixin, View):
     """
 
     def post(self, request: HttpRequest, location_slug: str) -> JsonResponse:
-        location, wiki, _profile = resolve_visible_wiki(request, location_slug)
+        location, wiki, profile = resolve_visible_wiki(request, location_slug)
         try:
             data = json.loads(request.body)
             image_id = data.get("image_id")
@@ -344,7 +344,7 @@ class WikiCoverPhotoView(LoginRequiredMixin, View):
             wiki.save(update_fields=["cover_photo", "updated"])
             return JsonResponse({"cover_photo": None})
 
-        image = get_object_or_404(Image, pk=image_id)
+        image = get_object_or_404(Image.objects.visible_to(profile), pk=image_id)
         if image.wiki_id != wiki.pk and image.location_id != location.pk:
             raise Http404
         wiki.cover_photo = image

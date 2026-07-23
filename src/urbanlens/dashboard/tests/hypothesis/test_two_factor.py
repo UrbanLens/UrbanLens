@@ -370,6 +370,24 @@ class LoginTwoFactorCodeViewTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertNotIn("_auth_user_id", self.client.session)
 
+    def test_repeated_wrong_codes_lock_out_the_fallback(self) -> None:
+        from urbanlens.dashboard.models.site_settings import SiteSettings
+
+        max_attempts = SiteSettings.get_current().login_max_attempts
+        for _ in range(max_attempts):
+            response = self.client.post(reverse("login.2fa.code"), {"code": "000000"})
+            self.assertEqual(response.status_code, 400)
+
+        locked_response = self.client.post(reverse("login.2fa.code"), {"code": "000000"})
+        self.assertEqual(locked_response.status_code, 429)
+        self.assertNotIn("_auth_user_id", self.client.session)
+
+        # Even the correct code is rejected while locked out.
+        code = pyotp.TOTP(self.secret).now()
+        still_locked = self.client.post(reverse("login.2fa.code"), {"code": code})
+        self.assertEqual(still_locked.status_code, 429)
+        self.assertNotIn("_auth_user_id", self.client.session)
+
     def test_challenge_page_offers_the_code_form_for_totp_only_account(self) -> None:
         response = self.client.get(reverse("login.2fa"))
         self.assertEqual(response.status_code, 200)
