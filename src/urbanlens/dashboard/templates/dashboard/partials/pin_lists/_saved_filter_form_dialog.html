@@ -1,12 +1,9 @@
 {% load dashboard_tags %}
 {% include "dashboard/partials/ui/_dialog_header.html" with title=saved_filter|yesno:"Edit Filter,New Filter" %}
 <div class="ul-dialog-body saved-filter-form-body">
-    {% if has_label_groups %}
-    <div class="saved-filter-form-warning">
-        <i class="material-symbols-outlined">warning</i>
-        This filter uses advanced label rules created from the map's filter panel. Saving here will replace them with the simple include/exclude labels below.
-    </div>
-    {% endif %}
+    {# Advanced label rules (label_groups) now round-trip through the rich    #}
+    {# picker below - the old "saving here will replace them" warning is gone #}
+    {# because it's no longer true.                                           #}
     <form id="saved-filter-form" onsubmit="return savedFilterFormSubmit(event)"
           data-action="{% if saved_filter %}{% url 'saved_filters.edit' saved_filter.uuid %}{% else %}{% url 'saved_filters.create' %}{% endif %}">
         {% include "dashboard/partials/pin_lists/_saved_filter_fields.html" %}

@@ -90,15 +90,18 @@ class SavedFilterDetailViewTests(TestCase):
         response = self.client.get(reverse("saved_filters.detail", args=[self.saved_filter.uuid]))
         self.assertContains(response, "dashboard/js/saved-filter-detail.js")
 
-    def test_label_pickers_render_search_driven_catalog(self) -> None:
-        """Include/exclude labels use the shared search+chip picker (see
-        initSavedFilterLabelPickers), not a flat checkbox list."""
+    def test_label_picker_renders_the_shared_rich_picker(self) -> None:
+        """Labels use the shared rich include/exclude picker (the same engine
+        as the main map's filter sidebar - see initSavedFilterLabelPickers and
+        ts/shared/label-picker.ts), not a flat checkbox list."""
         response = self.client.get(reverse("saved_filters.detail", args=[self.saved_filter.uuid]))
         content = response.content.decode()
-        self.assertIn('id="sf-label-catalog-tags"', content)
-        self.assertIn('id="sf-label-catalog-exclude_tags"', content)
-        self.assertIn('id="sf-label-chips-tags"', content)
-        self.assertIn('id="sf-label-search-tags"', content)
+        self.assertIn('id="sf-label-picker"', content)
+        self.assertIn('id="sf-label-list"', content)
+        self.assertIn('id="sf-label-formula"', content)
+        self.assertIn('id="sf-label-col-incl"', content)
+        self.assertIn('id="sf-label-col-excl"', content)
+        self.assertIn('name="label_groups"', content)
 
 
 class SavedFilterPreviewViewTests(TestCase):

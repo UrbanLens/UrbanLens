@@ -143,15 +143,9 @@ selected_tag_ids, selected_exclude_tag_ids, custom_field_values.
     </div>
 </div>
 
-<div class="saved-filter-label-grid">
-    <div class="form-row">
-        <label>Include labels</label>
-        {% include "dashboard/partials/pin_lists/_saved_filter_label_picker.html" with field_name="tags" labels=form.tags.field.queryset selected_ids=selected_tag_ids %}
-    </div>
-    <div class="form-row">
-        <label>Exclude labels</label>
-        {% include "dashboard/partials/pin_lists/_saved_filter_label_picker.html" with field_name="exclude_tags" labels=form.exclude_tags.field.queryset selected_ids=selected_exclude_tag_ids %}
-    </div>
+<div class="form-row saved-filter-labels-row">
+    <label>Labels</label>
+    {% include "dashboard/partials/pin_lists/_saved_filter_label_picker.html" with labels=form.tags.field.queryset %}
 </div>
 
 {% if form.custom_fields %}

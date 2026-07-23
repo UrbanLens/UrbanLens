@@ -238,10 +238,11 @@ class SavedFilterLabelPickerTests(TestCase):
     def test_new_filter_dialog_renders_all_labels_unselected(self) -> None:
         response = self.client.get(reverse("saved_filters.new"))
         html = response.content.decode()
-        catalog_html = html.split('id="sf-label-catalog-tags"', 1)[1].split("</div>", 1)[0]
-        self.assertIn(f'data-id="{self.selected_label.pk}"', catalog_html)
-        self.assertIn(f'data-id="{self.other_label.pk}"', catalog_html)
-        self.assertNotIn('data-selected="1"', catalog_html)
+        list_html = html.split('id="sf-label-list"', 1)[1].split("fp-label-list-hint", 1)[0]
+        self.assertIn(f'data-label-id="{self.selected_label.pk}"', list_html)
+        self.assertIn(f'data-label-id="{self.other_label.pk}"', list_html)
+        self.assertNotIn('data-selected-mode="incl"', list_html)
+        self.assertNotIn('data-selected-mode="excl"', list_html)
 
     def test_edit_filter_dialog_selects_only_the_saved_labels(self) -> None:
         saved_filter = SavedFilter.objects.create(
@@ -253,15 +254,16 @@ class SavedFilterLabelPickerTests(TestCase):
         html = response.content.decode()
         self.assertEqual(response.status_code, 200)
 
-        # The selected label's catalog entry is marked selected; the other one's is not.
-        selected_entry = html.split(f'data-id="{self.selected_label.pk}"', 1)[1][:120]
-        other_entry = html.split(f'data-id="{self.other_label.pk}"', 1)[1][:120]
-        self.assertIn('data-selected="1"', selected_entry)
-        self.assertIn('data-selected="0"', other_entry)
+        # The selected label's availability button carries its mode; the other one's is blank.
+        selected_entry = html.split(f'data-label-id="{self.selected_label.pk}"', 1)[1][:250]
+        other_entry = html.split(f'data-label-id="{self.other_label.pk}"', 1)[1][:250]
+        self.assertIn('data-selected-mode="incl"', selected_entry)
+        self.assertNotIn('data-selected-mode="incl"', other_entry)
 
-        # Chip picker reuses the shared .apdlg-* component, not a bespoke checkbox-pill class.
-        self.assertIn("saved-filter-label-picker", html)
-        self.assertIn('id="sf-label-chips-tags"', html)
+        # The picker is the shared rich engine's markup (fp-* classes, one
+        # combined component), not a bespoke checkbox-pill list.
+        self.assertIn('id="sf-label-picker"', html)
+        self.assertIn('id="sf-label-formula"', html)
 
 
 class PinListBoundaryDrawButtonTests(TestCase):
