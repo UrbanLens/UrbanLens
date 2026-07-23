@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import smtplib
 from typing import TYPE_CHECKING
@@ -27,7 +28,7 @@ from django.urls import reverse, reverse_lazy
 from django.utils.html import format_html
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views import View, generic
-from django.views.decorators.http import require_GET
+from django.views.decorators.http import require_GET, require_POST
 
 from urbanlens.dashboard.models.account import EmailVerification
 from urbanlens.dashboard.services.site_admin import should_redirect_to_site_admin
@@ -1019,3 +1020,73 @@ def suggest_passphrases(request: HttpRequest) -> JsonResponse:
         return JsonResponse({"error": "Too many requests. Try again in a few minutes."}, status=429)
     cache.set(key, hits + 1, timeout=_PASSPHRASE_RATE_WINDOW)
     return JsonResponse({"passphrases": generate_passphrases(5)})
+
+
+_PASSWORD_CHECK_RATE_KEY = "password_policy_check:{ip}"  # noqa: S105  # nosec B105 - cache key template, not a credential
+_PASSWORD_CHECK_RATE_LIMIT = 30  # checks per IP per window
+_PASSWORD_CHECK_RATE_WINDOW = 60 * 10  # 10 minutes
+#: Hard input cap - far above any legitimate passphrase, low enough that a
+#: hostile client can't make the validator chain chew on megabytes.
+_PASSWORD_CHECK_MAX_LENGTH = 1024
+
+
+@require_POST
+def validate_password_policy(request: HttpRequest) -> JsonResponse:
+    """Run a candidate password through the configured ``AUTH_PASSWORD_VALIDATORS``.
+
+    Exists for the E2EE signup / password-reset / password-change flows: the
+    client derives the login credential from the raw password *before* submit,
+    so the credential the server authenticates always "looks strong" and the
+    configured validators (length 12, complexity, common-password, HIBP
+    breach check) would otherwise never run against the real password at all.
+    The raw password crosses HTTPS exactly once here, is validated in memory,
+    and is never stored or logged (decision 2026-07-23, docs/PROBLEMS.md -
+    option (a): a validation endpoint, rather than duplicating every
+    validator's rules in TypeScript and keeping them in sync by hand).
+
+    Anonymous by design (signup has no session yet). Rate-limited per IP
+    primarily to bound the outbound HIBP range-API calls this can trigger.
+
+    Args:
+        request: JSON body with ``password`` plus optional ``username`` and
+            ``email`` (fed to ``UserAttributeSimilarityValidator`` so
+            "password resembles your username" is caught before the account
+            exists).
+
+    Returns:
+        JSON ``{valid, errors}`` (200), 400 on a malformed body, or 429 when
+        rate-limited - callers treat any non-200 as "could not check" and
+        fail open, since the 12-char client-side floor still applies.
+    """
+    from django.contrib.auth.password_validation import validate_password
+
+    key = _PASSWORD_CHECK_RATE_KEY.format(ip=_client_ip(request))
+    hits = int(cache.get(key) or 0)
+    if hits >= _PASSWORD_CHECK_RATE_LIMIT:
+        return JsonResponse({"error": "Too many requests. Try again in a few minutes."}, status=429)
+    cache.set(key, hits + 1, timeout=_PASSWORD_CHECK_RATE_WINDOW)
+
+    try:
+        body = json.loads(request.body)
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return JsonResponse({"error": "Invalid JSON body."}, status=400)
+    if not isinstance(body, dict):
+        return JsonResponse({"error": "Invalid JSON body."}, status=400)
+    password = body.get("password")
+    if not isinstance(password, str) or not password:
+        return JsonResponse({"error": "password is required."}, status=400)
+    if len(password) > _PASSWORD_CHECK_MAX_LENGTH:
+        return JsonResponse({"valid": False, "errors": ["This password is too long."]})
+
+    # An unsaved User carrying the form's identity fields is exactly what
+    # UserAttributeSimilarityValidator needs; nothing is persisted.
+    raw_username = body.get("username")
+    raw_email = body.get("email")
+    username = raw_username if isinstance(raw_username, str) else ""
+    email = raw_email if isinstance(raw_email, str) else ""
+    candidate = User(username=username[:150], email=email[:254])
+    try:
+        validate_password(password, user=candidate)
+    except ValidationError as exc:
+        return JsonResponse({"valid": False, "errors": exc.messages})
+    return JsonResponse({"valid": True, "errors": []})

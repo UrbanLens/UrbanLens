@@ -392,6 +392,92 @@ services:
         max-size: "200k"
         max-file: "10"
 
+  # --- Test topology (opt-in: docker compose --profile test ...) -------------
+  # pytest's LocalhostOnlyNetwork guard (core/tests/testing_network.py) only
+  # permits loopback connections, which the normal service topology can't
+  # satisfy - UL_VALKEY_URL/UL_DB_HOST resolve to container-bridge IPs, so
+  # running pytest inside `app` trips the guard on legitimate same-stack
+  # traffic (docs/PROBLEMS.md; decision 2026-07-23: dedicated topology, do NOT
+  # widen the guard). These three services form a "pod": test-db and
+  # test-valkey join test-runner's network namespace (network_mode:
+  # service:test-runner), so inside test-runner both really are localhost and
+  # the guard stays exactly as strict as written.
+  #
+  # Usage (fresh throwaway DB every time - no volumes are mounted):
+  #   docker compose --profile test up -d --build test-runner test-db test-valkey
+  #   docker compose exec -e UL_TEST_DB_NAME=ul_test_$RANDOM test-runner \
+  #     python -m pytest src/urbanlens/dashboard/tests/
+  #   docker compose --profile test down
+  test-runner:
+    container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_test_runner
+    profiles: ["test"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # Always a dev-grade build: the runner needs the `dev` dependency
+        # group (pytest, hypothesis, mypy) regardless of the host's
+        # UL_ENVIRONMENT (a staging/production value would `uv sync --no-dev`
+        # them away - see x-app-build's comment).
+        UL_ENVIRONMENT: development
+        UL_CONTAINER_NAME: ${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_test
+    # Bypass /docker-entrypoint.sh: init.py runs migrate+collectstatic against
+    # a DB that pytest hasn't created yet. The runner just stays alive for
+    # `docker compose exec ... pytest` calls.
+    entrypoint: ["sleep", "infinity"]
+    environment:
+      <<: *app-env
+      UL_DB_HOST: localhost
+      UL_DB_PORT: "5432"
+      UL_VALKEY_URL: redis://localhost:6379/0
+      UL_ENVIRONMENT: development
+    networks:
+      - app_network
+
+  test-db:
+    container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_test_db
+    profiles: ["test"]
+    image: postgis/postgis:17-3.5
+    # Shares test-runner's network namespace so it listens on the runner's
+    # localhost:5432. No data volume on purpose: every `up` starts pristine.
+    network_mode: service:test-runner
+    depends_on:
+      - test-runner
+    environment:
+      - POSTGRES_USER=${UL_DB_USER:-postgres}
+      - POSTGRES_DB=${UL_DB_NAME:-postgres}
+      - POSTGRES_PASSWORD=${UL_DB_PASS:-postgres}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${UL_DB_USER:-postgres}"]
+      interval: 10s
+      timeout: 10s
+      retries: 9
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "10"
+
+  test-valkey:
+    container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_test_valkey
+    profiles: ["test"]
+    image: valkey/valkey:7-alpine
+    user: nobody
+    network_mode: service:test-runner
+    depends_on:
+      - test-runner
+    command: ["valkey-server", "--save", "", "--appendonly", "no", "--maxmemory", "256mb", "--maxmemory-policy", "volatile-lru"]
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "10"
+
 volumes:
   postgres-data:
   logs:

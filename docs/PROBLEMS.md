@@ -36,7 +36,19 @@ Docker-environment pytest run - this Windows checkout has no local Postgres, and
 dev VM was unavailable in this session.
 
 **Decisions recorded 2026-07-23** (Jess answered the open product questions; these are now the
-authoritative direction for each blocked entry):
+authoritative direction for each blocked entry). **Implementation status, same day**: everything
+below is DONE except the two large builds - **export importers (all four)** and the **shared
+label-picker TS module extraction** - which are authorized but deliberately deferred to their
+own focused sessions (each is a session-sized project in sensitive code; exactly the "not
+attempted as a rider" class this file warns about). UL-255 additionally stays open pending a
+browser repro, UL-277 was skipped for now at Jess's request, and the hardcoded blues wait for a
+browser-verification session. All new DB-backed tests from this round
+(`test_identity_visibility.py::TripCommentVisibilityGateTests`/`LiveMessagePayloadMaskingTests`,
+`test_wikipedia_gateway.py::WikipediaCampusFallbackTests`, `test_notification_text_alerts.py`,
+`test_password_validators.py::ValidatePasswordPolicyViewTests`, `test_media_proxy.py`'s
+signing tests, `test_group_chats.py::GroupKeyEndpointTests`, and the earlier round's
+`test_external_apis_toggle.py` broker tests) need one run in the new compose test pod - local
+Windows still has no Postgres.
 
 - **E2EE password policy**: build the server validation endpoint (option (a)) - raw password
   crosses HTTPS once during signup/reset only, runs the full `AUTH_PASSWORD_VALIDATORS` chain.
@@ -132,7 +144,34 @@ All 63 alerts are now closed (2 fixed, 61 dismissed) and the native GitHub CodeQ
 
 ---
 
-## PR #111: three Codex identity/architecture findings deferred as design-level changes (2026-07-23)
+## ~~PR #111: three Codex identity/architecture findings deferred as design-level changes~~ (2026-07-23, ALL THREE RESOLVED later the same day)
+
+**RESOLVED 2026-07-23** (per the decisions recorded above - all three built):
+
+1. **E2EE rotation member slugs → opaque tokens**: `E2EEGroupKeyView.get` now issues
+   `members: [{id, public_key}]` where `id` is `services.e2ee.group_member_token` (an HMAC over
+   the group uuid + profile pk - group-scoped so tokens can't correlate a member across groups,
+   recomputed server-side on POST rather than decoded). POST accepts `wrapped` keyed by those
+   tokens; a stale cached client still keying by slug gets a clean 409 (same as any membership
+   mismatch) and recovers on its next fetch - rotation is briefly unavailable for stale JS
+   (bounded by the 4h CDN cache), never a partial write. TS client updated (`member.id`).
+   Tests: token round-trip, slug-keyed rejection, no-slug-in-payload, cross-group token
+   distinctness.
+2. **Per-recipient WebSocket payloads**: `serialize_direct_message`/`serialize_group_message`
+   gained a `viewer` param resolving the sender's name through
+   `display_identity_for`/`resolve_visible_identity`; `_broadcast_direct_message` sends the
+   sender's raw copy to the sender and a masked copy to the recipient, and
+   `broadcast_group_message` builds one payload per active member (the accepted per-member
+   resolution cost). Identity-free group events keep the shared-payload path. Sender slugs are
+   unchanged (they're already present in the rendered thread and are the thread-routing key);
+   the leak this fixes is the display name. Tests in `test_identity_visibility.py`
+   (`LiveMessagePayloadMaskingTests`).
+3. **Media-proxy binding**: proxy URLs are now HMAC-signed per photo name
+   (`controllers.media_proxy.sign_photo_name`, deterministic so URLs stay stable/cacheable);
+   the view rejects unsigned/tampered references before the cache lookup or any upstream call.
+   `GoogleMapsPhotosPanelSource.media_items` is the only URL producer and signs each one.
+   Tests: unsigned/wrong-sig rejection (no upstream call, no cache leak), end-to-end
+   render-then-fetch contract.
 
 The final Codex review round on PR #111 surfaced a cluster of identity-masking gaps. The
 template/sidebar-level ones were fixed in-session (DM reply preview + image-consent/delete-confirm
@@ -181,7 +220,21 @@ before running `migrate`, rather than encoding a `replaces` bridge in code.
 
 ---
 
-## PR #111: E2EE signup/password-reset only enforces an 8-char minimum client-side; the configured 12-char+complexity+common-password+HIBP policy never runs (flagged by Codex 2026-07-23)
+## ~~PR #111: E2EE signup/password-reset only enforces an 8-char minimum client-side; the configured 12-char+complexity+common-password+HIBP policy never runs~~ (flagged by Codex 2026-07-23, RESOLVED same day)
+
+**RESOLVED 2026-07-23** with option (a) per the recorded decision: new anonymous
+`POST /accounts/validate-password/` (`account.validate_password_policy`) runs the raw password
+through the full `AUTH_PASSWORD_VALIDATORS` chain (incl. `ComplexityValidator` and the HIBP
+k-anonymity check, which fails open on API outage) against an unsaved `User` built from the
+form's username/email (so the similarity validator works pre-account). Rate-limited per IP
+(mirroring `suggest_passphrases`) primarily to bound outbound HIBP calls; the password is
+validated in memory, never stored or logged. Client side: `e2ee-client.ts` raised its local
+floor from 8 to 12 (matching `MinimumLengthValidator`) and now calls the endpoint before
+deriving in all three flows - signup, password-reset-confirm, and password change/set -
+surfacing validator failures as native inline validation messages; any non-200 fails open
+(the 12-char floor still applies). All four password-entry templates wire the new
+`validatePassword` URL. Tests: `ValidatePasswordPolicyViewTests` (11 cases incl. rate limit,
+similarity, and password-never-echoed).
 
 `frontend/ts/shared/e2ee-client.ts`'s `wireSignupForm`/password-reset wiring derives a login
 credential from the user's raw password client-side before submit specifically so the raw
@@ -292,7 +345,19 @@ params" - the former should win, the latter probably shouldn't.
 
 ---
 
-## Most per-event WhatsApp/SMS notification toggles are stored but never delivered (found 2026-07-18)
+## ~~Most per-event WhatsApp/SMS notification toggles are stored but never delivered~~ (found 2026-07-18, RESOLVED 2026-07-23)
+
+**RESOLVED 2026-07-23** ("wire all toggles" per the recorded decision): rather than duplicating
+the DM pipeline at ~10 call sites, delivery hooks in centrally - a third `post_save` signal on
+`NotificationLog` (`notification_text_alerts`, alongside the existing live-push and native-push
+signals) schedules `services/notification_text_alerts.py`'s delayed Celery task for every
+notification type with a `<type>_whatsapp`/`<type>_sms` toggle pair. Same shape as the DM flow:
+cheap no-op when both toggles are off (the default), 120s delay, re-checks unread state before
+sending, debounced per (recipient, type) for 6h so bursts cost one billed text, and the body
+carries the title only (details stay off third-party carriers; titles already bake in
+recipient-masked names). `NotificationType.MESSAGE` stays on the DM pipeline (per-sender streak
+debounce + mutes) and is excluded here. `docs/FEATURES.md`'s delivery caveat updated. Tests:
+`test_notification_text_alerts.py` (15 cases).
 
 `NotificationPreference` has `*_whatsapp` opt-in booleans for ~10 event types (trip_updated,
 friend_request, comment_reply, comment_liked, friend_accepted, added_to_trip, wiki_updated,
@@ -331,7 +396,19 @@ Both tests pass again; nothing in production code needed changing.
 
 ---
 
-## Identity-masking for hidden profiles: two remaining render sites need a product decision (found 2026-07-18, narrowed 2026-07-19)
+## ~~Identity-masking for hidden profiles: two remaining render sites need a product decision~~ (found 2026-07-18, narrowed 2026-07-19, RESOLVED 2026-07-23)
+
+**RESOLVED 2026-07-23** (decision: fix both):
+
+1. **Group member-add search results** - found ALREADY FIXED by an intermediate session:
+   `GroupMemberSearchView` filters candidates through `candidate.can_view_profile(profile)`
+   (which enforces `profile_visibility` + temporary access grants), with a comment naming this
+   exact concern - hidden profiles aren't enumerable through the picker at all.
+2. **Trip comments** now gate on the author's `comment_visibility` exactly like pin/wiki
+   comments: `_render_trip_comments` skips comments (and replies, independently) whose author's
+   setting excludes the viewer, and `TripCommentReactionView` 404s for a gated comment so it
+   can't be discovered or reacted to by id. Author-less (deleted-author) comments stay visible.
+   Tests: `TripCommentVisibilityGateTests` (5 cases).
 
 `services/identity_visibility.py` masks a person's name/username/avatar when their
 `profile_visibility` doesn't permit the viewer to see them. Of the six gaps originally found in
@@ -424,7 +501,17 @@ target-reference shape first, in export.py, so the importer has something reliab
 
 ---
 
-## UL-354: Wikipedia missing for some HRSH buildings - likely geosearch radius, not a bug
+## ~~UL-354: Wikipedia missing for some HRSH buildings - likely geosearch radius, not a bug~~ (RESOLVED 2026-07-23)
+
+**RESOLVED 2026-07-23** ("campus-aware radius only" per the recorded decision):
+`WikipediaPanelSource.fetch` now falls back to `_ancestor_campus_article` when a pin's own
+coordinates find no article - each ancestor pin (bounded walk up the parent chain, cycle-safe)
+gets its own normal-radius geosearch using the *ancestor's* coordinates and name, so an
+outbuilding pin on a large campus picks up the campus article without widening the global 500m
+radius (which would invite false positives for every ordinary pin). The result is cached on the
+child's own Location as before. No manual-link override UI was added (explicitly declined).
+The Location-scoped `WikipediaEnrichmentSource` has no pin/hierarchy context and is unchanged.
+Tests: `WikipediaCampusFallbackTests` (3 cases).
 
 Original wording (`TODO.md:30`): "Wikipedia not showing up for some HRSH buildings." HRSH (Harlem
 Valley/Hudson River State Hospital-style abandoned psychiatric campuses) are exactly the kind of
@@ -454,7 +541,7 @@ assuming a code-only fix is even the right first step).
 
 ---
 
-## `docker compose exec app pytest` can't reach Valkey - no documented way to run pytest against the dev container
+## ~~`docker compose exec app pytest` can't reach Valkey - no documented way to run pytest against the dev container~~ (RESOLVED 2026-07-23 - see the test "pod" below)
 
 Discovered while trying to verify the article-editor changes (2026-07-19/20) with real Postgres,
 since local Windows dev has no Docker (per this project's CLAUDE.md) so `pytest` there never
@@ -648,7 +735,12 @@ one server-side filters vs. is silently dropped.
 
 ---
 
-## Internet Archive: `mediatype:texts` is excluded, but holds the best location material (found 2026-07-22)
+## ~~Internet Archive: `mediatype:texts` is excluded, but holds the best location material~~ (found 2026-07-22, RESOLVED 2026-07-23)
+
+**RESOLVED 2026-07-23** (decision: add texts): `_MEDIA_TYPE_FILTER` is now
+`mediatype:(image OR movies OR texts)` - document tiles (inspectors' reports, landmark books)
+render with archive.org's generated cover thumbnails. Audio/software/data stay excluded. Test
+expectations updated; all 26 relevance tests pass.
 
 While fixing Internet Archive's search relevance (see `services/apis/assets/internet_archive.py`),
 confirmed against the live `advancedsearch.php` endpoint that the gateway's
@@ -797,11 +889,21 @@ full ~30s socket timeout before failover. The pool is now `overpass-api.de` (bas
 `maps.mail.ru` (both globally complete; benchmark recommendation 4). The module comment now
 documents the membership rules (globally-complete instances only; why a regional extract is
 poisonous). The failover test suite (`test_location_background_services.py`, written
-pool-size-independent) passes against the reduced pool. NOT done here (deliberately, per the
-original entry): making the self-hosted instance primary (deployment decision), and
-detecting/validating empty responses from pool members (larger design change). Note the
-original entry's caveat still stands: `LocationCache` may hold empty-result rows that osm.ch
-caused; they expire naturally via `external_data_cache_days`.
+pool-size-independent) passes against the reduced pool.
+
+**Follow-up, same day** (per the recorded decision "primary + empty-result validation"): the
+self-hosted instance (`overpass.osm.urbanlens.org`) is now the primary (`_API_URL`), with
+overpass-api.de and maps.mail.ru as fallbacks - `_available_endpoints` keeps the primary first
+and shuffles only the fallbacks (replacing the equal-peer shuffle whose premise the benchmark
+disproved). `query()` also gained lie-by-omission detection: an empty `elements` list from a
+*fallback* is held as suspect and cross-checked once against the next endpoint - if the
+cross-check finds data, the empty-answering endpoint is marked down as incomplete and the
+non-empty payload wins; two independent empties are accepted as genuine; the primary is
+trusted without a cross-check (benchmarked complete, and doubling every genuinely-empty rural
+query would be waste). 4 new tests; 16/16 pass. Deploy-side follow-up still open: raise the
+openresty 90s proxy cap above the intended `[timeout:N]` ceiling (see
+docs/overpass-mirror-test.md). The original caveat stands: `LocationCache` may hold
+osm.ch-poisoned empty rows; they expire naturally via `external_data_cache_days`.
 
 Found while benchmarking the new self-hosted Overpass instance (full results and method:
 `docs/overpass-mirror-test.md`, run 2026-07-22).
@@ -883,7 +985,18 @@ detail.
 
 ---
 
-## Test suite's localhost-only network guard trips on the dev docker-compose network (2026-07-22)
+## ~~Test suite's localhost-only network guard trips on the dev docker-compose network~~ (2026-07-22, RESOLVED 2026-07-23)
+
+**RESOLVED 2026-07-23** with option (a) per the recorded decision - a dedicated test topology,
+leaving `LocalhostOnlyNetwork` exactly as strict as written: docker-compose.yml gained an
+opt-in `test` profile with a three-service "pod" - `test-db` (PostGIS) and `test-valkey` join
+`test-runner`'s network namespace via `network_mode: service:test-runner`, so inside the runner
+both genuinely listen on localhost. The runner is always built with dev dependencies
+(UL_ENVIRONMENT=development build arg), bypasses the migrate/collectstatic entrypoint (pytest
+creates its own DB), and mounts no volumes (pristine every `up`). Usage documented in
+CLAUDE.md's "Running DB-backed tests" section. `docker compose config` validates; an actual run
+needs the dev VM (not reachable this session). This also resolves the older
+"`docker compose exec app pytest` can't reach Valkey" entry above.
 
 Found while re-verifying the dev environment (`/projects/environments/dev/s1/UrbanLens`) and
 updating `CLAUDE.md`'s environment section. Running pytest inside the `app` container against the
@@ -953,3 +1066,18 @@ comments in `src/urbanlens/dashboard/controllers/media.py`:
 **Suggested next step**: product decision on icon visibility (owner-only + share-relationship vs.
 authenticated-only), a cleanup job for orphaned media files, and a review of safety check-in photo
 audience rules.
+
+## PinTombstone rows are kept forever - pruning exists but is unscheduled (2026-07-23)
+
+`PinTombstone` (written on every pin hard-delete, served by the external API's
+`pins/deleted/` delta-sync feed) has no scheduled cleanup.
+`PinTombstone.objects.prune_older_than(cutoff)` exists and is tested, but nothing
+calls it - rows accumulate indefinitely (tiny rows: profile FK + uuid + timestamp,
+and deletions are rare relative to creations, so this is hygiene rather than urgent).
+
+**Suggested next step**: wire `prune_older_than` into a Celery beat maintenance task
+once a client-offline-window policy is chosen. The retention MUST comfortably exceed
+the longest supported sync-client offline gap: a client whose `deleted_since`
+predates the oldest retained tombstone silently misses deletions and needs a
+full-resync signal (not yet designed - consider returning `410 Gone` from
+`pins/deleted/` when `deleted_since` is older than the retention floor).

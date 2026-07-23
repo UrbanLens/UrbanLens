@@ -296,16 +296,26 @@ def remove_group_member(group: GroupChat, actor: Profile, target: Profile) -> No
 # ---------------------------------------------------------------------------
 
 
-def serialize_group_message(message: GroupMessage) -> dict[str, Any]:
+def serialize_group_message(message: GroupMessage, *, viewer: Profile | None = None) -> dict[str, Any]:
     """Serialize a group message into the JSON payload pushed over the WebSocket.
 
     Args:
         message: The message to serialize.
+        viewer: The member this payload will be delivered to. When given, the
+            sender's name is resolved through ``resolve_visible_identity`` so
+            a live incoming message never reveals a name the server-rendered
+            thread would mask for that viewer (docs/PROBLEMS.md; decision
+            2026-07-23: per-recipient payloads). None keeps the raw name -
+            correct only for the sender's own sessions.
 
     Returns:
         A JSON-serializable dict; ``group_uuid`` lets the frontend route the
         payload to the right open conversation.
     """
+    if viewer is None or viewer.pk == message.sender_id:
+        sender_name = message.sender.username
+    else:
+        sender_name = resolve_visible_identity(viewer, message.sender)["display_name"]
     return {
         "type": "group_message",
         "id": message.pk,
@@ -317,7 +327,7 @@ def serialize_group_message(message: GroupMessage) -> dict[str, Any]:
         "key_version": message.key_version,
         "created": message.created.isoformat(),
         "sender_slug": message.sender.slug or "",
-        "sender_name": message.sender.username,
+        "sender_name": sender_name,
         # Shares need the full server-rendered card - the client re-fetches
         # the thread partial when this is set (same contract as 1:1 has_share).
         "has_share": message.shares.exists(),
@@ -512,10 +522,31 @@ def create_group_message(
 def broadcast_group_message(message: GroupMessage) -> None:
     """Push `message` to every active member's live sessions now.
 
+    Unlike the identity-free group events (``group_updated`` etc., which go
+    through ``_broadcast_group_event`` with one shared payload), a message
+    payload carries the sender's name - so it is built once per member, with
+    the name resolved through that member's own visibility. The per-member
+    resolution cost is the accepted price of never leaking a masked name
+    through the live channel (decision 2026-07-23).
+
     Args:
         message: The message to broadcast.
     """
-    _broadcast_group_event(message.group, serialize_group_message(message))
+    members = list(message.group.active_memberships().select_related("profile__user"))
+
+    deliveries = [(direct_message_group_name(membership.profile_id), serialize_group_message(message, viewer=membership.profile)) for membership in members]
+
+    def _send() -> None:
+        layer = get_channel_layer()
+        if layer is None:
+            return
+        for channel_group, payload in deliveries:
+            try:
+                async_to_sync(layer.group_send)(channel_group, {"type": "dm.message", "message": payload})
+            except Exception:
+                logger.warning("Live push of group message %s to %s failed", message.pk, channel_group, exc_info=True)
+
+    transaction.on_commit(_send)
 
 
 def delete_group_message(message: GroupMessage, actor: Profile) -> GroupMessage:

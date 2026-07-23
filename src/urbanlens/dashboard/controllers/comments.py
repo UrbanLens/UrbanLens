@@ -486,6 +486,11 @@ class TripCommentReactionView(LoginRequiredMixin, View):
         if not (trip.creator == profile or trip.profiles.filter(pk=profile.pk).exists()):
             return HttpResponse("Forbidden", status=403)
         comment = get_object_or_404(TripComment, id=comment_id, trip=trip)
+        # Same gate the panel render applies (and CommentReactionView enforces
+        # for pin/wiki comments): a comment the author's comment_visibility
+        # hides from this viewer can't be discovered or reacted to by id.
+        if comment.author is not None and not profile.can_view_comments_from(comment.author):
+            raise Http404
         emoji = request.POST.get("emoji", "")
         if emoji not in _ALLOWED_EMOJIS:
             return HttpResponse("Invalid emoji.", status=400)

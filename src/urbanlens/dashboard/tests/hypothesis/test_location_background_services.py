@@ -430,10 +430,13 @@ class OverpassGatewayTests(SimpleTestCase):
         from urbanlens.dashboard.services.apis.locations.boundaries.overpass import OverpassGateway, _endpoint_is_down
 
         gateway = OverpassGateway(session=mock.Mock())
+        # Non-empty payloads: an empty `elements` from a fallback would trigger
+        # the lie-by-omission cross-check (tested separately below), consuming
+        # an extra response and muddying what this test is about.
         gateway.session.post.side_effect = [
             self._fake_response(504),  # first query: primary fails...
-            self._fake_response(200, {"elements": []}),  # ...second endpoint answers
-            self._fake_response(200, {"elements": []}),  # second query: primary is skipped
+            self._fake_response(200, {"elements": [{"id": 1}]}),  # ...second endpoint answers
+            self._fake_response(200, {"elements": [{"id": 1}]}),  # second query: primary is skipped
         ]
 
         with self._no_shuffle(), self._no_sleep():
@@ -490,6 +493,73 @@ class OverpassGatewayTests(SimpleTestCase):
 
         self.assertEqual(gateway.session.post.call_count, 1)
         self.assertFalse(_endpoint_is_down(gateway.base_url))
+
+    def test_empty_primary_result_is_trusted_without_cross_check(self) -> None:
+        """The self-hosted primary is benchmarked complete - its empty answer is final."""
+        from urbanlens.dashboard.services.apis.locations.boundaries.overpass import OverpassGateway
+
+        gateway = OverpassGateway(session=mock.Mock())
+        gateway.session.post.side_effect = [self._fake_response(200, {"elements": []})]
+
+        with self._no_shuffle(), self._no_sleep():
+            payload = gateway.query("[out:json];node(1);out;")
+
+        self.assertEqual(payload, {"elements": []})
+        self.assertEqual(gateway.session.post.call_count, 1)
+
+    def test_empty_fallback_result_is_cross_checked_and_the_liar_downed(self) -> None:
+        """A fallback answering 0 elements where the next endpoint has data is
+        marked down as incomplete (the osm.ch lie-by-omission incident)."""
+        from urbanlens.dashboard.services.apis.locations.boundaries.overpass import OverpassGateway, _endpoint_is_down
+
+        gateway = OverpassGateway(session=mock.Mock())
+        gateway.session.post.side_effect = [
+            self._fake_response(504),  # primary overloaded
+            self._fake_response(200, {"elements": []}),  # fallback 1: suspect empty
+            self._fake_response(200, {"elements": [{"id": 1}]}),  # fallback 2: has data
+        ]
+
+        with self._no_shuffle(), self._no_sleep():
+            payload = gateway.query("[out:json];node(1);out;")
+
+        self.assertEqual(payload, {"elements": [{"id": 1}]})
+        self.assertEqual(gateway.session.post.call_count, 3)
+        self.assertTrue(_endpoint_is_down(gateway.mirrors[0]))
+
+    def test_empty_fallback_result_confirmed_by_second_endpoint_is_accepted(self) -> None:
+        """Two independent empties mean the data genuinely isn't there - no down-mark."""
+        from urbanlens.dashboard.services.apis.locations.boundaries.overpass import OverpassGateway, _endpoint_is_down
+
+        gateway = OverpassGateway(session=mock.Mock())
+        gateway.session.post.side_effect = [
+            self._fake_response(504),  # primary overloaded
+            self._fake_response(200, {"elements": []}),  # fallback 1: suspect empty
+            self._fake_response(200, {"elements": []}),  # fallback 2: also empty
+        ]
+
+        with self._no_shuffle(), self._no_sleep():
+            payload = gateway.query("[out:json];node(1);out;")
+
+        self.assertEqual(payload, {"elements": []})
+        self.assertFalse(_endpoint_is_down(gateway.mirrors[0]))
+
+    def test_suspect_empty_is_returned_when_the_cross_check_cannot_complete(self) -> None:
+        """If every endpoint after the suspect fails, its empty answer is the
+        best information available - returned rather than raising."""
+        from urbanlens.dashboard.services.apis.locations.boundaries.overpass import OverpassGateway
+
+        gateway = OverpassGateway(session=mock.Mock())
+        gateway.session.post.side_effect = [
+            self._fake_response(504),  # primary overloaded
+            self._fake_response(200, {"elements": []}),  # fallback 1: suspect empty
+            self._fake_response(504),  # fallback 2: also overloaded
+        ]
+
+        with self._no_shuffle(), self._no_sleep():
+            payload = gateway.query("[out:json];node(1);out;")
+
+        self.assertEqual(payload, {"elements": []})
+        self.assertEqual(gateway.session.post.call_count, 3)
 
     def test_query_does_not_fail_over_on_our_own_rate_limit(self) -> None:
         """A local rate-limit block short-circuits: failing over would only burn budget."""

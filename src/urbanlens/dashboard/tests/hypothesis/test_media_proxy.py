@@ -26,6 +26,15 @@ def _http_error(status_code: int, text: str = "") -> requests.exceptions.HTTPErr
     return requests.exceptions.HTTPError(response=response)
 
 
+def _signed_url(photo_name: str) -> str:
+    """The proxy URL exactly as GoogleMapsPhotosPanelSource.media_items renders it."""
+    from urllib.parse import quote
+
+    from urbanlens.dashboard.controllers.media_proxy import sign_photo_name
+
+    return reverse("media.google_maps_photo", args=[quote(photo_name, safe="")]) + f"?sig={quote(sign_photo_name(photo_name), safe='')}"
+
+
 class GoogleMapsPhotoProxyViewTests(TestCase):
     """GoogleMapsPhotoProxyView.get()."""
 
@@ -42,39 +51,74 @@ class GoogleMapsPhotoProxyViewTests(TestCase):
 
     def test_expired_reference_returns_404_not_502(self) -> None:
         with mock.patch.object(GooglePlacesGateway, "get_photo_media", side_effect=_http_error(404, "Not Found")):
-            response = self.client.get(reverse("media.google_maps_photo", args=["places/ABC/photos/XYZ"]))
+            response = self.client.get(_signed_url("places/ABC/photos/XYZ"))
         self.assertEqual(response.status_code, 404)
 
     def test_expired_reference_is_cached_to_avoid_repeat_upstream_calls(self) -> None:
         with mock.patch.object(GooglePlacesGateway, "get_photo_media", side_effect=_http_error(404, "Not Found")) as mocked:
-            self.client.get(reverse("media.google_maps_photo", args=["places/ABC/photos/XYZ"]))
-            response = self.client.get(reverse("media.google_maps_photo", args=["places/ABC/photos/XYZ"]))
+            self.client.get(_signed_url("places/ABC/photos/XYZ"))
+            response = self.client.get(_signed_url("places/ABC/photos/XYZ"))
         self.assertEqual(response.status_code, 404)
         self.assertEqual(mocked.call_count, 1)
 
     def test_other_http_errors_still_return_502(self) -> None:
         with mock.patch.object(GooglePlacesGateway, "get_photo_media", side_effect=_http_error(500, "Server Error")):
-            response = self.client.get(reverse("media.google_maps_photo", args=["places/ABC/photos/XYZ"]))
+            response = self.client.get(_signed_url("places/ABC/photos/XYZ"))
         self.assertEqual(response.status_code, 502)
 
     def test_connection_failure_returns_502(self) -> None:
         with mock.patch.object(GooglePlacesGateway, "get_photo_media", side_effect=requests.exceptions.ConnectionError("boom")):
-            response = self.client.get(reverse("media.google_maps_photo", args=["places/ABC/photos/XYZ"]))
+            response = self.client.get(_signed_url("places/ABC/photos/XYZ"))
         self.assertEqual(response.status_code, 502)
 
     def test_successful_fetch_returns_the_image_bytes(self) -> None:
         with mock.patch.object(GooglePlacesGateway, "get_photo_media", return_value=(b"fake-jpeg-bytes", "image/jpeg")):
-            response = self.client.get(reverse("media.google_maps_photo", args=["places/ABC/photos/XYZ"]))
+            response = self.client.get(_signed_url("places/ABC/photos/XYZ"))
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.content, b"fake-jpeg-bytes")
         self.assertEqual(response["Content-Type"], "image/jpeg")
 
     def test_successful_fetch_is_cached_to_avoid_repeat_upstream_calls(self) -> None:
         with mock.patch.object(GooglePlacesGateway, "get_photo_media", return_value=(b"fake-jpeg-bytes", "image/jpeg")) as mocked:
-            self.client.get(reverse("media.google_maps_photo", args=["places/ABC/photos/XYZ"]))
-            response = self.client.get(reverse("media.google_maps_photo", args=["places/ABC/photos/XYZ"]))
+            self.client.get(_signed_url("places/ABC/photos/XYZ"))
+            response = self.client.get(_signed_url("places/ABC/photos/XYZ"))
         self.assertEqual(response.status_code, 200)
         self.assertEqual(mocked.call_count, 1)
+
+    def test_unsigned_request_is_rejected_before_any_upstream_call(self) -> None:
+        """The photo_name path segment is client-controlled - without a valid
+        signature, a replayed/guessed reference must not consume Places quota."""
+        with mock.patch.object(GooglePlacesGateway, "get_photo_media") as mocked:
+            response = self.client.get(reverse("media.google_maps_photo", args=["places/ABC/photos/XYZ"]))
+        self.assertEqual(response.status_code, 404)
+        mocked.assert_not_called()
+
+    def test_signature_for_a_different_photo_name_is_rejected(self) -> None:
+        from urbanlens.dashboard.controllers.media_proxy import sign_photo_name
+
+        wrong_sig = sign_photo_name("places/OTHER/photos/DIFFERENT")
+        with mock.patch.object(GooglePlacesGateway, "get_photo_media") as mocked:
+            response = self.client.get(reverse("media.google_maps_photo", args=["places/ABC/photos/XYZ"]) + f"?sig={wrong_sig}")
+        self.assertEqual(response.status_code, 404)
+        mocked.assert_not_called()
+
+    def test_unsigned_request_never_serves_even_a_cached_photo(self) -> None:
+        """The signature check runs before the cache lookup - an invalid URL
+        reveals nothing about what's cached."""
+        with mock.patch.object(GooglePlacesGateway, "get_photo_media", return_value=(b"fake-jpeg-bytes", "image/jpeg")):
+            self.client.get(_signed_url("places/ABC/photos/XYZ"))
+        response = self.client.get(reverse("media.google_maps_photo", args=["places/ABC/photos/XYZ"]))
+        self.assertEqual(response.status_code, 404)
+
+    def test_media_items_renders_urls_the_proxy_accepts(self) -> None:
+        """End-to-end contract: the gallery's own rendered URL passes the check."""
+        from urbanlens.dashboard.plugins.builtin.google_places import GoogleMapsPhotosPanelSource
+
+        items = GoogleMapsPhotosPanelSource().media_items({"place_id": "p1", "photo_names": ["places/ABC/photos/XYZ"]})
+        self.assertEqual(len(items), 1)
+        with mock.patch.object(GooglePlacesGateway, "get_photo_media", return_value=(b"fake-jpeg-bytes", "image/jpeg")):
+            response = self.client.get(items[0].url)
+        self.assertEqual(response.status_code, 200)
 
     def test_external_apis_disabled_blocks_the_upstream_fetch(self) -> None:
         """A requester who opted out of external lookups must not trigger a
@@ -83,7 +127,7 @@ class GoogleMapsPhotoProxyViewTests(TestCase):
 
         Profile.objects.filter(user=self.user).update(external_apis_enabled=False)
         with mock.patch.object(GooglePlacesGateway, "get_photo_media") as mocked:
-            response = self.client.get(reverse("media.google_maps_photo", args=["places/ABC/photos/XYZ"]))
+            response = self.client.get(_signed_url("places/ABC/photos/XYZ"))
         self.assertEqual(response.status_code, 404)
         mocked.assert_not_called()
 
@@ -92,9 +136,9 @@ class GoogleMapsPhotoProxyViewTests(TestCase):
         from urbanlens.dashboard.models.profile.model import Profile
 
         with mock.patch.object(GooglePlacesGateway, "get_photo_media", return_value=(b"fake-jpeg-bytes", "image/jpeg")):
-            self.client.get(reverse("media.google_maps_photo", args=["places/ABC/photos/XYZ"]))
+            self.client.get(_signed_url("places/ABC/photos/XYZ"))
         Profile.objects.filter(user=self.user).update(external_apis_enabled=False)
         with mock.patch.object(GooglePlacesGateway, "get_photo_media") as mocked:
-            response = self.client.get(reverse("media.google_maps_photo", args=["places/ABC/photos/XYZ"]))
+            response = self.client.get(_signed_url("places/ABC/photos/XYZ"))
         self.assertEqual(response.status_code, 200)
         mocked.assert_not_called()

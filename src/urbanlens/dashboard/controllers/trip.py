@@ -1254,9 +1254,11 @@ def _render_trip_comments(request: HttpRequest, trip: Trip, profile: Profile) ->
         .order_by("created")
     )
 
-    # Comment content stays visible regardless of privacy settings (matching
-    # pin/wiki comments) - only the author's name/avatar are masked when the
-    # author's own profile_visibility doesn't permit this viewer to see them.
+    # Two independent privacy controls, matching pin/wiki comments
+    # (controllers.comments): the author's comment_visibility gates the whole
+    # comment (all-or-nothing, applied in the render loop below), and - once a
+    # comment passes that gate - the author's profile_visibility separately
+    # masks their name/avatar while keeping the content visible.
     # select_related gives each comment/reply its own author instance even for
     # the same underlying profile, so resolve once per distinct author and
     # re-point every comment/reply at that same (now-mutated) instance.
@@ -1280,6 +1282,11 @@ def _render_trip_comments(request: HttpRequest, trip: Trip, profile: Profile) ->
 
     rendered: list[_CommentData] = []
     for c in top_comments:
+        # The author's comment_visibility gates the whole comment for this
+        # viewer, exactly as pin/wiki comments already do. A comment whose
+        # author was deleted has no visibility preference left to enforce.
+        if c.author is not None and not profile.can_view_comments_from(c.author):
+            continue
         # A newly-uploaded image is scanned asynchronously - until that
         # clears pending_scan, the comment stays visible only to its own
         # author (see controllers.comments.start_comment_image_scan).
@@ -1291,6 +1298,8 @@ def _render_trip_comments(request: HttpRequest, trip: Trip, profile: Profile) ->
         reactions = _aggregate_reactions(c.reactions.all())
         replies_rendered: list[_ReplyData] = []
         for r in c.replies.all():
+            if r.author is not None and not profile.can_view_comments_from(r.author):
+                continue
             if r.pending_scan and r.author != profile:
                 continue
             r_html = render_comment_text(r.text, pinned, act_index_for_render)

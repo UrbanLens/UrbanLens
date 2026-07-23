@@ -21998,7 +21998,29 @@ https://github.com/browserify/crypto-browserify`);
       });
     }
   }
-  var MIN_PASSWORD_LENGTH = 8;
+  var MIN_PASSWORD_LENGTH = 12;
+  async function serverPolicyErrors(password, username, email) {
+    const url = cfg().urls.validatePassword;
+    if (!url) {
+      return [];
+    }
+    try {
+      const response = await postJson(url, { password, username, email });
+      if (!response.ok) {
+        return [];
+      }
+      const payload = await response.json();
+      if (payload.valid === false) {
+        return payload.errors && payload.errors.length ? payload.errors : ["This password doesn't meet the password policy."];
+      }
+    } catch {}
+    return [];
+  }
+  function reportPolicyErrors(input, errors) {
+    input.setCustomValidity(errors.join(" "));
+    input.reportValidity();
+    input.addEventListener("input", () => input.setCustomValidity(""), { once: true });
+  }
   function wireSignupForm(form) {
     form.addEventListener("submit", (event) => {
       if (form.dataset.e2eeReady === "1") {
@@ -22021,9 +22043,14 @@ https://github.com/browserify/crypto-browserify`);
       return;
     }
     if (password1.value.length < MIN_PASSWORD_LENGTH || /^\d+$/.test(password1.value)) {
-      password1.setCustomValidity(`Use at least ${MIN_PASSWORD_LENGTH} characters, not all numbers.`);
-      password1.reportValidity();
-      password1.addEventListener("input", () => password1.setCustomValidity(""), { once: true });
+      reportPolicyErrors(password1, [`Use at least ${MIN_PASSWORD_LENGTH} characters, not all numbers.`]);
+      return;
+    }
+    const username = form.elements.namedItem("username")?.value ?? "";
+    const email = form.elements.namedItem("email")?.value ?? "";
+    const policyErrors = await serverPolicyErrors(password1.value, username, email);
+    if (policyErrors.length) {
+      reportPolicyErrors(password1, policyErrors);
       return;
     }
     await cryptoReady();
@@ -22067,9 +22094,12 @@ https://github.com/browserify/crypto-browserify`);
       return;
     }
     if (password1.value.length < MIN_PASSWORD_LENGTH || /^\d+$/.test(password1.value)) {
-      password1.setCustomValidity(`Use at least ${MIN_PASSWORD_LENGTH} characters, not all numbers.`);
-      password1.reportValidity();
-      password1.addEventListener("input", () => password1.setCustomValidity(""), { once: true });
+      reportPolicyErrors(password1, [`Use at least ${MIN_PASSWORD_LENGTH} characters, not all numbers.`]);
+      return;
+    }
+    const policyErrors = await serverPolicyErrors(password1.value, "", "");
+    if (policyErrors.length) {
+      reportPolicyErrors(password1, policyErrors);
       return;
     }
     await cryptoReady();
@@ -22244,6 +22274,10 @@ https://github.com/browserify/crypto-browserify`);
     }
     if (newPassword.length < MIN_PASSWORD_LENGTH || /^\d+$/.test(newPassword)) {
       return { ok: false, error: `Use at least ${MIN_PASSWORD_LENGTH} characters, not all numbers.` };
+    }
+    const policyErrors = await serverPolicyErrors(newPassword, identifier, "");
+    if (policyErrors.length) {
+      return { ok: false, error: policyErrors.join(" ") };
     }
     await cryptoReady();
     let currentSecret = currentPassword;
@@ -22583,7 +22617,7 @@ https://github.com/browserify/crypto-browserify`);
     const key = generateConversationKey();
     const wrapped = {};
     for (const member of payload.members) {
-      wrapped[member.slug] = sealToPublicKey(key, member.public_key);
+      wrapped[member.id] = sealToPublicKey(key, member.public_key);
     }
     const version = payload.latest + 1;
     const response = await postJson(groupKeyUrl(groupUuid), { version, wrapped });

@@ -55,7 +55,56 @@ class WikipediaPanelSource(LocationCachePanelSource):
         )
         query_key = f"{name} ({address_bits})" if name and address_bits else name or address_bits or f"{lat:.5f}, {lng:.5f}"
         article = WikipediaGateway().get_article_for_location(lat, lng, address_components, name=name)
+        if article is None:
+            article = self._ancestor_campus_article(pin)
         LocationCache.set(location, self.cache_source, article or {}, query_key=query_key)
+
+    @staticmethod
+    def _ancestor_campus_article(pin: Pin) -> dict | None:
+        """Campus fallback: search again from each ancestor pin's own point.
+
+        A large campus (an HRSH-style hospital complex, a factory site)
+        typically has exactly one Wikipedia article, geotagged at a single
+        point - usually the main building. A child pin for an outbuilding can
+        easily sit more than the geosearch radius away from that point, so its
+        own coordinates find nothing even though the campus article is exactly
+        what its panel should show. Rather than widening the global radius
+        (which would invite false-positive matches for every ordinary pin),
+        each ancestor's coordinates and name get their own normal-radius
+        search (UL-354, decision 2026-07-23).
+
+        Args:
+            pin: The pin whose own-coordinate search came up empty.
+
+        Returns:
+            The first ancestor's matched article dict, or None.
+        """
+        from urbanlens.dashboard.services.apis.assets.wikipedia import WikipediaGateway
+
+        seen: set[int] = {pin.pk}
+        ancestor = pin.parent_pin
+        # Bounded walk: hierarchies are shallow (campus -> building -> spot),
+        # and the seen-set guards against a pathological parent cycle.
+        for _depth in range(3):
+            if ancestor is None or ancestor.pk in seen:
+                return None
+            seen.add(ancestor.pk)
+            lat = float(ancestor.effective_latitude or 0)
+            lng = float(ancestor.effective_longitude or 0)
+            location = ancestor.location
+            if lat and lng and location is not None:
+                components = {
+                    "locality": location.locality or "",
+                    "route": location.route or "",
+                    "street_number": location.street_number or "",
+                    "administrative_area_level_1": location.administrative_area_level_1 or "",
+                }
+                name = ancestor.meaningful_official_name or ancestor.meaningful_name or ""
+                article = WikipediaGateway().get_article_for_location(lat, lng, components, name=name)
+                if article is not None:
+                    return article
+            ancestor = ancestor.parent_pin
+        return None
 
 
 class WikipediaEnrichmentSource(LocationCacheEnrichmentSource):
