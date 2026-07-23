@@ -823,6 +823,23 @@ class SelfDeletedMessageVisibilityTests(TestCase):
         delete_message_for_self(only, self.me)
         self.assertEqual(conversations_for(self.me), [])
 
+    def test_self_deleted_message_stays_out_of_the_thread_page_too(self) -> None:
+        """Regression: thread_page() (reopening/scrolling a conversation) queried
+        between() directly, without visible_to() - so a "remove for me" delete
+        stuck in the sidebar/badge but reappeared the moment the thread reloaded.
+        """
+        from urbanlens.dashboard.services.direct_messages import delete_message_for_self, thread_page
+
+        keep = create_direct_message(self.partner, self.me, "keep me")
+        hide = create_direct_message(self.partner, self.me, "hide me")
+        delete_message_for_self(hide, self.me)
+        messages, _has_more = thread_page(self.me, self.partner)
+        self.assertIn(keep, messages)
+        self.assertNotIn(hide, messages)
+        # The sender still sees their own message in their own thread view.
+        partner_messages, _has_more = thread_page(self.partner, self.me)
+        self.assertIn(hide, partner_messages)
+
 
 class SenderOwnDeletedForEveryoneVisibilityTests(TestCase):
     """visible_to() must never hide a sender's own sent message from themselves.

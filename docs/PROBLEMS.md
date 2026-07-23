@@ -68,6 +68,94 @@ while the PR is still open, or `state=open` against `main` after merge) and work
 
 ---
 
+## PR #111: `0001_initial.py` rename may break `manage.py migrate` on an installation that only ever applied the old squashed name (flagged by Codex, verified against dev DBs 2026-07-23)
+
+`d8eb1529` renamed `0001_initial_squashed_0006_alter_notificationlog_notification_type_and_more.py`
+to `0001_initial.py` (pure rename, matching the 0007/0008/0009 squash-renames), and `b829d49b`
+then dropped its `replaces` list entirely because its first entry, `('dashboard', '0001_initial')`,
+collided with the file's own new name and made `manage.py migrate` fail immediately with
+"Cyclical squash replacement found." Codex correctly points out that dropping `replaces` outright
+loses the bridge for any database that only ever recorded the *old squashed name* as applied
+(never the pre-squash individual `0001`-`0006` migrations under their original names) - such a
+database would have `0002_boundary_emailsendlog_...` (etc.) marked applied while its now-renamed
+dependency `0001_initial` is not, which is exactly `InconsistentMigrationHistory`.
+
+**Verified empirically against two real databases** (`ssh` to the `chiron` dev VM, queried
+`django_migrations` directly - see this session's transcript for the exact commands):
+
+- `urbanlens_development_db` (the canonical `~/UrbanLens` checkout's DB): has **both**
+  `0001_initial` through `0006_alter_notificationlog_notification_type_and_more` (the pre-squash
+  individual names) **and** `0001_initial_squashed_0006_alter_notificationlog_notification_type_and_more`
+  applied (the latter one second after the former six - Django's squash-bridging recording the
+  squash as satisfied once its `replaces` list was fully applied, back when `replaces` still
+  existed). `0001_initial` (matching the *new* filename) is therefore already marked applied here,
+  so the rename is safe on this specific database: nothing to re-run, nothing inconsistent.
+- `urbanlens_devs1_db`: only has the new-style `0001_initial` (a from-scratch install past this
+  point already) - trivially safe, no legacy naming involved at all.
+
+**Not verified**: the actual production database (Portainer-managed, not directly reachable the
+way the `chiron` dev VM is per `CLAUDE.md`). If production's migration history went straight from
+nothing to the *old* squashed name only (skipping the pre-squash individual `0001`-`0006` names
+entirely - e.g. a deploy that started after the squash was introduced but before this PR's rename),
+it would hit the exact break Codex describes.
+
+**Why not blind-fixed**: the "obvious" fix (restore the full original `replaces` list) is what
+caused the cyclical-self-reference bug `b829d49b` already had to back out. A *correct* fix needs
+`replaces` to name the **old squashed filename** specifically -
+`replaces = [('dashboard', '0001_initial_squashed_0006_alter_notificationlog_notification_type_and_more')]`
+- not the pre-squash individual names, and not its own new name - but getting Django's
+partial-replaces bridging semantics exactly right (what happens if only *some* of a `replaces`
+list is applied) isn't something to guess at without a scratch database in the specific "only the
+old squashed name applied" state to test against, which nothing currently reachable is in.
+
+**Suggested next step before deploying v0.5.0 to production**: run the same read-only check this
+session did - `SELECT name, applied FROM django_migrations WHERE app='dashboard' AND name LIKE
+'0001%' ORDER BY id;` - against production *before* running `migrate`. If it shows only
+`0001_initial_squashed_0006_alter_notificationlog_notification_type_and_more` (no bare
+`0001_initial` row), the content is identical between the old and new file (confirmed via `git
+show d8eb1529 --stat`: pure rename, 0 insertions/deletions) - the simplest safe remediation is a
+one-time manual `UPDATE django_migrations SET name = '0001_initial' WHERE app = 'dashboard' AND
+name = '0001_initial_squashed_0006_alter_notificationlog_notification_type_and_more';` immediately
+before running `migrate`, rather than encoding a `replaces` bridge in code.
+
+---
+
+## PR #111: E2EE signup/password-reset only enforces an 8-char minimum client-side; the configured 12-char+complexity+common-password+HIBP policy never runs (flagged by Codex 2026-07-23)
+
+`frontend/ts/shared/e2ee-client.ts`'s `wireSignupForm`/password-reset wiring derives a login
+credential from the user's raw password client-side before submit specifically so the raw
+password never reaches the server (`prepareSignupSubmit`) - a deliberate, documented design
+(comment: "the server only ever sees the derived credential, which always 'looks strong'"). The
+file already acknowledges the consequence and enforces one guard: `MIN_PASSWORD_LENGTH = 8`. But
+`settings/base.py`'s actual `AUTH_PASSWORD_VALIDATORS` requires more: `MinimumLengthValidator`
+(12, not 8), `UserAttributeSimilarityValidator`, `CommonPasswordValidator`,
+`NumericPasswordValidator`, and two custom validators - `ComplexityValidator` and
+`HaveIBeenPwnedValidator` (this project's own HIBP k-anonymity check, `services/apis/security/hibp.py`).
+None of these run client-side, so with JS enabled (required for E2EE to work at all, i.e. the
+normal path for every real signup) a password like `passwordpassword` (16 chars, passes the 8-char
+floor) sails through, becomes a derived credential that trivially "looks" strong to the server, and
+the account ends up with an effectively unenforced password policy.
+
+**Why not fixed here**: no endpoint currently exists for a client to check a raw password against
+the configured validators (checked: no password-strength AJAX endpoint anywhere in
+`controllers/`/`services/`) - this needs new plumbing, either (a) a small endpoint that runs the
+raw password through `django.contrib.auth.password_validation.validate_password` (including the
+two custom validators) before the client proceeds to derive+submit, transmitted once over HTTPS
+during signup only (a bounded, arguably-acceptable exposure, since a fresh signup password has no
+alternative but to reach the server keystroke-for-keystroke at least once somewhere in any password
+flow), or (b) reimplementing each validator's logic in TypeScript (duplicating `ComplexityValidator`
+and keeping length/common-password rules in sync by hand - `HaveIBeenPwnedValidator`'s k-anonymity
+check *could* be called directly from the browser against the real HIBP API without touching this
+app's server at all, sidestepping the raw-password-to-our-server question for that one check
+specifically). Choosing between those two designs is a security-relevant product decision this
+session didn't make unilaterally.
+
+**Suggested next step**: decide (a) vs (b) above, then wire whichever into `prepareSignupSubmit`
+(and the password-reset equivalent) before the derive step, surfacing validator failures as the
+same inline form errors the legacy non-JS path already produces server-side.
+
+---
+
 ## UL-277: pin-detail external-data freshness window is one global knob, not per-source
 
 Original wording (`TODO.md:28`): "Cache time needs adjustments for some pin details data. Load

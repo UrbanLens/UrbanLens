@@ -987,6 +987,7 @@ def thread_page(profile: Profile, partner: Profile, *, before_id: int | None = N
     """
     queryset = (
         DirectMessage.objects.between(profile, partner)
+        .visible_to(profile)
         .select_related(
             "sender",
             "sender__user",
