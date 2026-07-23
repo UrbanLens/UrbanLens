@@ -1,0 +1,169 @@
+{% comment %}
+One conversation thread: header, message bubbles, composer. Context:
+`partner`, `thread_messages`, `can_message_partner`, `max_message_length`.
+Swapped into #dm-thread-pane by HTMX; the page's WebSocket JS (see
+pages/messages/index.html) reads the data attributes off #dm-thread to route
+live messages and fall back to the plain POST endpoint when the socket is down.
+{% endcomment %}
+{% load dashboard_tags %}
+<div class="dm-thread" id="dm-thread"
+     data-partner-slug="{{ partner.slug }}"
+     data-send-url="{% url 'messages.send' partner.slug %}"
+     data-read-url="{% url 'messages.read' partner.slug %}"
+     data-view-url="{% url 'messages.conversation' partner.slug %}"
+     data-partner-encrypts="{% if partner_e2ee_enrolled %}1{% else %}0{% endif %}"
+     {% url 'markup_map.snapshot' '11111111-1111-1111-1111-111111111111' as markup_snapshot_url_template %}
+     data-markup-snapshot-url-template="{{ markup_snapshot_url_template }}">
+
+  <div class="dm-thread__header">
+    <a class="dm-thread__back" href="{% url 'messages.view' %}" aria-label="Back to conversations">
+      <i class="material-symbols-outlined">arrow_back</i>
+    </a>
+    <span class="msg-avatar msg-avatar--lg" aria-hidden="true">
+      {% if display_avatar_url %}
+      <img src="{{ display_avatar_url }}" alt="" class="msg-avatar-img">
+      {% else %}
+      <span class="msg-avatar-initial">{{ display_name|first|upper }}</span>
+      {% endif %}
+    </span>
+    <div class="dm-thread__who">
+      <button type="button" class="dm-thread__name" id="dm-partner-menu-btn">{{ display_name }}</button>
+      {% if partner_online %}
+      <span class="dm-thread__status dm-thread__status--online" id="dm-partner-online">Online</span>
+      {% endif %}
+      <span class="dm-thread__status dm-thread__status--typing" id="dm-partner-typing" hidden>Typing…</span>
+      <span class="dm-thread__status" id="dm-conn-status" hidden>Reconnecting...</span>
+
+      <div class="dm-bubble-menu dm-thread-partner-menu" id="dm-partner-menu" hidden>
+        {% if display_profile_url %}
+        <a href="{{ display_profile_url }}" class="dm-bubble-menu__item">
+          <i class="material-symbols-outlined">person</i> View profile
+        </a>
+        {% endif %}
+        <button type="button" class="dm-bubble-menu__item" id="dm-download-transcript">
+          <i class="material-symbols-outlined">download</i> Download transcript
+        </button>
+        <button type="button" class="dm-bubble-menu__item"
+                hx-post="{% url 'messages.mute' partner.slug %}"
+                hx-target="#dm-thread-pane" hx-swap="innerHTML">
+          {% if is_muted %}
+          <i class="material-symbols-outlined">volume_up</i> Unmute notifications
+          {% else %}
+          <i class="material-symbols-outlined">volume_off</i> Mute notifications
+          {% endif %}
+        </button>
+        <button type="button" class="dm-bubble-menu__item"
+                hx-post="{% url 'messages.image_permission' partner.slug %}"
+                hx-vals='{"decision": "{% if image_permission_status == 'rejected' %}allow{% else %}reject{% endif %}"}'
+                hx-target="#dm-thread-pane" hx-swap="innerHTML">
+          <i class="material-symbols-outlined">{% if image_permission_status == 'rejected' %}image{% else %}hide_image{% endif %}</i>
+          {% if image_permission_status == 'rejected' %}Allow images{% else %}Block images{% endif %}
+        </button>
+        <form method="post" action="{% url 'friend.block' partner.id %}"
+              onsubmit="return confirm('Block {{ display_name }}? They will not be able to see your profile or message you.')">
+          {% csrf_token %}
+          <button type="submit" class="dm-bubble-menu__item dm-bubble-menu__item--danger">
+            <i class="material-symbols-outlined">block</i> Block
+          </button>
+        </form>
+      </div>
+    </div>
+    <button type="button" class="dm-thread__search-btn" id="dm-thread-search-btn"
+            title="Search this conversation" aria-label="Search this conversation"
+            aria-expanded="false" aria-controls="dm-thread-search">
+      <i class="material-symbols-outlined">search</i>
+    </button>
+  </div>
+
+  <div class="dm-thread-search" id="dm-thread-search" hidden>
+    <i class="material-symbols-outlined dm-thread-search__icon" aria-hidden="true">search</i>
+    <input type="search" id="dm-thread-search-input" class="dm-thread-search__input"
+           placeholder="Search this conversation..." autocomplete="off"
+           hx-get="{% url 'messages.conversation_search' partner.slug %}"
+           hx-trigger="input changed delay:300ms, search"
+           hx-target="#dm-thread-search-results"
+           hx-swap="innerHTML">
+    <button type="button" class="dm-thread-search__close" id="dm-thread-search-close" aria-label="Close search">
+      <i class="material-symbols-outlined">close</i>
+    </button>
+    <div id="dm-thread-search-results" class="dm-thread-search-results"></div>
+  </div>
+
+  <div class="dm-locked-banner" id="dm-locked-banner" hidden>
+    <i class="material-symbols-outlined" aria-hidden="true">lock</i>
+    <span>This device can't read your encrypted messages yet.</span>
+    <button type="button" id="dm-locked-unlock-btn">Unlock</button>
+  </div>
+
+  <ul class="dm-messages" id="dm-messages" role="list">
+    {% if has_more_older %}
+    <li class="dm-load-older" id="dm-load-older-sentinel"
+        hx-get="{% url 'messages.older' partner.slug %}?before={{ oldest_message_id }}"
+        hx-trigger="revealed" hx-target="this" hx-swap="outerHTML">
+      <span class="dm-load-older__spinner">
+        <i class="material-symbols-outlined">progress_activity</i> Loading earlier messages…
+      </span>
+    </li>
+    {% endif %}
+    {% include "dashboard/partials/messages/_message_items.html" %}
+  </ul>
+
+  <div class="dm-reply-preview" id="dm-reply-preview" hidden>
+    <div class="dm-reply-preview__body">
+      <span class="dm-reply-preview__label">Replying to <strong id="dm-reply-preview-name"></strong></span>
+      <span class="dm-reply-preview__snippet" id="dm-reply-preview-snippet"></span>
+    </div>
+    <button type="button" id="dm-reply-preview-cancel" aria-label="Cancel reply">&times;</button>
+  </div>
+  <p class="dm-thread-empty" id="dm-thread-empty" {% if thread_messages %}hidden{% endif %}>
+    This is the beginning of your conversation with {{ display_name }}.
+  </p>
+
+  {% if can_message_partner %}
+  <div class="dm-composer-attachments" id="dm-composer-attachments">
+    <div class="dm-composer-attachment-chips" id="dm-composer-image-chips"></div>
+    <span class="dm-composer-attachment-chip dm-composer-attachment-chip--map" id="dm-map-chip" hidden>
+      <span class="dm-map-chip-thumb" id="dm-map-chip-thumb"></span>
+      <i class="material-symbols-outlined">map</i> Map attached
+      <button type="button" id="dm-map-chip-remove" aria-label="Remove attached map">&times;</button>
+    </span>
+    <span class="dm-composer-attachment-chip dm-composer-attachment-chip--share" id="dm-share-chip" hidden>
+      <i class="material-symbols-outlined" id="dm-share-chip-icon">location_on</i>
+      <span id="dm-share-chip-label"></span>
+      <button type="button" id="dm-share-chip-remove" aria-label="Remove attachment">&times;</button>
+    </span>
+  </div>
+  <form class="dm-composer" id="dm-composer" action="{% url 'messages.send' partner.slug %}" method="post">
+    {% csrf_token %}
+    <input type="hidden" name="markup_map_uuid" id="dm-markup-map-uuid" value="">
+    <input type="hidden" name="reply_to" id="dm-reply-to-id" value="">
+    <div class="dm-composer__input-row">
+      <textarea name="body" id="dm-composer-input" autocomplete="off" rows="1"
+                placeholder="Message {{ display_name }}..." maxlength="{{ max_message_length }}"></textarea>
+      <button type="submit" class="btn btn--primary dm-composer__send" aria-label="Send message">
+        <i class="material-symbols-outlined">send</i>
+      </button>
+    </div>
+    <div class="dm-composer__toolbar">
+      <button type="button" class="btn btn--secondary dm-composer__attach" id="dm-attach-photo-btn" title="Attach a photo">
+        <i class="material-symbols-outlined">add_photo_alternate</i>
+      </button>
+      <input type="file" id="dm-attach-photo-input" accept="image/*" multiple hidden>
+      <button type="button" class="btn btn--secondary dm-composer__attach" id="dm-attach-map-btn" title="Attach a map (draw new or choose existing)">
+        <i class="material-symbols-outlined">map</i>
+      </button>
+      <button type="button" class="btn btn--secondary dm-composer__attach" id="dm-mention-btn" title="Share a pin, trip, map, or friend (type @)">
+        <i class="material-symbols-outlined">alternate_email</i>
+      </button>
+      <button type="button" class="btn btn--secondary dm-composer__attach" id="dm-emoji-btn" title="Insert an emoji">
+        <i class="material-symbols-outlined">mood</i>
+      </button>
+    </div>
+  </form>
+  {% else %}
+  <p class="dm-composer-locked">
+    <i class="material-symbols-outlined" aria-hidden="true">lock</i>
+    {{ display_name }} isn't accepting messages from you right now.
+  </p>
+  {% endif %}
+</div>

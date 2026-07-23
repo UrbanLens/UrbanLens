@@ -1,0 +1,30 @@
+{% load dashboard_tags %}
+{# Add-labels popup for one relationship direction (rel_type: 'parent' or 'child'). Nested inside _label_relationship_picker.html. #}
+<div class="label-rel-popup" id="{{ instance_id }}-popup-{{ rel_type }}" hidden>
+    {% if ns != 'people' %}
+    <div class="label-rel-tabs" role="tablist">
+        <button type="button" class="label-rel-tab" data-kind="tag" onclick="LabelRelPicker.setTab('{{ instance_id }}','{{ rel_type }}','tag',this)">Tags</button>
+        <button type="button" class="label-rel-tab" data-kind="category" onclick="LabelRelPicker.setTab('{{ instance_id }}','{{ rel_type }}','category',this)">Categories</button>
+        <button type="button" class="label-rel-tab" data-kind="status" onclick="LabelRelPicker.setTab('{{ instance_id }}','{{ rel_type }}','status',this)">Statuses</button>
+        <button type="button" class="label-rel-tab active" data-kind="" onclick="LabelRelPicker.setTab('{{ instance_id }}','{{ rel_type }}','',this)">All</button>
+    </div>
+    {% endif %}
+
+    <input type="text" class="form-input label-rel-search" placeholder="Search labels..."
+           oninput="LabelRelPicker.filter('{{ instance_id }}', '{{ rel_type }}', this.value)" autocomplete="off">
+
+    <div class="tag-parent-select label-rel-suggestions" id="{{ instance_id }}-suggestions-{{ rel_type }}" data-active-tab="">
+        {% for b in candidates %}
+        <button type="button" class="tag-chip label-rel-suggestion{% if selected_ids and b.id in selected_ids %} label-rel-suggestion--hidden{% endif %}"
+                data-id="{{ b.id }}" data-kind="{{ b.kind }}" data-name="{{ b.name|lower }}"
+                {% if b.color %}style="--tag-color:{{ b.color }}"{% endif %}
+                onclick="LabelRelPicker.select('{{ instance_id }}', '{{ rel_type }}', this)">
+            {% if ns != 'people' %}
+            {% include 'dashboard/partials/ui/_label_rel_chip_body.html' with label=b show_kind=True %}
+            {% else %}
+            {% include 'dashboard/partials/ui/_label_rel_chip_body.html' with label=b show_kind=False %}
+            {% endif %}
+        </button>
+        {% endfor %}
+    </div>
+</div>

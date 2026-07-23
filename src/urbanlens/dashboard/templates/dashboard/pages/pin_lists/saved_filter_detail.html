@@ -1,0 +1,179 @@
+{% extends 'dashboard/themes/base.html' %}
+{% load static %}
+{% load map_components %}
+{% load dashboard_tags %}
+
+{% block header %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
+<script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+{% endblock %}
+
+{% block page_title %}{{ saved_filter.name }} - Filters - {{ site_title|default:"UrbanLens" }}{% endblock %}
+
+{% block hero %}
+{% url 'organize.index' as organize_url %}
+{% include "dashboard/partials/ui/_page_hero.html" with icon=saved_filter.icon|default:"filter_alt" title=saved_filter.name subtitle=criteria|filter_criteria_summary back_url=organize_url|add:"?tab=filters" back_label="Filters" modifier="top" %}
+{% endblock %}
+
+{% block subnav %}
+<div class="ul-page-subnav">
+    <div class="ul-page-subnav__inner">
+        <nav class="ul-subnav-tabs" aria-label="Organize sections">
+            <a href="{% url 'organize.index' %}?tab=tags" class="ul-subnav-tab">
+                <i class="material-symbols-outlined">sell</i>
+                <span>Labels</span>
+            </a>
+            <a href="{% url 'organize.index' %}?tab=lists" class="ul-subnav-tab">
+                <i class="material-symbols-outlined">bookmarks</i>
+                <span>Lists</span>
+            </a>
+            <a href="{% url 'organize.index' %}?tab=filters" class="ul-subnav-tab is-active" aria-current="page">
+                <i class="material-symbols-outlined">filter_alt</i>
+                <span>Filters</span>
+            </a>
+        </nav>
+    </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="saved-filter-detail-page page-content">
+    <div class="saved-filter-detail-layout">
+        <div class="saved-filter-detail-map-col">
+            <div class="saved-filter-detail-map-header">
+                <span id="saved-filter-preview-count" class="saved-filter-preview-count">
+                    {{ initial_match_count }} matching pin{{ initial_match_count|pluralize }}
+                </span>
+                <span class="saved-filter-preview-status" id="saved-filter-preview-status" hidden>Updating…</span>
+            </div>
+            <section class="saved-filter-preview-map-section">
+                <div id="saved-filter-preview-map" class="saved-filter-preview-map"></div>
+                {% map_toolbar "screenshot" panel_id="saved-filter-preview-map-buttons" %}
+                {% map_layers_panel "street,terrain,satellite,borders" panel_id="saved-filter-preview-map-layers" %}
+            </section>
+        </div>
+
+        <div class="saved-filter-detail-form-col saved-filter-form-body">
+            <form id="saved-filter-form" onsubmit="return savedFilterFormSubmit(event)"
+                  data-action="{% url 'saved_filters.edit' saved_filter.uuid %}">
+                {% include "dashboard/partials/pin_lists/_saved_filter_fields.html" %}
+                <div class="form-actions">
+                    <button type="submit" class="btn btn--primary btn--lg">Save Filter</button>
+                    <button type="button" class="btn btn--ghost saved-filter-detail-delete-btn"
+                            onclick="savedFilterDelete('{{ saved_filter.uuid }}', '{{ saved_filter.name|escapejs }}')">
+                        <i class="material-symbols-outlined">delete</i> Delete Filter
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{{ initial_pins|json_script:"saved-filter-initial-pins" }}
+{# Never opened as a modal on this page - just carries data-success-redirect so #}
+{# the shared save/delete handler (_sfAfterSaveOrDelete in the scripts include #}
+{# below) sends the user back to the Filters tab after either action, matching #}
+{# how the dialog's own Save/Delete already behave everywhere else on the site. #}
+{% url 'organize.index' as organize_url %}
+<dialog id="saved-filter-form-dialog" hidden data-success-redirect="{{ organize_url }}?tab=filters"></dialog>
+{% include "dashboard/partials/pin_lists/_saved_filter_dialog_scripts.html" %}
+<script>
+(function () {
+    const PREVIEW_URL = "{% url 'saved_filters.preview' %}";
+    const previewMapEl = document.getElementById('saved-filter-preview-map');
+    const countEl = document.getElementById('saved-filter-preview-count');
+    const statusEl = document.getElementById('saved-filter-preview-status');
+    let previewMap = null;
+    let previewMarkers = null;
+
+    function buildPreviewPopup(pt) {
+        const div = document.createElement('div');
+        const link = document.createElement('a');
+        link.href = '/dashboard/map/pin/' + pt.slug + '/';
+        link.textContent = pt.name || 'View pin';
+        div.appendChild(link);
+        return div;
+    }
+
+    function paintPins(points) {
+        if (!previewMap) {
+            previewMap = L.map(previewMapEl, { attributionControl: false });
+            previewMap.setView([{{ map_center_lat|default:39.8283 }}, {{ map_center_lng|default:-98.5795 }}], 4);
+            window.map = previewMap;
+            window.MapLayers.create(previewMap, {
+                root: document.getElementById('saved-filter-preview-map-layers'),
+                onAttribution: function (text) {
+                    const el = document.getElementById('page-footer-attribution-text');
+                    if (el) el.textContent = text;
+                },
+            });
+            previewMarkers = L.layerGroup().addTo(previewMap);
+        }
+        previewMarkers.clearLayers();
+        const markers = points.map(function (pt) {
+            const marker = L.marker([pt.lat, pt.lng]);
+            marker.bindPopup(buildPreviewPopup(pt));
+            return marker.addTo(previewMarkers);
+        });
+        if (markers.length > 1) previewMap.fitBounds(L.featureGroup(markers).getBounds().pad(0.15));
+        else if (markers.length === 1) previewMap.setView([points[0].lat, points[0].lng], 14);
+        setTimeout(function () { previewMap.invalidateSize(); }, 0);
+    }
+
+    function updateCount(count, truncated) {
+        if (!countEl) return;
+        const label = count + ' matching pin' + (count === 1 ? '' : 's');
+        countEl.textContent = truncated ? label + ' (showing first {{ preview_pin_limit }} on the map)' : label;
+    }
+
+    // Initial paint from the server-rendered snapshot - no extra round trip
+    // for the criteria the page was already opened with.
+    (function initialPaint() {
+        const dataEl = document.getElementById('saved-filter-initial-pins');
+        let points = [];
+        try { points = dataEl ? JSON.parse(dataEl.textContent) : []; } catch (e) { points = []; }
+        paintPins(points);
+        updateCount({{ initial_match_count }}, points.length < {{ initial_match_count }});
+    })();
+
+    // Live-updating map: re-fetch matching pins whenever the form's criteria
+    // change, debounced so rapid typing/dragging a slider doesn't spam requests.
+    let previewTimer = null;
+    let previewToken = 0;
+    function schedulePreview() {
+        clearTimeout(previewTimer);
+        if (statusEl) statusEl.hidden = false;
+        previewTimer = setTimeout(runPreview, 500);
+    }
+    function runPreview() {
+        const form = document.getElementById('saved-filter-form');
+        if (!form) return;
+        const token = ++previewToken;
+        fetch(PREVIEW_URL, { method: 'POST', headers: { 'X-CSRFToken': CSRF }, body: new FormData(form) })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (token !== previewToken) return; // a newer request already superseded this one
+                if (statusEl) statusEl.hidden = true;
+                paintPins(data.pins || []);
+                updateCount(data.count || 0, (data.pins || []).length < (data.count || 0));
+            })
+            .catch(function () {
+                if (token !== previewToken) return;
+                if (statusEl) statusEl.hidden = true;
+            });
+    }
+
+    document.getElementById('saved-filter-form')?.addEventListener('change', schedulePreview);
+    document.getElementById('saved-filter-form')?.addEventListener('input', schedulePreview);
+
+    window.savedFilterInitInlinePage();
+})();
+</script>
+{% endblock %}
+
+{% block scripts %}
+<script type="module" src="{% static 'dashboard/js/saved-filter-detail.js' %}"></script>
+{% endblock %}

@@ -4,12 +4,12 @@
       {% elif context_type == "wiki" %}
       hx-post="{% url 'location.wiki.comments' location.slug %}"
       {% else %}
-      hx-post="{% url 'trips.comments' trip.uuid %}"
+      hx-post="{% url 'trips.comments' trip.slug %}"
       {% endif %}
       hx-target="#comment-panel"
       hx-swap="outerHTML"
       hx-encoding="multipart/form-data"
-      hx-on::after-request="if(event.detail.successful){this.reset();_clearCommentMap(this);this.closest('.comment-reply-form') && (this.closest('.comment-reply-form').hidden=true)}"
+      hx-on::after-request="if(event.detail.successful){this.reset();_clearCommentMap(this);_clearCommentImage(this);this.closest('.comment-reply-form') && (this.closest('.comment-reply-form').hidden=true)}"
       hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
       hx-on:submit="if(!window._validateCommentForm||!_validateCommentForm(this)){event.preventDefault();if(window.toastr)toastr.warning('Please add some text, a photo, or a map.');return false;}">
   {% if parent_id %}<input type="hidden" name="parent_id" value="{{ parent_id }}">{% endif %}
@@ -28,10 +28,10 @@
     <div class="comment-compose-field">
       <div class="comment-input-wrap">
         <textarea name="text" rows="2"
-                  placeholder="{% if is_reply %}Write a reply...{% else %}Add a comment...{% endif %}"
+                  placeholder="{% if is_reply %}Write a reply...{% elif context_type == 'pin' %}Add a note...{% else %}Add a comment...{% endif %}"
                   class="comment-input mention-input"
                   data-context-type="{{ context_type }}"
-                  {% if trip_uuid %}data-trip-uuid="{{ trip_uuid }}"{% elif trip %}data-trip-uuid="{{ trip.uuid }}"{% endif %}></textarea>
+                  {% if trip %}data-trip-slug="{{ trip.slug }}"{% endif %}></textarea>
         {# @ mention autocomplete container #}
         <div class="mention-dropdown" hidden></div>
       </div>
@@ -49,13 +49,16 @@
       </div>
 
       <div class="comment-compose-actions">
-        <label class="comment-image-label" title="Attach image">
+        <button type="button" class="comment-image-label" title="Attach photo"
+                onclick="_openCommentAttachImageDialog(this.closest('.comment-compose'))">
           <i class="material-symbols-outlined">image</i>
-          <input type="file" name="image" accept="image/*" class="comment-image-input">
-        </label>
+        </button>
+        <input type="file" name="image" accept="image/*" class="comment-image-input" hidden>
+        {# Hidden field carrying a previously-uploaded photo's id - populated by the "Choose Existing" tab #}
+        <input type="hidden" name="existing_image_id" class="comment-existing-image-field" value="">
         <span class="comment-image-preview"></span>
         <button type="button" class="comment-map-btn" title="Attach map"
-                onclick="_openCommentMapComposer(this.closest('.comment-compose'))">
+                onclick="_openCommentAttachMapDialog(this.closest('.comment-compose'))">
           <i class="material-symbols-outlined">map</i>
         </button>
         <button type="submit" class="btn btn--primary {% if is_reply %}btn--sm{% endif %}">

@@ -1,0 +1,34 @@
+{% comment %}
+Reaction bar for one direct message. Context: `message`, `reactions` (list of
+{emoji, count, slugs}), `my_slug`, `partner` (the conversation partner, whose
+slug scopes the react URL). Swapped by HTMX (outerHTML, target
+#dm-reactions-<message.id>) whenever the viewer toggles a reaction; live
+updates from the *other* party arrive over the WebSocket and are rebuilt by
+the page's inline JS (see pages/messages/index.html), mirroring this markup.
+{% endcomment %}
+<div class="dm-reactions" id="dm-reactions-{{ message.id }}">
+  {% for r in reactions %}
+  <button type="button" class="dm-reaction-pill{% if my_slug in r.slugs %} dm-reaction-pill--mine{% endif %}"
+          hx-post="{% url 'messages.react' partner.slug message.id %}"
+          hx-vals='{"emoji": "{{ r.emoji }}"}'
+          hx-target="#dm-reactions-{{ message.id }}" hx-swap="outerHTML">
+    <span class="dm-reaction-pill__emoji">{{ r.emoji }}</span>
+    <span class="dm-reaction-pill__count">{{ r.count }}</span>
+  </button>
+  {% endfor %}
+  <span class="dm-reaction-add-wrap">
+    <button type="button" class="dm-reaction-add-btn" title="Add a reaction"
+            onclick="var p=this.nextElementSibling; document.querySelectorAll('.dm-emoji-popover').forEach(function(x){ if (x!==p) x.hidden=true; }); p.hidden = !p.hidden;">
+      <i class="material-symbols-outlined">add_reaction</i>
+    </button>
+    <span class="dm-emoji-popover" hidden>
+      {% for emoji in reaction_picker_emojis %}
+      <button type="button"
+              hx-post="{% url 'messages.react' partner.slug message.id %}"
+              hx-vals='{"emoji": "{{ emoji }}"}'
+              hx-target="#dm-reactions-{{ message.id }}" hx-swap="outerHTML"
+              onclick="this.closest('.dm-emoji-popover').hidden = true;">{{ emoji }}</button>
+      {% endfor %}
+    </span>
+  </span>
+</div>

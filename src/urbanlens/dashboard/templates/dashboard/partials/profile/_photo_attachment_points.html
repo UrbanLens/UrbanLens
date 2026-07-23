@@ -1,0 +1,18 @@
+{# Lightbox side-panel strip: where one of the owner's own photo-strip photos #}
+{# is attached (wiki/DM) - see PhotoAttachmentPointsView, same "load into    #}
+{# #lightbox-custom-fields-shaped div" pattern as the custom-fields strip.    #}
+<div class="lightbox-attachment-points">
+    <div class="lightbox-attachment-points-title">
+        <i class="material-symbols-outlined">share</i> Shared via
+    </div>
+    <ul class="lightbox-attachment-points-list">
+        {% for point in points %}
+        <li>
+            <a href="{{ point.url }}">
+                <i class="material-symbols-outlined">{{ point.icon }}</i>
+                <span>{{ point.label }}</span>
+            </a>
+        </li>
+        {% endfor %}
+    </ul>
+</div>

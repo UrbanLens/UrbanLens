@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime
+from uuid import uuid4
 
 from django.db import IntegrityError, transaction
 from django.utils import timezone
@@ -10,9 +11,23 @@ from model_bakery import baker
 import pytest
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinStatus
+from urbanlens.dashboard.models.safety.model import (
+    EmergencyContactDefault,
+    SafetyCheckin,
+    SafetyCheckinContact,
+    SafetyCheckinStatus,
+    SafetyContactOptOutScope,
+)
 from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion
-from urbanlens.dashboard.services.safety import cancel_checkin, check_in, create_checkin, escalate_checkin, get_active_checkin, mark_found_safe
+from urbanlens.dashboard.services.safety import (
+    cancel_checkin,
+    check_in,
+    create_checkin,
+    escalate_checkin,
+    get_active_checkin,
+    is_contact_opted_out,
+    mark_found_safe,
+)
 
 
 def _checkin(profile, **kwargs) -> SafetyCheckin:
@@ -192,6 +207,31 @@ class SafetyCheckinQuerySetTests(TestCase):
         self.assertNotIn(cancelled.pk, results)
 
 
+class SafetyCheckinContactByTokenTests(TestCase):
+    """SafetyCheckinContact.objects.by_token() - previously six call sites
+    across controllers/markup.py and controllers/safety.py each re-wrote
+    `get_object_or_404(SafetyCheckinContact[.objects...], token=token)` directly."""
+
+    def setUp(self):
+        self.profile = baker.make("auth.User").profile
+        self.checkin = _checkin(self.profile)
+
+    def test_returns_the_matching_contact(self):
+        contact = baker.make("dashboard.SafetyCheckinContact", checkin=self.checkin, email="contact@example.com", contact_profile=None)
+        self.assertEqual(SafetyCheckinContact.objects.by_token(contact.token).first(), contact)
+
+    def test_empty_for_an_unknown_token(self):
+        self.assertFalse(SafetyCheckinContact.objects.by_token(uuid4()).exists())
+
+    def test_chains_with_select_related(self):
+        """Every real call site chains select_related(...) before by_token() -
+        confirm that composition still resolves to exactly the right row."""
+        contact = baker.make("dashboard.SafetyCheckinContact", checkin=self.checkin, email="contact@example.com", contact_profile=None)
+        result = SafetyCheckinContact.objects.select_related("checkin", "checkin__profile").by_token(contact.token).first()
+        self.assertEqual(result, contact)
+        self.assertEqual(result.checkin_id, self.checkin.pk)
+
+
 class OneActiveCheckinAtATimeTests(TestCase):
     """create_checkin()/get_active_checkin() enforce a single active check-in per profile."""
 
@@ -222,3 +262,101 @@ class OneActiveCheckinAtATimeTests(TestCase):
         self.assertEqual(get_active_checkin(self.profile), second)
         self.assertEqual(SafetyCheckin.objects.filter(profile=self.profile).count(), 2)
         self.assertNotEqual(first.pk, second.pk)
+
+
+class EmergencyContactDefaultQuerySetTests(TestCase):
+    """EmergencyContactDefault.objects.for_owner() - two call sites in services/safety.py
+    (save_contact_defaults, default_contacts_as_input) each re-wrote
+    `EmergencyContactDefault.objects.filter(owner=profile)` directly."""
+
+    def setUp(self):
+        self.profile = baker.make("auth.User").profile
+        self.other_profile = baker.make("auth.User").profile
+
+    def test_returns_only_the_owners_defaults(self):
+        mine = baker.make("dashboard.EmergencyContactDefault", owner=self.profile, email="a@example.com", contact_profile=None)
+        baker.make("dashboard.EmergencyContactDefault", owner=self.other_profile, email="b@example.com", contact_profile=None)
+        self.assertEqual(list(EmergencyContactDefault.objects.for_owner(self.profile)), [mine])
+
+    def test_empty_for_a_profile_with_no_defaults(self):
+        self.assertFalse(EmergencyContactDefault.objects.for_owner(self.profile).exists())
+
+    def test_respects_default_order(self):
+        second = baker.make("dashboard.EmergencyContactDefault", owner=self.profile, email="second@example.com", contact_profile=None, order=1)
+        first = baker.make("dashboard.EmergencyContactDefault", owner=self.profile, email="first@example.com", contact_profile=None, order=0)
+        self.assertEqual(list(EmergencyContactDefault.objects.for_owner(self.profile)), [first, second])
+
+
+class SafetyContactOptOutBlocksNotificationTests(TestCase):
+    """SafetyContactOptOut.objects.blocks_notification()/is_contact_opted_out() - the only
+    call site previously built the identity/scope Q-object query inline in services/safety.py;
+    is_contact_opted_out() now delegates to the manager method."""
+
+    def setUp(self):
+        self.owner = baker.make("auth.User").profile
+        self.other_owner = baker.make("auth.User").profile
+        self.checkin = _checkin(self.owner)
+        self.other_checkin = _checkin(self.owner)
+
+    def test_no_opt_out_allows_notification(self):
+        self.assertFalse(is_contact_opted_out(None, "contact@example.com", owner=self.owner))
+
+    def test_global_opt_out_blocks_by_email_regardless_of_owner(self):
+        baker.make(
+            "dashboard.SafetyContactOptOut",
+            email="contact@example.com",
+            scope=SafetyContactOptOutScope.GLOBAL,
+            owner=None,
+            checkin=None,
+            contact_profile=None,
+        )
+        self.assertTrue(is_contact_opted_out(None, "contact@example.com", owner=self.owner))
+        self.assertTrue(is_contact_opted_out(None, "contact@example.com", owner=self.other_owner))
+
+    def test_owner_scoped_opt_out_blocks_only_that_owner(self):
+        baker.make(
+            "dashboard.SafetyContactOptOut",
+            email="contact@example.com",
+            scope=SafetyContactOptOutScope.OWNER,
+            owner=self.owner,
+            checkin=None,
+            contact_profile=None,
+        )
+        self.assertTrue(is_contact_opted_out(None, "contact@example.com", owner=self.owner))
+        self.assertFalse(is_contact_opted_out(None, "contact@example.com", owner=self.other_owner))
+
+    def test_checkin_scoped_opt_out_requires_the_matching_checkin(self):
+        baker.make(
+            "dashboard.SafetyContactOptOut",
+            email="contact@example.com",
+            scope=SafetyContactOptOutScope.CHECKIN,
+            owner=None,
+            checkin=self.checkin,
+            contact_profile=None,
+        )
+        self.assertTrue(is_contact_opted_out(None, "contact@example.com", owner=self.owner, checkin=self.checkin))
+        self.assertFalse(is_contact_opted_out(None, "contact@example.com", owner=self.owner, checkin=self.other_checkin))
+        self.assertFalse(is_contact_opted_out(None, "contact@example.com", owner=self.owner))
+
+    def test_matches_by_contact_profile_not_email(self):
+        contact_profile = baker.make("auth.User").profile
+        baker.make(
+            "dashboard.SafetyContactOptOut",
+            email=None,
+            scope=SafetyContactOptOutScope.GLOBAL,
+            owner=None,
+            checkin=None,
+            contact_profile=contact_profile,
+        )
+        self.assertTrue(is_contact_opted_out(contact_profile, None, owner=self.owner))
+
+    def test_email_match_is_case_insensitive(self):
+        baker.make(
+            "dashboard.SafetyContactOptOut",
+            email="Contact@Example.com",
+            scope=SafetyContactOptOutScope.GLOBAL,
+            owner=None,
+            checkin=None,
+            contact_profile=None,
+        )
+        self.assertTrue(is_contact_opted_out(None, "contact@example.com", owner=self.owner))

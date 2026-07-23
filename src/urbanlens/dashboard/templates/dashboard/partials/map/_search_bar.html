@@ -17,6 +17,12 @@ presents search identically while each page keeps its own jump behavior.
         <i class="material-symbols-outlined">arrow_upward</i>
     </button>
     {% endif %}
+    {% if show_geolocate %}
+    <button type="button" class="addr-search-geolocate" id="{{ prefix }}-search-geolocate"
+            aria-label="Center map on your location" title="Center map on your location">
+        <i class="material-symbols-outlined">my_location</i>
+    </button>
+    {% endif %}
     <button type="button" class="addr-search-clear" id="{{ prefix }}-search-clear"
             aria-label="Clear search">
         <i class="material-symbols-outlined">close</i>

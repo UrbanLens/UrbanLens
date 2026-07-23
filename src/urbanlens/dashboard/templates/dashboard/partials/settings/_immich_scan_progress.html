@@ -1,0 +1,49 @@
+{% comment %}
+Immich library scan progress fragment - returned by ImmichLibraryScanStartView and
+polled by ImmichLibraryScanProgressView. Mirrors partials/pins/_immich_import_progress.html.
+Context: task_id, state, percent, message, error
+{% endcomment %}
+
+{% if state == "SUCCESS" %}
+<div class="immich-import-progress" id="immich-scan-progress">
+    <div class="immich-import-status-msg">
+        <i class="material-symbols-outlined" style="color: #388E3C;">check_circle</i>
+        <span>{{ message|default:"Scan complete." }}</span>
+    </div>
+    <div class="form-actions">
+        <a href="{% url 'memories.locations' %}" class="btn btn--ghost">Review suggestions</a>
+    </div>
+</div>
+
+{% elif state == "FAILURE" or state == "REVOKED" %}
+<div class="immich-import-progress" id="immich-scan-progress">
+    <div class="immich-import-error-msg">
+        <i class="material-symbols-outlined">error</i>
+        <span>{{ error|default:"Scan failed. Please try again." }}</span>
+    </div>
+</div>
+
+{% else %}
+<div
+    class="immich-import-progress"
+    id="immich-scan-progress"
+    hx-get="{% url 'settings.immich.scan.progress' task_id %}"
+    hx-trigger="load delay:1s"
+    hx-swap="outerHTML"
+>
+    <div class="immich-import-progress-label">
+        <span>{{ message|default:"Working..." }}</span>
+        <span class="immich-import-progress-pct">{{ percent|default:0 }}%</span>
+    </div>
+    <div class="immich-import-progress-track">
+        <div class="immich-import-progress-bar" style="width: {{ percent|default:0 }}%;"></div>
+    </div>
+    <div class="immich-import-status-msg">
+        <span class="htmx-indicator-spinner" style="display:inline-block; width:14px; height:14px; border:2px solid var(--ul-grey-4); border-top-color: #1976D2; border-radius:50%; animation: spin .7s linear infinite; flex-shrink:0;"></span>
+        <span>This can take a while for a large library...</span>
+    </div>
+</div>
+<style>
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>
+{% endif %}

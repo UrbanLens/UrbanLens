@@ -1,0 +1,14 @@
+{% comment %}
+Footer under a message bubble for places (coordinates / street addresses)
+detected in its text - see services.dm_location_detection. Context:
+`message`, `viewer_id`, `partner`.
+
+Everything here is recipient-only: the "Add to map" affordance acts on the
+recipient's account, and the "Pinned as …" reference is the recipient's own
+private pin name, which must never render for the sender.
+{% endcomment %}
+{% if message.recipient_id == viewer_id %}
+{% for mention in message.location_mentions.all %}
+{% include "dashboard/partials/messages/_message_location_mention_item.html" with mention=mention partner=partner %}
+{% endfor %}
+{% endif %}

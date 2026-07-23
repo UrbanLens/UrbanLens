@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import timedelta
+from decimal import Decimal
 import logging
 import time
 from typing import Any
@@ -34,8 +35,17 @@ class ServiceDefaults:
     display_name: str
     calls_per_minute: int | None = 20
     calls_per_day: int | None = 500
+    calls_per_30_days: int | None = None
     usa_only: bool = False
     notes: str = ""
+    #: Estimated USD cost per successful call, if confidently known from the
+    #: provider's published pricing. None means "not yet priced" (which may
+    #: still be a free service - see ``notes``), not "confirmed free". Only
+    #: populate this from a specific, verifiable published rate; a wrong
+    #: number here is worse than no cost-tracking at all for a feature whose
+    #: whole purpose is informing real spending decisions - see
+    #: ApiCallLog.cost_estimate's own docstring for the same caveat.
+    cost_per_call: Decimal | None = None
 
 
 SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
@@ -44,6 +54,9 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         calls_per_minute=20,
         calls_per_day=500,
         notes="Free tier: $200/month credit (~40,000 calls/month).",
+        # Google's published rate is $5/1000 requests, consistent with this
+        # entry's own $200-credit/~40,000-calls note (200/40000 = 0.005).
+        cost_per_call=Decimal("0.005"),
     ),
     "google_search": ServiceDefaults(
         display_name="Google Custom Search",
@@ -59,22 +72,19 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
     ),
     "overpass": ServiceDefaults(
         display_name="Overpass API (OpenStreetMap)",
-        calls_per_minute=2,
-        calls_per_day=500,
-        notes="Free API. Be conservative; public Overpass instances are shared community infrastructure.",
+        # OverpassGateway spreads every call across a pool of public instances
+        # and drops any that error out of rotation until the next day, so this
+        # limit governs our total load, not the load on any single instance.
+        # Each logical lookup may spend more than one call when it fails over.
+        calls_per_minute=240,
+        calls_per_day=24_000,
+        notes="Free API. Load is distributed across several public Overpass instances, and any instance that errors/times out is dropped until the next day. Each logical lookup may spend more than one call when it fails over.",
     ),
     "brave_search": ServiceDefaults(
         display_name="Brave Search API",
         calls_per_minute=10,
         calls_per_day=200,
         notes="Free tier: 2,000 queries/month.",
-    ),
-    "datagov": ServiceDefaults(
-        display_name="Data.gov",
-        calls_per_minute=10,
-        calls_per_day=500,
-        usa_only=True,
-        notes="US government open data. Free API.",
     ),
     "digital_commonwealth": ServiceDefaults(
         display_name="Digital Commonwealth",
@@ -118,6 +128,24 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         calls_per_minute=10,
         calls_per_day=500,
         notes="Free, no key required. Be polite - the Archive is a public resource.",
+    ),
+    "hibp": ServiceDefaults(
+        display_name="Have I Been Pwned (Pwned Passwords)",
+        calls_per_minute=60,
+        calls_per_day=5000,
+        notes="Free k-anonymity range API. Used when users set or change passwords.",
+    ),
+    "sms": ServiceDefaults(
+        display_name="Twilio SMS",
+        calls_per_minute=10,
+        calls_per_day=200,
+        notes="Billed per message sent - keep this conservative.",
+    ),
+    "whatsapp": ServiceDefaults(
+        display_name="Twilio WhatsApp",
+        calls_per_minute=10,
+        calls_per_day=200,
+        notes="Billed per message sent - keep this conservative.",
     ),
 }
 
@@ -166,6 +194,7 @@ def get_limit_config(service: str) -> Any:
                 "display_name": defaults_entry.display_name,
                 "calls_per_minute": defaults_entry.calls_per_minute,
                 "calls_per_day": defaults_entry.calls_per_day,
+                "calls_per_30_days": defaults_entry.calls_per_30_days,
                 "usa_only": defaults_entry.usa_only,
                 "notes": defaults_entry.notes,
             },
@@ -217,9 +246,9 @@ def check_rate_limit(service: str) -> bool:
     """Return ``True`` if a call to ``service`` is currently permitted.
 
     Queries the ``ApiCallLog`` table using a rolling window to enforce the
-    per-minute and per-day limits configured in ``ApiRateLimit``.  A ``False``
-    result means the call should be skipped; a ``_RateLimitedSession`` will
-    log the blocked attempt automatically.
+    per-minute, per-day, and per-30-day limits configured in
+    ``ApiRateLimit``.  A ``False`` result means the call should be skipped; a
+    ``_RateLimitedSession`` will log the blocked attempt automatically.
 
     Args:
         service: The service key.
@@ -258,6 +287,17 @@ def check_rate_limit(service: str) -> bool:
                     config.calls_per_day,
                 )
                 return False
+
+        if config.calls_per_30_days is not None:
+            recent_30_days = ApiCallLog.objects.for_service(service).since(timedelta(days=30)).exclude(was_geo_filtered=True).count()
+            if recent_30_days >= config.calls_per_30_days:
+                logger.warning(
+                    "30-day rate limit hit for %s: %d/%d calls in the last 30 days",
+                    service,
+                    recent_30_days,
+                    config.calls_per_30_days,
+                )
+                return False
     except Exception:
         # TODO: Catch specific exceptions
         logger.exception("Failed to check rate limit counts for %s - allowing call", service)
@@ -275,6 +315,7 @@ def log_api_call(
     was_rate_limited: bool = False,
     was_geo_filtered: bool = False,
     was_service_disabled: bool = False,
+    cost_estimate: Decimal | None = None,
 ) -> None:
     """Record one API call in the ``ApiCallLog`` table.
 
@@ -287,6 +328,8 @@ def log_api_call(
         endpoint: URL or endpoint path (truncated to 500 chars).
         was_rate_limited: True if the call was blocked by rate limiting.
         was_geo_filtered: True if the call was skipped due to geo filtering.
+        cost_estimate: Estimated USD cost of this call, if known - see
+            ``ServiceDefaults.cost_per_call``.
     """
     from urbanlens.dashboard.models.api_call_log import ApiCallLog
 
@@ -299,6 +342,7 @@ def log_api_call(
             was_rate_limited=was_rate_limited,
             was_geo_filtered=was_geo_filtered,
             was_service_disabled=was_service_disabled,
+            cost_estimate=cost_estimate,
         )
     except Exception:
         logger.exception("Failed to log API call for service %s", service)
@@ -381,11 +425,17 @@ class _RateLimitedSession:
         try:
             resp = self._session.request(method, url, **kwargs)
             elapsed_ms = int((time.monotonic() - t0) * 1000)
+            # Only a call that actually reached the provider and succeeded is
+            # billable - a rate-limited/disabled call above never went out,
+            # and a failed response wasn't necessarily charged either way, so
+            # estimating a cost for it would overstate real spend.
+            cost_estimate = all_service_defaults().get(self._service_key, ServiceDefaults(display_name="")).cost_per_call if resp.ok else None
             log_api_call(
                 self._service_key,
                 success=resp.ok,
                 response_ms=elapsed_ms,
                 endpoint=str(url),
+                cost_estimate=cost_estimate,
             )
             return resp
         except RateLimitExceededError:
@@ -408,10 +458,18 @@ class _RateLimitedSession:
 
 
 class RequestCancelledError(DashboardError):
-    """Raised when a request is cancelled."""
+    """Raised when a request is cancelled.
 
-    def __init__(self, service: str) -> None:
-        super().__init__(f"Request cancelled for service '{service}'")
+    Args:
+        service: The rate-limiter service key the cancelled request targeted.
+        message: Optional message override for subclasses; without it, the
+            subclass's formatted message would be mistaken for the service
+            name and wrapped again (e.g. ``Request cancelled for service
+            'Rate limit exceeded for service 'nps'''``).
+    """
+
+    def __init__(self, service: str, message: str | None = None) -> None:
+        super().__init__(message or f"Request cancelled for service '{service}'")
         self.service = service
 
 
@@ -419,13 +477,11 @@ class RateLimitExceededError(RequestCancelledError):
     """Raised when a rate limit prevents an API call from proceeding."""
 
     def __init__(self, service: str) -> None:
-        super().__init__(f"Rate limit exceeded for service '{service}'")
-        self.service = service
+        super().__init__(service, f"Rate limit exceeded for service '{service}'")
 
 
 class ServiceDisabledError(RequestCancelledError):
     """Raised when a service is disabled."""
 
     def __init__(self, service: str) -> None:
-        super().__init__(f"Service '{service}' is disabled")
-        self.service = service
+        super().__init__(service, f"Service '{service}' is disabled")

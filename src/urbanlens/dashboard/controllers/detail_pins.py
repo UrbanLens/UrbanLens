@@ -7,7 +7,7 @@ import logging
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ObjectDoesNotExist
-from django.http import HttpResponse, JsonResponse
+from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
 
@@ -16,27 +16,60 @@ from urbanlens.dashboard.models.pin.model import Pin, PinType
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
+from urbanlens.dashboard.services.locations.site_scope import is_site_scope
 from urbanlens.dashboard.services.undo.handlers.wiki import with_wiki_descendants
 from urbanlens.dashboard.services.undo.service import stash_for_undo
+from urbanlens.dashboard.services.wiki_access import location_visible_to, resolve_visible_wiki
 
 logger = logging.getLogger(__name__)
 
+#: Type a marker gets while automatic classification hasn't run (or found no
+#: building). Point of Interest is the honest provisional answer - most
+#: hand-placed sub-markers really are landmarks rather than structures, and
+#: it was this dialog's effective default before "Auto" existed.
+_PROVISIONAL_PIN_TYPE = PinType.POINT_OF_INTEREST
 
-def _resolve_wiki(location_slug: str) -> tuple[Location, Wiki]:
-    """Resolve the Location for a slug and its existing Wiki (404 when absent)."""
-    location = get_object_or_404(Location, slug=location_slug)
-    wiki = get_object_or_404(Wiki, location=location)
-    return location, wiki
+
+def _requested_pin_type(body) -> tuple[str, bool]:
+    """Resolve a submitted ``pin_type`` into a value plus "the user chose it".
+
+    The dialog's Type select offers "Auto" as a blank value, so a blank
+    submission means "work it out for me" rather than "no opinion recorded" -
+    the distinction ``pin_type_is_user_provided`` exists to keep (see
+    ``services.locations.site_scope.classify_building_pin_type``).
+
+    Args:
+        body: The parsed request body (JSON dict or QueryDict).
+
+    Returns:
+        Tuple of (pin type to store now, whether the user picked it).
+    """
+    chosen = (body.get("pin_type") or "").strip()
+    if chosen and PinType.valid(chosen):
+        return chosen, True
+    return _PROVISIONAL_PIN_TYPE, False
+
+
+def _schedule_classification(kind: str, pk: int) -> None:
+    """Queue automatic building classification for a newly placed marker."""
+    from urbanlens.dashboard.services.celery import safely_enqueue_task
+    from urbanlens.dashboard.tasks import classify_detail_marker
+
+    safely_enqueue_task(classify_detail_marker, kind, pk)
 
 
 def _location_for_coords(latitude, longitude) -> Location:
-    """Find-or-create the shared Location a detail pin sits at.
+    """Find-or-create the Location a detail pin sits at.
 
     A detail pin has its own coordinates (distinct from its parent's), and a Pin
     reads its coordinates from its Location, so each detail pin needs its own
-    Location row at its point.
+    Location row at its point. ``get_nearby_or_create``'s default 50m proximity
+    dedup would otherwise snap two detail pins placed within 50m of each other
+    (or of the parent pin itself) onto the same Location, collapsing their
+    coordinates together - so this skips that dedup and only reuses an existing
+    Location on an exact coordinate match, mirroring ``_location_for_child_wiki``.
     """
-    location, _created = Location.objects.get_nearby_or_create(float(latitude), float(longitude))
+    location, _created = Location.objects.get_nearby_or_create(float(latitude), float(longitude), threshold_meters=0)
     return location
 
 
@@ -75,6 +108,8 @@ class DetailPinPanelView(LoginRequiredMixin, View):
                 "pin": pin,
                 "detail_pins": detail_pins,
                 "pin_type_choices": PinType.choices,
+                "is_site_scope": is_site_scope(pin),
+                "has_wiki": Wiki.objects.get_for_location(pin.location) is not None,
             },
         )
 
@@ -103,11 +138,13 @@ class DetailPinPanelView(LoginRequiredMixin, View):
             return JsonResponse({"ok": False, "error": "Invalid parent pin."}, status=400)
 
         detail_name = body.get("name") or None
+        pin_type, pin_type_chosen = _requested_pin_type(body)
         detail_pin = Pin.objects.create(
             name=detail_name,
             name_is_user_provided=bool((detail_name or "").strip()),
             description=body.get("description") or None,
-            pin_type=body.get("pin_type") or PinType.POINT_OF_INTEREST,
+            pin_type=pin_type,
+            pin_type_is_user_provided=pin_type_chosen,
             icon=body.get("icon") or None,
             color=body.get("color") or None,
             detail_bg_color=body.get("bg_color") or None,
@@ -118,6 +155,8 @@ class DetailPinPanelView(LoginRequiredMixin, View):
             profile=parent.profile,
             location=_location_for_coords(lat, lon),
         )
+        if not pin_type_chosen:
+            _schedule_classification("pin", detail_pin.pk)
         return JsonResponse({"ok": True, "uuid": str(detail_pin.uuid)})
 
 
@@ -138,7 +177,6 @@ class DetailPinEditView(LoginRequiredMixin, View):
         for field, value in {
             "name": body.get("name") or None,
             "description": body.get("description") or None,
-            "pin_type": body.get("pin_type") or None,
             "icon": body.get("icon") or None,
             "color": body.get("color") or None,
             "detail_bg_color": body.get("bg_color") or None,
@@ -151,13 +189,25 @@ class DetailPinEditView(LoginRequiredMixin, View):
         if "border_opacity" in body:
             detail_pin.detail_border_opacity = int(body["border_opacity"])
 
+        # Type is handled apart from the loop above: it is non-nullable (a
+        # blank submission is the dialog's "Auto", not "clear it"), and a
+        # re-pick has to update pin_type_is_user_provided alongside it.
+        reclassify = False
+        if "pin_type" in body:
+            detail_pin.pin_type, detail_pin.pin_type_is_user_provided = _requested_pin_type(body)
+            reclassify = not detail_pin.pin_type_is_user_provided
+
         new_latitude = body.get("latitude")
         new_longitude = body.get("longitude")
-        if new_latitude and new_longitude:
+        if moved := bool(new_latitude and new_longitude):
             # A move repoints the detail pin to a Location at the new coordinates.
             detail_pin.location = _location_for_coords(new_latitude, new_longitude)
 
         detail_pin.save()
+        # A moved auto-typed marker may have landed on (or left) a building, so
+        # its classification is re-derived from wherever it now sits.
+        if reclassify or (moved and not detail_pin.pin_type_is_user_provided):
+            _schedule_classification("pin", detail_pin.pk)
         return JsonResponse({"ok": True})
 
     def delete(self, request, pin_slug, detail_pin_uuid):
@@ -172,12 +222,29 @@ class DetailPinEditView(LoginRequiredMixin, View):
 
 
 class DetailPinJsonView(LoginRequiredMixin, View):
-    """Return personal detail pins as JSON for Leaflet rendering on the pin details page."""
+    """Return personal detail pins as JSON for Leaflet rendering on the pin details page.
+
+    By default only the pin's direct children are returned. With ``?children=1``
+    (the page-wide "show sub pin details" toggle) the full descendant subtree is
+    returned instead, each nested pin annotated with the name of the child pin
+    it belongs to so the map can label it.
+    """
 
     def get(self, request, pin_slug):
         pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
-        detail_pins = pin.detail_pins.order_by("pin_type", "name")
-        return JsonResponse({"detail_pins": [dp.to_detail_json() for dp in detail_pins]})
+        include_children = request.GET.get("children") == "1"
+        if include_children:
+            detail_pins = pin.descendants().select_related("location", "parent_pin", "parent_pin__location").order_by("pin_type", "name")
+        else:
+            detail_pins = pin.detail_pins.select_related("location").order_by("pin_type", "name")
+
+        payload = []
+        for dp in detail_pins:
+            entry = dp.to_detail_json()
+            if include_children and dp.parent_pin_id != pin.pk and dp.parent_pin is not None:
+                entry["owner_name"] = dp.parent_pin.effective_name
+            payload.append(entry)
+        return JsonResponse({"detail_pins": payload})
 
 
 class LocationDetailPinJsonView(LoginRequiredMixin, View):
@@ -190,7 +257,10 @@ class LocationDetailPinJsonView(LoginRequiredMixin, View):
     """
 
     def get(self, request, location_slug):
-        location = get_object_or_404(Location, slug=location_slug)
+        location = get_object_or_404(Location.objects.slug_or_uuid(location_slug))
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        if not location_visible_to(location, profile):
+            raise Http404
         try:
             wiki = location.wiki
         except ObjectDoesNotExist:
@@ -210,7 +280,7 @@ class LocationWikiDetailPinView(LoginRequiredMixin, View):
     """
 
     def get(self, request, location_slug):
-        location, wiki = _resolve_wiki(location_slug)
+        location, wiki, _profile = resolve_visible_wiki(request, location_slug)
         child_wikis = wiki.child_wikis.order_by("pin_type", "name")
         return render(
             request,
@@ -224,8 +294,7 @@ class LocationWikiDetailPinView(LoginRequiredMixin, View):
         )
 
     def post(self, request, location_slug):
-        _location, wiki = _resolve_wiki(location_slug)
-        profile, _ = Profile.objects.get_or_create(user=request.user)
+        _location, wiki, profile = resolve_visible_wiki(request, location_slug)
 
         try:
             body = json.loads(request.body)
@@ -247,10 +316,12 @@ class LocationWikiDetailPinView(LoginRequiredMixin, View):
             return JsonResponse({"ok": False, "error": "Invalid parent wiki."}, status=400)
 
         child_name = body.get("name") or wiki.name
+        pin_type, pin_type_chosen = _requested_pin_type(body)
         child_wiki = Wiki.objects.create(
             name=child_name,
             description=body.get("description") or None,
-            pin_type=body.get("pin_type") or PinType.POINT_OF_INTEREST,
+            pin_type=pin_type,
+            pin_type_is_user_provided=pin_type_chosen,
             icon=body.get("icon") or None,
             color=body.get("color") or None,
             detail_bg_color=body.get("bg_color") or None,
@@ -267,6 +338,8 @@ class LocationWikiDetailPinView(LoginRequiredMixin, View):
             changes={"child_wiki_added": {"from": None, "to": child_wiki.name}},
         )
 
+        if not pin_type_chosen:
+            _schedule_classification("wiki", child_wiki.pk)
         return JsonResponse({"ok": True, "uuid": str(child_wiki.uuid)})
 
 
@@ -279,9 +352,8 @@ class LocationWikiDetailPinEditView(LoginRequiredMixin, View):
     """
 
     def post(self, request, location_slug, detail_pin_uuid):
-        _location, wiki = _resolve_wiki(location_slug)
+        _location, wiki, profile = resolve_visible_wiki(request, location_slug)
         child_wiki = get_object_or_404(Wiki, uuid=detail_pin_uuid, parent_wiki=wiki)
-        profile, _ = Profile.objects.get_or_create(user=request.user)
 
         try:
             body = json.loads(request.body)
@@ -296,7 +368,6 @@ class LocationWikiDetailPinEditView(LoginRequiredMixin, View):
         for field, value in {
             "name": body.get("name") or child_wiki.name,
             "description": body.get("description") or None,
-            "pin_type": body.get("pin_type") or None,
             "icon": body.get("icon") or None,
             "color": body.get("color") or None,
             "detail_bg_color": body.get("bg_color") or None,
@@ -309,12 +380,22 @@ class LocationWikiDetailPinEditView(LoginRequiredMixin, View):
         if "border_opacity" in body:
             child_wiki.detail_border_opacity = int(body["border_opacity"])
 
+        # Type is handled apart from the loop above - see the matching comment
+        # in DetailPinEditView for why.
+        reclassify = False
+        if "pin_type" in body:
+            child_wiki.pin_type, child_wiki.pin_type_is_user_provided = _requested_pin_type(body)
+            reclassify = not child_wiki.pin_type_is_user_provided
+
         new_latitude = body.get("latitude")
         new_longitude = body.get("longitude")
         old_lat, old_lon = child_wiki.location.latitude, child_wiki.location.longitude
         if moved := bool(new_latitude and new_longitude):
             child_wiki.location = _location_for_child_wiki(new_latitude, new_longitude)
         child_wiki.save()
+
+        if reclassify or (moved and not child_wiki.pin_type_is_user_provided):
+            _schedule_classification("wiki", child_wiki.pk)
 
         if moved:
             WikiEdit.objects.create(
@@ -332,9 +413,8 @@ class LocationWikiDetailPinEditView(LoginRequiredMixin, View):
         return JsonResponse({"ok": True})
 
     def delete(self, request, location_slug, detail_pin_uuid):
-        _location, wiki = _resolve_wiki(location_slug)
+        _location, wiki, profile = resolve_visible_wiki(request, location_slug)
         child_wiki = get_object_or_404(Wiki, uuid=detail_pin_uuid, parent_wiki=wiki)
-        profile, _ = Profile.objects.get_or_create(user=request.user)
 
         child_name = child_wiki.name
 

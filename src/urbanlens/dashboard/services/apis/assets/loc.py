@@ -4,9 +4,12 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from urbanlens.dashboard.services.apis.assets.base import MediaItem, MediaProvider
+from urbanlens.dashboard.services.geo_boundary import USA
 
 if TYPE_CHECKING:
     from collections.abc import Generator
+
+    from urbanlens.dashboard.services.geo_boundary import GeoBoundary
 
 
 @dataclass(slots=True, kw_only=True)
@@ -20,13 +23,29 @@ class LOCJsonGateway(MediaProvider):
     service_key: ClassVar[str] = "library_of_congress"
     display_name: ClassVar[str] = "Library of Congress"
     paid_service: ClassVar[bool] = False
-    usa_only: ClassVar[bool] = True
+    geo_boundary: ClassVar[GeoBoundary | None] = USA
     search_with_country: ClassVar[bool] = False
     # NOTE: quoting the name (quote_name=True) was tried and reverted -- LOC's
     # /search/ endpoint returned wildly unrelated results (e.g. out-of-state
     # newspaper archives) once the name was wrapped in quotes, likely because
     # its query parser doesn't handle a quoted phrase containing punctuation
     # (apostrophes, periods) the way a phrase-search operator normally would.
+    # Street addresses are excluded for the same underlying reason: LOC's
+    # relevance ranking appears to treat each word as an independent OR term
+    # rather than requiring a phrase match, so a house number or generic
+    # street-type word ("Road", "Street") coincidentally matches unrelated
+    # historical records nationwide instead of narrowing results - a query
+    # like "1265 Section Rd Cincinnati OH" returned newspaper archives from
+    # Maryland and California. Searching on name + city/state only is both
+    # more selective (no noise words) and a better fit for how LOC's
+    # collections are actually catalogued (historical documents/photos rarely
+    # carry modern street-address-level metadata anyway).
+    include_address: ClassVar[bool] = False
+    # A pin with no real landmark name (just its raw street address as a
+    # fallback "name") produces a search with no genuine narrowing power for
+    # LOC's word-independent relevance ranking - skip the provider entirely
+    # for such a pin instead of guaranteeing noisy results.
+    reject_address_derived_names: ClassVar[bool] = True
 
     base_url: str = "https://www.loc.gov"
 

@@ -13,19 +13,19 @@
     {% with c=item.comment %}
     <li class="comment-item" id="comment-{{ c.id }}">
       <div class="comment-avatar">
-        {% if c.author and c.author.avatar %}
-        <img src="{{ c.author.avatar.url }}" alt="" class="comment-avatar-img">
+        {% if c.author and c.author.display_avatar_url %}
+        <img src="{{ c.author.display_avatar_url }}" alt="" class="comment-avatar-img">
         {% else %}
-        <span class="comment-avatar-initial">{{ c.author.user.username|first|upper|default:"?" }}</span>
+        <span class="comment-avatar-initial {{ c.author.avatar_color_class }}">{{ c.author.display_name|first|upper|default:"?" }}</span>
         {% endif %}
       </div>
       <div class="comment-body">
         <div class="comment-meta">
-          <span class="comment-author">{{ c.author.user.username|default:"Unknown" }}</span>
+          <span class="comment-author">{{ c.author.display_name|default:"Unknown" }}</span>
           <span class="comment-date">{{ c.created|human_timesince }}</span>
           {% if c.author == profile or trip.creator == profile %}
           <button type="button" class="comment-delete-btn" title="Delete"
-                  hx-delete="{% url 'trips.comment.delete' trip.uuid c.id %}"
+                  hx-delete="{% url 'trips.comment.delete' trip.slug c.id %}"
                   hx-target="#trip-comments-panel"
                   hx-swap="outerHTML"
                   hx-confirm="Delete this comment?"
@@ -36,13 +36,23 @@
         </div>
         <div class="comment-text">{{ item.rendered_text }}</div>
         {% if c.image %}
+        {% if c.pending_scan %}
+        <p class="comment-image-scanning" title="Only visible to you until this clears - other trip members will see it once it's confirmed clean">
+          <i class="material-symbols-outlined">shield_person</i> Scanning photo for malware&hellip;
+        </p>
+        {% else %}
         <a href="{{ c.image.url }}" target="_blank" class="comment-image-link">
           <img src="{{ c.image.url }}" alt="Attached" class="comment-image">
         </a>
         {% endif %}
+        {% endif %}
         {% if c.map_data %}
         {% include "dashboard/partials/map/_map_view_preview.html" with map_id=c.id %}
         {% include "dashboard/partials/map/_map_view_dialog.html" with map_id=c.id map_data=c.map_data title="Attached map" %}
+        {% elif c.map_removed %}
+        <p class="comment-map-removed-indicator">
+          <i class="material-symbols-outlined">map_off</i> The map attached to this comment was deleted
+        </p>
         {% endif %}
 
         {# Reactions #}
@@ -50,7 +60,7 @@
           {% for emoji, data in item.reactions.items %}
           <button type="button"
                   class="reaction-pill{% if profile.id in data.reacted_by %} reaction-pill--mine{% endif %}"
-                  hx-post="{% url 'trips.comment.react' trip.uuid c.id %}"
+                  hx-post="{% url 'trips.comment.react' trip.slug c.id %}"
                   hx-target="#comment-reactions-{{ c.id }}"
                   hx-swap="outerHTML"
                   hx-vals='{"emoji": "{{ emoji }}"}'
@@ -67,7 +77,7 @@
               {% for emoji in allowed_emojis %}
               <button type="button" class="reaction-picker-emoji"
                       data-emoji="{{ emoji }}"
-                      hx-post="{% url 'trips.comment.react' trip.uuid c.id %}"
+                      hx-post="{% url 'trips.comment.react' trip.slug c.id %}"
                       hx-target="#comment-reactions-{{ c.id }}"
                       hx-swap="outerHTML"
                       hx-vals='{"emoji": "{{ emoji }}"}'
@@ -90,7 +100,7 @@
         {# Reply form #}
         <div id="reply-form-{{ c.id }}" class="comment-reply-form" hidden>
           <form class="comment-compose comment-compose--reply"
-                hx-post="{% url 'trips.comments' trip.uuid %}"
+                hx-post="{% url 'trips.comments' trip.slug %}"
                 hx-target="#trip-comments-panel"
                 hx-swap="outerHTML"
                 hx-encoding="multipart/form-data"
@@ -103,7 +113,7 @@
                 <textarea name="text" rows="2" placeholder="Write a reply..."
                           class="comment-input mention-input"
                           data-context-type="trip"
-                          data-trip-uuid="{{ trip.uuid }}"
+                          data-trip-slug="{{ trip.slug }}"
                           required></textarea>
                 <div class="mention-dropdown" hidden></div>
               </div>
@@ -137,19 +147,19 @@
           {% with r=reply_item.comment %}
           <li class="comment-item comment-item--reply" id="comment-{{ r.id }}">
             <div class="comment-avatar comment-avatar--sm">
-              {% if r.author and r.author.avatar %}
-              <img src="{{ r.author.avatar.url }}" alt="" class="comment-avatar-img">
+              {% if r.author and r.author.display_avatar_url %}
+              <img src="{{ r.author.display_avatar_url }}" alt="" class="comment-avatar-img">
               {% else %}
-              <span class="comment-avatar-initial">{{ r.author.user.username|first|upper|default:"?" }}</span>
+              <span class="comment-avatar-initial {{ r.author.avatar_color_class }}">{{ r.author.display_name|first|upper|default:"?" }}</span>
               {% endif %}
             </div>
             <div class="comment-body">
               <div class="comment-meta">
-                <span class="comment-author">{{ r.author.user.username|default:"Unknown" }}</span>
+                <span class="comment-author">{{ r.author.display_name|default:"Unknown" }}</span>
                 <span class="comment-date">{{ r.created|human_timesince }}</span>
                 {% if r.author == profile or trip.creator == profile %}
                 <button type="button" class="comment-delete-btn" title="Delete"
-                        hx-delete="{% url 'trips.comment.delete' trip.uuid r.id %}"
+                        hx-delete="{% url 'trips.comment.delete' trip.slug r.id %}"
                         hx-target="#trip-comments-panel"
                         hx-swap="outerHTML"
                         hx-confirm="Delete this reply?"
@@ -160,19 +170,29 @@
               </div>
               <div class="comment-text">{{ reply_item.rendered_text }}</div>
               {% if r.image %}
+              {% if r.pending_scan %}
+              <p class="comment-image-scanning" title="Only visible to you until this clears - other trip members will see it once it's confirmed clean">
+                <i class="material-symbols-outlined">shield_person</i> Scanning photo for malware&hellip;
+              </p>
+              {% else %}
               <a href="{{ r.image.url }}" target="_blank" class="comment-image-link">
                 <img src="{{ r.image.url }}" alt="Attached" class="comment-image">
               </a>
               {% endif %}
+              {% endif %}
               {% if r.map_data %}
               {% include "dashboard/partials/map/_map_view_preview.html" with map_id=r.id %}
               {% include "dashboard/partials/map/_map_view_dialog.html" with map_id=r.id map_data=r.map_data title="Attached map" %}
+              {% elif r.map_removed %}
+              <p class="comment-map-removed-indicator">
+                <i class="material-symbols-outlined">map_off</i> The map attached to this comment was deleted
+              </p>
               {% endif %}
               <div class="comment-reactions" id="comment-reactions-{{ r.id }}">
                 {% for emoji, data in reply_item.reactions.items %}
                 <button type="button"
                         class="reaction-pill{% if profile.id in data.reacted_by %} reaction-pill--mine{% endif %}"
-                        hx-post="{% url 'trips.comment.react' trip.uuid r.id %}"
+                        hx-post="{% url 'trips.comment.react' trip.slug r.id %}"
                         hx-target="#comment-reactions-{{ r.id }}"
                         hx-swap="outerHTML"
                         hx-vals='{"emoji": "{{ emoji }}"}'
@@ -188,7 +208,7 @@
                     {% for emoji in allowed_emojis %}
                     <button type="button" class="reaction-picker-emoji"
                             data-emoji="{{ emoji }}"
-                            hx-post="{% url 'trips.comment.react' trip.uuid r.id %}"
+                            hx-post="{% url 'trips.comment.react' trip.slug r.id %}"
                             hx-target="#comment-reactions-{{ r.id }}"
                             hx-swap="outerHTML"
                             hx-vals='{"emoji": "{{ emoji }}"}'
@@ -221,8 +241,11 @@
   {% endif %}
 
   {# -- Compose -- #}
+  {% if not viewer_has_joined %}
+  <p class="trip-panel-empty">Join this trip to leave a comment.</p>
+  {% else %}
   <form class="comment-compose"
-        hx-post="{% url 'trips.comments' trip.uuid %}"
+        hx-post="{% url 'trips.comments' trip.slug %}"
         hx-target="#trip-comments-panel"
         hx-swap="outerHTML"
         hx-encoding="multipart/form-data"
@@ -241,7 +264,7 @@
         <textarea name="text" rows="2" placeholder="Add a comment..."
                   class="comment-input mention-input"
                   data-context-type="trip"
-                  data-trip-uuid="{{ trip.uuid }}"
+                  data-trip-slug="{{ trip.slug }}"
                   required></textarea>
         <div class="mention-dropdown" hidden></div>
       </div>
@@ -266,4 +289,5 @@
       </div>
     </div>
   </form>
+  {% endif %}
 </div>

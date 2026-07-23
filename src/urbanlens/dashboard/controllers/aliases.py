@@ -10,20 +10,24 @@ from __future__ import annotations
 
 import json
 import logging
+from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
 
 from urbanlens.dashboard.models.aliases.model import AliasType, PinAlias, WikiAlias
-from urbanlens.dashboard.models.location.model import Location
+from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, PinAutoRemoval, WikiAutoRemoval
 from urbanlens.dashboard.models.pin.model import Pin
-from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
 from urbanlens.dashboard.services.locations.naming import normalize_name_for_comparison, persist_official_aliases_for_location
+from urbanlens.dashboard.services.wiki_access import resolve_visible_wiki
+
+if TYPE_CHECKING:
+    from urbanlens.dashboard.models.location.model import Location
+    from urbanlens.dashboard.models.wiki.model import Wiki
 
 logger = logging.getLogger(__name__)
 
@@ -67,8 +71,27 @@ def _render_pin_panel(request, pin: Pin) -> HttpResponse:
     aliases = _annotated(pin.aliases.order_by("name"), pin.effective_name)
     return render(
         request,
-        "dashboard/partials/pins/pin_aliases_panel.html",
-        {"pin": pin, "aliases": aliases},
+        "dashboard/partials/pins/aliases_panel.html",
+        {
+            "pin": pin,
+            "aliases": aliases,
+            "panel_id": "pin-aliases-panel",
+            "collapse_scope": "pin",
+            "wrap_body": False,
+            "show_header_add_button": True,
+            "explainer_id": "aliases-explainer",
+            "explainer_body": (
+                "Aliases are alternate names for this pin - former names, local nicknames, or codenames. "
+                "They're used when you search your own pins, and when we look things up externally (e.g. Google). "
+                "Mark an alias as a nickname (the person icon) and it'll help you find your own pins but never leave the site for external searches."
+            ),
+            "empty_text": "No aliases yet.",
+            "obj_slug": pin.slug,
+            "url_toggle_nickname": "pin.alias.toggle_nickname",
+            "url_use": "pin.alias.use",
+            "url_delete": "pin.alias.delete",
+            "url_add": "pin.aliases",
+        },
     )
 
 
@@ -77,8 +100,28 @@ def _render_location_panel(request, location: Location, wiki: Wiki) -> HttpRespo
     aliases = _annotated(wiki.aliases.order_by("name"), wiki.name)
     return render(
         request,
-        "dashboard/partials/pins/location_aliases_panel.html",
-        {"location": location, "wiki": wiki, "aliases": aliases},
+        "dashboard/partials/pins/aliases_panel.html",
+        {
+            "location": location,
+            "wiki": wiki,
+            "aliases": aliases,
+            "panel_id": "location-aliases-panel",
+            "collapse_scope": "wiki",
+            "wrap_body": True,
+            "show_header_add_button": True,
+            "explainer_id": "aliases-explainer",
+            "explainer_body": (
+                "Aliases are alternate names for this location - former names, local nicknames, or codenames. "
+                "They're used when the community searches for this place, and when we look things up externally (e.g. Google). "
+                "Mark an alias as a nickname (the person icon) and it'll help the community find this location but never leave the site for external searches."
+            ),
+            "empty_text": "No aliases yet. Add alternate names for this location.",
+            "obj_slug": location.slug,
+            "url_toggle_nickname": "location.wiki.alias.toggle_nickname",
+            "url_use": "location.wiki.alias.use",
+            "url_delete": "location.wiki.alias.delete",
+            "url_add": "location.wiki.aliases",
+        },
     )
 
 
@@ -87,6 +130,12 @@ class PinAliasView(LoginRequiredMixin, View):
 
     def get(self, request, pin_slug):
         pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
+        # External data for this pin's location may have been cached by
+        # something other than this pin's own panel fetch (background
+        # enrichment, another user's pin at the same location, ...) - backfill
+        # from it now, mirroring the wiki aliases panel's same backfill below.
+        if pin.location is not None:
+            persist_official_aliases_for_location(pin.location)
         return _render_pin_panel(request, pin)
 
     def post(self, request, pin_slug):
@@ -96,7 +145,15 @@ class PinAliasView(LoginRequiredMixin, View):
             return HttpResponse("Name is required.", status=400)
         kind = AliasType.NICKNAME if request.POST.get("is_nickname") else AliasType.ALTERNATE
         try:
-            PinAlias.objects.create(pin=pin, name=name, kind=kind)
+            # atomic() gives IntegrityError its own savepoint to roll back to -
+            # without it, catching the error still leaves the DB connection's
+            # surrounding transaction (if any) unusable for further queries
+            # (this view's own re-render right below included) until an
+            # explicit rollback. Case-insensitive alias matching (the whole
+            # point of this constraint) makes this collision far more common
+            # than the old exact-name-only version ever was.
+            with transaction.atomic():
+                PinAlias.objects.create(pin=pin, name=name, kind=kind)
         except IntegrityError:
             return HttpResponse("That alias already exists.", status=409)
         return _render_pin_panel(request, pin)
@@ -108,6 +165,10 @@ class PinAliasDeleteView(LoginRequiredMixin, View):
         alias = get_object_or_404(PinAlias, id=alias_id, pin=pin)
         if normalize_name_for_comparison(alias.name) == normalize_name_for_comparison(pin.effective_name):
             return HttpResponse("This alias is the current name - pick another name first.", status=400)
+        # Tombstone first: an external-source sync or the pin<->wiki alias-mirror
+        # signal could otherwise recreate this exact name the moment either one
+        # next runs, silently undoing the deletion.
+        PinAutoRemoval.objects.record(pin=pin, kind=AutoRemovalKind.ALIAS, value=alias.name)
         alias.delete()
         return _render_pin_panel(request, pin)
 
@@ -139,18 +200,11 @@ class PinAliasToggleNicknameView(LoginRequiredMixin, View):
         return _render_pin_panel(request, pin)
 
 
-def _resolve_wiki(location_slug: str) -> tuple[Location, Wiki]:
-    """Resolve the Location for a slug and its existing Wiki (404 when absent)."""
-    location = get_object_or_404(Location, slug=location_slug)
-    wiki = get_object_or_404(Wiki, location=location)
-    return location, wiki
-
-
 class LocationAliasView(LoginRequiredMixin, View):
     """GET: HTMX partial listing a wiki's aliases.  POST: add a new alias."""
 
     def get(self, request, location_slug):
-        location, wiki = _resolve_wiki(location_slug)
+        location, wiki, _profile = resolve_visible_wiki(request, location_slug)
         # Wikis are created lazily, so official-name candidates gathered before
         # the wiki existed have no alias rows yet; backfill them from the cache
         # (DB reads only - no network) now that there is a wiki to attach to.
@@ -158,14 +212,15 @@ class LocationAliasView(LoginRequiredMixin, View):
         return _render_location_panel(request, location, wiki)
 
     def post(self, request, location_slug):
-        location, wiki = _resolve_wiki(location_slug)
+        location, wiki, profile = resolve_visible_wiki(request, location_slug)
         name = (request.POST.get("name") or "").strip()
         if not name:
             return JsonResponse({"ok": False, "error": "Name is required."}, status=400)
-        profile, _ = Profile.objects.get_or_create(user=request.user)
         kind = AliasType.NICKNAME if request.POST.get("is_nickname") else AliasType.ALTERNATE
         try:
-            WikiAlias.objects.create(wiki=wiki, name=name, kind=kind, created_by=profile)
+            # See PinAliasView.post's atomic() comment - same reasoning here.
+            with transaction.atomic():
+                WikiAlias.objects.create(wiki=wiki, name=name, kind=kind, created_by=profile)
         except IntegrityError:
             return JsonResponse({"ok": False, "error": "That alias already exists."}, status=409)
         WikiEdit.objects.create(
@@ -178,13 +233,16 @@ class LocationAliasView(LoginRequiredMixin, View):
 
 class LocationAliasDeleteView(LoginRequiredMixin, View):
     def delete(self, request, location_slug, alias_id):
-        location, wiki = _resolve_wiki(location_slug)
+        location, wiki, profile = resolve_visible_wiki(request, location_slug)
         alias = get_object_or_404(WikiAlias, id=alias_id, wiki=wiki)
         if normalize_name_for_comparison(alias.name) == normalize_name_for_comparison(wiki.name):
             return HttpResponse("This alias is the current name - pick another name first.", status=400)
         alias_name = alias.name
+        # Tombstone first: an external-source sync or the pin<->wiki alias-mirror
+        # signal could otherwise recreate this exact name the moment either one
+        # next runs, silently undoing the deletion.
+        WikiAutoRemoval.objects.record(wiki=wiki, kind=AutoRemovalKind.ALIAS, value=alias_name)
         alias.delete()
-        profile, _ = Profile.objects.get_or_create(user=request.user)
         WikiEdit.objects.create(
             wiki=wiki,
             editor=profile,
@@ -197,12 +255,11 @@ class LocationAliasUseView(LoginRequiredMixin, View):
     """POST: make one of the wiki's aliases its current community name."""
 
     def post(self, request, location_slug, alias_id):
-        location, wiki = _resolve_wiki(location_slug)
+        location, wiki, profile = resolve_visible_wiki(request, location_slug)
         alias = get_object_or_404(WikiAlias, id=alias_id, wiki=wiki)
         previous_name = wiki.name
         wiki.name = alias.name
         wiki.save(update_fields=["name", "updated"])
-        profile, _ = Profile.objects.get_or_create(user=request.user)
         WikiEdit.objects.create(
             wiki=wiki,
             editor=profile,
@@ -217,7 +274,7 @@ class LocationAliasToggleNicknameView(LoginRequiredMixin, View):
     """POST: flip one of the wiki's aliases between nickname-only and a plain alias."""
 
     def post(self, request, location_slug, alias_id):
-        location, wiki = _resolve_wiki(location_slug)
+        location, wiki, _profile = resolve_visible_wiki(request, location_slug)
         alias = get_object_or_404(WikiAlias, id=alias_id, wiki=wiki)
         alias.toggle_nickname()
         return _render_location_panel(request, location, wiki)

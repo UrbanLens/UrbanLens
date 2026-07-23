@@ -12,7 +12,7 @@
     // Shared inner width
     .about-section-inner,
     .about-cta-inner {
-        max-width: 1100px;
+        max-width: 120rem;
         margin: 0 auto;
         padding: 0 1.5rem;
     }
@@ -24,17 +24,17 @@
         align-items: center;
         gap: 3rem;
         height: 60vh;
-        min-height: 29rem;
+        min-height: 36rem;
         padding: 3rem 1.5rem 2.5rem;
         text-align: center;
-        background: linear-gradient(145deg, $color-indigo-900 0%, $color-indigo-900 30%, $color-indigo-700 50%, $color-blue-500 100%);
+        background: linear-gradient(135deg, rgba(31, 111, 235, 0.2), rgba(23, 185, 120, 0.15));
         
         color: var(--ul-grey-4);
 
         @include up($breakpoint-sm) {
             grid-template-columns: 1fr 1fr;
             text-align: left;
-            padding: 5rem 6vw 4rem;
+            padding: 3rem 6vw;
         }
     }
 
@@ -65,7 +65,7 @@
         font-size: 1.05rem;
         color: $color-indigo-200;
         line-height: 1.7;
-        max-width: 500px;
+        max-width: 50rem;
         margin: 0 auto 2rem;
 
         @include up($breakpoint-sm) {
@@ -96,7 +96,15 @@
         }
 
         img {
-            max-height: 29rem;
+            // Scales with the hero's own viewport-height-driven sizing (see
+            // .about-hero's `height: 60vh`) instead of a flat cap, so the
+            // image actually grows to fill the extra room a large screen
+            // gives it rather than staying pinned at the same size forever.
+            // The lower bound matches the previous flat value (unchanged on
+            // short/small viewports); the upper bound keeps it from growing
+            // unbounded on very tall displays.
+            max-height: clamp(29rem, 50vh, 44rem);
+            max-width: 100%;
         }
     }
 
@@ -160,8 +168,8 @@
     }
 
     .about-pillar {
-        background: var(--ul-grey-0a);
-        border: 1px solid var(--ul-grey-1b);
+        background: var(--ul-surface-raised);
+        border: 1px solid var(--ul-surface-raised-border);
         border-radius: 12px;
         padding: 1.5rem;
     }
@@ -207,8 +215,8 @@
 
     .about-value-card {
         padding: 1.75rem;
-        background: var(--ul-grey-0);
-        border: 1px solid var(--ul-grey-1b);
+        background: var(--ul-surface-raised);
+        border: 1px solid var(--ul-surface-raised-border);
         border-radius: 12px;
         position: relative;
     }
@@ -295,7 +303,7 @@
         width: 120px;
         height: 120px;
         border-radius: 24px;
-        background: linear-gradient(135deg, rgba($primary-color, .12), rgba($primary-color, .22));
+        background: linear-gradient(135deg, rgba(31, 111, 235, 0.2), rgba(23, 185, 120, 0.15));
         border: 1px solid rgba($primary-color, .2);
         display: flex;
         align-items: center;
@@ -362,8 +370,8 @@
 
     .about-audience-card {
         padding: 1.5rem;
-        background: var(--ul-grey-0);
-        border: 1px solid var(--ul-grey-1b);
+        background: var(--ul-surface-raised);
+        border: 1px solid var(--ul-surface-raised-border);
         border-radius: 12px;
         text-align: center;
 
@@ -390,7 +398,7 @@
 
     // -- CTA -------------------------------------------------------------------
     .about-cta-section {
-        background: linear-gradient(135deg, $color-indigo-900 0%, $color-indigo-700 100%);
+        background: linear-gradient(135deg, rgba(31, 111, 235, 0.2), rgba(23, 185, 120, 0.15));
         padding: 5rem 1.5rem;
         text-align: center;
         color: var(--ul-grey-4);

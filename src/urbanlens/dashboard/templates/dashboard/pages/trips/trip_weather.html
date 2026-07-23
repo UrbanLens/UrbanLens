@@ -39,15 +39,6 @@
                             </div>
 
                             <div class="trip-weather-activity-forecast">
-                                {% if af.no_coords %}
-                                <span class="trip-weather-na">
-                                    <i class="material-symbols-outlined">location_off</i> No location data
-                                </span>
-                                {% elif af.out_of_range %}
-                                <span class="trip-weather-na">
-                                    <i class="material-symbols-outlined">event_busy</i> Outside 5-day forecast
-                                </span>
-                                {% elif af.slot %}
                                 {% with s=af.slot %}
                                 <div class="trip-weather-slot-inline">
                                     <img class="trip-weather-slot-icon"
@@ -68,11 +59,6 @@
                                     </div>
                                 </div>
                                 {% endwith %}
-                                {% else %}
-                                <span class="trip-weather-na">
-                                    <i class="material-symbols-outlined">cloud_off</i> No data
-                                </span>
-                                {% endif %}
                             </div>
 
                         </div>

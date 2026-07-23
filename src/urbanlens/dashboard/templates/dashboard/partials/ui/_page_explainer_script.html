@@ -68,6 +68,7 @@
         var ghost = sourceEl.cloneNode(true);
         ghost.classList.add('ul-explainer-ghost');
         ghost.classList.remove('is-collapsed');
+        ghost.hidden = false;
         ghost.removeAttribute('id');
         ghost.removeAttribute('data-explainer-id');
         ghost.removeAttribute('data-explainer-anchor');
@@ -208,6 +209,17 @@
         });
     }
 
+    function reveal(explainer) {
+        explainer.hidden = false;
+        if (prefersReducedMotion()) return;
+
+        explainer.classList.add('is-revealing');
+        explainer.addEventListener('animationend', function handler() {
+            explainer.classList.remove('is-revealing');
+            explainer.removeEventListener('animationend', handler);
+        });
+    }
+
     function initExplainer(explainer) {
         if (explainer.dataset.explainerInit === '1') return;
         explainer.dataset.explainerInit = '1';
@@ -226,6 +238,7 @@
             setToggleVisible(toggle, true);
         } else {
             setToggleVisible(toggle, false);
+            reveal(explainer);
         }
     }
 

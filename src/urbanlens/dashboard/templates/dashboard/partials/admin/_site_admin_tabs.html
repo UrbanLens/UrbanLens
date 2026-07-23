@@ -1,0 +1,62 @@
+{% comment %}
+Home | Stats | Settings | Subscriptions | API Limits | Plugins | Users | UI Components
+tab strip for the site-admin section.
+
+Context:
+  active - "home", "stats", "settings", "subscriptions", "api_limits", "plugins",
+           "users", or "ui_components" (which tab is current)
+  show_dev_toolbar - gates the UI Components tab (dev only), same as the nav
+                     card on the admin home page
+{% endcomment %}
+<nav class="ul-subnav-tabs" aria-label="Site admin views">
+    <a href="{% url 'site_admin_home' %}"
+       class="ul-subnav-tab {% if active == 'home' %}is-active{% endif %}"
+       {% if active == 'home' %}aria-current="page"{% endif %}>
+        <i class="material-symbols-outlined">admin_panel_settings</i>
+        <span>Home</span>
+    </a>
+    <a href="{% url 'site_admin_stats' %}"
+       class="ul-subnav-tab {% if active == 'stats' %}is-active{% endif %}"
+       {% if active == 'stats' %}aria-current="page"{% endif %}>
+        <i class="material-symbols-outlined">bar_chart</i>
+        <span>Stats</span>
+    </a>
+    <a href="{% url 'site_admin_users' %}"
+       class="ul-subnav-tab {% if active == 'users' %}is-active{% endif %}"
+       {% if active == 'users' %}aria-current="page"{% endif %}>
+        <i class="material-symbols-outlined">group</i>
+        <span>Users</span>
+    </a>
+    <a href="{% url 'site_admin' %}"
+       class="ul-subnav-tab {% if active == 'settings' %}is-active{% endif %}"
+       {% if active == 'settings' %}aria-current="page"{% endif %}>
+        <i class="material-symbols-outlined">tune</i>
+        <span>Settings</span>
+    </a>
+    <a href="{% url 'site_admin_subscriptions' %}"
+       class="ul-subnav-tab {% if active == 'subscriptions' %}is-active{% endif %}"
+       {% if active == 'subscriptions' %}aria-current="page"{% endif %}>
+        <i class="material-symbols-outlined">workspace_premium</i>
+        <span>Subscriptions</span>
+    </a>
+    <a href="{% url 'site_admin_api_limits' %}"
+       class="ul-subnav-tab {% if active == 'api_limits' %}is-active{% endif %}"
+       {% if active == 'api_limits' %}aria-current="page"{% endif %}>
+        <i class="material-symbols-outlined">cloud</i>
+        <span>API Limits</span>
+    </a>
+    <a href="{% url 'site_admin_plugins' %}"
+       class="ul-subnav-tab {% if active == 'plugins' %}is-active{% endif %}"
+       {% if active == 'plugins' %}aria-current="page"{% endif %}>
+        <i class="material-symbols-outlined">extension</i>
+        <span>Plugins</span>
+    </a>
+    {% if show_dev_toolbar %}
+    <a href="{% url 'site_admin_ui_components' %}"
+       class="ul-subnav-tab {% if active == 'ui_components' %}is-active{% endif %}"
+       {% if active == 'ui_components' %}aria-current="page"{% endif %}>
+        <i class="material-symbols-outlined">palette</i>
+        <span>UI Components</span>
+    </a>
+    {% endif %}
+</nav>

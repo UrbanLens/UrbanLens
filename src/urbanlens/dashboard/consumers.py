@@ -7,25 +7,6 @@ from channels.generic.websocket import AsyncWebsocketConsumer
 logger = logging.getLogger(__name__)
 
 
-class RequestStatusConsumer(AsyncWebsocketConsumer):
-    async def connect(self):
-        self.room_name = "request_status"
-        self.room_group_name = f"updates_{self.room_name}"
-
-        await self.channel_layer.group_add(self.room_group_name, self.channel_name)
-        await self.accept()
-
-    async def disconnect(self, close_code):
-        await self.channel_layer.group_discard(self.room_group_name, self.channel_name)
-
-    async def receive(self, text_data):
-        pass
-
-    async def send_status(self, event):
-        message = event["message"]
-        await self.send(text_data=json.dumps({"message": message}))
-
-
 class UserNotificationConsumer(AsyncWebsocketConsumer):
     """Pushes on-site notifications to a logged-in user's open tabs as they are created.
 
@@ -92,6 +73,257 @@ class UserNotificationConsumer(AsyncWebsocketConsumer):
 
         profile, _ = Profile.objects.get_or_create(user=self.scope["user"])
         return profile.pk
+
+
+class DirectMessageConsumer(AsyncWebsocketConsumer):
+    """Real-time direct-message channel for a logged-in user.
+
+    Mounted at ``ws/messages/``. Authentication comes from the session cookie
+    via Channels' ``AuthMiddlewareStack``. Each connection joins the
+    per-profile group from ``services.direct_messages.direct_message_group_name``;
+    ``create_direct_message`` broadcasts every new message to both the sender's
+    and the recipient's groups, so all of either party's open tabs update at once.
+
+    Sending: the client submits ``{"recipient": "<profile slug>", "body": "..."}``
+    frames; validation, privacy enforcement, persistence, and the broadcast all
+    live in ``create_direct_message`` - the same function the HTTP fallback
+    (``ConversationSendView``) uses, mirroring the safety check-in chat split.
+
+    Close codes on ``connect()`` failure (same contract as
+    ``SafetyCheckinChatConsumer``, which the frontend reconnect logic branches on):
+
+    - ``4404``: the session is unauthenticated - permanent, retrying won't help.
+    - ``4500``: an unexpected server-side error - transient, safe to retry.
+    """
+
+    async def connect(self):
+        """Authenticate the session, join the profile's direct-message group, and mark them online."""
+        user = self.scope.get("user")
+        if user is None or not user.is_authenticated:
+            await self.close(code=4404)
+            return
+
+        try:
+            self.profile_id = await self._get_profile_id()
+            from urbanlens.dashboard.services.direct_messages import direct_message_group_name, mark_profile_online
+
+            self.group_name = direct_message_group_name(self.profile_id)
+            await self.channel_layer.group_add(self.group_name, self.channel_name)
+            await self.accept()
+            await database_sync_to_async(mark_profile_online)(self.profile_id)
+        except Exception:
+            logger.exception("Direct message socket connect failed for user %s", getattr(user, "pk", None))
+            await self.close(code=4500)
+
+    async def disconnect(self, close_code):
+        """Leave the direct-message group and mark one fewer live connection, if we ever joined."""
+        if hasattr(self, "group_name"):
+            try:
+                await self.channel_layer.group_discard(self.group_name, self.channel_name)
+            except Exception:
+                logger.exception("Direct message socket failed to leave group %s cleanly", self.group_name)
+        if hasattr(self, "profile_id"):
+            from urbanlens.dashboard.services.direct_messages import mark_profile_offline
+
+            try:
+                await database_sync_to_async(mark_profile_offline)(self.profile_id)
+            except Exception:
+                logger.exception("Direct message socket failed to mark profile %s offline", self.profile_id)
+
+    async def receive(self, text_data):
+        """Persist an incoming message; the service broadcasts it to both parties.
+
+        Args:
+            text_data: JSON string with ``recipient`` (profile slug), ``body``,
+                and optional ``image_ids``/``markup_map_uuid``/``reply_to``
+                fields. Unparseable frames, or frames with no recipient and no
+                body/attachment at all, are silently ignored; a frame that
+                fails validation or privacy checks gets an explicit
+                ``{"type": "error", ...}`` reply so the sender always learns
+                their message didn't go through.
+        """
+        try:
+            data = json.loads(text_data)
+        except (json.JSONDecodeError, TypeError):
+            logger.warning("Direct message socket received an unparseable frame from profile %s", self.profile_id)
+            return
+
+        if data.get("type") == "typing":
+            recipient_slug = str(data.get("recipient") or "").strip()
+            if recipient_slug:
+                from urbanlens.dashboard.services.direct_messages import broadcast_typing_indicator
+
+                await database_sync_to_async(broadcast_typing_indicator)(self.profile_id, recipient_slug)
+            return
+
+        if data.get("type") == "open":
+            recipient_slug = str(data.get("recipient") or "").strip()
+            group_uuid = str(data.get("group") or "").strip()
+            if group_uuid:
+                await self._mark_group_thread_open(group_uuid)
+            elif recipient_slug:
+                await self._mark_thread_open(recipient_slug)
+            return
+
+        body = str(data.get("body") or "").strip()
+        ciphertext = str(data.get("ciphertext") or "").strip()
+        nonce = str(data.get("nonce") or "").strip()
+        key_version = data.get("key_version")
+        key_version = int(key_version) if isinstance(key_version, int) else 0
+
+        group_uuid = str(data.get("group") or "").strip()
+        if group_uuid:
+            # A group-chat frame: same validation/broadcast pipeline, but the
+            # message fans out to every active member (see services.group_chats).
+            if not (body or ciphertext):
+                return
+            try:
+                await self._create_group_message(group_uuid, body, ciphertext, nonce, key_version)
+            except (ValueError, PermissionError) as exc:
+                await self.send(text_data=json.dumps({"type": "error", "detail": str(exc)}))
+            except Exception:
+                logger.exception("Group message failed to save from profile %s", self.profile_id)
+                await self.send(text_data=json.dumps({"type": "error", "detail": "Your message couldn't be sent. Please try again."}))
+            return
+
+        recipient_slug = str(data.get("recipient") or "").strip()
+        image_ids = [int(v) for v in data.get("image_ids") or [] if isinstance(v, int)]
+        markup_map_uuid = str(data.get("markup_map_uuid") or "").strip() or None
+        reply_to_id = data.get("reply_to")
+        reply_to_id = int(reply_to_id) if isinstance(reply_to_id, int) else None
+        if not recipient_slug or not (body or ciphertext or image_ids or markup_map_uuid):
+            return
+
+        try:
+            await self._create_message(recipient_slug, body, ciphertext, nonce, key_version, image_ids, markup_map_uuid, reply_to_id)
+        except (ValueError, PermissionError) as exc:
+            await self.send(text_data=json.dumps({"type": "error", "detail": str(exc)}))
+        except Exception:
+            logger.exception("Direct message failed to save from profile %s", self.profile_id)
+            await self.send(text_data=json.dumps({"type": "error", "detail": "Your message couldn't be sent. Please try again."}))
+
+    async def dm_message(self, event):
+        """Deliver a broadcasted message to this connection.
+
+        Args:
+            event: The group-send event, with a ``message`` dict payload.
+        """
+        await self.send(text_data=json.dumps(event["message"]))
+
+    async def dm_reaction(self, event):
+        """Deliver a broadcasted reaction-summary update to this connection.
+
+        Args:
+            event: The group-send event, with a ``message`` dict payload
+                (``{"type": "reaction", "message_id": ..., "reactions": [...]}``).
+        """
+        await self.send(text_data=json.dumps(event["message"]))
+
+    @database_sync_to_async
+    def _mark_group_thread_open(self, group_uuid):
+        """Record that this connection currently has a group thread open.
+
+        Args:
+            group_uuid: UUID string of the group chat being viewed.
+        """
+        from urbanlens.dashboard.models.group_chats.model import GroupChat
+        from urbanlens.dashboard.services.group_chats import mark_group_thread_open
+
+        group = GroupChat.objects.filter(uuid=group_uuid).first()
+        if group is None:
+            return
+        mark_group_thread_open(self.profile_id, group.pk)
+
+    @database_sync_to_async
+    def _create_group_message(self, group_uuid, body, ciphertext, nonce, key_version):
+        """Resolve the group and create the message through the shared service.
+
+        Args:
+            group_uuid: UUID string of the target group chat.
+            body: Plaintext message text (blank for encrypted messages).
+            ciphertext: End-to-end encrypted body (base64), or blank.
+            nonce: Base64 nonce for ``ciphertext``.
+            key_version: GroupKey version that encrypted this message.
+
+        Raises:
+            ValueError: Bad content or no such group.
+            PermissionError: The sender isn't an active member.
+        """
+        from urbanlens.dashboard.models.group_chats.model import GroupChat
+        from urbanlens.dashboard.models.profile.model import Profile
+        from urbanlens.dashboard.services.group_chats import create_group_message
+
+        sender = Profile.objects.select_related("user").get(pk=self.profile_id)
+        group = GroupChat.objects.filter(uuid=group_uuid).first()
+        if group is None:
+            raise ValueError("That group could not be found.")
+        create_group_message(sender, group, body, ciphertext=ciphertext, nonce=nonce, key_version=key_version)
+
+    @database_sync_to_async
+    def _mark_thread_open(self, recipient_slug):
+        """Record that this connection currently has the thread with `recipient_slug` open.
+
+        Args:
+            recipient_slug: URL slug of the conversation partner being viewed.
+        """
+        from urbanlens.dashboard.models.profile.model import Profile
+        from urbanlens.dashboard.services.direct_messages import mark_thread_open
+
+        try:
+            partner = Profile.objects.get(slug=recipient_slug)
+        except Profile.DoesNotExist:
+            return
+        mark_thread_open(self.profile_id, partner.pk)
+
+    @database_sync_to_async
+    def _get_profile_id(self):
+        """Resolve (creating if needed) the session user's profile id.
+
+        Returns:
+            The primary key of the user's Profile.
+        """
+        from urbanlens.dashboard.models.profile.model import Profile
+
+        profile, _ = Profile.objects.get_or_create(user=self.scope["user"])
+        return profile.pk
+
+    @database_sync_to_async
+    def _create_message(self, recipient_slug, body, ciphertext, nonce, key_version, image_ids, markup_map_uuid, reply_to_id):
+        """Resolve the recipient and create the message through the shared service.
+
+        Args:
+            recipient_slug: URL slug of the recipient profile.
+            body: Plaintext message text (blank for encrypted messages).
+            ciphertext: End-to-end encrypted body (base64), or blank.
+            nonce: Base64 nonce for ``ciphertext``.
+            key_version: ConversationKey version that encrypted this message.
+            image_ids: PKs of the sender's unattached Image rows to attach.
+            markup_map_uuid: UUID of a MarkupMap owned by the sender to attach.
+            reply_to_id: PK of an earlier message in this conversation to quote.
+
+        Raises:
+            ValueError: Blank/too-long/malformed content, or no such recipient.
+            PermissionError: The recipient's privacy settings reject the sender.
+        """
+        from urbanlens.dashboard.models.profile.model import Profile
+        from urbanlens.dashboard.services.direct_messages import create_direct_message
+
+        sender = Profile.objects.select_related("user").get(pk=self.profile_id)
+        try:
+            recipient = Profile.objects.select_related("user").get(slug=recipient_slug)
+        except Profile.DoesNotExist:
+            raise ValueError("That user could not be found.") from None
+        create_direct_message(
+            sender,
+            recipient,
+            body,
+            ciphertext=ciphertext,
+            nonce=nonce,
+            key_version=key_version,
+            image_ids=image_ids,
+            markup_map_uuid=markup_map_uuid,
+            reply_to_id=reply_to_id,
+        )
 
 
 class SafetyCheckinChatConsumer(AsyncWebsocketConsumer):
@@ -202,6 +434,15 @@ class SafetyCheckinChatConsumer(AsyncWebsocketConsumer):
             event: The group-send event, with a ``message`` dict payload.
         """
         await self.send(text_data=json.dumps(event["message"]))
+
+    async def status_update(self, event):
+        """Deliver a check-in status change (escalated/found-safe) to this connection.
+
+        Args:
+            event: The group-send event, with a ``payload`` dict (see
+                ``services.safety._broadcast_status_update``).
+        """
+        await self.send(text_data=json.dumps(event["payload"]))
 
     @database_sync_to_async
     def _resolve(self, checkin_uuid, token):

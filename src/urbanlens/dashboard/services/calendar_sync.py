@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any
 
 from django.utils import timezone
 
-from urbanlens.dashboard.models.calendar_sync.model import CalendarSyncDirection, TripCalendarLink
+from urbanlens.dashboard.models.calendar_sync.model import CalendarSyncDirection, GoogleCalendarAccount, TripCalendarLink
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
 from urbanlens.dashboard.services.apis.calendar.google import (
     ACTIVITY_ID_EVENT_PROPERTY,
@@ -23,9 +23,9 @@ from urbanlens.dashboard.services.apis.calendar.google import (
     CalendarEventNotFoundError,
     GoogleCalendarGateway,
 )
+from urbanlens.dashboard.services.gateway import GatewayRequestError
 
 if TYPE_CHECKING:
-    from urbanlens.dashboard.models.calendar_sync.model import GoogleCalendarAccount
     from urbanlens.dashboard.models.profile.model import Profile
 
 logger = logging.getLogger(__name__)
@@ -68,13 +68,17 @@ def trip_to_event_body(trip: Trip, *, trip_url: str | None = None) -> dict[str, 
     if trip_url:
         description = f"{description}\n\n{trip_url}".strip()
 
-    return {
+    body: dict[str, Any] = {
         "summary": trip.name,
         "description": description,
         "start": {"date": start.isoformat()},
         "end": {"date": (end + datetime.timedelta(days=1)).isoformat()},
         "extendedProperties": {"private": {TRIP_UUID_EVENT_PROPERTY: str(trip.uuid)}},
     }
+    location_string = _trip_location_string(trip)
+    if location_string:
+        body["location"] = location_string
+    return body
 
 
 def _activity_location_string(activity: TripActivity) -> str | None:
@@ -98,6 +102,29 @@ def _activity_location_string(activity: TripActivity) -> str | None:
     lng = activity.lng_override if activity.lng_override is not None else (float(location.longitude) if location else None)
     if lat is not None and lng is not None:
         return f"{lat:.6f}, {lng:.6f}"
+    return None
+
+
+def _trip_location_string(trip: Trip) -> str | None:
+    """Human-readable location for the trip-level calendar event.
+
+    Uses the trip's first activity (by schedule, then manual order) that has a
+    shareable location, so the exported all-day event points at where the trip
+    starts.
+
+    Args:
+        trip: The trip being exported.
+
+    Returns:
+        A location string for the event, or None when no activity has one.
+    """
+    if trip.pk is None:
+        # Unsaved trips (e.g. pure-mapping property tests) have no activities.
+        return None
+    for activity in trip.activities.select_related("location", "pin__location"):
+        location_string = _activity_location_string(activity)
+        if location_string:
+            return location_string
     return None
 
 
@@ -319,7 +346,7 @@ def build_import_preview(account: GoogleCalendarAccount, event_ids: list[str]) -
         }
         previews.append(entry)
 
-        if TripCalendarLink.objects.filter(profile=profile, google_event_id=event_id).exists():
+        if TripCalendarLink.objects.already_linked(profile, event_id):
             entry["skip_reason"] = "Already linked to a trip."
             continue
         try:
@@ -412,7 +439,7 @@ def _invite_participants(trip: Trip, importer: Profile, profile_ids: list[int], 
         if trip.profiles.count() >= max_members:
             skipped.append(f'"{trip.name}" is full ({max_members} members maximum); some invitations were not sent.')
             break
-        _membership, created = TripMembership.objects.get_or_create(trip=trip, profile=invitee)
+        _membership, created = TripMembership.objects.get_or_create(trip=trip, profile=invitee, defaults={"status": TripMembership.STATUS_INVITED})
         if created:
             NotificationLog.objects.create(
                 profile=invitee,
@@ -421,7 +448,7 @@ def _invite_participants(trip: Trip, importer: Profile, profile_ids: list[int], 
                 notification_type=NotificationType.ADDED_TO_TRIP,
                 title="Added to a trip",
                 message=f'{importer.username} added you to the trip "{trip.name}".',
-                url=reverse("trips.detail", kwargs={"trip_uuid": trip.uuid}),
+                url=reverse("trips.detail", kwargs={"trip_slug": trip.slug}),
             )
             invited += 1
     return invited
@@ -494,15 +521,17 @@ def import_events_as_trips(account: GoogleCalendarAccount, selections: list[str 
     unparsable events are skipped with a reason.
 
     Each selection may carry per-event options confirmed on the review page:
-    whether to create an activity from the event's location, and which friend
-    profiles to invite as trip members. Invitees are re-validated - only
-    accepted friends of the importer are ever added.
+    whether to create an activity from the event's location, which friend
+    profiles to invite as trip members, and whether to keep the new trip
+    synced to the calendar event going forward. Invitees are re-validated -
+    only accepted friends of the importer are ever added.
 
     Args:
         account: The user's connected calendar account.
         selections: Either bare Google event ids, or dicts with ``event_id``,
-            ``create_activity`` (bool, default True), and ``invite_profile_ids``
-            (list of ints, default empty) keys.
+            ``create_activity`` (bool, default True), ``invite_profile_ids``
+            (list of ints, default empty), and ``auto_sync`` (bool, default
+            False) keys.
 
     Returns:
         Tuple of (created trips, human-readable skip reasons, number of
@@ -520,7 +549,7 @@ def import_events_as_trips(account: GoogleCalendarAccount, selections: list[str 
         if not event_id:
             continue
 
-        if TripCalendarLink.objects.filter(profile=profile, google_event_id=event_id).exists():
+        if TripCalendarLink.objects.already_linked(profile, event_id):
             skipped.append("An event was skipped because it is already linked to a trip.")
             continue
 
@@ -548,6 +577,7 @@ def import_events_as_trips(account: GoogleCalendarAccount, selections: list[str 
             google_event_id=event_id,
             direction=CalendarSyncDirection.IMPORTED,
             last_synced=timezone.now(),
+            auto_sync=bool(selection.get("auto_sync")),
         )
         if selection.get("create_activity", True):
             _create_activity_from_event(trip, event, profile)
@@ -633,7 +663,7 @@ def _sync_activity_events(
         GatewayRequestError: When a calendar write fails.
     """
     profile = account.profile
-    activity_links = {link.activity_id: link for link in TripCalendarLink.objects.filter(trip=trip, profile=profile, activity__isnull=False)}
+    activity_links = TripCalendarLink.objects.activity_links_by_activity_id(trip, profile)
 
     exported = 0
     scheduled_ids: set[int] = set()
@@ -677,7 +707,7 @@ def export_trip_to_calendar(account: GoogleCalendarAccount, trip: Trip, *, trip_
     body = trip_to_event_body(trip, trip_url=trip_url)
     profile = account.profile
 
-    trip_link = TripCalendarLink.objects.filter(trip=trip, profile=profile, activity__isnull=True).first()
+    trip_link = TripCalendarLink.objects.trip_level_link(trip, profile)
     trip_link = _upsert_event_link(gateway, account, body, trip_link, trip=trip)
     activity_count = _sync_activity_events(gateway, account, trip, trip_url=trip_url)
     return trip_link, activity_count
@@ -708,3 +738,73 @@ def remove_trip_from_calendar(account: GoogleCalendarAccount, trip: Trip) -> boo
         gateway.delete_event(link.google_event_id)
         link.delete()
     return True
+
+
+def disconnect_member_calendar_sync(trip: Trip, profile: Profile) -> None:
+    """Stop syncing a trip to one profile's calendar when they leave or are removed.
+
+    Trip access control lives on ``TripMembership``, but a live calendar
+    export is a second, independent channel to the same data - without this,
+    a removed (or departed) member's Google Calendar would keep silently
+    receiving the trip's evolving name, dates, and activity locations/notes
+    via ``push_auto_synced_trip_changes`` forever, even though they've lost
+    every other form of access. Callers must invoke this whenever a
+    ``TripMembership`` row for a non-creator is deleted.
+
+    Deleting each event on the Google side is best-effort: a revoked or
+    expired token must never block dropping the link rows, since those rows
+    - not the remote event - are what re-enables future auto-sync.
+
+    Args:
+        trip: The trip the profile is leaving/being removed from.
+        profile: The departing profile.
+    """
+    links = list(TripCalendarLink.objects.filter(trip=trip, profile=profile))
+    if not links:
+        return
+
+    account = GoogleCalendarAccount.objects.get_for_profile(profile)
+    if account is not None:
+        gateway = GoogleCalendarGateway(account=account)
+        for link in links:
+            try:
+                gateway.delete_event(link.google_event_id)
+            except GatewayRequestError:
+                logger.warning(
+                    "Could not delete calendar event %s for departing trip member %s; dropping the sync link anyway.",
+                    link.google_event_id,
+                    profile.pk,
+                    exc_info=True,
+                )
+
+    TripCalendarLink.objects.filter(trip=trip, profile=profile).delete()
+
+
+def push_auto_synced_trip_changes(trip: Trip) -> int:
+    """Push a trip's current state to every calendar it is set to auto-sync with.
+
+    Called after a trip or one of its activities changes. Only trip-level
+    links with ``auto_sync`` enabled are pushed - this is one-way (UrbanLens
+    to Google) and never pulls edits made on the Google Calendar side back in.
+    A failure on one profile's calendar (e.g. a revoked OAuth grant) is logged
+    and does not stop the others from syncing.
+
+    Args:
+        trip: The trip whose linked calendar events should be refreshed.
+
+    Returns:
+        The number of calendars the trip was successfully pushed to.
+    """
+    links = TripCalendarLink.objects.filter(trip=trip, activity__isnull=True, auto_sync=True).select_related("profile")
+    synced = 0
+    for link in links:
+        account = GoogleCalendarAccount.objects.get_for_profile(link.profile)
+        if account is None:
+            continue
+        try:
+            export_trip_to_calendar(account, trip)
+        except (GatewayRequestError, ValueError):
+            logger.warning("Auto-sync of trip %s to profile %s's calendar failed.", trip.uuid, link.profile_id, exc_info=True)
+            continue
+        synced += 1
+    return synced

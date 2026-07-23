@@ -1,0 +1,177 @@
+// Ownership card (pin detail page, private; wiki page, shared): owner
+// list/edit forms + Sale History tab. Shared styling for both scopes.
+
+@use 'variables' as *;
+
+.po-input {
+  background: var(--ul-control-bg);
+  border: 1px solid var(--ul-control-border);
+  border-radius: 6px;
+  color: var(--ul-grey-8);
+  font-size: .85rem;
+  padding: .45rem .6rem;
+  transition: border-color .15s, box-shadow .15s;
+
+  &:focus {
+    outline: none;
+    border-color: var(--ul-color-accent);
+    box-shadow: 0 0 0 2px var(--ul-color-accent-ring);
+  }
+}
+
+.po-notes-input {
+  min-height: 2.4rem;
+  resize: vertical;
+}
+
+// Tab strip itself now uses the shared .card-tabs/.card-tab styling (see
+// _pin-detail.scss) instead of these bespoke lookalikes, so every tabbed
+// section on the pin/wiki pages looks the same.
+.po-tab-body {
+  padding: .6rem .85rem .75rem;
+
+  &[hidden] { display: none; }
+}
+
+.po-owner-list {
+  display: flex;
+  flex-direction: column;
+  gap: .6rem;
+}
+
+.po-owner-row { border-radius: 6px; }
+
+.po-owner-main {
+  align-items: center;
+  display: flex;
+  gap: .5rem;
+}
+
+.po-owner-name { font-size: .88rem; font-weight: 600; }
+
+.po-owner-company {
+  color: var(--ul-grey-6);
+  font-size: .78rem;
+}
+
+.po-badge {
+  align-items: center;
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: .68rem;
+  gap: .2rem;
+  padding: .1rem .45rem;
+
+  .material-symbols-outlined { font-size: .85rem; }
+}
+
+.po-badge--official {
+  background: var(--ul-color-accent-ring);
+  color: var(--ul-color-accent);
+}
+
+.po-owner-actions {
+  display: flex;
+  gap: .1rem;
+  margin-left: auto;
+  opacity: 0;
+  transition: opacity .15s;
+
+  .po-owner-row:hover &,
+  .po-owner-row:focus-within & { opacity: 1; }
+}
+
+.po-owner-contact {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .25rem 1rem;
+  margin-top: .2rem;
+}
+
+.po-owner-detail {
+  align-items: center;
+  color: var(--ul-grey-6);
+  display: inline-flex;
+  font-size: .78rem;
+  gap: .25rem;
+
+  .material-symbols-outlined { font-size: .95rem; }
+}
+
+.po-owner-notes {
+  color: var(--ul-grey-6);
+  font-size: .8rem;
+  margin: .3rem 0 0;
+}
+
+.po-owner-edit-form,
+.po-add-form {
+  display: flex;
+  flex-direction: column;
+  gap: .4rem;
+  margin-top: .5rem;
+
+  &[hidden] { display: none; }
+}
+
+.po-owner-edit-actions {
+  display: flex;
+  gap: .3rem;
+  justify-content: flex-end;
+}
+
+.po-add-btn { align-self: flex-start; }
+
+.po-panel-empty {
+  color: var(--ul-grey-5);
+  font-size: .8rem;
+  margin: 0;
+}
+
+.po-sale-list {
+  display: flex;
+  flex-direction: column;
+  gap: .6rem;
+  margin-bottom: .6rem;
+}
+
+.po-sale-row {
+  border-bottom: 1px solid var(--ul-control-border);
+  padding-bottom: .5rem;
+
+  &:last-child { border-bottom: none; }
+}
+
+.po-sale-main {
+  align-items: center;
+  display: flex;
+  gap: .6rem;
+}
+
+.po-sale-date { font-size: .85rem; font-weight: 600; }
+
+.po-sale-price {
+  color: var(--ul-color-accent);
+  font-size: .85rem;
+}
+
+.po-sale-delete { margin-left: auto; }
+
+.po-sale-parties {
+  align-items: center;
+  color: var(--ul-grey-6);
+  display: flex;
+  font-size: .8rem;
+  gap: .4rem;
+  margin-top: .2rem;
+
+  .po-sale-arrow { font-size: .9rem; }
+}
+
+.po-sale-notes {
+  color: var(--ul-grey-6);
+  font-size: .78rem;
+  margin: .3rem 0 0;
+}
+
+.po-price-input { width: 8rem; }

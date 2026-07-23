@@ -1,0 +1,81 @@
+{% comment %}
+The single "organize this property?" suggestion, shown once per pin the first
+time its detail page is opened. Covers both halves together - creating a child
+pin per building here, and nesting existing top-level pins that stand inside
+this property - because they are one question about one pin's hierarchy, and
+two dialogs for that would be two interruptions. See
+controllers.pin_restructure.
+
+Reuses the shared onboarding-card markup (see ts/shared/onboarding-tour.ts and
+_map.scss's .page-onboarding-card rules) so it reads as the same kind of
+suggestion the rest of the app makes, with no styles of its own.
+
+All three actions swap this element away: Yes applies the plan (and toasts its
+own result), No dismisses this pin permanently, and "Don't show again" also
+turns the account-wide setting off.
+
+Context:
+    pin: the pin being viewed.
+    building_count / sample_names: buildings here with no pin yet.
+    nestable_count / nestable: the owner's top-level pins inside this property
+        (nestable is capped for display; nestable_count is the real total).
+{% endcomment %}
+<section class="page-onboarding-card" id="pin-restructure-offer">
+    <div class="page-onboarding-card__icon"><i class="material-icons">account_tree</i></div>
+    <div class="page-onboarding-card__body">
+        <div class="page-onboarding-card__eyebrow">Organize this property</div>
+        <h2>
+            {% if building_count and nestable_count %}
+                This property has {{ building_count }} unpinned building{{ building_count|pluralize }} and {{ nestable_count }} of your pins inside it
+            {% elif building_count %}
+                This property has {{ building_count }} building{{ building_count|pluralize }} you haven't pinned
+            {% else %}
+                {{ nestable_count }} of your pin{{ nestable_count|pluralize }} stand{{ nestable_count|pluralize:"s," }} inside this property
+            {% endif %}
+        </h2>
+        <p>
+            {% if building_count %}
+            Add a sub pin for each building{% if sample_names %} &mdash; {% for name in sample_names %}{{ name }}{% if not forloop.last %}, {% endif %}{% endfor %}{% if building_count > 3 %}, and more{% endif %}{% endif %}.
+            {% endif %}
+            {% if nestable_count %}
+            Move {% if nestable_count == 1 %}it{% else %}them{% endif %} under this pin as sub pins &mdash; nothing is merged or deleted, and everything on them comes along.
+            {% endif %}
+            You can undo any of this afterwards.
+        </p>
+        {% if nestable %}
+        <ul class="pin-restructure-nestable">
+            {% for candidate in nestable %}
+            <li>{{ candidate.effective_name }}</li>
+            {% endfor %}
+            {% if nestable_count > nestable|length %}
+            <li class="pin-restructure-nestable-more">and {{ nestable_count|add:"-5" }} more</li>
+            {% endif %}
+        </ul>
+        {% endif %}
+        <div class="page-onboarding-card__actions">
+            <button type="button" class="btn btn--primary"
+                    hx-post="{% url 'pin.restructure.apply' pin.slug %}"
+                    hx-target="#pin-restructure-offer"
+                    hx-swap="outerHTML"
+                    hx-indicator="#pin-restructure-spinner"
+                    hx-disabled-elt="this">
+                Yes, organize it
+            </button>
+            <button type="button" class="btn btn--ghost"
+                    hx-post="{% url 'pin.restructure.dismiss' pin.slug %}"
+                    hx-target="#pin-restructure-offer"
+                    hx-swap="outerHTML">
+                No
+            </button>
+            <button type="button" class="page-onboarding-dismiss"
+                    hx-post="{% url 'pin.restructure.dismiss' pin.slug %}?scope=all"
+                    hx-target="#pin-restructure-offer"
+                    hx-swap="outerHTML">
+                Don't show again
+            </button>
+            <span id="pin-restructure-spinner" class="htmx-indicator">
+                <i class="material-icons spin">autorenew</i> Organizing...
+            </span>
+        </div>
+    </div>
+</section>

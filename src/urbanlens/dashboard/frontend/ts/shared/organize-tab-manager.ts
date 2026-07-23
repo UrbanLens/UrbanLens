@@ -3,7 +3,7 @@ import { getCsrfToken } from "./csrf";
 import { renderIconGlyphHtml, resetIconPicker } from "./icon-picker";
 import { resetColorPicker } from "./color-picker";
 import { renderTreeView } from "./tree-view";
-import { BadgeRelPicker } from "./badge-rel-picker";
+import { LabelRelPicker } from "./label-rel-picker";
 import { registerBulkStateUpdater } from "./organize-icon-picker";
 import { applyOrgFilter, getOrgVisibleCards, type OrgNamespace } from "./organize-filter-engine";
 import { orgHeader } from "./organize-header";
@@ -18,6 +18,12 @@ export interface ConvertTarget {
     kind: string;
     label: string;
     endpoint: string;
+    /** GET url returning the destination tab's row list, for refreshing it after a convert. */
+    rowsUrl?: string;
+    /** CSS selector for the destination tab's rows container. */
+    rowsTarget?: string;
+    /** data-tab value of the destination tab's `.organize-tab` trigger, to switch to it after converting. */
+    tabKey?: string;
 }
 
 export interface OrgTabManagerConfig {
@@ -87,7 +93,7 @@ interface CardData {
  * tabs. Consolidates what used to be four separately copy-pasted ~350-450
  * line IIFEs differing mainly in id/dataset naming plus a handful of real
  * capability differences (kind-conversion, merge-time rename/re-icon/re-color,
- * a "protected" badge that can't be a merge source, custom-icon upload).
+ * a "protected" label that can't be a merge source, custom-icon upload).
  *
  * Selection/toolbar model differs from categories.ts/tags.ts's
  * BulkEntityManager: organize selects by clicking anywhere on a card (not a
@@ -240,7 +246,17 @@ export class OrgTabManager {
             const target = e.target as HTMLElement;
             const card = target.closest<HTMLElement>(this.cfg.cardSelector);
             if (!card) return;
-            if (target.closest("a,button,input,select,textarea")) return;
+
+            const cb = target.closest<HTMLInputElement>(this.cfg.checkboxSelector);
+            if (cb) {
+                // Prevent the browser's native checkbox toggle so this handler stays
+                // the single source of truth for `this.selected` - otherwise a direct
+                // click on the checkbox flips its visual state without updating
+                // `this.selected`, desyncing the bulk toolbar from what's checked.
+                e.preventDefault();
+            } else if (target.closest("a,button,input,select,textarea")) {
+                return;
+            }
 
             const cards = this.visibleCards();
             const idx = cards.indexOf(card);
@@ -273,7 +289,7 @@ export class OrgTabManager {
         });
     }
 
-    // When multiple badges are selected, a row's own "Edit" pencil should
+    // When multiple labels are selected, a row's own "Edit" pencil should
     // still open the bulk-edit dialog for the whole selection rather than
     // the single-item form - otherwise it silently edits just that one row
     // while the rest of the selection looks like it's being included. Runs
@@ -394,21 +410,33 @@ export class OrgTabManager {
         const ids = Array.from(this.selected);
         const iconSet = new Set<string>();
         const colorSet = new Set<string>();
+        const customIconSet = new Set<string>();
         ids.forEach((id) => {
             const card = document.querySelector<HTMLElement>(`[data-${this.datasetAttr(this.cfg.idKey)}="${id}"]`);
             if (!card) return;
             iconSet.add(card.dataset[this.cfg.iconKey] ?? "");
             colorSet.add(card.dataset[this.cfg.colorKey] ?? "");
+            if (this.cfg.customIconKey) customIconSet.add(card.dataset[this.cfg.customIconKey] ?? "");
         });
         const sharedIcon = iconSet.size === 1 ? Array.from(iconSet)[0]! : null;
         const sharedColor = colorSet.size === 1 ? Array.from(colorSet)[0]! : null;
+        // A shared *custom uploaded* icon has no representation in the symbol/emoji
+        // picker below - without this check, every selected label sharing one was
+        // computed as sharedIcon="" (empty symbol field), which unchecked "no
+        // change" and would submit icon="" on save, silently wiping the custom
+        // icon from all of them even for a bulk edit that only touched color/order.
+        const sharedCustomIcon = this.cfg.customIconKey && customIconSet.size === 1 ? Array.from(customIconSet)[0]! : null;
 
         const iconNochange = document.getElementById(d.iconNochangeId) as HTMLInputElement;
         const iconValue = document.getElementById(`icon-value-${d.iconPickerId}`) as HTMLInputElement | null;
         const iconCurrent = document.getElementById(`icon-current-${d.iconPickerId}`);
         const iconGrid = document.getElementById(`icon-grid-${d.iconPickerId}`);
         iconGrid?.querySelectorAll(".icon-picker-item").forEach((b) => b.classList.remove("selected"));
-        if (sharedIcon !== null) {
+        if (sharedCustomIcon) {
+            iconNochange.checked = true;
+            if (iconValue) iconValue.value = "";
+            if (iconCurrent) iconCurrent.innerHTML = `<img src="${sharedCustomIcon}" alt="" class="tag-icon-img"> <span class="icon-picker-none-label">Custom icon (kept unless you pick a new one)</span>`;
+        } else if (sharedIcon !== null) {
             iconNochange.checked = false;
             if (iconValue) iconValue.value = sharedIcon;
             if (iconCurrent) iconCurrent.innerHTML = renderIconGlyphHtml(sharedIcon);
@@ -452,7 +480,7 @@ export class OrgTabManager {
             }
         }
 
-        BadgeRelPicker.reset(`${this.cfg.ns}-bulk`);
+        LabelRelPicker.reset(`${this.cfg.ns}-bulk`);
         this.convertTarget = null;
         document.querySelectorAll(`#${d.dialogId} .kind-toggle-option`).forEach((b) => b.classList.remove("is-active"));
 
@@ -527,17 +555,27 @@ export class OrgTabManager {
             if (!(document.getElementById(d.colorNochangeId) as HTMLInputElement).checked) {
                 body.color = (document.getElementById(d.colorValueId) as HTMLInputElement | null)?.value ?? "";
             }
-            body.add_parent_ids = BadgeRelPicker.getSelectedIds(`${this.cfg.ns}-bulk`, "parent");
-            body.add_child_ids = BadgeRelPicker.getSelectedIds(`${this.cfg.ns}-bulk`, "child");
+            body.add_parent_ids = LabelRelPicker.getSelectedIds(`${this.cfg.ns}-bulk`, "parent");
+            body.add_child_ids = LabelRelPicker.getSelectedIds(`${this.cfg.ns}-bulk`, "child");
 
             try {
-                const url = converting ? this.cfg.convertTargets.find((t) => t.kind === this.convertTarget)!.endpoint : this.cfg.endpoints.bulkEdit;
+                const target = converting ? this.cfg.convertTargets.find((t) => t.kind === this.convertTarget) : undefined;
+                const url = converting ? target!.endpoint : this.cfg.endpoints.bulkEdit;
                 const html = await this.postForHtml(url, body);
                 (document.getElementById(d.dialogId) as HTMLDialogElement).close();
                 this.replaceRows(html);
                 this.onRowsUpdated();
                 if (converting) {
                     toast.success(ids.length === 1 ? `1 ${this.cfg.entitySingular.toLowerCase()} converted.` : `${ids.length} ${this.cfg.entityPluralLower} converted.`);
+                    // This request bypassed htmx (plain fetch), so the destination tab's
+                    // rows never see the converted items - refresh it explicitly and jump
+                    // there, mirroring the single-item edit form's kindChanged handling.
+                    if (target?.rowsUrl && target.rowsTarget) {
+                        window.htmx?.ajax("GET", target.rowsUrl, { target: target.rowsTarget, swap: "innerHTML" });
+                    }
+                    if (target?.tabKey) {
+                        document.querySelector<HTMLElement>(`.organize-tab[data-tab="${target.tabKey}"]`)?.click();
+                    }
                 } else {
                     toast.success(`${this.cfg.entityPluralCap} updated.`);
                 }

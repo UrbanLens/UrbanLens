@@ -20,7 +20,7 @@ from django.test import override_settings
 from hypothesis import given, strategies as st
 from PIL import Image as PILImage
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.services.images import extract_author, extract_caption_from_metadata, extract_copyright_notice, is_camera_generated_filename
 from urbanlens.dashboard.tasks import process_image_upload
@@ -67,7 +67,7 @@ class ExtractAttributionTests(TestCase):
         self.assertIsNone(extract_caption_from_metadata(io.BytesIO(_jpeg_bytes())))
 
 
-class CameraFilenameTests(TestCase):
+class CameraFilenameTests(SimpleTestCase):
     """is_camera_generated_filename() recognizes common phone/camera naming conventions."""
 
     @given(st.sampled_from(_CAMERA_PREFIXES + tuple(p.upper() for p in _CAMERA_PREFIXES)), st.integers(min_value=1000, max_value=99999999))

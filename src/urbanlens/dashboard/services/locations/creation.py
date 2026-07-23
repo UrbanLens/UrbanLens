@@ -100,8 +100,18 @@ class WikiCreationService:
 
             safely_enqueue_task(enrich_wiki_location, wiki.pk)
 
+        def _seed_article() -> None:
+            # Covers the case where a Wikipedia article was already matched
+            # and cached for this location *before* the wiki existed to seed
+            # (see models.cache.signals for the other trigger - a Wikipedia
+            # match caching *after* the wiki already exists).
+            from urbanlens.dashboard.services.wiki_seed import seed_wiki_article_from_wikipedia
+
+            seed_wiki_article_from_wikipedia(location)
+
         if created:
             transaction.on_commit(_enqueue)
+            transaction.on_commit(_seed_article)
         return wiki, created
 
     def _seed_aliases(self, pin: Pin, wiki: Wiki, alias_ids: set[int]) -> None:
@@ -109,7 +119,9 @@ class WikiCreationService:
         official = pin.aliases.filter(kind=AliasType.OFFICIAL)
         chosen = pin.aliases.filter(pk__in=alias_ids).exclude(kind=AliasType.OFFICIAL)
         for alias in list(official) + list(chosen):
-            WikiAlias.objects.get_or_create(wiki=wiki, name=alias.name, defaults={"kind": alias.kind, "source": alias.source})
+            # Case-insensitive lookup matches the alias uniqueness rule, so two
+            # source aliases differing only by case don't race the DB constraint.
+            WikiAlias.objects.get_or_create(wiki=wiki, name__iexact=alias.name, defaults={"name": alias.name, "kind": alias.kind, "source": alias.source})
 
     def _seed_photos(self, pin: Pin, wiki: Wiki, image_ids: set[int]) -> None:
         """Attach the chosen photos to the wiki's gallery, keeping their pin link intact."""

@@ -62,10 +62,10 @@ $_icon-warning-dark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/200
 }
 
 // -- Container -----------------------------------------------------------------
-// Override Materialize CDN rules that pin toasts top-right on wide screens.
+// Override toastr's CDN rules that pin toasts top-right on wide screens.
 
 #toast-container {
-    z-index: 2000; // above dialogs ($z-dialog: 1001) and nav ($z-nav: 1100)
+    z-index: 10070; // above everything, incl. the sticky .page-footer (9999) and dev/env overlays (10000-10060)
     top:     auto !important;
     left:    auto !important;
     bottom:  $space-lg !important;

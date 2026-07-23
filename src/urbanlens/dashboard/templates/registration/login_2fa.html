@@ -1,0 +1,65 @@
+{% extends "dashboard/themes/auth_base.html" %}
+{% load static %}
+
+{% block title %}Verify it's you - UrbanLens{% endblock %}
+
+{% block auth_header %}
+<h1 class="auth-title">Verify it's you</h1>
+<p class="auth-subtitle">Sign in as <strong>{{ username }}</strong></p>
+{% endblock %}
+
+{% block content %}
+
+{% if has_passkey %}
+<div id="webauthn-2fa-status" class="auth-errors" hidden></div>
+
+<div style="display:flex;flex-direction:column;gap:1rem;align-items:center;text-align:center;padding:.5rem 0 1rem">
+    <i class="material-symbols-outlined" style="font-size:48px;color:#9ca3af">passkey</i>
+    <p class="settings-help" style="margin:0">
+        Use your device's passkey - Face ID, Windows Hello, a security key, or a password
+        manager like Bitwarden - to finish signing in.
+    </p>
+    <button type="button" class="btn btn--primary auth-submit-btn" id="webauthn-2fa-retry" style="width:100%">
+        Use my passkey
+    </button>
+</div>
+{% endif %}
+
+{% if has_code_factor %}
+<details class="auth-code-fallback" {% if not has_passkey or code_error %}open{% endif %}>
+    <summary>{% if has_passkey %}Use a code instead{% else %}Enter your code{% endif %}</summary>
+
+    {% if code_error %}
+    <div class="auth-errors"><p>{{ code_error }}</p></div>
+    {% endif %}
+
+    <form method="post" action="{% url 'login.2fa.code' %}" class="auth-form">
+        {% csrf_token %}
+        <div class="auth-field">
+            <label for="id_code">Authenticator app or backup code</label>
+            <input type="text" id="id_code" name="code" autocomplete="one-time-code" autofocus placeholder="123456 or backup code">
+        </div>
+        <button type="submit" class="btn btn--primary auth-submit-btn">Verify</button>
+    </form>
+</details>
+{% endif %}
+
+<div class="auth-footer">
+    <a href="{% url 'login.2fa.cancel' %}">Cancel and use a different account</a>
+</div>
+
+{% endblock %}
+
+{% block auth_scripts %}
+{% if has_passkey %}
+<script src="{% static 'dashboard/js/webauthn.js' %}"></script>
+<script>
+    UrbanLensWebAuthn.runLogin({
+        optionsUrl: "{% url 'login.2fa.options' %}",
+        verifyUrl: "{% url 'login.2fa.verify' %}",
+        retryButtonId: "webauthn-2fa-retry",
+        statusElId: "webauthn-2fa-status",
+    });
+</script>
+{% endif %}
+{% endblock %}

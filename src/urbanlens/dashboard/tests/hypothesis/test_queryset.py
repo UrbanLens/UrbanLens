@@ -18,11 +18,12 @@ from datetime import date, timedelta
 from typing import Any
 
 from django.contrib.auth.models import User
+from django.utils import timezone
 from hypothesis import HealthCheck, given, settings, strategies as st
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.models.badges.model import KIND_TAG, Badge
+from urbanlens.dashboard.models.labels.model import KIND_TAG, Label
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.reviews.model import Review
@@ -115,6 +116,56 @@ class FilterByCriteriaPriorityTests(TestCase):
                 self.assertNotIn(pin.pk, result_ids, f"Pin with priority {p} must be excluded (min={min_prio})")
 
 
+class FilterByCriteriaDangerTests(TestCase):
+    """min_danger / max_danger criteria - unlike rating, danger is a plain
+    always-populated IntegerField(default=0) on Pin, so 0 is a real,
+    meaningful value with no "unrated" special case needed - the only
+    regression here is UL-296's `if x := ...:` truthiness bug silently
+    skipping the filter whenever the threshold was exactly 0."""
+
+    profile: Profile
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.profile = baker.make(User).profile
+        self.dangers = [0, 1, 2, 3, 4, 5]
+        self.pins_by_danger: dict[int, Pin] = {d: baker.make(Pin, profile=self.profile, danger=d) for d in self.dangers}
+
+    def _base_qs(self):
+        return Pin.objects.filter(profile=self.profile)
+
+    def test_min_danger_zero_is_applied_not_skipped(self) -> None:
+        """Before the fix, min_danger=0 was indistinguishable from "no
+        criterion at all" - since every pin here has danger>=0, that
+        happens to look identical either way, so assert against a stricter
+        min_danger=1 in the same call to prove 0 was actually evaluated."""
+        result_ids = set(self._base_qs().filter_by_criteria({"min_danger": 0, "max_danger": 0}).values_list("pk", flat=True))
+        self.assertEqual(result_ids, {self.pins_by_danger[0].pk})
+
+    @given(min_d=st.sampled_from([0, 1, 2, 3, 4, 5]))
+    @_db_settings
+    def test_soundness_all_results_meet_threshold(self, min_d: int) -> None:
+        qs = self._base_qs().filter_by_criteria({"min_danger": min_d})
+        for pin in qs:
+            self.assertGreaterEqual(pin.danger, min_d)
+
+    @given(min_d=st.sampled_from([1, 2, 3, 4, 5]))
+    @_db_settings
+    def test_below_threshold_pins_excluded(self, min_d: int) -> None:
+        result_ids = set(self._base_qs().filter_by_criteria({"min_danger": min_d}).values_list("pk", flat=True))
+        for d, pin in self.pins_by_danger.items():
+            if d < min_d:
+                self.assertNotIn(pin.pk, result_ids, f"Pin with danger {d} must be excluded (min={min_d})")
+
+    @given(max_d=st.sampled_from([0, 1, 2, 3, 4]))
+    @_db_settings
+    def test_above_threshold_pins_excluded(self, max_d: int) -> None:
+        result_ids = set(self._base_qs().filter_by_criteria({"max_danger": max_d}).values_list("pk", flat=True))
+        for d, pin in self.pins_by_danger.items():
+            if d > max_d:
+                self.assertNotIn(pin.pk, result_ids, f"Pin with danger {d} must be excluded (max={max_d})")
+
+
 class FilterByCriteriaDateTests(TestCase):
     """created_after / created_before criteria."""
 
@@ -141,7 +192,10 @@ class FilterByCriteriaDateTests(TestCase):
 
     def test_pins_created_today_pass_both_bounds(self) -> None:
         pin = baker.make(Pin, profile=self.profile)
-        today = date.today()
+        # timezone.localdate() (not date.today()) - created__date is computed
+        # in Django's configured TIME_ZONE (UTC), which can already be a
+        # different calendar day than the test runner's local machine time.
+        today = timezone.localdate()
         qs = self._base_qs().filter_by_criteria({
             "created_after": today,
             "created_before": today,
@@ -150,7 +204,15 @@ class FilterByCriteriaDateTests(TestCase):
 
 
 class FilterByCriteriaRatingTests(TestCase):
-    """min_rating / max_rating criteria filter by review score."""
+    """min_rating / max_rating criteria filter by review score.
+
+    UL-296/UL-270 regression coverage: `min_rating`/`max_rating` used to be
+    silently skipped whenever the slider was set to 0 (`if x := ...:` treats
+    0 as falsy), so a "0 = unrated" filter did nothing. There is also no
+    Review row with rating=0 in real data - pin_edit.py deletes the review
+    instead of ever writing one - so 0 has to be special-cased as "unrated",
+    not filtered via a literal `rating__lte=0`/`rating__gte=0` comparison.
+    """
 
     user: User
     profile: Profile
@@ -159,12 +221,13 @@ class FilterByCriteriaRatingTests(TestCase):
         super().setUp()
         self.user = baker.make(User)
         self.profile = self.user.profile  # auto-created by post_save signal
-        # One pin per rating 1-5 (rating 0 = no review).
+        # One pin per rating 1-5, plus one genuinely unrated pin (no Review row).
         self.pins_by_rating: dict[int, Pin] = {}
         for rating in range(1, 6):
             pin = baker.make(Pin, profile=self.profile)
             baker.make(Review, profile=self.profile, pin=pin, rating=rating)
             self.pins_by_rating[rating] = pin
+        self.unrated_pin = baker.make(Pin, profile=self.profile)
 
     def _base_qs(self):
         return Pin.objects.filter(profile=self.profile)
@@ -198,6 +261,32 @@ class FilterByCriteriaRatingTests(TestCase):
             if rating_val is not None:
                 self.assertGreaterEqual(rating_val, min_r)
                 self.assertLessEqual(rating_val, max_r)
+
+    def test_min_rating_zero_is_a_no_op_and_includes_unrated_pins(self) -> None:
+        """The regression this fixes: min_rating=0 used to be silently
+        skipped by an `if x := ...:` truthiness check - confirm it no
+        longer is, AND that the result is every pin including unrated ones
+        (0 is the floor of the scale, not a real threshold)."""
+        result_ids = set(self._base_qs().filter_by_criteria({"min_rating": 0}).values_list("pk", flat=True))
+        all_ids = set(self._base_qs().values_list("pk", flat=True))
+        self.assertEqual(result_ids, all_ids)
+        self.assertIn(self.unrated_pin.pk, result_ids)
+
+    def test_max_rating_zero_returns_only_unrated_pins(self) -> None:
+        """max_rating=0 asks for "unrated only" - there is no stored Review
+        with rating=0 (pin_edit.py deletes the review instead), so this must
+        resolve via reviews__isnull, not a literal rating__lte=0 comparison
+        (which would silently match nothing)."""
+        result_ids = set(self._base_qs().filter_by_criteria({"max_rating": 0}).values_list("pk", flat=True))
+        self.assertEqual(result_ids, {self.unrated_pin.pk})
+        for rating, pin in self.pins_by_rating.items():
+            self.assertNotIn(pin.pk, result_ids, f"Rated pin ({rating} stars) must be excluded from max_rating=0")
+
+    def test_min_rating_one_excludes_the_unrated_pin(self) -> None:
+        """Sanity check distinguishing "0" (no-op/unrated) from "1" (a real
+        floor) - the unrated pin must never satisfy a real minimum."""
+        result_ids = set(self._base_qs().filter_by_criteria({"min_rating": 1}).values_list("pk", flat=True))
+        self.assertNotIn(self.unrated_pin.pk, result_ids)
 
 
 class FilterByCriteriaNameTests(TestCase):
@@ -301,16 +390,16 @@ class FilterByCriteriaMonotonicityTests(TestCase):
 
 
 class FilterByCriteriaTagTests(TestCase):
-    """Tag criterion filters via Badge.get_badge_and_descendants."""
+    """Tag criterion filters via Label.get_label_and_descendants."""
 
     profile: Profile
 
     def setUp(self) -> None:
         super().setUp()
         self.profile = baker.make(User).profile
-        self.tag = baker.make(Badge, kind=KIND_TAG, profile=None, name="urban-exploration")
+        self.tag = baker.make(Label, kind=KIND_TAG, profile=None, name="urban-exploration")
         self.tagged_pin = baker.make(Pin, profile=self.profile)
-        self.tagged_pin.badges.add(self.tag)
+        self.tagged_pin.labels.add(self.tag)
         self.untagged_pin = baker.make(Pin, profile=self.profile)
 
     def _base_qs(self):
@@ -328,10 +417,10 @@ class FilterByCriteriaTagTests(TestCase):
 
     def test_tag_filter_includes_child_tag_pins(self) -> None:
         """Pins with a child tag of the filter tag must also appear."""
-        child_tag = baker.make(Badge, kind=KIND_TAG, profile=None, name="abandoned-urbex")
+        child_tag = baker.make(Label, kind=KIND_TAG, profile=None, name="abandoned-urbex")
         child_tag.parents.add(self.tag)
         child_pin = baker.make(Pin, profile=self.profile)
-        child_pin.badges.add(child_tag)
+        child_pin.labels.add(child_tag)
         qs = self._base_qs().filter_by_criteria({"tags": [self.tag]})
         result_ids = set(qs.values_list("pk", flat=True))
         self.assertIn(child_pin.pk, result_ids)

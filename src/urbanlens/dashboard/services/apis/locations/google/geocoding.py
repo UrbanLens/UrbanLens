@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import json
 import logging
 import re
-import sys
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from django.db import DatabaseError
@@ -21,6 +20,38 @@ if TYPE_CHECKING:
     import requests
 
 logger = logging.getLogger(__name__)
+
+# Google place/geocoding "types" that identify an administrative area or other
+# coarse region rather than a specific point of interest. A geocoding result
+# carrying only these types names the *surroundings* (a city, neighborhood,
+# postal code, ...), not the pinned place, so it must not be handed back as a
+# usable place name (see ``get_place_name`` below and its sibling filter on
+# ``GooglePlacesNameResolver`` in ``services.locations.google``).
+LOCALITY_PLACE_TYPES: frozenset[str] = frozenset(
+    {
+        "locality",
+        "sublocality",
+        "sublocality_level_1",
+        "sublocality_level_2",
+        "sublocality_level_3",
+        "sublocality_level_4",
+        "sublocality_level_5",
+        "neighborhood",
+        "postal_town",
+        "colloquial_area",
+        "administrative_area_level_1",
+        "administrative_area_level_2",
+        "administrative_area_level_3",
+        "administrative_area_level_4",
+        "administrative_area_level_5",
+        "administrative_area_level_6",
+        "administrative_area_level_7",
+        "country",
+        "postal_code",
+        "political",
+        "plus_code",
+    },
+)
 
 
 def parse_address_components(address_components: list[dict[str, Any]]) -> dict[str, str]:
@@ -56,16 +87,18 @@ class GoogleGeocodingGateway(Gateway):
     service_key: ClassVar[str] = "google_geocoding"
     paid_service: ClassVar[bool] = True
 
-    api_key: str | None = settings.google_unrestricted_api_key
+    api_key: str | None = field(default_factory=lambda: settings.google_unrestricted_api_key)
     base_url: str = "https://maps.googleapis.com/maps/api/geocode/json"
 
     def __post_init__(self) -> None:
         Gateway.__post_init__(self)
         if not self.api_key:
-            # TODO: Build k=>v pairs for all settings to help logging (temporarily for debugging)
-            settings_dict = {k: v for k, v in settings.__dict__.items() if not k.startswith("_")}
-            logger.error("Settings that are missing the api key: %s", settings_dict)
-            raise ValueError("Google Geocoding Gateway requires an API Key.")
+            # Deliberately does not raise - most callers (e.g. pin import's CSV/URL
+            # parsing) construct this gateway before knowing whether any row will
+            # actually need a live Google lookup (S2-cell CID decoding and plain
+            # lat/lon columns never do). The network-calling methods below each
+            # check self.api_key themselves and degrade gracefully instead.
+            logger.debug("GoogleGeocodingGateway constructed with no API key configured - geocoding calls will be skipped.")
 
     def decode_place_name(self, place_name: str) -> str:
         """
@@ -92,8 +125,11 @@ class GoogleGeocodingGateway(Gateway):
 
                 # Remove it from the cache
                 geocoded_location.delete()
-                sys.exit()
                 return None
+
+        if not self.api_key:
+            logger.debug("Skipping Google geocoding for %r - no API key configured.", place_name)
+            return None
 
         params = {
             "address": place_name,
@@ -127,8 +163,11 @@ class GoogleGeocodingGateway(Gateway):
                 logger.exception("json_response: %s", geocoded_location.json_response)
                 # Remove it from the cache
                 geocoded_location.delete()
-                sys.exit()
                 return None
+
+        if not self.api_key:
+            logger.debug("Skipping Google geocoding for %s, %s - no API key configured.", redact_coordinate(latitude), redact_coordinate(longitude))
+            return None
 
         params = {
             "latlng": f"{latitude},{longitude}",
@@ -186,6 +225,23 @@ class GoogleGeocodingGateway(Gateway):
         return body
 
     def get_place_name(self, latitude: float | Decimal, longitude: float | Decimal) -> str | None:
+        """Return the formatted address of the most relevant non-administrative geocoding result.
+
+        Results whose ``types`` are entirely administrative/regional (a bare
+        "locality" hit for a rural pin with no closer address, an
+        "administrative_area_level_*", a "postal_code", ...) name the
+        surrounding area rather than the pinned place, so they are skipped in
+        favor of the first result with at least one finer-grained type (e.g.
+        "street_address", "premise", "establishment").
+
+        Args:
+            latitude: WGS-84 latitude.
+            longitude: WGS-84 longitude.
+
+        Returns:
+            The winning result's formatted address, or None when geocoding
+            failed or every result was purely administrative.
+        """
         if latitude is None or longitude is None:
             logger.error("Latitude and longitude must be provided to get_place_name.")
             return None
@@ -200,9 +256,13 @@ class GoogleGeocodingGateway(Gateway):
 
             results = body.get("results", [])
             place_name: str | None = None
-            if results:
-                # Typically, the first result is the most relevant
-                place_name = results[0].get("formatted_address")
+            for result in results:
+                types = set(result.get("types") or [])
+                if types and not (types - LOCALITY_PLACE_TYPES):
+                    continue
+                place_name = result.get("formatted_address")
+                if place_name:
+                    break
         except KeyError:
             logger.exception(
                 "Error getting place name for latitude: %s, longitude: %s",
@@ -260,6 +320,10 @@ class GoogleGeocodingGateway(Gateway):
                         return float(lat), float(lng)
             except (json.JSONDecodeError, TypeError):
                 cached.delete()
+
+        if not self.api_key:
+            logger.debug("Skipping Places Details lookup for CID %d - no API key configured.", cid)
+            return None, None
 
         params = {"cid": str(cid), "fields": "geometry", "key": self.api_key}
         response = self.session.get(

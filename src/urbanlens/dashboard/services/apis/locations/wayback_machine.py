@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any, ClassVar
+from urllib.parse import urlparse
 
 from urbanlens.dashboard.services.gateway import Gateway
 
@@ -11,6 +12,39 @@ _AVAILABILITY_URL = "https://archive.org/wayback/available"
 _CDX_URL = "https://web.archive.org/cdx/search/cdx"
 _SAVE_URL = "https://web.archive.org/save"
 _MEMENTO_TIMEMAP_URL = "https://web.archive.org/web/timemap"
+
+# Always excluded regardless of this deployment's own SITE_URL, so a
+# self-hosted instance (running under a different domain) still won't submit
+# the canonical site's own URLs either.
+_ALWAYS_EXCLUDED_DOMAINS = ("urbanlens.org",)
+
+
+def is_own_site_url(url: str) -> bool:
+    """True when ``url`` points at this deployment's own domain (or urbanlens.org).
+
+    Most pages on this site require being logged in, so archiving them on the
+    Wayback Machine wouldn't produce anything a future anonymous visitor
+    could actually read - checked before submitting any link a user adds for
+    a pin/wiki. The current domain is read from ``settings.SITE_URL`` rather
+    than a request (this runs from a Celery task with no request available);
+    ``urbanlens.org`` and its subdomains (``staging.``, etc.) are always
+    excluded too, independent of ``SITE_URL``, for the self-hosting case.
+
+    Args:
+        url: The URL a user is asking to be archived.
+
+    Returns:
+        True if the URL's host is this site's own domain or urbanlens.org
+        (or a subdomain of either), meaning it should not be submitted.
+    """
+    from django.conf import settings
+
+    hostname = (urlparse(url).hostname or "").lower().rstrip(".")
+    if not hostname:
+        return False
+    site_hostname = (urlparse(settings.SITE_URL).hostname or "").lower()
+    excluded_domains = {domain for domain in (site_hostname, *_ALWAYS_EXCLUDED_DOMAINS) if domain}
+    return any(hostname == domain or hostname.endswith(f".{domain}") for domain in excluded_domains)
 
 
 @dataclass(slots=True, kw_only=True)

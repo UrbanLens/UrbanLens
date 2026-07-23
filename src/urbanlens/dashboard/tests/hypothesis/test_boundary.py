@@ -167,6 +167,18 @@ class PinPropertyResolutionTests(TestCase):
         self.assertEqual(source, "pin")
         self.assertEqual(polygon.wkt, _SMALL.wkt)
 
+    def test_detail_pin_outside_parent_property_falls_through_to_own_circle(self) -> None:
+        """A detail pin outside its parent's property must not inherit that property's boundary."""
+        baker.make("dashboard.Boundary", pin=self.pin, profile=self.pin.profile, location=self.location, boundary_type=BoundaryType.PROPERTY, polygon=_BIG)
+        # Outside the ±0.003 property square, but still a "detail pin" of it.
+        child_location = baker.make("dashboard.Location", latitude="40.010000", longitude="-74.010000")
+        child = baker.make("dashboard.Pin", profile=self.pin.profile, location=child_location, parent_pin=self.pin)
+
+        polygon, source = Boundary.objects.resolve_for_pin(child, BoundaryType.PROPERTY)
+        self.assertEqual(source, "circle")
+        self.assertTrue(polygon.contains(Point(-74.01, 40.01, srid=4326)))
+        self.assertFalse(polygon.intersects(_BIG))
+
 
 class PinBuildingResolutionTests(TestCase):
     """Building boundaries: containment-gated inheritance, no circle fallback."""

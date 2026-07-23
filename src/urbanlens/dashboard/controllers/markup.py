@@ -16,8 +16,8 @@ import math
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.http import HttpResponse, JsonResponse
-from django.shortcuts import get_object_or_404
+from django.http import Http404, HttpResponse, JsonResponse
+from django.shortcuts import get_object_or_404, redirect, render
 from django.views import View
 
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
@@ -29,9 +29,11 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinContact
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
+from urbanlens.dashboard.services.map_sharing import clone_markup_map
 from urbanlens.dashboard.services.map_snapshot import default_markup_map_title, sanitize_map_data
 from urbanlens.dashboard.services.safety import notify_contacts_of_update
 from urbanlens.dashboard.services.text_limits import MAX_MARKUP_LABEL_LENGTH, text_length_error
+from urbanlens.dashboard.services.wiki_access import location_visible_to, resolve_visible_wiki
 
 if TYPE_CHECKING:
     from django.db.models import QuerySet
@@ -131,10 +133,9 @@ def _resolve_owner(
     personal markup under a pin's own map, shared/community markup on a wiki
     map, or a standalone MarkupMap (safety check-in routes, comment/visit
     maps). Pin-scoped and map-scoped markup both require the caller to own
-    the parent; Wiki-scoped markup is shared data any signed-in user may
-    edit, matching the existing community detail-pin permission model. The
-    community route is keyed by the Location slug and resolves
-    (get-or-creates) that Location's Wiki.
+    the parent; Wiki-scoped markup is shared data any profile with a pin at
+    that location may edit (see ``resolve_visible_wiki``), matching the
+    existing community detail-pin permission model.
 
     Args:
         request: The current HttpRequest (used for the ownership checks).
@@ -151,8 +152,9 @@ def _resolve_owner(
     if map_uuid is not None:
         markup_map = get_object_or_404(MarkupMap, uuid=map_uuid, profile__user=request.user)
         return markup_map, PinMarkup.objects.for_map(markup_map)
-    location = get_object_or_404(Location, slug=location_slug)
-    wiki = get_object_or_404(Wiki, location=location)
+    if location_slug is None:
+        raise Http404
+    _location, wiki, _profile = resolve_visible_wiki(request, location_slug)
     return wiki, PinMarkup.objects.for_wiki(wiki)
 
 
@@ -175,10 +177,24 @@ class MarkupJsonView(LoginRequiredMixin, View):
 
         Returns:
             JsonResponse with ``markup_items`` list, plus ``view`` (centre,
-            zoom, layer_mode, show_borders, title) on the map route.
+            zoom, layer_mode, show_borders, title) on the map route. On the
+            pin route, ``?children=1`` additionally includes markup belonging
+            to every descendant child pin, each item annotated with the owning
+            child pin's name (``owner_name``).
         """
         owner, items = _resolve_owner(request, pin_slug, location_slug, map_uuid)
-        payload: dict = {"markup_items": [m.to_json() for m in items.order_by("created")]}
+        include_children = pin_slug is not None and request.GET.get("children") == "1"
+        if include_children and isinstance(owner, Pin):
+            subtree = Pin.objects.filter(pk=owner.pk).with_descendants()
+            items = PinMarkup.objects.filter(parent_pin__in=subtree).select_related("parent_pin__location", "parent_pin__location__wiki")
+
+        markup_items = []
+        for m in items.order_by("created"):
+            entry = m.to_json()
+            if include_children and m.parent_pin_id is not None and m.parent_pin_id != owner.pk and m.parent_pin is not None:
+                entry["owner_name"] = m.parent_pin.effective_name
+            markup_items.append(entry)
+        payload: dict = {"markup_items": markup_items}
         if isinstance(owner, MarkupMap):
             payload["view"] = {
                 "center_lat": owner.center_latitude,
@@ -213,7 +229,7 @@ class SafetyContactMarkupJsonView(View):
         Returns:
             JsonResponse with ``markup_items`` list, or 404 if the token is invalid.
         """
-        contact = get_object_or_404(SafetyCheckinContact.objects.select_related("checkin__markup_map"), token=token)
+        contact = get_object_or_404(SafetyCheckinContact.objects.select_related("checkin__markup_map").by_token(token))
         markup_map = contact.checkin.markup_map
         if markup_map is None:
             return JsonResponse({"markup_items": []})
@@ -244,7 +260,10 @@ def _resolve_title_context(request: HttpRequest, body: dict) -> Pin | Wiki | Non
     location_slug = body.get("location_slug")
     if location_slug:
         location = Location.objects.filter(slug=location_slug).first()
-        return Wiki.objects.filter(location=location).first() if location else None
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        if location is None or not location_visible_to(location, profile):
+            return None
+        return Wiki.objects.filter(location=location).first()
     return None
 
 
@@ -284,7 +303,12 @@ class MarkupMapCreateView(LoginRequiredMixin, View):
         profile, _ = Profile.objects.get_or_create(user=request.user)
         body = _parse_body(request)
         context = _resolve_title_context(request, body)
-        markup_map = MarkupMap.objects.create(profile=profile, title=default_markup_map_title(context))
+        # When created from a specific pin's page (e.g. the pin-share dialog's
+        # "New map" flow), associate the map with that pin immediately - see
+        # MarkupMap.pin. _resolve_title_context() already scopes the Pin
+        # lookup to the requesting profile.
+        pin_for_map = context if isinstance(context, Pin) else None
+        markup_map = MarkupMap.objects.create(profile=profile, title=default_markup_map_title(context), pin=pin_for_map)
 
         if isinstance(body.get("markup"), list) or isinstance(body.get("shapes"), list):
             snapshot = sanitize_map_data(body)
@@ -333,6 +357,33 @@ def _apply_view_state(markup_map: MarkupMap, body: dict) -> None:
         markup_map.save(update_fields=[*updates, "updated"])
 
 
+class MarkupMapSnapshotView(LoginRequiredMixin, View):
+    """Return a MarkupMap's full snapshot (viewport + markup) as JSON.
+
+    Unlike ``MarkupJsonView`` (which returns each item's compact Leaflet-edit
+    shape), this returns the same ``{center_lat, ..., markup: [{latlngs, ...}]}``
+    format ``to_snapshot()`` embeds server-side for read-only thumbnails - the
+    DM composer fetches it client-side to render a live preview of a map the
+    caller is about to attach, before the message is sent.
+
+    GET /markup-maps/<map_uuid>/snapshot/
+    """
+
+    def get(self, request: HttpRequest, map_uuid: str) -> HttpResponse:
+        """Return the caller's own map as a snapshot dict.
+
+        Args:
+            request: HttpRequest.
+            map_uuid: UUID of the map to read.
+
+        Returns:
+            JsonResponse with the snapshot fields, or 404 if the caller
+            doesn't own that map.
+        """
+        markup_map = get_object_or_404(MarkupMap, uuid=map_uuid, profile__user=request.user)
+        return JsonResponse(markup_map.to_snapshot())
+
+
 class MarkupMapViewStateView(LoginRequiredMixin, View):
     """Persist a MarkupMap's viewport (centre/zoom/layer/borders) and title.
 
@@ -357,11 +408,46 @@ class MarkupMapViewStateView(LoginRequiredMixin, View):
         return JsonResponse({"ok": True})
 
 
+class PinMarkupMapsView(LoginRequiredMixin, View):
+    """ "Markup Maps" panel for the pin detail page (loaded via HTMX).
+
+    Lists MarkupMaps directly associated with the pin (``MarkupMap.pin`` -
+    e.g. created via the pin-share dialog's "New map" flow). Most pins have
+    none, so this returns 204 in that case; the page's shared
+    ``htmx:afterOnLoad`` handler removes the placeholder card entirely (same
+    pattern as the external-data panels).
+
+    GET /map/pin/<slug:pin_slug>/markup-maps/
+    """
+
+    def get(self, request: HttpRequest, pin_slug: str) -> HttpResponse:
+        """Render the panel, or 204 when the pin has no associated maps.
+
+        Args:
+            request: HttpRequest.
+            pin_slug: Slug of the pin (scoped to the requesting profile).
+
+        Returns:
+            Rendered panel, or an empty 204 response.
+        """
+        pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
+        maps = list(MarkupMap.objects.filter(pin=pin).prefetch_related("items").order_by("-updated"))
+        if not maps:
+            return HttpResponse(status=204)
+        map_cards = [{"map": markup_map, "snapshot": markup_map.to_snapshot(), "item_count": len(markup_map.items.all())} for markup_map in maps]
+        return render(request, "dashboard/partials/pins/_pin_markup_maps_panel.html", {"pin": pin, "map_cards": map_cards})
+
+
 class MarkupMapDeleteView(LoginRequiredMixin, View):
     """Delete a standalone MarkupMap (and, via cascade, its items).
 
     Host models reference maps with ``on_delete=SET_NULL``, so deleting a map
-    that is still attached simply detaches it from its host.
+    that is still attached simply detaches it from its host - the host's own
+    text/content is untouched. A ``pre_delete`` signal on ``MarkupMap`` (see
+    ``models.markup.signals``) additionally flags every Comment/TripComment/
+    DirectMessage referencing this map (``map_removed``), so those hosts can
+    keep showing a "map removed" notice instead of silently losing all trace
+    that one was ever attached.
 
     POST/DELETE /markup-maps/<map_uuid>/delete/
     """
@@ -391,6 +477,62 @@ class MarkupMapDeleteView(LoginRequiredMixin, View):
             Empty 200 response on success.
         """
         return self.post(request, map_uuid)
+
+
+def _map_visible_to(profile: Profile, markup_map: MarkupMap) -> Profile | None:
+    """Return whoever sent ``markup_map`` to ``profile`` through a legitimate channel, if any.
+
+    Checks the three ways a map can become visible to someone other than its
+    owner: a DM attachment, a standalone :class:`MarkupMapShare`, or an
+    attachment on an explicit :class:`PinShare`.
+
+    Args:
+        profile: The prospective recipient.
+        markup_map: The map to check.
+
+    Returns:
+        The immediate sender if any channel grants ``profile`` access, else None.
+    """
+    dm = markup_map.direct_messages.filter(recipient=profile).select_related("sender").first()
+    if dm is not None:
+        return dm.sender
+    map_share = markup_map.shares.filter(to_profile=profile).select_related("from_profile").first()
+    if map_share is not None:
+        return map_share.from_profile
+    pin_share = markup_map.pin_share_attachments.filter(to_profile=profile).select_related("from_profile").first()
+    if pin_share is not None:
+        return pin_share.from_profile
+    return None
+
+
+class MarkupMapCloneView(LoginRequiredMixin, View):
+    """ "Add to my maps": clone someone else's shared map into the caller's own maps.
+
+    POST /markup-maps/<map_uuid>/clone/
+    """
+
+    def post(self, request: HttpRequest, map_uuid: str) -> HttpResponse:
+        """Clone ``map_uuid`` into the caller's own Memories > Maps.
+
+        Args:
+            request: HttpRequest.
+            map_uuid: UUID of the map to clone.
+
+        Returns:
+            Redirect to Memories > Maps on success, 400 if the caller already
+            owns the map, or 404 if it was never shared with them.
+        """
+        recipient, _ = Profile.objects.get_or_create(user=request.user)
+        source = get_object_or_404(MarkupMap, uuid=map_uuid)
+        if source.profile_id == recipient.pk:
+            return HttpResponse("This is already your own map.", status=400)
+        sender = _map_visible_to(recipient, source)
+        if sender is None:
+            raise Http404
+        existing = MarkupMap.objects.filter(profile=recipient, cloned_from=source).first()
+        if existing is None:
+            clone_markup_map(source, recipient, sender=sender)
+        return redirect("memories.maps")
 
 
 class MarkupView(LoginRequiredMixin, View):

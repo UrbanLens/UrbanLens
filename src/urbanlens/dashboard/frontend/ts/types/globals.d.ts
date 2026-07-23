@@ -28,6 +28,11 @@ interface HtmxApi {
     ajax(verb: string, url: string, options: Record<string, unknown>): void;
 }
 
+interface UlBulkToolbar {
+    sync(namespace: string, count: number, actions: Record<string, (() => void) | null | undefined>): void;
+    clear(namespace: string): void;
+}
+
 interface CommentMapComposerOptions {
     form?: HTMLElement;
     context?: { pinSlug?: string; locationSlug?: string } | null;
@@ -43,6 +48,7 @@ declare global {
         toastr: Toastr;
         confirmDialog?: (options: ConfirmDialogOptions) => Promise<boolean>;
         htmx?: HtmxApi;
+        ulBulkToolbar?: UlBulkToolbar;
         csrftoken: string;
         // The shared map composer dialog (base.html) - opened with a host form
         // element (legacy comment/visit/trip-comment usage) or an options

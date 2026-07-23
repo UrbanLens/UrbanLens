@@ -81,11 +81,9 @@ class TestEntry(NamedTuple):
     message: str | None = None
 
 
-class TestCase(_HypothesisMixin, test.TestCase):
+class _MessagePrefixMixin:
     '''
-    Provides additional functionality to the django unittest TestCase.
-
-    - Adds a default message to all assertions.
+    Shared message-prefixing behavior for our custom TestCase/SimpleTestCase variants.
     '''
     # Deprecated, in favor of fn
     target: type | None = None
@@ -168,3 +166,29 @@ class TestCase(_HypothesisMixin, test.TestCase):
         Append the data to the failure message. Individual tests will override this.
         """
         return ''
+
+
+class TestCase(_MessagePrefixMixin, _HypothesisMixin, test.TestCase):
+    '''
+    Provides additional functionality to the django unittest TestCase.
+
+    - Adds a default message to all assertions.
+
+    Use this for tests that need database access (model creation, ORM
+    queries, the Django test client, etc). Each test runs in its own
+    transaction that is rolled back afterwards.
+    '''
+
+
+class SimpleTestCase(_MessagePrefixMixin, _HypothesisMixin, test.SimpleTestCase):
+    '''
+    Provides additional functionality to the django unittest SimpleTestCase.
+
+    - Adds a default message to all assertions.
+
+    Use this for tests that never touch the database - pure functions,
+    serializer/form field validation without saving, parsing, etc. It skips
+    the per-test transaction wrapping that TestCase pays for, so prefer it
+    whenever a test doesn't need the database. Django raises
+    ``DatabaseOperationForbidden`` if a test accidentally performs a query.
+    '''

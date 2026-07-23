@@ -7,8 +7,8 @@ client-supplied identifiers without scoping them to the requesting user:
   slug. Pin slugs are only unique per profile, so this both matched other
   users' pins and raised MultipleObjectsReturned (a 500) whenever two users
   shared a slug.
-- The badge membership panels fetched any Badge by id, letting a forged id
-  attach (and thereby expose) another user's private badge.
+- The label membership panels fetched any Label by id, letting a forged id
+  attach (and thereby expose) another user's private label.
 - Comment reactions accepted any comment id, and trip-comment reactions never
   checked trip membership.
 """
@@ -20,10 +20,10 @@ from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.models.badges.meta import KIND_TAG
-from urbanlens.dashboard.models.badges.model import Badge
 from urbanlens.dashboard.models.comments.model import Comment
 from urbanlens.dashboard.models.images.model import Image
+from urbanlens.dashboard.models.labels.meta import KIND_TAG
+from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.model import Pin
 
 
@@ -81,38 +81,90 @@ class PinGalleryScopingTests(TestCase):
         self.assertEqual(response.status_code, 404)
 
 
-class BadgeMembershipVisibilityTests(TestCase):
-    """Only badges visible to the requester may be attached to pins or wikis."""
+class LabelMembershipVisibilityTests(TestCase):
+    """Only labels visible to the requester may be attached to pins or wikis."""
 
     def setUp(self) -> None:
         self.user = baker.make(User)
         self.other = baker.make(User)
         self.client.force_login(self.user)
         self.pin = baker.make(Pin, profile=self.user.profile)
-        self.own_badge = baker.make(Badge, kind=KIND_TAG, profile=self.user.profile)
-        self.foreign_badge = baker.make(Badge, kind=KIND_TAG, profile=self.other.profile)
+        self.own_label = baker.make(Label, kind=KIND_TAG, profile=self.user.profile)
+        self.foreign_label = baker.make(Label, kind=KIND_TAG, profile=self.other.profile)
 
-    def _add(self, badge_id: int):
+    def _add(self, label_id: int):
         return self.client.post(
-            reverse("badge.pin", kwargs={"badge_kind": "tag", "pin_slug": self.pin.slug}),
-            data={"badge_id": badge_id, "action": "add"},
+            reverse("label.pin", kwargs={"label_kind": "tag", "pin_slug": self.pin.slug}),
+            data={"label_id": label_id, "action": "add"},
         )
 
-    def test_own_badge_can_be_added(self) -> None:
-        response = self._add(self.own_badge.id)
+    def test_own_label_can_be_added(self) -> None:
+        response = self._add(self.own_label.id)
         self.assertEqual(response.status_code, 200)
-        self.assertIn(self.own_badge, self.pin.badges.all())
+        self.assertIn(self.own_label, self.pin.labels.all())
 
-    def test_foreign_private_badge_is_rejected(self) -> None:
-        response = self._add(self.foreign_badge.id)
+    def test_foreign_private_label_is_rejected(self) -> None:
+        response = self._add(self.foreign_label.id)
         self.assertEqual(response.status_code, 404)
-        self.assertNotIn(self.foreign_badge, self.pin.badges.all())
+        self.assertNotIn(self.foreign_label, self.pin.labels.all())
 
-    def test_global_badge_can_be_added(self) -> None:
-        global_badge = baker.make(Badge, kind=KIND_TAG, profile=None)
-        response = self._add(global_badge.id)
+    def test_global_label_can_be_added(self) -> None:
+        global_label = baker.make(Label, kind=KIND_TAG, profile=None)
+        response = self._add(global_label.id)
         self.assertEqual(response.status_code, 200)
-        self.assertIn(global_badge, self.pin.badges.all())
+        self.assertIn(global_label, self.pin.labels.all())
+
+
+class MapEndpointLabelVisibilityTests(TestCase):
+    """The map add/quick-edit endpoints must apply the same label visibility
+    rule as the label membership panels - a guessed foreign label id must not
+    attach (and thereby expose the name of) another user's private label."""
+
+    def setUp(self) -> None:
+        self.user = baker.make(User)
+        self.other = baker.make(User)
+        self.client.force_login(self.user)
+        self.own_label = baker.make(Label, kind=KIND_TAG, profile=self.user.profile)
+        self.foreign_label = baker.make(Label, kind=KIND_TAG, profile=self.other.profile)
+
+    def test_add_pin_ignores_foreign_label_ids(self) -> None:
+        response = self.client.post(
+            reverse("pin.add"),
+            data={"name": "Test", "latitude": "42.65", "longitude": "-73.75", "label_ids": [self.own_label.id, self.foreign_label.id]},
+        )
+        self.assertEqual(response.status_code, 200)
+        pin = Pin.objects.get(profile=self.user.profile)
+        self.assertIn(self.own_label, pin.labels.all())
+        self.assertNotIn(self.foreign_label, pin.labels.all())
+
+    def test_add_pin_ignores_foreign_tag_ids(self) -> None:
+        response = self.client.post(
+            reverse("pin.add"),
+            data={"name": "Test", "latitude": "42.66", "longitude": "-73.76", "tag_ids": [self.foreign_label.id]},
+        )
+        self.assertEqual(response.status_code, 200)
+        pin = Pin.objects.get(profile=self.user.profile)
+        self.assertNotIn(self.foreign_label, pin.labels.all())
+
+    def test_quick_edit_ignores_foreign_label_ids(self) -> None:
+        pin = baker.make(Pin, profile=self.user.profile)
+        response = self.client.post(
+            reverse("pin.quick_edit", args=[pin.slug]),
+            data={"label_ids": [self.own_label.id, self.foreign_label.id]},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(self.own_label, pin.labels.all())
+        self.assertNotIn(self.foreign_label, pin.labels.all())
+
+    def test_quick_edit_accepts_global_labels(self) -> None:
+        pin = baker.make(Pin, profile=self.user.profile)
+        global_label = baker.make(Label, kind=KIND_TAG, profile=None)
+        response = self.client.post(
+            reverse("pin.quick_edit", args=[pin.slug]),
+            data={"label_ids": [global_label.id]},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(global_label, pin.labels.all())
 
 
 class CommentReactionScopingTests(TestCase):
@@ -139,6 +191,27 @@ class CommentReactionScopingTests(TestCase):
         comment = baker.make(Comment, pin=pin, wiki=None, profile=self.other.profile)
         self.assertEqual(self._react(comment.id).status_code, 404)
 
+    def test_can_react_to_wiki_comment_for_pinned_location(self) -> None:
+        from urbanlens.dashboard.models.wiki.model import Wiki
+
+        pin = baker.make(Pin, profile=self.user.profile)
+        wiki = baker.make(Wiki, location=pin.location)
+        # A real wiki comment author must themselves have had a pin at this
+        # location (see WikiCommentsView.post's resolve_visible_wiki gate),
+        # which also satisfies their default comment_visibility (common pin).
+        baker.make(Pin, profile=self.other.profile, location=pin.location)
+        comment = baker.make(Comment, pin=None, wiki=wiki, profile=self.other.profile)
+        self.assertEqual(self._react(comment.id).status_code, 200)
+
+    def test_cannot_react_to_wiki_comment_for_unpinned_location(self) -> None:
+        """A wiki comment id must not act as an oracle for un-pinned wikis (matches resolve_visible_wiki)."""
+        from urbanlens.dashboard.models.wiki.model import Wiki
+
+        pin = baker.make(Pin, profile=self.other.profile)
+        wiki = baker.make(Wiki, location=pin.location)
+        comment = baker.make(Comment, pin=None, wiki=wiki, profile=self.other.profile)
+        self.assertEqual(self._react(comment.id).status_code, 404)
+
 
 class TripCommentReactionMembershipTests(TestCase):
     """Trip comment reactions require trip membership."""
@@ -153,7 +226,7 @@ class TripCommentReactionMembershipTests(TestCase):
 
     def _react(self):
         return self.client.post(
-            reverse("trips.comment.react", args=[self.trip.uuid, self.comment.id]),
+            reverse("trips.comment.react", args=[self.trip.slug, self.comment.id]),
             data={"emoji": "👍"},
         )
 

@@ -4,7 +4,9 @@ Invariants verified:
   - With no query params, trips are ordered by most-recently-updated first (existing
     default behavior, preserved by the new sort feature).
   - `?sort=updated&dir=asc` reverses that order.
-  - `?sort=start_date&dir=asc`/`desc` orders by start date, and trips with no
+  - `?sort=start_date&dir=asc` ("soonest first") groups trips: upcoming/active
+    soonest first, then undated (planning) trips, then past trips most-recent first.
+  - `?sort=start_date&dir=desc` orders by start date, and trips with no
     start_date always sort to the end regardless of direction.
   - Unrecognized `sort`/`dir` values fall back to the defaults instead of erroring.
 """
@@ -22,7 +24,7 @@ from urbanlens.dashboard.models.trips.model import Trip, TripMembership
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
 
-_LIST_URL = "/dashboard/trips/"
+_LIST_URL = "/dashboard/trips/list/"
 
 
 def _make_trip(creator_profile: Profile, **kwargs) -> Trip:
@@ -66,14 +68,25 @@ class TripListSortTests(TestCase):
 
         self.assertEqual(self._names(resp), ["Older", "Newer"])
 
-    def test_start_date_ascending_puts_soonest_first_and_undated_last(self) -> None:
+    def test_start_date_ascending_groups_future_then_planning_then_past(self) -> None:
+        """"Soonest first" groups trips instead of sorting purely chronologically:
+        upcoming/active trips soonest first, then undated (planning) trips, then
+        past trips most-recent first - so a months-old trip doesn't outrank
+        tomorrow's just because its date is numerically smaller.
+        """
+        today = datetime.date.today()
         _make_trip(self.profile, name="No Date")
-        _make_trip(self.profile, name="July", start_date=datetime.date(2026, 7, 1))
-        _make_trip(self.profile, name="March", start_date=datetime.date(2026, 3, 1))
+        _make_trip(self.profile, name="Future Far", start_date=today + datetime.timedelta(days=30))
+        _make_trip(self.profile, name="Future Soon", start_date=today + datetime.timedelta(days=5))
+        _make_trip(self.profile, name="Past Recent", start_date=today - datetime.timedelta(days=5))
+        _make_trip(self.profile, name="Past Old", start_date=today - datetime.timedelta(days=30))
 
         resp = self.client.get(_LIST_URL, {"sort": "start_date", "dir": "asc"})
 
-        self.assertEqual(self._names(resp), ["March", "July", "No Date"])
+        self.assertEqual(
+            self._names(resp),
+            ["Future Soon", "Future Far", "No Date", "Past Recent", "Past Old"],
+        )
 
     def test_start_date_descending_puts_latest_first_and_undated_last(self) -> None:
         _make_trip(self.profile, name="No Date")

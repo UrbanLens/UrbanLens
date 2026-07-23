@@ -1,0 +1,68 @@
+{% extends 'dashboard/themes/base.html' %}
+
+{% block page_title %}AI Link Analysis - {{ site_title|default:"UrbanLens" }}{% endblock %}
+
+{% block hero %}
+{% include "dashboard/partials/ui/_page_hero.html" with icon="auto_awesome" title="AI Link Analysis" subtitle="Everything AI has read and filled in for your pins." modifier="top" %}
+{% endblock %}
+
+{% block content %}
+<div class="ai-extractions-page page-content">
+
+    {% if feature_available %}
+    <p class="ai-extractions-limit">You can analyze {{ remaining_today }} more link{{ remaining_today|pluralize }} today.</p>
+    {% else %}
+    <p class="ai-extractions-limit">AI link processing isn't currently available on your account.</p>
+    {% endif %}
+
+    {% if extractions %}
+    <ul class="ai-extractions-list">
+        {% for extraction in extractions %}
+        <li class="ai-extraction-item ai-extraction-item--{{ extraction.status }}">
+            <div class="ai-extraction-meta">
+                <span class="ai-extraction-status ai-extraction-status--{{ extraction.status }}">
+                    {% if extraction.status == "success" %}<i class="material-symbols-outlined">check_circle</i>
+                    {% elif extraction.status == "failed" %}<i class="material-symbols-outlined">error</i>
+                    {% elif extraction.status == "empty" %}<i class="material-symbols-outlined">search_off</i>
+                    {% else %}<i class="material-symbols-outlined">hourglass_top</i>{% endif %}
+                    {{ extraction.get_status_display }}
+                </span>
+                <a class="ai-extraction-pin" href="{% url 'pin.details' extraction.pin.slug %}">
+                    <i class="material-symbols-outlined">location_on</i> {{ extraction.pin.effective_name }}
+                </a>
+                <span class="ai-extraction-date">{{ extraction.created|date:"M j, Y g:i A" }}</span>
+            </div>
+            <a class="ai-extraction-url" href="{{ extraction.url }}" target="_blank" rel="noopener noreferrer">{{ extraction.url|truncatechars:100 }}</a>
+
+            {% if extraction.error %}
+            <p class="ai-extraction-error">{{ extraction.error }}</p>
+            {% endif %}
+
+            {% if extraction.results_rows %}
+            <ul class="ai-extraction-results">
+                {% for row in extraction.results_rows %}
+                <li class="ai-extraction-result">
+                    <span class="ai-extraction-result-label">{{ row.label }}</span>
+                    <span class="ai-extraction-result-value">{{ row.value }}</span>
+                    {% if row.applied %}
+                    <span class="ai-extraction-result-badge ai-extraction-result-badge--applied"><i class="material-symbols-outlined">check</i> Applied</span>
+                    {% else %}
+                    <span class="ai-extraction-result-badge"><i class="material-symbols-outlined">block</i> Not applied</span>
+                    {% endif %}
+                    <span class="ai-extraction-result-note">{{ row.note }}</span>
+                </li>
+                {% endfor %}
+            </ul>
+            {% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="ai-extractions-empty">
+        Nothing here yet. On a pin's detail page, click the <i class="material-symbols-outlined" aria-hidden="true">auto_awesome</i> button
+        next to a link to have AI read the page and fill in supported pin details.
+    </p>
+    {% endif %}
+
+</div>
+{% endblock %}

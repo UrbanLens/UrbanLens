@@ -5,12 +5,37 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
+from urbanlens.dashboard.services.enrichment import LocationCacheEnrichmentSource
 from urbanlens.dashboard.services.external_data import LocationCachePanelSource
+from urbanlens.dashboard.services.locations.name_resolution import LocationCacheNameProvider
 from urbanlens.dashboard.services.rate_limiter import ServiceDefaults
 
 if TYPE_CHECKING:
+    from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.services.enrichment import EnrichmentSource
     from urbanlens.dashboard.services.external_data import PanelSource
+    from urbanlens.dashboard.services.locations.name_resolution import NameProvider
+
+
+class _SemicolonSplitNameProvider(LocationCacheNameProvider):
+    """Splits a semicolon-separated multi-value tag into separate candidates.
+
+    OSM's ``old_name`` tag is often two-or-more former names in one field
+    (e.g. ``"Pauline Warfield Lewis Center;Cincinnati State Hospital"``).
+    Left as one string, ``sanitize_name`` would strip the semicolon - not
+    split on it - running the two names together into one garbled string
+    instead of producing two real aliases.
+    """
+
+    def candidates(self, location: Location) -> list[str | None]:
+        split: list[str | None] = []
+        for value in super().candidates(location):
+            if isinstance(value, str) and ";" in value:
+                split.extend(part.strip() for part in value.split(";") if part.strip())
+            else:
+                split.append(value)
+        return split
 
 
 class NominatimPanelSource(LocationCachePanelSource):
@@ -20,24 +45,90 @@ class NominatimPanelSource(LocationCachePanelSource):
     cache_source = "nominatim"
     section_id = "nominatim-section"
     icon = "map"
-    title = "OpenStreetMap"
+    # Distinguishes this panel from the separate "Photon (OpenStreetMap)"
+    # panel (plugins.builtin.photon) - both reverse-geocode the same
+    # underlying OpenStreetMap data through different, independent hosted
+    # services (Nominatim vs. Komoot's Photon), by design, for cross-checking
+    # - not a duplicate query against one provider. A bare "OpenStreetMap"
+    # title here was ambiguous next to Photon's own title.
+    title = "Nominatim"
 
     def fetch(self, pin: Pin) -> None:
-        """Reverse-geocode the pin's coordinates and cache the place metadata."""
+        """Reverse-geocode the pin's coordinates and cache the place metadata.
+
+        Nominatim's panel data lands lazily (only once the pin detail page is
+        viewed), well after a Location's ``official_name`` is first resolved
+        at creation time. When that first resolution never found a real name
+        - or, worse, fell back to a bare city/administrative name - this is
+        the first opportunity to retry with OpenStreetMap's name in the mix,
+        so the name is refreshed here rather than left stuck on a placeholder.
+        """
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
         from urbanlens.dashboard.services.apis.locations.nominatim import NominatimGateway
+        from urbanlens.dashboard.services.locations.naming import (
+            is_address_derived_name,
+            is_meaningful_name,
+            update_location_name_from_external_sources,
+        )
 
         lat = float(pin.effective_latitude or 0)
         lng = float(pin.effective_longitude or 0)
         place = NominatimGateway().reverse_geocode(lat, lng)
         LocationCache.set(pin.location, self.cache_source, place or {}, query_key=f"{lat},{lng}")
 
+        location = pin.location
+        current_name = location.official_name
+        name_needs_improvement = not is_meaningful_name(current_name) or bool(current_name and is_address_derived_name(current_name, location))
+        if place and place.get("name") and name_needs_improvement:
+            update_location_name_from_external_sources(location, profile=pin.profile)
+
+        if place and place.get("osm_url"):
+            self._add_osm_link(pin, location, place["osm_url"])
+
+    @staticmethod
+    def _add_osm_link(pin: Pin, location: Location, osm_url: str) -> None:
+        """Add the OSM way/node/relation URL to the pin's (and wiki's) links, if not already there.
+
+        Args:
+            pin: The pin whose links should include this URL.
+            location: The pin's location, for reaching its wiki (if any).
+            osm_url: The OSM element URL from the reverse-geocode result.
+        """
+        from urbanlens.dashboard.services.locations.external_links import add_pin_and_wiki_link
+
+        add_pin_and_wiki_link(pin, location, osm_url, "OpenStreetMap")
+
+
+class NominatimEnrichmentSource(LocationCacheEnrichmentSource):
+    """Background-fills the OSM reverse-geocode cache (a name/alias source) per Location."""
+
+    key: ClassVar[str] = "nominatim"
+    verbose_name: ClassVar[str] = "Nominatim"
+    cache_source: ClassVar[str] = "nominatim"
+    service_keys: ClassVar[tuple[str, ...]] = ("nominatim",)
+
+    def fetch(self, location: Location) -> tuple[dict | None, str]:
+        """Reverse-geocode a location's coordinates via Nominatim.
+
+        Args:
+            location: The location to reverse-geocode.
+
+        Returns:
+            Tuple of (place payload or None, coordinate query key).
+        """
+        from urbanlens.dashboard.services.apis.locations.nominatim import NominatimGateway
+
+        lat = float(location.latitude or 0)
+        lng = float(location.longitude or 0)
+        place = NominatimGateway().reverse_geocode(lat, lng)
+        return place, f"{lat},{lng}"
+
 
 class NominatimPlugin(UrbanLensPlugin):
     """OpenStreetMap place metadata for pinned locations."""
 
     name: ClassVar[str] = "nominatim"
-    verbose_name: ClassVar[str] = "OpenStreetMap (Nominatim)"
+    verbose_name: ClassVar[str] = "Nominatim"
     description: ClassVar[str] = "Reverse-geocodes pins via Nominatim and shows OpenStreetMap place metadata on the pin detail page."
     author: ClassVar[str] = "UrbanLens"
 
@@ -55,3 +146,14 @@ class NominatimPlugin(UrbanLensPlugin):
     def get_panel_sources(self) -> list[PanelSource]:
         """Contribute the OpenStreetMap pin-detail panel."""
         return [NominatimPanelSource()]
+
+    def get_name_providers(self) -> list[NameProvider]:
+        """Contribute the reverse-geocoded OSM place name, and its former name(s), as candidates."""
+        return [
+            LocationCacheNameProvider(source="nominatim", cache_source="nominatim", keys=("name",), verbose_name="OpenStreetMap"),
+            _SemicolonSplitNameProvider(source="nominatim_old_name", cache_source="nominatim", keys=("old_name",), verbose_name="OpenStreetMap"),
+        ]
+
+    def get_enrichment_sources(self) -> list[EnrichmentSource]:
+        """Contribute the OSM reverse-geocode cache to scheduled background enrichment."""
+        return [NominatimEnrichmentSource()]

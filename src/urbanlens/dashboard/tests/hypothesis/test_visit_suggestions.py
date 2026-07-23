@@ -301,6 +301,26 @@ class CreateVisitSuggestionTests(TestCase):
         self.assertIsNotNone(suggestion)
         self.assertIsNone(suggestion.notification_id)
 
+    def test_no_suggestion_created_when_recipient_has_visit_tracking_off(self) -> None:
+        self.recipient.track_pin_visits = False
+        self.recipient.save(update_fields=["track_pin_visits"])
+        origin_pin = baker.make(Pin, profile=self.suggester, location=self.location)
+        origin_visit = baker.make(PinVisit, pin=origin_pin, visited_at=self.visited_at, source=VisitSource.MANUAL)
+
+        suggestion = create_visit_suggestion(
+            suggested_to=self.recipient,
+            suggested_by=self.suggester,
+            visited_at=self.visited_at,
+            location=self.location,
+            latitude=40.0,
+            longitude=-74.0,
+            candidate_profiles=[],
+            origin_visit=origin_visit,
+        )
+
+        self.assertIsNone(suggestion)
+        self.assertFalse(VisitSuggestion.objects.exists())
+
     def test_skips_entirely_when_existing_visit_has_all_participants_already(self) -> None:
         _make_accepted_friendship(self.recipient, self.suggester)
         recipient_pin = baker.make(Pin, profile=self.recipient, location=self.location)
@@ -510,7 +530,7 @@ class TripActivityCompletionTests(TestCase):
         self.client.force_login(self.completer.user)
 
     def _complete_url(self) -> str:
-        return reverse("trips.activity.complete", kwargs={"trip_uuid": str(self.trip.uuid), "activity_id": self.activity.id})
+        return reverse("trips.activity.complete", kwargs={"trip_slug": self.trip.slug, "activity_id": self.activity.id})
 
     def test_completer_gets_an_immediate_visit(self) -> None:
         self.client.post(self._complete_url(), data={"completed_date": "2026-06-01"})

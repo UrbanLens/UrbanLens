@@ -1,0 +1,128 @@
+{% comment %}
+Reusable gradient hero banner for page tops (safety pages, Organize, Thanks &
+Credits, ...).
+
+Required (unless body_template is given):
+  title            - heading text, auto-escaped
+
+Optional:
+  icon                  - material-symbols-outlined icon shown before the title
+  title_suffix_template - path to a partial appended after icon+title (e.g. a
+                          page explainer anchor); rendered with the including
+                          template's full context; ignored if body_template is set
+  eyebrow               - small uppercase label shown above the title, auto-escaped
+  subtitle              - supporting text shown below the title, auto-escaped
+  subtitle_tooltip      - native title="" tooltip text for the subtitle element
+  body_template         - path to a partial that replaces the eyebrow/title/subtitle
+                          markup entirely (e.g. a status badge, a live-updating
+                          title span, or a subtitle with a link); rendered with
+                          the including template's full context
+  back_url              - if set, renders a back-link above the title (e.g. back
+                          to a section's home page)
+  back_label            - label for back_url; defaults to "Back"
+  modifier              - extra BEM modifier class: "wide" for a wider hero that
+                          doesn't need to bleed out of an ambient page padding,
+                          "top" when rendered in base.html's block hero (outside
+                          .container, right below the header) - see the
+                          .ul-page-subnav notes in _page_hero.scss - or
+                          "profile" for the Profile | Edit avatar+identity
+                          layout (also renders in block hero; see
+                          partials/profile/_profile_hero_body.html)
+  id                    - id attribute on the outer <section>, so a page whose
+                          hero content can change after load (e.g. an edit
+                          dialog) can target it for an out-of-band HTMX swap
+  oob                   - when True (with id set), adds hx-swap-oob="true" so
+                          this render can be concatenated onto another view's
+                          response as an out-of-band update
+
+Usage:
+  {% include "dashboard/partials/ui/_page_hero.html" with icon="emergency" title="Safety" subtitle="..." %}
+  {% include "dashboard/partials/ui/_page_hero.html" with body_template="dashboard/partials/safety/_detail_hero_body.html" %}
+
+  Page with a subnav tab strip directly below the hero (see memories/*.html):
+    {% block hero %}
+    {% include "dashboard/partials/ui/_page_hero.html" with icon="..." title="..." modifier="top" %}
+    {% endblock %}
+
+    {% block subnav %}
+    <div class="ul-page-subnav"><div class="ul-page-subnav__inner">...tabs...</div></div>
+    {% endblock %}
+{% endcomment %}
+<section class="ul-page-hero{% if modifier %} ul-page-hero--{{ modifier }}{% endif %}{% if hero_image_url %} ul-page-hero--cover{% endif %}"{% if id %} id="{{ id }}"{% endif %}{% if hero_image_url %} data-cover-hero-key="{{ hero_cover_key|default:'page' }}" style="background-image:url('{{ hero_image_url }}')"{% endif %}{% if oob %} hx-swap-oob="true"{% endif %}>
+    <div class="ul-page-hero__inner">
+        {% if back_url %}
+        <a href="{{ back_url }}" class="ul-page-hero__back">
+            <i class="material-symbols-outlined">arrow_back</i>
+            {{ back_label|default:"Back" }}
+        </a>
+        {% endif %}
+        {% if hero_image_url %}
+        <button type="button" class="ul-page-hero__adjust" data-cover-adjust-toggle title="Adjust cover photo">
+            <i class="material-symbols-outlined">tune</i><span>Adjust</span>
+        </button>
+        <div class="ul-page-hero__cover-controls" data-cover-adjust-controls hidden>
+            <label>Zoom <input type="range" min="100" max="300" value="100" data-cover-zoom></label>
+            <button type="button" class="btn btn--ghost btn--sm" onclick="window._setCoverPhoto && window._setCoverPhoto(null)">Remove cover</button>
+        </div>
+        {% endif %}
+        {% if body_template %}
+        {% include body_template %}
+        {% else %}
+        {% if eyebrow %}<p class="ul-page-hero__eyebrow">{{ eyebrow }}</p>{% endif %}
+        <h1 class="ul-page-hero__title">
+            {% if icon %}<i class="material-symbols-outlined">{{ icon }}</i>{% endif %}
+            {{ title }}
+            {% if title_suffix_template %}{% include title_suffix_template %}{% endif %}
+        </h1>
+        {% if subtitle %}
+        <p class="ul-page-hero__subtitle"{% if subtitle_tooltip %} title="{{ subtitle_tooltip }}"{% endif %}>{{ subtitle }}</p>
+        {% endif %}
+        {% endif %}
+    </div>
+</section>
+{% if hero_image_url %}
+<script>
+(function () {
+    var hero = document.getElementById('{{ id|default:"" }}');
+    if (!hero) return;
+    var key = 'ul_cover_hero_' + (hero.dataset.coverHeroKey || '{{ hero_cover_key|default:"page" }}') + '_' + '{{ pin.slug|default:wiki.location.slug|default:"" }}';
+    var toggle = hero.querySelector('[data-cover-adjust-toggle]');
+    var controls = hero.querySelector('[data-cover-adjust-controls]');
+    var zoom = hero.querySelector('[data-cover-zoom]');
+    var dragging = false, startX = 0, startY = 0, startPos = {x: 50, y: 50};
+    function state() {
+        try { return JSON.parse(localStorage.getItem(key) || '{}'); } catch (_) { return {}; }
+    }
+    function save(st) { try { localStorage.setItem(key, JSON.stringify(st)); } catch (_) {} }
+    function apply(st) {
+        var z = Math.max(100, Math.min(300, parseInt(st.zoom || 100, 10)));
+        var x = Math.max(0, Math.min(100, parseFloat(st.x == null ? 50 : st.x)));
+        var y = Math.max(0, Math.min(100, parseFloat(st.y == null ? 50 : st.y)));
+        hero.style.backgroundSize = z + '% auto';
+        hero.style.backgroundPosition = x + '% ' + y + '%';
+        if (zoom) zoom.value = z;
+    }
+    apply(state());
+    if (toggle && controls) toggle.addEventListener('click', function () {
+        var on = !hero.classList.contains('is-adjusting-cover');
+        hero.classList.toggle('is-adjusting-cover', on);
+        controls.hidden = !on;
+        toggle.classList.toggle('is-active', on);
+    });
+    if (zoom) zoom.addEventListener('input', function () { var st = state(); st.zoom = zoom.value; apply(st); save(st); });
+    hero.addEventListener('pointerdown', function (e) {
+        if (!hero.classList.contains('is-adjusting-cover') || (controls && controls.contains(e.target)) || (toggle && toggle.contains(e.target))) return;
+        dragging = true; hero.setPointerCapture(e.pointerId); startX = e.clientX; startY = e.clientY;
+        var st = state(); startPos = {x: st.x == null ? 50 : parseFloat(st.x), y: st.y == null ? 50 : parseFloat(st.y)};
+    });
+    hero.addEventListener('pointermove', function (e) {
+        if (!dragging) return;
+        var st = state();
+        st.x = Math.max(0, Math.min(100, startPos.x + ((e.clientX - startX) / hero.clientWidth) * 100));
+        st.y = Math.max(0, Math.min(100, startPos.y + ((e.clientY - startY) / hero.clientHeight) * 100));
+        apply(st); save(st);
+    });
+    hero.addEventListener('pointerup', function () { dragging = false; });
+})();
+</script>
+{% endif %}

@@ -26,6 +26,7 @@ class ImageSerializer(serializers.ModelSerializer):
             "taken_at",
             "latitude",
             "longitude",
+            "direction",
             "created",
         ]
         read_only_fields = ["id", "image_url", "uploader_username", "created"]

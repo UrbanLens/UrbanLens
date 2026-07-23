@@ -1,0 +1,687 @@
+// Base reset & bare-element styling.
+//
+// This replaces third_party/_materialize.scss (deleted - the vendored Materialize
+// CSS framework is gone; nothing in the app uses its component classes any more:
+// no .row/.col grid, no .modal/.sidenav/.dropdown-content/.collapsible/.chips/
+// .select-wrapper/.tabs, no M.* JS init calls). What's here is the small slice of
+// Materialize's bare-element/attribute-selector styling that templates across the
+// app still rely on for their visual appearance without any project-owned class
+// name to hook into (native checkboxes/radios/selects/range sliders, plain <nav>,
+// plain text inputs/textareas, and the root typography/font-size scale). Values
+// are copied over unchanged so removing the vendor file doesn't change how
+// anything renders.
+
+// -- Document reset (was normalize.css v7, bundled inside Materialize) --------
+
+html {
+    line-height: 1.15;
+    -ms-text-size-adjust: 100%;
+    -webkit-text-size-adjust: 100%;
+    -webkit-box-sizing: border-box;
+    box-sizing: border-box;
+}
+
+// -- Root typography ------------------------------------------------------
+// This is the actual base font stack/color/line-height for the whole site, and
+// - critically - the responsive root font-size that every `rem` measurement
+// throughout the compiled CSS scales from (14px up to 992px, 14.5px up to
+// 1200px, 15px above). Do not change these without checking rem-based sizing
+// site-wide.
+html {
+    line-height: 1.5;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+    font-weight: normal;
+    color: rgba(0, 0, 0, 0.87);
+    font-size: 14px;
+}
+
+@media only screen and (min-width: 992px) {
+    html {
+        font-size: 14.5px;
+    }
+}
+
+@media only screen and (min-width: 1200px) {
+    html {
+        font-size: 15px;
+    }
+}
+
+h1, h2, h3, h4, h5, h6 {
+    font-weight: 400;
+    line-height: 1.3;
+}
+
+h1 a, h2 a, h3 a, h4 a, h5 a, h6 a {
+    font-weight: inherit;
+}
+
+h1 {
+    font-size: 4.2rem;
+    line-height: 110%;
+    margin: 2.8rem 0 1.68rem 0;
+}
+
+h2 {
+    font-size: 3.56rem;
+    line-height: 110%;
+    margin: 2.3733333333rem 0 1.424rem 0;
+}
+
+h3 {
+    font-size: 2.92rem;
+    line-height: 110%;
+    margin: 1.9466666667rem 0 1.168rem 0;
+}
+
+h4 {
+    font-size: 2.28rem;
+    line-height: 110%;
+    margin: 1.52rem 0 .912rem 0;
+}
+
+h5 {
+    font-size: 1.64rem;
+    line-height: 110%;
+    margin: 1.0933333333rem 0 .656rem 0;
+}
+
+h6 {
+    font-size: 1.15rem;
+    line-height: 110%;
+    margin: .7666666667rem 0 .46rem 0;
+}
+
+// Overrides the `b, strong` / `small` rules below - this is the weight/size
+// that's actually been rendering.
+strong {
+    font-weight: 500;
+}
+
+small {
+    font-size: 75%;
+}
+
+i {
+    line-height: inherit;
+}
+
+label {
+    font-size: .8rem;
+    color: #9e9e9e;
+}
+
+::-webkit-input-placeholder {
+    color: #d1d1d1;
+}
+
+::-moz-placeholder {
+    color: #d1d1d1;
+}
+
+:-ms-input-placeholder {
+    color: #d1d1d1;
+}
+
+::-ms-input-placeholder {
+    color: #d1d1d1;
+}
+
+::placeholder {
+    color: #d1d1d1;
+}
+
+*, *:before, *:after {
+    -webkit-box-sizing: inherit;
+    box-sizing: inherit;
+}
+
+body {
+    margin: 0;
+}
+
+article, aside, footer, header, nav, section {
+    display: block;
+}
+
+figcaption, figure, main {
+    display: block;
+}
+
+figure {
+    margin: 1em 40px;
+}
+
+hr {
+    -webkit-box-sizing: content-box;
+    box-sizing: content-box;
+    height: 0;
+    overflow: visible;
+}
+
+pre {
+    font-family: monospace, monospace;
+    font-size: 1em;
+}
+
+a {
+    background-color: transparent;
+    -webkit-text-decoration-skip: objects;
+    color: #039be5;
+    text-decoration: none;
+    -webkit-tap-highlight-color: transparent;
+}
+
+abbr[title] {
+    border-bottom: none;
+    text-decoration: underline;
+    text-decoration: underline dotted;
+}
+
+b, strong {
+    font-weight: bolder;
+}
+
+code, kbd, samp {
+    font-family: monospace, monospace;
+    font-size: 1em;
+}
+
+dfn {
+    font-style: italic;
+}
+
+mark {
+    background-color: #ff0;
+    color: #000;
+}
+
+sub, sup {
+    font-size: 75%;
+    line-height: 0;
+    position: relative;
+    vertical-align: baseline;
+}
+
+sub {
+    bottom: -0.25em;
+}
+
+sup {
+    top: -0.5em;
+}
+
+audio, video {
+    display: inline-block;
+}
+
+audio:not([controls]) {
+    display: none;
+    height: 0;
+}
+
+img {
+    border-style: none;
+}
+
+svg:not(:root) {
+    overflow: hidden;
+}
+
+button, input, optgroup, select, textarea {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+    font-size: 100%;
+    line-height: 1.15;
+    margin: 0;
+}
+
+button, input {
+    overflow: visible;
+}
+
+button, select {
+    text-transform: none;
+}
+
+button, html [type="button"], [type="reset"], [type="submit"] {
+    -webkit-appearance: button;
+}
+
+button::-moz-focus-inner, [type="button"]::-moz-focus-inner, [type="reset"]::-moz-focus-inner, [type="submit"]::-moz-focus-inner {
+    border-style: none;
+    padding: 0;
+}
+
+button:-moz-focusring, [type="button"]:-moz-focusring, [type="reset"]:-moz-focusring, [type="submit"]:-moz-focusring {
+    outline: 1px dotted ButtonText;
+}
+
+fieldset {
+    padding: 0.35em 0.75em 0.625em;
+}
+
+legend {
+    -webkit-box-sizing: border-box;
+    box-sizing: border-box;
+    color: inherit;
+    display: table;
+    max-width: 100%;
+    padding: 0;
+    white-space: normal;
+}
+
+progress {
+    display: inline-block;
+    vertical-align: baseline;
+}
+
+textarea {
+    overflow: auto;
+}
+
+[type="checkbox"], [type="radio"] {
+    -webkit-box-sizing: border-box;
+    box-sizing: border-box;
+    padding: 0;
+}
+
+[type="number"]::-webkit-inner-spin-button, [type="number"]::-webkit-outer-spin-button {
+    height: auto;
+}
+
+[type="search"] {
+    -webkit-appearance: textfield;
+    outline-offset: -2px;
+}
+
+[type="search"]::-webkit-search-cancel-button, [type="search"]::-webkit-search-decoration {
+    -webkit-appearance: none;
+}
+
+::-webkit-file-upload-button {
+    -webkit-appearance: button;
+    font: inherit;
+}
+
+details, menu {
+    display: block;
+}
+
+summary {
+    display: list-item;
+}
+
+canvas {
+    display: inline-block;
+}
+
+template {
+    display: none;
+}
+
+[hidden] {
+    display: none;
+}
+
+ul:not(.browser-default) {
+    padding-left: 0;
+    list-style-type: none;
+}
+
+ul:not(.browser-default) > li {
+    list-style-type: none;
+}
+
+// -- Bare <nav> baseline -------------------------------------------------------
+// Every real nav bar in the app (.app-nav, .ul-subnav-tabs,
+// .help-import-toc-nav) sets its own background/height/color, but they rely on
+// this baseline for the properties they don't re-declare.
+nav {
+    color: var(--ul-text-4);
+    background-color: #ee6e73;
+    width: 100%;
+    height: 56px;
+    line-height: 56px;
+}
+
+nav i,
+nav i.material-icons {
+    display: block;
+    font-size: 24px;
+    height: 56px;
+    line-height: 56px;
+}
+
+// Default resting-state elevation shadow. .btn's hover/focus/disabled states
+// are fully covered by _buttons.scss, but nothing there sets a resting-state
+// shadow, so this is what's actually under every button today.
+nav,
+.btn {
+    box-shadow: 0 2px 2px 0 rgba(0, 0, 0, 0.14), 0 3px 1px -2px rgba(0, 0, 0, 0.12), 0 1px 5px 0 rgba(0, 0, 0, 0.2);
+}
+
+// -- Count badge (card headers, subnav tabs, list headings) --------------------
+span.badge {
+    min-width: 3rem;
+    padding: 0 6px;
+    margin-left: 14px;
+    text-align: center;
+    font-size: 1rem;
+    line-height: 22px;
+    height: 22px;
+    color: #757575;
+    float: right;
+    -webkit-box-sizing: border-box;
+    box-sizing: border-box;
+}
+
+// -- Checkbox / radio custom visual --------------------------------------------
+// Markup convention used throughout the app: <input type="checkbox|radio"> followed
+// by an empty <span>; the input is visually hidden and the span draws the box/dot/
+// checkmark via ::before/::after. Pages that want the native control visible instead
+// opt out with their own higher-specificity override (see _nav.scss, _trips.scss,
+// _pin-detail.scss, _tags.scss) - those overrides are unaffected by this rule.
+[type="radio"]:not(:checked),
+[type="radio"]:checked {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+[type="radio"]:not(:checked) + span,
+[type="radio"]:checked + span {
+    position: relative;
+    padding-left: 35px;
+    cursor: pointer;
+    display: inline-block;
+    height: 25px;
+    line-height: 25px;
+    font-size: 1rem;
+    -webkit-transition: .28s ease;
+    transition: .28s ease;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+}
+
+[type="radio"] + span:before,
+[type="radio"] + span:after {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    margin: 4px;
+    width: 16px;
+    height: 16px;
+    z-index: 0;
+    -webkit-transition: .28s ease;
+    transition: .28s ease;
+}
+
+[type="radio"]:not(:checked) + span:before,
+[type="radio"]:not(:checked) + span:after,
+[type="radio"]:checked + span:before,
+[type="radio"]:checked + span:after {
+    border-radius: 50%;
+}
+
+[type="radio"]:not(:checked) + span:before,
+[type="radio"]:not(:checked) + span:after {
+    border: 2px solid #5a5a5a;
+}
+
+[type="radio"]:not(:checked) + span:after {
+    -webkit-transform: scale(0);
+    transform: scale(0);
+}
+
+[type="radio"]:checked + span:before {
+    border: 2px solid transparent;
+}
+
+[type="radio"]:checked + span:after {
+    border: 2px solid #26a69a;
+    background-color: #26a69a;
+    -webkit-transform: scale(1.02);
+    transform: scale(1.02);
+}
+
+[type="radio"]:disabled:not(:checked) + span:before,
+[type="radio"]:disabled:checked + span:before {
+    background-color: transparent;
+    border-color: rgba(0, 0, 0, 0.42);
+}
+
+[type="radio"]:disabled + span {
+    color: rgba(0, 0, 0, 0.42);
+}
+
+[type="radio"]:disabled:checked + span:after {
+    background-color: rgba(0, 0, 0, 0.42);
+    border-color: #949494;
+}
+
+[type="checkbox"]:not(:checked),
+[type="checkbox"]:checked {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+[type="checkbox"] + span:not(.lever) {
+    position: relative;
+    padding-left: 35px;
+    cursor: pointer;
+    display: inline-block;
+    height: 25px;
+    line-height: 25px;
+    font-size: 1rem;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+}
+
+[type="checkbox"] + span:not(.lever):before,
+[type="checkbox"] + span:not(.lever):after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 18px;
+    height: 18px;
+    z-index: 0;
+    border: 2px solid #5a5a5a;
+    border-radius: 1px;
+    margin-top: 3px;
+    -webkit-transition: .2s;
+    transition: .2s;
+}
+
+[type="checkbox"] + span:not(.lever):after {
+    border: 0;
+    -webkit-transform: scale(0);
+    transform: scale(0);
+}
+
+[type="checkbox"]:not(:checked):disabled + span:not(.lever):before {
+    border: none;
+    background-color: rgba(0, 0, 0, 0.42);
+}
+
+[type="checkbox"]:checked + span:not(.lever):before {
+    top: -4px;
+    left: -5px;
+    width: 12px;
+    height: 22px;
+    border-top: 2px solid transparent;
+    border-left: 2px solid transparent;
+    border-right: 2px solid #26a69a;
+    border-bottom: 2px solid #26a69a;
+    -webkit-transform: rotate(40deg);
+    transform: rotate(40deg);
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+    -webkit-transform-origin: 100% 100%;
+    transform-origin: 100% 100%;
+}
+
+[type="checkbox"]:checked:disabled + span:before {
+    border-right: 2px solid rgba(0, 0, 0, 0.42);
+    border-bottom: 2px solid rgba(0, 0, 0, 0.42);
+}
+
+[type="checkbox"]:indeterminate + span:not(.lever):before {
+    top: -11px;
+    left: -12px;
+    width: 10px;
+    height: 22px;
+    border-top: none;
+    border-left: none;
+    border-right: 2px solid #26a69a;
+    border-bottom: none;
+    -webkit-transform: rotate(90deg);
+    transform: rotate(90deg);
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+    -webkit-transform-origin: 100% 100%;
+    transform-origin: 100% 100%;
+}
+
+[type="checkbox"]:indeterminate:disabled + span:not(.lever):before {
+    border-right: 2px solid rgba(0, 0, 0, 0.42);
+    background-color: transparent;
+}
+
+// -- Text inputs, textareas, selects, range sliders ----------------------------
+// `.browser-default` opts an input out of this skin. Anything more specific
+// (a class, an ID, a parent container - see _base.scss, _dark.scss, _map.scss,
+// _search.scss, _messages.scss, _settings pages, etc.) already wins on
+// specificity, exactly as before. Same input-type list as the project's own
+// `input-selectors` mixin (_mixins.scss), minus `select`/`textarea` - those two
+// get their own distinct skin below.
+$_ul-reset-inputs: 'input[type=text]', 'input[type=password]', 'input[type=email]',
+    'input[type=url]', 'input[type=time]', 'input[type=date]', 'input[type=datetime]',
+    'input[type=datetime-local]', 'input[type=tel]', 'input[type=number]', 'input[type=search]';
+
+@each $selector in $_ul-reset-inputs {
+    #{$selector}:not(.browser-default) {
+        background-color: transparent;
+        border: none;
+        border-bottom: 1px solid #9e9e9e;
+        border-radius: 0;
+        outline: none;
+        height: 3rem;
+        width: 100%;
+        font-size: 16px;
+        margin: 0 0 8px 0;
+        padding: 0;
+        -webkit-box-shadow: none;
+        box-shadow: none;
+        -webkit-box-sizing: content-box;
+        box-sizing: content-box;
+        -webkit-transition: border .3s, -webkit-box-shadow .3s;
+        transition: box-shadow .3s, border .3s, -webkit-box-shadow .3s;
+
+        &:disabled,
+        &[readonly="readonly"] {
+            color: rgba(0, 0, 0, 0.42);
+            border-bottom: 1px dotted rgba(0, 0, 0, 0.42);
+        }
+
+        &:focus:not([readonly]) {
+            border-bottom: 1px solid #26a69a;
+            -webkit-box-shadow: 0 1px 0 0 #26a69a;
+            box-shadow: 0 1px 0 0 #26a69a;
+        }
+    }
+}
+
+textarea {
+    width: 100%;
+    height: 3rem;
+    background-color: transparent;
+}
+
+select {
+    background-color: rgba(255, 255, 255, 0.9);
+    width: 100%;
+    padding: 5px;
+    border: 1px solid var(--ul-border);
+    border-radius: 2px;
+    height: 3rem;
+}
+
+select:focus {
+    outline: 1px solid #c9f3ef;
+}
+
+select:disabled {
+    color: rgba(0, 0, 0, 0.42);
+}
+
+// -- Range sliders --------------------------------------------------------------
+// Bare <input type="range"> elements (no dedicated .ul-slider-style class) - e.g.
+// #cluster-radius-slider, #dp-bg-opacity, #markup-panel-width, #cmc-width.
+input[type=range] {
+    cursor: pointer;
+    position: relative;
+    background-color: transparent;
+    outline: none;
+    width: 100%;
+    margin: 15px 0;
+    padding: 0;
+    -webkit-appearance: none;
+    border: 1px solid white;
+}
+
+input[type=range]:focus {
+    outline: none;
+}
+
+input[type=range]::-webkit-slider-runnable-track {
+    height: 3px;
+    background: #c2c0c2;
+    border: none;
+}
+
+input[type=range]::-webkit-slider-thumb {
+    border: none;
+    height: 14px;
+    width: 14px;
+    border-radius: 50%;
+    background-color: #26a69a;
+    -webkit-transition: -webkit-box-shadow .3s;
+    transition: box-shadow .3s, -webkit-box-shadow .3s;
+    -webkit-appearance: none;
+    -webkit-transform-origin: 50% 50%;
+    transform-origin: 50% 50%;
+    margin: -5px 0 0 0;
+}
+
+input[type=range]::-moz-range-track {
+    height: 3px;
+    background: #c2c0c2;
+    border: none;
+}
+
+input[type=range]::-moz-focus-inner {
+    border: 0;
+}
+
+input[type=range]::-moz-range-thumb {
+    border: none;
+    height: 14px;
+    width: 14px;
+    border-radius: 50%;
+    background: #26a69a;
+    -webkit-transition: -webkit-box-shadow .3s;
+    transition: box-shadow .3s, -webkit-box-shadow .3s;
+    margin-top: -5px;
+}
+
+input[type=range]:-moz-focusring {
+    outline: 1px solid #fff;
+    outline-offset: -1px;
+}

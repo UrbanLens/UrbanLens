@@ -1,0 +1,19 @@
+{% comment %}
+One older page of a conversation thread, returned by ConversationOlderMessagesView
+and swapped in (outerHTML, replacing the sentinel that triggered the request)
+at the top of #dm-messages. Context: `partner`, `timeline`, `viewer_id`,
+`my_slug`, `reaction_picker_emojis`, `image_permission_status`,
+`has_more_older`, `oldest_message_id`, plus `display_identity_for`'s
+`display_name`/`display_avatar_url`/`display_profile_url`/`is_anonymized`
+(needed by _message_items.html's quoted-reply header).
+{% endcomment %}
+{% if has_more_older %}
+<li class="dm-load-older" id="dm-load-older-sentinel"
+    hx-get="{% url 'messages.older' partner.slug %}?before={{ oldest_message_id }}"
+    hx-trigger="revealed" hx-target="this" hx-swap="outerHTML">
+  <span class="dm-load-older__spinner">
+    <i class="material-symbols-outlined">progress_activity</i> Loading earlier messages…
+  </span>
+</li>
+{% endif %}
+{% include "dashboard/partials/messages/_message_items.html" %}

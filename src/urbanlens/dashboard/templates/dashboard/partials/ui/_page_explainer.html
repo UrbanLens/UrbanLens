@@ -16,10 +16,11 @@ Usage:
   <h2>Section title {% include "dashboard/partials/ui/_page_explainer_anchor.html" with explainer_id="my-explainer" %}</h2>
   {% include "dashboard/partials/ui/_page_explainer.html" with explainer_id="my-explainer" kicker="Tip" heading="..." body="..." %}
 {% endcomment %}
-<div class="ul-page-explainer{% if modifier %} ul-page-explainer--{{ modifier }}{% endif %}"
+<div class="ul-page-explainer{% if modifier %} ul-page-explainer--{{ modifier }}{% endif %}{% if not visual_template %} ul-page-explainer--text-only{% endif %}"
      id="{{ explainer_id }}"
      data-explainer-id="{{ explainer_id }}"
-     data-explainer-anchor="#{{ anchor_id|default:explainer_id }}-anchor">
+     data-explainer-anchor="#{{ anchor_id|default:explainer_id }}-anchor"
+     hidden>
     <button type="button" class="ul-explainer-collapse" aria-label="Hide explanation" title="Hide explanation">
         <i class="material-icons" aria-hidden="true">expand_less</i>
     </button>

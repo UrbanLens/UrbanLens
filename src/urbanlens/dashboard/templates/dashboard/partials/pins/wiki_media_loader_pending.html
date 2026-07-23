@@ -1,0 +1,15 @@
+{% comment %}
+Wiki-page counterpart of media_loader_pending.html: a self-polling replacement
+for one media provider's hidden loader div while its background fetch is in
+flight (see services/external_data.py). Served with the UL-Panel-Pending
+response header (so the wiki gallery JS skips it) plus HX-Retarget/HX-Reswap
+headers that swap this div in place of the requesting loader instead of
+appending to the wiki grid. Targets #wiki-media-grid and the wiki loader id.
+{% endcomment %}
+<div class="media-provider-loader" id="wiki-media-loader-{{ source }}"
+    hx-get="{{ poll_url }}?attempt={{ next_attempt }}"
+    hx-trigger="load delay:{{ poll_interval }}s"
+    hx-target="#wiki-media-grid"
+    hx-swap="beforeend"
+    hx-timeout="25000"
+    hidden></div>

@@ -1,16 +1,15 @@
 import {
-  IconPicker,
-  installGlobalColorPicker,
-  renderIconGlyphHtml,
-  renderTreeView,
-  resetColorPicker,
-  resetIconPicker
-} from "./categories-we5ca0ws.js";
-import {
   confirmAction,
   getCsrfToken,
+  htmxProcess,
   toast
-} from "./categories-agkcnzxy.js";
+} from "./article-wysiwyg-5jnnp4sj.js";
+import {
+  IconPicker,
+  renderIconGlyphHtml,
+  resetIconPicker
+} from "./article-wysiwyg-ee3vhq76.js";
+import"./article-wysiwyg-2vd5xdaq.js";
 
 // src/urbanlens/dashboard/frontend/ts/shared/organize-icon-picker.ts
 var bulkStateUpdaters = new Map;
@@ -58,6 +57,25 @@ var OrganizeIconPicker = {
 };
 function installGlobalOrganizeIconPicker() {
   window.IconPicker = OrganizeIconPicker;
+}
+
+// src/urbanlens/dashboard/frontend/ts/shared/color-picker.ts
+function pickColor(pickerId, valueId, colorHex, btn) {
+  const picker = document.getElementById(pickerId);
+  picker?.querySelectorAll(".color-swatch").forEach((b) => b.classList.remove("selected"));
+  btn.classList.add("selected");
+  const value = document.getElementById(valueId);
+  if (value)
+    value.value = colorHex;
+}
+function resetColorPicker(pickerId, valueId) {
+  document.getElementById(pickerId)?.querySelectorAll(".color-swatch").forEach((b) => b.classList.remove("selected"));
+  const value = document.getElementById(valueId);
+  if (value)
+    value.value = "";
+}
+function installGlobalColorPicker() {
+  window.pickColor = pickColor;
 }
 
 // node_modules/sortablejs/modular/sortable.esm.js
@@ -2258,33 +2276,33 @@ Sortable.mount(new AutoScrollPlugin);
 Sortable.mount(Remove, Revert);
 var sortable_esm_default = Sortable;
 
-// src/urbanlens/dashboard/frontend/ts/shared/badge-rel-picker.ts
-var BadgeRelPicker = {
+// src/urbanlens/dashboard/frontend/ts/shared/label-rel-picker.ts
+var LabelRelPicker = {
   toggle(instanceId, relType, _triggerBtn) {
     const popup = document.getElementById(`${instanceId}-popup-${relType}`);
     if (!popup)
       return;
     const wasHidden = popup.hidden;
-    document.querySelectorAll(".badge-rel-popup").forEach((p) => {
+    document.querySelectorAll(".label-rel-popup").forEach((p) => {
       p.hidden = true;
     });
     if (!wasHidden)
       return;
     popup.hidden = false;
-    const search = popup.querySelector(".badge-rel-search");
+    const search = popup.querySelector(".label-rel-search");
     if (search) {
       search.value = "";
       search.focus();
     }
   },
   select(instanceId, relType, btn) {
-    if (btn.classList.contains("badge-rel-suggestion--hidden"))
+    if (btn.classList.contains("label-rel-suggestion--hidden"))
       return;
     const group = document.getElementById(`${instanceId}-sel-${relType}`);
     if (!group)
       return;
     const id = btn.dataset.id;
-    if (!id || group.querySelector(`.badge-rel-chip[data-id="${id}"]`))
+    if (!id || group.querySelector(`.label-rel-chip[data-id="${id}"]`))
       return;
     const picker = document.querySelector(`[data-picker-id="${instanceId}"]`);
     const pill = document.createElement("span");
@@ -2293,7 +2311,7 @@ var BadgeRelPicker = {
     if (color)
       pill.style.setProperty("--tag-color", color);
     pill.innerHTML = btn.innerHTML;
-    pill.querySelector(".badge-kind-chip")?.remove();
+    pill.querySelector(".label-kind-chip")?.remove();
     if (picker?.dataset.mode === "replace") {
       const hidden = document.createElement("input");
       hidden.type = "hidden";
@@ -2302,7 +2320,7 @@ var BadgeRelPicker = {
       pill.appendChild(hidden);
     }
     const chip = document.createElement("span");
-    chip.className = "badge-rel-chip";
+    chip.className = "label-rel-chip";
     chip.dataset.id = id;
     chip.appendChild(pill);
     const removeBtn = document.createElement("button");
@@ -2310,11 +2328,11 @@ var BadgeRelPicker = {
     removeBtn.className = "tag-chip-remove";
     removeBtn.title = "Remove";
     removeBtn.innerHTML = "&times;";
-    removeBtn.onclick = () => BadgeRelPicker.remove(instanceId, chip);
+    removeBtn.onclick = () => LabelRelPicker.remove(instanceId, chip);
     chip.appendChild(removeBtn);
     group.appendChild(chip);
-    BadgeRelPicker._hideSuggestion(instanceId, id);
-    BadgeRelPicker._updateEmptyHints(instanceId);
+    LabelRelPicker._hideSuggestion(instanceId, id);
+    LabelRelPicker._updateEmptyHints(instanceId);
   },
   remove(instanceId, chipEl) {
     if (!chipEl)
@@ -2322,22 +2340,22 @@ var BadgeRelPicker = {
     const id = chipEl.dataset.id;
     chipEl.remove();
     if (id)
-      BadgeRelPicker._showSuggestion(instanceId, id);
-    BadgeRelPicker._updateEmptyHints(instanceId);
+      LabelRelPicker._showSuggestion(instanceId, id);
+    LabelRelPicker._updateEmptyHints(instanceId);
   },
   _hideSuggestion(instanceId, id) {
     ["parent", "child"].forEach((relType) => {
       const container = document.getElementById(`${instanceId}-suggestions-${relType}`);
-      container?.querySelector(`.badge-rel-suggestion[data-id="${id}"]`)?.classList.add("badge-rel-suggestion--hidden");
+      container?.querySelector(`.label-rel-suggestion[data-id="${id}"]`)?.classList.add("label-rel-suggestion--hidden");
     });
   },
   _showSuggestion(instanceId, id) {
     ["parent", "child"].forEach((relType) => {
       const container = document.getElementById(`${instanceId}-suggestions-${relType}`);
-      const btn = container?.querySelector(`.badge-rel-suggestion[data-id="${id}"]`);
+      const btn = container?.querySelector(`.label-rel-suggestion[data-id="${id}"]`);
       if (btn) {
-        btn.classList.remove("badge-rel-suggestion--hidden");
-        BadgeRelPicker._applyFilters(instanceId, relType);
+        btn.classList.remove("label-rel-suggestion--hidden");
+        LabelRelPicker._applyFilters(instanceId, relType);
       }
     });
   },
@@ -2345,18 +2363,18 @@ var BadgeRelPicker = {
     const popup = document.getElementById(`${instanceId}-popup-${relType}`);
     if (!popup)
       return;
-    popup.querySelectorAll(".badge-rel-tab").forEach((b) => b.classList.remove("active"));
+    popup.querySelectorAll(".label-rel-tab").forEach((b) => b.classList.remove("active"));
     btn.classList.add("active");
     const container = document.getElementById(`${instanceId}-suggestions-${relType}`);
     if (container)
       container.dataset.activeTab = kind;
-    BadgeRelPicker._applyFilters(instanceId, relType);
+    LabelRelPicker._applyFilters(instanceId, relType);
   },
   filter(instanceId, relType, query) {
     const popup = document.getElementById(`${instanceId}-popup-${relType}`);
     if (popup)
       popup.dataset.searchQuery = query.toLowerCase().trim();
-    BadgeRelPicker._applyFilters(instanceId, relType);
+    LabelRelPicker._applyFilters(instanceId, relType);
   },
   _applyFilters(instanceId, relType) {
     const popup = document.getElementById(`${instanceId}-popup-${relType}`);
@@ -2365,7 +2383,7 @@ var BadgeRelPicker = {
       return;
     const q = popup.dataset.searchQuery ?? "";
     const tab = container.dataset.activeTab ?? "";
-    container.querySelectorAll(".badge-rel-suggestion").forEach((btn) => {
+    container.querySelectorAll(".label-rel-suggestion").forEach((btn) => {
       const matchesTab = !tab || btn.dataset.kind === tab;
       const matchesSearch = !q || (btn.dataset.name ?? "").indexOf(q) !== -1;
       btn.style.display = matchesTab && matchesSearch ? "" : "none";
@@ -2374,7 +2392,7 @@ var BadgeRelPicker = {
   _updateEmptyHints(instanceId) {
     ["parent", "child"].forEach((relType) => {
       const group = document.getElementById(`${instanceId}-sel-${relType}`);
-      const hint = group?.parentElement?.querySelector(".badge-rel-empty-hint");
+      const hint = group?.parentElement?.querySelector(".label-rel-empty-hint");
       if (hint)
         hint.hidden = (group?.children.length ?? 0) > 0;
     });
@@ -2383,14 +2401,14 @@ var BadgeRelPicker = {
     const group = document.getElementById(`${instanceId}-sel-${relType}`);
     if (!group)
       return [];
-    return Array.from(group.querySelectorAll(".badge-rel-chip")).map((c) => Number.parseInt(c.dataset.id ?? "0", 10));
+    return Array.from(group.querySelectorAll(".label-rel-chip")).map((c) => Number.parseInt(c.dataset.id ?? "0", 10));
   },
   reset(instanceId) {
     ["parent", "child"].forEach((relType) => {
       const group = document.getElementById(`${instanceId}-sel-${relType}`);
       if (!group)
         return;
-      Array.from(group.querySelectorAll(".badge-rel-chip")).forEach((chip) => BadgeRelPicker.remove(instanceId, chip));
+      Array.from(group.querySelectorAll(".label-rel-chip")).forEach((chip) => LabelRelPicker.remove(instanceId, chip));
     });
   },
   _makeSortable(instanceId) {
@@ -2404,7 +2422,7 @@ var BadgeRelPicker = {
     const hideTrash = () => trash?.classList.remove("is-active");
     const onEnd = () => {
       hideTrash();
-      BadgeRelPicker._updateEmptyHints(instanceId);
+      LabelRelPicker._updateEmptyHints(instanceId);
     };
     const makeOnAdd = (relType) => (evt) => {
       const hidden = evt.item.querySelector('input[type="hidden"]');
@@ -2433,27 +2451,27 @@ var BadgeRelPicker = {
       new sortable_esm_default(trash, {
         group: { name: groupName, put: true, pull: false },
         animation: 150,
-        onAdd: (evt) => BadgeRelPicker.remove(instanceId, evt.item)
+        onAdd: (evt) => LabelRelPicker.remove(instanceId, evt.item)
       });
     }
   },
   _initAll(root) {
-    (root ?? document).querySelectorAll(".badge-rel-picker").forEach((picker) => {
+    (root ?? document).querySelectorAll(".label-rel-picker").forEach((picker) => {
       if (picker.dataset.relInit === "1")
         return;
       picker.dataset.relInit = "1";
       if (picker.dataset.pickerId)
-        BadgeRelPicker._makeSortable(picker.dataset.pickerId);
+        LabelRelPicker._makeSortable(picker.dataset.pickerId);
     });
   }
 };
-function installGlobalBadgeRelPicker() {
-  window.BadgeRelPicker = BadgeRelPicker;
-  BadgeRelPicker._initAll();
-  document.body.addEventListener("htmx:afterSettle", () => BadgeRelPicker._initAll());
+function installGlobalLabelRelPicker() {
+  window.LabelRelPicker = LabelRelPicker;
+  LabelRelPicker._initAll();
+  document.body.addEventListener("htmx:afterSettle", () => LabelRelPicker._initAll());
   document.addEventListener("click", (e) => {
-    if (!e.target.closest(".badge-rel-add-dropdown")) {
-      document.querySelectorAll(".badge-rel-popup").forEach((p) => {
+    if (!e.target.closest(".label-rel-add-dropdown")) {
+      document.querySelectorAll(".label-rel-popup").forEach((p) => {
         p.hidden = true;
       });
     }
@@ -2467,7 +2485,7 @@ var NS_CONFIG = {
   tag: { rowsId: "tag-rows", cardSel: ".tag-card[data-tag-id]", idKey: "tagId", nameKey: "tagName", iconKey: "tagIcon", customIconKey: "tagCustomIcon", colorKey: "tagColor", parentsKey: "tagParents" },
   cat: { rowsId: "category-rows", cardSel: ".tag-card[data-category-id]", idKey: "categoryId", nameKey: "categoryName", iconKey: "categoryIcon", customIconKey: "categoryCustomIcon", colorKey: "categoryColor", parentsKey: "categoryParents" },
   status: { rowsId: "status-rows", cardSel: ".tag-card[data-status-id]", idKey: "statusId", nameKey: "statusName", iconKey: "statusIcon", customIconKey: "statusCustomIcon", colorKey: "statusColor", parentsKey: "statusParents" },
-  people: { rowsId: "people-badge-rows", cardSel: ".tag-card[data-people-id]", idKey: "peopleId", nameKey: "peopleName", iconKey: "peopleIcon", colorKey: "peopleColor", parentsKey: "peopleParents" }
+  people: { rowsId: "people-label-rows", cardSel: ".tag-card[data-people-id]", idKey: "peopleId", nameKey: "peopleName", iconKey: "peopleIcon", colorKey: "peopleColor", parentsKey: "peopleParents" }
 };
 function loadSharedFilter() {
   const params = new URLSearchParams(window.location.search);
@@ -3001,6 +3019,130 @@ function installOrgTabSwitching() {
     window._orgBulk?.deselect?.();
   });
 }
+var ORG_SECTION_HERO = {
+  labels: { icon: "tune", title: "Organize", subtitle: "Manage the tags, categories, statuses, and people labels used to organize your data." },
+  lists: { icon: "bookmarks", title: "Lists", subtitle: "Group your pins into curated collections you can browse, share, and filter by." },
+  filters: { icon: "filter_alt", title: "Filters", subtitle: "Save reusable filter criteria to quickly narrow down pins on the map and elsewhere." }
+};
+function updateOrgSectionHero(section) {
+  const hero = ORG_SECTION_HERO[section];
+  if (!hero)
+    return;
+  const titleEl = document.querySelector(".ul-page-hero__title");
+  const iconEl = titleEl?.querySelector(".material-symbols-outlined");
+  const subtitleEl = document.querySelector(".ul-page-hero__subtitle");
+  if (iconEl)
+    iconEl.textContent = hero.icon;
+  if (titleEl) {
+    const textNode = Array.from(titleEl.childNodes).find((n) => n.nodeType === Node.TEXT_NODE && !!n.textContent?.trim());
+    if (textNode)
+      textNode.textContent = ` ${hero.title} `;
+  }
+  if (subtitleEl)
+    subtitleEl.textContent = hero.subtitle;
+}
+function installOrgSectionSwitching() {
+  const tabs = document.querySelectorAll(".organize-section-tab");
+  const panels = document.querySelectorAll(".organize-section-panel");
+  if (!tabs.length)
+    return;
+  tabs.forEach((tab) => {
+    tab.addEventListener("click", () => {
+      const section = tab.dataset.section;
+      if (!section)
+        return;
+      tabs.forEach((t) => t.classList.toggle("is-active", t === tab));
+      panels.forEach((p) => {
+        p.hidden = p.id !== `panel-${section}`;
+      });
+      updateOrgSectionHero(section);
+      const url = new URL(window.location.href);
+      const tabParam = section === "labels" ? localStorage.getItem("organize_tab") ?? "tags" : section;
+      url.searchParams.set("tab", tabParam);
+      window.history.replaceState({}, "", url.toString());
+    });
+  });
+}
+
+// src/urbanlens/dashboard/frontend/ts/shared/tree-view.ts
+var DEFAULT_TREE_ROOT_CLASS = "tag-tree-root";
+function renderTreeView(rows, config) {
+  const treeRootClass = config.treeRootClass ?? DEFAULT_TREE_ROOT_CLASS;
+  rows.querySelector(`.${treeRootClass}`)?.remove();
+  const cards = Array.from(rows.querySelectorAll(config.cardSelector));
+  const cardMap = new Map;
+  const parentMap = new Map;
+  cards.forEach((card) => {
+    const id = card.dataset[config.idKey];
+    if (!id)
+      return;
+    cardMap.set(id, card);
+    const parents = card.dataset[config.parentsKey] ?? "";
+    parentMap.set(id, parents.split(",").map((s) => s.trim()).filter(Boolean));
+    card.style.display = "none";
+  });
+  const childrenMap = new Map;
+  parentMap.forEach((parents, id) => {
+    parents.forEach((pid) => {
+      const siblings = childrenMap.get(pid) ?? [];
+      siblings.push(id);
+      childrenMap.set(pid, siblings);
+    });
+  });
+  const cardIds = new Set(cardMap.keys());
+  const rootIds = Array.from(cardMap.keys()).filter((id) => {
+    const parents = parentMap.get(id) ?? [];
+    return parents.length === 0 || parents.every((pid) => !cardIds.has(pid));
+  });
+  rootIds.sort((a, b) => cards.indexOf(cardMap.get(a)) - cards.indexOf(cardMap.get(b)));
+  const treeRoot = document.createElement("div");
+  treeRoot.className = treeRootClass;
+  const appearedInTree = new Set;
+  function buildNode(id, depth, ancestorPath) {
+    if (ancestorPath.has(id))
+      return null;
+    const card = cardMap.get(id);
+    if (!card)
+      return null;
+    appearedInTree.add(id);
+    const item = document.createElement("div");
+    item.className = "tag-tree-item";
+    item.dataset.depth = String(depth);
+    item.style.setProperty("--tree-depth", String(depth));
+    const clone2 = card.cloneNode(true);
+    clone2.style.display = "";
+    clone2.id = `tree-node-${id}-d${depth}-${Math.random().toString(36).slice(2, 6)}`;
+    item.appendChild(clone2);
+    const newPath = new Set(ancestorPath);
+    newPath.add(id);
+    const children = childrenMap.get(id) ?? [];
+    if (children.length > 0) {
+      const childrenContainer = document.createElement("div");
+      childrenContainer.className = "tag-tree-children";
+      children.forEach((cid) => {
+        const childNode = buildNode(cid, depth + 1, newPath);
+        if (childNode)
+          childrenContainer.appendChild(childNode);
+      });
+      item.appendChild(childrenContainer);
+    }
+    return item;
+  }
+  rootIds.forEach((id) => {
+    const node = buildNode(id, 0, new Set);
+    if (node)
+      treeRoot.appendChild(node);
+  });
+  cardMap.forEach((_card, id) => {
+    if (!appearedInTree.has(id)) {
+      const node = buildNode(id, 0, new Set);
+      if (node)
+        treeRoot.appendChild(node);
+    }
+  });
+  rows.appendChild(treeRoot);
+  htmxProcess(treeRoot);
+}
 
 // src/urbanlens/dashboard/frontend/ts/shared/organize-tab-manager.ts
 var MATERIAL_ICON_NAME = /^[a-z_]+$/;
@@ -3142,8 +3284,12 @@ class OrgTabManager {
       const card = target.closest(this.cfg.cardSelector);
       if (!card)
         return;
-      if (target.closest("a,button,input,select,textarea"))
+      const cb = target.closest(this.cfg.checkboxSelector);
+      if (cb) {
+        e.preventDefault();
+      } else if (target.closest("a,button,input,select,textarea")) {
         return;
+      }
       const cards = this.visibleCards();
       const idx = cards.indexOf(card);
       const id = card.dataset[this.cfg.idKey] ?? "";
@@ -3289,21 +3435,31 @@ ${this.cfg.deleteWarning}`;
     const ids = Array.from(this.selected);
     const iconSet = new Set;
     const colorSet = new Set;
+    const customIconSet = new Set;
     ids.forEach((id) => {
       const card = document.querySelector(`[data-${this.datasetAttr(this.cfg.idKey)}="${id}"]`);
       if (!card)
         return;
       iconSet.add(card.dataset[this.cfg.iconKey] ?? "");
       colorSet.add(card.dataset[this.cfg.colorKey] ?? "");
+      if (this.cfg.customIconKey)
+        customIconSet.add(card.dataset[this.cfg.customIconKey] ?? "");
     });
     const sharedIcon = iconSet.size === 1 ? Array.from(iconSet)[0] : null;
     const sharedColor = colorSet.size === 1 ? Array.from(colorSet)[0] : null;
+    const sharedCustomIcon = this.cfg.customIconKey && customIconSet.size === 1 ? Array.from(customIconSet)[0] : null;
     const iconNochange = document.getElementById(d.iconNochangeId);
     const iconValue = document.getElementById(`icon-value-${d.iconPickerId}`);
     const iconCurrent = document.getElementById(`icon-current-${d.iconPickerId}`);
     const iconGrid = document.getElementById(`icon-grid-${d.iconPickerId}`);
     iconGrid?.querySelectorAll(".icon-picker-item").forEach((b) => b.classList.remove("selected"));
-    if (sharedIcon !== null) {
+    if (sharedCustomIcon) {
+      iconNochange.checked = true;
+      if (iconValue)
+        iconValue.value = "";
+      if (iconCurrent)
+        iconCurrent.innerHTML = `<img src="${sharedCustomIcon}" alt="" class="tag-icon-img"> <span class="icon-picker-none-label">Custom icon (kept unless you pick a new one)</span>`;
+    } else if (sharedIcon !== null) {
       iconNochange.checked = false;
       if (iconValue)
         iconValue.value = sharedIcon;
@@ -3353,7 +3509,7 @@ ${this.cfg.deleteWarning}`;
         descValue.dataset.bulkOriginal = "";
       }
     }
-    BadgeRelPicker.reset(`${this.cfg.ns}-bulk`);
+    LabelRelPicker.reset(`${this.cfg.ns}-bulk`);
     this.convertTarget = null;
     document.querySelectorAll(`#${d.dialogId} .kind-toggle-option`).forEach((b) => b.classList.remove("is-active"));
     const titleEl = document.getElementById(d.titleId);
@@ -3427,16 +3583,23 @@ ${this.cfg.deleteWarning}`;
       if (!document.getElementById(d.colorNochangeId).checked) {
         body.color = document.getElementById(d.colorValueId)?.value ?? "";
       }
-      body.add_parent_ids = BadgeRelPicker.getSelectedIds(`${this.cfg.ns}-bulk`, "parent");
-      body.add_child_ids = BadgeRelPicker.getSelectedIds(`${this.cfg.ns}-bulk`, "child");
+      body.add_parent_ids = LabelRelPicker.getSelectedIds(`${this.cfg.ns}-bulk`, "parent");
+      body.add_child_ids = LabelRelPicker.getSelectedIds(`${this.cfg.ns}-bulk`, "child");
       try {
-        const url = converting ? this.cfg.convertTargets.find((t) => t.kind === this.convertTarget).endpoint : this.cfg.endpoints.bulkEdit;
+        const target = converting ? this.cfg.convertTargets.find((t) => t.kind === this.convertTarget) : undefined;
+        const url = converting ? target.endpoint : this.cfg.endpoints.bulkEdit;
         const html = await this.postForHtml(url, body);
         document.getElementById(d.dialogId).close();
         this.replaceRows(html);
         this.onRowsUpdated();
         if (converting) {
           toast.success(ids.length === 1 ? `1 ${this.cfg.entitySingular.toLowerCase()} converted.` : `${ids.length} ${this.cfg.entityPluralLower} converted.`);
+          if (target?.rowsUrl && target.rowsTarget) {
+            window.htmx?.ajax("GET", target.rowsUrl, { target: target.rowsTarget, swap: "innerHTML" });
+          }
+          if (target?.tabKey) {
+            document.querySelector(`.organize-tab[data-tab="${target.tabKey}"]`)?.click();
+          }
         } else {
           toast.success(`${this.cfg.entityPluralCap} updated.`);
         }
@@ -3635,7 +3798,7 @@ function initOrganizePriority() {
   let priorityOrderEditing = null;
   let lastClickedIdx = -1;
   function priorityOrderBadge(item) {
-    return item.querySelector(".priority-order-editor")?.querySelector(".priority-order-badge") ?? null;
+    return item.querySelector(".priority-order-editor")?.querySelector(".priority-order-chip") ?? null;
   }
   function flashPriorityOrderSaved(item) {
     item.classList.remove("priority-item--order-saved");
@@ -3643,9 +3806,9 @@ function initOrganizePriority() {
     item.classList.add("priority-item--order-saved");
     const badge = priorityOrderBadge(item);
     if (badge) {
-      badge.classList.remove("priority-order-badge--flash");
+      badge.classList.remove("priority-order-chip--flash");
       badge.offsetWidth;
-      badge.classList.add("priority-order-badge--flash");
+      badge.classList.add("priority-order-chip--flash");
     }
     window.setTimeout(() => item.classList.remove("priority-item--order-saved"), 650);
   }
@@ -3840,7 +4003,7 @@ function initOrganizePriority() {
   }
   document.getElementById("priority-list")?.addEventListener("click", (e) => {
     const target = e.target;
-    const badge = target.closest(".priority-order-badge");
+    const badge = target.closest(".priority-order-chip");
     if (badge) {
       e.preventDefault();
       beginPriorityOrderEdit(badge);
@@ -3883,6 +4046,10 @@ function initOrganizePriority() {
     updatePrioritySelBar();
   });
   window._initPrioritySortable = initPrioritySortable;
+  document.getElementById("priority-list")?.addEventListener("htmx:afterSwap", () => {
+    clearPrioritySelection();
+    initPrioritySortable();
+  });
   if (document.getElementById("panel-priority") && !document.getElementById("panel-priority").hidden) {
     initPrioritySortable();
   }
@@ -3891,6 +4058,7 @@ function initOrganizePriority() {
 // src/urbanlens/dashboard/frontend/ts/shared/onboarding-tour.ts
 function initOnboardingTour(config) {
   const sessionKey = `${config.prefix}_later`;
+  let activeCard = null;
   function dismissed(id) {
     try {
       return localStorage.getItem(`${config.prefix}_${id}_dismissed`) === "1";
@@ -3915,9 +4083,14 @@ function initOnboardingTour(config) {
       return false;
     }
   }
+  function isCardTargetVisible(card) {
+    const el = document.querySelector(card.target);
+    return !!el && el.offsetParent !== null;
+  }
   function clear() {
     document.querySelector(config.hostSelector)?.replaceChildren();
     document.querySelectorAll(".onboarding-focus").forEach((el) => el.classList.remove("onboarding-focus"));
+    activeCard = null;
   }
   function registerAutoDismiss(card) {
     if (dismissed(card.id) || !card.watchSelector)
@@ -3931,6 +4104,7 @@ function initOnboardingTour(config) {
     if (!host)
       return;
     clear();
+    activeCard = card;
     document.querySelector(card.target)?.classList.add("onboarding-focus");
     const el = document.createElement("section");
     el.className = "page-onboarding-card";
@@ -3953,30 +4127,28 @@ function initOnboardingTour(config) {
   function tryShow() {
     if (laterSet())
       return;
-    const card = config.cards.find((c) => c.ready() && !dismissed(c.id));
+    if (activeCard && (!activeCard.ready() || !isCardTargetVisible(activeCard)))
+      clear();
+    if (document.querySelector(".page-onboarding-card"))
+      return;
+    const card = config.cards.find((c) => c.ready() && isCardTargetVisible(c) && !dismissed(c.id));
     if (card)
       show(card);
   }
   config.cards.forEach(registerAutoDismiss);
   setTimeout(tryShow, config.initialDelayMs ?? 900);
   if (config.retryEvent) {
-    document.addEventListener(config.retryEvent, () => {
-      if (!document.querySelector(".page-onboarding-card"))
-        setTimeout(tryShow, 250);
-    });
+    document.addEventListener(config.retryEvent, () => setTimeout(tryShow, 250));
   } else {
-    document.body.addEventListener("htmx:afterSettle", () => {
-      if (!document.querySelector(".page-onboarding-card"))
-        setTimeout(tryShow, 250);
-    });
+    document.body.addEventListener("htmx:afterSettle", () => setTimeout(tryShow, 250));
   }
 }
 
 // src/urbanlens/dashboard/frontend/ts/entries/organize.ts
 installGlobalOrganizeIconPicker();
 installGlobalColorPicker();
-installGlobalBadgeRelPicker();
-function showBadgeCustomPreview(input, previewId) {
+installGlobalLabelRelPicker();
+function showLabelCustomPreview(input, previewId) {
   const file = input.files?.[0];
   if (!file)
     return;
@@ -3991,18 +4163,22 @@ function showBadgeCustomPreview(input, previewId) {
   reader.readAsDataURL(file);
 }
 function showTagCustomPreview(input) {
-  showBadgeCustomPreview(input, "new-tag-custom-preview");
+  showLabelCustomPreview(input, "new-tag-custom-preview");
 }
-window.showBadgeCustomPreview = showBadgeCustomPreview;
+window.showLabelCustomPreview = showLabelCustomPreview;
 window.showTagCustomPreview = showTagCustomPreview;
+var KIND_ROWS_TARGET = { tag: "#tag-rows", category: "#category-rows", status: "#status-rows" };
+var KIND_TAB_KEY = { tag: "tags", category: "categories", status: "status" };
 function buildTabConfig(rows, overrides) {
+  const page = document.querySelector(".organize-page");
+  const rowsUrls = { tag: page?.dataset.rowsUrlTag, category: page?.dataset.rowsUrlCategory, status: page?.dataset.rowsUrlStatus };
   const convertTargets = [];
   if (rows.dataset.convertCategoryUrl)
-    convertTargets.push({ kind: "category", label: "Categories", endpoint: rows.dataset.convertCategoryUrl });
+    convertTargets.push({ kind: "category", label: "Categories", endpoint: rows.dataset.convertCategoryUrl, rowsUrl: rowsUrls.category, rowsTarget: KIND_ROWS_TARGET.category, tabKey: KIND_TAB_KEY.category });
   if (rows.dataset.convertTagUrl)
-    convertTargets.push({ kind: "tag", label: "Tags", endpoint: rows.dataset.convertTagUrl });
+    convertTargets.push({ kind: "tag", label: "Tags", endpoint: rows.dataset.convertTagUrl, rowsUrl: rowsUrls.tag, rowsTarget: KIND_ROWS_TARGET.tag, tabKey: KIND_TAB_KEY.tag });
   if (rows.dataset.convertStatusUrl)
-    convertTargets.push({ kind: "status", label: "Statuses", endpoint: rows.dataset.convertStatusUrl });
+    convertTargets.push({ kind: "status", label: "Statuses", endpoint: rows.dataset.convertStatusUrl, rowsUrl: rowsUrls.status, rowsTarget: KIND_ROWS_TARGET.status, tabKey: KIND_TAB_KEY.status });
   const base = {
     ns: overrides.ns,
     nsCapitalized: overrides.nsCapitalized,
@@ -4108,7 +4284,7 @@ function initTabs() {
       newForm: { dialogId: "new-status-form", iconPickerId: "new-status", colorPickerId: "new-status-color-picker", colorValueId: "new-status-color-value", customPreviewId: "new-status-custom-preview" }
     })).init();
   }
-  const peopleRows = document.getElementById("people-badge-rows");
+  const peopleRows = document.getElementById("people-label-rows");
   if (peopleRows) {
     new OrgTabManager(buildTabConfig(peopleRows, {
       ns: "people",
@@ -4137,7 +4313,7 @@ function initTabs() {
         descValueId: "people-bulk-description-value",
         descNochangeId: "people-bulk-description-nochange"
       },
-      newForm: null
+      newForm: { dialogId: "new-people-form", iconPickerId: "new-people", colorPickerId: "new-people-color-picker", colorValueId: "new-people-color-value" }
     })).init();
   }
 }
@@ -4211,8 +4387,6 @@ function initKindChangedListener() {
     category: page?.dataset.rowsUrlCategory,
     status: page?.dataset.rowsUrlStatus
   };
-  const rowTargets = { tag: "#tag-rows", category: "#category-rows", status: "#status-rows" };
-  const tabKeys = { tag: "tags", category: "categories", status: "status" };
   document.body.addEventListener("htmx:afterRequest", (e) => {
     const detail = e.detail;
     if (!detail.xhr || !detail.successful)
@@ -4221,12 +4395,25 @@ function initKindChangedListener() {
     if (!kindChanged)
       return;
     const url = rowUrls[kindChanged];
-    const target = rowTargets[kindChanged];
+    const target = KIND_ROWS_TARGET[kindChanged];
     if (url && target)
       window.htmx?.ajax("GET", url, { target, swap: "innerHTML" });
-    const tabKey = tabKeys[kindChanged];
+    const tabKey = KIND_TAB_KEY[kindChanged];
     if (tabKey)
       document.querySelector(`.organize-tab[data-tab="${tabKey}"]`)?.click();
+  });
+}
+function initPinCacheInvalidation() {
+  document.body.addEventListener("htmx:afterRequest", (e) => {
+    const detail = e.detail;
+    if (!detail.xhr || !detail.successful)
+      return;
+    if (detail.requestConfig?.verb?.toLowerCase() === "get")
+      return;
+    try {
+      localStorage.setItem("ul_pins_dirty", "1");
+    } catch {}
+    document.body.dispatchEvent(new Event("refreshPriority"));
   });
 }
 function initConsolidatedDialogOpener() {
@@ -4235,28 +4422,28 @@ function initConsolidatedDialogOpener() {
     const id = detail.target?.id;
     if (!id)
       return;
-    if (id === "badge-edit-dialog-body") {
+    if (id === "label-edit-dialog-body") {
       const body = detail.target;
-      const titleEl = document.getElementById("badge-edit-dialog-title");
+      const titleEl = document.getElementById("label-edit-dialog-title");
       if (titleEl) {
-        if (body.querySelector(".organize-badge-merge-form")) {
+        if (body.querySelector(".organize-label-merge-form")) {
           const mergeName = body.querySelector(".tag-merge-source-name");
           titleEl.textContent = mergeName ? `Merge ${mergeName.textContent?.trim()}` : "Merge";
-        } else if (body.querySelector(".organize-badge-customize-form")) {
+        } else if (body.querySelector(".organize-label-customize-form")) {
           titleEl.textContent = "Customize Display";
         } else if (body.querySelector(".tag-global-edit-form")) {
           titleEl.textContent = "Edit Global Tag";
         } else {
           const kindInput = body.querySelector('input[name="kind"]:checked');
           const titles = { tag: "Tag", category: "Category", status: "Status" };
-          titleEl.textContent = `Edit ${titles[kindInput?.value ?? ""] ?? "Badge"}`;
+          titleEl.textContent = `Edit ${titles[kindInput?.value ?? ""] ?? "Label"}`;
         }
       }
-      const dialog = document.getElementById("badge-edit-dialog");
+      const dialog = document.getElementById("label-edit-dialog");
       if (dialog && !dialog.open)
         dialog.showModal();
-    } else if (id === "people-badge-edit-dialog-body") {
-      const dialog = document.getElementById("people-badge-edit-dialog");
+    } else if (id === "people-label-edit-dialog-body") {
+      const dialog = document.getElementById("people-label-edit-dialog");
       if (dialog && !dialog.open)
         dialog.showModal();
     }
@@ -4270,8 +4457,10 @@ function init() {
   installOrgBulkToolbar();
   createOrganizeHeader(page.dataset.activeTab ?? "tags");
   installOrgTabSwitching();
+  installOrgSectionSwitching();
   initConsolidatedDialogOpener();
   initKindChangedListener();
+  initPinCacheInvalidation();
   initOnboarding();
   initTabs();
   initOrganizePriority();

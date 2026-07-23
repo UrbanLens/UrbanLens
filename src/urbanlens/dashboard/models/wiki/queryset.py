@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 class WikiQuerySet(abstract.PublicDashboardQuerySet):
     """QuerySet for Wiki - the community-editable half of the place model.
 
-    Filters here operate on community data (name, badges). For address/geo
+    Filters here operate on community data (name, labels). For address/geo
     filtering use LocationQuerySet; for per-user filtering use PinQuerySet.
     """
 
@@ -33,7 +33,7 @@ class WikiQuerySet(abstract.PublicDashboardQuerySet):
         return self.filter(parent_wiki__isnull=False)
 
     def by_category(self, category):
-        return self.filter(badges__name=category, badges__kind="category")
+        return self.filter(labels__name=category, labels__kind="category")
 
     def by_name(self, name):
         return self.filter(name__icontains=name)
@@ -51,7 +51,7 @@ class WikiQuerySet(abstract.PublicDashboardQuerySet):
         if criteria.get("tags"):
             tags = criteria["tags"].split(",")
             for tag in tags:
-                query &= Q(badges__name__in=[tag], badges__kind="tag")
+                query &= Q(labels__name__in=[tag], labels__kind="tag")
         return self.filter(query)
 
 
@@ -100,6 +100,7 @@ class WikiManager(abstract.PublicDashboardManager.from_queryset(WikiQuerySet)):
             pass
 
         defaults = dict(defaults or {})
-        name = defaults.pop("name", None) or location.official_name or "Unnamed Location"
+        placeholder = f"Unnamed Location in {location.area_label}" if location.area_label else "Unnamed Location"
+        name = defaults.pop("name", None) or location.official_name or placeholder
         wiki = self.create(location=location, name=name, **defaults)
         return wiki, True

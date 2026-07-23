@@ -1,6 +1,6 @@
 {
     "name": "urbanlens",
-    "version": "0.4.0b0",
+    "version": "0.5.0b0",
     "description": "Mapping for Urban Explorers",
     "main": "index.js",
     "scripts": {
@@ -9,10 +9,11 @@
         "sass": "sass --style=compressed --no-source-map src/urbanlens/dashboard/frontend/sass/style.scss src/urbanlens/dashboard/frontend/static/dashboard/style.css",
         "sass:dev": "sass --style=expanded src/urbanlens/dashboard/frontend/sass/style.scss src/urbanlens/dashboard/frontend/static/dashboard/style.css",
         "sass:watch": "sass --watch --style=expanded src/urbanlens/dashboard/frontend/sass/style.scss src/urbanlens/dashboard/frontend/static/dashboard/style.css",
-        "clean:js": "rm -rf src/urbanlens/dashboard/frontend/static/dashboard/js/*.js",
-        "build": "npm run clean:js && bun build src/urbanlens/dashboard/frontend/ts/entries/*.ts --outdir src/urbanlens/dashboard/frontend/static/dashboard/js --target browser --splitting --format esm && bun build src/urbanlens/dashboard/frontend/ts/entries-classic/*.ts --outdir src/urbanlens/dashboard/frontend/static/dashboard/js --target browser --format iife",
-        "deploy": "npm run clean:js && bun build src/urbanlens/dashboard/frontend/ts/entries/*.ts --outdir src/urbanlens/dashboard/frontend/static/dashboard/js --target browser --splitting --format esm --minify && bun build src/urbanlens/dashboard/frontend/ts/entries-classic/*.ts --outdir src/urbanlens/dashboard/frontend/static/dashboard/js --target browser --format iife --minify",
+        "clean:js": "rm -rf src/urbanlens/dashboard/frontend/static/dashboard/js",
+        "build": "bun run bin/build-frontend.ts",
+        "deploy": "bun run bin/build-frontend.ts --minify",
         "typecheck": "tsc --noEmit -p tsconfig.json",
+        "test:ts": "bun test src/urbanlens/dashboard/frontend/ts",
         "start": "gunicorn urbanlens.UrbanLens.wsgi:application --bind 0.0.0.0:8000 -t 600 -k gevent -c gunicorn.conf.py",
         "git-squash": "pkill gunicorn && git fetch origin && git reset --hard origin/main && npm run start",
         "lint": "pyright src/urbanlens",
@@ -20,6 +21,7 @@
         "test": "python -m coverage run --source='src' src/urbanlens/manage.py test",
         "coverage": "python -m coverage report",
         "uninstall": "echo \"docker compose down && docker volume ls -q | grep '^urbanlens_' | xargs -r docker volume rm\"",
+        "clone-to-staging": "bash bin/clone_prod_to_staging.sh",
         "pre-commit": "pre-commit run --all-files &> /dev/null || true && pre-commit run --all-files"
     },
     "author": "Jess Mann",
@@ -27,7 +29,9 @@
     "devDependencies": {
         "@types/leaflet": "^1.9.21",
         "@types/leaflet-draw": "^1.0.13",
+        "@types/libsodium-wrappers-sumo": "^0.8.2",
         "@types/sortablejs": "^1.15.9",
+        "@types/wicg-file-system-access": "^2023.10.7",
         "bun-types": "latest",
         "sortablejs": "^1.15.7"
     },
@@ -35,12 +39,23 @@
         "typescript": "^6.0.3"
     },
     "dependencies": {
+        "@tiptap/core": "^3.28.0",
+        "@tiptap/extension-bubble-menu": "^3.28.0",
+        "@tiptap/extension-floating-menu": "^3.28.0",
+        "@tiptap/extension-image": "^3.28.0",
+        "@tiptap/extension-placeholder": "^3.28.0",
+        "@tiptap/extension-table": "^3.28.0",
+        "@tiptap/starter-kit": "^3.28.0",
+        "@tiptap/suggestion": "^3.28.0",
         "bun": "^1.0.15",
         "dotenv": "^17.4.2",
         "dotenv-expand": "^13.0.0",
+        "exifr": "^7.1.3",
+        "libsodium-wrappers-sumo": "^0.8.4",
         "sass": "^1.101.0",
         "sass-loader": "^17.0.0",
         "semver": "^7.3.5",
+        "tiptap-markdown": "^0.9.0",
         "typescript": "^6.0.3",
         "yarn": "^1.22.19"
     },

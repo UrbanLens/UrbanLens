@@ -1,0 +1,11 @@
+{% comment %}
+Hero body for pin_lists/detail.html. Expects pin_list in context.
+{% endcomment %}
+<h1 class="ul-page-hero__title">
+    <span class="pin-list-title-editable" tabindex="0" role="button"
+          data-raw-name="{{ pin_list.name }}" title="Click to rename">{{ pin_list.name }}</span>
+    {% if pin_list.is_smart %}<span class="pin-list-card-badge">Smart</span>{% endif %}
+</h1>
+<p class="ul-page-hero__subtitle pin-list-description-editable" tabindex="0" role="button"
+   data-raw-description="{{ pin_list.description|default:'' }}" title="Click to edit the description">{{ pin_list.description|default:"Add a description..." }}</p>
+<p class="pin-list-detail-count">{{ pin_list.pin_count }} pin{{ pin_list.pin_count|pluralize }}</p>

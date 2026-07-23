@@ -1,0 +1,9 @@
+{% comment %}
+Hero body for profile/friends.html. Expects is_own_profile, profile, friends in context.
+The #friends-page-count span is kept in sync via an HTMX out-of-band swap from
+friends_page_content.html - keep the id even though it moved into the hero.
+{% endcomment %}
+<h1 class="ul-page-hero__title">
+    {% if is_own_profile %}Your Friends{% else %}{{ profile.full_name|default:profile.username }}'s Friends{% endif %}
+    <span class="friends-page-count" id="friends-page-count">{{ friends|length }}</span>
+</h1>

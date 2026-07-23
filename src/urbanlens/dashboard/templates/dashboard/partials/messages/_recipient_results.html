@@ -1,0 +1,25 @@
+{% comment %}
+Search results for the new-message recipient picker. Context: `results`
+(messageable Profiles), `query` (the search string).
+{% endcomment %}
+{% if results %}
+<ul class="dm-recipient-list" role="list">
+  {% for candidate in results %}
+  <li>
+    <a class="dm-recipient-item" href="{% url 'messages.conversation' candidate.slug %}">
+      <span class="msg-avatar" aria-hidden="true">
+        {% if candidate.avatar %}
+        <img src="{{ candidate.avatar.url }}" alt="" class="msg-avatar-img">
+        {% else %}
+        <span class="msg-avatar-initial">{{ candidate.username|first|upper }}</span>
+        {% endif %}
+      </span>
+      <span class="dm-recipient-item__name">{{ candidate.username }}</span>
+      <i class="material-symbols-outlined dm-recipient-item__go" aria-hidden="true">chat</i>
+    </a>
+  </li>
+  {% endfor %}
+</ul>
+{% elif query|length >= 2 %}
+<p class="dm-recipient-none">No one matching "{{ query }}" can receive your messages.</p>
+{% endif %}

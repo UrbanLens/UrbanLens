@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Print all discoverable metadata for an image file.
 
@@ -11,7 +10,7 @@ import argparse
 import json
 from pathlib import Path
 import shutil
-import subprocess
+import subprocess  # nosec B404
 from typing import Any
 
 from PIL import ExifTags, Image
@@ -19,12 +18,13 @@ from PIL import ExifTags, Image
 
 def print_exiftool(path: Path) -> bool:
     """Print metadata using ExifTool, if installed."""
-    if not shutil.which("exiftool"):
+    exiftool_path = shutil.which("exiftool")
+    if not exiftool_path:
         return False
 
-    result = subprocess.run(
+    result = subprocess.run(  # nosec B603 - exiftool_path resolved via shutil.which above, args are static
         [
-            "exiftool",
+            exiftool_path,
             "-a",  # show duplicate tags
             "-u",  # show unknown tags
             "-g1",  # group by metadata family

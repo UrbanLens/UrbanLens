@@ -22,7 +22,7 @@ from django.utils.dateformat import format as format_date
 from hypothesis import given, settings, strategies as st
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.markup.model import MarkupMap, PinMarkup
 from urbanlens.dashboard.services.map_snapshot import default_markup_map_title, materialize_markup_map, sanitize_map_data
 
@@ -45,7 +45,7 @@ def _shape(shape_type: str, latlngs: list, **extra) -> dict:
     return base
 
 
-class ShapeRoundTripTests(TestCase):
+class ShapeRoundTripTests(SimpleTestCase):
     """from_snapshot_shape → to_snapshot_shape preserves the drawing."""
 
     @settings(max_examples=25, deadline=None)
@@ -135,7 +135,7 @@ class ShapeRoundTripTests(TestCase):
         self.assertEqual(result["label"], "path")
 
 
-class SanitizeLayerFieldsTests(TestCase):
+class SanitizeLayerFieldsTests(SimpleTestCase):
     """sanitize_map_data whitelists layer_mode and coerces show_borders."""
 
     def test_valid_layer_modes_pass(self) -> None:
@@ -231,6 +231,14 @@ class DefaultMarkupMapTitleTests(TestCase):
         wiki = baker.make("dashboard.Wiki", location=location, name="Curated Mill")
         self.assertEqual(default_markup_map_title(wiki), f"Curated Mill - {self._today()}")
 
+    def test_trip_context_uses_trip_name_and_date(self) -> None:
+        trip = baker.make("dashboard.Trip", name="Fall Roadtrip")
+        self.assertEqual(default_markup_map_title(trip), f"Fall Roadtrip - {self._today()}")
+
+    def test_pin_list_context_uses_list_name_and_date(self) -> None:
+        pin_list = baker.make("dashboard.PinList", name="Ohio Ruins")
+        self.assertEqual(default_markup_map_title(pin_list), f"Ohio Ruins - {self._today()}")
+
 
 class MaterializeMarkupMapTests(TestCase):
     """materialize_markup_map create/update/remove semantics."""
@@ -264,6 +272,28 @@ class MaterializeMarkupMapTests(TestCase):
         existing = materialize_markup_map(self.profile, _snapshot())
         self.assertIsNone(materialize_markup_map(self.profile, None, existing_map=existing))
         self.assertFalse(MarkupMap.objects.filter(pk=existing.pk).exists())
+
+    def test_context_gives_a_new_map_a_named_default_title(self) -> None:
+        """Regression guard: comments/trip comments/pin visits/list maps all
+        create through this one function - without threading their own
+        context through, every map created from those flows was stuck with a
+        bare date title, even though default_markup_map_title has always
+        supported a named default when given one."""
+        pin = baker.make("dashboard.Pin", name="Old Mill")
+        markup_map = materialize_markup_map(self.profile, _snapshot(), context=pin)
+        assert markup_map is not None  # nosec B101
+        self.assertEqual(markup_map.title, default_markup_map_title(pin))
+
+    def test_context_is_ignored_when_updating_an_existing_map(self) -> None:
+        """The user may have already renamed the map - an update must never
+        silently overwrite a customized title just because a context was passed."""
+        pin = baker.make("dashboard.Pin", name="Old Mill")
+        existing = materialize_markup_map(self.profile, _snapshot())
+        existing.title = "My Custom Title"
+        existing.save(update_fields=["title"])
+        updated = materialize_markup_map(self.profile, _snapshot(markup=[]), existing_map=existing, context=pin)
+        assert updated is not None  # nosec B101
+        self.assertEqual(updated.title, "My Custom Title")
 
 
 class UnattachedQuerySetTests(TestCase):
@@ -393,6 +423,7 @@ class MarkupMapEndpointTests(TestCase):
     def test_create_with_location_slug_uses_wiki_named_default_title(self) -> None:
         location = baker.make("dashboard.Location")
         baker.make("dashboard.Wiki", location=location, name="Curated Mill")
+        baker.make("dashboard.Pin", profile=self.profile, location=location)
         response = self.client.post(
             reverse("markup_map.create"),
             data=json.dumps(_snapshot(location_slug=location.slug)),
@@ -450,6 +481,29 @@ class MarkupMapEndpointTests(TestCase):
         self.assertEqual(self.client.get(reverse("markup_map.json", args=[map_uuid])).status_code, 404)
         self.assertEqual(self.client.post(reverse("markup_map.delete", args=[map_uuid])).status_code, 404)
 
+    def test_snapshot_endpoint_returns_to_snapshot_shape(self) -> None:
+        map_uuid = self._create_map()
+        baker.make(
+            "dashboard.PinMarkup",
+            parent_map=MarkupMap.objects.get(uuid=map_uuid),
+            profile=self.profile,
+            markup_type="line",
+            geometry={"type": "LineString", "coordinates": [[0, 0], [1, 1]]},
+        )
+        response = self.client.get(reverse("markup_map.snapshot", args=[map_uuid]))
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["center_lat"], 40.0)
+        self.assertEqual(data["layer_mode"], "topographic")
+        self.assertEqual(len(data["markup"]), 1)
+        self.assertEqual(data["markup"][0]["latlngs"], [[0, 0], [1, 1]])
+
+    def test_snapshot_of_other_users_map_is_a_404(self) -> None:
+        map_uuid = self._create_map()
+        other = baker.make("auth.User")
+        self.client.force_login(other)
+        self.assertEqual(self.client.get(reverse("markup_map.snapshot", args=[map_uuid])).status_code, 404)
+
 
 class CheckinCreateLinksMapTests(TestCase):
     """The check-in create POST links a draft map submitted in ``markup_map``."""
@@ -486,3 +540,84 @@ class CheckinCreateLinksMapTests(TestCase):
     def test_garbage_uuid_is_ignored(self) -> None:
         checkin = self._create_checkin(markup_map="not-a-uuid")
         self.assertIsNone(checkin.markup_map_id)
+
+
+class DeleteFlagsAttachedContentTests(TestCase):
+    """Deleting a MarkupMap flags every Comment/TripComment/DirectMessage that referenced it.
+
+    ``on_delete=SET_NULL`` already detaches the map without touching the
+    host row's text, but without a separate flag there'd be no way to tell
+    "never had a map" from "had one that was deleted" once the FK is nulled.
+    """
+
+    def setUp(self) -> None:
+        self.user = baker.make("auth.User")
+        self.profile = self.user.profile
+
+    def test_comment_is_flagged_and_text_survives(self) -> None:
+        markup_map = MarkupMap.objects.create(profile=self.profile)
+        pin = baker.make("dashboard.Pin", profile=self.profile)
+        comment = baker.make("dashboard.Comment", pin=pin, profile=self.profile, markup_map=markup_map, text="Watch out here")
+        markup_map.delete()
+        comment.refresh_from_db()
+        self.assertIsNone(comment.markup_map_id)
+        self.assertTrue(comment.map_removed)
+        self.assertEqual(comment.text, "Watch out here")
+
+    def test_trip_comment_is_flagged(self) -> None:
+        markup_map = MarkupMap.objects.create(profile=self.profile)
+        trip = baker.make("dashboard.Trip", creator=self.profile)
+        trip_comment = baker.make("dashboard.TripComment", trip=trip, author=self.profile, markup_map=markup_map, text="Route looks good")
+        markup_map.delete()
+        trip_comment.refresh_from_db()
+        self.assertIsNone(trip_comment.markup_map_id)
+        self.assertTrue(trip_comment.map_removed)
+        self.assertEqual(trip_comment.text, "Route looks good")
+
+    def test_direct_message_is_flagged(self) -> None:
+        recipient_user = baker.make("auth.User")
+        markup_map = MarkupMap.objects.create(profile=self.profile)
+        message = baker.make(
+            "dashboard.DirectMessage",
+            sender=self.profile,
+            recipient=recipient_user.profile,
+            markup_map=markup_map,
+            body="Check out this spot",
+        )
+        markup_map.delete()
+        message.refresh_from_db()
+        self.assertIsNone(message.markup_map_id)
+        self.assertTrue(message.map_removed)
+        self.assertEqual(message.body, "Check out this spot")
+
+    def test_unrelated_comment_is_not_flagged(self) -> None:
+        markup_map = MarkupMap.objects.create(profile=self.profile)
+        pin = baker.make("dashboard.Pin", profile=self.profile)
+        untouched = baker.make("dashboard.Comment", pin=pin, profile=self.profile, markup_map=None, text="No map here")
+        markup_map.delete()
+        untouched.refresh_from_db()
+        self.assertFalse(untouched.map_removed)
+
+
+class AttachmentsPropertyTests(TestCase):
+    """MarkupMap.attachments enumerates every host referencing a map, including DMs."""
+
+    def setUp(self) -> None:
+        self.user = baker.make("auth.User")
+        self.profile = self.user.profile
+
+    def test_lists_every_attachment_kind_at_once(self) -> None:
+        markup_map = MarkupMap.objects.create(profile=self.profile)
+        pin = baker.make("dashboard.Pin", profile=self.profile)
+        recipient_user = baker.make("auth.User")
+        comment = baker.make("dashboard.Comment", pin=pin, profile=self.profile, markup_map=markup_map)
+        message = baker.make("dashboard.DirectMessage", sender=self.profile, recipient=recipient_user.profile, markup_map=markup_map)
+
+        kinds = {kind for kind, _host in markup_map.attachments}
+        self.assertEqual(kinds, {"comment", "direct_message"})
+        hosts = {host.pk for _kind, host in markup_map.attachments}
+        self.assertEqual(hosts, {comment.pk, message.pk})
+
+    def test_unattached_map_has_no_attachments(self) -> None:
+        markup_map = MarkupMap.objects.create(profile=self.profile)
+        self.assertEqual(markup_map.attachments, [])

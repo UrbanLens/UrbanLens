@@ -10,7 +10,7 @@ from __future__ import annotations
 from hypothesis import HealthCheck, given, settings, strategies as st
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.forms.settings_form import StyleSettingsForm
 from urbanlens.dashboard.models.profile.meta import DistanceUnit
 from urbanlens.dashboard.models.profile.model import GuidanceLevel, Profile, ThemeChoice
@@ -31,7 +31,7 @@ def _profile() -> Profile:
 # -- ThemeChoice enum ----------------------------------------------------------
 
 
-class ThemeChoiceEnumTests(TestCase):
+class ThemeChoiceEnumTests(SimpleTestCase):
     """ThemeChoice must contain exactly the three expected values."""
 
     def test_system_is_a_valid_choice(self) -> None:
@@ -55,11 +55,11 @@ class ThemeChoiceEnumTests(TestCase):
 
 
 class ProfileThemeModeDefaultTests(TestCase):
-    """New profiles must default to the 'system' theme."""
+    """New profiles must default to the 'dark' theme."""
 
-    def test_new_profile_defaults_to_system(self) -> None:
+    def test_new_profile_defaults_to_dark(self) -> None:
         profile = _profile()
-        self.assertEqual(profile.theme_mode, ThemeChoice.SYSTEM)
+        self.assertEqual(profile.theme_mode, ThemeChoice.DARK)
 
     def test_theme_mode_field_exists_on_profile(self) -> None:
         profile = _profile()

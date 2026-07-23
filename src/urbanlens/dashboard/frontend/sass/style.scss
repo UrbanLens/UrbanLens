@@ -8,7 +8,7 @@
 //   dark             →  CSS custom properties (must precede components)
 //   components       →  .ul-* design system classes
 
-@use 'third_party/_materialize';
+@use 'reset';
 @use 'variables';
 @use 'dark';
 @use 'base';
@@ -18,10 +18,15 @@
 @use 'components';
 @use 'tooltips';
 @use 'explainer';
+@use 'page_hero';
+@use 'page-tabs';
+@use 'article';
+@use 'ai_extractions';
 @use 'pin-detail';
 @use 'tags';
 @use 'icon-picker';
 @use 'profile';
+@use 'settings';
 @use 'wiki';
 @use 'detail-pins';
 @use 'trips';
@@ -46,6 +51,15 @@
 @use 'admin';
 @use 'collapsible';
 @use 'memories';
+@use 'pin_select_map';
+@use 'pin_suggestions';
+@use 'messages';
+@use 'search';
+@use 'e2ee';
+@use 'webauthn';
 @use 'safety';
 @use 'account_deletion';
 @use 'undo_history';
+@use 'custom_fields';
+@use 'property_owner';
+@use 'pin_lists';

@@ -11,13 +11,13 @@ Invariants verified:
 """
 from __future__ import annotations
 
-from hypothesis import HealthCheck, given, settings
-from hypothesis import strategies as st
+from hypothesis import HealthCheck, given, settings, strategies as st
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.forms.settings_form import (
     ContactSettingsForm,
+    KeywordTaggingSettingsForm,
     MapCenterForm,
     MapDisplayForm,
     StyleSettingsForm,
@@ -117,6 +117,40 @@ class MapCenterFormModeTests(TestCase):
         form = MapCenterForm(data={"map_center_mode": "invalid_mode"}, instance=profile)
         self.assertFalse(form.is_valid())
         self.assertIn("map_center_mode", form.errors)
+
+
+# -- KeywordTaggingSettingsForm --------------------------------------------------
+
+class KeywordTaggingSettingsFormTests(TestCase):
+    """Unchecked BooleanFields are optional and persist as False; the form saves all four fields."""
+
+    def test_all_checked_saves_true(self) -> None:
+        profile = _profile()
+        form = KeywordTaggingSettingsForm(
+            data={
+                "keyword_tagging_enabled": "on",
+                "keyword_label_categories": "on",
+                "keyword_label_tags": "on",
+                "keyword_label_statuses": "on",
+            },
+            instance=profile,
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+        saved = form.save()
+        self.assertTrue(saved.keyword_tagging_enabled)
+        self.assertTrue(saved.keyword_label_categories)
+        self.assertTrue(saved.keyword_label_tags)
+        self.assertTrue(saved.keyword_label_statuses)
+
+    def test_all_unchecked_saves_false(self) -> None:
+        profile = _profile()
+        form = KeywordTaggingSettingsForm(data={}, instance=profile)
+        self.assertTrue(form.is_valid(), form.errors)
+        saved = form.save()
+        self.assertFalse(saved.keyword_tagging_enabled)
+        self.assertFalse(saved.keyword_label_categories)
+        self.assertFalse(saved.keyword_label_tags)
+        self.assertFalse(saved.keyword_label_statuses)
 
 
 # -- MapDisplayForm.use_pin_cache ----------------------------------------------
@@ -237,10 +271,10 @@ class MapCenterFormSaveTests(TestCase):
 
     def test_save_with_commit_false_does_not_write_to_db(self) -> None:
         profile = _profile()
-        from urbanlens.dashboard.models.profile.model import Profile, MapCenterMode as MCM
+        from urbanlens.dashboard.models.profile.model import Profile
         original_mode = profile.map_center_mode
         form = self._submit(profile, MapCenterMode.GPS)
-        instance = form.save(commit=False)
+        form.save(commit=False)
         # Reload from DB - it should not have changed.
         db_profile = Profile.objects.get(pk=profile.pk)
         self.assertEqual(db_profile.map_center_mode, original_mode)
@@ -341,7 +375,11 @@ class ContactSettingsFormTests(TestCase):
         self.assertFalse(form.is_valid())
         self.assertIn("email", form.errors)
 
-    @given(local=st.from_regex(r"[a-zA-Z0-9_%+][a-zA-Z0-9_%+.-]{0,18}[a-zA-Z0-9_%+-]", fullmatch=True),
+    # The middle character class allows dots, but consecutive dots in an
+    # unquoted local part are invalid (RFC 5321) and Django's EmailValidator
+    # correctly rejects them - filter those out so the strategy only produces
+    # genuinely well-formed addresses (hypothesis found "0..0" here once).
+    @given(local=st.from_regex(r"[a-zA-Z0-9_%+][a-zA-Z0-9_%+.-]{0,18}[a-zA-Z0-9_%+-]", fullmatch=True).filter(lambda s: ".." not in s),
            domain=st.from_regex(r"[a-zA-Z0-9]([a-zA-Z0-9-]{0,18}[a-zA-Z0-9])?\.[a-zA-Z]{2,6}", fullmatch=True))
     @settings(max_examples=50, deadline=None)
     def test_well_formed_emails_are_valid(self, local, domain) -> None:

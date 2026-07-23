@@ -7,7 +7,7 @@ from __future__ import annotations
 from typing import Any
 
 from urbanlens.dashboard.models.wiki.model import Wiki
-from urbanlens.dashboard.services.undo.base import UndoHandler, register
+from urbanlens.dashboard.services.undo.base import UndoHandler, describe_batch, register
 
 _RESTORABLE_FIELDS = (
     "name",
@@ -15,6 +15,7 @@ _RESTORABLE_FIELDS = (
     "date_abandoned",
     "date_last_active",
     "pin_type",
+    "pin_type_is_user_provided",
     "color",
     "icon",
     "detail_bg_color",
@@ -57,7 +58,7 @@ def with_wiki_descendants(wikis: list[Wiki]) -> list[Wiki]:
 
 @register
 class WikiUndoHandler(UndoHandler):
-    """Restores a wiki's own fields, hierarchy position, and badges - not its cascade children.
+    """Restores a wiki's own fields, hierarchy position, and labels - not its cascade children.
 
     Comments, aliases, edit history, and photos are gone the instant the
     wiki is deleted and are not restored.
@@ -78,18 +79,16 @@ class WikiUndoHandler(UndoHandler):
             "location_id": wiki.location_id,
             "created_by_id": wiki.created_by_id,
             "parent_wiki_old_pk": wiki.parent_wiki_id,
-            "badge_ids": list(wiki.badges.values_list("id", flat=True)),
+            "label_ids": list(wiki.labels.values_list("id", flat=True)),
         }
 
     @classmethod
     def describe(cls, instances: list[Wiki]) -> str:
-        if len(instances) == 1:
-            return f"Wiki: {instances[0].name}"
-        return f"{len(instances)} wiki pages"
+        return describe_batch("Wiki", "wiki pages", [w.name for w in instances])
 
     @classmethod
     def restore(cls, payload: list[dict[str, Any]]) -> list[Wiki]:
-        """Recreate wikis with fresh pks/uuids/slugs, relinking hierarchy and badges."""
+        """Recreate wikis with fresh pks/uuids/slugs, relinking hierarchy and labels."""
         old_to_new: dict[int, Wiki] = {}
         restored: list[Wiki] = []
         for entry in payload:
@@ -108,7 +107,7 @@ class WikiUndoHandler(UndoHandler):
                 if parent is not None:
                     wiki.parent_wiki = parent
                     wiki.save(update_fields=["parent_wiki"])
-            if entry["badge_ids"]:
-                wiki.badges.set(entry["badge_ids"])
+            if entry["label_ids"]:
+                wiki.labels.set(entry["label_ids"])
 
         return restored

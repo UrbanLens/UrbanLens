@@ -1,31 +1,32 @@
 {% load dashboard_tags %}
-<div id="friends_page_list">
+{# The page header's count lives outside this swap target - keep it in sync via OOB. #}
+<span class="friends-page-count" id="friends-page-count" hx-swap-oob="true">{{ friends|length }}</span>
+<div id="friends_page_list"
+     hx-get="{% url 'friend.page_widget' friend_list_profile.id %}"
+     hx-trigger="friendListChanged from:body"
+     hx-swap="outerHTML">
 
     {# -- Outgoing friend requests (own profile only) ---------------------------- #}
-    {% if is_own_profile and outgoing_requests %}
+    {# No identity shown until accepted, and one shared loop/URL shape for both    #}
+    {# pending kinds - see _friend_list_ctx's docstring on outgoing_pending.       #}
+    {% if is_own_profile and outgoing_pending_count %}
     <section class="friends-section friends-section--requests card">
         <div class="card-header">
             <i class="material-symbols-outlined">hourglass_top</i>
             <span>Sent Requests</span>
-            <span class="badge">{{ outgoing_requests|length }}</span>
+            <span class="badge">{{ outgoing_pending_count }}</span>
         </div>
         <ul class="friend-request-list friend-request-list--page">
-            {% for req in outgoing_requests %}
+            {% for pending in outgoing_pending %}
             <li class="friend-request-item">
-                {% if req.to_profile.avatar %}
-                <img class="friend-avatar" src="{{ req.to_profile.avatar.url }}" alt="">
-                {% else %}
-                <div class="friend-avatar friend-avatar-placeholder">{{ req.to_profile.username|first|upper }}</div>
-                {% endif %}
+                <div class="friend-avatar friend-avatar-placeholder"><i class="material-symbols-outlined">hourglass_top</i></div>
                 <div class="friend-request-info">
-                    <a href="{% url 'profile.view_user' req.to_profile.slug %}" class="friend-request-name">
-                        {{ req.to_profile.full_name|default:req.to_profile.username }}
-                    </a>
-                    <span class="friend-request-sub">@{{ req.to_profile.username }}</span>
+                    <span class="friend-request-name">Pending request</span>
+                    <span class="friend-request-sub">Hidden until accepted</span>
                 </div>
                 <div class="friend-request-actions">
                     <button type="button" class="btn btn--primary btn-friend btn-friend--reject"
-                            hx-post="{% url 'friend.remove' req.to_profile.id %}"
+                            hx-post="{% url 'friend.cancel_pending' pending.cancel_token %}"
                             hx-target="#friends_page_list"
                             hx-swap="outerHTML">
                         <i class="material-symbols-outlined">cancel</i> Cancel

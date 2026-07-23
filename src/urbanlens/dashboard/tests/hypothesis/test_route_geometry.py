@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from hypothesis import given, settings as hyp_settings, strategies as st
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.import_formats.route_geometry import simplify_and_measure
 
 _hyp = hyp_settings(max_examples=50, deadline=None)
@@ -17,7 +17,7 @@ _lng = st.floats(min_value=-170, max_value=170, allow_nan=False, allow_infinity=
 _points = st.lists(st.tuples(_lat, _lng), min_size=2, max_size=25)
 
 
-class SimplifyAndMeasureTests(TestCase):
+class SimplifyAndMeasureTests(SimpleTestCase):
     """simplify_and_measure() simplifies a point sequence and measures its true distance."""
 
     def test_raises_for_fewer_than_two_points(self):

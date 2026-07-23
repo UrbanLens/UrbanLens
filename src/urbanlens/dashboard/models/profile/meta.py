@@ -51,3 +51,17 @@ class GuidanceLevel(TextChoices):
     ALL = "all", "Guides & hints"
     TOOLTIPS = "tooltips", "Hints only"
     NONE = "none", "Off"
+
+
+class SyncAliasesDirection(TextChoices):
+    """Which direction(s) newly-added aliases sync between a pin and its wiki.
+
+    Sync is additive only in both directions (never deletes) and only fires
+    for genuine new aliases, never edits to an existing one - see
+    ``models.aliases.signals``.
+    """
+
+    OFF = "off", "Off"
+    TO_WIKI = "to_wiki", "Sync to wiki"
+    FROM_WIKI = "from_wiki", "Sync from wiki"
+    BOTH = "both", "Sync both ways"

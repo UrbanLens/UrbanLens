@@ -6,7 +6,7 @@ from django.contrib.auth.models import User
 from hypothesis import given, settings, strategies as st
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.profile.email import ProfileEmail
 from urbanlens.dashboard.services.email_normalization import (
     find_user_by_email,
@@ -15,7 +15,7 @@ from urbanlens.dashboard.services.email_normalization import (
 )
 
 
-class NormalizeEmailTests(TestCase):
+class NormalizeEmailTests(SimpleTestCase):
     """Gmail dot/plus stripping and case-insensitivity."""
 
     def test_lowercases_and_strips_whitespace(self) -> None:

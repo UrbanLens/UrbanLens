@@ -14,7 +14,7 @@ from __future__ import annotations
 from hypothesis import given, settings as hyp_settings
 from hypothesis import strategies as st
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
 
 _hyp = hyp_settings(max_examples=40, deadline=None)
@@ -44,7 +44,7 @@ def _kml_bytes(body: str) -> bytes:
     return _KML_TEMPLATE.format(body=body).encode("utf-8")
 
 
-class TakeoutKmlToDictTests(TestCase):
+class TakeoutKmlToDictTests(SimpleTestCase):
     """takeout_kml_to_dict() extracts pins regardless of encoding declaration or nesting depth."""
 
     def setUp(self):
@@ -91,6 +91,22 @@ class TakeoutKmlToDictTests(TestCase):
         pins = self.gateway.takeout_kml_to_dict(data, self.profile)
 
         self.assertEqual(pins, [])
+
+    def test_https_kml_namespace_still_parses(self):
+        # Some third-party exporters (e.g. multiplottr.com) declare the KML
+        # namespace as `https://www.opengis.net/kml/2.2` instead of `http://`.
+        # fastkml matches elements by exact namespace URI, so this previously
+        # produced zero features with no exception raised - a silent failure
+        # surfaced to users as "No valid location files found in the upload."
+        data = _kml_bytes(_placemark_xml("HTTPS Namespace", 38.6244206, -90.1610675)).replace(
+            b"http://www.opengis.net/kml/2.2",
+            b"https://www.opengis.net/kml/2.2",
+        )
+
+        pins = self.gateway.takeout_kml_to_dict(data, self.profile)
+
+        self.assertEqual(len(pins), 1)
+        self.assertEqual(pins[0]["name"], "HTTPS Namespace")
 
     @_hyp
     @given(

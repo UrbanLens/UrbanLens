@@ -167,6 +167,11 @@
     font-size: .9rem;
 }
 .iw-file-chip-remove:hover { color: var(--ul-text-danger); }
+.iw-file-chip.iw-media-chip i { color: var(--ul-grey-7); }
+
+/* Inline media-upload progress (separate from the location-file parse/import flow) */
+.iw-media-progress { margin-top: 10px; }
+.iw-media-progress .iw-progress-bar-track { margin-bottom: 4px; }
 
 /* Parse loading spinner */
 .iw-parsing {
@@ -259,15 +264,15 @@
 .iw-meta-row label:before,
 .iw-meta-row label:after { display: none !important; }
 
-/* Badge picker */
-.iw-badge-row {
+/* Label picker */
+.iw-label-row {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
     gap: 6px;
 }
-.iw-badge-row-label { font-size: .78rem; color: #9aa0a6; white-space: nowrap; }
-.iw-badge-pill {
+.iw-label-row-text { font-size: .78rem; color: #9aa0a6; white-space: nowrap; }
+.iw-label-pill {
     display: inline-flex;
     align-items: center;
     gap: 4px;
@@ -281,20 +286,23 @@
     color: #333;
     user-select: none;
 }
-.iw-badge-pill.selected {
+.iw-label-pill[hidden] {
+    display: none;
+}
+.iw-label-pill.selected {
     border-color: currentColor;
     box-shadow: 0 0 0 2px rgba(33,150,243,.15);
 }
-.iw-badge-pill i { font-size: .85rem; }
-.iw-badge-pill-new {
+.iw-label-pill i { font-size: .85rem; }
+.iw-label-pill-new {
     background: none;
     border-style: dashed;
     border-color: #c8d0d8;
     color: #5f6368;
     cursor: default;
 }
-.iw-badge-pill-new i { color: #4caf50; font-size: 1rem; }
-.iw-badge-add {
+.iw-label-pill-new i { color: #4caf50; font-size: 1rem; }
+.iw-label-add {
     display: inline-flex;
     align-items: center;
     gap: 4px;
@@ -306,10 +314,10 @@
     color: #5f6368;
     cursor: pointer;
 }
-.iw-badge-add:hover { border-color: #2196F3; color: #2196F3; }
+.iw-label-add:hover { border-color: #2196F3; color: #2196F3; }
 
-/* Badge dropdown */
-.iw-badge-dropdown {
+/* Label dropdown */
+.iw-label-dropdown {
     position: absolute;
     z-index: 9999;
     background: var(--ul-grey-1, #fff);
@@ -321,7 +329,7 @@
     max-height: 240px;
     overflow-y: auto;
 }
-.iw-badge-dropdown-item {
+.iw-label-dropdown-item {
     display: flex;
     align-items: center;
     gap: 8px;
@@ -331,10 +339,10 @@
     font-size: .83rem;
     color: var(--ul-grey-9);
 }
-.iw-badge-dropdown-item:hover { background: var(--ul-grey-1); }
-.iw-badge-dropdown-item.checked { background: var(--ul-grey-1); }
-.iw-badge-dropdown-item i { font-size: 1rem; }
-.iw-badge-dropdown-check { margin-left: auto; color: var(--ul-primary-color); font-size: .9rem; }
+.iw-label-dropdown-item:hover { background: var(--ul-grey-1); }
+.iw-label-dropdown-item.checked { background: var(--ul-grey-1); }
+.iw-label-dropdown-item i { font-size: 1rem; }
+.iw-label-dropdown-check { margin-left: auto; color: var(--ul-primary-color); font-size: .9rem; }
 
 /* Pin list */
 .iw-pin-list {
@@ -374,6 +382,17 @@
 
 /* Deselected row */
 .iw-pin-row.deselected .iw-pin-name { opacity: .4; text-decoration: line-through; }
+
+/* Pre-deselected because it matched a pin already on the user's map */
+.iw-pin-existing-badge {
+    font-size: .72rem;
+    color: var(--ul-grey-7);
+    background: var(--ul-grey-1);
+    border-radius: 999px;
+    padding: 2px 8px;
+    flex-shrink: 0;
+    white-space: nowrap;
+}
 
 /* Preview footer count */
 #iw-selected-count { font-size: .85rem; color: #5f6368; }
@@ -474,7 +493,8 @@
                 {% else %}
                 Import data from another app. Many apps are supported.
                 {% endif %}
-                We accept KML, KMZ, GeoJSON, GPX, OSM XML, WKT, WKB, CSV, and Google Takeout's My Activity (Maps) HTML export - or a ZIP / TGZ containing any of the above. Shapefiles (.shp/.dbf/.shx) must be uploaded zipped. {% if can_use_ai_features and profile.ai_enabled %}Plain text (.txt), and Word documents (.docx) must be uploaded directly, not within a zip.{% endif %} Multiple files accepted. See the <a href="{% url 'help.import_pins' %}" target="_blank" rel="noopener noreferrer">import help page</a> for more info.
+                We accept KML, KMZ, GeoJSON, GPX, OSM XML, WKT, WKB, CSV, and Google Takeout - or a ZIP / TGZ containing any of the above. Shapefiles (.shp/.dbf/.shx) must be uploaded zipped. {% if can_use_ai_features and profile.ai_enabled %}Plain text (.txt), and Word documents (.docx) must be uploaded directly, not within a zip.{% endif %} Multiple files accepted. See the <a href="{% url 'help.import_pins' %}" target="_blank" rel="noopener noreferrer">import help page</a> for more info.
+                {% if import_variant != "memories" %}You can also drop in photos{% if can_upload_videos %} or videos{% endif %} here - they're added to your library and matched to pins by location automatically.{% endif %}
             </p>
             {% if can_use_ai_features and profile.ai_enabled %}
             <div class="iw-takeout-help" style="margin-bottom:18px;">
@@ -501,9 +521,13 @@
                     Drop files here or <strong id="iw-browse-label">browse</strong>
                 </span>
                 <input type="file" class="iw-file-input" id="iw-file-input" multiple
-                       accept=".kml,.kmz,.json,.geojson,.gpx,.osm,.wkt,.wkb,.csv,.html,.zip,.tgz,.tar.gz{% if can_use_ai_features and profile.ai_enabled %},.txt,.docx{% endif %}">
+                       accept=".kml,.kmz,.json,.geojson,.gpx,.osm,.wkt,.wkb,.csv,.html,.zip,.tgz,.tar.gz{% if can_use_ai_features and profile.ai_enabled %},.txt,.docx{% endif %}{% if import_variant != "memories" %},image/*{% if can_upload_videos %},video/*{% endif %}{% endif %}">
             </div>
             <div class="iw-selected-files" id="iw-selected-files"></div>
+            <div class="iw-media-progress" id="iw-media-progress" hidden>
+                <div class="iw-progress-bar-track"><div class="iw-progress-bar-fill" id="iw-media-bar"></div></div>
+                <span class="iw-hint" id="iw-media-progress-label" style="margin:0"></span>
+            </div>
         </div>
         <div class="iw-footer">
             <button id="iw-btn-upload" class="btn btn--primary btn--lg btn--submit" disabled>Continue →</button>
@@ -570,12 +594,31 @@
 'use strict';
 
 /* -- State ------------------------------------------------------------- */
-var parsedData = null;   // {lists, total, badges} from server
+var parsedData = null;   // {lists, total, labels} from server
 var selectedFiles = [];  // FileList-like array
 var abortCtrl = null;
 var importing = false;
 var needsConfirm = false;
 var allSelected = true;
+
+/* -- Photos/videos dropped alongside location-data files --------------- */
+/* These are attached to nothing in particular - they're uploaded through
+   the exact same endpoint/pipeline as the Memories > Photos page, and get
+   matched to pins (including ones this same import just created) later by
+   the existing GPS-based visit-suggestion matching. No pin-specific upload
+   code lives here. */
+var acceptsMedia = {% if import_variant != "memories" %}true{% else %}false{% endif %};
+var canUploadVideos = {{ can_upload_videos|yesno:"true,false" }};
+var MEDIA_UPLOAD_URL = '{% url "memories.photos.upload" %}';
+var IMAGE_EXT_RE = /\.(jpe?g|png|gif|webp|heic|heif|bmp|tiff?|avif)$/i;
+var VIDEO_EXT_RE = /\.(mp4|mov|m4v|webm|avi|mkv|3gp)$/i;
+
+function mediaKind(file) {
+    if (!acceptsMedia) return null;
+    if ((file.type || '').indexOf('image/') === 0 || IMAGE_EXT_RE.test(file.name)) return 'image';
+    if ((file.type || '').indexOf('video/') === 0 || VIDEO_EXT_RE.test(file.name)) return 'video';
+    return null;
+}
 
 /* -- DOM references --------------------------------------------------- */
 var $ = function (id) { return document.getElementById(id); };
@@ -667,6 +710,10 @@ fileZone.addEventListener('drop', function (e) {
 
 function handleFiles(newFiles) {
     newFiles.forEach(function (f) {
+        if (mediaKind(f) === 'video' && !canUploadVideos) {
+            toastr.warning(f.name + ': video uploads are not enabled for your account.', 'Skipped');
+            return;
+        }
         if (!selectedFiles.find(function (x) { return x.name === f.name && x.size === f.size; }))
             selectedFiles.push(f);
     });
@@ -677,11 +724,13 @@ function renderFileChips() {
     var container = $('iw-selected-files');
     container.innerHTML = '';
     selectedFiles.forEach(function (f, idx) {
+        var kind = mediaKind(f);
         var chip = document.createElement('div');
-        chip.className = 'iw-file-chip';
+        chip.className = 'iw-file-chip' + (kind ? ' iw-media-chip' : '');
+        var icon = kind === 'image' ? 'photo' : kind === 'video' ? 'videocam' : 'insert_drive_file';
         chip.innerHTML =
-            '<i class="material-symbols-outlined">insert_drive_file</i>' +
-            '<span class="iw-file-chip-name">' + escHtml(f.name) + '</span>' +
+            '<i class="material-symbols-outlined">' + icon + '</i>' +
+            '<span class="iw-file-chip-name">' + escHtml(f.name) + (kind ? ' <em>(added to your library)</em>' : '') + '</span>' +
             '<button class="iw-file-chip-remove" data-idx="' + idx + '" title="Remove">x</button>';
         container.appendChild(chip);
     });
@@ -694,13 +743,63 @@ function renderFileChips() {
     $('iw-btn-upload').disabled = selectedFiles.length === 0;
 }
 
+/* -- Photos/videos: uploaded via the same endpoint/pipeline as Memories >
+   Photos, independent of the location-file parse/preview/confirm flow
+   below. They aren't tied to a specific imported pin - the existing
+   GPS-based visit-suggestion matching files them in afterwards. */
+function uploadMediaFiles(files) {
+    var progress = $('iw-media-progress');
+    var bar = $('iw-media-bar');
+    var label = $('iw-media-progress-label');
+    progress.hidden = false;
+    var total = files.length, done = 0, ok = 0;
+    label.textContent = 'Uploading 0 of ' + total + '...';
+
+    files.forEach(function (file) {
+        var fd = new FormData();
+        fd.append('image', file);
+        fd.append('csrfmiddlewaretoken', getCsrfToken());
+        fetch(MEDIA_UPLOAD_URL, { method: 'POST', body: fd, headers: { 'X-CSRFToken': getCsrfToken() } })
+            .then(function (r) {
+                return r.json().catch(function () { return {}; }).then(function (data) {
+                    if (!r.ok) throw new Error(data.error || 'HTTP ' + r.status);
+                    return data;
+                });
+            })
+            .then(function () { ok++; })
+            .catch(function (err) {
+                toastr.error(file.name + ': ' + (err.message || 'upload failed'));
+            })
+            .finally(function () {
+                done++;
+                bar.style.width = Math.round(done / total * 100) + '%';
+                label.textContent = 'Uploading ' + done + ' of ' + total + '...';
+                if (done === total) {
+                    label.textContent = ok + ' of ' + total + ' added to your library.';
+                    setTimeout(function () { progress.hidden = true; bar.style.width = '0'; }, 1200);
+                    if (ok) toastr.success(ok + (ok === 1 ? ' photo/video' : ' photos/videos') + ' added to your library.');
+                }
+            });
+    });
+}
+
 /* -- Step 1 → Step 2: Parse -------------------------------------------- */
 $('iw-btn-upload').addEventListener('click', async function () {
     if (selectedFiles.length === 0) return;
+
+    var mediaFiles = selectedFiles.filter(function (f) { return mediaKind(f) !== null; });
+    var locationFiles = selectedFiles.filter(function (f) { return mediaKind(f) === null; });
+
+    if (mediaFiles.length > 0) uploadMediaFiles(mediaFiles);
+    selectedFiles = locationFiles;
+    renderFileChips();
+
+    if (locationFiles.length === 0) return;
+
     showStep('parsing', 0);
     $('closeImportDialog').disabled = true;
 
-    var hasDocument = selectedFiles.some(function (f) {
+    var hasDocument = locationFiles.some(function (f) {
         return /\.(txt|docx)$/i.test(f.name);
     });
     $('iw-parsing-label').textContent = hasDocument
@@ -709,7 +808,7 @@ $('iw-btn-upload').addEventListener('click', async function () {
 
     var formData = new FormData();
     formData.append('csrfmiddlewaretoken', getCsrfToken());
-    selectedFiles.forEach(function (f) { formData.append('upload_files', f); });
+    locationFiles.forEach(function (f) { formData.append('upload_files', f); });
 
     try {
         var res = await fetch('{% url "pin.import.preview" %}', { method: 'POST', body: formData });
@@ -738,11 +837,11 @@ $('iw-btn-upload').addEventListener('click', async function () {
 /* -- Step 2: Render preview -------------------------------------------- */
 function renderPreview(data) {
     var lists = data.lists;
-    var badges = data.badges || [];
+    var labels = data.labels || [];
     allSelected = true;
+    var alreadyOnMapCount = 0;
 
-    $('iw-preview-total-label').textContent =
-        data.total + ' pin' + (data.total !== 1 ? 's' : '') +
+    var totalLabel = data.total + ' pin' + (data.total !== 1 ? 's' : '') +
         ' across ' + lists.length + ' list' + (lists.length !== 1 ? 's' : '');
 
     var container = $('iw-lists-container');
@@ -778,42 +877,42 @@ function renderPreview(data) {
         meta.appendChild(catRow);
         var catCheckbox = catRow.querySelector('input[type=checkbox]');
 
-        /* Badge picker row (always present so the new-category preview chip has somewhere to live) */
-        var badgeRow = document.createElement('div');
-        badgeRow.className = 'iw-meta-row';
-        var badgeInner = document.createElement('div');
-        badgeInner.className = 'iw-badge-row';
-        badgeInner.id = 'iw-badges-' + listIdx;
-        badgeInner.innerHTML = '<span class="iw-badge-row-label">Badges:</span>';
+        /* Label picker row (always present so the new-category preview chip has somewhere to live) */
+        var labelRow = document.createElement('div');
+        labelRow.className = 'iw-meta-row';
+        var labelInner = document.createElement('div');
+        labelInner.className = 'iw-label-row';
+        labelInner.id = 'iw-labels-' + listIdx;
+        labelInner.innerHTML = '<span class="iw-label-row-text">Labels:</span>';
 
-        /* Sample chip previewing the category badge that will be created on import */
+        /* Sample chip previewing the category label that will be created on import */
         var catPreview = document.createElement('span');
-        catPreview.className = 'iw-badge-pill iw-badge-pill-new';
+        catPreview.className = 'iw-label-pill iw-label-pill-new';
         catPreview.title = 'This category will be created when you import';
         catPreview.innerHTML = '<i class="material-icons">fiber_new</i><span>' + escHtml(lst.stem) + '</span>';
         catPreview.hidden = !catCheckbox.checked;
-        badgeInner.appendChild(catPreview);
+        labelInner.appendChild(catPreview);
         catCheckbox.addEventListener('change', function () {
             catPreview.hidden = !catCheckbox.checked;
         });
 
-        if (badges.length > 0) {
+        if (labels.length > 0) {
             var addBtn = document.createElement('button');
-            addBtn.className = 'iw-badge-add';
+            addBtn.className = 'iw-label-add';
             addBtn.type = 'button';
             addBtn.dataset.listIdx = listIdx;
-            addBtn.innerHTML = '<i class="material-icons" style="font-size:.9rem">add</i> Add badge';
-            badgeInner.appendChild(addBtn);
+            addBtn.innerHTML = '<i class="material-icons" style="font-size:.9rem">add</i> Add label';
+            labelInner.appendChild(addBtn);
 
             addBtn.addEventListener('click', function (e) {
                 e.stopPropagation();
-                openBadgeDropdown(listIdx, badges, addBtn);
+                openLabelDropdown(listIdx, labels, addBtn);
             });
         }
 
-        badgeRow.appendChild(badgeInner);
-        meta.appendChild(badgeRow);
-        lst._selectedBadgeIds = [];
+        labelRow.appendChild(labelInner);
+        meta.appendChild(labelRow);
+        lst._selectedLabelIds = [];
 
         group.appendChild(meta);
 
@@ -822,16 +921,25 @@ function renderPreview(data) {
         pinList.className = 'iw-pin-list';
         pinList.id = 'iw-pins-' + listIdx;
         lst.pins.forEach(function (pin, pinIdx) {
-            pin._selected = true;
+            /* window.findLocalPinNear only exists on the main map page (it reads
+               that page's in-memory pin store) - pre-deselecting pins that are
+               already on the user's map there saves them from uploading pins
+               that would just come back as "existed" anyway. On pages without
+               it (e.g. Memories), every pin is selected by default as before. */
+            var localMatch = window.findLocalPinNear ? window.findLocalPinNear(pin.lat, pin.lng) : null;
+            pin._selected = !localMatch;
+            if (localMatch) alreadyOnMapCount++;
+
             var row = document.createElement('li');
-            row.className = 'iw-pin-row';
+            row.className = 'iw-pin-row' + (localMatch ? ' deselected' : '');
             row.dataset.listIdx = listIdx;
             row.dataset.pinIdx = pinIdx;
             var cbId = 'iw-pin-' + listIdx + '-' + pinIdx;
             row.innerHTML =
-                '<input type="checkbox" id="' + cbId + '" checked>' +
+                '<input type="checkbox" id="' + cbId + '"' + (localMatch ? '' : ' checked') + '>' +
                 '<label for="' + cbId + '" class="iw-pin-name" title="' + escHtml(pin.name || '(unnamed)') + '">' +
-                escHtml(pin.name || '(unnamed)') + '</label>';
+                escHtml(pin.name || '(unnamed)') + '</label>' +
+                (localMatch ? '<span class="iw-pin-existing-badge" title="A pin within 50m of these coordinates is already on your map">Already on your map</span>' : '');
             var cb = row.querySelector('input[type=checkbox]');
             cb.addEventListener('change', function () {
                 pin._selected = cb.checked;
@@ -842,11 +950,12 @@ function renderPreview(data) {
             pinList.appendChild(row);
         });
         group.appendChild(pinList);
+        updateListCount(listIdx);
 
         /* Collapse/expand */
         var toggleIcon = header.querySelector('.iw-list-toggle');
         header.addEventListener('click', function (e) {
-            if (e.target.closest('.iw-badge-add')) return;
+            if (e.target.closest('.iw-label-add')) return;
             var collapsed = pinList.hidden;
             pinList.hidden = !collapsed;
             toggleIcon.classList.toggle('collapsed', !collapsed);
@@ -855,31 +964,34 @@ function renderPreview(data) {
         container.appendChild(group);
     });
 
+    $('iw-preview-total-label').textContent = alreadyOnMapCount > 0
+        ? totalLabel + ' · ' + alreadyOnMapCount + ' already on your map (deselected)'
+        : totalLabel;
     updateSelectedCount();
 }
 
-/* Badge dropdown */
+/* Label dropdown */
 var openDropdown = null;
-function openBadgeDropdown(listIdx, badges, anchor) {
+function openLabelDropdown(listIdx, labels, anchor) {
     closeOpenDropdown();
 
     var lst = parsedData.lists[listIdx];
     var dropdown = document.createElement('div');
-    dropdown.className = 'iw-badge-dropdown';
+    dropdown.className = 'iw-label-dropdown';
     dropdown.id = 'iw-bdrop-' + listIdx;
 
-    badges.forEach(function (b) {
+    labels.forEach(function (b) {
         var item = document.createElement('div');
-        item.className = 'iw-badge-dropdown-item' + (lst._selectedBadgeIds.indexOf(b.id) >= 0 ? ' checked' : '');
+        item.className = 'iw-label-dropdown-item' + (lst._selectedLabelIds.indexOf(b.id) >= 0 ? ' checked' : '');
         var iconHtml = b.icon
             ? '<i class="material-icons" style="font-size:1rem' + (b.color ? ';color:' + b.color : '') + '">' + escHtml(b.icon) + '</i>'
             : '<i class="material-icons" style="font-size:1rem;opacity:.3">label</i>';
         item.innerHTML = iconHtml + '<span>' + escHtml(b.name) + '</span>';
-        if (lst._selectedBadgeIds.indexOf(b.id) >= 0) {
-            item.innerHTML += '<i class="material-icons iw-badge-dropdown-check">check</i>';
+        if (lst._selectedLabelIds.indexOf(b.id) >= 0) {
+            item.innerHTML += '<i class="material-icons iw-label-dropdown-check">check</i>';
         }
         item.addEventListener('click', function () {
-            toggleBadgeOnList(listIdx, b);
+            toggleLabelOnList(listIdx, b);
             dropdown.remove();
             openDropdown = null;
         });
@@ -902,29 +1014,29 @@ function closeOpenDropdown() {
     if (openDropdown) { openDropdown.remove(); openDropdown = null; }
 }
 
-function toggleBadgeOnList(listIdx, badge) {
+function toggleLabelOnList(listIdx, label) {
     var lst = parsedData.lists[listIdx];
-    var ids = lst._selectedBadgeIds;
-    var badgeRow = $('iw-badges-' + listIdx);
-    var existIdx = ids.indexOf(badge.id);
+    var ids = lst._selectedLabelIds;
+    var labelRow = $('iw-labels-' + listIdx);
+    var existIdx = ids.indexOf(label.id);
     if (existIdx >= 0) {
         ids.splice(existIdx, 1);
-        var pill = badgeRow.querySelector('[data-badge-id="' + badge.id + '"]');
+        var pill = labelRow.querySelector('[data-label-id="' + label.id + '"]');
         if (pill) pill.remove();
     } else {
-        ids.push(badge.id);
+        ids.push(label.id);
         var pill = document.createElement('span');
-        pill.className = 'iw-badge-pill selected';
-        pill.dataset.badgeId = badge.id;
+        pill.className = 'iw-label-pill selected';
+        pill.dataset.labelId = label.id;
         pill.title = 'Click to remove';
-        if (badge.color) pill.style.setProperty('color', badge.color);
-        if (badge.icon) {
-            pill.innerHTML = '<i class="material-icons" style="font-size:.85rem">' + escHtml(badge.icon) + '</i>';
+        if (label.color) pill.style.setProperty('color', label.color);
+        if (label.icon) {
+            pill.innerHTML = '<i class="material-icons" style="font-size:.85rem">' + escHtml(label.icon) + '</i>';
         }
-        pill.innerHTML += '<span>' + escHtml(badge.name) + '</span>';
-        pill.addEventListener('click', function () { toggleBadgeOnList(listIdx, badge); });
-        var addBtn = badgeRow.querySelector('.iw-badge-add');
-        badgeRow.insertBefore(pill, addBtn);
+        pill.innerHTML += '<span>' + escHtml(label.name) + '</span>';
+        pill.addEventListener('click', function () { toggleLabelOnList(listIdx, label); });
+        var addBtn = labelRow.querySelector('.iw-label-add');
+        labelRow.insertBefore(pill, addBtn);
     }
 }
 
@@ -980,7 +1092,7 @@ $('iw-btn-confirm').addEventListener('click', async function () {
             return {
                 stem: lst.stem,
                 create_category: catEl ? catEl.checked : false,
-                badge_ids: lst._selectedBadgeIds || [],
+                label_ids: lst._selectedLabelIds || [],
                 pins: lst.pins
                     .filter(function (p) { return p._selected; })
                     .map(function (p) {
@@ -990,7 +1102,7 @@ $('iw-btn-confirm').addEventListener('click', async function () {
                             lng: p.lng,
                             description: p.description,
                             cid: p.cid,
-                            badge_ids: [],
+                            label_ids: [],
                         };
                     }),
             };
@@ -1059,10 +1171,13 @@ function handleProgressEvent(evt) {
             $('iw-n-created').textContent = evt.created;
             $('iw-n-exists').textContent = evt.exists;
             $('iw-n-skipped').textContent = evt.skipped;
-            addLogRow(evt.name, 'spin', '');
+            /* This event's own outcome is stashed on its row now (not read back
+               later from cumulative totals - see finaliseLogRow) so the previous
+               row, finalised below, is never misattributed by a *different*
+               item's outcome landing in the same delta. */
+            addLogRow(evt.name, 'spin', '', evt.outcome);
             if (logRows.length > 1) {
-                var prev = logRows[logRows.length - 2];
-                finaliseLogRow(prev, evt);
+                finaliseLogRow(logRows[logRows.length - 2]);
             }
             break;
 
@@ -1074,7 +1189,7 @@ function handleProgressEvent(evt) {
             $('iw-n-created').textContent = evt.created;
             $('iw-n-exists').textContent = evt.exists;
             $('iw-n-skipped').textContent = evt.skipped;
-            if (logRows.length > 0) finaliseLogRow(logRows[logRows.length - 1], evt);
+            if (logRows.length > 0) finaliseLogRow(logRows[logRows.length - 1]);
             $('iw-progress-header').textContent = 'Import complete';
             $('iw-progress-header').style.color = '#43a047';
             importing = false;
@@ -1086,6 +1201,23 @@ function handleProgressEvent(evt) {
                 evt.created + ' created · ' + evt.exists + ' existed · ' + evt.skipped + ' skipped',
                 'Import complete', { timeOut: 8000 }
             );
+            if (evt.created > 0) {
+                // On the main map page (window.forceRefreshPinCache only exists
+                // there - see findLocalPinNear's own comment above for why this
+                // shared dialog can't assume it), refresh the already-loaded pin
+                // store/cache from the server so newly-imported pins appear
+                // immediately instead of only after a manual reload (the dialog
+                // closing alone never touched the map's in-memory state).
+                if (typeof window.forceRefreshPinCache === 'function') {
+                    window.forceRefreshPinCache();
+                } else {
+                    // Some other page (e.g. Memories) reused this dialog - it
+                    // can't refresh the map itself, so flag the cache dirty the
+                    // same way the bulk Takeout importer does, for whenever the
+                    // user next visits the map.
+                    try { localStorage.setItem('ul_pins_dirty', '1'); } catch (_) {}
+                }
+            }
             break;
 
         case 'error':
@@ -1096,10 +1228,11 @@ function handleProgressEvent(evt) {
     }
 }
 
-function addLogRow(name, iconClass, statusLabel) {
+function addLogRow(name, iconClass, statusLabel, outcome) {
     var log = $('iw-item-log');
     var row = document.createElement('div');
     row.className = 'iw-log-row';
+    row.dataset.outcome = outcome || '';
     row.innerHTML =
         '<i class="material-icons iw-log-icon ' + iconClass + '">' + iconForClass(iconClass) + '</i>' +
         '<span class="iw-log-name">' + escHtml(name || '...') + '</span>' +
@@ -1113,29 +1246,22 @@ function addLogRow(name, iconClass, statusLabel) {
     log.scrollTop = log.scrollHeight;
 }
 
-function finaliseLogRow(row, evt) {
-    /* The last progress event tells us the cumulative totals, but not which
-       outcome this specific pin had.  We infer: the running deltas reveal it. */
+function finaliseLogRow(row) {
+    /* outcome was stashed on the row itself when it was added (see addLogRow),
+       from that same progress event's own "outcome" field - each pin's own
+       result, not a diff against running totals, which could be thrown off by
+       a *different*, immediately-adjacent pin's outcome. */
     var icon = row.querySelector('.iw-log-icon');
     var statusEl = row.querySelector('.iw-log-status');
-    /* We store the running totals on the row element for diff comparison */
-    var prevCreated = parseInt(row.dataset.created || 0);
-    var curCreated  = parseInt(evt.created || 0);
-    var prevExists  = parseInt(row.dataset.exists  || 0);
-    var curExists   = parseInt(evt.exists  || 0);
 
     var cls, mat, lbl;
-    if (curCreated > prevCreated) { cls = 'created'; mat = 'check_circle'; lbl = 'new'; }
-    else if (curExists > prevExists) { cls = 'existed'; mat = 'remove_circle_outline'; lbl = 'existed'; }
+    if (row.dataset.outcome === 'created') { cls = 'created'; mat = 'check_circle'; lbl = 'new'; }
+    else if (row.dataset.outcome === 'exists') { cls = 'existed'; mat = 'remove_circle_outline'; lbl = 'existed'; }
     else { cls = 'skipped'; mat = 'cancel'; lbl = 'skipped'; }
 
     icon.className = 'material-icons iw-log-icon ' + cls;
     icon.textContent = mat;
     if (statusEl) statusEl.textContent = lbl;
-
-    /* Tag the row for the next diff */
-    row.dataset.created = evt.created;
-    row.dataset.exists  = evt.exists;
 }
 
 function iconForClass(cls) {

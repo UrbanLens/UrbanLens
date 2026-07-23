@@ -1,20 +1,19 @@
 {% extends 'dashboard/themes/base.html' %}
 
+{% block hero %}
+{% include "dashboard/partials/ui/_page_hero.html" with icon="tune" title="Site Settings" subtitle="Configure site-wide behaviour, branding, and security." modifier="top" %}
+{% endblock %}
+
+{% block subnav %}
+<div class="ul-page-subnav">
+    <div class="ul-page-subnav__inner">
+        {% include "dashboard/partials/admin/_site_admin_tabs.html" with active="settings" %}
+    </div>
+</div>
+{% endblock %}
+
 {% block content %}
 <div class="site-admin-page page-content">
-    <div class="site-admin-header">
-        <div class="site-admin-breadcrumb">
-            <a href="{% url 'site_admin_home' %}" class="site-admin-breadcrumb__link">
-                <i class="material-symbols-outlined">arrow_back</i>
-                Admin Home
-            </a>
-        </div>
-        <h1 class="site-admin-title">
-            <i class="material-symbols-outlined">tune</i>
-            Site Settings
-        </h1>
-        <p class="site-admin-subtitle">Configure site-wide behaviour, branding, and security.</p>
-    </div>
 
     {% if saved %}
     <div class="site-admin-notice site-admin-notice--success">
@@ -23,13 +22,65 @@
     </div>
     {% endif %}
 
+    <div class="site-admin-settings-grid">
+
     <div class="site-admin-card ul-section card">
         <div class="card-header">
             <i class="material-symbols-outlined">settings_suggest</i>
-            <span>Environment</span>
+            <span>General</span>
         </div>
-        <form method="post" action="{% url 'site_admin' %}" class="site-admin-form" id="form-environment">
+        <form method="post" action="{% url 'site_admin' %}" class="site-admin-form" id="form-general">
             {% csrf_token %}
+            <div class="form-row">
+                <label for="app-title">App title</label>
+                <p class="form-help">
+                    Shown in the browser tab and navigation. Change this to brand your own instance of UrbanLens.
+                </p>
+                <input type="text" name="app_title" id="app-title"
+                       value="{{ settings.app_title }}" maxlength="100" placeholder="UrbanLens">
+            </div>
+            <div class="form-row">
+                <label for="max-trip-members">Maximum members per trip</label>
+                <p class="form-help">Users cannot add more than this many members to a single trip.</p>
+                <input type="number" name="max_trip_members" id="max-trip-members"
+                       value="{{ settings.max_trip_members }}" min="1" max="500">
+            </div>
+            <div class="form-row">
+                <label for="max-trip-activities">Maximum activities per trip</label>
+                <p class="form-help">Users cannot add more than this many activities to a single trip. Set to <strong>0</strong> for unlimited.</p>
+                <input type="number" name="max_trip_activities" id="max-trip-activities"
+                       value="{{ settings.max_trip_activities }}" min="0" max="10000">
+            </div>
+            <div class="form-row">
+                <label for="max-upcoming-trips-per-user">Maximum upcoming trips per user</label>
+                <p class="form-help">Users cannot belong to more than this many upcoming (or still-planning) trips at once. Set to <strong>0</strong> for unlimited.</p>
+                <input type="number" name="max_upcoming_trips_per_user" id="max-upcoming-trips-per-user"
+                       value="{{ settings.max_upcoming_trips_per_user }}" min="0" max="10000">
+            </div>
+            <div class="form-row">
+                <label for="max-pins-per-list">Maximum pins per list</label>
+                <p class="form-help">Users cannot add more than this many pins to a single list. Set to <strong>0</strong> for unlimited.</p>
+                <input type="number" name="max_pins_per_list" id="max-pins-per-list"
+                       value="{{ settings.max_pins_per_list }}" min="0" max="1000000">
+            </div>
+            <div class="form-row">
+                <label for="max-friends-per-user">Maximum friends per user</label>
+                <p class="form-help">Users cannot have more than this many friends. Set to <strong>0</strong> for unlimited.</p>
+                <input type="number" name="max_friends_per_user" id="max-friends-per-user"
+                       value="{{ settings.max_friends_per_user }}" min="0" max="1000000">
+            </div>
+            <div class="form-row">
+                <label for="max-group-chat-members">Maximum group chat members</label>
+                <p class="form-help">Users cannot add more than this many members to a direct message group chat. Set to <strong>0</strong> for unlimited.</p>
+                <input type="number" name="max_group_chat_members" id="max-group-chat-members"
+                       value="{{ settings.max_group_chat_members }}" min="0" max="10000">
+            </div>
+            <div class="form-row">
+                <label for="max-safety-checkin-contacts">Maximum contacts per safety check-in</label>
+                <p class="form-help">Users cannot notify more than this many contacts on a single safety check-in. Set to <strong>0</strong> for unlimited.</p>
+                <input type="number" name="max_safety_checkin_contacts" id="max-safety-checkin-contacts"
+                       value="{{ settings.max_safety_checkin_contacts }}" min="0" max="1000">
+            </div>
             <div class="form-row">
                 <label for="environment-override">Environment</label>
                 <p class="form-help">
@@ -54,27 +105,6 @@
             </div>
             <div class="form-actions">
                 <button type="submit" class="btn btn--primary btn--lg btn--submit">Save Settings</button>
-            </div>
-        </form>
-    </div>
-
-    <div class="site-admin-card ul-section card">
-        <div class="card-header">
-            <i class="material-symbols-outlined">drive_file_rename_outline</i>
-            <span>Branding</span>
-        </div>
-        <form method="post" action="{% url 'site_admin' %}" class="site-admin-form" id="form-branding">
-            {% csrf_token %}
-            <div class="form-row">
-                <label for="app-title">App title</label>
-                <p class="form-help">
-                    Shown in the browser tab and navigation. Change this to brand your own instance of UrbanLens.
-                </p>
-                <input type="text" name="app_title" id="app-title"
-                       value="{{ settings.app_title }}" maxlength="100" placeholder="UrbanLens">
-            </div>
-            <div class="form-actions">
-                <button type="submit" class="btn btn--primary btn--lg btn--submit">Save Settings</button>
                 <span class="admin-autosave-indicator"></span>
             </div>
         </form>
@@ -82,16 +112,39 @@
 
     <div class="site-admin-card ul-section card">
         <div class="card-header">
-            <i class="material-symbols-outlined">group</i>
-            <span>Trip Settings</span>
+            <i class="material-symbols-outlined">lock_clock</i>
+            <span>Registration &amp; Login Security</span>
         </div>
         <form method="post" action="{% url 'site_admin' %}" class="site-admin-form">
             {% csrf_token %}
             <div class="form-row">
-                <label for="max-trip-members">Maximum members per trip</label>
-                <p class="form-help">Users cannot add more than this many members to a single trip.</p>
-                <input type="number" name="max_trip_members" id="max-trip-members"
-                       value="{{ settings.max_trip_members }}" min="1" max="500">
+                <label for="signup-restricted">Sign-up mode</label>
+                <p class="form-help">
+                    When set to <strong>Invite-only</strong>, the public sign-up page shows an access-denied
+                    message unless the visitor arrives via an invitation link from an existing member.
+                </p>
+                <select name="signup_restricted" id="signup-restricted">
+                    <option value="0"{% if not settings.signup_restricted %} selected{% endif %}>Open (anyone can sign up)</option>
+                    <option value="1"{% if settings.signup_restricted %} selected{% endif %}>Invite-only (invitation link required)</option>
+                </select>
+            </div>
+            <div class="form-row">
+                <label for="login-max-attempts">Max failed login attempts</label>
+                <p class="form-help">
+                    How many consecutive failed login attempts are allowed before the account is
+                    temporarily locked. Set to <strong>0</strong> to disable rate limiting.
+                </p>
+                <input type="number" name="login_max_attempts" id="login-max-attempts"
+                       value="{{ settings.login_max_attempts }}" min="0" max="100" step="1">
+            </div>
+            <div class="form-row">
+                <label for="login-lockout-minutes">Lockout duration (minutes)</label>
+                <p class="form-help">
+                    How many minutes a locked account must wait before login attempts are accepted
+                    again. Minimum 1 minute.
+                </p>
+                <input type="number" name="login_lockout_minutes" id="login-lockout-minutes"
+                       value="{{ settings.login_lockout_minutes }}" min="1" max="1440" step="1">
             </div>
             <div class="form-actions">
                 <button type="submit" class="btn btn--primary btn--lg btn--submit">Save Settings</button>
@@ -99,17 +152,19 @@
         </form>
     </div>
 
-    <div class="site-admin-card ul-section card">
+    <div class="site-admin-card ul-section card site-admin-card--wide">
         <div class="card-header">
-            <i class="material-symbols-outlined">search</i>
-            <span>Web Search</span>
+            <i class="material-symbols-outlined">travel_explore</i>
+            <span>Web Search &amp; Place Data</span>
         </div>
-        <form method="post" action="{% url 'site_admin' %}" class="site-admin-form">
+        <form method="post" action="{% url 'site_admin' %}" class="site-admin-form" id="form-name-priority">
             {% csrf_token %}
             <div class="form-row">
                 <label for="search-provider">Search provider</label>
                 <p class="form-help">
-                    Provider used for the "Web Search" panel on pin detail pages.
+                    Preferred provider for the "Web Search" panel on pin detail pages, tried first. If it's
+                    unconfigured, rate-limited, or fails, the remaining providers are tried automatically
+                    (SearXNG, Google, Brave, DuckDuckGo, Mojeek, Marginalia, in that order).
                 </p>
                 <select name="search_provider" id="search-provider">
                     {% for value, label in search_provider_choices %}
@@ -128,19 +183,14 @@
                 <input type="number" name="external_data_cache_days" id="external-data-cache-days"
                        value="{{ settings.external_data_cache_days }}" min="1" max="365" step="1">
             </div>
-            <div class="form-actions">
-                <button type="submit" class="btn btn--primary btn--lg btn--submit">Save Settings</button>
+            <div class="form-row">
+                <label for="max-bbox-area">Maximum bounding box area (km²)</label>
+                <p class="form-help">
+                    Largest area a user may draw as a location boundary, in square kilometers.
+                </p>
+                <input type="number" name="max_bbox_area_km2" id="max-bbox-area"
+                       value="{{ settings.max_bbox_area_km2 }}" min="0.001" step="any">
             </div>
-        </form>
-    </div>
-
-    <div class="site-admin-card ul-section card">
-        <div class="card-header">
-            <i class="material-symbols-outlined">badge</i>
-            <span>Place Naming</span>
-        </div>
-        <form method="post" action="{% url 'site_admin' %}" class="site-admin-form" id="form-name-priority">
-            {% csrf_token %}
             <div class="form-row">
                 <label for="name-source-priority-list">Name source priority</label>
                 <p class="form-help">
@@ -149,39 +199,13 @@
                     on always wins regardless of rank. Untick a source to leave it unranked; unranked sources
                     still contribute a name, just last, in plugin order.
                 </p>
-                <ul class="priority-list" id="name-source-priority-list">
-                    {% for slug, label, ranked in name_source_order %}
-                    <li class="priority-list__item{% if not ranked %} priority-list__item--unranked{% endif %}"
-                        draggable="{% if ranked %}true{% else %}false{% endif %}" data-slug="{{ slug }}">
-                        <i class="material-symbols-outlined priority-list__handle" aria-hidden="true">drag_indicator</i>
-                        <span class="priority-list__rank"></span>
-                        <span class="priority-list__label">{{ label }}</span>
-                        <div class="priority-list__move">
-                            <button type="button" class="priority-list__btn" data-action="up" aria-label="Move {{ label }} up">
-                                <i class="material-symbols-outlined">arrow_upward</i>
-                            </button>
-                            <button type="button" class="priority-list__btn" data-action="down" aria-label="Move {{ label }} down">
-                                <i class="material-symbols-outlined">arrow_downward</i>
-                            </button>
-                        </div>
-                        <label class="priority-list__toggle">
-                            <input type="checkbox" data-role="rank-toggle"{% if ranked %} checked{% endif %}>
-                            Ranked
-                        </label>
-                    </li>
-                    {% empty %}
-                    <li class="priority-list__item priority-list__item--empty">No name-provider plugins are enabled.</li>
-                    {% endfor %}
-                </ul>
-                <input type="hidden" name="default_name_source_priority" id="default-name-source-priority"
-                       value="{{ settings.default_name_source_priority }}">
+                {% include "dashboard/partials/ui/_priority_list.html" with list_id="name-source-priority-list" hidden_id="default-name-source-priority" field_name="default_name_source_priority" current_value=settings.default_name_source_priority items=name_source_order empty_text="No name-provider plugins are enabled." %}
             </div>
             <div class="form-actions">
                 <button type="submit" class="btn btn--primary btn--lg btn--submit">Save Settings</button>
             </div>
         </form>
     </div>
-
 
     <div class="site-admin-card ul-section card">
         <div class="card-header">
@@ -210,6 +234,101 @@
                 <input type="number" name="backup_retention" id="backup-retention"
                        value="{{ settings.backup_retention }}" min="1" max="1000" step="1">
             </div>
+            <div class="form-actions">
+                <button type="submit" class="btn btn--primary btn--lg btn--submit">Save Settings</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="site-admin-card ul-section card">
+        <div class="card-header">
+            <i class="material-symbols-outlined">auto_awesome</i>
+            <span>Background Enrichment</span>
+        </div>
+        <form method="post" action="{% url 'site_admin' %}" class="site-admin-form">
+            {% csrf_token %}
+            <div class="form-row">
+                <label for="enrichment-enabled">Scheduled enrichment</label>
+                <p class="form-help">
+                    Once an hour, proactively backfill official names, aliases, street addresses, and
+                    property/building boundaries for pins and wikis that are still missing them, prioritizing
+                    the locations most users will see. Only spends API budget left over after real traffic --
+                    per-service limits from the <a href="{% url 'site_admin_api_limits' %}">API Limits</a> page
+                    are always respected.
+                </p>
+                <select name="enrichment_enabled" id="enrichment-enabled">
+                    <option value="1"{% if settings.enrichment_enabled %} selected{% endif %}>Enabled</option>
+                    <option value="0"{% if not settings.enrichment_enabled %} selected{% endif %}>Disabled</option>
+                </select>
+            </div>
+            <div class="form-row">
+                <label for="enrichment-start-hour">Run window start (UTC hour)</label>
+                <p class="form-help">
+                    Hourly enrichment runs only between the start and end hours (UTC). Set both to the same
+                    value to allow enrichment at any hour; the window may wrap midnight (e.g. 22 to 4).
+                </p>
+                <input type="number" name="enrichment_start_hour" id="enrichment-start-hour"
+                       value="{{ settings.enrichment_start_hour }}" min="0" max="23" step="1">
+            </div>
+            <div class="form-row">
+                <label for="enrichment-end-hour">Run window end (UTC hour)</label>
+                <input type="number" name="enrichment_end_hour" id="enrichment-end-hour"
+                       value="{{ settings.enrichment_end_hour }}" min="0" max="23" step="1">
+            </div>
+            <div class="form-row">
+                <label for="enrichment-buffer-percent">Rate-limit buffer (%)</label>
+                <p class="form-help">
+                    Share of every API limit kept in reserve for traffic spikes. With a 10% buffer and a
+                    300-calls/30-days limit, enrichment paces itself to at most 9 calls per day and never
+                    spends past 270 in any 30-day window.
+                </p>
+                <input type="number" name="enrichment_buffer_percent" id="enrichment-buffer-percent"
+                       value="{{ settings.enrichment_buffer_percent }}" min="0" max="90" step="1">
+            </div>
+            <div class="form-row">
+                <label for="enrichment-max-per-service-per-run">Max items per service per run</label>
+                <p class="form-help">
+                    Hard cap per hourly run for each API service, even when its rate limit would allow more,
+                    so services with very generous limits are never hammered in bursts. Requests within a run
+                    are additionally staggered to stay under each service's per-minute limit.
+                </p>
+                <input type="number" name="enrichment_max_per_service_per_run" id="enrichment-max-per-service-per-run"
+                       value="{{ settings.enrichment_max_per_service_per_run }}" min="1" max="500" step="1">
+            </div>
+            {% if enrichment_sources %}
+            <div class="form-row">
+                <label>Enrichment sources</label>
+                <p class="form-help">
+                    Contributed by core and plugins; disable a source by disabling its API service on the
+                    <a href="{% url 'site_admin_api_limits' %}">API Limits</a> page.
+                </p>
+                <ul class="enrichment-source-list">
+                    {% for source in enrichment_sources %}
+                    <li>
+                        <strong>{{ source.verbose_name }}</strong>
+                        <span class="text-muted">({{ source.services }})</span>
+                        {% if not source.available %}<span class="badge badge--muted">unavailable</span>{% endif %}
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+            {% if enrichment_last_run %}
+            <div class="form-row">
+                <label>Last run</label>
+                <p class="form-help">
+                    {% if enrichment_last_run.skipped %}
+                        Skipped ({{ enrichment_last_run.skipped }}) at {{ enrichment_last_run.started }}.
+                    {% else %}
+                        Started {{ enrichment_last_run.started }}{% if enrichment_last_run.names_refreshed %};
+                        refreshed {{ enrichment_last_run.names_refreshed }} name(s){% endif %}.
+                        {% for key, result in enrichment_last_run.sources.items %}
+                            {{ key }}: {{ result.enriched }} enriched{% if result.failed %}, {{ result.failed }} failed{% endif %}{% if result.skipped %} ({{ result.skipped }}){% endif %}.
+                        {% endfor %}
+                    {% endif %}
+                </p>
+            </div>
+            {% endif %}
             <div class="form-actions">
                 <button type="submit" class="btn btn--primary btn--lg btn--submit">Save Settings</button>
             </div>
@@ -276,28 +395,45 @@
                     <option value="0"{% if not settings.image_downscale_vip %} selected{% endif %}>No, subscribers keep originals</option>
                 </select>
             </div>
-            <div class="form-actions">
-                <button type="submit" class="btn btn--primary btn--lg btn--submit">Save Settings</button>
-            </div>
-        </form>
-    </div>
-
-    <div class="site-admin-card ul-section card">
-        <div class="card-header">
-            <i class="material-symbols-outlined">person_add_disabled</i>
-            <span>Registration</span>
-        </div>
-        <form method="post" action="{% url 'site_admin' %}" class="site-admin-form">
-            {% csrf_token %}
             <div class="form-row">
-                <label for="signup-restricted">Sign-up mode</label>
+                <label for="max-upload-file-size-mb">Max upload file size (MB)</label>
                 <p class="form-help">
-                    When set to <strong>Invite-only</strong>, the public sign-up page shows an access-denied
-                    message unless the visitor arrives via an invitation link from an existing member.
+                    Maximum size for a single photo, video, or document upload. Enforced on both the
+                    upload form and the server.
                 </p>
-                <select name="signup_restricted" id="signup-restricted">
-                    <option value="0"{% if not settings.signup_restricted %} selected{% endif %}>Open (anyone can sign up)</option>
-                    <option value="1"{% if settings.signup_restricted %} selected{% endif %}>Invite-only (invitation link required)</option>
+                <input type="number" name="max_upload_file_size_mb" id="max-upload-file-size-mb"
+                       value="{{ settings.max_upload_file_size_mb }}" min="1" max="900" step="1">
+            </div>
+            <div class="form-row">
+                <label for="video-downscale-enabled">Downscale uploaded videos</label>
+                <p class="form-help">
+                    Videos taller than the maximum height below are re-encoded on upload to save storage
+                    space.
+                </p>
+                <select name="video_downscale_enabled" id="video-downscale-enabled">
+                    <option value="1"{% if settings.video_downscale_enabled %} selected{% endif %}>Enabled</option>
+                    <option value="0"{% if not settings.video_downscale_enabled %} selected{% endif %}>Disabled</option>
+                </select>
+            </div>
+            <div class="form-row">
+                <label for="video-downscale-max-height">Max video height (px)</label>
+                <p class="form-help">
+                    Vertical resolution videos are downscaled to. 1080&nbsp;px (Full HD) keeps plenty of
+                    detail while meaningfully reducing storage for 4K phone footage.
+                </p>
+                <input type="number" name="video_downscale_max_height" id="video-downscale-max-height"
+                       value="{{ settings.video_downscale_max_height }}" min="240" max="8000" step="1">
+            </div>
+            <div class="form-row">
+                <label for="video-downscale-vip">Downscale subscriber videos</label>
+                <p class="form-help">
+                    Whether videos uploaded by users with an active subscription are also downscaled. When
+                    off, subscribers keep their original resolution (unless they opt into downscaling in
+                    their own settings).
+                </p>
+                <select name="video_downscale_vip" id="video-downscale-vip">
+                    <option value="1"{% if settings.video_downscale_vip %} selected{% endif %}>Yes, downscale subscribers too</option>
+                    <option value="0"{% if not settings.video_downscale_vip %} selected{% endif %}>No, subscribers keep originals</option>
                 </select>
             </div>
             <div class="form-actions">
@@ -340,56 +476,6 @@
         </form>
     </div>
 
-    <div class="site-admin-card ul-section card">
-        <div class="card-header">
-            <i class="material-symbols-outlined">lock_clock</i>
-            <span>Login Security</span>
-        </div>
-        <form method="post" action="{% url 'site_admin' %}" class="site-admin-form">
-            {% csrf_token %}
-            <div class="form-row">
-                <label for="login-max-attempts">Max failed login attempts</label>
-                <p class="form-help">
-                    How many consecutive failed login attempts are allowed before the account is
-                    temporarily locked. Set to <strong>0</strong> to disable rate limiting.
-                </p>
-                <input type="number" name="login_max_attempts" id="login-max-attempts"
-                       value="{{ settings.login_max_attempts }}" min="0" max="100" step="1">
-            </div>
-            <div class="form-row">
-                <label for="login-lockout-minutes">Lockout duration (minutes)</label>
-                <p class="form-help">
-                    How many minutes a locked account must wait before login attempts are accepted
-                    again. Minimum 1 minute.
-                </p>
-                <input type="number" name="login_lockout_minutes" id="login-lockout-minutes"
-                       value="{{ settings.login_lockout_minutes }}" min="1" max="1440" step="1">
-            </div>
-            <div class="form-actions">
-                <button type="submit" class="btn btn--primary btn--lg btn--submit">Save Settings</button>
-            </div>
-        </form>
-    </div>
-
-    <div class="site-admin-card ul-section card">
-        <div class="card-header">
-            <i class="material-symbols-outlined">crop_free</i>
-            <span>Location Bounding Box</span>
-        </div>
-        <form method="post" action="{% url 'site_admin' %}" class="site-admin-form">
-            {% csrf_token %}
-            <div class="form-row">
-                <label for="max-bbox-area">Maximum bounding box area (km²)</label>
-                <p class="form-help">
-                    Largest area a user may draw as a location boundary, in square kilometers.
-                </p>
-                <input type="number" name="max_bbox_area_km2" id="max-bbox-area"
-                       value="{{ settings.max_bbox_area_km2 }}" min="0.001" step="any">
-            </div>
-            <div class="form-actions">
-                <button type="submit" class="btn btn--primary btn--lg btn--submit">Save Settings</button>
-            </div>
-        </form>
     </div>
 </div>
 {% endblock %}
@@ -419,8 +505,27 @@
         fetch(form.action, {
             method: 'POST',
             body: new FormData(form),
-            headers: { 'X-CSRFToken': getCsrf() },
+            headers: { 'X-CSRFToken': getCsrf(), 'X-Requested-With': 'XMLHttpRequest' },
         }).then(function (r) {
+            var ct = r.headers.get('content-type') || '';
+            if (ct.indexOf('application/json') !== -1) {
+                return r.json().then(function (data) {
+                    if (data.ok === false) {
+                        if (guard) guard.markDirty();
+                        if (window.toastr) toastr.error('Could not save your changes. Please try again.');
+                        return;
+                    }
+                    // Several numeric fields are silently clamped into range server-side -
+                    // repaint the input with what was actually persisted so it doesn't
+                    // silently disagree with the DB while claiming "Saved".
+                    (Object.keys(data.values || {})).forEach(function (name) {
+                        var input = form.querySelector('[name="' + name + '"]');
+                        if (input && document.activeElement !== input) input.value = data.values[name];
+                    });
+                    if (guard) guard.markClean();
+                    showSaved(card);
+                });
+            }
             if (r.ok && guard) guard.markClean();
             if (r.ok) showSaved(card);
         }).catch(function () {}).finally(function () {
@@ -464,105 +569,6 @@
     });
 }());
 
-(function () {
-    var list = document.getElementById('name-source-priority-list');
-    var hidden = document.getElementById('default-name-source-priority');
-    if (!list || !hidden) return;
-
-    function isRankable(li) {
-        return li.classList.contains('priority-list__item') && !!li.dataset.slug;
-    }
-
-    function rankedItems() {
-        return Array.from(list.children).filter(function (li) {
-            return isRankable(li) && !li.classList.contains('priority-list__item--unranked');
-        });
-    }
-
-    function firstUnranked() {
-        return list.querySelector('.priority-list__item--unranked');
-    }
-
-    function renumber() {
-        rankedItems().forEach(function (li, i) {
-            var rank = li.querySelector('.priority-list__rank');
-            if (rank) rank.textContent = String(i + 1);
-        });
-        Array.from(list.children).filter(function (li) {
-            return isRankable(li) && li.classList.contains('priority-list__item--unranked');
-        }).forEach(function (li) {
-            var rank = li.querySelector('.priority-list__rank');
-            if (rank) rank.textContent = '—';
-        });
-    }
-
-    function sync() {
-        renumber();
-        hidden.value = rankedItems().map(function (li) { return li.dataset.slug; }).join(',');
-        hidden.dispatchEvent(new Event('change', { bubbles: true }));
-    }
-
-    list.addEventListener('click', function (e) {
-        var btn = e.target.closest('.priority-list__btn');
-        if (!btn) return;
-        var li = btn.closest('.priority-list__item');
-        if (!li || li.classList.contains('priority-list__item--unranked')) return;
-        if (btn.dataset.action === 'up') {
-            var prev = li.previousElementSibling;
-            if (prev) list.insertBefore(li, prev);
-        } else if (btn.dataset.action === 'down') {
-            var next = li.nextElementSibling;
-            if (next && !next.classList.contains('priority-list__item--unranked')) {
-                list.insertBefore(next, li);
-            }
-        }
-        sync();
-    });
-
-    list.addEventListener('change', function (e) {
-        var toggle = e.target.closest('[data-role="rank-toggle"]');
-        if (!toggle) return;
-        var li = toggle.closest('.priority-list__item');
-        if (!li) return;
-        if (toggle.checked) {
-            li.classList.remove('priority-list__item--unranked');
-            li.draggable = true;
-            list.insertBefore(li, firstUnranked());
-        } else {
-            li.classList.add('priority-list__item--unranked');
-            li.draggable = false;
-            list.appendChild(li);
-        }
-        sync();
-    });
-
-    var dragging = null;
-
-    list.addEventListener('dragstart', function (e) {
-        var li = e.target.closest('.priority-list__item');
-        if (!li || li.classList.contains('priority-list__item--unranked')) { e.preventDefault(); return; }
-        dragging = li;
-        li.classList.add('priority-list__item--dragging');
-        e.dataTransfer.effectAllowed = 'move';
-    });
-
-    list.addEventListener('dragend', function () {
-        if (dragging) dragging.classList.remove('priority-list__item--dragging');
-        dragging = null;
-        sync();
-    });
-
-    list.addEventListener('dragover', function (e) {
-        if (!dragging) return;
-        e.preventDefault();
-        var after = rankedItems().filter(function (li) { return li !== dragging; }).find(function (li) {
-            var rect = li.getBoundingClientRect();
-            return e.clientY < rect.top + rect.height / 2;
-        });
-        list.insertBefore(dragging, after || firstUnranked());
-    });
-
-    renumber();
-}());
 </script>
+{% include "dashboard/partials/ui/_priority_list_script.html" %}
 {% endblock %}

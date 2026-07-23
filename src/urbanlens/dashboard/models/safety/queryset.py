@@ -1,15 +1,19 @@
-"""QuerySet and manager for SafetyCheckin."""
+"""Querysets and managers for the safety-checkin model family."""
 
 from __future__ import annotations
 
 from datetime import timedelta
 from typing import TYPE_CHECKING, Self
 
-from django.db.models import DateTimeField, ExpressionWrapper, F
+from django.db.models import DateTimeField, ExpressionWrapper, F, Q
 from django.db.models.functions import Greatest
 from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract
+
+if TYPE_CHECKING:
+    from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.models.safety.model import SafetyCheckin
 
 
 class SafetyCheckinQuerySet(abstract.PublicDashboardQuerySet):
@@ -120,6 +124,105 @@ class SafetyCheckinQuerySet(abstract.PublicDashboardQuerySet):
 
         return self.exclude(status__in=SafetyCheckinStatus.resolved_statuses())
 
+    def shared_with(self, profile: Profile) -> Self:
+        """Return other profiles' check-ins where ``profile`` is a registered emergency contact.
+
+        Powers the safety overview's "Shared with you" section - a logged-in
+        emergency contact gets a read-only view of the check-in (see
+        ``SafetyCheckinDetailView._render_shared_view``) even before/without
+        the owner ever posting it to a community wiki.
+
+        Args:
+            profile: The viewing profile.
+
+        Returns:
+            Filtered queryset, most recent ``checkin_by`` first, excluding the
+            viewer's own check-ins.
+        """
+        return self.filter(contacts__contact_profile=profile).exclude(profile=profile).distinct()
+
 
 class SafetyCheckinManager(abstract.PublicDashboardManager.from_queryset(SafetyCheckinQuerySet)):
     """Manager for SafetyCheckin."""
+
+
+class SafetyCheckinContactQuerySet(abstract.DashboardQuerySet):
+    """QuerySet for SafetyCheckinContact records."""
+
+    def by_token(self, token: str) -> Self:
+        """Resolve a contact by their magic-link token.
+
+        A contact identified only by email has no account to log into, so
+        the public contact portal (and the check-in/markup-map views it
+        links to) all resolve the requesting contact this same way - see
+        the model's own docstring for why ``token`` is the credential here.
+
+        Args:
+            token: The magic-link token from the URL.
+
+        Returns:
+            Queryset filtered to at most one matching row - callers typically
+            wrap this in ``get_object_or_404`` (optionally after chaining
+            their own ``select_related(...)`` first).
+        """
+        return self.filter(token=token)
+
+
+class SafetyCheckinContactManager(abstract.DashboardManager.from_queryset(SafetyCheckinContactQuerySet)):
+    """Manager for SafetyCheckinContact."""
+
+
+class EmergencyContactDefaultQuerySet(abstract.DashboardQuerySet):
+    """QuerySet for EmergencyContactDefault records."""
+
+    def for_owner(self, owner: Profile) -> Self:
+        """Return a profile's saved default emergency contacts.
+
+        Args:
+            owner: The profile whose defaults to return.
+
+        Returns:
+            Filtered queryset, in the model's default ``order``/``created`` ordering.
+        """
+        return self.filter(owner=owner)
+
+
+class EmergencyContactDefaultManager(abstract.DashboardManager.from_queryset(EmergencyContactDefaultQuerySet)):
+    """Manager for EmergencyContactDefault."""
+
+
+class SafetyContactOptOutQuerySet(abstract.DashboardQuerySet):
+    """QuerySet for SafetyContactOptOut records."""
+
+
+class SafetyContactOptOutManager(abstract.DashboardManager.from_queryset(SafetyContactOptOutQuerySet)):
+    """Manager for SafetyContactOptOut."""
+
+    def blocks_notification(
+        self,
+        contact_profile: Profile | None,
+        email: str | None,
+        *,
+        owner: Profile,
+        checkin: SafetyCheckin | None = None,
+    ) -> bool:
+        """Whether a contact identity has opted out of notifications relevant to this owner/check-in.
+
+        Args:
+            contact_profile: The contact's profile, if they have an account.
+            email: The contact's email, used to resolve identity when ``contact_profile`` is None.
+            owner: The check-in owner whose notification is about to be sent.
+            checkin: The specific check-in being notified about, if any - enables matching a
+                CHECKIN-scoped opt-out in addition to OWNER/GLOBAL-scoped ones.
+
+        Returns:
+            True if a matching GLOBAL, OWNER, or (when ``checkin`` is given) CHECKIN-scoped
+            opt-out row exists for this contact identity.
+        """
+        from urbanlens.dashboard.models.safety.model import SafetyContactOptOutScope
+
+        identity = Q(contact_profile=contact_profile) if contact_profile else Q(email__iexact=email)
+        scope = Q(scope=SafetyContactOptOutScope.GLOBAL) | Q(scope=SafetyContactOptOutScope.OWNER, owner=owner)
+        if checkin is not None:
+            scope |= Q(scope=SafetyContactOptOutScope.CHECKIN, checkin=checkin)
+        return self.filter(identity & scope).exists()

@@ -1,0 +1,24 @@
+<div class="organize-panel tag-page" id="panel-{{ tab }}" role="tabpanel" {% if active_tab != tab %}hidden{% endif %}>
+    {% include 'dashboard/partials/labels/organize_label_filter_bar.html' with ns=filter_ns filter_ns=filter_ns plural_lower=plural_lower %}
+    {% include 'dashboard/partials/labels/organize_label_create_dialog.html' with kind=kind ns=ns form_id=form_id singular_title=singular_title label_url_kind=label_url_kind rows_target=rows_target name_placeholder=name_placeholder desc_placeholder=desc_placeholder parent_items=parent_items %}
+    <div id="{{ rows_id }}" class="organize-label-rows"
+         data-bulk-delete-url="{% url 'label.bulk_delete' label_kind=label_url_kind %}"
+         data-bulk-edit-url="{% url 'label.bulk_edit' label_kind=label_url_kind %}"
+         data-merge-url="{% url 'label.multi_merge' label_kind=label_url_kind %}"
+         {% if label_url_kind != 'people' %}
+         data-merge-edit-url-template="{% url 'label.edit' label_kind=label_url_kind label_id=99999 %}"
+         {% endif %}
+         {% if label_url_kind == 'tag' %}
+         data-convert-category-url="{% url 'label.bulk_convert' label_kind='tag' %}"
+         data-convert-status-url="{% url 'label.bulk_convert_status' label_kind='tag' %}"
+         {% elif label_url_kind == 'category' %}
+         data-convert-tag-url="{% url 'label.bulk_convert' label_kind='category' %}"
+         data-convert-status-url="{% url 'label.bulk_convert_status' label_kind='category' %}"
+         {% elif label_url_kind == 'status' %}
+         data-convert-tag-url="{% url 'label.bulk_convert_tag' label_kind='status' %}"
+         data-convert-category-url="{% url 'label.bulk_convert_category' label_kind='status' %}"
+         {% endif %}>
+        {% include 'dashboard/partials/labels/organize_label_rows.html' with labels=labels label_url_kind=label_url_kind kind=kind empty_icon=empty_icon empty_message=empty_message select_class=select_class select_data_name=select_data_name selectable=selectable editable=editable deletable=deletable edit_target=edit_target|default:'#label-edit-dialog-body' rows_target=rows_target %}
+    </div>
+    <div id="org-cross-tab-{{ ns }}" class="org-cross-tab-footer" hidden></div>
+</div>

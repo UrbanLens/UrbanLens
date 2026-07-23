@@ -1,0 +1,16 @@
+{% comment %}
+Active emergency check-in widget. Context: home_active_checkin (SafetyCheckin or None).
+{% endcomment %}
+{% if home_active_checkin %}
+<section class="home-widget home-widget--emergency ul-section" data-widget-key="safety_checkin">
+    <div class="home-widget-heading">
+        <span class="home-widget-icon"><i class="material-symbols-outlined">emergency_home</i></span>
+        <div><h3>Active emergency check-in</h3><p>Keep this plan current until you're safely checked in.</p></div>
+    </div>
+    <a class="home-widget-feature-card" href="{% url 'safety.checkin.detail' home_active_checkin.slug %}">
+        <strong>{{ home_active_checkin.title }}</strong>
+        <span>{{ home_active_checkin.get_status_display }} · due {{ home_active_checkin.checkin_by|date:"M j, g:i A" }}</span>
+        {% if home_active_checkin.destination_location %}<small>{{ home_active_checkin.destination_location.display_name }}</small>{% endif %}
+    </a>
+</section>
+{% endif %}

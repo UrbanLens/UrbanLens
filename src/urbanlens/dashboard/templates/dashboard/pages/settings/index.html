@@ -1,11 +1,52 @@
 {% extends 'dashboard/themes/base.html' %}
+{% load static %}
+
+{% block hero %}
+{% include "dashboard/partials/ui/_page_hero.html" with icon="settings" title="Settings" subtitle="Manage your account preferences" modifier="top" %}
+{% endblock %}
+
+{% block subnav %}
+<div class="ul-page-subnav">
+    <div class="ul-page-subnav__inner">
+        <div class="settings-tabs ul-subnav-tabs" role="tablist" id="settings-tabs">
+            <button type="button" class="settings-tab ul-subnav-tab active" data-tab="privacy" role="tab" aria-selected="true">
+                <i class="material-symbols-outlined">lock</i> Privacy
+            </button>
+            <button type="button" class="settings-tab ul-subnav-tab" data-tab="connections" role="tab" aria-selected="false">
+                <i class="material-symbols-outlined">cable</i> Connections
+            </button>
+            <button type="button" class="settings-tab ul-subnav-tab" data-tab="messages" role="tab" aria-selected="false">
+                <i class="material-symbols-outlined">chat</i> Messages
+            </button>
+            <button type="button" class="settings-tab ul-subnav-tab" data-tab="security" role="tab" aria-selected="false">
+                <i class="material-symbols-outlined">passkey</i> Security
+            </button>
+            <button type="button" class="settings-tab ul-subnav-tab" data-tab="map" role="tab" aria-selected="false">
+                <i class="material-symbols-outlined">map</i> Theme
+            </button>
+            {% if can_use_ai_features %}
+            <button type="button" class="settings-tab ul-subnav-tab" data-tab="ai" role="tab" aria-selected="false">
+                <i class="material-symbols-outlined">auto_awesome</i> AI
+            </button>
+            {% endif %}
+            <button type="button" class="settings-tab ul-subnav-tab" data-tab="account" role="tab" aria-selected="false">
+                <i class="material-symbols-outlined">manage_accounts</i> Account
+            </button>
+            <button type="button" class="settings-tab ul-subnav-tab" data-tab="advanced" role="tab" aria-selected="false">
+                <i class="material-symbols-outlined">tune</i> Advanced
+            </button>
+        </div>
+    </div>
+</div>
+{% endblock %}
 
 {% block content %}
 <div class="settings-page page-content">
-    <div class="settings-header">
-        <h1 class="settings-title">Settings</h1>
-        <p class="settings-subtitle">Manage your account preferences</p>
-    </div>
+
+    {# ======================================================================= #}
+    {# Privacy tab                                                             #}
+    {# ======================================================================= #}
+    <div class="settings-tab-panel active" data-tab-panel="privacy" id="tab-panel-privacy">
 
     {# -- Privacy ------------------------------------------------------------- #}
     {# Community, Memories, and External Services each bulk-gate what UrbanLens tracks or #}
@@ -21,7 +62,7 @@
         </div>
 
         <div class="settings-section-body">
-        <form method="post" class="settings-form settings-form--privacy" id="privacy-form">
+        <form method="post" class="settings-form" id="privacy-form">
             {% csrf_token %}
             <input type="hidden" name="section" value="privacy">
 
@@ -90,7 +131,7 @@
                 <p class="settings-error">{{ privacy_form.trip_pin_location_visibility.errors|join:", " }}</p>
                 {% endif %}
             </div>
-            
+
             <div class="settings-field">
                 <label class="settings-label" for="{{ privacy_form.contact_visibility.id_for_label }}">
                     {{ privacy_form.contact_visibility.label }}
@@ -99,6 +140,28 @@
                 {{ privacy_form.contact_visibility }}
                 {% if privacy_form.contact_visibility.errors %}
                 <p class="settings-error">{{ privacy_form.contact_visibility.errors|join:", " }}</p>
+                {% endif %}
+            </div>
+
+            <div class="settings-field">
+                <label class="settings-label" for="{{ privacy_form.direct_message_visibility.id_for_label }}">
+                    {{ privacy_form.direct_message_visibility.label }}
+                </label>
+                <p class="settings-help">{{ privacy_form.direct_message_visibility.help_text }}</p>
+                {{ privacy_form.direct_message_visibility }}
+                {% if privacy_form.direct_message_visibility.errors %}
+                <p class="settings-error">{{ privacy_form.direct_message_visibility.errors|join:", " }}</p>
+                {% endif %}
+            </div>
+
+            <div class="settings-field">
+                <label class="settings-label" for="{{ privacy_form.common_pins_visibility.id_for_label }}">
+                    {{ privacy_form.common_pins_visibility.label }}
+                </label>
+                <p class="settings-help">{{ privacy_form.common_pins_visibility.help_text }}</p>
+                {{ privacy_form.common_pins_visibility }}
+                {% if privacy_form.common_pins_visibility.errors %}
+                <p class="settings-error">{{ privacy_form.common_pins_visibility.errors|join:", " }}</p>
                 {% endif %}
             </div>
 
@@ -131,6 +194,30 @@
                     <p class="settings-error">{{ community_form.community_enabled.errors|join:", " }}</p>
                     {% endif %}
                 </div>
+                <div class="settings-field">
+                    <label class="settings-toggle-row">
+                        {{ community_form.show_wiki_cover_photos }}
+                        <span class="settings-toggle-label">
+                            <strong>{{ community_form.show_wiki_cover_photos.label }}</strong>
+                            <span class="settings-help">{{ community_form.show_wiki_cover_photos.help_text }}</span>
+                        </span>
+                    </label>
+                    {% if community_form.show_wiki_cover_photos.errors %}
+                    <p class="settings-error">{{ community_form.show_wiki_cover_photos.errors|join:", " }}</p>
+                    {% endif %}
+                </div>
+                <div class="settings-field">
+                    <label class="settings-toggle-row">
+                        {{ community_form.auto_create_pin_article_from_wikipedia }}
+                        <span class="settings-toggle-label">
+                            <strong>{{ community_form.auto_create_pin_article_from_wikipedia.label }}</strong>
+                            <span class="settings-help">{{ community_form.auto_create_pin_article_from_wikipedia.help_text }}</span>
+                        </span>
+                    </label>
+                    {% if community_form.auto_create_pin_article_from_wikipedia.errors %}
+                    <p class="settings-error">{{ community_form.auto_create_pin_article_from_wikipedia.errors|join:", " }}</p>
+                    {% endif %}
+                </div>
                 {% if not community_form.instance.community_enabled %}
                 <p class="settings-help">All of your pins are private and your privacy settings above are locked to the most restrictive option while this is off.</p>
                 {% endif %}
@@ -141,44 +228,136 @@
             </form>
         </div>
 
-        {# -- Memories (subsection) -------------------------------------------- #}
-        <div class="settings-subsection" id="memories-settings-section">
+        {# -- Wiki Sync (subsection) -------------------------------------------- #}
+        <div class="settings-subsection" id="wiki-sync-settings-section">
+            <h3 class="settings-subsection-title">
+                <i class="material-symbols-outlined">sync</i>
+                Wiki Sync
+            </h3>
+            <p class="settings-section-desc">Automatically sync public information between a pin and its community wiki. This only applies to anonymized public details, never your private notes about a pin.</p>
+
+            <form method="post" class="settings-form" id="wiki-sync-form">
+                {% csrf_token %}
+                <input type="hidden" name="section" value="wiki_sync">
+
+                <div class="settings-field">
+                    <label class="settings-toggle-row">
+                        {{ wiki_sync_form.sync_rating_to_wiki }}
+                        <span class="settings-toggle-label">
+                            <strong>{{ wiki_sync_form.sync_rating_to_wiki.label }}</strong>
+                            <span class="settings-help">{{ wiki_sync_form.sync_rating_to_wiki.help_text }}</span>
+                        </span>
+                    </label>
+                    {% if wiki_sync_form.sync_rating_to_wiki.errors %}
+                    <p class="settings-error">{{ wiki_sync_form.sync_rating_to_wiki.errors|join:", " }}</p>
+                    {% endif %}
+                </div>
+                <div class="settings-field">
+                    <label class="settings-toggle-row">
+                        {{ wiki_sync_form.sync_vulnerability_to_wiki }}
+                        <span class="settings-toggle-label">
+                            <strong>{{ wiki_sync_form.sync_vulnerability_to_wiki.label }}</strong>
+                            <span class="settings-help">{{ wiki_sync_form.sync_vulnerability_to_wiki.help_text }}</span>
+                        </span>
+                    </label>
+                    {% if wiki_sync_form.sync_vulnerability_to_wiki.errors %}
+                    <p class="settings-error">{{ wiki_sync_form.sync_vulnerability_to_wiki.errors|join:", " }}</p>
+                    {% endif %}
+                </div>
+                <div class="settings-field">
+                    <label class="settings-toggle-row">
+                        {{ wiki_sync_form.sync_priority_to_wiki }}
+                        <span class="settings-toggle-label">
+                            <strong>{{ wiki_sync_form.sync_priority_to_wiki.label }}</strong>
+                            <span class="settings-help">{{ wiki_sync_form.sync_priority_to_wiki.help_text }}</span>
+                        </span>
+                    </label>
+                    {% if wiki_sync_form.sync_priority_to_wiki.errors %}
+                    <p class="settings-error">{{ wiki_sync_form.sync_priority_to_wiki.errors|join:", " }}</p>
+                    {% endif %}
+                </div>
+                <div class="settings-field">
+                    <label class="settings-toggle-row">
+                        {{ wiki_sync_form.sync_danger_to_wiki }}
+                        <span class="settings-toggle-label">
+                            <strong>{{ wiki_sync_form.sync_danger_to_wiki.label }}</strong>
+                            <span class="settings-help">{{ wiki_sync_form.sync_danger_to_wiki.help_text }}</span>
+                        </span>
+                    </label>
+                    {% if wiki_sync_form.sync_danger_to_wiki.errors %}
+                    <p class="settings-error">{{ wiki_sync_form.sync_danger_to_wiki.errors|join:", " }}</p>
+                    {% endif %}
+                </div>
+
+                <div class="settings-field">
+                    <label class="settings-label" for="{{ wiki_sync_form.sync_aliases.id_for_label }}">
+                        {{ wiki_sync_form.sync_aliases.label }}
+                    </label>
+                    <p class="settings-help">{{ wiki_sync_form.sync_aliases.help_text }}</p>
+                    {{ wiki_sync_form.sync_aliases }}
+                    {% if wiki_sync_form.sync_aliases.errors %}
+                    <p class="settings-error">{{ wiki_sync_form.sync_aliases.errors|join:", " }}</p>
+                    {% endif %}
+                </div>
+
+                {% if not wiki_sync_form.instance.community_enabled %}
+                <p class="settings-help">Wiki syncing is off while Community Features (above) is off.</p>
+                {% endif %}
+
+                <div class="settings-actions">
+                    <button type="submit" class="settings-save-btn">Save</button>
+                </div>
+            </form>
+        </div>
+
+        {# -- History (subsection) -------------------------------------------- #}
+        <div class="settings-subsection" id="history-settings-section">
             <h3 class="settings-subsection-title">
                 <i class="material-symbols-outlined">history</i>
-                Memories
+                History
             </h3>
             <p class="settings-section-desc">What visit and location history is saved.</p>
 
-            <form method="post" class="settings-form" id="memories-form">
+            <form method="post" class="settings-form" id="history-form">
                 {% csrf_token %}
-                <input type="hidden" name="section" value="memories">
+                <input type="hidden" name="section" value="history">
 
                 <div class="settings-field">
                     <label class="settings-toggle-row">
-                        {{ memories_form.track_pin_visits }}
+                        {{ history_form.track_pin_visits }}
                         <span class="settings-toggle-label">
-                            <strong>{{ memories_form.track_pin_visits.label }}</strong>
-                            <span class="settings-help">{{ memories_form.track_pin_visits.help_text }}</span>
+                            <strong>{{ history_form.track_pin_visits.label }}</strong>
+                            <span class="settings-help">{{ history_form.track_pin_visits.help_text }}</span>
                         </span>
                     </label>
                 </div>
 
                 <div class="settings-field">
                     <label class="settings-toggle-row">
-                        {{ memories_form.track_routes }}
+                        {{ history_form.track_routes }}
                         <span class="settings-toggle-label">
-                            <strong>{{ memories_form.track_routes.label }}</strong>
-                            <span class="settings-help">{{ memories_form.track_routes.help_text }}</span>
+                            <strong>{{ history_form.track_routes.label }}</strong>
+                            <span class="settings-help">{{ history_form.track_routes.help_text }}</span>
                         </span>
                     </label>
                 </div>
 
                 <div class="settings-field">
                     <label class="settings-toggle-row">
-                        {{ memories_form.track_geolocation }}
+                        {{ history_form.track_geolocation }}
                         <span class="settings-toggle-label">
-                            <strong>{{ memories_form.track_geolocation.label }}</strong>
-                            <span class="settings-help">{{ memories_form.track_geolocation.help_text }}</span>
+                            <strong>{{ history_form.track_geolocation.label }}</strong>
+                            <span class="settings-help">{{ history_form.track_geolocation.help_text }}</span>
+                        </span>
+                    </label>
+                </div>
+
+                <div class="settings-field">
+                    <label class="settings-toggle-row">
+                        {{ history_form.generate_photo_keywords }}
+                        <span class="settings-toggle-label">
+                            <strong>{{ history_form.generate_photo_keywords.label }}</strong>
+                            <span class="settings-help">{{ history_form.generate_photo_keywords.help_text }}</span>
                         </span>
                     </label>
                 </div>
@@ -224,9 +403,359 @@
         </div>
         </div>
     </section>
+    </div> {# /tab-panel-privacy #}
+
+    {# ======================================================================= #}
+    {# Connections tab                                                         #}
+    {# ======================================================================= #}
+    <div class="settings-tab-panel" data-tab-panel="connections" id="tab-panel-connections">
+    <section class="settings-section ul-section" id="connections-settings-section">
+        <div class="settings-section-header">
+            <i class="material-symbols-outlined">cable</i>
+            <div>
+                <h2 class="settings-section-title">Connections</h2>
+                <p class="settings-section-desc">Import photos automatically from services you already use.</p>
+            </div>
+        </div>
+
+        <div class="settings-section-body">
+        {# -- Immich (subsection) ------------------------------------------------ #}
+        <div class="settings-subsection" id="immich-settings-section">
+            <h3 class="settings-subsection-title">
+                <i class="material-symbols-outlined">photo_library</i>
+                Immich
+            </h3>
+            <p class="settings-section-desc">Connect a self-hosted Immich server to import photos near your pins.</p>
+            <div hx-get="{% url 'settings.immich' %}" hx-trigger="load" hx-swap="outerHTML">
+                <p class="loading-text">Loading...</p>
+            </div>
+        </div>
+
+        {# -- Flickr (subsection) ------------------------------------------------- #}
+        {% if flickr_configured %}
+        <div class="settings-subsection" id="flickr-settings-section">
+            <h3 class="settings-subsection-title">
+                <i class="material-symbols-outlined">photo_camera</i>
+                Flickr
+            </h3>
+            <p class="settings-section-desc">Connect Flickr to import your own photos near your pins.</p>
+            <div hx-get="{% url 'settings.flickr' %}" hx-trigger="load" hx-swap="outerHTML">
+                <p class="loading-text">Loading...</p>
+            </div>
+        </div>
+        {% endif %}
+
+        {# -- Google Photos (subsection) ------------------------------------------ #}
+        <div class="settings-subsection" id="google-photos-settings-section">
+            <h3 class="settings-subsection-title">
+                <i class="material-symbols-outlined">add_photo_alternate</i>
+                Google Photos
+            </h3>
+            <p class="settings-section-desc">Connect Google Photos to pick photos to import from the pin detail page.</p>
+            <div hx-get="{% url 'settings.google_photos' %}" hx-trigger="load" hx-swap="outerHTML">
+                <p class="loading-text">Loading...</p>
+            </div>
+        </div>
+
+        {# -- Google Calendar (subsection) ----------------------------------------- #}
+        <div class="settings-subsection" id="google-calendar-settings-section">
+            <h3 class="settings-subsection-title">
+                <i class="material-symbols-outlined">calendar_month</i>
+                Google Calendar
+            </h3>
+            <p class="settings-section-desc">Connect your Google Calendar to import events as trips and export trips as calendar events.</p>
+            <div hx-get="{% url 'settings.google_calendar' %}" hx-trigger="load" hx-swap="outerHTML">
+                <p class="loading-text">Loading...</p>
+            </div>
+        </div>
+        </div>
+    </section>
+
+    {# -- Browser Permissions ----------------------------------------------------- #}
+    <section class="settings-section ul-section" id="browser-permissions-settings-section">
+        <div class="settings-section-header">
+            <i class="material-symbols-outlined">verified_user</i>
+            <div>
+                <h2 class="settings-section-title">Browser Permissions</h2>
+                <p class="settings-section-desc">Permissions UrbanLens can ask your browser for. Enabling one opens your browser's own permission prompt - we never grant access silently.</p>
+            </div>
+        </div>
+
+        <div class="settings-section-body">
+            <div class="settings-permissions-list" id="browser-permissions-list">
+
+                <div class="settings-permission-card" data-permission="location">
+                    <span class="settings-permission-icon"><i class="material-symbols-outlined">my_location</i></span>
+                    <div class="settings-permission-body">
+                        <div class="settings-permission-name">Location</div>
+                        <p class="settings-permission-status" data-status>Checking status…</p>
+                    </div>
+                    <div class="settings-permission-actions">
+                        <button type="button" class="btn btn--secondary settings-secondary-btn" data-enable hidden>Enable</button>
+                    </div>
+                </div>
+
+                <div class="settings-permission-card" data-permission="notifications">
+                    <span class="settings-permission-icon"><i class="material-symbols-outlined">notifications</i></span>
+                    <div class="settings-permission-body">
+                        <div class="settings-permission-name">Notifications</div>
+                        <p class="settings-permission-status" data-status>Checking status…</p>
+                    </div>
+                    <div class="settings-permission-actions">
+                        <button type="button" class="btn btn--secondary settings-secondary-btn" data-enable hidden>Enable</button>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+    {# -- Keyword Tagging --------------------------------------------------------- #}
+    <section class="settings-section ul-section" id="keyword-tagging-settings-section">
+        <div class="settings-section-header">
+            <i class="material-symbols-outlined">sell</i>
+            <div>
+                <h2 class="settings-section-title">Keyword Tagging</h2>
+                <p class="settings-section-desc">Free, local keyword matching that can auto-tag pins - no AI subscription needed.</p>
+            </div>
+        </div>
+
+        <form method="post" class="settings-form" id="keyword-tagging-form">
+            {% csrf_token %}
+            <input type="hidden" name="section" value="keyword_tagging">
+
+            <div class="settings-field">
+                <label class="settings-toggle-row">
+                    {{ keyword_tagging_form.keyword_tagging_enabled }}
+                    <span class="settings-toggle-label">
+                        <strong>{{ keyword_tagging_form.keyword_tagging_enabled.label }}</strong>
+                        <span class="settings-help">{{ keyword_tagging_form.keyword_tagging_enabled.help_text }}</span>
+                    </span>
+                </label>
+                {% if keyword_tagging_form.keyword_tagging_enabled.errors %}
+                <p class="settings-error">{{ keyword_tagging_form.keyword_tagging_enabled.errors|join:", " }}</p>
+                {% endif %}
+            </div>
+
+            <div class="settings-ai-sub-options" id="keyword-tagging-sub-options">
+                <p class="settings-help" style="margin-bottom:0.75rem;">When a pin is created, matching keywords can automatically add these label types:</p>
+
+                <div class="settings-field">
+                    <label class="settings-toggle-row">
+                        {{ keyword_tagging_form.keyword_label_categories }}
+                        <span class="settings-toggle-label">
+                            <strong>{{ keyword_tagging_form.keyword_label_categories.label }}</strong>
+                            <span class="settings-help">{{ keyword_tagging_form.keyword_label_categories.help_text }}</span>
+                        </span>
+                    </label>
+                </div>
+
+                <div class="settings-field">
+                    <label class="settings-toggle-row">
+                        {{ keyword_tagging_form.keyword_label_tags }}
+                        <span class="settings-toggle-label">
+                            <strong>{{ keyword_tagging_form.keyword_label_tags.label }}</strong>
+                            <span class="settings-help">{{ keyword_tagging_form.keyword_label_tags.help_text }}</span>
+                        </span>
+                    </label>
+                </div>
+
+                <div class="settings-field">
+                    <label class="settings-toggle-row">
+                        {{ keyword_tagging_form.keyword_label_statuses }}
+                        <span class="settings-toggle-label">
+                            <strong>{{ keyword_tagging_form.keyword_label_statuses.label }}</strong>
+                            <span class="settings-help">{{ keyword_tagging_form.keyword_label_statuses.help_text }}</span>
+                        </span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="settings-actions">
+                <button type="submit" class="settings-save-btn">Save</button>
+            </div>
+        </form>
+    </section>
+    </div> {# /tab-panel-connections #}
+
+    {# ======================================================================= #}
+    {# Messages tab                                                            #}
+    {# ======================================================================= #}
+    <div class="settings-tab-panel" data-tab-panel="messages" id="tab-panel-messages">
+    <section class="settings-section ul-section" id="direct-message-settings-section">
+        <div class="settings-section-header">
+            <i class="material-symbols-outlined">chat</i>
+            <div>
+                <h2 class="settings-section-title">Messages</h2>
+                <p class="settings-section-desc">Presence, read receipts, disappearing messages, and encryption for your conversations.</p>
+            </div>
+        </div>
+
+        <div class="settings-section-body">
+            <form method="post" class="settings-form" id="direct-message-form">
+                {% csrf_token %}
+                <input type="hidden" name="section" value="direct_messages">
+
+                <div class="settings-field">
+                    <label class="settings-label" for="{{ direct_message_form.online_status_visibility.id_for_label }}">
+                        {{ direct_message_form.online_status_visibility.label }}
+                    </label>
+                    <p class="settings-help">{{ direct_message_form.online_status_visibility.help_text }}</p>
+                    {{ direct_message_form.online_status_visibility }}
+                    {% if direct_message_form.online_status_visibility.errors %}
+                    <p class="settings-error">{{ direct_message_form.online_status_visibility.errors|join:", " }}</p>
+                    {% endif %}
+                </div>
+
+                <div class="settings-field">
+                    <label class="settings-label" for="{{ direct_message_form.read_receipt_visibility.id_for_label }}">
+                        {{ direct_message_form.read_receipt_visibility.label }}
+                    </label>
+                    <p class="settings-help">{{ direct_message_form.read_receipt_visibility.help_text }}</p>
+                    {{ direct_message_form.read_receipt_visibility }}
+                    {% if direct_message_form.read_receipt_visibility.errors %}
+                    <p class="settings-error">{{ direct_message_form.read_receipt_visibility.errors|join:", " }}</p>
+                    {% endif %}
+                </div>
+
+                <div class="settings-field">
+                    <label class="settings-label" for="{{ direct_message_form.typing_indicator_visibility.id_for_label }}">
+                        {{ direct_message_form.typing_indicator_visibility.label }}
+                    </label>
+                    <p class="settings-help">{{ direct_message_form.typing_indicator_visibility.help_text }}</p>
+                    {{ direct_message_form.typing_indicator_visibility }}
+                    {% if direct_message_form.typing_indicator_visibility.errors %}
+                    <p class="settings-error">{{ direct_message_form.typing_indicator_visibility.errors|join:", " }}</p>
+                    {% endif %}
+                </div>
+
+                <div class="settings-field">
+                    <label class="settings-label" for="{{ direct_message_form.direct_message_delete_after.id_for_label }}">
+                        {{ direct_message_form.direct_message_delete_after.label }}
+                    </label>
+                    <p class="settings-help">{{ direct_message_form.direct_message_delete_after.help_text }}</p>
+                    {{ direct_message_form.direct_message_delete_after }}
+                    {% if direct_message_form.direct_message_delete_after.errors %}
+                    <p class="settings-error">{{ direct_message_form.direct_message_delete_after.errors|join:", " }}</p>
+                    {% endif %}
+                </div>
+
+                <div class="settings-field">
+                    <label class="settings-toggle-row">
+                        {{ direct_message_form.allow_friend_recommendations }}
+                        <span class="settings-toggle-label">
+                            <strong>{{ direct_message_form.allow_friend_recommendations.label }}</strong>
+                            <span class="settings-help">{{ direct_message_form.allow_friend_recommendations.help_text }}</span>
+                        </span>
+                    </label>
+                </div>
+
+                <div class="settings-actions">
+                    <button type="submit" class="settings-save-btn">Save</button>
+                </div>
+            </form>
+
+            {# -- Encryption (E2EE key management) ------------------------------ #}
+            <div class="settings-e2ee-card" id="e2ee-card"
+                 data-enrolled="{% if e2ee_enrolled %}1{% else %}0{% endif %}"
+                 data-has-password="{% if e2ee_has_password %}1{% else %}0{% endif %}">
+                <h4 class="settings-e2ee-title">
+                    <i class="material-symbols-outlined">lock</i>
+                    End-to-end encryption
+                </h4>
+                <p class="settings-help">
+                    New messages between people who both use UrbanLens are end-to-end encrypted:
+                    only you and the person you're talking to can read them, not our servers.
+                    <a href="{% url 'faq' %}#faq-e2ee" target="_blank" rel="noopener">What's a recovery key, and why do I need one?</a>
+                </p>
+                <p class="settings-e2ee-status" id="e2ee-status">Checking status…</p>
+
+                <div class="settings-e2ee-actions">
+                    <button type="button" class="btn btn--secondary settings-secondary-btn" id="e2ee-view-recovery" hidden>View recovery key</button>
+                    <button type="button" class="btn btn--secondary settings-secondary-btn" id="e2ee-unlock" hidden>Unlock this device</button>
+                    <button type="button" class="btn btn--secondary settings-danger-btn" id="e2ee-reset" hidden>Reset encryption keys</button>
+                </div>
+            </div>
+        </div>
+    </section>
+    </div> {# /tab-panel-messages #}
+
+    {# ======================================================================= #}
+    {# Security tab                                                            #}
+    {# ======================================================================= #}
+    <div class="settings-tab-panel" data-tab-panel="security" id="tab-panel-security">
+
+    {# -- Password (change, or first-time set for social sign-in accounts) ---- #}
+    <section class="settings-section ul-section" id="password-settings-section">
+        <div class="settings-section-header">
+            <i class="material-symbols-outlined">password</i>
+            <div>
+                <h2 class="settings-section-title">Password</h2>
+                <p class="settings-section-desc">
+                    {% if e2ee_has_password %}
+                    Change your account password. Your password also protects your encrypted messages, so changing it here keeps them unlockable on every device.
+                    {% else %}
+                    You signed up with Google or Discord, so your account has no password yet. Setting one lets you log in directly and unlock your encrypted messages with it on new devices - no recovery key needed.
+                    {% endif %}
+                </p>
+            </div>
+        </div>
+
+        <div class="settings-section-body">
+            <form class="settings-form" id="password-change-form"
+                  data-has-password="{% if e2ee_has_password %}1{% else %}0{% endif %}"
+                  data-username="{{ request.user.username }}">
+                <input type="text" name="username" value="{{ request.user.username }}" autocomplete="username" style="display:none" aria-hidden="true" tabindex="-1">
+                {% if e2ee_has_password %}
+                <div class="settings-field">
+                    <label class="settings-label" for="password-current">Current password</label>
+                    <input type="password" id="password-current" name="current_password"
+                           autocomplete="current-password" required class="settings-input">
+                    <p class="settings-help">
+                        <a href="{% url 'password_reset' %}">Forgot your password?</a>
+                    </p>
+                </div>
+                {% endif %}
+                <div class="settings-field">
+                    <label class="settings-label" for="password-new">New password</label>
+                    <input type="password" id="password-new" name="new_password"
+                           autocomplete="new-password" required minlength="8" class="settings-input">
+                </div>
+                <div class="settings-field">
+                    <label class="settings-label" for="password-confirm">Confirm new password</label>
+                    <input type="password" id="password-confirm" name="confirm_password"
+                           autocomplete="new-password" required minlength="8" class="settings-input">
+                </div>
+                <div class="settings-actions">
+                    <button type="submit" class="settings-save-btn" id="password-change-submit">
+                        {% if e2ee_has_password %}Change password{% else %}Set password{% endif %}
+                    </button>
+                </div>
+            </form>
+        </div>
+    </section>
+
+    {# -- Security (passkeys, authenticator app, backup codes) ---------------- #}
+    <section class="settings-section ul-section" id="security-settings-section">
+        <div class="settings-section-header">
+            <i class="material-symbols-outlined">passkey</i>
+            <div>
+                <h2 class="settings-section-title">Security</h2>
+                <p class="settings-section-desc">Add a passkey or authenticator app for optional two-factor sign-in.</p>
+            </div>
+        </div>
+
+        {% include "dashboard/partials/settings/_security_section_body.html" %}
+    </section>
+    </div> {# /tab-panel-security #}
+
+    {# ======================================================================= #}
+    {# Map & Display tab                                                       #}
+    {# ======================================================================= #}
+    <div class="settings-tab-panel" data-tab-panel="map" id="tab-panel-map">
 
     {# -- Style --------------------------------------------------------------- #}
-    <section class="settings-section ul-section">
+    <section class="settings-section ul-section" id="style-settings-section">
         <div class="settings-section-header">
             <i class="material-symbols-outlined">palette</i>
             <div>
@@ -242,22 +771,22 @@
             <div class="settings-field">
                 <label class="settings-label">Color Theme</label>
                 <p class="settings-help">System follows your OS preference automatically.</p>
-                <div class="settings-theme-row">
-                    <label class="settings-theme-option {% if style_form.instance.theme_mode == 'system' %}active{% endif %}" id="theme-opt-system">
+                <div class="settings-option-row">
+                    <label class="settings-option-tile {% if style_form.instance.theme_mode == 'system' %}active{% endif %}" id="theme-opt-system">
                         <input type="radio" name="theme_mode" value="system"
                                {% if style_form.instance.theme_mode == 'system' %}checked{% endif %}
                                onchange="applyThemePreview('system')">
                         <i class="material-symbols-outlined">brightness_auto</i>
                         <span>System</span>
                     </label>
-                    <label class="settings-theme-option {% if style_form.instance.theme_mode == 'light' %}active{% endif %}" id="theme-opt-light">
+                    <label class="settings-option-tile {% if style_form.instance.theme_mode == 'light' %}active{% endif %}" id="theme-opt-light">
                         <input type="radio" name="theme_mode" value="light"
                                {% if style_form.instance.theme_mode == 'light' %}checked{% endif %}
                                onchange="applyThemePreview('light')">
                         <i class="material-symbols-outlined">light_mode</i>
                         <span>Light</span>
                     </label>
-                    <label class="settings-theme-option {% if style_form.instance.theme_mode == 'dark' %}active{% endif %}" id="theme-opt-dark">
+                    <label class="settings-option-tile {% if style_form.instance.theme_mode == 'dark' %}active{% endif %}" id="theme-opt-dark">
                         <input type="radio" name="theme_mode" value="dark"
                                {% if style_form.instance.theme_mode == 'dark' %}checked{% endif %}
                                onchange="applyThemePreview('dark')">
@@ -273,22 +802,22 @@
                     {% include "dashboard/partials/ui/_tooltip_help.html" with text="When to switch the base map to a dark tile layer. System follows your OS preference. Topographic filter is included." %}
                 </label>
                 <p class="settings-help">System follows your OS preference. Satellite is always unaffected.</p>
-                <div class="settings-theme-row">
-                    <label class="settings-theme-option {% if style_form.instance.map_dark_mode == 'system' %}active{% endif %}" id="map-dark-opt-system">
+                <div class="settings-option-row">
+                    <label class="settings-option-tile {% if style_form.instance.map_dark_mode == 'system' %}active{% endif %}" id="map-dark-opt-system">
                         <input type="radio" name="map_dark_mode" value="system"
                                {% if style_form.instance.map_dark_mode == 'system' %}checked{% endif %}
                                onchange="applyMapDarkPreview('system')">
                         <i class="material-symbols-outlined">brightness_auto</i>
                         <span>System</span>
                     </label>
-                    <label class="settings-theme-option {% if style_form.instance.map_dark_mode == 'light' %}active{% endif %}" id="map-dark-opt-light">
+                    <label class="settings-option-tile {% if style_form.instance.map_dark_mode == 'light' %}active{% endif %}" id="map-dark-opt-light">
                         <input type="radio" name="map_dark_mode" value="light"
                                {% if style_form.instance.map_dark_mode == 'light' %}checked{% endif %}
                                onchange="applyMapDarkPreview('light')">
                         <i class="material-symbols-outlined">light_mode</i>
                         <span>Light</span>
                     </label>
-                    <label class="settings-theme-option {% if style_form.instance.map_dark_mode == 'dark' %}active{% endif %}" id="map-dark-opt-dark">
+                    <label class="settings-option-tile {% if style_form.instance.map_dark_mode == 'dark' %}active{% endif %}" id="map-dark-opt-dark">
                         <input type="radio" name="map_dark_mode" value="dark"
                                {% if style_form.instance.map_dark_mode == 'dark' %}checked{% endif %}
                                onchange="applyMapDarkPreview('dark')">
@@ -304,9 +833,9 @@
             <div class="settings-field">
                 <label class="settings-label">{{ style_form.guidance_level.label }}</label>
                 <p class="settings-help">{{ style_form.guidance_level.help_text }}</p>
-                <div class="settings-map-view-row">
+                <div class="settings-option-row">
                     {% for radio in style_form.guidance_level %}
-                    <label class="settings-map-view-option ul-radio-button {% if radio.data.value == style_form.instance.guidance_level %}active{% endif %}"
+                    <label class="settings-option-tile {% if radio.data.value == style_form.instance.guidance_level %}active{% endif %}"
                            id="guidance-opt-{{ radio.data.value }}"
                            onclick="applyGuidancePreview('{{ radio.data.value }}')">
                         {{ radio.tag }}
@@ -352,7 +881,7 @@
     </section>
 
     {# -- Map ----------------------------------------------------------------- #}
-    <section class="settings-section ul-section">
+    <section class="settings-section ul-section" id="map-settings-section">
         <div class="settings-section-header">
             <i class="material-symbols-outlined">map</i>
             <div>
@@ -361,6 +890,7 @@
             </div>
         </div>
 
+        <div class="settings-section-body">
         <form method="post" class="settings-form" id="map-form">
             {% csrf_token %}
             <input type="hidden" name="section" value="map">
@@ -374,9 +904,9 @@
                     {% include "dashboard/partials/ui/_tooltip_help.html" with text="The basemap shown when you open the map. Remember keeps whichever view you used last." %}
                 </label>
                 <p class="settings-help">{{ map_display_form.default_map_view.help_text }}</p>
-                <div class="settings-map-view-row">
+                <div class="settings-option-row">
                     {% for radio in map_display_form.default_map_view %}
-                    <label class="settings-map-view-option ul-radio-button {% if radio.data.value == map_display_form.instance.default_map_view %}active{% endif %}">
+                    <label class="settings-option-tile {% if radio.data.value == map_display_form.instance.default_map_view %}active{% endif %}">
                         {{ radio.tag }}
                         {% if radio.data.value == "satellite" %}<i class="material-symbols-outlined">globe</i>
                         {% elif radio.data.value == "topographic" %}<i class="material-symbols-outlined">terrain</i>
@@ -396,9 +926,9 @@
                     Starting Point
                     {% include "dashboard/partials/ui/_tooltip_help.html" with text="Where the map opens when you visit it. My Pins centers on your pin cluster; My Location uses GPS; Remember keeps your last view; Custom uses the address below." wide=True %}
                 </label>
-                <div class="settings-map-view-row">
+                <div class="settings-option-row">
                     {% for radio in map_center_form.map_center_mode %}
-                    <label class="settings-map-view-option ul-radio-button{% if radio.data.value == map_center_form.instance.map_center_mode %} active{% endif %}"
+                    <label class="settings-option-tile{% if radio.data.value == map_center_form.instance.map_center_mode %} active{% endif %}"
                            onclick="selectMapMode('{{ radio.data.value }}')">
                         {{ radio.tag }}
                         {% if radio.data.value == 'auto' %}
@@ -434,6 +964,8 @@
                 <label class="settings-label" title="Drag or zoom to adjust">Preview</label>
                 <div id="map-center-preview" style="height:300px;border-radius:8px;overflow:hidden;border:1px solid var(--color-border,#ddd)"></div>
                 <p class="settings-help" style="margin-top:4px">The zoom level you leave this map at will be used as your default zoom.</p>
+                {# Replaces Leaflet's on-map attribution control (attributionControl: false below). #}
+                <p class="form-hint" id="map-center-preview-attribution" aria-live="polite"></p>
             </div>
 
             <div class="settings-field">
@@ -451,14 +983,14 @@
 
                 {# Auto / Custom mode pills #}
                 {% with is_custom=map_display_form.cluster_radius.value %}
-                <div class="settings-map-view-row" style="margin-top:.5rem">
-                    <label class="settings-map-view-option ul-radio-button{% if not is_custom %} active{% endif %}"
+                <div class="settings-option-row" style="margin-top:.5rem">
+                    <label class="settings-option-tile{% if not is_custom %} active{% endif %}"
                            id="cluster-auto-label" onclick="setClusterMode('auto')">
                         <input type="radio" name="_cluster_mode" value="auto"{% if not is_custom %} checked{% endif %}>
                         <i class="material-symbols-outlined">auto_awesome</i>
                         <span>Auto</span>
                     </label>
-                    <label class="settings-map-view-option ul-radio-button{% if is_custom %} active{% endif %}"
+                    <label class="settings-option-tile{% if is_custom %} active{% endif %}"
                            id="cluster-custom-label" onclick="setClusterMode('custom')">
                         <input type="radio" name="_cluster_mode" value="custom"{% if is_custom %} checked{% endif %}>
                         <i class="material-symbols-outlined">tune</i>
@@ -502,63 +1034,17 @@
                 {% endif %}
             </div>
 
-            <div class="settings-actions">
-                <button type="submit" class="settings-save-btn">Save</button>
-            </div>
-        </form>
-    </section>
-
-    {# -- Places Layer Sources ---------------------------------------------- #}
-    {% if show_places_layer %}
-    <section class="settings-section ul-section" id="places-layer-settings-section">
-        <div class="settings-section-header">
-            <i class="material-symbols-outlined">place</i>
-            <div>
-                <h2 class="settings-section-title">Places Layer</h2>
-                <p class="settings-section-desc">Choose which data sources appear in the Places layer on the map.</p>
-            </div>
-        </div>
-
-        <form method="post" class="settings-form" id="places-layer-form">
-            {% csrf_token %}
-            <input type="hidden" name="section" value="places_layer">
-
-            <div class="settings-field">
-                <label class="settings-toggle-row">
-                    {{ places_layer_form.places_google_enabled }}
-                    <span class="settings-toggle-label">
-                        <strong>{{ places_layer_form.places_google_enabled.label }}</strong>
-                        <span class="settings-help">{{ places_layer_form.places_google_enabled.help_text }}</span>
+            <div class="settings-field settings-field--checkbox">
+                <label class="settings-checkbox-label">
+                    {{ map_display_form.suggest_pin_restructure }}
+                    <span class="settings-checkbox-materialize"></span>
+                    <span>
+                        <span class="settings-label">{{ map_display_form.suggest_pin_restructure.label }}</span>
+                        <p class="settings-help">{{ map_display_form.suggest_pin_restructure.help_text }}</p>
                     </span>
                 </label>
-                {% if places_layer_form.places_google_enabled.errors %}
-                <p class="settings-error">{{ places_layer_form.places_google_enabled.errors|join:", " }}</p>
-                {% endif %}
-            </div>
-
-            <div class="settings-field">
-                <label class="settings-toggle-row">
-                    {{ places_layer_form.places_nps_enabled }}
-                    <span class="settings-toggle-label">
-                        <strong>{{ places_layer_form.places_nps_enabled.label }}</strong>
-                        <span class="settings-help">{{ places_layer_form.places_nps_enabled.help_text }}</span>
-                    </span>
-                </label>
-                {% if places_layer_form.places_nps_enabled.errors %}
-                <p class="settings-error">{{ places_layer_form.places_nps_enabled.errors|join:", " }}</p>
-                {% endif %}
-            </div>
-
-            <div class="settings-field">
-                <label class="settings-toggle-row">
-                    {{ places_layer_form.places_wikipedia_enabled }}
-                    <span class="settings-toggle-label">
-                        <strong>{{ places_layer_form.places_wikipedia_enabled.label }}</strong>
-                        <span class="settings-help">{{ places_layer_form.places_wikipedia_enabled.help_text }}</span>
-                    </span>
-                </label>
-                {% if places_layer_form.places_wikipedia_enabled.errors %}
-                <p class="settings-error">{{ places_layer_form.places_wikipedia_enabled.errors|join:", " }}</p>
+                {% if map_display_form.suggest_pin_restructure.errors %}
+                <p class="settings-error">{{ map_display_form.suggest_pin_restructure.errors|join:", " }}</p>
                 {% endif %}
             </div>
 
@@ -566,81 +1052,144 @@
                 <button type="submit" class="settings-save-btn">Save</button>
             </div>
         </form>
-    </section>
-    {% endif %}
 
-    {# -- Pin Detail Defaults ----------------------------------------------- #}
-    <section class="settings-section ul-section">
-        <div class="settings-section-header">
-            <i class="material-symbols-outlined">draw</i>
-            <div>
-                <h2 class="settings-section-title">Markup</h2>
-                <p class="settings-section-desc">Default colors and transparency applied when you add arrows, shapes, and text to a pin.</p>
-            </div>
+        {# -- Places Layer Sources (subsection) ---------------------------------- #}
+        {% if show_places_layer %}
+        <div class="settings-subsection" id="places-layer-settings-section">
+            <h3 class="settings-subsection-title">
+                <i class="material-symbols-outlined">place</i>
+                Places Layer
+            </h3>
+            <p class="settings-section-desc">Choose which data sources appear in the Places layer on the map.</p>
+
+            <form method="post" class="settings-form" id="places-layer-form">
+                {% csrf_token %}
+                <input type="hidden" name="section" value="places_layer">
+
+                <div class="settings-field">
+                    <label class="settings-toggle-row">
+                        {{ places_layer_form.places_google_enabled }}
+                        <span class="settings-toggle-label">
+                            <strong>{{ places_layer_form.places_google_enabled.label }}</strong>
+                            <span class="settings-help">{{ places_layer_form.places_google_enabled.help_text }}</span>
+                        </span>
+                    </label>
+                    {% if places_layer_form.places_google_enabled.errors %}
+                    <p class="settings-error">{{ places_layer_form.places_google_enabled.errors|join:", " }}</p>
+                    {% endif %}
+                </div>
+
+                <div class="settings-field">
+                    <label class="settings-toggle-row">
+                        {{ places_layer_form.places_nps_enabled }}
+                        <span class="settings-toggle-label">
+                            <strong>{{ places_layer_form.places_nps_enabled.label }}</strong>
+                            <span class="settings-help">{{ places_layer_form.places_nps_enabled.help_text }}</span>
+                        </span>
+                    </label>
+                    {% if places_layer_form.places_nps_enabled.errors %}
+                    <p class="settings-error">{{ places_layer_form.places_nps_enabled.errors|join:", " }}</p>
+                    {% endif %}
+                </div>
+
+                <div class="settings-field">
+                    <label class="settings-toggle-row">
+                        {{ places_layer_form.places_wikipedia_enabled }}
+                        <span class="settings-toggle-label">
+                            <strong>{{ places_layer_form.places_wikipedia_enabled.label }}</strong>
+                            <span class="settings-help">{{ places_layer_form.places_wikipedia_enabled.help_text }}</span>
+                        </span>
+                    </label>
+                    {% if places_layer_form.places_wikipedia_enabled.errors %}
+                    <p class="settings-error">{{ places_layer_form.places_wikipedia_enabled.errors|join:", " }}</p>
+                    {% endif %}
+                </div>
+
+                <div class="settings-actions">
+                    <button type="submit" class="settings-save-btn">Save</button>
+                </div>
+            </form>
         </div>
+        {% endif %}
 
-        <form method="post" class="settings-form" id="markup-defaults-form">
-            {% csrf_token %}
-            <input type="hidden" name="section" value="markup_defaults">
-            {{ markup_defaults_form.markup_fill_color }}
-            {{ markup_defaults_form.markup_fill_opacity }}
-            {{ markup_defaults_form.markup_border_color }}
-            {{ markup_defaults_form.markup_border_opacity }}
+        {# -- Markup defaults (subsection) --------------------------------------- #}
+        <div class="settings-subsection" id="markup-defaults-settings-section">
+            <h3 class="settings-subsection-title">
+                <i class="material-symbols-outlined">draw</i>
+                Markup
+            </h3>
+            <p class="settings-section-desc">Default colors and transparency applied when you add arrows, shapes, and text to a pin.</p>
 
-            <div class="settings-field">
-                <label class="settings-label">Fill Color &amp; Opacity</label>
-                <p class="settings-help">The main color of arrows, shapes, and text.</p>
-                <div class="cop-widget" id="cop-fill">
-                    <div class="cop-preview-wrap">
-                        <div class="cop-checkerboard"></div>
-                        <div class="cop-preview" id="cop-fill-preview"></div>
-                    </div>
-                    <div class="cop-controls">
-                        <div class="markup-color-swatches" id="cop-fill-swatches"></div>
-                        <div class="cop-alpha-row">
-                            <input type="range" class="cop-alpha-slider" id="cop-fill-opacity"
-                                   min="0" max="100" value="{{ markup_defaults_form.markup_fill_opacity.value|default:87 }}"
-                                   oninput="copUpdate('fill')">
-                            <span class="cop-alpha-val" id="cop-fill-opacity-val">{{ markup_defaults_form.markup_fill_opacity.value|default:87 }}</span><span class="cop-pct">%</span>
+            <form method="post" class="settings-form" id="markup-defaults-form">
+                {% csrf_token %}
+                <input type="hidden" name="section" value="markup_defaults">
+                {{ markup_defaults_form.markup_fill_color }}
+                {{ markup_defaults_form.markup_fill_opacity }}
+                {{ markup_defaults_form.markup_border_color }}
+                {{ markup_defaults_form.markup_border_opacity }}
+
+                <div class="settings-field">
+                    <label class="settings-label">Fill Color &amp; Opacity</label>
+                    <p class="settings-help">The main color of arrows, shapes, and text.</p>
+                    <div class="cop-widget" id="cop-fill">
+                        <div class="cop-preview-wrap">
+                            <div class="cop-checkerboard"></div>
+                            <div class="cop-preview" id="cop-fill-preview"></div>
+                        </div>
+                        <div class="cop-controls">
+                            <div class="markup-color-swatches" id="cop-fill-swatches"></div>
+                            <div class="cop-alpha-row">
+                                <input type="range" class="cop-alpha-slider" id="cop-fill-opacity"
+                                       min="0" max="100" value="{{ markup_defaults_form.markup_fill_opacity.value|default:87 }}"
+                                       oninput="copUpdate('fill')">
+                                <span class="cop-alpha-val" id="cop-fill-opacity-val">{{ markup_defaults_form.markup_fill_opacity.value|default:87 }}</span><span class="cop-pct">%</span>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
 
-            <div class="settings-field">
-                <label class="settings-label">Border Color &amp; Opacity</label>
-                <p class="settings-help">Outline color for shapes and arrows. Leave as "None" for no border.</p>
-                <div class="cop-widget" id="cop-border">
-                    <div class="cop-preview-wrap">
-                        <div class="cop-checkerboard"></div>
-                        <div class="cop-preview" id="cop-border-preview"></div>
-                    </div>
-                    <div class="cop-controls">
-                        <div class="markup-color-swatches" id="cop-border-swatches"></div>
-                        <div class="cop-alpha-row">
-                            <input type="range" class="cop-alpha-slider" id="cop-border-opacity"
-                                   min="0" max="100" value="{{ markup_defaults_form.markup_border_opacity.value|default:100 }}"
-                                   oninput="copUpdate('border')">
-                            <span class="cop-alpha-val" id="cop-border-opacity-val">{{ markup_defaults_form.markup_border_opacity.value|default:100 }}</span><span class="cop-pct">%</span>
+                <div class="settings-field">
+                    <label class="settings-label">Border Color &amp; Opacity</label>
+                    <p class="settings-help">Outline color for shapes and arrows. Leave as "None" for no border.</p>
+                    <div class="cop-widget" id="cop-border">
+                        <div class="cop-preview-wrap">
+                            <div class="cop-checkerboard"></div>
+                            <div class="cop-preview" id="cop-border-preview"></div>
+                        </div>
+                        <div class="cop-controls">
+                            <div class="markup-color-swatches" id="cop-border-swatches"></div>
+                            <div class="cop-alpha-row">
+                                <input type="range" class="cop-alpha-slider" id="cop-border-opacity"
+                                       min="0" max="100" value="{{ markup_defaults_form.markup_border_opacity.value|default:100 }}"
+                                       oninput="copUpdate('border')">
+                                <span class="cop-alpha-val" id="cop-border-opacity-val">{{ markup_defaults_form.markup_border_opacity.value|default:100 }}</span><span class="cop-pct">%</span>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
 
-            <div class="settings-actions">
-                <button type="submit" class="settings-save-btn">Save</button>
-            </div>
-        </form>
+                <div class="settings-actions">
+                    <button type="submit" class="settings-save-btn">Save</button>
+                </div>
+            </form>
+        </div>
+        </div>
     </section>
+    </div> {# /tab-panel-map #}
 
-    {# -- AI Features --------------------------------------------------------- #}
+    {# ======================================================================= #}
+    {# AI tab (only exists for users whose subscription grants AI features)    #}
+    {# ======================================================================= #}
     {% if can_use_ai_features %}
+    <div class="settings-tab-panel" data-tab-panel="ai" id="tab-panel-ai">
+
+    {# -- AI Features ----------------------------------------------------------- #}
     <section class="settings-section ul-section" id="ai-settings-section">
         <div class="settings-section-header">
             <i class="material-symbols-outlined">auto_awesome</i>
             <div>
                 <h2 class="settings-section-title">AI Features</h2>
-                <p class="settings-section-desc">Control how AI is used when organizing your pins.</p>
+                <p class="settings-section-desc">Everything AI-related in one place. Turning the master switch off disables all AI features on your account at once.</p>
             </div>
         </div>
 
@@ -662,37 +1211,43 @@
             </div>
 
             <div class="settings-ai-sub-options" id="ai-sub-options">
-                <p class="settings-help" style="margin-bottom:0.75rem;">When a pin is created, AI can automatically add these badge types:</p>
+                <p class="settings-help" style="margin-bottom:0.75rem;">When a pin is created, AI can automatically add these label types:</p>
 
                 <div class="settings-field">
                     <label class="settings-toggle-row">
-                        {{ ai_form.ai_badge_categories }}
+                        {{ ai_form.ai_label_categories }}
                         <span class="settings-toggle-label">
-                            <strong>{{ ai_form.ai_badge_categories.label }}</strong>
-                            <span class="settings-help">{{ ai_form.ai_badge_categories.help_text }}</span>
+                            <strong>{{ ai_form.ai_label_categories.label }}</strong>
+                            <span class="settings-help">{{ ai_form.ai_label_categories.help_text }}</span>
                         </span>
                     </label>
                 </div>
 
                 <div class="settings-field">
                     <label class="settings-toggle-row">
-                        {{ ai_form.ai_badge_tags }}
+                        {{ ai_form.ai_label_tags }}
                         <span class="settings-toggle-label">
-                            <strong>{{ ai_form.ai_badge_tags.label }}</strong>
-                            <span class="settings-help">{{ ai_form.ai_badge_tags.help_text }}</span>
+                            <strong>{{ ai_form.ai_label_tags.label }}</strong>
+                            <span class="settings-help">{{ ai_form.ai_label_tags.help_text }}</span>
                         </span>
                     </label>
                 </div>
 
                 <div class="settings-field">
                     <label class="settings-toggle-row">
-                        {{ ai_form.ai_badge_statuses }}
+                        {{ ai_form.ai_label_statuses }}
                         <span class="settings-toggle-label">
-                            <strong>{{ ai_form.ai_badge_statuses.label }}</strong>
-                            <span class="settings-help">{{ ai_form.ai_badge_statuses.help_text }}</span>
+                            <strong>{{ ai_form.ai_label_statuses.label }}</strong>
+                            <span class="settings-help">{{ ai_form.ai_label_statuses.help_text }}</span>
                         </span>
                     </label>
                 </div>
+
+                <p class="settings-help" style="margin:0.75rem 0 0;">
+                    AI can also read external links on your pin detail pages to fill in supported fields -
+                    look for the <i class="material-symbols-outlined" aria-hidden="true" style="font-size:1rem;vertical-align:middle;">auto_awesome</i>
+                    button next to each link. Results are reviewable on the page linked from each completion notification.
+                </p>
             </div>
 
             <div class="settings-actions">
@@ -700,7 +1255,34 @@
             </div>
         </form>
     </section>
+    </div> {# /tab-panel-ai #}
     {% endif %}
+
+    {# ======================================================================= #}
+    {# Account tab                                                             #}
+    {# ======================================================================= #}
+    <div class="settings-tab-panel" data-tab-panel="account" id="tab-panel-account">
+
+    {# -- Account Info ------------------------------------------------------------ #}
+    <section class="settings-section ul-section" id="account-info-settings-section">
+        <div class="settings-section-header">
+            <i class="material-symbols-outlined">badge</i>
+            <div>
+                <h2 class="settings-section-title">Account Info</h2>
+                <p class="settings-section-desc">Basic facts about your account.</p>
+            </div>
+        </div>
+
+        <div class="settings-section-body">
+            <p class="settings-help">
+                {% if request.user.profile.tos_accepted_at %}
+                Terms of Service accepted on {{ request.user.profile.tos_accepted_at|date:"N j, Y" }}.
+                {% else %}
+                No Terms of Service acceptance on record.
+                {% endif %}
+            </p>
+        </div>
+    </section>
 
     {# -- Storage --------------------------------------------------------------- #}
     <section class="settings-section ul-section" id="storage-settings-section">
@@ -748,6 +1330,22 @@
                     {% endif %}
                 </div>
 
+                {% if can_upload_videos %}
+                <div class="settings-field">
+                    <label class="settings-label" for="id_video_downscale_max_height">Video quality</label>
+                    <p class="settings-help">
+                        Videos are downscaled to this height when stored. Choosing a lower quality lets more
+                        video fit in your storage. Applies to future uploads only - existing videos are not
+                        changed.
+                    </p>
+                    <select class="settings-select browser-default" name="video_downscale_max_height" id="id_video_downscale_max_height">
+                        {% for option in storage_video_downscale_options %}
+                        <option value="{{ option.value }}"{% if option.selected %} selected{% endif %}>{{ option.label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {% endif %}
+
                 <div class="settings-actions">
                     <button type="submit" class="settings-save-btn">Save</button>
                 </div>
@@ -756,7 +1354,7 @@
     </section>
 
     {# -- Notifications ------------------------------------------------------- #}
-    <section class="settings-section ul-section">
+    <section class="settings-section ul-section" id="notifications-settings-section">
         <div class="settings-section-header">
             <i class="material-symbols-outlined">notifications</i>
             <div>
@@ -795,7 +1393,7 @@
     </section>
 
     {# -- Undo history ------------------------------------------------------------ #}
-    <section class="settings-section ul-section">
+    <section class="settings-section ul-section" id="undo-history-settings-section">
         <div class="settings-section-header">
             <i class="material-symbols-outlined">history</i>
             <div>
@@ -814,7 +1412,7 @@
     </section>
 
     {# -- Danger Zone ----------------------------------------------------------- #}
-    <section class="settings-section ul-section settings-section--danger">
+    <section class="settings-section ul-section settings-section--danger" id="danger-zone-settings-section">
         <div class="settings-section-header">
             <i class="material-symbols-outlined">warning</i>
             <div>
@@ -851,6 +1449,50 @@
             </div>
         </div>
     </section>
+    </div> {# /tab-panel-account #}
+
+    {# ======================================================================= #}
+    {# Advanced tab                                                            #}
+    {# ======================================================================= #}
+    <div class="settings-tab-panel" data-tab-panel="advanced" id="tab-panel-advanced">
+
+    {# -- Customize (custom fields) ------------------------------------------- #}
+    <section class="settings-section ul-section" id="customize-settings-section">
+        <div class="settings-section-header">
+            <i class="material-symbols-outlined">tune</i>
+            <div>
+                <h2 class="settings-section-title">Custom Fields
+                    {% include "dashboard/partials/ui/_page_explainer_anchor.html" with explainer_id="custom-fields-explainer" %}
+                </h2>
+                <p class="settings-section-desc">Define your own fields for pins, photos, people, and maps. Only you can see them.</p>
+            </div>
+        </div>
+
+        <div class="settings-section-body">
+            {% include "dashboard/partials/ui/_page_explainer.html" with explainer_id="custom-fields-explainer" kicker="Personal metadata" heading="Make your own fields." body="Track anything about a pin, photo, person, or map that UrbanLens doesn't already have a field for. Custom fields are private to you - they never show up to anyone else, even on a pin or map you've shared." %}
+
+            <div id="custom-fields-settings"
+                 hx-get="{% url 'custom_fields.settings' %}"
+                 hx-trigger="load"
+                 hx-swap="innerHTML">
+                <p class="settings-help">Loading...</p>
+            </div>
+        </div>
+    </section>
+
+    {# -- API keys -------------------------------------------------------------- #}
+    <section class="settings-section ul-section" id="api-keys-settings-section">
+        <div class="settings-section-header">
+            <i class="material-symbols-outlined">vpn_key</i>
+            <div>
+                <h2 class="settings-section-title">API Keys</h2>
+                <p class="settings-section-desc">Let another application create pins on your behalf.</p>
+            </div>
+        </div>
+
+        {% include "dashboard/partials/settings/_api_keys_section_body.html" %}
+    </section>
+    </div> {# /tab-panel-advanced #}
 </div>
 
 {% include "dashboard/partials/account/_delete_account_dialog.html" %}
@@ -859,6 +1501,289 @@
 {% block scripts %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="{% static 'dashboard/js/e2ee.js' %}"></script>
+<script src="{% static 'dashboard/js/webauthn.js' %}"></script>
+<script src="{% static 'dashboard/js/permissions.js' %}"></script>
+{% include "dashboard/partials/ui/_priority_list_script.html" %}
+<script>
+// -- Tabs: switch panels, keep deep links (e.g. #immich-settings-section) working -----
+(function () {
+    var tabs = document.querySelectorAll('.settings-tab');
+    var panels = document.querySelectorAll('.settings-tab-panel');
+
+    function activateTab(name, opts) {
+        var found = false;
+        tabs.forEach(function (btn) {
+            var active = btn.dataset.tab === name;
+            if (active) found = true;
+            btn.classList.toggle('active', active);
+            btn.setAttribute('aria-selected', active ? 'true' : 'false');
+        });
+        if (!found) return;
+        panels.forEach(function (panel) {
+            panel.classList.toggle('active', panel.dataset.tabPanel === name);
+        });
+        // The Leaflet preview map is created while its tab may be hidden, which
+        // leaves it with a zero-size viewport - refresh it once the tab is shown.
+        if (name === 'map' && window.__settingsPreviewMap) {
+            setTimeout(function () { window.__settingsPreviewMap.invalidateSize(); }, 0);
+        }
+        if (!(opts && opts.silent)) {
+            try { history.replaceState(null, '', '#tab-' + name); } catch (e) { /* noop */ }
+        }
+    }
+
+    tabs.forEach(function (btn) {
+        btn.addEventListener('click', function () { activateTab(btn.dataset.tab); });
+    });
+
+    function activateFromHash() {
+        var hash = window.location.hash.replace('#', '');
+        if (!hash) return;
+        if (hash.indexOf('tab-') === 0) {
+            activateTab(hash.slice(4), { silent: true });
+            return;
+        }
+        var target = document.getElementById(hash);
+        if (!target) return;
+        var panel = target.closest('.settings-tab-panel');
+        if (!panel) return;
+        activateTab(panel.dataset.tabPanel, { silent: true });
+        setTimeout(function () { target.scrollIntoView({ block: 'start' }); }, 50);
+    }
+
+    activateFromHash();
+    window.addEventListener('hashchange', activateFromHash);
+}());
+</script>
+<script>
+// -- Security section: add-passkey, passkey rename autosave, TOTP code entry --
+// Event-delegated on document (rather than bound directly to the elements)
+// because #security-settings-section-body is swapped wholesale by htmx after
+// every TOTP/backup-code action - a direct binding would go stale the first
+// time any of those forms submit.
+(function () {
+    document.addEventListener('click', function (e) {
+        var addBtn = e.target.closest('#add-passkey-btn');
+        if (!addBtn || !window.UrbanLensWebAuthn) return;
+        addBtn.disabled = true;
+        UrbanLensWebAuthn.registerPasskey({
+            optionsUrl: "{% url 'settings.security.passkeys.options' %}",
+            registerUrl: "{% url 'settings.security.passkeys.register' %}",
+        }).then(function (result) {
+            addBtn.disabled = false;
+            if (result.ok) {
+                if (window.toastr) toastr.success('Passkey added.');
+                window.location.reload();
+            } else if (window.toastr) {
+                toastr.error(result.error || 'Could not add that passkey.');
+            }
+        });
+    });
+
+    // -- Passkey rename: autosave on blur/Enter, no separate Save button ------
+    function getCsrf() {
+        var m = document.cookie.match(/csrftoken=([^;]+)/);
+        return m ? m[1] : '';
+    }
+    function savePasskeyName(input) {
+        var form = input.closest('.passkey-rename-form');
+        if (!form) return;
+        input.disabled = true;
+        fetch(form.action, {
+            method: 'POST',
+            body: new FormData(form),
+            headers: { 'X-CSRFToken': getCsrf(), 'X-Requested-With': 'XMLHttpRequest' },
+        }).then(function (r) { return r.ok; }).then(function (ok) {
+            input.disabled = false;
+            if (!ok && window.toastr) toastr.error('Could not rename that passkey.');
+        }).catch(function () {
+            input.disabled = false;
+            if (window.toastr) toastr.error('Could not rename that passkey.');
+        });
+    }
+    document.addEventListener('focusout', function (e) {
+        if (e.target.matches && e.target.matches('.passkey-rename-form .passkey-name-input')) {
+            savePasskeyName(e.target);
+        }
+    });
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' && e.target.matches && e.target.matches('.passkey-rename-form .passkey-name-input')) {
+            e.preventDefault();
+            e.target.blur();
+        }
+    });
+
+    // -- TOTP code entry: strip spaces/non-digits as the user types or pastes -
+    document.addEventListener('input', function (e) {
+        if (e.target.id === 'totp-confirm-code') {
+            e.target.value = e.target.value.replace(/\D/g, '').slice(0, 6);
+        }
+    });
+}());
+</script>
+<script>
+// -- Encryption card: status, recovery key, unlock, reset ----------------------
+(function () {
+    var card = document.getElementById('e2ee-card');
+    if (!card || !window.UrbanLensE2EE) return;
+    UrbanLensE2EE.init({
+        selfSlug: "{{ self_slug }}",
+        urls: {
+            loginParams: "{% url 'e2ee.login_params' %}",
+            enroll: "{% url 'e2ee.enroll' %}",
+            keys: "{% url 'e2ee.keys' %}",
+            rewrap: "{% url 'e2ee.rewrap' %}",
+            rewrapAll: "{% url 'e2ee.rewrap_all' %}",
+            reset: "{% url 'e2ee.reset' %}",
+            partnerKeyBase: "{% url 'e2ee.keys' %}",
+            conversationKeyBase: "{% url 'e2ee.conversation_key' 'e2ee-slug-token' %}".replace("e2ee-slug-token/", ""),
+            changePassword: "{% url 'e2ee.change_password' %}",
+            login: "{% url 'login' %}",
+            faqUrl: "{% url 'faq' %}#faq-e2ee",
+        },
+    });
+
+    // -- Change / set password (Security tab) -------------------------------
+    var passwordForm = document.getElementById('password-change-form');
+    if (passwordForm) {
+        passwordForm.addEventListener('submit', function (e) {
+            e.preventDefault();
+            var hasCurrent = passwordForm.dataset.hasPassword === '1';
+            var currentInput = document.getElementById('password-current');
+            var newInput = document.getElementById('password-new');
+            var confirmInput = document.getElementById('password-confirm');
+            var submitBtn = document.getElementById('password-change-submit');
+            var current = currentInput ? currentInput.value : '';
+            if (hasCurrent && !current) {
+                if (window.toastr) toastr.error('Type your current password first.');
+                return;
+            }
+            if (newInput.value !== confirmInput.value) {
+                if (window.toastr) toastr.error("Those passwords don't match.");
+                return;
+            }
+            submitBtn.disabled = true;
+            UrbanLensE2EE.changePassword(current, newInput.value, passwordForm.dataset.username).then(function (result) {
+                if (result.ok) {
+                    if (window.toastr) toastr.success(hasCurrent ? 'Your password has been changed.' : 'Your password has been set. You can now log in with it.');
+                    if (currentInput) currentInput.value = '';
+                    newInput.value = '';
+                    confirmInput.value = '';
+                    if (!hasCurrent) window.location.reload();
+                } else if (window.toastr) {
+                    toastr.error(result.error || 'Could not change your password.');
+                }
+            }).catch(function () {
+                if (window.toastr) toastr.error('Could not change your password. Please try again.');
+            }).finally(function () {
+                submitBtn.disabled = false;
+            });
+        });
+    }
+
+    var status = document.getElementById('e2ee-status');
+    var viewBtn = document.getElementById('e2ee-view-recovery');
+    var unlockBtn = document.getElementById('e2ee-unlock');
+    var resetBtn = document.getElementById('e2ee-reset');
+    var hasPassword = card.dataset.hasPassword === '1';
+
+    function setStatus(text) { status.textContent = text; }
+
+    UrbanLensE2EE.getUnlockState().then(function (state) {
+        if (state === 'not-enrolled') {
+            setStatus('Encryption is not set up yet on your account. Sign in again or open Messages to finish setup.');
+            return;
+        }
+        if (state === 'unlocked') {
+            setStatus('Encryption is active and this device can read your messages.');
+            viewBtn.hidden = false;
+            resetBtn.hidden = false;
+        } else {
+            setStatus("This device can't read your encrypted messages yet. Unlock it with your password or recovery key.");
+            unlockBtn.hidden = false;
+            resetBtn.hidden = false;
+        }
+    });
+
+    viewBtn.addEventListener('click', function () {
+        UrbanLensE2EE.regenerateRecoveryKey().then(function (display) {
+            if (display) {
+                UrbanLensE2EE.showRecoveryDialog(display);
+            } else if (window.toastr) {
+                toastr.error('Could not generate a recovery key. This device may be locked.');
+            }
+        });
+    });
+
+    unlockBtn.addEventListener('click', function () {
+        UrbanLensE2EE.showUnlockDialog().then(function (ok) {
+            if (ok) window.location.reload();
+        });
+    });
+
+    resetBtn.addEventListener('click', function () {
+        UrbanLensE2EE.showResetDialog(hasPassword).then(function (display) {
+            if (display) {
+                UrbanLensE2EE.showRecoveryDialog(display).then(function () { window.location.reload(); });
+            }
+        });
+    });
+}());
+</script>
+<script>
+// -- Browser permission cards: status + enable buttons --------------------------
+(function () {
+    var list = document.getElementById('browser-permissions-list');
+    if (!list || !window.UrbanLensPermissions) return;
+
+    var STATUS_TEXT = {
+        // Browsers don't let a website revoke a permission it was granted -
+        // once granted, disabling it is only possible from the browser's own
+        // site settings (there is no "disable" button to offer here).
+        granted: "Enabled. To disable, use your browser's site settings.",
+        denied: "Blocked - change this in your browser's site settings to re-enable.",
+        prompt: 'Not enabled yet.',
+        unsupported: "Not supported by this browser.",
+    };
+
+    var GETTERS = {
+        location: UrbanLensPermissions.getLocationPermissionState,
+        notifications: UrbanLensPermissions.getNotificationPermissionState,
+    };
+    var REQUESTERS = {
+        location: UrbanLensPermissions.requestLocationPermission,
+        notifications: UrbanLensPermissions.requestNotificationPermission,
+    };
+
+    function applyState(card, state) {
+        var statusEl = card.querySelector('[data-status]');
+        var enableBtn = card.querySelector('[data-enable]');
+        statusEl.textContent = STATUS_TEXT[state] || STATUS_TEXT.unsupported;
+        statusEl.classList.remove('settings-permission-status--granted', 'settings-permission-status--denied');
+        if (state === 'granted') statusEl.classList.add('settings-permission-status--granted');
+        if (state === 'denied') statusEl.classList.add('settings-permission-status--denied');
+        enableBtn.hidden = state !== 'prompt';
+    }
+
+    Array.prototype.forEach.call(list.querySelectorAll('.settings-permission-card'), function (card) {
+        var key = card.dataset.permission;
+        var getState = GETTERS[key];
+        if (!getState) return;
+
+        getState().then(function (state) { applyState(card, state); });
+
+        var enableBtn = card.querySelector('[data-enable]');
+        enableBtn.addEventListener('click', function () {
+            REQUESTERS[key]().then(function (state) {
+                applyState(card, state);
+                if (state === 'granted' && window.toastr) toastr.success('Permission enabled.');
+                if (state === 'denied' && window.toastr) toastr.warning('Permission was denied.');
+            });
+        });
+    });
+}());
+</script>
 <script>
 function applyThemePreview(theme) {
     var root = document.getElementById('html-root');
@@ -931,14 +1856,35 @@ function applyGuidancePreview(level) {
 
     // Initialise the preview Leaflet map. Tiles come from the shared
     // window.MapLayers factory so the preview always matches the real maps.
-    var previewMap = L.map('map-center-preview').setView([previewLat, previewLng], previewZoom);
+    var previewMap = L.map('map-center-preview', { attributionControl: false }).setView([previewLat, previewLng], previewZoom);
+    window.__settingsPreviewMap = previewMap;
     var _previewTileLayer = window.MapLayers.tileLayer(_currentMapViewTile).addTo(previewMap);
+
+    // Replaces Leaflet's on-map attribution control (disabled above) - reads
+    // the attribution straight off the active tile layer's own options
+    // rather than duplicating each source's attribution string here.
+    function _updatePreviewAttribution() {
+        var el = document.getElementById('map-center-preview-attribution');
+        if (el) el.innerHTML = _previewTileLayer.options.attribution || '';
+    }
+    _updatePreviewAttribution();
 
     // Switch the preview tile layer when the user picks a different map view.
     document.querySelectorAll('input[name="default_map_view"]').forEach(function (radio) {
         radio.addEventListener('change', function () {
             previewMap.removeLayer(_previewTileLayer);
             _previewTileLayer = window.MapLayers.tileLayer(radio.value).addTo(previewMap);
+            _updatePreviewAttribution();
+            // The server only stamps .active on the saved value at render time;
+            // without clearing it here too, the newly-picked tile gets
+            // highlighted via the :has(input:checked) CSS fallback while the
+            // old server-rendered .active class stays on the previous tile,
+            // showing two tiles selected at once (same fix map_center_mode's
+            // selectMapMode() already applies to its own tile group).
+            document.querySelectorAll('input[name="default_map_view"]').forEach(function (other) {
+                var tile = other.closest('.settings-option-tile');
+                if (tile) tile.classList.toggle('active', other === radio);
+            });
         });
     });
 
@@ -996,10 +1942,13 @@ function applyGuidancePreview(level) {
             marker.dragging.disable();
             customField.style.display = 'none';
         }
-        // Update active pill styling.
-        document.querySelectorAll('.settings-map-view-option').forEach(function (el) {
-            var radio = el.querySelector('input[type=radio]');
-            el.classList.toggle('active', radio && radio.value === mode);
+        // Update active pill styling. Scoped to this radio group specifically -
+        // other pill groups on the page (Default Map View, Cluster Radius) reuse
+        // some of the same values ("remember", "auto"), so an unscoped selector
+        // here would cross-highlight their pills too.
+        document.querySelectorAll('input[name="map_center_mode"]').forEach(function (radio) {
+            var el = radio.closest('.settings-option-tile');
+            if (el) el.classList.toggle('active', radio.value === mode);
         });
     }
 
@@ -1007,7 +1956,7 @@ function applyGuidancePreview(level) {
     var _AUTO_ZOOM = 11;  // slightly wider - shows a whole pin cluster
 
     window.selectMapMode = function (mode) {
-        // Select the matching hidden radio input.
+        // Select the matching radio input.
         var radio = document.querySelector('input[name="map_center_mode"][value="' + mode + '"]');
         if (radio) radio.checked = true;
         applyMode(mode);
@@ -1028,6 +1977,14 @@ function applyGuidancePreview(level) {
             }
         }
         // Custom: keep whatever zoom the user last set.
+
+        // Setting .checked directly above does not fire a native "change"
+        // event, so the form's autosave listener (which only reacts to real
+        // "change" events) would otherwise never see this as a save-worthy
+        // edit and the choice would silently revert on the next page load.
+        // Dispatch one manually, after the mode-specific field updates above,
+        // so the autosave submits the fully-settled state.
+        if (radio) radio.dispatchEvent(new Event('change', { bubbles: true }));
     };
 
     // Geocode an address string and move the preview map there.
@@ -1227,9 +2184,21 @@ window.updateClusterRadius = function (value) {
         var el = _indicators[formId];
         if (!el) return;
         el.textContent = '✓ Saved';
+        el.classList.remove('settings-autosave-indicator--error');
         el.style.opacity = '1';
         clearTimeout(el._t);
         el._t = setTimeout(function () { el.style.opacity = '0'; }, 2500);
+    }
+
+    function showSaveError(formId, message) {
+        var el = _indicators[formId];
+        if (!el) return;
+        el.textContent = message || 'Could not save';
+        el.classList.add('settings-autosave-indicator--error');
+        el.style.opacity = '1';
+        clearTimeout(el._t);
+        el._t = setTimeout(function () { el.style.opacity = '0'; }, 4000);
+        if (window.toastr) toastr.error(message || 'Could not save your changes. Please try again.');
     }
 
     function doSave(form) {
@@ -1238,8 +2207,27 @@ window.updateClusterRadius = function (value) {
         fetch(form.action || window.location.href, {
             method: 'POST',
             body: new FormData(form),
-            headers: { 'X-CSRFToken': getCsrf() },
+            headers: { 'X-CSRFToken': getCsrf(), 'X-Requested-With': 'XMLHttpRequest' },
         }).then(function (r) {
+            // A validation failure still comes back with a 200 (either the JSON
+            // {ok:false} verdict below, or - for section branches that don't check
+            // is_xhr - a redirect-then-200 full page fetch() silently followed) so
+            // status alone can't tell success from failure; the response body must
+            // be inspected too.
+            var ct = r.headers.get('content-type') || '';
+            if (ct.indexOf('application/json') !== -1) {
+                return r.json().then(function (data) {
+                    if (data.ok === false) {
+                        if (guard) guard.markDirty();
+                        var firstError = data.errors && Object.keys(data.errors).length
+                            ? Object.values(data.errors)[0][0] : null;
+                        showSaveError(form.id, firstError);
+                        return;
+                    }
+                    if (guard) guard.markClean();
+                    showSaved(form.id);
+                });
+            }
             if (r.ok && guard) guard.markClean();
             if (r.ok) showSaved(form.id);
         }).catch(function () {}).finally(function () {
@@ -1294,6 +2282,23 @@ window.updateClusterRadius = function (value) {
 (function () {
     var masterToggle = document.getElementById('{{ ai_form.ai_enabled.id_for_label }}');
     var subOptions   = document.getElementById('ai-sub-options');
+    if (!masterToggle || !subOptions) return;
+
+    function syncSubOptions() {
+        subOptions.style.opacity = masterToggle.checked ? '' : '0.4';
+        subOptions.querySelectorAll('input').forEach(function (inp) {
+            inp.disabled = !masterToggle.checked;
+        });
+    }
+
+    masterToggle.addEventListener('change', syncSubOptions);
+    syncSubOptions();
+}());
+
+// -- Keyword tagging: toggle sub-options when master switch is flipped ---------
+(function () {
+    var masterToggle = document.getElementById('{{ keyword_tagging_form.keyword_tagging_enabled.id_for_label }}');
+    var subOptions   = document.getElementById('keyword-tagging-sub-options');
     if (!masterToggle || !subOptions) return;
 
     function syncSubOptions() {

@@ -1,0 +1,32 @@
+{% comment %}
+`@trip` invite dialog: pick one of the sender's upcoming trips (or plan a new
+one) to invite the conversation partner to. Picking one stages it as a
+composer attachment - see `_share_pin_dialog.html`. Context: `partner`, `trips`.
+{% endcomment %}
+<dialog id="dm-share-dialog" class="dm-share-dialog ul-dialog" data-kind="trip" data-field-name="trip_slug">
+  <div class="dialog-header">
+    <span>Invite {{ partner.username }} to a trip</span>
+    <button type="button" class="dialog-close" onclick="this.closest('dialog').close()">
+      <i class="material-symbols-outlined">close</i>
+    </button>
+  </div>
+
+  <div class="dm-share-step">
+    <input type="search" class="dm-share-filter" placeholder="Search your trips..." oninput="window.dmFilterShareList(this)">
+    <ul class="dm-share-list">
+      <li class="dm-share-list-item" data-search="plan a new trip">
+        <a class="dm-share-pick-btn" href="{% url 'trips.list' %}">
+          <i class="material-symbols-outlined">add</i> Plan a new trip
+        </a>
+      </li>
+      {% for trip in trips %}
+      <li class="dm-share-list-item" data-search="{{ trip.name|lower }}">
+        <button type="button" class="dm-share-pick-btn" data-value="{{ trip.slug }}" data-label="{{ trip.name }}" onclick="window.dmSharePick(this)">
+          <i class="material-symbols-outlined">luggage</i> {{ trip.name }}
+        </button>
+      </li>
+      {% endfor %}
+    </ul>
+    {% if not trips %}<p class="dm-share-empty">You're not on any trips yet - plan one above.</p>{% endif %}
+  </div>
+</dialog>

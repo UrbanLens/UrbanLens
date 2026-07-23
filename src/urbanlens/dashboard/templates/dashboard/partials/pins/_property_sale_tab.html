@@ -1,0 +1,53 @@
+
+{% if sales %}
+<div class="po-sale-list">
+    {% for sale in sales %}
+    <div class="po-sale-row" id="po-sale-{{ sale.id }}">
+        <div class="po-sale-main">
+            <span class="po-sale-date">{{ sale.sale_date|default:"Undated" }}</span>
+            {% if sale.sale_price %}<span class="po-sale-price">${{ sale.sale_price|floatformat:2 }}</span>{% endif %}
+            {% if show_official_badge and sale.source == "official" %}
+            <span class="po-badge po-badge--official" title="Official data - not directly editable">
+                <i class="material-symbols-outlined">verified</i>Official
+            </span>
+            {% else %}
+            <button type="button" class="btn btn--icon-sm po-sale-delete" title="Delete sale record"
+                    hx-delete="{% url url_delete obj_slug sale.id %}"
+                    hx-target="closest .po-tab-body"
+                    hx-swap="innerHTML"
+                    hx-confirm="Delete this sale record?">
+                <i class="material-symbols-outlined">close</i>
+            </button>
+            {% endif %}
+        </div>
+        <div class="po-sale-parties">
+            <span class="po-sale-party">
+                {% for owner in sale.previous_owners.all %}{{ owner.name }}{% if not forloop.last %}, {% endif %}{% empty %}Unknown{% endfor %}
+            </span>
+            <i class="material-symbols-outlined po-sale-arrow">arrow_forward</i>
+            <span class="po-sale-party">
+                {% for owner in sale.new_owners.all %}{{ owner.name }}{% if not forloop.last %}, {% endif %}{% empty %}Unknown{% endfor %}
+            </span>
+        </div>
+        {% if sale.notes %}<p class="po-sale-notes">{{ sale.notes|linebreaksbr }}</p>{% endif %}
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<p class="po-panel-empty">No sale history recorded yet.</p>
+{% endif %}
+
+<form class="po-add-form po-sale-add-form" hidden
+      hx-post="{% url url_add obj_slug %}"
+      hx-target="closest .po-tab-body"
+      hx-swap="innerHTML">
+    {% csrf_token %}
+    <input type="text" name="previous_owners" class="po-input" placeholder="Previous owner(s), comma-separated (optional)" maxlength="500">
+    <input type="text" name="new_owners" class="po-input" placeholder="New owner(s), comma-separated (optional)" maxlength="500">
+    <input type="number" name="sale_price" class="po-input po-price-input" placeholder="Sale price" min="0" step="0.01">
+    <input type="date" name="sale_date" class="po-input">
+    <input type="text" name="notes" class="po-input" placeholder="Notes (optional)">
+    <button type="submit" class="btn btn--icon-sm po-add-btn" title="Record sale">
+        <i class="material-symbols-outlined">add</i>
+    </button>
+</form>

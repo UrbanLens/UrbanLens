@@ -1,0 +1,75 @@
+{% extends 'dashboard/themes/base.html' %}
+{% load static %}
+{% load memories_components %}
+
+{% block title %}Journal{% endblock %}
+
+{% block hero %}
+{% include "dashboard/partials/ui/_page_hero.html" with icon="auto_stories" title="Journal" subtitle="Your visit notes, ratings, and comments, all in one place." modifier="top" %}
+{% endblock %}
+
+{% block subnav %}
+<div class="ul-page-subnav">
+    <div class="ul-page-subnav__inner">
+        {% memories_tabs "journal" %}
+    </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="memories-journal-page" class="memories-tab-page">
+
+    <div class="page-inner">
+        {% if journal_entries %}
+        {% regroup journal_entries by occurred_at.date as day_groups %}
+        <div class="memories-journal-list">
+            {% for day in day_groups %}
+            <section class="memories-journal-day">
+                <h2 class="memories-timeline-group-title">{{ day.grouper|date:"l, F j, Y" }}</h2>
+                <div class="memories-journal-entries">
+                    {% for entry in day.list %}
+                    <a href="{{ entry.url }}" class="memories-journal-card memories-journal-card--{{ entry.kind }} card">
+                        <span class="memories-journal-icon memories-journal-icon--{{ entry.kind }}">
+                            <i class="material-symbols-outlined">{{ entry.icon }}</i>
+                        </span>
+                        <div class="memories-journal-body">
+                            <div class="memories-journal-meta">
+                                <span class="memories-journal-title">{{ entry.title }}</span>
+                                {% if entry.subtitle %}<span class="memories-journal-subtitle">{{ entry.subtitle }}</span>{% endif %}
+                                <time class="memories-journal-time" datetime="{{ entry.occurred_at|date:'c' }}">{{ entry.occurred_at|date:"g:i A" }}</time>
+                            </div>
+                            {% if entry.kind == "review" %}
+                            <div class="memories-journal-stars" aria-label="Rated {{ entry.rating }} out of 5 stars">
+                                {% for i in "12345" %}
+                                <i class="material-symbols-outlined">{% if forloop.counter <= entry.rating %}star{% else %}star_border{% endif %}</i>
+                                {% endfor %}
+                            </div>
+                            {% elif entry.body %}
+                            <p class="memories-journal-snippet">{{ entry.body|striptags|truncatechars:180 }}</p>
+                            {% endif %}
+                        </div>
+                    </a>
+                    {% endfor %}
+                </div>
+            </section>
+            {% endfor %}
+        </div>
+        {% else %}
+        <section class="visits-empty-state" aria-labelledby="journal-empty-title">
+            <div class="visits-empty-hero">
+                <span class="visits-empty-icon"><i class="material-symbols-outlined">auto_stories</i></span>
+                <span class="visits-empty-sparkle"><i class="material-symbols-outlined">auto_awesome</i></span>
+            </div>
+            <p class="visits-empty-kicker">Nothing here yet</p>
+            <h2 id="journal-empty-title">Your journal is empty.</h2>
+            <p>Add a note to a visit, rate a pin, or leave a comment, and it'll show up here.</p>
+            <div class="visits-empty-actions">
+                <a class="btn btn--primary" href="{% url 'map.view' %}">
+                    <i class="material-symbols-outlined">map</i> Explore your map
+                </a>
+            </div>
+        </section>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

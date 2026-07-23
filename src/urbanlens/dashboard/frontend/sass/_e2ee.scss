@@ -1,0 +1,284 @@
+// End-to-end encryption UI: recovery-key overlay, settings card, locked
+// banner, and the decrypt-in-place states shared by the messages page.
+
+@use 'variables' as *;
+
+.e2ee-recovery-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    background: rgba(15, 23, 42, .72);
+}
+
+.e2ee-recovery-dialog {
+    width: 100%;
+    max-width: 46rem;
+    background: var(--ul-surface, #fff);
+    color: var(--text, #1f2937);
+    border-radius: 16px;
+    padding: 1.75rem;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, .35);
+
+    h2 {
+        margin: 0 0 .75rem;
+        font-size: 1.25rem;
+        font-weight: 800;
+    }
+
+    p {
+        margin: 0 0 1rem;
+        font-size: .9rem;
+        line-height: 1.55;
+        color: var(--text-muted, #6b7280);
+    }
+}
+
+.e2ee-recovery-key {
+    display: block;
+    padding: .85rem 1rem;
+    margin-bottom: 1rem;
+    background: var(--ul-surface-alt, #f3f4f6);
+    border: 1px dashed var(--ul-border, #d1d5db);
+    border-radius: 10px;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 1rem;
+    letter-spacing: .06em;
+    word-break: break-all;
+    text-align: center;
+}
+
+.e2ee-recovery-actions {
+    display: flex;
+    gap: .6rem;
+    margin-bottom: 1.25rem;
+
+    button {
+        flex: 1;
+        padding: .6rem;
+        border: 1px solid var(--ul-border, #d1d5db);
+        border-radius: 9px;
+        background: var(--ul-surface, #fff);
+        color: var(--text, #1f2937);
+        font-weight: 600;
+        cursor: pointer;
+
+        &:hover {
+            background: var(--ul-surface-alt, #f3f4f6);
+        }
+    }
+}
+
+.e2ee-recovery-done {
+    width: 100%;
+    padding: .8rem;
+    border: none;
+    border-radius: 10px;
+    background: #4f46e5;
+    color: #fff;
+    font-weight: 700;
+    font-size: .95rem;
+    cursor: pointer;
+
+    &:hover {
+        background: #4338ca;
+    }
+}
+
+.e2ee-recovery-later {
+    width: 100%;
+    margin-top: .6rem;
+    padding: .4rem;
+    border: none;
+    background: none;
+    color: var(--text-muted, #9ca3af);
+    font-size: .82rem;
+    cursor: pointer;
+
+    &:hover {
+        text-decoration: underline;
+    }
+}
+
+// -- Settings encryption card --------------------------------------------------
+
+.settings-e2ee-card {
+    @include surface;
+    margin-top: 1.25rem;
+    padding: 1.1rem 1.25rem;
+}
+
+.settings-e2ee-title {
+    display: flex;
+    align-items: center;
+    gap: .45rem;
+    margin: 0 0 .5rem;
+    font-size: 1rem;
+    font-weight: 700;
+
+    i {
+        font-size: 1.15rem;
+        color: #4f46e5;
+    }
+}
+
+.settings-e2ee-status {
+    margin: .6rem 0 .85rem;
+    font-size: .88rem;
+    line-height: 1.5;
+    color: var(--text-muted, #6b7280);
+}
+
+.settings-e2ee-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .6rem;
+
+    button[hidden] {
+        display: none;
+    }
+}
+
+// -- Locked banner on the messages page ----------------------------------------
+
+.dm-locked-banner {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    padding: .7rem 1rem;
+    margin: .5rem;
+    border: 1px solid #fcd34d;
+    border-radius: 10px;
+    background: #fffbeb;
+    color: #92400e;
+    font-size: .85rem;
+
+    &[hidden] {
+        display: none;
+    }
+
+    button {
+        margin-left: auto;
+        padding: .4rem .8rem;
+        border: none;
+        border-radius: 8px;
+        background: #d97706;
+        color: #fff;
+        font-weight: 600;
+        cursor: pointer;
+
+        &:hover {
+            background: #b45309;
+        }
+    }
+}
+
+// -- Encrypted bubble states ---------------------------------------------------
+
+.dm-bubble__body.e2ee-pending {
+    font-style: italic;
+    opacity: .6;
+}
+
+.dm-bubble__body.e2ee-failed {
+    font-style: italic;
+    //color: $color-red-100;
+}
+
+// .dm-bubble is a column flex container, so a plain inline sibling after the
+// body span would land on its own row below the text instead of beside it -
+// float it over the bubble's own corner instead (.dm-bubble is already
+// position: relative).
+.dm-lock-icon {
+    position: absolute;
+    top: .4rem;
+    right: .5rem;
+    font-size: .8rem;
+    opacity: .8;
+    pointer-events: none;
+}
+
+.dm-e2ee-hint {
+    font-size: .75rem;
+    color: var(--text-muted, #9ca3af);
+    margin: .35rem 0 0;
+}
+
+// -- Unlock dialog (password and/or recovery key) ----------------------------
+
+.e2ee-unlock-label {
+    display: block;
+    margin-bottom: .9rem;
+    font-size: .8rem;
+    font-weight: 700;
+    color: var(--text-muted, #6b7280);
+
+    input {
+        display: block;
+        width: 100%;
+        margin-top: .35rem;
+        padding: .6rem .75rem;
+        border: 1px solid var(--ul-border, #d1d5db);
+        border-radius: 9px;
+        background: var(--ul-surface, #fff);
+        color: var(--text, #1f2937);
+        font-size: .95rem;
+    }
+}
+
+.e2ee-unlock-divider {
+    margin: .35rem 0 .9rem;
+    text-align: center;
+    font-size: .75rem;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    color: var(--text-muted, #9ca3af);
+}
+
+.e2ee-unlock-error {
+    color: #b91c1c;
+    font-size: .85rem;
+    margin: 0 0 .75rem;
+}
+
+.e2ee-unlock-cancel {
+    background: transparent !important;
+    border: none !important;
+    color: var(--text-muted, #6b7280) !important;
+}
+
+// -- Reset-keys dialog (merged confirm + password, with a progress state) ----
+
+.e2ee-reset-progress {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    color: var(--text-muted, #6b7280);
+    font-size: .85rem;
+    margin: 0 0 .75rem;
+}
+
+.e2ee-reset-spinner {
+    font-size: 1rem;
+    animation: e2ee-reset-spin 1s linear infinite;
+}
+
+@keyframes e2ee-reset-spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.e2ee-reset-cancel {
+    background: transparent !important;
+    border: none !important;
+    color: var(--text-muted, #6b7280) !important;
+}
+
+.e2ee-reset-submit:disabled,
+.e2ee-reset-cancel:disabled {
+    opacity: .6;
+    cursor: not-allowed;
+}

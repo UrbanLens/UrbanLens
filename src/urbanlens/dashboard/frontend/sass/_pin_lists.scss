@@ -1,0 +1,859 @@
+@use 'sass:color';
+@use 'variables' as *;
+
+// -- Pin Lists --------------------------------------------------------------
+
+.pin-lists-page {
+    padding-bottom: 3rem;
+}
+
+// -- Lists / Filters tab toggle -------------------------------------------
+.lists-view-toggle {
+    margin: 0 1.25rem 1rem;
+
+    @include up($breakpoint-sm) {
+        margin: 0 2rem 1.25rem;
+    }
+}
+
+.lists-tab-panel[hidden] {
+    display: none;
+}
+
+// -- Toolbar ------------------------------------------------------------
+.pin-lists-toolbar {
+    display: flex;
+    flex-direction: column;
+    gap: .75rem;
+    margin-bottom: 1.25rem;
+    padding: 0 1.25rem;
+
+    @include up($breakpoint-sm) {
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 2rem;
+    }
+}
+
+.pin-lists-search {
+    width: 100%;
+    border: 1px solid var(--ul-surface-raised-border);
+    background: var(--ul-surface-raised);
+    color: var(--ul-grey-8);
+    border-radius: 8px;
+    padding: .5rem .75rem;
+    font-size: .88rem;
+
+    @include up($breakpoint-sm) {
+        max-width: 26rem;
+    }
+}
+
+.pin-lists-sort-control {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+}
+
+.pin-lists-sort-label {
+    display: flex;
+    align-items: center;
+    gap: .3rem;
+    font-size: .82rem;
+    font-weight: 600;
+    color: var(--ul-grey-6);
+    white-space: nowrap;
+
+    .material-symbols-outlined { font-size: 1.05rem; }
+}
+
+#pin-lists-sort-select {
+    border: 1px solid var(--ul-surface-raised-border);
+    background: var(--ul-surface-raised);
+    color: var(--ul-grey-8);
+    border-radius: 7px;
+    padding: .4rem .6rem;
+    font-size: .85rem;
+    cursor: pointer;
+}
+
+// -- Grid of list cards ---------------------------------------------------
+.pin-lists-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1rem;
+    padding: 0 1.25rem;
+
+    @include up($breakpoint-sm) {
+        grid-template-columns: repeat(2, 1fr);
+        padding: 0 2rem;
+    }
+
+    @include up($breakpoint-md) {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+.pin-list-card {
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+    padding: 1.1rem;
+    @include surface($radius: 12px);
+    text-decoration: none;
+    color: inherit;
+    transition: border-color .15s, transform .15s, box-shadow .15s;
+
+    &:hover {
+        border-color: $color-blue-500;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 14px rgba(0, 0, 0, .12);
+    }
+}
+
+.pin-list-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.pin-list-card-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    background: rgba(90, 150, 255, .14);
+    color: $color-blue-500;
+}
+
+.pin-list-card-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+    font-size: .68rem;
+    font-weight: 700;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: #2ea44f;
+    background: rgba(46, 164, 79, .14);
+    border-radius: 999px;
+    padding: .18rem .55rem;
+}
+
+.pin-list-card-title {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--ul-grey-8);
+}
+
+.pin-list-card-description {
+    margin: 0;
+    font-size: .85rem;
+    color: var(--ul-grey-6);
+    line-height: 1.4;
+}
+
+.pin-list-card-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: auto;
+    padding-top: .5rem;
+    font-size: .78rem;
+    color: var(--ul-grey-6);
+}
+
+.pin-list-card-count {
+    display: flex;
+    align-items: center;
+    gap: .25rem;
+
+    .material-symbols-outlined { font-size: 1rem; }
+}
+
+// -- Empty state ------------------------------------------------------------
+.pin-lists-empty {
+    text-align: center;
+    padding: 4rem 1.5rem;
+    color: var(--ul-grey-6);
+    max-width: 26rem;
+    margin: 0 auto;
+
+    h2 {
+        margin: 0 0 .35rem;
+        color: var(--ul-grey-8);
+        font-size: 1.15rem;
+    }
+
+    p {
+        margin: 0 0 1rem;
+        font-size: .88rem;
+    }
+}
+
+// -- Detail page --------------------------------------------------------
+.pin-list-detail-page {
+    padding-left: 1.25rem;
+    padding-right: 1.25rem;
+
+    @include up($breakpoint-sm) {
+        padding-left: 2rem;
+        padding-right: 2rem;
+    }
+}
+
+.pin-list-detail-count {
+    margin: 0;
+    color: var(--ul-grey-5);
+    font-size: .8rem;
+}
+
+// -- Click-to-edit-in-place title/description (hero) ------------------------
+
+.pin-list-title-editable,
+.pin-list-description-editable {
+    cursor: pointer;
+    border-radius: 6px;
+    padding: .1rem .4rem;
+    margin-left: -.4rem;
+    transition: background .15s;
+    display: inline-block;
+
+    &:hover,
+    &:focus-visible {
+        background: var(--ul-grey-0a);
+        outline: none;
+    }
+}
+
+.pin-list-title-input,
+.pin-list-description-input {
+    font: inherit;
+    font-weight: inherit;
+    line-height: inherit;
+    color: inherit;
+    background: var(--ul-control-bg);
+    border: 1px solid var(--ul-color-accent);
+    border-radius: 6px;
+    padding: .1rem .4rem;
+    margin-left: -.4rem;
+    outline: none;
+}
+
+.pin-list-description-input {
+    display: block;
+    width: 100%;
+    resize: vertical;
+}
+
+.pin-list-detail-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: .5rem;
+    align-items: center;
+    margin-bottom: 1.5rem;
+}
+
+.pin-list-trip-actions {
+    display: flex;
+    gap: .5rem;
+}
+
+// -- Overflow "more actions" menu ---------------------------------------------
+.pin-list-more-menu {
+    position: relative;
+}
+
+.pin-list-more-menu-panel {
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    min-width: 180px;
+    @include surface($radius: 10px, $rung: null);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, .18);
+    // Above the map's own controls/toolbar (z-index 1000, see .map-buttons /
+    // .map-layers-panel) - this menu sits earlier in the DOM than the map
+    // section but must still render on top of it when both occupy the same
+    // area of the page.
+    z-index: 1200;
+    padding: .35rem;
+    display: flex;
+    flex-direction: column;
+    gap: .1rem;
+
+    &[hidden] { display: none; }
+
+    button {
+        display: flex;
+        align-items: center;
+        gap: .55rem;
+        width: 100%;
+        border: none;
+        background: none;
+        color: var(--ul-grey-8);
+        font-size: .85rem;
+        text-align: left;
+        padding: .5rem .6rem;
+        border-radius: 7px;
+        cursor: pointer;
+
+        &:hover { background: var(--ul-hover-bg); }
+
+        .material-symbols-outlined { font-size: 1.1rem; color: var(--ul-grey-6); }
+
+        &:disabled {
+            opacity: .45;
+            cursor: not-allowed;
+
+            &:hover { background: none; }
+        }
+    }
+}
+
+.pin-list-more-menu-divider {
+    height: 1px;
+    background: var(--ul-surface-border);
+    margin: .3rem .2rem;
+}
+
+.pin-list-more-menu-danger {
+    color: #ef4444 !important;
+
+    .material-symbols-outlined { color: #ef4444 !important; }
+
+    &:hover { background: rgba(239, 68, 68, .12) !important; }
+}
+
+// -- Overview map of every pin on the list -----------------------------------
+.pin-list-map-section {
+    position: relative;
+    margin-bottom: 1.5rem;
+
+    &[hidden] { display: none; }
+}
+
+.pin-list-map {
+    height: 280px;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid var(--ul-surface-border);
+
+    @include up($breakpoint-sm) {
+        height: 360px;
+    }
+}
+
+// -- Smart config panel -----------------------------------------------------
+.pin-list-smart-panel {
+    @include surface($radius: 12px);
+    margin-bottom: 1.5rem;
+    overflow: hidden;
+}
+
+.pin-list-smart-panel-header {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    padding: 1rem 1.1rem;
+}
+
+.pin-list-smart-panel-toggle {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    flex: 1;
+    min-width: 0;
+    border: none;
+    background: none;
+    cursor: pointer;
+    text-align: left;
+    padding: 0;
+}
+
+.pin-list-smart-panel-title {
+    font-weight: 700;
+    color: var(--ul-grey-8);
+}
+
+.pin-list-smart-chevron {
+    color: var(--ul-grey-6);
+    transition: transform .15s;
+}
+
+.pin-list-smart-toggle {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    font-weight: 700;
+    color: var(--ul-grey-8);
+    cursor: pointer;
+}
+
+.pin-list-smart-panel-body {
+    padding: 0 1.1rem 1.1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+
+    &[hidden] { display: none; }
+}
+
+.pin-list-smart-row label {
+    display: block;
+    font-size: .82rem;
+    font-weight: 600;
+    color: var(--ul-grey-6);
+    margin-bottom: .35rem;
+}
+
+.pin-list-smart-row select {
+    width: 100%;
+    max-width: 32rem;
+    border: 1px solid var(--ul-surface-raised-border);
+    background: var(--ul-surface-raised);
+    color: var(--ul-grey-8);
+    border-radius: 7px;
+    padding: .45rem .6rem;
+    font-size: .85rem;
+}
+
+.pin-list-smart-hint {
+    margin: .4rem 0 0;
+    font-size: .78rem;
+    color: var(--ul-grey-5);
+}
+
+.pin-list-boundary-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: .35rem;
+}
+
+.pin-list-boundary-map {
+    height: 280px;
+    border-radius: 10px;
+    overflow: hidden;
+    border: 1px solid var(--ul-surface-border);
+
+    @include up($breakpoint-sm) {
+        height: 340px;
+    }
+}
+
+// -- Items list ---------------------------------------------------------
+.pin-list-items-section {
+    margin-bottom: 2rem;
+}
+
+.pin-list-items {
+    display: flex;
+    flex-direction: column;
+    gap: .4rem;
+}
+
+.pin-list-item {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    padding: .55rem .75rem;
+    @include surface($radius: 9px);
+
+    &--ghost {
+        opacity: .4;
+    }
+}
+
+.pin-list-item-drag-handle {
+    display: flex;
+    align-items: center;
+    color: var(--ul-grey-4);
+    cursor: grab;
+    touch-action: none;
+}
+
+.pin-list-item-link {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    text-decoration: none;
+    color: var(--ul-grey-8);
+    font-size: .88rem;
+    min-width: 0;
+}
+
+.pin-list-item-swatch {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.pin-list-item-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pin-list-item-provenance {
+    display: flex;
+    align-items: center;
+    color: $color-blue-500;
+
+    .material-symbols-outlined { font-size: 1.05rem; }
+}
+
+.pin-list-item-remove {
+    background: none;
+    border: none;
+    color: var(--ul-grey-4);
+    cursor: pointer;
+    padding: .2rem;
+    display: flex;
+    border-radius: 5px;
+    transition: color .15s, background .15s;
+
+    &:hover {
+        color: #fca5a5;
+        background: rgba(239, 68, 68, .12);
+    }
+}
+
+.pin-list-items-empty {
+    text-align: center;
+    padding: 2rem 1rem;
+    color: var(--ul-grey-5);
+    font-size: .85rem;
+}
+
+// -- Add pins / add to trip dialogs --------------------------------------
+
+// The location-search suggestions dropdown is absolutely positioned against
+// .addr-search-bar and can grow taller than the dialog's remaining content
+// height; .ul-dialog-body's overflow-y:auto (and the <dialog> root's own
+// overflow:hidden, for its rounded corners) would otherwise clip it. This
+// dialog's content is short and never needs to scroll, so it's safe to drop
+// both clips here.
+#add-pins-dialog {
+    &[open] { overflow: visible; }
+
+    .ul-dialog-body { overflow: visible; }
+}
+
+.pin-list-add-pins-search-wrap {
+    position: relative;
+    margin-bottom: .25rem;
+}
+
+.pin-list-add-results {
+    list-style: none;
+    margin: .5rem 0 0;
+    padding: 0;
+    max-height: 320px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: .3rem;
+}
+
+.pin-list-add-results-item {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    text-align: left;
+    background: var(--ul-surface-raised);
+    border: 1px solid var(--ul-surface-raised-border);
+    border-radius: 8px;
+    padding: .5rem .7rem;
+    font-size: .85rem;
+    color: var(--ul-grey-8);
+    cursor: pointer;
+
+    &:hover {
+        border-color: $color-blue-500;
+    }
+}
+
+.pin-list-add-results-search {
+    width: 100%;
+    border: 1px solid var(--ul-surface-raised-border);
+    background: var(--ul-surface-raised);
+    color: var(--ul-grey-8);
+    border-radius: 8px;
+    padding: .5rem .7rem;
+    font-size: .85rem;
+}
+
+.pin-list-add-results-item--new {
+    cursor: default;
+
+    &:hover { border-color: var(--ul-surface-raised-border); }
+
+    input[type="text"] {
+        flex: 1;
+        border: none;
+        background: transparent;
+        color: var(--ul-grey-8);
+        font-size: .85rem;
+        min-width: 0;
+
+        &:focus { outline: none; }
+    }
+}
+
+.pin-list-add-results-count {
+    margin-left: auto;
+    font-size: .75rem;
+    color: var(--ul-grey-5);
+}
+
+// -- Filters tab ------------------------------------------------------------
+.saved-filter-region-badge {
+    color: $color-blue-500;
+    background: rgba(90, 150, 255, .14);
+}
+
+.saved-filter-card-actions {
+    justify-content: flex-end;
+    gap: .5rem;
+}
+
+.saved-filter-delete-btn {
+    color: #ef4444;
+
+    .material-symbols-outlined { color: #ef4444; }
+}
+
+// -- Saved filter create/edit dialog -----------------------------------------
+.saved-filter-form-dialog {
+    max-width: 64rem;
+    width: 92vw;
+}
+
+.saved-filter-form-body {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+
+    // The gap above only spaces the warning banner and <form> apart - the form's
+    // own direct children (each .form-row, the score/date/label grids, etc.) need
+    // their own gap so sections don't render crammed against one another.
+    > form {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+}
+
+.saved-filter-form-warning {
+    display: flex;
+    align-items: flex-start;
+    gap: .5rem;
+    background: rgba(234, 179, 8, .12);
+    border: 1px solid rgba(234, 179, 8, .35);
+    border-radius: 8px;
+    padding: .6rem .75rem;
+    font-size: .82rem;
+    color: var(--ul-grey-7);
+
+    .material-symbols-outlined { color: #eab308; flex-shrink: 0; }
+}
+
+.saved-filter-score-grid,
+.saved-filter-date-grid,
+.saved-filter-label-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: .9rem;
+
+    @include up($breakpoint-sm) {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+
+// .saved-filter-label-picker itself needs no layout rules of its own - it's a
+// plain stack of the shared .apdlg-* chip/search/suggestions pieces (see
+// _map.scss), reused as-is so the include/exclude pickers here look and
+// behave identically to the main map's add-pin and bulk-edit label pickers.
+
+.saved-filter-custom-fields {
+    display: flex;
+    flex-direction: column;
+    gap: .6rem;
+}
+
+.saved-filter-toggle-row {
+    margin: 0;
+}
+
+// -- Saved filter detail page (map + every option, side by side) ------------
+.saved-filter-detail-layout {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+    align-items: start;
+
+    @include up($breakpoint-lg) {
+        grid-template-columns: minmax(0, 1fr) minmax(320px, 420px);
+    }
+}
+
+.saved-filter-detail-map-col {
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+
+    @include up($breakpoint-lg) {
+        position: sticky;
+        top: 1rem;
+    }
+}
+
+// The form column can grow very tall (score/date grids, region map, label
+// lists, custom fields, visits...) - it used to be capped at `100vh` with its
+// own overflow-y: auto so its height wouldn't drive the whole page-content
+// grid's height. That gave it a second, independent scrollbar stacked on top
+// of the page's own scrollbar (and the 100vh cap didn't even account for the
+// header/hero/subnav space already consumed above it, so the page still
+// ended up taller than the viewport anyway) - removed in favor of just
+// letting this column flow naturally and scroll with the rest of the page,
+// same as every other page on the site. The map column beside it keeps its
+// own `position: sticky` (see .saved-filter-detail-map-col below), which
+// works the same regardless of whether this column has its own overflow.
+.saved-filter-detail-form-col {
+    @include up($breakpoint-lg) {
+        padding-right: .25rem;
+    }
+}
+
+.saved-filter-detail-map-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .5rem;
+}
+
+.saved-filter-preview-count {
+    font-weight: 600;
+    color: var(--ul-grey-7);
+    font-size: .9rem;
+}
+
+.saved-filter-preview-status {
+    font-size: .8rem;
+    color: var(--ul-grey-5);
+    font-style: italic;
+}
+
+.saved-filter-preview-map-section {
+    position: relative;
+}
+
+.saved-filter-preview-map {
+    height: 420px;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid var(--ul-surface-border);
+
+    @include up($breakpoint-sm) {
+        height: 560px;
+    }
+}
+
+// -- Region field (include/exclude polygon drawing) --------------------------
+.saved-filter-region-field {
+    border-top: 1px solid var(--ul-surface-border);
+    padding-top: 1rem;
+}
+
+.saved-filter-region-header {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    margin-bottom: .5rem;
+}
+
+.saved-filter-region-optional {
+    font-weight: 400;
+    color: var(--ul-grey-5);
+}
+
+.saved-filter-region-mode-toggle {
+    display: flex;
+    gap: .5rem;
+    margin-bottom: .6rem;
+}
+
+.saved-filter-region-mode-btn {
+    opacity: .6;
+
+    &--include.saved-filter-region-mode-btn--active {
+        opacity: 1;
+        border-color: #2e7d32;
+        color: #2e7d32;
+    }
+
+    &--exclude.saved-filter-region-mode-btn--active {
+        opacity: 1;
+        border-color: #c62828;
+        color: #c62828;
+    }
+}
+
+.saved-filter-region-search {
+    display: flex;
+    gap: .5rem;
+    margin-bottom: .5rem;
+
+    input {
+        flex: 1;
+        border: 1px solid var(--ul-surface-raised-border);
+        background: var(--ul-surface-raised);
+        color: var(--ul-grey-8);
+        border-radius: 7px;
+        padding: .45rem .6rem;
+        font-size: .85rem;
+    }
+}
+
+.saved-filter-region-search-results {
+    display: flex;
+    flex-direction: column;
+    gap: .3rem;
+    margin-bottom: .5rem;
+    max-height: 160px;
+    overflow-y: auto;
+}
+
+.saved-filter-region-result {
+    text-align: left;
+    background: var(--ul-surface-raised);
+    border: 1px solid var(--ul-surface-raised-border);
+    border-radius: 7px;
+    padding: .4rem .6rem;
+    font-size: .82rem;
+    color: var(--ul-grey-8);
+    cursor: pointer;
+
+    &:hover { border-color: $color-blue-500; }
+}
+
+.saved-filter-region-search-message {
+    margin: 0 0 .5rem;
+    font-size: .78rem;
+    color: var(--ul-grey-5);
+}
+
+.saved-filter-region-map {
+    height: 280px;
+    border-radius: 10px;
+    overflow: hidden;
+    border: 1px solid var(--ul-surface-raised-border);
+}

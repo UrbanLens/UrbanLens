@@ -12,17 +12,32 @@ from rest_framework import routers
 
 from urbanlens.dashboard.controllers import (
     account_deletion,
+    ai_extraction,
     aliases,
-    badges,
+    api_keys,
+    article,
     boundary,
     calendar_sync,
     comments,
+    costs,
+    custom_fields,
     detail_pins,
+    direct_message_shares,
+    direct_messages,
+    e2ee,
+    flickr,
     friendship,
+    google_photos,
+    group_chats,
     image_gallery,
+    immich,
+    labels,
+    links,
     location_wiki,
+    map_sharing,
     maps,
     markup,
+    media_proxy,
     memories,
     notifications,
     onboarding,
@@ -31,50 +46,46 @@ from urbanlens.dashboard.controllers import (
     pin,
     pin_bulk,
     pin_edit,
+    pin_lists,
+    pin_restructure,
     pin_sharing,
+    pin_suggestions,
+    pin_wiki_sync,
+    property_owner,
+    region_search,
     safety,
+    saved_filters,
+    search,
     settings,
     setup,
     site_admin,
     thanks,
     tools,
     trip,
+    two_factor,
     undo,
     userprofile,
     visit_suggestions,
     visits,
+    webauthn,
     wiki_create,
+    wiki_media,
 )
-from urbanlens.dashboard.controllers.index import IndexController
-from urbanlens.dashboard.models.badges.meta import KIND_CATEGORY, KIND_STATUS, KIND_TAG, KIND_USER
+from urbanlens.dashboard.controllers.index import HomeOverviewView, HomeWidgetLayoutSaveView, IndexController
+from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_STATUS, KIND_TAG, KIND_USER
 from urbanlens.dashboard.models.pin import PinViewSet
-from urbanlens.dashboard.models.profile import ProfileViewSet
-
-# from urbanlens.dashboard.models.comments import CommentViewSet
-# from urbanlens.dashboard.models.images import ImageViewSet
 from urbanlens.dashboard.models.reviews import ReviewViewSet
 
 logger = logging.getLogger(__name__)
 
 app_name = "dashboard"
 
-# Define all our REST API routes
-routes = {
-    # 'categories': CategoryViewSet,
-    "pins": PinViewSet,
-    "profiles": ProfileViewSet,
-    "reviews": ReviewViewSet,
-    # 'comments': CommentViewSet,
-    # 'images': ImageViewSet
-}
+# The REST surface is deliberately minimal: the frontend only uses
+# PATCH/DELETE on individual pins (map popup quick-edit, pin move, delete)
+# and the review-create-or-update path below (star-rating widget). Nothing
+# external consumes this API; expose more only when the app itself needs it.
 router = routers.DefaultRouter()
-
-# Register each viewset with the router
-for route, viewset in routes.items():
-    if hasattr(viewset, "basename"):
-        router.register(route, viewset, basename=viewset.basename)
-    else:
-        router.register(route, viewset)
+router.register("pins", PinViewSet, basename=PinViewSet.basename)
 
 urlpatterns = [
     path(
@@ -83,7 +94,13 @@ urlpatterns = [
         name="review-create-or-update",
     ),
     path("rest/", include(router.urls)),
+    # API-key-authenticated surface for third-party applications - see
+    # external_api/__init__.py for why this is deliberately not part of the
+    # session-authenticated router above.
+    path("api/external/v1/", include("urbanlens.dashboard.external_api.urls")),
     re_path("^$", IndexController.as_view(), name="home"),
+    path("home/", HomeOverviewView.as_view(), name="home.view"),
+    path("home/widgets/", HomeWidgetLayoutSaveView.as_view(), name="home.widgets.save"),
     path(
         "about/",
         TemplateView.as_view(
@@ -117,6 +134,7 @@ urlpatterns = [
         name="terms",
     ),
     path("thanks/", thanks.ThanksView.as_view(), name="thanks"),
+    path("costs/", costs.CostsView.as_view(), name="costs"),
     path(
         "help/import-pins/",
         TemplateView.as_view(
@@ -132,6 +150,7 @@ urlpatterns = [
                 path("", maps.MapController.as_view({"get": "view_map"}), name="map.view"),
                 path("init/", maps.MapController.as_view({"get": "init_map"}), name="map.init"),
                 path("pins/", maps.MapController.as_view({"get": "map_pins_json"}), name="map.pins"),
+                path("pins/children/", maps.MapController.as_view({"get": "map_child_pins_json"}), name="map.pins.children"),
                 path("pins/meta/", maps.MapController.as_view({"get": "map_pins_meta"}), name="map.pins.meta"),
                 path("geolocation/visits/", maps.MapController.as_view({"post": "record_geolocation_visit"}), name="map.geolocation.visits"),
                 path("pins/list/", maps.MapController.as_view({"get": "pin_list_panel"}), name="map.pins.list"),
@@ -142,10 +161,12 @@ urlpatterns = [
                 path("pins/bulk-merge/", pin_bulk.PinBulkMergeView.as_view(), name="pin.bulk_merge"),
                 path("pins/bulk-edit/", pin_bulk.PinBulkEditView.as_view(), name="pin.bulk_edit"),
                 path(
-                    "pins/bulk-edit/badge-options/",
-                    pin_bulk.PinBulkEditBadgeOptionsView.as_view(),
-                    name="pin.bulk_edit.badge_options",
+                    "pins/bulk-edit/label-options/",
+                    pin_bulk.PinBulkEditLabelOptionsView.as_view(),
+                    name="pin.bulk_edit.label_options",
                 ),
+                path("pins/parent-search/", pin_bulk.PinParentSearchView.as_view(), name="pin.parent_search"),
+                path("pins/bulk-export/", pin_bulk.PinBulkExportView.as_view(), name="pin.bulk_export"),
                 path("pins/<slug:pin_slug>/", maps.MapController.as_view({"get": "map_pin_json"}), name="map.pin.json"),
                 path(
                     "boundaries/",
@@ -154,7 +175,7 @@ urlpatterns = [
                 ),
                 path(
                     "add/",
-                    maps.MapController.as_view({"get": "add_pin", "post": "post_add_pin"}),
+                    maps.MapController.as_view({"post": "post_add_pin"}),
                     name="pin.add",
                 ),
                 path(
@@ -198,6 +219,11 @@ urlpatterns = [
                     name="map.places.nearby",
                 ),
                 path(
+                    "media-photo/google-maps/<path:photo_name>/",
+                    media_proxy.GoogleMapsPhotoProxyView.as_view(),
+                    name="media.google_maps_photo",
+                ),
+                path(
                     "places/details/",
                     maps.MapController.as_view({"get": "place_details"}),
                     name="map.places.details",
@@ -207,7 +233,7 @@ urlpatterns = [
                     maps.MapController.as_view({"post": "upload_image"}),
                     name="pin.upload_image",
                 ),
-                # TODO: Assess codebase, but this is probably deprecated since the addition of Badges more generically.
+                # TODO: Assess codebase, but this is probably deprecated since the addition of Labels more generically.
                 path(
                     "change_category/<slug:pin_slug>/",
                     maps.MapController.as_view({"post": "change_category"}),
@@ -219,9 +245,40 @@ urlpatterns = [
                     "pin/",
                     include(
                         [
+                            # Registered before the <slug:pin_slug>/ catch-all below -
+                            # "map-height" is a single path segment just like a real
+                            # slug, so Django would otherwise match it there first
+                            # (treating "map-height" as a pin slug) and 405 every POST,
+                            # exactly the same class of bug documented in
+                            # test_pin_media_endpoints.py's module docstring for
+                            # media/relevance/ vs the media/<str:source>/ catch-all.
+                            path(
+                                "map-height/",
+                                pin.PinController.as_view({"post": "set_map_height"}),
+                                name="pin.map_height",
+                            ),
+                            # Also registered before the <slug:pin_slug>/ catch-all, same reason -
+                            # these proxy a REData media file by listing/resource uuid, not by pin,
+                            # so there's no pin_slug segment for them to nest under at all.
+                            path(
+                                "loopnet/photo/<str:listing_uuid>/<int:photo_id>/",
+                                pin.PinLoopnetPhotoView.as_view(),
+                                name="pin.loopnet.photo",
+                            ),
+                            path(
+                                "cris/attachment/<str:resource_uuid>/<int:attachment_id>/",
+                                pin.PinCrisAttachmentView.as_view(),
+                                name="pin.cris.attachment",
+                            ),
+                            path(
+                                "cris/attachment/<str:resource_uuid>/<int:attachment_id>/extracted/<int:image_id>/",
+                                pin.PinCrisExtractedImageView.as_view(),
+                                name="pin.cris.extracted_image",
+                            ),
                             path("<slug:pin_slug>/", pin.PinController.as_view({"get": "view"}), name="pin.details"),
                             path("<slug:pin_slug>/share/", pin_sharing.PinShareDialogView.as_view(), name="pin.share.dialog"),
                             path("<slug:pin_slug>/share/send/", pin_sharing.PinShareCreateView.as_view(), name="pin.share.send"),
+                            path("<slug:pin_slug>/share/maps/", pin_sharing.PinShareMapGridView.as_view(), name="pin.share.maps"),
                             path(
                                 "<slug:pin_slug>/boundary/",
                                 boundary.BoundaryController.as_view({"get": "get_boundaries", "post": "save_boundary"}),
@@ -232,10 +289,50 @@ urlpatterns = [
                                 wiki_create.PinWikiCreateView.as_view(),
                                 name="pin.wiki.create",
                             ),
+                            path("<slug:pin_slug>/article/", article.ArticlePanelView.as_view(), name="pin.article"),
+                            path("<slug:pin_slug>/article/save/", article.ArticleSaveView.as_view(), name="pin.article.save"),
+                            path("<slug:pin_slug>/article/preview/", article.ArticlePreviewView.as_view(), name="pin.article.preview"),
+                            path("<slug:pin_slug>/article/image/", article.ArticleImageUploadView.as_view(), name="pin.article.image"),
+                            path("<slug:pin_slug>/article/history/", article.ArticleHistoryView.as_view(), name="pin.article.history"),
+                            path("<slug:pin_slug>/article/history/<int:revision_id>/", article.ArticleRevisionView.as_view(), name="pin.article.revision"),
+                            path("<slug:pin_slug>/article/history/<int:revision_id>/restore/", article.ArticleRestoreView.as_view(), name="pin.article.restore"),
+                            path(
+                                "<slug:pin_slug>/media/relevance/",
+                                pin.PinController.as_view({"post": "media_relevance"}),
+                                name="pin.media.relevance",
+                            ),
+                            path(
+                                "<slug:pin_slug>/media/send-to-wiki/",
+                                pin.PinController.as_view({"post": "media_send_to_wiki"}),
+                                name="pin.media.send_to_wiki",
+                            ),
+                            path(
+                                "media/sort/",
+                                pin.PinController.as_view({"post": "set_media_sort"}),
+                                name="pin.media.sort",
+                            ),
+                            path(
+                                "<slug:pin_slug>/nearby-pins/json/",
+                                pin.PinController.as_view({"get": "nearby_pins_json"}),
+                                name="pin.nearby_pins.json",
+                            ),
+                            # This catch-all must stay below the more specific media/ routes above -
+                            # <str:source> would otherwise swallow "relevance"/"send-to-wiki" as a
+                            # provider name and 405 on their POST-only methods.
                             path(
                                 "<slug:pin_slug>/media/<str:source>/",
                                 pin.PinController.as_view({"get": "media_provider"}),
                                 name="pin.media",
+                            ),
+                            path(
+                                "<slug:pin_slug>/cover-photo/",
+                                image_gallery.PinCoverPhotoView.as_view(),
+                                name="pin.cover_photo",
+                            ),
+                            path(
+                                "<slug:pin_slug>/gallery/bulk/",
+                                image_gallery.PinGalleryBulkView.as_view(),
+                                name="pin.gallery.bulk",
                             ),
                             path(
                                 "<slug:pin_slug>/google/",
@@ -293,6 +390,16 @@ urlpatterns = [
                                 name="pin.detail_pins.json",
                             ),
                             path(
+                                "<slug:pin_slug>/detail-pins/send-to-wiki/",
+                                pin_wiki_sync.PinSendToWikiView.as_view(),
+                                name="pin.detail_pins.send_to_wiki",
+                            ),
+                            path(
+                                "<slug:pin_slug>/detail-pins/pull-from-wiki/",
+                                pin_wiki_sync.PinPullFromWikiView.as_view(),
+                                name="pin.detail_pins.pull_from_wiki",
+                            ),
+                            path(
                                 "<slug:pin_slug>/detail-pins/<uuid:detail_pin_uuid>/",
                                 detail_pins.DetailPinEditView.as_view(),
                                 name="pin.detail_pin.edit",
@@ -323,11 +430,6 @@ urlpatterns = [
                                 name="pin.edit",
                             ),
                             path(
-                                "<slug:pin_slug>/delete/",
-                                pin_edit.PinDeleteView.as_view(),
-                                name="pin.delete",
-                            ),
-                            path(
                                 "<slug:pin_slug>/notes/",
                                 pin_edit.PinNotesView.as_view(),
                                 name="pin.notes",
@@ -336,6 +438,21 @@ urlpatterns = [
                                 "<slug:pin_slug>/notes/<int:note_id>/delete/",
                                 pin_edit.PinNoteDeleteView.as_view(),
                                 name="pin.note.delete",
+                            ),
+                            path(
+                                "<slug:pin_slug>/detach-parent/",
+                                pin_edit.PinDetachChildView.as_view(),
+                                name="pin.detach_parent",
+                            ),
+                            path(
+                                "<slug:pin_slug>/promote-children/",
+                                pin_edit.PinPromoteChildrenView.as_view(),
+                                name="pin.promote_children",
+                            ),
+                            path(
+                                "<slug:pin_slug>/swap-parent/",
+                                pin_edit.PinSwapParentView.as_view(),
+                                name="pin.swap_parent",
                             ),
                             path(
                                 "<slug:pin_slug>/link/",
@@ -368,6 +485,61 @@ urlpatterns = [
                                 name="pin.alias.toggle_nickname",
                             ),
                             path(
+                                "<slug:pin_slug>/links/",
+                                links.PinLinksView.as_view(),
+                                name="pin.links",
+                            ),
+                            path(
+                                "<slug:pin_slug>/links/<int:link_id>/delete/",
+                                links.PinLinkDeleteView.as_view(),
+                                name="pin.link.delete",
+                            ),
+                            path(
+                                "<slug:pin_slug>/ai/extract/",
+                                ai_extraction.PinLinkExtractionView.as_view(),
+                                name="pin.ai_extract",
+                            ),
+                            path(
+                                "<slug:pin_slug>/custom-fields/",
+                                custom_fields.PinCustomFieldsPanelView.as_view(),
+                                name="pin.custom_fields",
+                            ),
+                            path(
+                                "<slug:pin_slug>/custom-fields/<int:field_id>/value/",
+                                custom_fields.PinCustomFieldValueView.as_view(),
+                                name="pin.custom_fields.value",
+                            ),
+                            path(
+                                "<slug:pin_slug>/markup-maps/",
+                                markup.PinMarkupMapsView.as_view(),
+                                name="pin.markup_maps",
+                            ),
+                            path(
+                                "<slug:pin_slug>/ownership/",
+                                property_owner.PinOwnershipPanelView.as_view(),
+                                name="pin.ownership",
+                            ),
+                            path(
+                                "<slug:pin_slug>/ownership/<int:owner_id>/edit/",
+                                property_owner.PinOwnerUpdateView.as_view(),
+                                name="pin.ownership.edit",
+                            ),
+                            path(
+                                "<slug:pin_slug>/ownership/<int:owner_id>/remove/",
+                                property_owner.PinOwnerRemoveView.as_view(),
+                                name="pin.ownership.remove",
+                            ),
+                            path(
+                                "<slug:pin_slug>/sales/",
+                                property_owner.PinPropertySaleTabView.as_view(),
+                                name="pin.sales",
+                            ),
+                            path(
+                                "<slug:pin_slug>/sales/<int:sale_id>/delete/",
+                                property_owner.PinPropertySaleDeleteView.as_view(),
+                                name="pin.sales.delete",
+                            ),
+                            path(
                                 "<slug:pin_slug>/comments/",
                                 comments.PinCommentsView.as_view(),
                                 name="pin.comments",
@@ -393,9 +565,54 @@ urlpatterns = [
                                 name="pin.nps",
                             ),
                             path(
+                                "<slug:pin_slug>/yelp/",
+                                pin.PinController.as_view({"get": "yelp_info"}),
+                                name="pin.yelp",
+                            ),
+                            path(
                                 "<slug:pin_slug>/nominatim/",
                                 pin.PinController.as_view({"get": "nominatim_info"}),
                                 name="pin.nominatim",
+                            ),
+                            path(
+                                "<slug:pin_slug>/location-data-overview/",
+                                pin.PinController.as_view({"get": "location_data_overview"}),
+                                name="pin.location_data_overview",
+                            ),
+                            path(
+                                "<slug:pin_slug>/azure-maps/",
+                                pin.PinController.as_view({"get": "azure_maps_info"}),
+                                name="pin.azure_maps",
+                            ),
+                            path(
+                                "<slug:pin_slug>/panel/<str:panel_key>/",
+                                pin.PinController.as_view({"get": "panel_info"}),
+                                name="pin.panel",
+                            ),
+                            path(
+                                "<slug:pin_slug>/buildings/",
+                                pin.PinController.as_view({"get": "parcel_buildings"}),
+                                name="pin.parcel_buildings",
+                            ),
+                            path(
+                                "<slug:pin_slug>/buildings/import/",
+                                pin_restructure.PinBuildingImportView.as_view(),
+                                name="pin.buildings.import",
+                            ),
+                            path(
+                                "<slug:pin_slug>/restructure/offer/",
+                                pin_restructure.PinRestructureOfferView.as_view(),
+                                name="pin.restructure.offer",
+                            ),
+                            path(
+                                "<slug:pin_slug>/restructure/dismiss/",
+                                pin_restructure.PinRestructureDismissView.as_view(),
+                                name="pin.restructure.dismiss",
+                            ),
+                            path(
+                                "<slug:pin_slug>/restructure/apply/",
+                                pin_restructure.PinRestructureApplyView.as_view(),
+                                name="pin.restructure.apply",
                             ),
                             path(
                                 "<slug:pin_slug>/usgs-topo/",
@@ -427,6 +644,91 @@ urlpatterns = [
                             path(
                                 "<slug:pin_slug>/gallery/<int:image_id>",
                                 image_gallery.PinImageView.as_view(),
+                            ),
+                            path(
+                                "<slug:pin_slug>/immich/search/",
+                                immich.PinImmichSearchView.as_view(),
+                                name="pin.immich.search",
+                            ),
+                            path(
+                                "<slug:pin_slug>/immich/thumbnail/<str:asset_id>/",
+                                immich.PinImmichThumbnailView.as_view(),
+                                name="pin.immich.thumbnail",
+                            ),
+                            path(
+                                "<slug:pin_slug>/immich/import/",
+                                immich.PinImmichImportView.as_view(),
+                                name="pin.immich.import",
+                            ),
+                            path(
+                                "<slug:pin_slug>/immich/import/<str:task_id>/progress/",
+                                immich.PinImmichImportProgressView.as_view(),
+                                name="pin.immich.import.progress",
+                            ),
+                            path(
+                                "<slug:pin_slug>/flickr/search/",
+                                flickr.PinFlickrSearchView.as_view(),
+                                name="pin.flickr.search",
+                            ),
+                            path(
+                                "<slug:pin_slug>/flickr/import/",
+                                flickr.PinFlickrImportView.as_view(),
+                                name="pin.flickr.import",
+                            ),
+                            path(
+                                "<slug:pin_slug>/flickr/import/<str:task_id>/progress/",
+                                flickr.PinFlickrImportProgressView.as_view(),
+                                name="pin.flickr.import.progress",
+                            ),
+                            path(
+                                "<slug:pin_slug>/flickr-album/",
+                                flickr.PinFlickrAlbumDialogView.as_view(),
+                                name="pin.flickr_album.dialog",
+                            ),
+                            path(
+                                "<slug:pin_slug>/flickr-album/lookup/",
+                                flickr.PinFlickrAlbumLookupView.as_view(),
+                                name="pin.flickr_album.lookup",
+                            ),
+                            path(
+                                "<slug:pin_slug>/flickr-album/import/",
+                                flickr.PinFlickrAlbumImportView.as_view(),
+                                name="pin.flickr_album.import",
+                            ),
+                            path(
+                                "<slug:pin_slug>/flickr-album/import/<str:task_id>/progress/",
+                                flickr.PinFlickrAlbumImportProgressView.as_view(),
+                                name="pin.flickr_album.import.progress",
+                            ),
+                            path(
+                                "<slug:pin_slug>/google-photos/",
+                                google_photos.PinGooglePhotosStartView.as_view(),
+                                name="pin.google_photos.start",
+                            ),
+                            path(
+                                "<slug:pin_slug>/google-photos/session/",
+                                google_photos.PinGooglePhotosSessionCreateView.as_view(),
+                                name="pin.google_photos.session.create",
+                            ),
+                            path(
+                                "<slug:pin_slug>/google-photos/session/<str:session_id>/status/",
+                                google_photos.PinGooglePhotosSessionStatusView.as_view(),
+                                name="pin.google_photos.session.status",
+                            ),
+                            path(
+                                "<slug:pin_slug>/google-photos/thumbnail/<str:session_id>/<str:item_id>/",
+                                google_photos.PinGooglePhotosThumbnailView.as_view(),
+                                name="pin.google_photos.thumbnail",
+                            ),
+                            path(
+                                "<slug:pin_slug>/google-photos/import/",
+                                google_photos.PinGooglePhotosImportView.as_view(),
+                                name="pin.google_photos.import",
+                            ),
+                            path(
+                                "<slug:pin_slug>/google-photos/import/<str:task_id>/progress/",
+                                google_photos.PinGooglePhotosImportProgressView.as_view(),
+                                name="pin.google_photos.import.progress",
                             ),
                             path(
                                 "import/",
@@ -462,10 +764,47 @@ urlpatterns = [
         ),
     ),
     path(
+        "saved-filters/",
+        include(
+            [
+                path("create/", saved_filters.SavedFilterCreateView.as_view(), name="saved_filters.create"),
+                path("new/", saved_filters.SavedFilterEditView.as_view(), name="saved_filters.new"),
+                path("preview/", saved_filters.SavedFilterPreviewView.as_view(), name="saved_filters.preview"),
+                path("<uuid:filter_uuid>/edit/", saved_filters.SavedFilterEditView.as_view(), name="saved_filters.edit"),
+                path("<uuid:filter_uuid>/delete/", saved_filters.SavedFilterDeleteView.as_view(), name="saved_filters.delete"),
+                path("<uuid:filter_uuid>/", saved_filters.SavedFilterDetailView.as_view(), name="saved_filters.detail"),
+                path("suggest-name/", saved_filters.SavedFilterSuggestNameView.as_view(), name="saved_filters.suggest_name"),
+                path("counts/", saved_filters.SavedFilterMatchCountsView.as_view(), name="saved_filters.counts"),
+            ],
+        ),
+    ),
+    path("region-search/", region_search.RegionBoundarySearchView.as_view(), name="region_search.search"),
+    path(
+        "lists/",
+        include(
+            [
+                path("", pin_lists.PinListsIndexView.as_view(), name="lists.list"),
+                path("create/", pin_lists.PinListCreateView.as_view(), name="lists.create"),
+                path("<slug:list_slug>/", pin_lists.PinListDetailView.as_view(), name="lists.detail"),
+                path("<slug:list_slug>/edit/", pin_lists.PinListEditView.as_view(), name="lists.edit"),
+                path("<slug:list_slug>/delete/", pin_lists.PinListDeleteView.as_view(), name="lists.delete"),
+                path("<slug:list_slug>/items/", pin_lists.PinListItemsView.as_view(), name="lists.items"),
+                path("<slug:list_slug>/items/add/", pin_lists.PinListAddPinsView.as_view(), name="lists.items.add"),
+                path("<slug:list_slug>/items/<int:item_id>/remove/", pin_lists.PinListRemoveItemView.as_view(), name="lists.items.remove"),
+                path("<slug:list_slug>/items/reorder/", pin_lists.PinListReorderView.as_view(), name="lists.items.reorder"),
+                path("<slug:list_slug>/create-trip/", pin_lists.PinListCreateTripView.as_view(), name="lists.create_trip"),
+                path("<slug:list_slug>/add-to-trip/", pin_lists.PinListAddToTripView.as_view(), name="lists.add_to_trip"),
+                path("<slug:list_slug>/markup-map/", pin_lists.PinListMarkupMapView.as_view(), name="lists.markup_map"),
+                path("<slug:list_slug>/export/", pin_lists.PinListExportView.as_view(), name="lists.export"),
+            ],
+        ),
+    ),
+    path(
         "profile/",
         include(
             [
                 path("", userprofile.ViewProfileView.as_view(), name="profile.view"),
+                path("photos/<int:image_id>/attachments/", userprofile.PhotoAttachmentPointsView.as_view(), name="profile.photo.attachments"),
                 path("edit/", userprofile.EditProfileView.as_view(), name="profile.edit"),
                 path("edit/field/", userprofile.ProfileFieldUpdateView.as_view(), name="profile.field.update"),
                 path("edit/social/verify/", userprofile.SocialLinkVerifyView.as_view(), name="profile.social.verify"),
@@ -477,6 +816,7 @@ urlpatterns = [
                 path("preview/exit/", userprofile.ProfilePreviewStopView.as_view(), name="profile.preview.exit"),
                 path("preview/<slug:mode>/", userprofile.ProfilePreviewStartView.as_view(), name="profile.preview"),
                 path("<slug:profile_slug>/", userprofile.ViewProfileView.as_view(), name="profile.view_user"),
+                path("<slug:profile_slug>/common-pins/", userprofile.CommonPinsView.as_view(), name="profile.common_pins"),
                 path("<slug:profile_slug>/note/", userprofile.ProfileNoteView.as_view(), name="profile.note"),
                 path(
                     "<slug:profile_slug>/note/<int:note_id>/delete/",
@@ -489,19 +829,38 @@ urlpatterns = [
                     name="profile.note.edit",
                 ),
                 path(
-                    "<slug:profile_slug>/badge/<int:badge_id>/",
-                    userprofile.ProfileBadgeToggleView.as_view(),
-                    name="profile.badge_toggle",
+                    "<slug:profile_slug>/label/<int:label_id>/",
+                    userprofile.ProfileLabelToggleView.as_view(),
+                    name="profile.label_toggle",
                 ),
                 path(
                     "<slug:profile_slug>/trust/",
                     userprofile.ProfileTrustView.as_view(),
                     name="profile.trust",
                 ),
+                path(
+                    "<slug:profile_slug>/nickname/",
+                    userprofile.ProfileNicknameView.as_view(),
+                    name="profile.nickname",
+                ),
+                path(
+                    "<slug:profile_slug>/custom-field/<int:field_id>/",
+                    custom_fields.ProfileCustomFieldValueView.as_view(),
+                    name="profile.custom_field_value",
+                ),
             ],
         ),
     ),
+    # Deliberately unlinked from site navigation - reached via the completion
+    # notification (see services.ai.link_extraction._notify_extraction_complete).
+    path("ai/extractions/", ai_extraction.AIExtractionReviewView.as_view(), name="ai.extractions"),
     path("settings/", settings.SettingsView.as_view(), name="settings.view"),
+    path("settings/custom-fields/", custom_fields.CustomFieldSettingsPanelView.as_view(), name="custom_fields.settings"),
+    path("settings/custom-fields/<int:field_id>/", custom_fields.CustomFieldUpdateView.as_view(), name="custom_fields.update"),
+    path("settings/custom-fields/<int:field_id>/delete/", custom_fields.CustomFieldDeleteView.as_view(), name="custom_fields.delete"),
+    path("custom-fields/<int:field_id>/position/", custom_fields.CustomFieldPositionView.as_view(), name="custom_fields.position"),
+    path("custom-fields/photo/<int:image_id>/", custom_fields.PhotoCustomFieldsView.as_view(), name="custom_fields.photo"),
+    path("custom-fields/markup-map/<uuid:map_uuid>/", custom_fields.MarkupMapCustomFieldsView.as_view(), name="custom_fields.markup_map"),
     path("settings/geocode/", settings.geocode_address, name="settings.geocode"),
     path("settings/map-position/", settings.SaveMapPositionView.as_view(), name="settings.save_map_position"),
     path("settings/map-dark-mode/", settings.SaveMapDarkModeView.as_view(), name="settings.save_map_dark_mode"),
@@ -509,50 +868,81 @@ urlpatterns = [
     path("settings/delete-account/cancel/", account_deletion.CancelAccountDeletionView.as_view(), name="account.delete.cancel"),
     path("settings/undo-history/", undo.UndoHistoryView.as_view(), name="undo.history"),
     path("settings/undo-history/clear/", undo.UndoClearView.as_view(), name="undo.clear"),
+    path("settings/security/passkeys/options/", webauthn.PasskeyRegisterOptionsView.as_view(), name="settings.security.passkeys.options"),
+    path("settings/security/passkeys/", webauthn.PasskeyRegisterView.as_view(), name="settings.security.passkeys.register"),
+    path("settings/security/passkeys/<int:credential_id>/rename/", webauthn.PasskeyRenameView.as_view(), name="settings.security.passkeys.rename"),
+    path("settings/security/passkeys/<int:credential_id>/delete/", webauthn.PasskeyDeleteView.as_view(), name="settings.security.passkeys.delete"),
+    path("settings/security/totp/start/", two_factor.TOTPSetupStartView.as_view(), name="settings.security.totp.start"),
+    path("settings/security/totp/qrcode.png", two_factor.TOTPQRCodeView.as_view(), name="settings.security.totp.qrcode"),
+    path("settings/security/totp/confirm/", two_factor.TOTPSetupConfirmView.as_view(), name="settings.security.totp.confirm"),
+    path("settings/security/totp/cancel/", two_factor.TOTPSetupCancelView.as_view(), name="settings.security.totp.cancel"),
+    path("settings/security/totp/disable/", two_factor.TOTPDisableView.as_view(), name="settings.security.totp.disable"),
+    path("settings/security/backup-codes/generate/", two_factor.BackupCodesGenerateView.as_view(), name="settings.security.backup_codes.generate"),
+    path("settings/security/api-keys/", api_keys.ApiKeyCreateView.as_view(), name="settings.security.api_keys.create"),
+    path("settings/security/api-keys/<int:api_key_id>/revoke/", api_keys.ApiKeyRevokeView.as_view(), name="settings.security.api_keys.revoke"),
+    path("settings/immich/", immich.ImmichSettingsView.as_view(), name="settings.immich"),
+    path("settings/immich/disconnect/", immich.ImmichDisconnectView.as_view(), name="settings.immich.disconnect"),
+    path("settings/immich/scan/", immich.ImmichLibraryScanStartView.as_view(), name="settings.immich.scan"),
+    path("settings/immich/scan/<str:task_id>/progress/", immich.ImmichLibraryScanProgressView.as_view(), name="settings.immich.scan.progress"),
+    path("settings/flickr/", flickr.FlickrSettingsView.as_view(), name="settings.flickr"),
+    path("settings/flickr/connect/", flickr.FlickrConnectView.as_view(), name="settings.flickr.connect"),
+    path("settings/flickr/callback/", flickr.FlickrCallbackView.as_view(), name="settings.flickr.callback"),
+    path("settings/flickr/disconnect/", flickr.FlickrDisconnectView.as_view(), name="settings.flickr.disconnect"),
+    path("settings/google-photos/", google_photos.GooglePhotosSettingsView.as_view(), name="settings.google_photos"),
+    path("settings/google-photos/connect/", google_photos.GooglePhotosConnectView.as_view(), name="settings.google_photos.connect"),
+    path("settings/google-photos/callback/", google_photos.GooglePhotosCallbackView.as_view(), name="settings.google_photos.callback"),
+    path("settings/google-photos/disconnect/", google_photos.GooglePhotosDisconnectView.as_view(), name="settings.google_photos.disconnect"),
+    path("settings/google-calendar/", calendar_sync.GoogleCalendarSettingsSectionView.as_view(), name="settings.google_calendar"),
+    path("settings/google-calendar/disconnect/", calendar_sync.GoogleCalendarSettingsDisconnectView.as_view(), name="settings.google_calendar.disconnect"),
     path("undo/<uuid:undo_id>/restore/", undo.UndoRestoreView.as_view(), name="undo.restore"),
     re_path(
-        r"^(?P<badge_kind>tags?|categor(y|ies)|status(es)?|people)/",
+        r"^(?P<label_kind>tags?|categor(y|ies)|status(es)?|people|media)/",
         include(
             [
-                path("", badges.BadgeKindIndexView.as_view(), name="badge.index"),
-                path("create/", badges.BadgeCreateView.as_view(), name="badge.create"),
-                path("rows/", badges.BadgeRowsView.as_view(), name="badge.rows"),
-                path("<int:badge_id>/edit/", badges.BadgeEditView.as_view(), name="badge.edit"),
-                path("<int:badge_id>/delete/", badges.BadgeDeleteView.as_view(), name="badge.delete"),
-                path("<int:badge_id>/merge/", badges.BadgeMergeView.as_view(), name="badge.merge"),
-                path("<int:badge_id>/customize/", badges.BadgeCustomizeView.as_view(), name="badge.customize"),
-                path("reorder/", badges.BadgeReorderView.as_view(), name="badge.reorder"),
-                path("bulk-delete/", badges.BadgeBulkDeleteView.as_view(), name="badge.bulk_delete"),
-                path("bulk-edit/", badges.BadgeBulkEditView.as_view(), name="badge.bulk_edit"),
+                path("", labels.LabelKindIndexView.as_view(), name="label.index"),
+                path("create/", labels.LabelCreateView.as_view(), name="label.create"),
+                path("rows/", labels.LabelRowsView.as_view(), name="label.rows"),
+                path("<int:label_id>/edit/", labels.LabelEditView.as_view(), name="label.edit"),
+                path("<int:label_id>/delete/", labels.LabelDeleteView.as_view(), name="label.delete"),
+                path("<int:label_id>/merge/", labels.LabelMergeView.as_view(), name="label.merge"),
+                path("<int:label_id>/customize/", labels.LabelCustomizeView.as_view(), name="label.customize"),
+                path("reorder/", labels.LabelReorderView.as_view(), name="label.reorder"),
+                path("bulk-delete/", labels.LabelBulkDeleteView.as_view(), name="label.bulk_delete"),
+                path("bulk-edit/", labels.LabelBulkEditView.as_view(), name="label.bulk_edit"),
                 path(
                     "bulk-convert/",
-                    badges.BadgeBulkConvertView.as_view(),
-                    name="badge.bulk_convert",
+                    labels.LabelBulkConvertView.as_view(),
+                    name="label.bulk_convert",
                 ),
                 path(
                     "bulk-convert-status/",
-                    badges.BadgeBulkConvertView.as_view(target_kind=KIND_STATUS),
-                    name="badge.bulk_convert_status",
+                    labels.LabelBulkConvertView.as_view(target_kind=KIND_STATUS),
+                    name="label.bulk_convert_status",
                 ),
                 path(
                     "bulk-convert-tag/",
-                    badges.BadgeBulkConvertView.as_view(target_kind=KIND_TAG),
-                    name="badge.bulk_convert_tag",
+                    labels.LabelBulkConvertView.as_view(target_kind=KIND_TAG),
+                    name="label.bulk_convert_tag",
                 ),
                 path(
                     "bulk-convert-category/",
-                    badges.BadgeBulkConvertView.as_view(target_kind=KIND_CATEGORY),
-                    name="badge.bulk_convert_category",
+                    labels.LabelBulkConvertView.as_view(target_kind=KIND_CATEGORY),
+                    name="label.bulk_convert_category",
                 ),
-                path("multi-merge/", badges.BadgeMultiMergeView.as_view(), name="badge.multi_merge"),
-                path("pin/<slug:pin_slug>/", badges.BadgePinMembershipView.as_view(), name="badge.pin"),
+                path("multi-merge/", labels.LabelMultiMergeView.as_view(), name="label.multi_merge"),
+                path("pin/<slug:pin_slug>/", labels.LabelPinMembershipView.as_view(), name="label.pin"),
                 path(
                     "location/<slug:location_slug>/",
-                    badges.BadgeLocationMembershipView.as_view(),
-                    name="badge.location",
+                    labels.LabelLocationMembershipView.as_view(),
+                    name="label.location",
                 ),
             ]
         ),
+    ),
+    path(
+        "labels/image/<uuid:image_uuid>/",
+        labels.LabelImageMembershipView.as_view(),
+        name="label.image",
     ),
     path(
         "friendship/",
@@ -567,6 +957,11 @@ urlpatterns = [
                     "friends/<int:profile_id>/",
                     friendship.FriendController.as_view({"get": "friends_page"}),
                     name="friend.page",
+                ),
+                path(
+                    "friends/<int:profile_id>/widget/",
+                    friendship.FriendController.as_view({"get": "friends_page_widget"}),
+                    name="friend.page_widget",
                 ),
                 path(
                     "request/<int:profile_id>",
@@ -592,6 +987,11 @@ urlpatterns = [
                     "remove/<int:profile_id>",
                     friendship.FriendController.as_view({"post": "remove_friend"}),
                     name="friend.remove",
+                ),
+                path(
+                    "pending/<str:token>/cancel/",
+                    friendship.FriendController.as_view({"post": "cancel_pending"}),
+                    name="friend.cancel_pending",
                 ),
                 path(
                     "block/<int:profile_id>",
@@ -645,6 +1045,13 @@ urlpatterns = [
                     location_wiki.LocationWikiHistoryView.as_view(),
                     name="location.wiki.history",
                 ),
+                path("<slug:location_slug>/wiki/article/", article.ArticlePanelView.as_view(), name="location.wiki.article"),
+                path("<slug:location_slug>/wiki/article/save/", article.ArticleSaveView.as_view(), name="location.wiki.article.save"),
+                path("<slug:location_slug>/wiki/article/preview/", article.ArticlePreviewView.as_view(), name="location.wiki.article.preview"),
+                path("<slug:location_slug>/wiki/article/image/", article.ArticleImageUploadView.as_view(), name="location.wiki.article.image"),
+                path("<slug:location_slug>/wiki/article/history/", article.ArticleHistoryView.as_view(), name="location.wiki.article.history"),
+                path("<slug:location_slug>/wiki/article/history/<int:revision_id>/", article.ArticleRevisionView.as_view(), name="location.wiki.article.revision"),
+                path("<slug:location_slug>/wiki/article/history/<int:revision_id>/restore/", article.ArticleRestoreView.as_view(), name="location.wiki.article.restore"),
                 path(
                     "<slug:location_slug>/wiki/history/<int:edit_id>/revert/",
                     location_wiki.LocationWikiRevertView.as_view(),
@@ -716,6 +1123,51 @@ urlpatterns = [
                     name="location.wiki.alias.toggle_nickname",
                 ),
                 path(
+                    "<slug:location_slug>/wiki/building-attributes/",
+                    location_wiki.WikiBuildingAttributesPanelView.as_view(),
+                    name="location.wiki.building_attributes",
+                ),
+                path(
+                    "<slug:location_slug>/wiki/buildings/",
+                    location_wiki.WikiParcelBuildingsPanelView.as_view(),
+                    name="location.wiki.buildings",
+                ),
+                path(
+                    "<slug:location_slug>/wiki/ownership/",
+                    property_owner.WikiOwnershipPanelView.as_view(),
+                    name="location.wiki.ownership",
+                ),
+                path(
+                    "<slug:location_slug>/wiki/ownership/<int:owner_id>/edit/",
+                    property_owner.WikiOwnerUpdateView.as_view(),
+                    name="location.wiki.ownership.edit",
+                ),
+                path(
+                    "<slug:location_slug>/wiki/ownership/<int:owner_id>/remove/",
+                    property_owner.WikiOwnerRemoveView.as_view(),
+                    name="location.wiki.ownership.remove",
+                ),
+                path(
+                    "<slug:location_slug>/wiki/sales/",
+                    property_owner.WikiPropertySaleTabView.as_view(),
+                    name="location.wiki.sales",
+                ),
+                path(
+                    "<slug:location_slug>/wiki/sales/<int:sale_id>/delete/",
+                    property_owner.WikiPropertySaleDeleteView.as_view(),
+                    name="location.wiki.sales.delete",
+                ),
+                path(
+                    "<slug:location_slug>/wiki/links/",
+                    links.LocationLinksView.as_view(),
+                    name="location.wiki.links",
+                ),
+                path(
+                    "<slug:location_slug>/wiki/links/<int:link_id>/delete/",
+                    links.LocationLinkDeleteView.as_view(),
+                    name="location.wiki.link.delete",
+                ),
+                path(
                     "<slug:location_slug>/wiki/gallery/",
                     image_gallery.WikiGalleryView.as_view(),
                     name="location.wiki.gallery",
@@ -731,9 +1183,46 @@ urlpatterns = [
                     name="location.wiki.gallery.image",
                 ),
                 path(
+                    "<slug:location_slug>/wiki/cover-photo/",
+                    image_gallery.WikiCoverPhotoView.as_view(),
+                    name="location.wiki.cover_photo",
+                ),
+                path(
+                    "<slug:location_slug>/wiki/flickr-album/",
+                    flickr.WikiFlickrAlbumDialogView.as_view(),
+                    name="location.wiki.flickr_album.dialog",
+                ),
+                path(
+                    "<slug:location_slug>/wiki/flickr-album/lookup/",
+                    flickr.WikiFlickrAlbumLookupView.as_view(),
+                    name="location.wiki.flickr_album.lookup",
+                ),
+                path(
+                    "<slug:location_slug>/wiki/flickr-album/import/",
+                    flickr.WikiFlickrAlbumImportView.as_view(),
+                    name="location.wiki.flickr_album.import",
+                ),
+                path(
+                    "<slug:location_slug>/wiki/flickr-album/import/<str:task_id>/progress/",
+                    flickr.WikiFlickrAlbumImportProgressView.as_view(),
+                    name="location.wiki.flickr_album.import.progress",
+                ),
+                path(
                     "<slug:location_slug>/wiki/stat/<str:field>/vote/",
                     location_wiki.WikiStatVoteView.as_view(),
                     name="location.wiki.stat_vote",
+                ),
+                # Media gallery: the vote endpoint must precede the catch-all
+                # media/<source>/ loader so "vote" isn't captured as a source.
+                path(
+                    "<slug:location_slug>/wiki/media/vote/",
+                    wiki_media.WikiMediaVoteView.as_view(),
+                    name="location.wiki.media.vote",
+                ),
+                path(
+                    "<slug:location_slug>/wiki/media/<str:source>/",
+                    wiki_media.WikiMediaProviderView.as_view(),
+                    name="location.wiki.media",
                 ),
             ],
         ),
@@ -742,94 +1231,98 @@ urlpatterns = [
         "trips/",
         include(
             [
-                path("", trip.TripListView.as_view(), name="trips.list"),
+                path("", trip.TripOverviewView.as_view(), name="trips.overview"),
+                path("list/", trip.TripListView.as_view(), name="trips.list"),
+                path("calendar/", trip.TripCalendarView.as_view(), name="trips.calendar"),
                 path("create/", trip.TripCreateView.as_view(), name="trips.create"),
-                path("location-search/", trip.TripLocationSearchView.as_view(), name="trips.location_search"),
                 path("calendar/connect/", calendar_sync.GoogleCalendarConnectView.as_view(), name="trips.calendar.connect"),
                 path("calendar/callback/", calendar_sync.GoogleCalendarCallbackView.as_view(), name="trips.calendar.callback"),
                 path("calendar/disconnect/", calendar_sync.GoogleCalendarDisconnectView.as_view(), name="trips.calendar.disconnect"),
                 path("calendar/import/", calendar_sync.CalendarImportView.as_view(), name="trips.calendar.import"),
                 path("calendar/import/preview/", calendar_sync.CalendarImportPreviewView.as_view(), name="trips.calendar.import.preview"),
-                path("<uuid:trip_uuid>/calendar/export/", calendar_sync.TripCalendarExportView.as_view(), name="trips.calendar.export"),
-                path("<uuid:trip_uuid>/", trip.TripDetailView.as_view(), name="trips.detail"),
-                path("<uuid:trip_uuid>/edit/", trip.TripEditView.as_view(), name="trips.edit"),
-                path("<uuid:trip_uuid>/delete/", trip.TripDeleteView.as_view(), name="trips.delete"),
-                path("<uuid:trip_uuid>/activities/", trip.TripActivitiesView.as_view(), name="trips.activities"),
+                path("<slug:trip_slug>/calendar/export/", calendar_sync.TripCalendarExportView.as_view(), name="trips.calendar.export"),
+                path("<slug:trip_slug>/calendar/auto-sync/", calendar_sync.TripCalendarAutoSyncView.as_view(), name="trips.calendar.autosync"),
+                path("<slug:trip_slug>/", trip.TripDetailView.as_view(), name="trips.detail"),
+                path("<slug:trip_slug>/edit/", trip.TripEditView.as_view(), name="trips.edit"),
+                path("<slug:trip_slug>/delete/", trip.TripDeleteView.as_view(), name="trips.delete"),
+                path("<slug:trip_slug>/activities/", trip.TripActivitiesView.as_view(), name="trips.activities"),
                 path(
-                    "<uuid:trip_uuid>/activities/<int:activity_id>/delete/",
+                    "<slug:trip_slug>/activities/<int:activity_id>/delete/",
                     trip.TripActivityDeleteView.as_view(),
                     name="trips.activity.delete",
                 ),
                 path(
-                    "<uuid:trip_uuid>/activities/<int:activity_id>/edit/",
+                    "<slug:trip_slug>/activities/<int:activity_id>/edit/",
                     trip.TripActivityEditView.as_view(),
                     name="trips.activity.edit",
                 ),
                 path(
-                    "<uuid:trip_uuid>/activities/<int:activity_id>/status/",
+                    "<slug:trip_slug>/activities/<int:activity_id>/status/",
                     trip.TripActivityStatusView.as_view(),
                     name="trips.activity.status",
                 ),
                 path(
-                    "<uuid:trip_uuid>/activities/<int:activity_id>/move/",
+                    "<slug:trip_slug>/activities/<int:activity_id>/move/",
                     trip.TripActivityMoveView.as_view(),
                     name="trips.activity.move",
                 ),
                 path(
-                    "<uuid:trip_uuid>/activities/<int:activity_id>/position/",
+                    "<slug:trip_slug>/activities/<int:activity_id>/position/",
                     trip.TripActivityPositionView.as_view(),
                     name="trips.activity.position",
                 ),
                 path(
-                    "<uuid:trip_uuid>/activities/<int:activity_id>/position",
+                    "<slug:trip_slug>/activities/<int:activity_id>/position",
                     trip.TripActivityPositionView.as_view(),
                 ),
                 path(
-                    "<uuid:trip_uuid>/activities/<int:activity_id>/vote/",
+                    "<slug:trip_slug>/activities/<int:activity_id>/vote/",
                     trip.TripActivityVoteView.as_view(),
                     name="trips.activity.vote",
                 ),
                 path(
-                    "<uuid:trip_uuid>/activities/<int:activity_id>/complete/",
+                    "<slug:trip_slug>/activities/<int:activity_id>/complete/",
                     trip.TripActivityCompleteView.as_view(),
                     name="trips.activity.complete",
                 ),
                 path(
-                    "<uuid:trip_uuid>/child-trip-search/",
+                    "<slug:trip_slug>/child-trip-search/",
                     trip.TripChildTripSearchView.as_view(),
                     name="trips.child_trip_search",
                 ),
-                path("<uuid:trip_uuid>/comments/", trip.TripCommentsView.as_view(), name="trips.comments"),
+                path("<slug:trip_slug>/comments/", trip.TripCommentsView.as_view(), name="trips.comments"),
                 path(
-                    "<uuid:trip_uuid>/comments/<int:comment_id>/delete/",
+                    "<slug:trip_slug>/comments/<int:comment_id>/delete/",
                     trip.TripCommentDeleteView.as_view(),
                     name="trips.comment.delete",
                 ),
                 path(
-                    "<uuid:trip_uuid>/comments/<int:comment_id>/react/",
+                    "<slug:trip_slug>/comments/<int:comment_id>/react/",
                     comments.TripCommentReactionView.as_view(),
                     name="trips.comment.react",
                 ),
-                path("<uuid:trip_uuid>/members/", trip.TripMembersView.as_view(), name="trips.members"),
-                path("<uuid:trip_uuid>/members", trip.TripMembersView.as_view()),
+                path("<slug:trip_slug>/members/", trip.TripMembersView.as_view(), name="trips.members"),
+                path("<slug:trip_slug>/members", trip.TripMembersView.as_view()),
                 path(
-                    "<uuid:trip_uuid>/members/<int:profile_id>/remove/",
+                    "<slug:trip_slug>/members/<int:profile_id>/remove/",
                     trip.TripMemberRemoveView.as_view(),
                     name="trips.member.remove",
                 ),
                 path(
-                    "<uuid:trip_uuid>/members/<int:profile_id>/organizer/",
+                    "<slug:trip_slug>/members/<int:profile_id>/organizer/",
                     trip.TripMemberOrganizerView.as_view(),
                     name="trips.member.organizer",
                 ),
-                path("<uuid:trip_uuid>/rsvp/", trip.TripMemberRSVPView.as_view(), name="trips.rsvp"),
-                path("<uuid:trip_uuid>/rsvp", trip.TripMemberRSVPView.as_view()),
-                path("<uuid:trip_uuid>/leave/", trip.TripLeaveView.as_view(), name="trips.leave"),
-                path("<uuid:trip_uuid>/leave", trip.TripLeaveView.as_view()),
-                path("<uuid:trip_uuid>/settings/", trip.TripSettingsView.as_view(), name="trips.settings"),
-                path("<uuid:trip_uuid>/settings", trip.TripSettingsView.as_view()),
-                path("<uuid:trip_uuid>/map-data/", trip.TripMapDataView.as_view(), name="trips.map_data"),
-                path("<uuid:trip_uuid>/weather/", trip.TripWeatherView.as_view(), name="trips.weather"),
+                path("<slug:trip_slug>/rsvp/", trip.TripMemberRSVPView.as_view(), name="trips.rsvp"),
+                path("<slug:trip_slug>/rsvp", trip.TripMemberRSVPView.as_view()),
+                path("<slug:trip_slug>/join/", trip.TripMembershipJoinView.as_view(), name="trips.join"),
+                path("<slug:trip_slug>/join", trip.TripMembershipJoinView.as_view()),
+                path("<slug:trip_slug>/leave/", trip.TripLeaveView.as_view(), name="trips.leave"),
+                path("<slug:trip_slug>/leave", trip.TripLeaveView.as_view()),
+                path("<slug:trip_slug>/settings/", trip.TripSettingsView.as_view(), name="trips.settings"),
+                path("<slug:trip_slug>/settings", trip.TripSettingsView.as_view()),
+                path("<slug:trip_slug>/map-data/", trip.TripMapDataView.as_view(), name="trips.map_data"),
+                path("<slug:trip_slug>/weather/", trip.TripWeatherView.as_view(), name="trips.weather"),
             ],
         ),
     ),
@@ -838,6 +1331,7 @@ urlpatterns = [
         include(
             [
                 path("", safety.SafetyHomeView.as_view(), name="safety.home"),
+                path("settings/", safety.SafetySettingsView.as_view(), name="safety.settings"),
                 path("new/", safety.SafetyCheckinCreateView.as_view(), name="safety.checkin.create"),
                 path("nav-banner/", safety.SafetyActiveCheckinBannerView.as_view(), name="safety.active_banner"),
                 path("wiki-option/", safety.SafetyCheckinWikiOptionView.as_view(), name="safety.checkin.wiki_option"),
@@ -868,8 +1362,12 @@ urlpatterns = [
             [
                 path("new/", markup.MarkupMapCreateView.as_view(), name="markup_map.create"),
                 path("<uuid:map_uuid>/json/", markup.MarkupJsonView.as_view(), name="markup_map.json"),
+                path("<uuid:map_uuid>/snapshot/", markup.MarkupMapSnapshotView.as_view(), name="markup_map.snapshot"),
                 path("<uuid:map_uuid>/view/", markup.MarkupMapViewStateView.as_view(), name="markup_map.view_state"),
                 path("<uuid:map_uuid>/delete/", markup.MarkupMapDeleteView.as_view(), name="markup_map.delete"),
+                path("<uuid:map_uuid>/clone/", markup.MarkupMapCloneView.as_view(), name="markup_map.clone"),
+                path("<uuid:map_uuid>/share/", map_sharing.MarkupMapShareDialogView.as_view(), name="markup_map.share.dialog"),
+                path("<uuid:map_uuid>/share/send/", map_sharing.MarkupMapShareCreateView.as_view(), name="markup_map.share.send"),
                 path("<uuid:map_uuid>/markup/", markup.MarkupView.as_view(), name="markup_map.markup"),
                 path("<uuid:map_uuid>/markup/<uuid:markup_uuid>/", markup.MarkupEditView.as_view(), name="markup_map.markup.edit"),
             ],
@@ -881,6 +1379,7 @@ urlpatterns = [
             [
                 path("", organize.OrganizeIndexView.as_view(), name="organize.index"),
                 path("priority/save/", organize.OrganizePrioritySaveView.as_view(), name="organize.priority.save"),
+                path("priority/list/", organize.OrganizePriorityListView.as_view(), name="organize.priority.list"),
             ],
         ),
     ),
@@ -895,7 +1394,82 @@ urlpatterns = [
     ),
     path("pin-shares/<int:share_id>/", pin_sharing.PinShareDetailView.as_view(), name="pin.share.detail"),
     path("pin-shares/<int:share_id>/respond/", pin_sharing.PinShareRespondView.as_view(), name="pin.share.respond"),
+    path("map-shares/<int:share_id>/", map_sharing.MarkupMapShareDetailView.as_view(), name="markup_map.share.detail"),
     path("visit-suggestions/<int:suggestion_id>/respond/", visit_suggestions.VisitSuggestionRespondView.as_view(), name="visit_suggestion.respond"),
+    path("comments/images/picker/", comments.CommentImagePickerView.as_view(), name="comments.image_picker"),
+    path(
+        "messages/",
+        include(
+            [
+                path("", direct_messages.MessagesPageView.as_view(), name="messages.view"),
+                path("dropdown/", direct_messages.MessagesDropdownView.as_view(), name="messages.dropdown"),
+                path("unread-count/", direct_messages.MessagesUnreadCountView.as_view(), name="messages.unread_count"),
+                path("recipients/", direct_messages.RecipientSearchView.as_view(), name="messages.recipients"),
+                path("search/", direct_messages.MessagesSearchView.as_view(), name="messages.search"),
+                path("upload-image/", direct_messages.DirectMessageImageUploadView.as_view(), name="messages.upload_image"),
+                path("attach-map/picker/", direct_messages.DirectMessageMapPickerView.as_view(), name="messages.attach_map.picker"),
+                path("list/", direct_messages.ConversationListView.as_view(), name="messages.list"),
+                path("groups/create/", group_chats.GroupCreateView.as_view(), name="messages.group.create"),
+                path("groups/member-search/", group_chats.GroupMemberSearchView.as_view(), name="messages.group.member_search"),
+                path("g/<uuid:group_uuid>/", group_chats.GroupConversationView.as_view(), name="messages.group"),
+                path("g/<uuid:group_uuid>/send/", group_chats.GroupSendView.as_view(), name="messages.group.send"),
+                path("g/<uuid:group_uuid>/older/", group_chats.GroupOlderMessagesView.as_view(), name="messages.group.older"),
+                path("g/<uuid:group_uuid>/read/", group_chats.GroupReadView.as_view(), name="messages.group.read"),
+                path("g/<uuid:group_uuid>/rename/", group_chats.GroupRenameView.as_view(), name="messages.group.rename"),
+                path("g/<uuid:group_uuid>/mute/", group_chats.GroupMuteToggleView.as_view(), name="messages.group.mute"),
+                path("g/<uuid:group_uuid>/leave/", group_chats.GroupLeaveView.as_view(), name="messages.group.leave"),
+                path("g/<uuid:group_uuid>/members/", group_chats.GroupMembersDialogView.as_view(), name="messages.group.members"),
+                path("g/<uuid:group_uuid>/members/add/", group_chats.GroupAddMembersView.as_view(), name="messages.group.members.add"),
+                path("g/<uuid:group_uuid>/members/remove/", group_chats.GroupRemoveMemberView.as_view(), name="messages.group.members.remove"),
+                path("g/<uuid:group_uuid>/delete/<int:message_id>/", group_chats.GroupMessageDeleteView.as_view(), name="messages.group.delete"),
+                path("g/<uuid:group_uuid>/share/pin/", group_chats.GroupSharePinView.as_view(), name="messages.group.share.pin"),
+                path("g/<uuid:group_uuid>/share/pin/<int:message_id>/respond/", group_chats.GroupSharePinRespondView.as_view(), name="messages.group.share.pin.respond"),
+                path("<slug:profile_slug>/", direct_messages.ConversationView.as_view(), name="messages.conversation"),
+                path("<slug:profile_slug>/send/", direct_messages.ConversationSendView.as_view(), name="messages.send"),
+                path("<slug:profile_slug>/read/", direct_messages.ConversationReadView.as_view(), name="messages.read"),
+                path("<slug:profile_slug>/mute/", direct_messages.ConversationMuteToggleView.as_view(), name="messages.mute"),
+                path("<slug:profile_slug>/older/", direct_messages.ConversationOlderMessagesView.as_view(), name="messages.older"),
+                path("<slug:profile_slug>/search/", direct_messages.ConversationSearchView.as_view(), name="messages.conversation_search"),
+                path("<slug:profile_slug>/react/<int:message_id>/", direct_messages.MessageReactionToggleView.as_view(), name="messages.react"),
+                path("<slug:profile_slug>/delete/<int:message_id>/", direct_messages.MessageDeleteView.as_view(), name="messages.delete"),
+                path("<slug:profile_slug>/image-permission/", direct_messages.MessageImagePermissionView.as_view(), name="messages.image_permission"),
+                path("<slug:profile_slug>/share/pin/", direct_message_shares.MessageSharePinView.as_view(), name="messages.share.pin"),
+                path("<slug:profile_slug>/share/trip/", direct_message_shares.MessageShareTripView.as_view(), name="messages.share.trip"),
+                path("<slug:profile_slug>/share/friend/", direct_message_shares.MessageShareFriendView.as_view(), name="messages.share.friend"),
+                path("<slug:profile_slug>/share/pin/<int:message_id>/respond/", direct_message_shares.MessageShareRespondPinView.as_view(), name="messages.share.pin.respond"),
+                path("<slug:profile_slug>/share/friend/<int:message_id>/respond/", direct_message_shares.MessageShareRespondFriendView.as_view(), name="messages.share.friend.respond"),
+                path("<slug:profile_slug>/mention/<int:mention_id>/add-pin/", direct_message_shares.MessageMentionAddPinView.as_view(), name="messages.mention.add_pin"),
+            ],
+        ),
+    ),
+    path(
+        "e2ee/",
+        include(
+            [
+                path("login-params/", e2ee.E2EELoginParamsView.as_view(), name="e2ee.login_params"),
+                path("enroll/", e2ee.E2EEEnrollView.as_view(), name="e2ee.enroll"),
+                path("keys/", e2ee.E2EEOwnKeysView.as_view(), name="e2ee.keys"),
+                path("keys/<slug:profile_slug>/", e2ee.E2EEPartnerKeyView.as_view(), name="e2ee.partner_key"),
+                path("conversation-key/<slug:profile_slug>/", e2ee.E2EEConversationKeyView.as_view(), name="e2ee.conversation_key"),
+                path("group-key/<uuid:group_uuid>/", e2ee.E2EEGroupKeyView.as_view(), name="e2ee.group_key"),
+                path("change-password/", e2ee.E2EEChangePasswordView.as_view(), name="e2ee.change_password"),
+                path("rewrap/", e2ee.E2EERewrapView.as_view(), name="e2ee.rewrap"),
+                path("rewrap-all/", e2ee.E2EERewrapAllView.as_view(), name="e2ee.rewrap_all"),
+                path("reset/", e2ee.E2EEResetView.as_view(), name="e2ee.reset"),
+            ],
+        ),
+    ),
+    path(
+        "search/",
+        include(
+            [
+                path("panel/", search.GlobalSearchPanelView.as_view(), name="search.panel"),
+                path("hints/", search.GlobalSearchHintsView.as_view(), name="search.hints"),
+                path("commit/", search.GlobalSearchCommitView.as_view(), name="search.commit"),
+                path("history/delete/", search.GlobalSearchHistoryDeleteView.as_view(), name="search.history.delete"),
+            ],
+        ),
+    ),
     path(
         "notifications/",
         include(
@@ -932,6 +1506,8 @@ urlpatterns = [
                 path("import/start/", tools.ImportStartView.as_view(), name="tools.import.start"),
                 path("import/status/<str:job_id>/", tools.ImportStatusView.as_view(), name="tools.import.status"),
                 path("backup/start/", tools.BackupStartView.as_view(), name="tools.backup.start"),
+                path("photo-scan/upload/", tools.PhotoLocationScanUploadView.as_view(), name="tools.photo_scan.upload"),
+                path("photo-scan/upload-photo/", tools.PhotoLocationScanPhotoUploadView.as_view(), name="tools.photo_scan.upload_photo"),
             ],
         ),
     ),
@@ -942,11 +1518,15 @@ urlpatterns = [
                 path("", memories.MemoriesView.as_view(), name="memories.view"),
                 path("data/", memories.MemoriesFeedDataView.as_view(), name="memories.data"),
                 path("on-this-day/", memories.MemoriesOnThisDayView.as_view(), name="memories.on_this_day"),
+                path("hero-stats/", memories.MemoriesHeroStatsView.as_view(), name="memories.hero_stats"),
                 path("visit/<slug:pin_slug>/", memories.MemoriesVisitView.as_view(), name="memories.visit"),
                 path("visit/<slug:pin_slug>/<int:visit_id>/", memories.MemoriesVisitView.as_view(), name="memories.visit.edit"),
                 path("visits/", memories.MemoriesVisitsView.as_view(), name="memories.visits"),
+                path("visits/map-data/", memories.MemoriesVisitsMapDataView.as_view(), name="memories.visits.map_data"),
+                path("visits/bulk/<str:action>/", memories.MemoriesVisitsBulkActionView.as_view(), name="memories.visits.bulk"),
                 path("maps/", memories.MemoriesMapsView.as_view(), name="memories.maps"),
                 path("sharing/", memories.MemoriesSharingView.as_view(), name="memories.sharing"),
+                path("journal/", memories.MemoriesJournalView.as_view(), name="memories.journal"),
                 path("unlogged/<slug:pin_slug>/<str:action>/", memories.MemoriesUnloggedActionView.as_view(), name="memories.unlogged.action"),
                 path("photos/", photos.MemoriesPhotosView.as_view(), name="memories.photos"),
                 path("photos/queue/", photos.PhotoQueueView.as_view(), name="memories.photos.queue"),
@@ -955,6 +1535,16 @@ urlpatterns = [
                 path("photos/pin-search/", photos.PhotoPinSearchView.as_view(), name="memories.photos.pin_search"),
                 path("photos/<int:image_id>/confirm-pin/", photos.PhotoPinConfirmView.as_view(), name="memories.photos.pin_confirm"),
                 path("photos/<int:image_id>/<str:action>/", photos.PhotoActionView.as_view(), name="memories.photos.action"),
+                path("locations/", pin_suggestions.PinSuggestionQueueView.as_view(), name="memories.locations"),
+                path("locations/queue/", pin_suggestions.PinSuggestionQueuePartialView.as_view(), name="memories.locations.queue"),
+                path("locations/map-data/", pin_suggestions.PinSuggestionMapDataView.as_view(), name="memories.locations.map_data"),
+                path("locations/bulk/<str:action>/", pin_suggestions.PinSuggestionBulkActionView.as_view(), name="memories.locations.bulk"),
+                path(
+                    "locations/<int:suggestion_id>/immich/thumbnail/<str:asset_id>/",
+                    pin_suggestions.PinSuggestionImmichThumbnailView.as_view(),
+                    name="memories.locations.immich_thumbnail",
+                ),
+                path("locations/<int:suggestion_id>/<str:action>/", pin_suggestions.PinSuggestionActionView.as_view(), name="memories.locations.action"),
             ],
         ),
     ),
@@ -962,6 +1552,7 @@ urlpatterns = [
     path("welcome/", onboarding.WelcomeOnboardingView.as_view(), name="onboarding.welcome"),
     path("tasks/<str:task_id>/status/", site_admin.CeleryTaskStatusView.as_view(), name="celery_task_status"),
     path("site-admin/", site_admin.SiteAdminHomeView.as_view(), name="site_admin_home"),
+    path("site-admin/status/", site_admin.SiteAdminHomeStatusPartialView.as_view(), name="site_admin_home_status"),
     path("site-admin/users/", site_admin.SiteAdminUsersView.as_view(), name="site_admin_users"),
     path("site-admin/settings/", site_admin.SiteAdminView.as_view(), name="site_admin"),
     path("site-admin/stats/", site_admin.SiteAdminStatsView.as_view(), name="site_admin_stats"),

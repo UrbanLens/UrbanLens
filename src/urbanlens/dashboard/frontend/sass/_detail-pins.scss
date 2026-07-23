@@ -183,8 +183,8 @@
     width: 34px;
     height: 34px;
     border-radius: 6px;
-    border: 1px solid var(--ul-grey-1a);
-    background: var(--ul-grey-0);
+    border: 1px solid var(--ul-surface-raised-border);
+    background: var(--ul-surface-raised);
     cursor: pointer;
     transition: border-color .12s, background .12s;
 
@@ -195,7 +195,7 @@
     }
 
     &:hover {
-        background: var(--ul-grey-0a);
+        background: var(--ul-hover-bg);
         border-color: $color-blue-300;
     }
 
@@ -275,11 +275,24 @@
 
 // -- Aliases panel ------------------------------------------------------------
 .aliases-panel {
-    .aliases-description {
-        padding: .5rem 1rem 0;
-        font-size: .83rem;
-        color: var(--ul-grey-6);
-        margin: 0;
+    .ul-page-explainer {
+        margin: .5rem 1rem 0;
+    }
+
+    // .card-header is a named-area CSS grid (see panel-header-grid) that places
+    // items by grid-area, not DOM order - an element with no explicit grid-area
+    // (like .ul-explainer-anchor) falls back to auto-placement in whatever cell
+    // is first free, which lands it *after* the title here. This panel wants the
+    // explainer to the left of "Aliases" instead, so it gets its own column
+    // between the icon and the title rather than relying on source order.
+    .card-header {
+        grid-template-columns: auto auto minmax(0, 1fr) auto auto;
+        grid-template-areas: 'header-icon header-explainer header-title header-meta header-actions';
+
+        .ul-explainer-anchor {
+            grid-area: header-explainer;
+            margin-left: 0;
+        }
     }
 }
 
@@ -405,35 +418,37 @@
 
 .alias-add-form {
     display: flex;
-    gap: .5rem;
+    flex-direction: column;
+    gap: .4rem;
     padding: 0 1rem 1rem;
-    align-items: center;
 
-    // Rendered as a small pill so the checked state is obvious at a glance.
-    .alias-nickname-check {
-        display: inline-flex;
+    // Hidden until the header "+" button reveals it (see .is-adding below) -
+    // only applies where that button exists (the pin page's own panel).
+    &.alias-add-form--collapsed {
+        display: none;
+    }
+
+    .alias-add-row {
+        display: flex;
+        gap: .5rem;
         align-items: center;
-        gap: .35rem;
-        padding: .3rem .55rem;
-        border: 1px solid var(--ul-grey-1a);
-        border-radius: 999px;
-        font-size: .78rem;
-        color: var(--ul-grey-6);
-        white-space: nowrap;
-        cursor: pointer;
-        user-select: none;
-        transition: border-color .15s, background .15s, color .15s;
+    }
 
-        &:has(input:checked) {
-            border-color: $color-indigo-500;
-            background: rgba(99, 102, 241, .1);
-        }
+    // Visible checkbox positioned below the name input, rather than an
+    // icon-only toggle - the nickname distinction is easy to miss otherwise.
+    .alias-nickname-checkbox {
+        display: flex;
+        align-items: center;
+        gap: .4rem;
+        font-size: .8rem;
+        color: var(--ul-grey-6);
+        cursor: pointer;
     }
 
     .alias-add-input {
         flex: 1;
         padding: .35rem .6rem;
-        border: 1px solid var(--ul-grey-1a);
+        border: 1px solid var(--ul-surface-raised-border);
         border-radius: 6px;
         font-size: .85rem;
         outline: none;
@@ -455,7 +470,7 @@
         border-radius: 6px;
         cursor: pointer;
         transition: background .15s;
-        
+
         .material-symbols-outlined,
         .material-icons {
             font-size: 18px;
@@ -467,54 +482,9 @@
     }
 }
 
-// -- Collapsible "what are aliases?" explainer --------------------------------
-.alias-help {
-    margin: 0 1rem 1rem;
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: 8px;
-    font-size: .8rem;
-    color: var(--ul-grey-6);
-
-    .alias-help-summary {
-        display: flex;
-        align-items: center;
-        gap: .35rem;
-        padding: .45rem .6rem;
-        cursor: pointer;
-        list-style: none;
-        user-select: none;
-
-        &::-webkit-details-marker {
-            display: none;
-        }
-
-        .material-symbols-outlined {
-            font-size: 1rem;
-            color: var(--ul-grey-5);
-        }
-    }
-
-    &[open] .alias-help-summary {
-        border-bottom: 1px solid var(--ul-grey-1a);
-    }
-
-    .alias-help-body {
-        padding: .5rem .6rem;
-
-        p {
-            margin: 0 0 .5rem;
-            line-height: 1.45;
-
-            &:last-child {
-                margin-bottom: 0;
-            }
-        }
-    }
-
-    .alias-help-inline-icon {
-        font-size: .9rem;
-        vertical-align: -.15em;
-    }
+// Header "+" button reveals the (otherwise collapsed) add-alias form.
+.aliases-panel.is-adding .alias-add-form--collapsed {
+    display: flex;
 }
 
 // -- Circle-style bg/border opacity row --------------------------------------
@@ -574,5 +544,89 @@
         flex: 1;
         min-height: 0;
         overflow-y: auto;
+    }
+}
+// -- Buildings on this property ------------------------------------------------
+// Every structure known to stand on the parcel (see plugins.builtin.parcel_buildings),
+// on both the pin detail page and the wiki. Rows that already have a sub pin are
+// linked and flagged; the rest are what the import button below the list creates.
+.parcel-buildings {
+    .card__body {
+        padding: 0;
+    }
+
+    .parcel-buildings-import {
+        margin: .75rem 1.25rem 1rem;
+    }
+}
+
+.parcel-building-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    max-height: 26rem;
+    overflow-y: auto;
+}
+
+.parcel-building {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    padding: .5rem 1.25rem;
+    border-bottom: 1px solid rgba(128, 128, 128, .15);
+
+    &:last-child {
+        border-bottom: none;
+    }
+}
+
+// Building numbers are the identifiers people navigate a campus by, so they get
+// a fixed-width leading column and stay vertically aligned down the whole list.
+.parcel-building-number {
+    flex: 0 0 2.75rem;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    font-size: .85rem;
+    color: var(--ul-grey-7);
+    text-align: right;
+}
+
+.parcel-building-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: .1rem;
+}
+
+.parcel-building-name {
+    font-size: .9rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.parcel-building-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem;
+    font-size: .75rem;
+    color: var(--ul-grey-6);
+}
+
+.parcel-building-source {
+    opacity: .8;
+}
+
+.parcel-building-status {
+    font-size: 1rem;
+    color: var(--ul-primary-color);
+    flex-shrink: 0;
+}
+
+.parcel-building--unpinned {
+    .parcel-building-name,
+    .parcel-building-number {
+        opacity: .75;
     }
 }

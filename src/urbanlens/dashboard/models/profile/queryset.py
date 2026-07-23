@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract
+
+if TYPE_CHECKING:
+    from urbanlens.dashboard.models.profile.model import Profile
 
 
 class ProfileQuerySet(abstract.PublicDashboardQuerySet):
@@ -40,3 +45,86 @@ class ProfileManager(abstract.PublicDashboardManager.from_queryset(ProfileQueryS
     """
     A custom query manager. This creates QuerySets and is used in all models interacting with the app db.
     """
+
+
+class ProfileNoteQuerySet(abstract.DashboardQuerySet):
+    """Custom queryset for ProfileNote models."""
+
+    def for_pair(self, author: Profile, subject: Profile) -> ProfileNoteQuerySet:
+        """Notes a specific author has written about a specific subject.
+
+        Args:
+            author: The profile who wrote the note(s).
+            subject: The profile the note(s) are about.
+
+        Returns:
+            Matching notes - a viewer may hold several per subject.
+        """
+        return self.filter(author=author, subject=subject)
+
+
+class ProfileNoteManager(abstract.DashboardManager.from_queryset(ProfileNoteQuerySet)):
+    """Custom query manager for ProfileNote models."""
+
+
+class ProfileNicknameQuerySet(abstract.DashboardQuerySet):
+    """Custom queryset for ProfileNickname models."""
+
+    def for_pair(self, author: Profile, subject: Profile) -> ProfileNicknameQuerySet:
+        """The nickname row (at most one) an author has assigned to a subject.
+
+        Args:
+            author: The profile who assigned the nickname.
+            subject: The profile the nickname is about.
+
+        Returns:
+            A queryset matching at most one row (unique on author+subject).
+        """
+        return self.filter(author=author, subject=subject)
+
+
+class ProfileNicknameManager(abstract.DashboardManager.from_queryset(ProfileNicknameQuerySet)):
+    """Custom query manager for ProfileNickname models."""
+
+
+class ProfileTrustQuerySet(abstract.DashboardQuerySet):
+    """Custom queryset for ProfileTrust models."""
+
+    def for_pair(self, author: Profile, subject: Profile) -> ProfileTrustQuerySet:
+        """The trust rating row (at most one) an author has given a subject.
+
+        Args:
+            author: The profile who gave the rating.
+            subject: The profile the rating is about.
+
+        Returns:
+            A queryset matching at most one row (unique on author+subject).
+        """
+        return self.filter(author=author, subject=subject)
+
+
+class ProfileTrustManager(abstract.DashboardManager.from_queryset(ProfileTrustQuerySet)):
+    """Custom query manager for ProfileTrust models."""
+
+
+class ProfileEmailQuerySet(abstract.DashboardQuerySet):
+    """Custom queryset for ProfileEmail models."""
+
+    def verified_for(self, normalized_email: str) -> ProfileEmailQuerySet:
+        """Verified claims on one normalized address (at most one row exists).
+
+        Only verified rows count for identity matching anywhere - an
+        unverified row is inert by design (see the model docstring).
+
+        Args:
+            normalized_email: The normalized form (see ``normalize_email``).
+
+        Returns:
+            A queryset matching at most one row (partial unique constraint on
+            verified rows).
+        """
+        return self.filter(is_verified=True, normalized_email=normalized_email)
+
+
+class ProfileEmailManager(abstract.DashboardManager.from_queryset(ProfileEmailQuerySet)):
+    """Custom query manager for ProfileEmail models."""

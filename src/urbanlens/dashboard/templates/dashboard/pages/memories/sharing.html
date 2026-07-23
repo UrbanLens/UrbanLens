@@ -1,53 +1,198 @@
 {% extends 'dashboard/themes/base.html' %}
 {% load static %}
+{% load memories_components %}
 
 {% block title %}Sharing{% endblock %}
 
+{% block hero %}
+{% include "dashboard/partials/ui/_page_hero.html" with icon="ios_share" title="Pins & maps you've shared" subtitle="Everything you've shared with friends and received from them, and how far your own shares travelled from there." modifier="top" %}
+{% endblock %}
+
+{% block subnav %}
+<div class="ul-page-subnav">
+    <div class="ul-page-subnav__inner">
+        {% memories_tabs "sharing" %}
+    </div>
+</div>
+{% endblock %}
+
 {% block content %}
 <div id="memories-sharing-page" class="memories-tab-page">
-    <div class="memories-header">
-        <div>
-            <h1 class="memories-title"><i class="material-symbols-outlined">ios_share</i> Pins you've shared</h1>
-            <p class="memories-subtitle">Every pin you've shared with friends, who received it, and how far it travelled from there.</p>
-        </div>
-    </div>
 
     <div class="page-inner">
-        {% include "dashboard/partials/memories/_photos_tabs.html" with active="sharing" unlogged_visits_count=unlogged_visits|length %}
-
-        {% if share_groups %}
-        <div class="memories-sharing-list">
-            {% for group in share_groups %}
-            <article class="memories-sharing-card card">
-                <div class="memories-sharing-card-header">
-                    <a class="memories-sharing-pin-link" href="{% url 'pin.details' group.pin.slug %}">
-                        <i class="material-symbols-outlined">location_on</i>
-                        {{ group.pin.effective_name }}
-                    </a>
-                    <span class="memories-sharing-chain"
-                          data-tooltip="Counts every share of this pin down the chain, including friends resharing it with their friends.">
-                        <i class="material-symbols-outlined">account_tree</i>
-                        {{ group.chain_total }} share{{ group.chain_total|pluralize }} down the chain
-                        {% if group.reshare_count %}· reshared {{ group.reshare_count }} time{{ group.reshare_count|pluralize }}{% endif %}
-                    </span>
-                </div>
-                <ul class="memories-sharing-recipients">
-                    {% for share in group.shares %}
-                    <li class="memories-sharing-recipient">
-                        <span class="memories-sharing-recipient-name">
-                            <i class="material-symbols-outlined">person</i>
-                            {{ share.to_profile.username }}
-                        </span>
-                        <span class="memories-sharing-recipient-meta">
-                            shared {{ share.created|date:"M j, Y" }} ·
-                            <span class="memories-sharing-status memories-sharing-status--{{ share.status }}">{{ share.get_status_display }}</span>
-                        </span>
-                    </li>
-                    {% endfor %}
-                </ul>
-            </article>
-            {% endfor %}
+        {% if share_groups or map_share_groups or incoming_share_groups or incoming_map_share_groups %}
+        <div class="view-toggle-group memories-sharing-toggle" role="group" aria-label="Choose which shares to show">
+            <button type="button" class="btn btn--secondary view-toggle-btn view-toggle-btn--active" data-view="sent"
+                    onclick="memoriesSharingSetView('sent')" title="Shared by you">
+                <i class="material-symbols-outlined" aria-hidden="true">call_made</i>
+                Shared by you ({{ sent_count }})
+            </button>
+            <button type="button" class="btn btn--secondary view-toggle-btn" data-view="received"
+                    onclick="memoriesSharingSetView('received')" title="Shared with you">
+                <i class="material-symbols-outlined" aria-hidden="true">call_received</i>
+                Shared with you ({{ received_count }})
+            </button>
         </div>
+
+        <div class="memories-sharing-view" data-sharing-view="sent">
+            <h2 class="memories-sharing-section-title">Pins</h2>
+            {% if share_groups %}
+            <div class="memories-sharing-list">
+                {% for group in share_groups %}
+                <article class="memories-sharing-card card">
+                    <div class="memories-sharing-card-header">
+                        {% if group.pin %}
+                        <a class="memories-sharing-pin-link" href="{% url 'pin.details' group.pin.slug %}">
+                            <i class="material-symbols-outlined">location_on</i>
+                            {{ group.pin.effective_name }}
+                        </a>
+                        {% else %}
+                        <span class="memories-sharing-pin-link">
+                            <i class="material-symbols-outlined">location_on</i>
+                            {{ group.place_label }}
+                        </span>
+                        {% endif %}
+                        <span class="memories-sharing-chain"
+                              data-tooltip="Counts every share of this pin, including friends resharing it with their friends.">
+                            <i class="material-symbols-outlined">account_tree</i>
+                            {{ group.chain_total }} total share{{ group.chain_total|pluralize }}
+                            {% if group.reshare_count %}· reshared {{ group.reshare_count }} time{{ group.reshare_count|pluralize }}{% endif %}
+                        </span>
+                    </div>
+                    <ul class="memories-sharing-recipients">
+                        {% for share in group.shares %}
+                        <li class="memories-sharing-recipient">
+                            <span class="memories-sharing-recipient-name">
+                                <i class="material-symbols-outlined">person</i>
+                                {{ share.to_profile.username }}
+                            </span>
+                            <span class="memories-sharing-recipient-meta">
+                                shared {{ share.created|date:"M j, Y" }} ·
+                            </span>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </article>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="memories-sharing-section-empty">You haven't shared any pins yet.</p>
+            {% endif %}
+
+            <h2 class="memories-sharing-section-title">Maps</h2>
+            {% if map_share_groups %}
+            {% url 'memories.maps' as maps_url %}
+            <div class="memories-sharing-list">
+                {% for group in map_share_groups %}
+                <article class="memories-sharing-card card">
+                    <div class="memories-sharing-card-header">
+                        <a class="memories-sharing-pin-link" href="{{ group.attachment_url|default:maps_url }}">
+                            <i class="material-symbols-outlined">map</i>
+                            {{ group.map.title|default:"Untitled map" }}
+                        </a>
+                        {% if group.attachment_label %}
+                        <span class="memories-sharing-chain" data-tooltip="{{ group.attachment_label }}">
+                            <i class="material-symbols-outlined">link</i>
+                            {{ group.attachment_label }}
+                        </span>
+                        {% endif %}
+                    </div>
+                    <ul class="memories-sharing-recipients">
+                        {% for share in group.shares %}
+                        <li class="memories-sharing-recipient">
+                            <span class="memories-sharing-recipient-name">
+                                <i class="material-symbols-outlined">person</i>
+                                {{ share.to_profile.username }}
+                            </span>
+                            <span class="memories-sharing-recipient-meta">
+                                shared {{ share.created|date:"M j, Y" }}
+                            </span>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </article>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="memories-sharing-section-empty">You haven't shared any maps yet.</p>
+            {% endif %}
+        </div>
+
+        <div class="memories-sharing-view" data-sharing-view="received" hidden>
+            <h2 class="memories-sharing-section-title">Pins</h2>
+            {% if incoming_share_groups %}
+            <div class="memories-sharing-list">
+                {% for group in incoming_share_groups %}
+                <article class="memories-sharing-card card">
+                    <div class="memories-sharing-card-header">
+                        <span class="memories-sharing-pin-link">
+                            <i class="material-symbols-outlined">location_on</i>
+                            {% if group.pin %}{{ group.pin.effective_name }}{% else %}{{ group.place_label }}{% endif %}
+                        </span>
+                    </div>
+                    <ul class="memories-sharing-recipients">
+                        {% for share in group.shares %}
+                        <li class="memories-sharing-recipient">
+                            <a class="memories-sharing-recipient-name" href="{% url 'pin.share.detail' share.id %}">
+                                <i class="material-symbols-outlined">person</i>
+                                {{ share.from_profile.username }}
+                            </a>
+                            <span class="memories-sharing-recipient-meta">
+                                shared {{ share.created|date:"M j, Y" }} ·
+                                <span class="memories-sharing-status memories-sharing-status--{{ share.status }}">{{ share.get_status_display }}</span>
+                            </span>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </article>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="memories-sharing-section-empty">Nobody has shared any pins with you yet.</p>
+            {% endif %}
+
+            <h2 class="memories-sharing-section-title">Maps</h2>
+            {% if incoming_map_share_groups %}
+            <div class="memories-sharing-list">
+                {% for group in incoming_map_share_groups %}
+                <article class="memories-sharing-card card">
+                    <div class="memories-sharing-card-header">
+                        <span class="memories-sharing-pin-link">
+                            <i class="material-symbols-outlined">map</i>
+                            {{ group.map.title|default:"Untitled map" }}
+                        </span>
+                    </div>
+                    <ul class="memories-sharing-recipients">
+                        {% for share in group.shares %}
+                        <li class="memories-sharing-recipient">
+                            <a class="memories-sharing-recipient-name" href="{% url 'markup_map.share.detail' share.id %}">
+                                <i class="material-symbols-outlined">person</i>
+                                {{ share.from_profile.username }}
+                            </a>
+                            <span class="memories-sharing-recipient-meta">
+                                shared {{ share.created|date:"M j, Y" }}
+                            </span>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </article>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="memories-sharing-section-empty">Nobody has shared any maps with you yet.</p>
+            {% endif %}
+        </div>
+
+        <script>
+            window.memoriesSharingSetView = function (view) {
+                document.querySelectorAll('.memories-sharing-view').forEach(function (el) {
+                    el.hidden = el.dataset.sharingView !== view;
+                });
+                document.querySelectorAll('.memories-sharing-toggle .view-toggle-btn').forEach(function (btn) {
+                    btn.classList.toggle('view-toggle-btn--active', btn.dataset.view === view);
+                });
+            };
+        </script>
         {% else %}
         <section class="visits-empty-state" aria-labelledby="sharing-empty-title">
             <div class="visits-empty-hero">
@@ -55,8 +200,8 @@
                 <span class="visits-empty-sparkle"><i class="material-symbols-outlined">auto_awesome</i></span>
             </div>
             <p class="visits-empty-kicker">Nothing here yet</p>
-            <h2 id="sharing-empty-title">You haven't shared any pins.</h2>
-            <p>If you ever share a pin with a friend, it will show up here.</p>
+            <h2 id="sharing-empty-title">You haven't shared or received anything.</h2>
+            <p>If you ever share a pin or a map with a friend, or a friend shares one with you, it will show up here.</p>
             <div class="visits-empty-actions">
                 <a class="btn btn--primary" href="{% url 'map.view' %}">
                     <i class="material-symbols-outlined">map</i> Explore your map

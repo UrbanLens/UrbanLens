@@ -4,30 +4,19 @@
 // -- Profile page --------------------------------------------------------------
 
 .profile-page {
-    //margin: 2rem auto;
-    //padding: 0 1rem;
     display: flex;
     flex-direction: column;
-    gap: 1.25rem;
-}
-
-// Hero card - avatar + identity side by side
-.profile-hero {
-    background: linear-gradient(135deg, rgba(37, 99, 235, 0.15), rgba(6, 182, 212, 0.12));
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: $radius-md;
-    box-shadow: 0 1px 4px rgba(0, 0, 0, .06);
-    padding: 2rem;
-    display: flex;
+    // Roomier rhythm between the body sections (About / Social / Contact /
+    // Additional Details / Friends) so they don't read as one dense stack,
+    // plus breathing room below the subnav and above the footer.
     gap: 2rem;
-    align-items: flex-start;
-
-    @include down($breakpoint-xs) {
-        flex-direction: column;
-        align-items: center;
-        text-align: center;
-    }
+    padding: 1.5rem 0 3rem;
 }
+
+// Avatar + identity, rendered inside the shared .ul-page-hero--profile banner
+// (partials/ui/_page_hero.html + partials/profile/_profile_hero_body.html) on
+// both the Profile and Edit Profile pages, so the two tabs share one fixed
+// hero height - see .ul-page-hero--profile in _page_hero.scss.
 
 // Avatar column
 .profile-avatar-col {
@@ -36,23 +25,29 @@
 
 .profile-avatar-wrap {
     position: relative;
-    width: 96px;
-    height: 96px;
-}
-
-.profile-avatar-img {
+    box-sizing: border-box;
     width: 96px;
     height: 96px;
     border-radius: 50%;
+    padding: 3px;
+    background: linear-gradient(135deg, $color-blue-500, $color-green-500);
+}
+
+.profile-avatar-img {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
     object-fit: cover;
-    border: 3px solid var(--ul-grey-1a);
+    border: 3px solid var(--ul-surface-raised);
     display: block;
 }
 
 .profile-avatar-placeholder {
-    width: 96px;
-    height: 96px;
+    width: 100%;
+    height: 100%;
     border-radius: 50%;
+    border: 3px solid var(--ul-surface-raised);
+    box-sizing: border-box;
     background: linear-gradient(135deg, $primary-color 0%, color.adjust($primary-color, $lightness: -15%) 100%);
     color: var(--ul-grey-7);
     display: flex;
@@ -158,15 +153,15 @@
     }
 
     &--friend {
-        background: color-mix(in srgb, $primary-color 10%, transparent);
+        background: $primary-color;
         border-color: color-mix(in srgb, $primary-color 35%, transparent);
-        color: var(--primary-color);
+        color: #fff;
     }
 
     &--pending {
-        background: color-mix(in srgb, $color-amber-500 10%, transparent);
+        background: $color-amber-500;
         border-color: color-mix(in srgb, $color-amber-500 35%, transparent);
-        color: var(--ul-accent-amber-fg);
+        color: #fff;
     }
 
     &--muted {
@@ -188,16 +183,85 @@
     gap: .4rem;
 }
 
-.profile-bio {
+// Bio shown once, in its own "About" card - the hero used to show a
+// 2-line-clamped duplicate above it, which read as redundant since this
+// full version sat immediately below. Removed from the hero entirely.
+.profile-bio-full {
     font-size: 0.95rem;
     color: var(--ul-grey-8);
     line-height: 1.6;
-    margin: 0.5rem 0 0.75rem;
+    margin: 0;
+    white-space: pre-wrap;
 
-    &.empty {
-        color: var(--ul-grey-6b);
-        font-style: italic;
+    &--editable {
+        cursor: pointer;
+        border-radius: 6px;
+        padding: .2rem .4rem;
+        margin: 0 0 0 -.4rem;
+        transition: background .15s;
+
+        &:hover,
+        &:focus-visible {
+            background: var(--ul-grey-0a);
+            outline: none;
+        }
     }
+}
+
+// -- Photo strip ---------------------------------------------------------------
+// Horizontally-scrolling row of thumbnails - see services.profile_photos for
+// which photos are eligible (never a fully-private, pin-only upload).
+.profile-photo-strip {
+    display: flex;
+    gap: .5rem;
+    overflow-x: auto;
+    padding-bottom: .25rem;
+    scrollbar-width: thin;
+}
+
+.profile-photo-strip-item {
+    flex: 0 0 auto;
+    width: 6rem;
+    height: 6rem;
+    padding: 0;
+    border: none;
+    border-radius: $radius-sm;
+    overflow: hidden;
+    cursor: pointer;
+    background: var(--ul-grey-0b);
+
+    img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+        transition: transform .15s;
+    }
+
+    &:hover img,
+    &:focus-visible img {
+        transform: scale(1.06);
+    }
+
+    &:focus-visible {
+        outline: 2px solid var(--ul-color-accent-ring);
+        outline-offset: 2px;
+    }
+}
+
+.profile-bio-input {
+    display: block;
+    width: 100%;
+    font: inherit;
+    line-height: inherit;
+    color: inherit;
+    background: var(--ul-control-bg);
+    border: 1px solid var(--ul-color-accent);
+    border-radius: 6px;
+    padding: .2rem .4rem;
+    margin: 0 0 0 -.4rem;
+    outline: none;
+    resize: vertical;
 }
 
 .profile-meta-row {
@@ -220,6 +284,118 @@
         font-size: 16px;
         opacity: 0.7;
     }
+
+    &--editable {
+        cursor: pointer;
+        border-radius: 6px;
+        padding: .1rem .4rem;
+        margin: -.1rem -.4rem;
+        transition: background .15s;
+
+        &:hover,
+        &:focus-visible {
+            background: var(--ul-grey-0a);
+            outline: none;
+        }
+    }
+}
+
+.profile-meta-input {
+    font: inherit;
+    color: inherit;
+    background: var(--ul-control-bg);
+    border: 1px solid var(--ul-color-accent);
+    border-radius: 6px;
+    padding: .1rem .4rem;
+    outline: none;
+    min-width: 6rem;
+}
+
+.profile-meta-text {
+    margin-left: 0.2rem;
+}
+
+// Contact / Additional Details sections (profile/index.html) - each item is a
+// <span> or <a>, which default to inline with no separation between them.
+// Stacked one-per-line, mirroring .profile-meta-row/.profile-meta-item's
+// pattern (the hero's own contact-ish row) but vertical instead of wrapped.
+.contact-info-list {
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+    margin-top: .25rem;
+}
+
+.contact-info-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: .875rem;
+    color: $color-grey-0;
+    text-decoration: none;
+
+    &:hover {
+        color: $color-grey-0;
+    }
+
+    .material-symbols-outlined,
+    .material-icons,
+    .fa-brands {
+        font-size: 16px;
+        width: 16px;
+        text-align: center;
+        opacity: .7;
+    }
+}
+
+// Click-to-edit-in-place contact fields + birthday, inside .contact-info-item
+.profile-phone-editable,
+.profile-whatsapp-editable,
+.profile-signal-editable,
+.profile-telegram-editable,
+.profile-discord-editable,
+.profile-matrix-editable,
+.profile-birth-date-editable {
+    cursor: pointer;
+    border-radius: 6px;
+    padding: .1rem .3rem;
+    margin: -.1rem -.3rem;
+    transition: background .15s;
+
+    &:hover,
+    &:focus-visible {
+        background: var(--ul-grey-0a);
+        outline: none;
+    }
+}
+
+// Click-to-edit-in-place identity fields in the hero (name/username/email)
+.profile-name-editable,
+.profile-username-editable,
+.profile-email-editable {
+    cursor: pointer;
+    border-radius: 6px;
+    padding: .1rem .3rem;
+    margin: -.1rem -.3rem;
+    transition: background .15s;
+
+    &:hover,
+    &:focus-visible {
+        background: var(--ul-grey-0a);
+        outline: none;
+    }
+}
+
+.profile-name-edit-wrap {
+    display: inline-flex;
+    gap: .4rem;
+    flex-wrap: wrap;
+
+    .profile-meta-input {
+        font-size: 1rem;
+        font-weight: 500;
+        max-width: 11rem;
+    }
 }
 
 // Stats row
@@ -230,9 +406,7 @@
 }
 
 .profile-stat {
-    background: var(--ul-grey-0);
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: $radius-md;
+    @include surface($radius: $radius-md);
     box-shadow: 0 1px 4px rgba(0, 0, 0, .06);
     padding: 1.25rem 2rem;
     display: flex;
@@ -256,10 +430,10 @@
         margin-top: 4px;
     }
 
-    &--highlight {    
+    &--highlight {
         background: linear-gradient(135deg,
-                color-mix(in srgb, $primary-color 8%, var(--ul-grey-0)) 0%,
-                color-mix(in srgb, $primary-color 4%, var(--ul-grey-0)) 100%);
+                color-mix(in srgb, $primary-color 8%, var(--ul-surface-1)) 0%,
+                color-mix(in srgb, $primary-color 4%, var(--ul-surface-1)) 100%);
         border-color: color-mix(in srgb, $primary-color 30%, transparent);
 
         .stat-label {
@@ -270,9 +444,7 @@
 
 // Generic profile section card
 .profile-section {
-    background: var(--ul-grey-0);
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: $radius-md;
+    @include surface($radius: $radius-md);
     box-shadow: 0 1px 4px rgba(0, 0, 0, .06);
     padding: 1.5rem 2rem;
     width: 100%;
@@ -342,8 +514,8 @@
     align-items: center;
     gap: 8px;
     padding: 8px 12px;
-    background: var(--ul-grey-0);
-    border: 1px solid var(--ul-grey-1a);
+    background: var(--ul-surface-raised);
+    border: 1px solid var(--ul-surface-raised-border);
     border-radius: $radius-sm;
     font-size: 0.95rem;
     color: var(--ul-grey-9);
@@ -356,23 +528,6 @@
 }
 
 // -- Settings page ------------------------------------------------------------
-
-
-.settings-header {
-    margin-bottom: 2rem;
-}
-
-.settings-title {
-    font-size: 1.75rem;
-    font-weight: 700;
-    color: var(--ul-grey-9);
-    margin: 0 0 0.25rem;
-}
-
-.settings-subtitle {
-    color: var(--ul-grey-6);
-    margin: 0;
-}
 
 .settings-section {
     border-radius: $radius-md;
@@ -389,7 +544,7 @@
             margin-bottom: 0;
             padding-bottom: 0;
             border-bottom: none;
-            border-right: 1px solid var(--ul-grey-1a);
+            border-right: 1px solid var(--ul-surface-border);
             padding-right: 2rem;
             // Sticky within the section so it doesn't scroll away on tall forms
             position: sticky;
@@ -412,7 +567,7 @@
     gap: 1rem;
     margin-bottom: 1.5rem;
     padding-bottom: 1rem;
-    border-bottom: 1px solid var(--ul-grey-1a);
+    border-bottom: 1px solid var(--ul-surface-border);
 
     >.material-symbols-outlined,
     >.material-icons {
@@ -440,7 +595,7 @@
 .settings-subsection {
     margin-top: 1.75rem;
     padding-top: 1.5rem;
-    border-top: 1px solid var(--ul-grey-1a);
+    border-top: 1px solid var(--ul-surface-border);
 
     &:first-of-type {
         margin-top: 2rem;
@@ -509,15 +664,15 @@
 }
 
 .settings-select {
-    display: block !important; // override Materialize's select:not(.browser-default) { display:none }
+    display: block !important; // <select> defaults to inline-block; see _reset.scss
     width: 100%;
-    max-width: 360px;
+    max-width: 36rem;
     padding: 8px 12px;
-    border: 1px solid var(--ul-grey-1a);
+    border: 1px solid var(--ul-surface-raised-border);
     border-radius: $radius-sm;
     font-size: 0.95rem;
     color: var(--ul-grey-9);
-    background: var(--ul-grey-0);
+    background: var(--ul-surface-raised);
     appearance: auto;
 
     &:focus {
@@ -528,28 +683,43 @@
 }
 
 
-.settings-form--privacy {
-    .settings-field {
-        padding: 0.95rem 1rem;
-        max-width: 45rem;
-    }
+// Label-left/control-right on wide screens, for any settings field shaped
+// like Privacy's (a .settings-label direct child) - scoped structurally
+// rather than per-form, so every settings tab gets this consistently
+// (previously Privacy-only; every other tab always stacked the control
+// below its label even with room to spare) and any new field added later
+// gets it automatically as long as it follows the same markup shape.
+// Toggle-style fields (.settings-toggle-row, no .settings-label child) are
+// unaffected - their content doesn't fit this label/control split anyway.
+.settings-field:has(> .settings-label) {
+    padding: 0.95rem 1rem;
+    max-width: 45rem;
 
     @include up($breakpoint-md) {
-        .settings-field {
-            display: grid;
-            grid-template-columns: minmax(0, 1fr) minmax(14rem, 22rem);
-            grid-template-areas:
-                "label control"
-                "help control"
-                "error error";
-            align-items: center;
-            gap: 0.15rem 1.25rem;
-        }
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(14rem, 22rem);
+        grid-template-areas:
+            "label control"
+            "help control"
+            "error error";
+        align-items: center;
+        gap: 0.15rem 1.25rem;
 
-        .settings-label { grid-area: label; margin-bottom: 0; }
-        .settings-help { grid-area: help; margin-bottom: 0; line-height: 1.4; }
-        .settings-select { grid-area: control; justify-self: end; max-width: 100%; }
-        .settings-error { grid-area: error; }
+        > .settings-label { grid-area: label; margin-bottom: 0; }
+        > .settings-help { grid-area: help; margin-bottom: 0; line-height: 1.4; }
+        > .settings-select { grid-area: control; justify-self: end; max-width: 100%; }
+        > .settings-error { grid-area: error; }
+
+        // A field with a second .settings-help child (e.g. a dynamic estimate/detail
+        // paragraph below the main description, like #storage-estimate or
+        // #guidance-help-detail) would otherwise also claim grid-area: help and
+        // overlap the first one, since grid-area assigns by selector match, not
+        // occurrence order. Only the first gets the named cell; anything after it
+        // falls back to normal auto-placement in its own row underneath the field.
+        > .settings-help ~ .settings-help {
+            grid-area: auto;
+            margin-top: .35rem;
+        }
     }
 }
 
@@ -584,7 +754,7 @@
     gap: 0.75rem;
     cursor: pointer;
 
-    // Materialize hides native checkboxes globally; the sibling span carries the visual.
+    // _reset.scss hides native checkboxes globally; the sibling span carries the visual.
     .settings-checkbox-materialize {
         flex-shrink: 0;
         margin-top: 2px;
@@ -635,6 +805,13 @@
     padding-top: 1rem;
 }
 
+.settings-autosave-indicator {
+    font-size: .8rem;
+    color: var(--ul-grey-6);
+
+    &--error { color: $color-red-500; }
+}
+
 .settings-save-btn {
     @include btn-primary;
     padding: 10px 24px;
@@ -650,7 +827,7 @@
 .storage-usage__bar {
     height: 10px;
     border-radius: 5px;
-    background: var(--ul-grey-2);
+    background: var(--ul-surface-raised-border);
     overflow: hidden;
 }
 
@@ -698,7 +875,7 @@
 
     input[type="range"] {
         flex: 1;
-        max-width: 260px;
+        max-width: 26rem;
         accent-color: var(--primary-color);
         cursor: pointer;
     }
@@ -725,7 +902,7 @@
     height: 44px;
     border-radius: 6px;
     overflow: hidden;
-    border: 1px solid var(--ul-grey-1a);
+    border: 1px solid var(--ul-surface-border);
     flex-shrink: 0;
 }
 
@@ -764,7 +941,7 @@
 
 .cop-alpha-slider {
     flex: 1;
-    max-width: 240px;
+    max-width: 24rem;
     height: 10px;
     border-radius: 5px;
     cursor: pointer;
@@ -776,7 +953,7 @@
             #bbb 0px, #bbb 4px,
             #fff 4px, #fff 8px);
     background-size: 100% 100%, 8px 8px;
-    border: 1px solid var(--ul-grey-1a);
+    border: 1px solid var(--ul-surface-border);
 
     &::-webkit-slider-thumb {
         appearance: none;
@@ -828,13 +1005,13 @@
 
 .settings-input {
     width: 100%;
-    max-width: 360px;
+    max-width: 36rem;
     padding: 8px 12px;
-    border: 1px solid var(--ul-grey-1a);
+    border: 1px solid var(--ul-surface-raised-border);
     border-radius: $radius-sm;
     font-size: 0.95rem;
     color: var(--ul-grey-9);
-    background: var(--ul-grey-0);
+    background: var(--ul-surface-raised);
 
     &:focus {
         outline: none;
@@ -843,21 +1020,26 @@
     }
 }
 
-.settings-theme-row {
+// Generic option-tile picker: a row of clickable icon+label tiles backing a
+// hidden radio input, used for every mutually-exclusive visual choice on the
+// settings page (theme, map dark mode, guidance level, default map view,
+// starting point, cluster radius mode). Was named .settings-theme-option
+// (theme picker only) before being generalized to every group of this shape.
+.settings-option-row {
     display: flex;
     gap: 1rem;
     margin-top: 0.5rem;
 }
 
-.settings-theme-option {
+.settings-option-tile {
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 0.5rem;
     padding: 1rem 2rem;
-    border: 2px solid var(--ul-grey-1a);
+    border: 2px solid var(--ul-surface-raised-border);
     border-radius: $radius-md;
-    background: var(--ul-grey-0);
+    background: var(--ul-surface-raised);
     cursor: pointer;
     transition: border-color 0.15s, background 0.15s;
 
@@ -874,26 +1056,27 @@
     span {
         font-size: 0.85rem;
         font-weight: 600;
-        color: var(--ul-grey-6);
         transition: color 0.15s;
     }
 
-    &.active {
+    // Groups wired with explicit JS toggle the .active class directly; groups
+    // that only ever set the radio's checked state rely on :has() instead -
+    // both are supported so a new group doesn't need its own JS just to
+    // reflect selection.
+    &.active,
+    &:has(input:checked) {
         border-color: var(--primary-color);
         background: rgba($primary-color, 0.06);
 
+        span,
         i {
-            color: var(--primary-color);
-        }
-
-        span {
-            color: var(--primary-color);
+            color: #fff;
         }
     }
 
-    &:hover:not(.active) {
+    &:hover:not(.active):not(:has(input:checked)) {
         border-color: $text-muted;
-        background: var(--ul-grey-0);
+        background: var(--ul-surface);
     }
 }
 
@@ -901,36 +1084,6 @@
 // -- Profile supplements --------------------
 // -- Edit profile page --------------------------------------------------------
 
-
-.edit-profile-header {
-    margin-bottom: 1.75rem;
-}
-
-.edit-back-link {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    font-size: 0.875rem;
-    color: var(--ul-grey-6);
-    text-decoration: none;
-    margin-bottom: 0.5rem;
-
-    .material-symbols-outlined,
-    .material-icons {
-        font-size: 1rem;
-    }
-
-    &:hover {
-        color: var(--primary-color);
-    }
-}
-
-.edit-profile-title {
-    font-size: 1.75rem;
-    font-weight: 700;
-    color: var(--ul-grey-8);
-    margin: 0;
-}
 
 .edit-profile-autosave-hint {
     font-size: 0.8rem;
@@ -940,9 +1093,7 @@
 }
 
 .edit-card {
-    background: var(--ul-grey-0a);
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: $radius-md;
+    @include surface($radius: $radius-md);
     padding: 1.5rem;
     margin-bottom: 1.5rem;
     box-shadow: var(--ul-shadow-sm);
@@ -954,7 +1105,7 @@
     color: var(--ul-grey-8);
     margin: 0 0 1.25rem;
     padding-bottom: 0.75rem;
-    border-bottom: 1px solid var(--ul-grey-1a);
+    border-bottom: 1px solid var(--ul-surface-border);
 }
 
 .edit-card-desc {
@@ -1032,7 +1183,7 @@
     height: 80px;
     border-radius: 50%;
     object-fit: cover;
-    border: 2px solid var(--ul-grey-1a);
+    border: 2px solid var(--ul-surface-raised-border);
 }
 
 .edit-avatar-placeholder {
@@ -1040,7 +1191,7 @@
     height: 80px;
     border-radius: 50%;
     background: var(--ul-grey-4);
-    border: 2px solid var(--ul-grey-1a);
+    border: 2px solid var(--ul-surface-raised-border);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1057,7 +1208,7 @@
     align-items: center;
     gap: 6px;
     padding: 8px 16px;
-    background: var(--ul-grey-0);
+    background: var(--ul-surface-raised);
     border: 1px solid var(--primary-color);
     border-radius: $radius-sm;
     font-size: 0.875rem;
@@ -1094,7 +1245,7 @@ textarea.edit-textarea {
 .edit-actions {
     margin-top: 1.5rem;
     padding-top: 1rem;
-    border-top: 1px solid var(--ul-grey-1a);
+    border-top: 1px solid var(--ul-surface-border);
 }
 
 .edit-save-btn {
@@ -1109,8 +1260,8 @@ textarea.edit-textarea {
     display: flex;
     align-items: center;
     gap: 12px;
-    background: linear-gradient(135deg, $color-indigo-900, $color-indigo-700);
-    color: #fff;
+    background: linear-gradient(135deg, rgba(31, 111, 235, 0.20), rgba(23, 185, 120, 0.15));
+    border: 1px solid var(--ul-surface-border);
     border-radius: $radius-md;
     padding: 14px 18px;
     margin-bottom: 20px;
@@ -1118,29 +1269,24 @@ textarea.edit-textarea {
 
 .setup-banner-icon {
     font-size: 1.6rem;
-    opacity: .9;
+    color: $color-blue-500;
     flex-shrink: 0;
 }
 
 .setup-banner-text {
     flex: 1;
 
-    strong { display: block; font-size: .95rem; }
-    span   { font-size: .82rem; opacity: .85; }
+    strong { display: block; font-size: .95rem; color: var(--ul-grey-9); }
+    span   { font-size: .82rem; color: var(--ul-grey-7); }
 }
 
 .setup-banner-skip {
-    background: rgba(255, 255, 255, .15);
-    color: #fff;
-    border: 1px solid rgba(255, 255, 255, .3);
-    border-radius: $radius-sm;
+    @include btn-ghost;
+    background: var(--ul-surface-raised);
     padding: 6px 14px;
     font-size: .82rem;
-    cursor: pointer;
     flex-shrink: 0;
     white-space: nowrap;
-
-    &:hover { background: rgba(255, 255, 255, .25); }
 }
 
 // -- Edit profile: username input group ----------------------------------------
@@ -1156,12 +1302,12 @@ textarea.edit-textarea {
     height: 3rem;
     flex: 0 0 auto;
     padding: 0 10px;
-    border: 1px solid var(--ul-grey-1);
+    border: 1px solid var(--ul-surface-raised-border);
     border-right: none;
     border-top: none;
     border-radius: $radius-sm 0 0 $radius-sm;
     font-size: .9rem;
-    background: var(--ul-grey-0);
+    background: var(--ul-surface-raised);
     color: var(--ul-grey-6);
     white-space: nowrap;
     user-select: none;
@@ -1171,8 +1317,8 @@ textarea.edit-textarea {
     &:hover {
         .edit-username-input, 
         .edit-username-at {
-            background-color: var(--ul-grey-0b);
-            border-color: var(--ul-grey-2);
+            background-color: var(--ul-surface-2);
+            border-color: var(--ul-surface-2-border);
             color: var(--ul-grey-8);
         }
     }
@@ -1228,8 +1374,8 @@ body div.container .edit-profile-page input[type=text].edit-username-input {
     cursor: pointer;
     padding: 8px;
     border-radius: $radius-sm + 2;
-    border: 1.5px solid var(--ul-grey-1a);
-    background: var(--ul-grey-0a);
+    border: 1.5px solid var(--ul-surface-raised-border);
+    background: var(--ul-surface-raised);
     font-size: .75rem;
     color: var(--ul-grey-6);
     min-width: 64px;
@@ -1277,8 +1423,8 @@ body div.container .edit-profile-page input[type=text].edit-username-input {
     align-items: center;
     gap: 10px;
     padding: 9px 12px;
-    background: var(--ul-grey-1);
-    border: 1px solid var(--ul-grey-1a);
+    background: var(--ul-surface-raised);
+    border: 1px solid var(--ul-surface-raised-border);
     border-radius: $radius-sm;
 }
 
@@ -1350,11 +1496,11 @@ body div.container .edit-profile-page input[type=text].edit-username-input {
 .edit-add-link-input {
     flex: 1;
     padding: 9px 12px;
-    border: 1px solid var(--ul-grey-1a);
+    border: 1px solid var(--ul-surface-raised-border);
     border-radius: $radius-sm;
     font-size: 0.9rem;
     color: var(--ul-grey-9);
-    background: var(--ul-grey-0);
+    background: var(--ul-surface-raised);
 
     &::placeholder {
         color: color.adjust($text-secondary, $lightness: 15%);
@@ -1404,13 +1550,6 @@ body div.container .edit-profile-page input[type=text].edit-username-input {
 
 // -- Profile page modernization ------------------------------------------------
 
-.profile-hero {
-    background: linear-gradient(135deg, var(--ul-grey-0a) 0%, var(--ul-grey-0b) 40%);
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: $radius-md;
-    box-shadow: 0 2px 12px rgba(0, 0, 0, .08);
-}
-
 .profile-stats-row {
     justify-content: center;
     flex-wrap: wrap;
@@ -1419,19 +1558,11 @@ body div.container .edit-profile-page input[type=text].edit-username-input {
     .profile-stat {
         flex: 1;
         min-width: 100px;
-        max-width: 160px;
+        max-width: 16rem;
     }
 }
 
 // -- Private profile annotation panel -----------------------------------------
-
-.profile-annotation-panel {
-    background: var(--ul-grey-0);
-    border: 1px solid var(--ul-grey-1a);
-    border-left: 3px solid color-mix(in srgb, $primary-color 50%, transparent);
-    border-radius: $radius-md;
-    padding: 1.1rem 1.25rem;
-}
 
 #profile-annotation-inner {
     display: flex;
@@ -1454,12 +1585,15 @@ body div.container .edit-profile-page input[type=text].edit-username-input {
 .profile-annotation-title {
     font-size: 0.85rem;
     font-weight: 600;
-}
-
-.profile-annotation-badge {
-    margin-left: auto;
+    position: absolute;
+    top: 0;
+    left: 0;
+    border-radius: 8px 0 8px 0;
+    padding: 1rem;
+    color: var(--ul-grey-0);
+    font-weight: bold;
+    box-shadow: 5px 5px 10px rgba(0,0,0,0.2);
     background: var(--ul-accent-amber);
-    color: var(--ul-black);
 }
 
 .profile-annotation-label {
@@ -1477,39 +1611,39 @@ body div.container .edit-profile-page input[type=text].edit-username-input {
     gap: 0.4rem;
 }
 
-.profile-badge-chip {
+.profile-label-chip {
     display: inline-flex;
     align-items: center;
     gap: 5px;
     padding: 4px 10px;
     border-radius: 999px;
-    border: 1px solid var(--badge-color, var(--ul-grey-1a));
+    border: 1px solid var(--label-color, var(--ul-surface-border));
     background: transparent;
-    color: var(--badge-color, $text-color);
+    color: var(--label-color, $text-color);
     font-size: 0.8rem;
     cursor: pointer;
     transition: background 0.15s, color 0.15s;
 
     &:hover {
-        background: color-mix(in srgb, var(--badge-color, #{$primary-color}) 12%, transparent);
+        background: color-mix(in srgb, var(--label-color, #{$primary-color}) 12%, transparent);
     }
 
     &--on {
-        background: color-mix(in srgb, var(--badge-color, #{$primary-color}) 18%, transparent);
+        background: color-mix(in srgb, var(--label-color, #{$primary-color}) 18%, transparent);
         font-weight: 600;
     }
 
-    .profile-badge-chip-icon {
+    .profile-label-chip-icon {
         font-size: 0.9rem;
     }
 
-    .profile-badge-chip-remove {
+    .profile-label-chip-remove {
         font-size: .8rem;
         opacity: .5;
         transition: opacity .12s;
     }
 
-    &:hover .profile-badge-chip-remove {
+    &:hover .profile-label-chip-remove {
         opacity: 1;
     }
 }
@@ -1532,8 +1666,8 @@ body div.container .edit-profile-page input[type=text].edit-username-input {
     gap: 3px;
     padding: 4px 10px;
     border-radius: 999px;
-    border: 1px dashed var(--ul-grey-1a);
-    background: none;
+    border: 1px dashed var(--ul-surface-raised-border);
+    background: var(--ul-surface-raised);
     color: $text-muted;
     font-size: .8rem;
     cursor: pointer;
@@ -1559,15 +1693,13 @@ body div.container .edit-profile-page input[type=text].edit-username-input {
     top: calc(100% + 4px);
     left: 0;
     z-index: 50;
-    background: var(--ul-grey-0);
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: $radius-md;
+    @include surface($radius: $radius-md, $rung: null);
     box-shadow: 0 4px 16px rgba(0, 0, 0, .12);
     padding: .5rem;
     display: flex;
     flex-wrap: wrap;
     gap: .3rem;
-    max-width: 260px;
+    max-width: 26rem;
     max-height: 200px;
     overflow-y: auto;
 }
@@ -1576,9 +1708,9 @@ body div.container .edit-profile-page input[type=text].edit-username-input {
     width: 100%;
     min-height: 80px;
     resize: vertical;
-    border: 1px solid var(--ul-grey-1a);
+    border: 1px solid var(--ul-surface-raised-border);
     border-radius: $radius-sm;
-    background: var(--ul-grey-1);
+    background: var(--ul-surface-raised);
     color: var(--ul-grey-8);
     font-size: 0.875rem;
     padding: 0.6rem 0.75rem;
@@ -1601,6 +1733,31 @@ body div.container .edit-profile-page input[type=text].edit-username-input {
 
 .profile-note-saved {
     color: $color-green-500;
+}
+
+// -- Nickname --------------------------------------------------------------------
+
+.profile-annotation-nickname {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+}
+
+.profile-annotation-nickname-input {
+    width: 100%;
+    border: 1px solid var(--ul-surface-raised-border);
+    border-radius: $radius-sm;
+    background: var(--ul-surface-raised);
+    color: var(--ul-grey-8);
+    font-size: 0.875rem;
+    padding: 0.4rem 0.6rem;
+    box-sizing: border-box;
+    font-family: inherit;
+
+    &:focus {
+        outline: none;
+        border-color: var(--primary-color);
+    }
 }
 
 // -- Trust rating --------------------------------------------------------------
@@ -1692,14 +1849,12 @@ body div.container .profile-annotation-notes {
     gap: .65rem;
 
     textarea {
-        background: var(--ul-grey-0b);
+        background: var(--ul-surface-raised);
     }
 }
 
 .pan-note {
-    background: var(--ul-grey-1);
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: $radius-sm;
+    @include surface($radius: $radius-sm, $rung: 2);
     overflow: hidden;
 }
 
@@ -1708,8 +1863,7 @@ body div.container .profile-annotation-notes {
     align-items: center;
     justify-content: space-between;
     padding: .4rem .65rem;
-    border-bottom: 1px solid var(--ul-grey-1a);
-    background: var(--ul-grey-4);
+    background: var(--ul-surface-border);
 }
 
 .pan-note-date {
@@ -1729,7 +1883,7 @@ body div.container .profile-annotation-notes {
 
 .pan-note-content {
     font-size: .875rem;
-    color: $text-primary;
+    color: var(--ul-grey-7);
     margin: 0;
     white-space: pre-wrap;
     line-height: 1.55;
@@ -1748,16 +1902,22 @@ body div.container .profile-annotation-notes {
 .pan-note-textarea {
     width: 100%;
     min-height: 70px;
-    resize: vertical;
-    border: 1px solid var(--ul-grey-1a);
+    resize: none;
+    overflow-y: hidden;
+    border: 1px solid var(--ul-surface-raised-border);
     border-radius: $radius-sm;
-    background: var(--ul-grey-0);
+    background: var(--ul-surface-raised);
     color: var(--ul-grey-8);
     font-size: 0.875rem;
-    padding: 0.55rem 0.7rem;
+    padding: 1rem 2rem;
     box-sizing: border-box;
     font-family: inherit;
     line-height: 1.5;
+
+    // Grow to fit content instead of scrolling internally. JS fallback for
+    // browsers without field-sizing support lives in profile_annotation_content.html,
+    // since it must re-run after every htmx swap of this panel.
+    field-sizing: content;
 
     &:focus {
         outline: none;
@@ -1771,7 +1931,7 @@ body div.container .profile-annotation-notes {
     flex-direction: column;
     gap: .4rem;
     padding: .5rem 0 .1rem;
-    border-top: 1px dashed var(--ul-grey-1a);
+    border-top: 1px dashed var(--ul-surface-border);
     margin-top: .25rem;
 }
 
@@ -1787,18 +1947,11 @@ body div.container .profile-annotation-notes {
 
 // -- Friends page: invite button + dialog --------------------------------------
 
-.friends-page-header {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 0.75rem;
-}
-
 .invite-dialog {
     @include dialog-base(460px);
 
     .dialog-header {
-        background-color: var(--ul-grey-2);
+        background-color: var(--ul-surface-border);
     }
 }
 
@@ -1824,9 +1977,9 @@ body div.container .profile-annotation-notes {
 .invite-email-input {
     width: 100%;
     padding: 9px 12px;
-    border: 1px solid var(--ul-grey-1a);
+    border: 1px solid var(--ul-surface-raised-border);
     border-radius: $radius-sm;
-    background: var(--ul-grey-1);
+    background: var(--ul-surface-raised);
     color: var(--ul-grey-9);
     font-size: 0.875rem;
     box-sizing: border-box;
@@ -1835,6 +1988,12 @@ body div.container .profile-annotation-notes {
         outline: none;
         border-color: var(--primary-color);
     }
+}
+
+.invite-message-input {
+    margin-top: .6rem;
+    resize: vertical;
+    font-family: inherit;
 }
 
 .invite-subscription-panel {
@@ -1858,9 +2017,9 @@ body div.container .profile-annotation-notes {
 
     select {
         padding: 9px 12px;
-        border: 1px solid var(--ul-grey-1a);
+        border: 1px solid var(--ul-surface-raised-border);
         border-radius: $radius-sm;
-        background: var(--ul-grey-1);
+        background: var(--ul-surface-raised);
         color: var(--ul-grey-9);
         font-size: 0.875rem;
 
@@ -1936,7 +2095,7 @@ body div.container .profile-annotation-notes {
     top: auto;
     left: auto;
     transform: none;
-    max-width: 440px;
+    max-width: 44rem;
     width: calc(100% - 2rem);
 }
 
@@ -1966,8 +2125,8 @@ body div.container .profile-annotation-notes {
 .ext-warn-url {
     font-size: 0.85rem;
     color: var(--ul-grey-9);
-    background: var(--ul-grey-1);
-    border: 1px solid var(--ul-grey-1a);
+    background: var(--ul-surface-raised);
+    border: 1px solid var(--ul-surface-raised-border);
     border-radius: $radius-sm;
     padding: 8px 12px;
     word-break: break-all;
@@ -2032,7 +2191,7 @@ body div.container .profile-annotation-notes {
 
     &:hover,
     &:focus {
-        background: var(--ul-grey-0a);
+        background: var(--ul-hover-bg);
         color: $color-red-600;
         outline: none;
     }
@@ -2040,9 +2199,7 @@ body div.container .profile-annotation-notes {
 
 // Create card
 .pinlist-create-card {
-    background: var(--ul-grey-0);
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: $radius-md;
+    @include surface($radius: $radius-md);
     padding: 1.5rem;
     margin-bottom: 1.5rem;
     box-shadow: 0 2px 8px rgba(0, 0, 0, .05);
@@ -2050,9 +2207,7 @@ body div.container .profile-annotation-notes {
 
 // List cards
 .pinlist-card {
-    background: var(--ul-grey-0);
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: $radius-md;
+    @include surface($radius: $radius-md);
     margin-bottom: 0.75rem;
     transition: box-shadow 0.15s;
 
@@ -2072,7 +2227,7 @@ body div.container .profile-annotation-notes {
     width: 44px;
     height: 44px;
     border-radius: 50%;
-    background: var(--ul-grey-0);
+    background: var(--ul-surface-raised);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -2172,12 +2327,12 @@ body div.container .profile-annotation-notes {
 }
 
 .form-input {
-    border: 1px solid var(--ul-grey-1a);
+    border: 1px solid var(--ul-surface-raised-border);
     border-radius: $radius-sm;
     padding: 8px 12px;
     font-size: 0.9rem;
     color: $text-primary;
-    background: var(--ul-grey-0);
+    background: var(--ul-surface-raised);
     transition: border-color 0.15s;
 
     &:focus {
@@ -2301,15 +2456,13 @@ a.profile-stat--link {
     align-items: center;
     gap: .65rem;
     padding: .5rem .65rem;
-    border-radius: 10px;
-    border: 1px solid var(--ul-grey-1a);
-    background: var(--ul-grey-0);
+    @include surface($radius: 10px);
     transition: border-color .15s, box-shadow .15s;
 
     &:hover {
-        border-color: var(--ul-grey-3b);
+        border-color: var(--ul-surface-2-border);
         box-shadow: 0 2px 8px rgba(0, 0, 0, .08);
-        background-color: var(--ul-grey-0b);
+        background-color: var(--ul-hover-bg);
     }
 
     .friend-card-link {
@@ -2422,7 +2575,7 @@ a.profile-stat--link {
 // -- Friend requests section (partial) ----------------------------------------
 
 .friend-requests-section {
-    background: var(--ul-grey-0);
+    background: var(--ul-surface-1);
     border: 1px solid $color-amber-200;
     border-radius: 10px;
     padding: .75rem 1rem;
@@ -2472,7 +2625,7 @@ a.profile-stat--link {
 
 .friend-request-list--page .friend-request-item {
     padding: .65rem 0;
-    border-bottom: 1px solid var(--ul-grey-1a);
+    border-bottom: 1px solid var(--ul-surface-border);
 }
 
 .friend-request-info {
@@ -2536,7 +2689,7 @@ a.profile-stat--link {
 
         &--remove {
             background: none;
-            border-color: var(--ul-grey-1a);
+            border-color: var(--ul-surface-border);
             padding: .25rem .5rem;
 
             &:hover {
@@ -2653,39 +2806,6 @@ a.profile-stat--link {
     gap: 1.25rem;
 }
 
-.friends-page-header {
-    display: flex;
-    flex-direction: column;
-    gap: .5rem;
-}
-
-.friends-back-link {
-    display: inline-flex;
-    align-items: center;
-    gap: .25rem;
-    font-size: .85rem;
-    color: $text-muted;
-    text-decoration: none;
-
-    .material-symbols-outlined,
-    .material-icons {
-        font-size: 1rem;
-    }
-
-    &:hover {
-        color: $text-primary;
-    }
-}
-
-.friends-page-title {
-    font-size: 1.4rem;
-    font-weight: 700;
-    margin: 0;
-    display: flex;
-    align-items: center;
-    gap: .5rem;
-}
-
 .friends-page-count {
     display: inline-flex;
     align-items: center;
@@ -2794,9 +2914,7 @@ a.profile-stat--link {
     right: 0;
     top: calc(100% + .35rem);
     min-width: 240px;
-    background: var(--ul-grey-0);
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: $radius-md;
+    @include surface($radius: $radius-md, $rung: null);
     box-shadow: 0 6px 24px rgba(0, 0, 0, .18);
     padding: .35rem;
     display: flex;
@@ -2807,6 +2925,7 @@ a.profile-stat--link {
 .profile-viewas-item {
     display: block;
     width: 100%;
+    box-sizing: border-box;
     text-align: left;
     background: none;
     border: none;
@@ -2817,7 +2936,7 @@ a.profile-stat--link {
     cursor: pointer;
 
     &:hover {
-        background: var(--ul-grey-1);
+        background: var(--ul-hover-bg);
     }
 }
 
@@ -2833,7 +2952,7 @@ a.profile-stat--link {
     gap: .75rem;
     max-width: min(92vw, 720px);
     padding: .65rem 1rem;
-    background: var(--ul-grey-0);
+    background: var(--ul-surface-1);
     border: 1px solid $primary-color;
     border-radius: $radius-md;
     box-shadow: 0 8px 28px rgba(0, 0, 0, .3);
@@ -2849,4 +2968,122 @@ a.profile-stat--link {
         flex-shrink: 0;
         white-space: nowrap;
     }
+}
+
+// -- Private annotation zone ---------------------------------------------------
+// A private note/trust-rating a user keeps about someone ELSE (see
+// partials/profile/profile_annotation_partial.html, rendered on that other
+// user's profile page) - wrapped in a single amber "private" frame with chips
+// straddling the top/bottom borders, so it reads as one private area without
+// repeating an "Only visible to you" chip per field. This is the only
+// remaining consumer of the amber-frame treatment - the logged-in homepage's
+// own dashboard used to share it too, but moved to a plain widget-grid layout
+// (see _homepage.scss) since a whole page of "this is secret" framing read as
+// unnecessarily alarming for what is, after all, just your own homepage.
+
+.profile-private-zone {
+    position: relative;
+    margin: 2rem 0;
+    padding: 1.5rem 1.1rem 1.6rem;
+    border: 1px solid color-mix(in srgb, var(--ul-accent-amber) 48%, var(--ul-surface-border));
+    border-radius: $radius-md;
+    background: color-mix(in srgb, var(--ul-accent-amber) 8%, var(--ul-surface));
+}
+
+.profile-private-zone-cap {
+    position: absolute;
+    left: 50%;
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    max-width: calc(100% - 2rem);
+    padding: .26rem .85rem;
+    border-radius: 999px;
+    background: var(--ul-accent-amber);
+    color: var(--ul-black);
+    font-size: .78rem;
+    font-weight: 700;
+    letter-spacing: .02em;
+    line-height: 1.2;
+    white-space: nowrap;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, .14);
+}
+
+.profile-private-zone-cap .material-symbols-outlined {
+    font-size: .95rem;
+}
+
+.profile-private-zone-cap--top {
+    top: 0;
+    transform: translate(-50%, -50%);
+}
+
+.profile-private-zone-cap--bottom {
+    top: 100%;
+    transform: translate(-50%, -50%);
+}
+
+.profile-private-zone-note {
+    margin: 0 0 1.1rem;
+    color: color-mix(in srgb, var(--ul-accent-amber-fg) 55%, var(--ul-grey-6));
+    font-size: .8rem;
+    text-align: center;
+}
+
+// -- "Places in Common" page (mutual privacy-gated, linked from the stat above) ---
+
+.common-pins-map-section {
+    position: relative;
+    margin-bottom: 1.5rem;
+
+    &[hidden] { display: none; }
+}
+
+.common-pins-map {
+    height: 280px;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid var(--ul-surface-border);
+
+    @include up($breakpoint-sm) {
+        height: 360px;
+    }
+}
+
+.common-pins-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+}
+
+.common-pins-list-item {
+    @include surface($radius: $radius-md);
+    padding: 0;
+}
+
+.common-pins-list-link {
+    display: flex;
+    flex-direction: column;
+    padding: .85rem 1.1rem;
+    text-decoration: none;
+    color: inherit;
+}
+
+.common-pins-list-name {
+    font-weight: 600;
+    color: var(--ul-grey-9);
+}
+
+.common-pins-list-address {
+    font-size: .82rem;
+    color: var(--ul-grey-6);
+    margin-top: .15rem;
+}
+
+.common-pins-empty {
+    color: var(--ul-grey-6);
+    padding: 1rem 0;
 }

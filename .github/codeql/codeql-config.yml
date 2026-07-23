@@ -1,0 +1,5 @@
+name: "UrbanLens CodeQL config"
+
+paths-ignore:
+  - "**/frontend/static/**"
+  - "**/migrations/**"

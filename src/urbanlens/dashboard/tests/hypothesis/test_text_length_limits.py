@@ -152,7 +152,6 @@ class PinEditDescriptionLengthTests(TestCase):
         )
         req.user = self.user
         with (
-            patch("urbanlens.dashboard.controllers.pin_edit._ensure_location_address"),
             patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None),
         ):
             return PinEditView.as_view()(req, pin_slug=self.pin.slug)
@@ -202,6 +201,7 @@ class WikiEditDescriptionLengthTests(TestCase):
         self.client = Client()
         self.client.force_login(self.user)
         self.location, self.wiki = _location_with_wiki()
+        baker.make(Pin, profile=self.user.profile, location=self.location)
 
     def test_oversized_description_rejected(self) -> None:
         resp = self.client.post(
@@ -288,7 +288,7 @@ class TripDescriptionLengthTests(TestCase):
     def test_edit_rejects_oversized_description(self) -> None:
         trip = _make_trip(self.profile)
         resp = self.client.post(
-            reverse("trips.edit", kwargs={"trip_uuid": str(trip.uuid)}),
+            reverse("trips.edit", kwargs={"trip_slug": trip.slug}),
             data=json.dumps({"description": "x" * (MAX_TRIP_DESCRIPTION_LENGTH + 1)}),
             content_type="application/json",
         )
@@ -310,7 +310,7 @@ class TripActivityNotesLengthTests(TestCase):
 
     def test_create_rejects_oversized_notes(self) -> None:
         resp = self.client.post(
-            reverse("trips.activities", kwargs={"trip_uuid": str(self.trip.uuid)}),
+            reverse("trips.activities", kwargs={"trip_slug": self.trip.slug}),
             data=json.dumps({"title": "Stop", "notes": "x" * (MAX_TRIP_ACTIVITY_NOTES_LENGTH + 1)}),
             content_type="application/json",
         )
@@ -320,7 +320,7 @@ class TripActivityNotesLengthTests(TestCase):
     def test_edit_rejects_oversized_notes(self) -> None:
         activity = baker.make(TripActivity, trip=self.trip, notes="short")
         resp = self.client.post(
-            reverse("trips.activity.edit", kwargs={"trip_uuid": str(self.trip.uuid), "activity_id": activity.id}),
+            reverse("trips.activity.edit", kwargs={"trip_slug": self.trip.slug, "activity_id": activity.id}),
             data=json.dumps({"notes": "x" * (MAX_TRIP_ACTIVITY_NOTES_LENGTH + 1)}),
             content_type="application/json",
         )
@@ -342,7 +342,7 @@ class TripCommentTextLengthTests(TestCase):
 
     def test_oversized_text_rejected(self) -> None:
         resp = self.client.post(
-            reverse("trips.comments", kwargs={"trip_uuid": str(self.trip.uuid)}),
+            reverse("trips.comments", kwargs={"trip_slug": self.trip.slug}),
             {"text": "x" * (MAX_COMMENT_TEXT_LENGTH + 1)},
         )
         self.assertEqual(resp.status_code, 400)

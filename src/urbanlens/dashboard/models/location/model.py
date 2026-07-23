@@ -36,7 +36,7 @@ class Location(abstract.PublicDashboardModel):
       coordinates. Treated as immutable: when a pin's or wiki's coordinates
       change we find-or-create a *different* Location instead of mutating it.
     - Wiki      - one community page per Location (1:1); everything users edit
-      collectively (name, description, security, badges, aliases, ...).
+      collectively (name, description, security, labels, aliases, ...).
     - Pin       - one row per (user, place) pair; a user's personal record.
 
     A Location stores only what is derived from the address itself: coordinates,
@@ -46,7 +46,7 @@ class Location(abstract.PublicDashboardModel):
 
     What does NOT belong here (all on Wiki now):
     - Community name / description -> Wiki.name / Wiki.description
-    - Security indicators, badges, dates -> Wiki
+    - Security indicators, labels, dates -> Wiki
     - Aliases, comments, edit history, photos -> Wiki
     A user's personal label/notes/visit history belong on Pin.
 
@@ -214,9 +214,17 @@ class Location(abstract.PublicDashboardModel):
 
     @property
     def place_name(self) -> str | None:
-        if self.cached_place_name:
-            return self.cached_place_name
-        return self.get_place_name()
+        """Cached Google place name, or None when nothing has been resolved yet.
+
+        Deliberately cache-only - this used to fall back to get_place_name(),
+        which blocks on a live Google API call. A plain property is the wrong
+        place to make a synchronous external request (it fires on every pin
+        detail page render until the cache warms, with no way to opt out or
+        show a loading state) - see PinOverviewView.get, which dispatches
+        tasks.resolve_location_place_name in the background instead so this
+        stays populated for next time without ever blocking a request.
+        """
+        return self.cached_place_name
 
     # Country spellings reverse-geocoders commonly return for the USA, compared
     # casefolded with periods stripped (so "U.S.A." matches too).
@@ -284,7 +292,13 @@ class Location(abstract.PublicDashboardModel):
         return "Unnamed Location"
 
     def get_place_name(self) -> str | None:
-        """Fetch the canonical place name from Google and cache it on GooglePlace."""
+        """Fetch the canonical place name from Google and cache it on GooglePlace.
+
+        Blocks on a live API call when nothing is cached yet - safe to call
+        from a Celery task (see tasks.resolve_location_place_name), never from
+        a request/response cycle. Use the place_name property instead for
+        anything that renders synchronously.
+        """
         from urbanlens.dashboard.services.apis.locations.google.place_info import GooglePlaceService
 
         if self.latitude is None or self.longitude is None or not (-90 <= float(self.latitude) <= 90) or not (-180 <= float(self.longitude) <= 180):
@@ -298,7 +312,7 @@ class Location(abstract.PublicDashboardModel):
         return service.resolve_place_name(google_place)
 
     def has_place_name(self) -> bool:
-        """True when the cached or resolved Google place name is useful for queries."""
+        """True when the cached Google place name (if any) is useful for queries."""
         from urbanlens.dashboard.services.locations.naming import is_meaningful_name
 
         return is_meaningful_name(self.place_name)
@@ -399,9 +413,15 @@ class Location(abstract.PublicDashboardModel):
             )
 
     def save(self, *args, **kwargs) -> None:
-        """Sync the PostGIS point, then let PublicDashboardModel mint a routing slug."""
+        """Sanitize the official name, sync the PostGIS point, then let PublicDashboardModel mint a routing slug."""
+        from urbanlens.dashboard.services.locations.naming import sanitize_name
+
         if self.pk is not None:
             self._assert_identity_unchanged(kwargs.get("update_fields"))
+
+        update_fields = kwargs.get("update_fields")
+        if update_fields is None or "official_name" in update_fields:
+            self.official_name = sanitize_name(self.official_name)
 
         if self.latitude is not None and self.longitude is not None:
             lon = float(self.longitude)

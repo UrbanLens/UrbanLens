@@ -7,6 +7,7 @@ x-app-build: &app-build
   dockerfile: Dockerfile
   args:
     UL_ENVIRONMENT: ${UL_ENVIRONMENT:-production}
+    UL_CONTAINER_NAME: ${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}
 
 # Full environment for the app server and celery workers (need all API keys).
 # UL_PG_DUMP_BIN bypasses the pg_wrapper dispatcher and calls the versioned
@@ -59,11 +60,11 @@ x-beat-env: &beat-env
 # Project name is derived from the environment so each of prod/dev/test/staging
 # gets its own Compose namespace - this prefixes default (unnamed) networks and
 # volumes automatically, in addition to the explicit container_names below.
-name: urbanlens-${UL_ENVIRONMENT:-production}
+name: urbanlens-${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}
 
 services:
   app:
-    container_name: urbanlens_${UL_ENVIRONMENT:-production}_app
+    container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_app
     build:
       <<: *app-build
 
@@ -100,7 +101,7 @@ services:
   # chat, etc). `app` above keeps serving 100% of normal HTTP via gunicorn+gevent
   # unchanged - nginx routes just /ws/ to this service (see config/nginx/django.conf).
   app-ws:
-    container_name: urbanlens_${UL_ENVIRONMENT:-production}_app_ws
+    container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_app_ws
     build:
       <<: *app-build
 
@@ -147,7 +148,7 @@ services:
       start_period: 15s
 
   nginx:
-    container_name: urbanlens_${UL_ENVIRONMENT:-production}_nginx
+    container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_nginx
     image: nginxinc/nginx-unprivileged:alpine
     volumes:
       - static_volume:/app/src/urbanlens/frontend/static
@@ -166,14 +167,18 @@ services:
           - urbanlens_nginx
 
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/nginx-health"]
+      # 127.0.0.1, not localhost: inside the alpine image localhost resolves
+      # to ::1 first and nginx's `listen 8080` binds IPv4 only, so the check
+      # was connection-refused on every probe (container permanently
+      # "unhealthy" despite serving traffic fine).
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/nginx-health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 15s
 
   db:
-    container_name: urbanlens_${UL_ENVIRONMENT:-production}_db
+    container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_db
     # Pin to the same major version as postgresql-client-17 in the Dockerfile so
     # the pg_dump binary and server protocol stay in sync.
     image: postgis/postgis:17-3.5
@@ -204,14 +209,16 @@ services:
         max-file: "10"
 
   celery-worker:
-    container_name: urbanlens_${UL_ENVIRONMENT:-production}_celery_worker
+    container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_celery_worker
     build:
       <<: *app-build
     entrypoint: ["/docker-entrypoint.sh", "python", "-m", "celery"]
-    # Concurrency sized for the external-data panel fetches (see
-    # services/external_data.py): a cold pin detail page enqueues ~10 small
-    # IO-bound tasks at once, and 2 workers made the last panels wait through
-    # every earlier provider's network time before starting.
+    # Handles every task EXCEPT external-data panel fetches, which now run on
+    # celery-worker-panels below (see that service's comment for why they're
+    # split out). Concurrency=4 (prefork - one OS process per slot) is plenty
+    # for this queue's remaining traffic: photo/backup/export jobs and the
+    # scheduled housekeeping tasks (safety check-ins, account deletion, etc),
+    # none of which arrive in the same "~10 at once" bursts panel fetches did.
     # loglevel=warning: info logs a "received"/"succeeded" line for every task,
     # including the safety-checkin scheduled tasks that fire every 5 minutes -
     # that drowns out real signal in production. Failures/retries are still
@@ -237,8 +244,55 @@ services:
         max-size: "200k"
         max-file: "10"
 
+  celery-worker-panels:
+    container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_celery_worker_panels
+    build:
+      <<: *app-build
+    entrypoint: ["/docker-entrypoint.sh", "python", "-m", "celery"]
+    # Dedicated queue + worker for external-data panel fetches
+    # (services/external_data.py's fetch_panel_source task, dispatched to the
+    # "panel_fetch" queue via PanelSource.queue). Split out from celery-worker
+    # above because a cold pin detail page enqueues ~10 of these small,
+    # mostly-IO-bound tasks at once, all sharing celery-worker's 4 process
+    # slots - one slow/degraded external API could occupy a slot long enough
+    # that unrelated panels queued behind it were still "Loading..." when the
+    # client's poll budget ran out (see the pin-page bug report this fixed).
+    #
+    # --pool=threads (real OS threads, no extra dependency - built into
+    # Celery) instead of prefork: these tasks are >95% spent waiting on HTTP
+    # responses, so one thread per task costs kilobytes instead of a whole
+    # Python/Django process's worth of memory, letting --concurrency go much
+    # higher for the same resource budget. Deliberately NOT gevent/eventlet:
+    # this app already got burned once by cooperative-scheduling greenlets
+    # (see WEB_CONCURRENCY's comment above) - a CPU-bound unit of work never
+    # yields control in a gevent loop, freezing every other greenlet in that
+    # process indefinitely, whereas the GIL still preempts between OS threads
+    # every few ms regardless. The couple of panels that DO real CPU-bound
+    # work (BoundaryPanelSource, OvertureBuildingAttributesPanelSource -
+    # GeoParquet/Shapely geometry parsing) opt out via PanelSource.queue and
+    # stay on celery-worker's prefork pool instead, so they can't cause GIL
+    # contention here for the panels that are genuinely just waiting on I/O.
+    command: ["-A", "urbanlens.UrbanLens", "worker", "--loglevel=warning", "--pool=threads", "--concurrency=20", "-Q", "panel_fetch"]
+    restart: on-failure
+    depends_on:
+      db:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+    volumes:
+      - logs:/var/log/urbanlens
+    networks:
+      - app_network
+    environment:
+      <<: *app-env
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "10"
+
   celery-beat:
-    container_name: urbanlens_${UL_ENVIRONMENT:-production}_celery_beat
+    container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_celery_beat
     build:
       <<: *app-build
     entrypoint: ["/docker-entrypoint.sh", "python", "-m", "celery"]
@@ -264,8 +318,54 @@ services:
         max-size: "200k"
         max-file: "10"
 
+  # clamd daemon every upload (photos/videos/documents, article images,
+  # avatars, custom icons, comment/DM attachments) is scanned through before
+  # it's ever written to permanent storage - see services/malware_scan.py.
+  # The image's own baked-in HEALTHCHECK (pings clamd on its TCP port) is
+  # used as-is rather than reimplemented here - deliberately not overriding
+  # it with a guessed script name. The app fails uploads closed (rejects
+  # them, see MalwareScanUnavailableError) if this container is unreachable,
+  # so keep it running in every environment that accepts uploads.
+  clamav:
+    container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_clamav
+    image: clamav/clamav-debian:stable
+    restart: unless-stopped
+    environment:
+      # StreamMaxLength is unset by default, which falls back to clamd's own
+      # compiled-in default - observed to be well under SiteSettings'
+      # max_upload_file_size_mb (250MB by default, admin-adjustable up to
+      # 20,000MB), so an upload that passes our own size check could still
+      # be rejected by clamd with a confusing "too large to scan" error (see
+      # docs/prompts/completed.md's "article image upload malware-scan-too-
+      # large" entry). Pinned explicitly, comfortably above the default site
+      # setting, so clamd is never the surprise bottleneck for a normal-sized
+      # upload - see the image's /init entrypoint script, which turns any
+      # CLAMD_CONF_<Directive> env var into that clamd.conf directive.
+      CLAMD_CONF_StreamMaxLength: "1000M"
+      # clamd has no separate log-level control for its own periodic
+      # "SelfCheck: Database status OK." heartbeat - it isn't gated by
+      # LogVerbose (confirmed: it still logs with LogVerbose at its default
+      # of "no"), so the only lever available is how often it runs. Left at
+      # its compiled-in default (600s = every 10 minutes) this floods
+      # `docker compose logs` with a benign, expected message every few
+      # minutes; once a day is still a reasonable cadence for what this
+      # check actually verifies (the virus database directory hasn't gone
+      # stale/corrupted underneath the running daemon).
+      CLAMD_CONF_SelfCheck: "86400"
+    volumes:
+      - clamav-db:/var/lib/clamav
+    networks:
+      app_network:
+        aliases:
+          - urbanlens_clamav
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+        max-file: "10"
+
   valkey:
-    container_name: urbanlens_${UL_ENVIRONMENT:-production}_valkey
+    container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_valkey
     image: valkey/valkey:7-alpine
     user: nobody
     restart: unless-stopped
@@ -298,6 +398,7 @@ volumes:
   static_volume:
   media_volume:
   backups:
+  clamav-db:
 
 networks:
   app_network:

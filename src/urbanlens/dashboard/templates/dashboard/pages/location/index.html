@@ -9,9 +9,48 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" crossorigin="" />
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"
     integrity="sha384-JP5UPxIO2Tm2o79Fb0tGYMa44jkWar53aBoCbd8ah0+LcCDoohTIYr+zIXyfGIJN" crossorigin="anonymous"></script>
+<script src="{% static 'js/cover-hero.js' %}"></script>
+<script src="{% static 'js/page-tabs.js' %}" defer></script>
+<script src="{% static 'js/article-editor.js' %}" defer></script>
+<script type="module" src="{% static 'dashboard/js/article-wysiwyg.js' %}"></script>
+{% endblock %}
+
+{% block hero %}
+{% url 'map.view' as map_view_url %}
+{% include "dashboard/partials/ui/_page_hero.html" with id="pin-detail-hero" body_template="dashboard/partials/pins/_pin_detail_hero_body.html" back_url=map_view_url back_label="Map" modifier="top" hero_image_url=pin.cover_photo.image.url hero_cover_key="pin" %}
+{% endblock %}
+
+{% block subnav %}
+<div class="ul-page-subnav">
+    <div class="ul-page-subnav__inner">
+        {# -- Page tabs: Overview / Visit History / Article / Comments / Edit History -- #}
+        <nav class="ul-subnav-tabs" data-page-tabs aria-label="Pin sections">
+            <button type="button" class="ul-subnav-tab is-active" data-tab="overview">
+                <i class="material-symbols-outlined">dashboard</i><span>Overview</span>
+            </button>
+            <button type="button" class="ul-subnav-tab" data-tab="visits">
+                <i class="material-symbols-outlined">directions_walk</i><span>Visits</span>
+                {% if pin_visit_count %}<span class="page-tab-badge">{{ pin_visit_count }}</span>{% endif %}
+            </button>
+            <button type="button" class="ul-subnav-tab" data-tab="article"
+                    title="Your private article about this place - only you can see it">
+                <i class="material-symbols-outlined">article</i><span>Article</span>
+            </button>
+            <button type="button" class="ul-subnav-tab" data-tab="comments"
+                    title="Private notes only you can see - not shared with anyone else">
+                <i class="material-symbols-outlined">sticky_note_2</i><span>Notes</span>
+                {% if pin_comment_count %}<span class="page-tab-badge">{{ pin_comment_count }}</span>{% endif %}
+            </button>
+            <button type="button" class="ul-subnav-tab" data-tab="history">
+                <i class="material-symbols-outlined">history</i><span>Changes</span>
+            </button>
+        </nav>
+    </div>
+</div>
 {% endblock %}
 
 {% block content %}
+<div class="location-detail-page page-content">
 {% if can_view_debug_overlay %}
 <div id="pin-debug-overlay" class="pin-debug-overlay" hidden>
     <div class="pin-debug-overlay__header">
@@ -94,18 +133,40 @@
 }());
 </script>
 {% endif %}
+<section class="page-tab-panel" data-tab-panel="overview">
 <div class="pin-detail-grid">
     <div id="pin-detail-onboarding" class="page-onboarding" aria-live="polite"></div>
+
+    {# The one-time "organize this property?" suggestion: sub pins for the     #}
+    {# buildings here, plus nesting any top-level pins that stand inside it.   #}
+    {# 204s (and removes itself) whenever there's nothing to suggest, the      #}
+    {# owner has declined for this pin, or they've turned suggestions off.     #}
+    {# See controllers.pin_restructure. #}
+    {% if not parent_pin %}
+    <div id="pin-restructure-slot"
+         hx-get="{% url 'pin.restructure.offer' pin.slug %}"
+         hx-trigger="load"
+         hx-swap="outerHTML"
+         hx-timeout="25000"></div>
+    {% endif %}
+
+    {% if parent_pin %}
+    {# -- Child pin: obvious way back up to the parent -------------------- #}
+    <a class="pin-parent-breadcrumb" href="{% url 'pin.details' parent_pin.slug|default:parent_pin.uuid %}"
+       title="This is a sub pin - open its parent pin">
+        <i class="material-symbols-outlined">arrow_back</i>
+        <span>Sub pin of <strong>{{ parent_pin.effective_name }}</strong></span>
+    </a>
+    {% endif %}
 
     {# -- Title + details (swappable) ------------------------------------ #}
     <div id="pin-overview"
          hx-get="{% url 'pin.overview' pin.slug %}"
-         hx-trigger="load"
+         hx-trigger="load, pinOverviewChanged from:body"
          hx-swap="outerHTML">
-        <div class="pin-overview-title-row">
-            <h1 class="pin-title location-title">{{ pin.effective_name }}</h1>
+        <div class="pin-details location-details card">
+            <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
         </div>
-        <div class="pin-details location-details card" style="padding:1rem;color:#888;font-size:.85rem;">Loading...</div>
     </div>
 
     {# -- Map (full width) ----------------------------------------------- #}
@@ -114,18 +175,23 @@
             <i class="material-symbols-outlined">place</i>
             <h3>Location</h3>
         </div>
-        <div class="map-wrapper">
+        <div class="map-wrapper" id="pin-detail-map-wrapper"
+             {% if profile.pin_detail_map_height %}style="height: {{ profile.pin_detail_map_height }}px"{% endif %}>
 
-            {% include "dashboard/partials/layout/_map_annotations_panels.html" %}
+            {% include "dashboard/partials/layout/_map_annotations_panels.html" with layers="street,terrain,satellite,weather,borders,details,photos,nearby" %}
+            {% include "dashboard/partials/ui/_bulk_toolbar.html" with namespace="detailpins" actions=detail_pin_bulk_actions %}
 
         </div>
+        <div class="map-resize-handle" id="pin-detail-map-resize-handle"
+             title="Drag to resize the map" role="separator" aria-orientation="horizontal"
+             aria-label="Resize map"></div>
     </div>{# end .location-map #}
 
     {# -- Satellite / street view / photos: each card grows to fill the space -- #}
     {# left behind when a sibling in this row is collapsed (see .pin-media-row -- #}
     {# in _pin-detail.scss and the [data-collapse-scope] handling in base.html). #}
     <div class="pin-media-row">
-        <div id="satellite-view-section" class="satellite-view card card--primary"
+        <div id="satellite-view-section" class="satellite-view card card--primary" data-ext-panel-204
             hx-get="{% url 'pin.satellite_view' pin.slug %}"
             hx-trigger="load[!window.ulSectionCollapsed('pin','satellite')], ul:unhide"
             hx-swap="outerHTML"
@@ -140,7 +206,7 @@
             </div>
         </div>
 
-        <div id="street-view-section" class="street-view card card--primary"
+        <div id="street-view-section" class="street-view card card--primary" data-ext-panel-204
             hx-get="{% url 'pin.street_view' pin.slug %}"
             hx-trigger="load[!window.ulSectionCollapsed('pin','street-view')], ul:unhide"
             hx-swap="outerHTML"
@@ -155,82 +221,107 @@
             </div>
         </div>
 
-        <div id="pin-gallery-panel" class="card card--secondary"
-         hx-get="{% url 'pin.gallery' pin.slug %}"
-         hx-trigger="load[!window.ulSectionCollapsed('pin','gallery')], ul:unhide"
-         hx-swap="outerHTML"
-         data-collapse-scope="pin" data-collapse-section="gallery">
-            <div class="card-header">
-                <i class="material-symbols-outlined">photo_library</i>
-                <span>Photos</span>
-            </div>
-            <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
-        </div>
-    </div>{# end .pin-media-row #}
-
-    {# -- Visits / categories / aliases: same fill-the-gap behavior as above -- #}
-    <div class="pin-lists-row">
-        <div hx-get="{% url 'pin.visits' pin.slug %}"
-            hx-trigger="load[!window.ulSectionCollapsed('pin','visits')], ul:unhide"
-            hx-swap="outerHTML"
-            class="visit-history card card--secondary"
-            data-collapse-scope="pin" data-collapse-section="visits">
-            <div class="card-header">
-                <i class="material-symbols-outlined">history</i>
-                <span>Visit History</span>
-            </div>
-            <div style="padding:1rem;color:#888;font-size:.85rem;">Loading...</div>
-        </div>
-
-        <div hx-get="{% url 'badge.pin' badge_kind='category' pin_slug=pin.slug %}"
-            hx-trigger="load[!window.ulSectionCollapsed('pin','categories')], ul:unhide"
-            hx-swap="outerHTML"
-            class="tag-panel card card--secondary"
-            data-collapse-scope="pin" data-collapse-section="categories">
-            <div class="tag-panel-header">
-                <i class="material-symbols-outlined">category</i>
-                <span>Badges</span>
-            </div>
-            <div style="padding:1rem;color:#888;font-size:.85rem;">Loading...</div>
-        </div>
-
-        <div hx-get="{% url 'pin.aliases' pin.slug %}"
-            hx-trigger="load[!window.ulSectionCollapsed('pin','aliases')], ul:unhide"
-            hx-swap="outerHTML"
-            id="pin-aliases-panel"
-            class="aliases-panel card card--secondary"
-            data-collapse-scope="pin" data-collapse-section="aliases">
-            <div class="card-header">
-                <i class="material-symbols-outlined">label_important</i>
-                <span>Aliases</span>
-            </div>
-            <div style="padding:1rem;color:#888;font-size:.85rem;">Loading...</div>
-        </div>
-    </div>{# end .pin-lists-row #}
-
-    {# -- Auxiliary cards: a single adaptive grid that reflows to fill the ---- #}
-    {# space left by any card that doesn't render (optional cards, or cards -- #}
-    {# removed at runtime when their HTMX request returns 204 - see the ------ #}
-    {# htmx:afterOnLoad handler near the bottom of this file). ---------------- #}
-    <div class="pin-aux-grid">
-        <div id="media-gallery-section" class="media-gallery card card--secondary" hidden>
+        {# -- Combined Media section: the pin's own photos + every external ---- #}
+        {# provider (Wikimedia, Smithsonian, ...) in one place. "All" (default) #}
+        {# shows everything together, with a capped preview of the pin's own   #}
+        {# photos (PinController._photos_media_preview) alongside the external #}
+        {# providers; "Mine" swaps in the full, unlimited photo gallery        #}
+        {# (_photo_gallery.html, completely unchanged - same partial the wiki  #}
+        {# and safety check-in pages still use standalone) with everything it  #}
+        {# already had: drag-drop upload, delete, reposition, cover photo,     #}
+        {# bulk select/delete/send-to-wiki. See completed.md for why the two   #}
+        {# halves aren't merged into one literal grid (different pagination    #}
+        {# models: this section's external items are a capped, client-side-   #}
+        {# paginated batch; a pin's photos need real unlimited pagination). #}
+        <div id="media-gallery-section" class="media-gallery card card--secondary"
+             data-media-view="all"
+             data-media-sort="{{ profile.media_gallery_sort }}"
+             data-collapse-scope="pin" data-collapse-section="media">
             <div class="card-header">
                 <i class="material-symbols-outlined">collections</i>
                 <h3>Media</h3>
+                <span class="badge" id="media-count-badge" hidden></span>
+                {# .card-header-actions is the shared multi-action wrapper (see panel-header-grid #}
+                {# mixin) - without it, these buttons had no grid-area of their own and fell #}
+                {# to CSS Grid auto-placement, landing on an implicit second row below the title. #}
+                <div class="card-header-actions">
+                    {% if profile.external_apis_enabled %}
+                    <button type="button" class="media-gallery-header-btn" title="Import Photos"
+                            onclick="document.getElementById('pin-import-photos-dialog').showModal(); var t = document.querySelector('#pin-import-photos-dialog .import-photos-tab'); if (t) t.click();">
+                        <i class="material-symbols-outlined">add_photo_alternate</i>
+                    </button>
+                    <button type="button" class="media-gallery-header-btn" title="Import a Flickr Album"
+                            hx-get="{% url 'pin.flickr_album.dialog' pin.slug %}"
+                            hx-target="#flickr-album-dialog" hx-swap="innerHTML"
+                            onclick="document.getElementById('flickr-album-dialog').showModal();">
+                        <i class="material-symbols-outlined">photo_camera</i>
+                    </button>
+                    {% endif %}
+                    <button type="button" class="media-gallery-header-btn" id="media-select-btn" title="Select media"
+                            onclick="window.mediaDispatchSelect()">
+                        <i class="material-symbols-outlined">checklist</i>
+                    </button>
+                    <button type="button" class="media-gallery-header-btn" id="media-settings-btn" title="Media settings"
+                            onclick="window.mediaToggleSettingsMenu()">
+                        <i class="material-symbols-outlined">tune</i>
+                    </button>
+                </div>
+                <div class="media-settings-menu" id="media-settings-menu" hidden>
+                    <div class="media-settings-group">
+                        <span class="media-settings-label">Visibility</span>
+                        <button type="button" class="media-settings-option" data-media-visibility="default">Hide not-relevant photos</button>
+                        <button type="button" class="media-settings-option" data-media-visibility="show-hidden">Temporarily show all</button>
+                        <button type="button" class="media-settings-option" data-media-visibility="only-relevant">Show only relevant</button>
+                    </div>
+                    <div class="media-settings-group">
+                        <span class="media-settings-label">Order</span>
+                        <button type="button" class="media-settings-option" data-media-sort="relevant">Relevant first</button>
+                        <button type="button" class="media-settings-option" data-media-sort="recent">Most recent</button>
+                    </div>
+                </div>
             </div>
-            <div class="view-loading" id="media-gallery-loading">
-                <i class="material-icons spin">autorenew</i>
-                Loading...
+
+            {# -- Source filter tabs + All/Mine view switch, combined into one row -- #}
+            {# "All" and "Mine" are built into rebuildMediaTabs() alongside the      #}
+            {# per-source tabs (see index.html's media-gallery IIFE) so there's a    #}
+            {# single tab strip instead of two stacked ones - "Mine" switches to the #}
+            {# pin's own full gallery panel below; every other tab filters within    #}
+            {# the combined grid. #}
+            <div class="card-tabs" id="media-tabs" role="tablist" aria-label="Media view"></div>
+
+            <div class="media-view-panel" data-media-view-panel="all">
+                <div class="view-loading" id="media-gallery-loading">
+                    <i class="material-icons spin">autorenew</i>
+                    Loading...
+                </div>
+                <div class="media-gallery-grid" id="media-gallery-grid"
+                     data-adaptive-pagination-list data-adaptive-pagination-min-page-size="6"></div>
+                <div class="media-gallery-empty" id="media-gallery-empty" hidden>
+                    <i class="material-symbols-outlined">collections</i>
+                    <p>No media found for this location yet.</p>
+                </div>
+                <div class="pagination-bar" data-adaptive-pagination-controls
+                     data-server-page="1" data-server-pages="1" hidden></div>
             </div>
-            <div class="media-gallery-grid" id="media-gallery-grid"
-                 data-adaptive-pagination-list data-adaptive-pagination-min-page-size="6"></div>
-            <div class="pagination-bar" data-adaptive-pagination-controls
-                 data-server-page="1" data-server-pages="1" hidden></div>
+
+            <div class="media-view-panel" data-media-view-panel="mine" hidden>
+                <div id="pin-gallery-panel"
+                     hx-get="{% url 'pin.gallery' pin.slug %}{% if include_children %}?children=1{% endif %}"
+                     hx-trigger="load"
+                     hx-swap="innerHTML">
+                    <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
+                </div>
+            </div>
         </div>
-        {# Loader ids are load-bearing: while a provider's background fetch is #}
-        {# in flight, the server's pending response retargets itself onto the #}
-        {# requesting loader by id (HX-Retarget) so the loader re-polls itself #}
-        {# instead of appending into the gallery grid. #}
+        {# Per-provider loaders - hidden, append their results into #media-gallery-grid #}
+        {# above as each responds (see the media-gallery IIFE further down this file). #}
+        <div class="media-provider-loader" id="media-loader-photos"
+            hx-get="{% url 'pin.media' pin.slug 'photos' %}"
+            hx-trigger="load"
+            hx-target="#media-gallery-grid"
+            hx-swap="beforeend"
+            hx-timeout="25000"
+            hidden></div>
         <div class="media-provider-loader" id="media-loader-smithsonian"
             hx-get="{% url 'pin.media' pin.slug 'smithsonian' %}"
             hx-trigger="load"
@@ -245,6 +336,15 @@
             hx-swap="beforeend"
             hx-timeout="25000"
             hidden></div>
+        {# Images from the pin's own matched Wikipedia article page, distinct from the #}
+        {# Wikimedia Commons text search above - see WikipediaMediaGateway. #}
+        <div class="media-provider-loader" id="media-loader-wikipedia_media"
+            hx-get="{% url 'pin.media' pin.slug 'wikipedia_media' %}"
+            hx-trigger="load"
+            hx-target="#media-gallery-grid"
+            hx-swap="beforeend"
+            hx-timeout="25000"
+            hidden></div>
         <div class="media-provider-loader" id="media-loader-loc"
             hx-get="{% url 'pin.media' pin.slug 'loc' %}"
             hx-trigger="load"
@@ -252,9 +352,181 @@
             hx-swap="beforeend"
             hx-timeout="25000"
             hidden></div>
+        <div class="media-provider-loader" id="media-loader-internet_archive"
+            hx-get="{% url 'pin.media' pin.slug 'internet_archive' %}"
+            hx-trigger="load"
+            hx-target="#media-gallery-grid"
+            hx-swap="beforeend"
+            hx-timeout="25000"
+            hidden></div>
+        <div class="media-provider-loader" id="media-loader-yelp"
+            hx-get="{% url 'pin.media' pin.slug 'yelp' %}"
+            hx-trigger="load"
+            hx-target="#media-gallery-grid"
+            hx-swap="beforeend"
+            hx-timeout="25000"
+            hidden></div>
+        <div class="media-provider-loader" id="media-loader-google_images"
+            hx-get="{% url 'pin.media' pin.slug 'google_images' %}"
+            hx-trigger="load"
+            hx-target="#media-gallery-grid"
+            hx-swap="beforeend"
+            hx-timeout="25000"
+            hidden></div>
+        {# Broad web-image search via SearXNG's image engines - see plugins.builtin.searxng_images. #}
+        <div class="media-provider-loader" id="media-loader-searxng_images"
+            hx-get="{% url 'pin.media' pin.slug 'searxng_images' %}"
+            hx-trigger="load"
+            hx-target="#media-gallery-grid"
+            hx-swap="beforeend"
+            hx-timeout="25000"
+            hidden></div>
+        <div class="media-provider-loader" id="media-loader-google_maps"
+            hx-get="{% url 'pin.media' pin.slug 'google_maps' %}"
+            hx-trigger="load"
+            hx-target="#media-gallery-grid"
+            hx-swap="beforeend"
+            hx-timeout="25000"
+            hidden></div>
+        {# LoopNet listing photos and CRIS attachment photos/documents, via REData - see plugins.builtin.loopnet/cris_buildings. #}
+        <div class="media-provider-loader" id="media-loader-loopnet"
+            hx-get="{% url 'pin.media' pin.slug 'loopnet' %}"
+            hx-trigger="load"
+            hx-target="#media-gallery-grid"
+            hx-swap="beforeend"
+            hx-timeout="25000"
+            hidden></div>
+        <div class="media-provider-loader" id="media-loader-cris_building"
+            hx-get="{% url 'pin.media' pin.slug 'cris_building' %}"
+            hx-trigger="load"
+            hx-target="#media-gallery-grid"
+            hx-swap="beforeend"
+            hx-timeout="25000"
+            hidden></div>
+    </div>{# end .pin-media-row #}
 
+    {# -- Categories / aliases: same fill-the-gap behavior as above -- #}
+    {# Visit History moved to its own subnav tab (data-tab="visits") - see    #}
+    {# the page-tab-panel below - it no longer shares this masonry row.      #}
+    <div class="pin-lists-row">
+        <div class="organization-card card card--secondary"
+             data-collapse-scope="pin" data-collapse-section="categories">
+            <div class="card-header">
+                <i class="material-symbols-outlined">folder</i>
+                <span>Organization</span>
+                <span class="badge" id="organization-count-badge" hidden></span>
+                <div class="card-header-actions organization-add-wrap" id="organization-add-wrap">
+                    <button type="button" class="btn btn--icon-sm" id="organization-add-btn"
+                            onclick="document.getElementById('category-add-dialog-{{ pin.slug }}').showModal();"
+                            title="Add a label or list">
+                        <i class="material-symbols-outlined">add</i>
+                    </button>
+                </div>
+            </div>
+            <div hx-get="{% url 'label.pin' label_kind='category' pin_slug=pin.slug %}"
+                hx-trigger="load[!window.ulSectionCollapsed('pin','categories')], ul:unhide"
+                hx-swap="outerHTML"
+                class="tag-panel tag-panel--embedded">
+                <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
+            </div>
+        </div>
+
+
+
+        {% with link_count=pin.links.count %}
+        <div class="pin-links-card card card--secondary"
+             data-collapse-scope="pin" data-collapse-section="links"
+             {# Auto-collapsed (session-only, never persisted - see base.html's #}
+             {# _applyState) whenever the pin has no links yet, so an empty card #}
+             {# doesn't take up space by default; the user can still expand it #}
+             {# manually to add one. #}
+             data-collapse-if-empty="{% if not link_count %}true{% endif %}">
+            <div class="card-header">
+                <i class="material-symbols-outlined">link</i>
+                <span>Links</span>
+                <span class="badge" id="pin-links-count-badge"{% if not link_count %} hidden{% endif %}>{{ link_count }}</span>
+                <button type="button" class="btn btn--icon-sm" title="Add a link"
+                        onclick="document.getElementById('pin-link-add-dialog').showModal()">
+                    <i class="material-symbols-outlined">add_link</i>
+                </button>
+            </div>
+            <div class="card__body"
+                 hx-get="{% url 'pin.links' pin.slug %}"
+                 hx-trigger="pinLinksChanged from:body"
+                 hx-swap="innerHTML">
+                {% include "dashboard/partials/pins/_pin_links_row.html" with pin=pin links=pin.links.all add_url="pin.links" delete_url_name="pin.link.delete" row_id="pin-links-row" owner_slug=pin.slug use_dialog=True %}
+            </div>
+        </div>
+        {% endwith %}
+
+        <div hx-get="{% url 'pin.aliases' pin.slug %}"
+            hx-trigger="load[!window.ulSectionCollapsed('pin','aliases')], ul:unhide, pinAliasesChanged from:body"
+            hx-swap="outerHTML"
+            id="pin-aliases-panel"
+            class="aliases-panel card card--secondary"
+            data-collapse-scope="pin" data-collapse-section="aliases">
+            <div class="card-header">
+                <i class="material-symbols-outlined">label_important</i>
+                <span>Aliases</span>
+            </div>
+            <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
+        </div>
+
+        <div hx-get="{% url 'pin.custom_fields' pin.slug %}"
+            hx-trigger="load, ul:unhide"
+            hx-swap="outerHTML"
+            id="pin-custom-fields-panel"
+            class="cf-panel-area">
+            {# Loads unconditionally (no collapse gate): section-display cards and #}
+            {# fixed-display overlays live in this response too, and they must render #}
+            {# even when the Custom Fields card itself is collapsed. #}
+            <div class="custom-fields-panel card card--secondary"
+                 data-collapse-scope="pin" data-collapse-section="custom-fields">
+                <div class="card-header">
+                    <i class="material-symbols-outlined">tune</i>
+                    <span>Custom Fields</span>
+                </div>
+                <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
+            </div>
+        </div>
+
+        <div hx-get="{% url 'pin.ownership' pin.slug %}"
+            hx-trigger="load[!window.ulSectionCollapsed('pin','ownership')], ul:unhide"
+            hx-swap="outerHTML"
+            id="pin-ownership-panel"
+            class="ownership-panel card card--secondary"
+            data-collapse-scope="pin" data-collapse-section="ownership">
+            <div class="card-header">
+                <i class="material-symbols-outlined">real_estate_agent</i>
+                <span>Ownership</span>
+            </div>
+            <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
+        </div>
+
+        {# Only rendered when the pin has associated markup maps - the view returns 204 #}
+        {# otherwise, and the htmx:afterOnLoad handler below removes this placeholder. #}
+        <div hx-get="{% url 'pin.markup_maps' pin.slug %}"
+            hx-trigger="load[!window.ulSectionCollapsed('pin','markup-maps')], ul:unhide, refreshMarkupMaps from:body"
+            hx-swap="outerHTML"
+            id="pin-markup-maps-panel"
+            data-ext-panel-204
+            class="pin-markup-maps-panel card card--secondary"
+            data-collapse-scope="pin" data-collapse-section="markup-maps">
+            <div class="card-header">
+                <i class="material-symbols-outlined">map</i>
+                <span>Markup Maps</span>
+            </div>
+            <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
+        </div>
+    </div>{# end .pin-lists-row #}
+
+    {# -- Auxiliary cards: a single adaptive grid that reflows to fill the ---- #}
+    {# space left by any card that doesn't render (optional cards, or cards -- #}
+    {# removed at runtime when their HTMX request returns 204 - see the ------ #}
+    {# htmx:afterOnLoad handler near the bottom of this file). ---------------- #}
+    <div class="pin-aux-grid">
         {% if pin.meaningful_name and can_use_web_search %}
-        <div id="web-search-section" class="web-search card card--secondary"
+        <div id="web-search-section" class="web-search card card--secondary" data-ext-panel-204
             hx-get="{% url 'pin.web_search' pin.slug %}"
             hx-trigger="load[!window.ulSectionCollapsed('pin','web-search')], ul:unhide"
             hx-swap="outerHTML"
@@ -270,33 +542,67 @@
         </div>
         {% endif %}
 
-        <div id="wikipedia-section" class="card card--secondary"
-            hx-get="{% url 'pin.wikipedia' pin.slug %}"
-            hx-trigger="load[!window.ulSectionCollapsed('pin','wikipedia')], ul:unhide"
+        {% include "dashboard/partials/pins/_pin_location_data_tabs.html" with pin=pin location_data_tabs=location_data_tabs %}
+
+        <div id="azure-maps-section" class="card card--secondary" data-ext-panel-204
+            hx-get="{% url 'pin.azure_maps' pin.slug %}"
+            hx-trigger="load[!window.ulSectionCollapsed('pin','azure_maps')], ul:unhide"
             hx-swap="outerHTML"
             hx-timeout="25000"
-            data-collapse-scope="pin" data-collapse-section="wikipedia">
+            data-collapse-scope="pin" data-collapse-section="azure_maps">
             <div class="card-header">
-                <i class="material-symbols-outlined">menu_book</i>
-                <h3>Wikipedia</h3>
+                <i class="material-symbols-outlined">travel_explore</i>
+                <h3>Azure Maps</h3>
             </div>
             <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
         </div>
 
-        <div id="nominatim-section" class="card card--secondary"
-            hx-get="{% url 'pin.nominatim' pin.slug %}"
-            hx-trigger="load[!window.ulSectionCollapsed('pin','nominatim')], ul:unhide"
+        {# Every building on the parcel - see plugins.builtin.parcel_buildings. #}
+        <div id="parcel-buildings-section" class="card card--secondary" data-ext-panel-204
+            hx-get="{% url 'pin.parcel_buildings' pin.slug %}"
+            hx-trigger="load[!window.ulSectionCollapsed('pin','parcel_buildings')], ul:unhide, pinDetailPinsChanged from:body"
             hx-swap="outerHTML"
             hx-timeout="25000"
-            data-collapse-scope="pin" data-collapse-section="nominatim">
+            data-collapse-scope="pin" data-collapse-section="parcel_buildings">
             <div class="card-header">
-                <i class="material-symbols-outlined">map</i>
-                <h3>OpenStreetMap</h3>
+                <i class="material-symbols-outlined">apartment</i>
+                <h3>Buildings on this Property</h3>
             </div>
             <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
         </div>
 
-        <div id="nps-section" class="card card--secondary"
+        {% for panel in simple_info_panels %}
+        <div id="{{ panel.section_id }}" class="card card--secondary" data-ext-panel-204
+            hx-get="{% url 'pin.panel' pin.slug panel.key %}"
+            hx-trigger="load[!window.ulSectionCollapsed('pin','{{ panel.key }}')], ul:unhide"
+            hx-swap="outerHTML"
+            hx-timeout="25000"
+            data-collapse-scope="pin" data-collapse-section="{{ panel.key }}">
+            <div class="card-header">
+                <i class="material-symbols-outlined">{{ panel.icon }}</i>
+                <h3>{{ panel.title }}</h3>
+            </div>
+            <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
+        </div>
+        {% endfor %}
+
+        {% if panel_tabs %}
+        {% include "dashboard/partials/pins/_pin_plugin_tabs.html" with tabs=panel_tabs default_tab_key=default_panel_tab_key section_id="pin-plugin-tabs-section" body_id="pin-plugin-tab-body" heading="Regional Data" heading_icon="layers" collapse_section="plugin_tabs" collapse_label="Regional Data" %}
+        {% endif %}
+
+        <div id="yelp-section" class="card card--secondary" data-ext-panel-204
+            hx-get="{% url 'pin.yelp' pin.slug %}"
+            hx-trigger="load[!window.ulSectionCollapsed('pin','yelp')], ul:unhide"
+            hx-swap="outerHTML"
+            data-collapse-scope="pin" data-collapse-section="yelp">
+            <div class="card-header">
+                <i class="material-symbols-outlined">storefront</i>
+                <h3>Yelp</h3>
+            </div>
+            <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
+        </div>
+
+        <div id="nps-section" class="card card--secondary" data-ext-panel-204
             hx-get="{% url 'pin.nps' pin.slug %}"
             hx-trigger="load[!window.ulSectionCollapsed('pin','nps')], ul:unhide"
             hx-swap="outerHTML"
@@ -308,7 +614,7 @@
             <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
         </div>
 
-        <div id="loopnet-section" class="card card--secondary"
+        <div id="loopnet-section" class="card card--secondary" data-ext-panel-204
             hx-get="{% url 'pin.loopnet' pin.slug %}"
             hx-trigger="load[!window.ulSectionCollapsed('pin','loopnet')], ul:unhide"
             hx-swap="outerHTML"
@@ -320,7 +626,7 @@
             <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
         </div>
 
-        <div id="usgs-topo-section"
+        <div id="usgs-topo-section" data-ext-panel-204
             hx-get="{% url 'pin.usgs_topo' pin.slug %}"
             hx-trigger="load"
             hx-swap="outerHTML"
@@ -335,19 +641,183 @@
         </div>
     </div>{# end .pin-aux-grid #}
 
-    {# -- Comments: always present ----------------------------------------- #}
-    <div id="comment-panel" class="card card--secondary"
-     hx-get="{% url 'pin.comments' pin.slug %}"
-     hx-trigger="load[!window.ulSectionCollapsed('pin','comments')], ul:unhide"
-     hx-swap="outerHTML"
-     data-collapse-scope="pin" data-collapse-section="comments">
+</div>{# end .pin-detail-grid #}
+</section>{# end overview tab #}
+
+{# -- Visit History tab: previously crammed into Overview alongside a dozen  #}
+{# other cards - promoted to its own subnav tab so it reads as its own page. #}
+<section class="page-tab-panel" data-tab-panel="visits" hidden>
+    <div id="visit-history-panel"
+        hx-get="{% url 'pin.visits' pin.slug %}{% if include_children %}?children=1{% endif %}"
+        hx-trigger="load"
+        hx-swap="outerHTML"
+        class="visit-history card">
         <div class="card-header">
-            <i class="material-symbols-outlined">chat</i>
-            <span>Comments</span>
+            <i class="material-symbols-outlined">directions_walk</i>
+            <span>Visit History</span>
         </div>
         <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
     </div>
-</div>{# end .pin-detail-grid #}
+</section>
+
+{# -- Article tab: the user's private, Wikipedia-style article, plus a ------ #}
+{# Wikipedia sub-tab (moved here from the Overview tab's aux grid) showing -- #}
+{# the matched Wikipedia article read-only for reference/comparison. -------- #}
+<section class="page-tab-panel" data-tab-panel="article" hidden>
+    <div class="card-tabs article-subtabs" role="tablist" aria-label="Article view">
+        <button type="button" class="pin-plugin-tab-btn card-tab active" role="tab" aria-selected="true"
+                onclick="window.articleSetSubTab(this, 'article')">
+            <i class="material-symbols-outlined">article</i><span>Article</span>
+        </button>
+        <button type="button" id="article-subtab-btn-wikipedia" class="pin-plugin-tab-btn card-tab" role="tab" aria-selected="false"
+                onclick="window.articleSetSubTab(this, 'wikipedia')">
+            <i class="material-symbols-outlined">menu_book</i><span>Wikipedia</span>
+        </button>
+    </div>
+    <div data-article-subtab="article">
+        <div class="card article-card">
+            <div id="article-panel"
+                    hx-get="{% url 'pin.article' pin.slug %}"
+                    hx-trigger="load"
+                    hx-swap="outerHTML">
+                <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading article...</div>
+            </div>
+        </div>
+    </div>
+    <div data-article-subtab="wikipedia" hidden>
+        {# data-ext-panel-204-hide-tab: no Wikipedia article means nothing to show #}
+        {# on this sub-tab at all - hide the tab button itself, not just this card. #}
+        <div id="wikipedia-section" class="card card--secondary" data-ext-panel-204
+            data-ext-panel-204-hide-tab="article-subtab-btn-wikipedia"
+            hx-get="{% url 'pin.wikipedia' pin.slug %}"
+            hx-trigger="load[!window.ulSectionCollapsed('pin','wikipedia')], ul:unhide"
+            hx-swap="outerHTML"
+            hx-timeout="25000"
+            data-collapse-scope="pin" data-collapse-section="wikipedia">
+            <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
+        </div>
+    </div>
+</section>
+<script>
+    // Article/Wikipedia sub-tabs: both panels' markup is always present (the
+    // Wikipedia one eagerly loads on page load, same as before it moved here
+    // from the Overview tab's aux grid) - switching just toggles which is
+    // visible, so nothing needs re-fetching on every click. The Wikipedia
+    // panel's own hx-swap="outerHTML" only ever replaces #wikipedia-section
+    // itself, never this wrapper div, so the `hidden` state set here survives
+    // every poll/refresh of that panel.
+    window.articleSetSubTab = function (btn, key) {
+        document.querySelectorAll('.article-subtabs .pin-plugin-tab-btn').forEach(function (b) {
+            b.classList.remove('active');
+            b.setAttribute('aria-selected', 'false');
+        });
+        btn.classList.add('active');
+        btn.setAttribute('aria-selected', 'true');
+        document.querySelectorAll('[data-article-subtab]').forEach(function (panel) {
+            panel.hidden = panel.dataset.articleSubtab !== key;
+        });
+        if (window.ulRefreshCollapseRestore) window.ulRefreshCollapseRestore();
+    };
+</script>
+
+{# -- Notes tab (backend: pin comments, private to the pin's owner) --------- #}
+<section class="page-tab-panel" data-tab-panel="comments" hidden>
+    <div id="comment-panel" class="card"
+         hx-get="{% url 'pin.comments' pin.slug %}{% if include_children %}?children=1{% endif %}"
+         hx-trigger="load"
+         hx-swap="outerHTML">
+        <div class="card-header">
+            <i class="material-symbols-outlined">sticky_note_2</i>
+            <span>Notes</span>
+        </div>
+        <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
+    </div>
+</section>
+
+{# -- Edit history tab: article revision history --------------------------- #}
+<section class="page-tab-panel" data-tab-panel="history" hidden>
+    <div class="card article-history-card">
+        <div class="card-header">
+            <i class="material-symbols-outlined">history_edu</i>
+            <h3>Article Revisions</h3>
+        </div>
+        <div class="card__body">
+            <div id="article-history-panel"
+                 hx-get="{% url 'pin.article.history' pin.slug %}"
+                 hx-trigger="load"
+                 hx-swap="outerHTML">
+                <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
+            </div>
+        </div>
+    </div>
+</section>
+
+{% if has_child_pins or parent_pin %}
+{# -- Floating actions menu (bottom-right, follows scroll) ----------------- #}
+{# Holds the uncommon pin-hierarchy actions so they never clutter the page:  #}
+{# the page-wide "sub pin details" toggle, jump-to-parent, and detach.       #}
+<div class="pin-actions-fab" id="pin-actions-fab">
+    <div class="pin-actions-menu" id="pin-actions-menu" hidden>
+        {% if has_child_pins %}
+        {# Both directions are explicit: a parcel pin defaults the toggle ON      #}
+        {# (its children are the content), so a bare URL would no longer mean     #}
+        {# "off" and the toggle could never be turned off. See PinController.details. #}
+        <a class="pin-actions-item{% if include_children %} is-active{% endif %}"
+           href="{% url 'pin.details' pin.slug %}?children={% if include_children %}0{% else %}1{% endif %}"
+           title="Show everything from this pin's child pins on this page - map details, photos, and visit history">
+            <i class="material-symbols-outlined">{% if include_children %}toggle_on{% else %}toggle_off{% endif %}</i>
+            <span>Sub pin details</span>
+            <span class="pin-actions-state">{% if include_children %}On{% else %}Off{% endif %}</span>
+        </a>
+        {% endif %}
+        {% if parent_pin %}
+        <a class="pin-actions-item" href="{% url 'pin.details' parent_pin.slug|default:parent_pin.uuid %}">
+            <i class="material-symbols-outlined">arrow_upward</i>
+            <span>Open parent pin</span>
+        </a>
+        <button type="button" class="pin-actions-item pin-actions-item--danger"
+                hx-post="{% url 'pin.detach_parent' pin.slug %}"
+                hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+                hx-confirm="Detach this pin from {{ parent_pin.effective_name }}? It becomes a top-level pin on your main map again."
+                hx-swap="none">
+            <i class="material-symbols-outlined">link_off</i>
+            <span>Detach from parent</span>
+        </button>
+        {% endif %}
+    </div>
+    <button type="button" class="pin-actions-fab-btn" id="pin-actions-fab-btn"
+            aria-haspopup="true" aria-expanded="false" title="Pin actions">
+        <i class="material-symbols-outlined">account_tree</i>
+        <span class="pin-actions-fab-label">Actions</span>
+        {% if include_children %}<span class="pin-actions-fab-dot" title="Sub pin details are on"></span>{% endif %}
+    </button>
+</div>
+<script>
+(function () {
+    var fab = document.getElementById('pin-actions-fab');
+    var btn = document.getElementById('pin-actions-fab-btn');
+    var menu = document.getElementById('pin-actions-menu');
+    if (!fab || !btn || !menu) return;
+    btn.addEventListener('click', function () {
+        var open = menu.hidden;
+        menu.hidden = !open;
+        btn.setAttribute('aria-expanded', String(open));
+        fab.classList.toggle('is-open', open);
+    });
+    document.addEventListener('click', function (e) {
+        if (!fab.contains(e.target) && !menu.hidden) {
+            menu.hidden = true;
+            btn.setAttribute('aria-expanded', 'false');
+            fab.classList.remove('is-open');
+        }
+    });
+}());
+</script>
+{% endif %}
+
+{# -- Media gallery multi-select floating toolbar --------------------------- #}
+{% include "dashboard/partials/ui/_bulk_toolbar.html" with namespace="media" actions=media_bulk_actions %}
+<script src="{% static 'js/bulk-toolbar.js' %}"></script>
 
 {# -- Create community wiki dialog (content loaded via HTMX) --------------- #}
 <dialog id="pin-wiki-create-dialog" class="pin-wiki-create-dialog ul-dialog">
@@ -356,6 +826,20 @@
 
 {# -- Share pin dialog (content loaded via HTMX from pin.share.dialog) ------ #}
 <dialog id="pin-share-dialog" class="pin-share-dialog ul-dialog"></dialog>
+
+{# -- Import Photos dialog (Immich/Flickr/Google Photos tabs) -------------- #}
+<dialog id="pin-import-photos-dialog" class="pin-import-photos-dialog ul-dialog">
+    {% include "dashboard/partials/pins/_import_photos_dialog.html" %}
+</dialog>
+
+{# -- Import a public Flickr album by URL (distinct from the per-user OAuth #}
+{# "Flickr" tab above - see controllers/flickr.py's module docstring) ------ #}
+<dialog id="flickr-album-dialog" class="ul-dialog"></dialog>
+
+{# -- Add link dialog -------------------------------------------------------- #}
+<dialog id="pin-link-add-dialog" class="pin-link-add-dialog ul-dialog">
+    {% include "dashboard/partials/pins/_pin_link_add_dialog.html" %}
+</dialog>
 
 {# -- Pin edit dialog ------------------------------------------------------ #}
 <dialog id="pin-edit-dialog" class="pin-edit-dialog ul-dialog">
@@ -369,11 +853,25 @@
         {% csrf_token %}
 
         <div class="pin-edit-form-body ul-dialog-body">
-        <div class="form-row">
+        <div class="form-row pin-edit-name-row">
             <label for="pe-name">Name <span class="form-optional">(leave blank to use wiki name)</span></label>
             <input type="text" name="name" id="pe-name"
                    value="{{ pin.name|default:'' }}" maxlength="255"
-                   placeholder="{{ pin.effective_name }}">
+                   placeholder="{{ pin.effective_name }}" autocomplete="off"
+                   oninput="_pinEditFilterNameSuggestions(this)"
+                   onfocus="_pinEditShowNameSuggestions()">
+            {% if pin_alias_suggestions %}
+            <ul class="pin-edit-name-suggestions" id="pe-name-suggestions" hidden>
+                {% for alias in pin_alias_suggestions %}
+                <li data-search="{{ alias.name|lower }}">
+                    <button type="button" onclick="_pinEditPickNameSuggestion(this)">
+                        {{ alias.name }}
+                        {% if alias.kind == "official" %}<span class="pin-edit-name-suggestion-tag">official</span>{% endif %}
+                    </button>
+                </li>
+                {% endfor %}
+            </ul>
+            {% endif %}
         </div>
 
         <div class="form-row">
@@ -382,16 +880,12 @@
                       placeholder="Your personal notes about this location...">{{ pin.description|default:'' }}</textarea>
         </div>
 
-        <div class="form-row">
-            <label for="pe-pin-type">Pin Type</label>
-            <select name="pin_type" id="pe-pin-type">
-                {% for value, label in pin_type_choices %}
-                <option value="{{ value }}"{% if pin.pin_type == value %} selected{% endif %}>{{ label }}</option>
-                {% endfor %}
-            </select>
-        </div>
-
         <div class="form-row form-row--two-col">
+            <div>
+                <label for="pe-date-built">Date Built</label>
+                <input type="date" name="date_built" id="pe-date-built"
+                       value="{{ pin.date_built|date:'Y-m-d'|default:'' }}">
+            </div>
             <div>
                 <label for="pe-date-abandoned">Date Abandoned</label>
                 <input type="date" name="date_abandoned" id="pe-date-abandoned"
@@ -426,9 +920,10 @@
             <button type="button" class="btn btn--ghost"
                     onclick="this.closest('dialog').close()">Cancel</button>
             <button type="button" class="btn btn--danger pin-edit-delete-btn"
-                    hx-delete="{% url 'pin.delete' pin.slug %}"
-                    hx-confirm="Permanently delete this pin? This cannot be undone."
-                    hx-target="body"
+                    onclick="window.deletePinCascade('{{ pin.uuid }}', '{{ pin.effective_name|escapejs }}', '{{ csrf_token }}').then(function (result) {
+                        if (result === true) { window.location = '{% url 'map.view' %}'; }
+                        else if (result === null) { toastr.error('Failed to delete pin'); }
+                    })"
                     style="margin-left:auto">
                 <i class="material-icons" style="font-size:1rem;vertical-align:-.15em">delete</i>
                 Delete Pin
@@ -436,11 +931,59 @@
         </div>
     </form>
 </dialog>
+</div>
 
 {% endblock %}
 
 {% block scripts %}
 <script>
+    // -- Add this pin to a list -------------------------------------------------
+    const PIN_LIST_ADD_PIN_ID = "{{ pin.id }}";
+    const PIN_ORGANIZE_DIALOG_ID = "category-add-dialog-{{ pin.slug }}";
+
+    function filterAddToListResults(query) {
+        const q = (query || '').trim().toLowerCase();
+        document.querySelectorAll('#add-to-list-results li').forEach((li) => {
+            li.style.display = (!q || (li.dataset.search || '').includes(q)) ? '' : 'none';
+        });
+    }
+
+    function addPinsToList(listUuid) {
+        const addUrl = "{% url 'lists.items.add' '00000000-0000-0000-0000-000000000000' %}".replace('00000000-0000-0000-0000-000000000000', listUuid);
+        const params = new URLSearchParams();
+        params.append('pin_ids', PIN_LIST_ADD_PIN_ID);
+        fetch(addUrl, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': "{{ csrf_token }}" },
+            body: params,
+        }).then((response) => {
+            if (!response.ok) {
+                if (typeof toastr !== 'undefined') toastr.error('Could not add pin to that list.');
+                return;
+            }
+            document.getElementById(PIN_ORGANIZE_DIALOG_ID)?.close();
+            if (typeof toastr !== 'undefined') toastr.success('Added to list.');
+        });
+    }
+
+    function createListAndAddPins() {
+        const nameInput = document.getElementById('add-to-list-new-name');
+        const name = (nameInput.value || '').trim();
+        if (!name) { nameInput.focus(); return; }
+        fetch("{% url 'lists.create' %}", {
+            method: 'POST',
+            headers: { 'X-CSRFToken': "{{ csrf_token }}", 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify({ name }),
+        }).then((r) => r.json()).then((data) => {
+            if (data.ok) {
+                nameInput.value = '';
+                addPinsToList(data.uuid);
+            } else if (typeof toastr !== 'undefined') {
+                toastr.error('Could not create that list.');
+            }
+        });
+    }
+
     // -- Pin edit dialog: submit only the fields the user actually changed ------
     // Snapshots the form's values when the dialog opens. On submit, any field whose
     // value still matches its snapshot is dropped from the request - so a field another
@@ -466,6 +1009,32 @@
         });
     });
 
+    // -- Pin edit dialog: name suggestions from the pin's own aliases -----------
+    // Pre-rendered server-side (official-first, see _overview_context), filtered
+    // client-side as the user types - no network round trip needed for such a
+    // small, already-loaded list.
+    function _pinEditShowNameSuggestions() {
+        const list = document.getElementById('pe-name-suggestions');
+        if (list) list.hidden = false;
+    }
+    function _pinEditFilterNameSuggestions(input) {
+        const q = input.value.trim().toLowerCase();
+        document.querySelectorAll('#pe-name-suggestions li').forEach((li) => {
+            li.hidden = q.length > 0 && li.dataset.search.indexOf(q) === -1;
+        });
+        _pinEditShowNameSuggestions();
+    }
+    function _pinEditPickNameSuggestion(btn) {
+        const input = document.getElementById('pe-name');
+        input.value = btn.firstChild.textContent.trim();
+        document.getElementById('pe-name-suggestions').hidden = true;
+    }
+    document.addEventListener('click', (e) => {
+        if (e.target.closest('.pin-edit-name-row')) return;
+        const list = document.getElementById('pe-name-suggestions');
+        if (list) list.hidden = true;
+    });
+
 </script>
 {% url 'pin.markup.json' pin.slug as markup_json_url %}
 {% url 'pin.markup' pin.slug as markup_create_url %}
@@ -475,6 +1044,8 @@
 {% url 'pin.detail_pin.edit' pin.slug '00000000-0000-0000-0000-000000000000' as detail_pin_edit_url_template %}
 {% url 'boundary.pin' pin.slug as boundary_url %}
 {% url 'pin.gallery.json' pin.slug as photo_gallery_json_url %}
+{% url 'pin.nearby_pins.json' pin.slug as nearby_pins_json_url %}
+{% url 'pin.share.dialog' pin.slug as pin_share_dialog_url %}
 <div id="map-annotations-config" hidden
      data-map-center-lat="{{ pin.effective_latitude|default:"42.6525" }}"
      data-map-center-lng="{{ pin.effective_longitude|default:"-73.7579" }}"
@@ -482,14 +1053,18 @@
      data-pin-slug="{{ pin.slug }}"
      data-default-map-view="{{ default_map_view }}"
      data-openweathermap-api-key="{{ openweathermap_api_key }}"
-     data-markup-json-url="{{ markup_json_url }}"
+     data-markup-json-url="{{ markup_json_url }}{% if include_children %}?children=1{% endif %}"
      data-markup-create-url="{{ markup_create_url }}"
      data-markup-edit-url-template="{{ markup_edit_url_template }}"
-     data-detail-pins-json-url="{{ detail_pins_json_url }}"
+     data-detail-pins-json-url="{{ detail_pins_json_url }}{% if include_children %}?children=1{% endif %}"
      data-detail-pin-create-url="{{ detail_pin_create_url }}"
      data-detail-pin-edit-url-template="{{ detail_pin_edit_url_template }}"
      data-boundary-url="{{ boundary_url }}"
-     data-photo-gallery-json-url="{{ photo_gallery_json_url }}"
+     data-photo-gallery-json-url="{{ photo_gallery_json_url }}{% if include_children %}?children=1{% endif %}"
+     data-nearby-pins-json-url="{{ nearby_pins_json_url }}"
+     data-pin-share-dialog-url="{{ pin_share_dialog_url }}"
+     data-detail-pins-send-to-wiki-url="{% url 'pin.detail_pins.send_to_wiki' pin.slug %}"
+     data-media-relevance-url="{% url 'pin.media.relevance' pin.slug %}"
      data-markup-fill-opacity="{{ markup_fill_opacity|default:87 }}"
      data-markup-border-opacity="{{ markup_border_opacity|default:100 }}"
      data-show-onboarding-tips="{{ request.user.profile.show_onboarding_tips|yesno:'1,' }}"></div>
@@ -497,19 +1072,42 @@
 <script>
 
 
+    // -- Pin the "sub pin of" breadcrumb to the corner once it scrolls away --
+    (function initPinParentBreadcrumbScroll() {
+        const breadcrumb = document.querySelector('.pin-parent-breadcrumb');
+        const header = document.querySelector('.app-nav');
+        if (!breadcrumb || !header) return;
+        let ticking = false;
+        function update() {
+            ticking = false;
+            breadcrumb.classList.toggle('pin-parent-breadcrumb--pinned', header.getBoundingClientRect().bottom <= 0);
+        }
+        window.addEventListener('scroll', function () {
+            if (ticking) return;
+            ticking = true;
+            requestAnimationFrame(update);
+        }, { passive: true });
+        update();
+    }());
+
     // -- Pin detail onboarding ------------------------------------------------
     (function initPinDetailOnboarding() {
         {% if not request.user.profile.show_onboarding_tips %}return;{% endif %}
-        const prefix = 'ul_onboarding_v1_pin_detail_{{ pin.uuid|default:pin.id }}';
+        // Global (per-user, not per-pin) so "Don't show again" on one pin
+        // actually stays dismissed when visiting a different pin - cards are
+        // already uniquely identified by their own `id` below, so scoping the
+        // prefix to this pin's uuid on top of that just fragmented the same
+        // dismissal into a separate localStorage key per pin ever visited.
+        const prefix = 'ul_onboarding_v1_pin_detail';
         const sessionKey = prefix + '_later';
         const cards = [
             {
-                id: 'personal-detail-map', icon: 'add_location_alt', target: '#add-detail-btn',
+                id: 'personal-detail-map', icon: 'add_location_alt', target: '#markup-pin-button',
                 eyebrow: 'Personal layer', title: 'Map entrances, hazards, routes, and notes for yourself',
-                body: 'Add Detail lets you place private sub-pins, shapes, arrows, and labels on this exact location map.',
-                button: 'Add a detail', watchSelector: '#add-detail-btn',
-                action: function () { document.getElementById('add-detail-btn')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); setTimeout(() => document.getElementById('add-detail-btn')?.click(), 100 ); },
-                ready: function () { return !!document.getElementById('add-detail-btn'); },
+                body: 'The map toolbar lets you place private sub-pins, shapes, arrows, and labels on this exact location map.',
+                button: 'Add a detail', watchSelector: '#markup-pin-button',
+                action: function () { document.getElementById('markup-pin-button')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); setTimeout(() => document.getElementById('markup-pin-button')?.click(), 100 ); },
+                ready: function () { return !!document.getElementById('markup-pin-button'); },
             },
             {
                 id: 'photos', icon: 'add_photo_alternate', target: '#pin-gallery-panel, #photo-gallery .gallery-upload-compact-btn',
@@ -533,7 +1131,7 @@
                     panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
                     panel.querySelector('input[type="text"], button')?.focus();
                 },
-                ready: function () { return !!document.getElementById('pin-aliases-panel'); },
+                ready: function () { return {{ has_ever_used_aliases|yesno:'false,true' }} && !!document.getElementById('pin-aliases-panel'); },
             },
             {
                 id: 'community-wiki', icon: 'public', target: '.pin-location-name, .wiki-back-link',
@@ -593,7 +1191,14 @@
     // -- Adaptive client-side pagination for variable-height external panels ---
     (function () {
         function getItems(card) {
-            return Array.from(card.querySelectorAll('[data-adaptive-pagination-item]'));
+            // Items excluded by the Media gallery's active source tab (see the
+            // media-gallery IIFE below) are not candidates for the current
+            // page - excluding them here is what makes "pagination keeps
+            // working in every tab" free: each tab just re-triggers a forced
+            // reinit over whatever is/isn't excluded right now.
+            return Array.from(card.querySelectorAll('[data-adaptive-pagination-item]')).filter(function (el) {
+                return !el.classList.contains('media-tab-excluded');
+            });
         }
 
         function getAvailableListHeight(card, list) {
@@ -601,7 +1206,15 @@
             var cardTop = card.getBoundingClientRect().top;
             var availableCardHeight = Math.max(180, viewportBottom - cardTop - 24);
             var nonListHeight = card.offsetHeight - list.offsetHeight;
-            return Math.max(120, availableCardHeight - nonListHeight);
+            var height = Math.max(120, availableCardHeight - nonListHeight);
+            // Some lists (the Media gallery grid) also declare their own CSS
+            // max-height as an upper bound for unusually tall viewports - without
+            // clamping to it here too, this viewport-derived measurement could
+            // count more items as "visible" than the CSS box can actually show,
+            // so the page would overflow the instant the measurement's inline
+            // override is removed and the CSS max-height takes back over.
+            var cssMaxHeight = parseFloat(getComputedStyle(list).maxHeight);
+            return isNaN(cssMaxHeight) ? height : Math.min(height, cssMaxHeight);
         }
 
         function measureVisiblePageSize(card, list, items) {
@@ -737,18 +1350,41 @@
 
     // -- External-data panels: handle 204 (no data) and request errors --------
     (function () {
-        var _extSections = new Set([
-            'wikipedia-section', 'nominatim-section', 'nps-section',
-            'loopnet-section', 'usgs-topo-section',
-            'web-search-section',
-            'satellite-view-section', 'street-view-section',
-        ]);
+        // Every auto-loading external-data card carries data-ext-panel-204 (see the
+        // simple_info_panels loop and each bespoke card below) - a hardcoded JS id
+        // Set here previously had to be kept in sync by hand and silently drifted
+        // out of date (missing Azure Maps, EPA Site Details, GDELT/News, Photon,
+        // Building Characteristics - all reported "stuck on Loading..." forever,
+        // since a 204 with nothing matching the old Set never got its placeholder
+        // removed). Checking the attribute instead means any panel that's supposed
+        // to get this treatment gets it automatically, with no separate list to forget.
+        function isExtPanel204(el) {
+            return !!(el && el.hasAttribute && el.hasAttribute('data-ext-panel-204'));
+        }
 
         // HTMX does not perform a swap for 204 No Content responses, so the
         // "Loading..." placeholder stays visible forever.  Remove it explicitly.
         document.body.addEventListener('htmx:afterOnLoad', function (evt) {
             var el = evt.detail && evt.detail.elt;
-            if (el && _extSections.has(el.id) && evt.detail.xhr.status === 204) {
+            if (isExtPanel204(el) && evt.detail.xhr.status === 204) {
+                // A panel that's also reachable via its own tab button (so far
+                // just Wikipedia, under the Article tab's sub-tab strip) names
+                // that button's id here - opt-in, so this stays a no-op for
+                // every other data-ext-panel-204 card. Hiding the button
+                // (rather than removing it) keeps element lookups elsewhere
+                // (querySelectorAll('.pin-plugin-tab-btn')) unaffected.
+                var tabBtnId = el.getAttribute('data-ext-panel-204-hide-tab');
+                if (tabBtnId) {
+                    var tabBtn = document.getElementById(tabBtnId);
+                    if (tabBtn) {
+                        var wasActive = tabBtn.classList.contains('active');
+                        tabBtn.hidden = true;
+                        if (wasActive) {
+                            var fallback = tabBtn.closest('.card-tabs').querySelector('.pin-plugin-tab-btn:not([hidden])');
+                            if (fallback) fallback.click();
+                        }
+                    }
+                }
                 el.remove();
             }
         });
@@ -757,7 +1393,7 @@
         // the global error toast (capture phase runs before the base handler).
         document.body.addEventListener('htmx:responseError', function (evt) {
             var el = evt.detail && evt.detail.elt;
-            if (!el || !_extSections.has(el.id)) return;
+            if (!isExtPanel204(el)) return;
             evt.stopImmediatePropagation();
             // web-search-section renders a real partial (e.g. the VIP upsell message) even
             // on its 403 "not subscribed" response, so swap that content in instead of
@@ -777,7 +1413,7 @@
         // Network failure: just remove the placeholder.
         document.body.addEventListener('htmx:sendError', function (evt) {
             var el = evt.detail && evt.detail.elt;
-            if (el && _extSections.has(el.id)) {
+            if (isExtPanel204(el)) {
                 evt.stopImmediatePropagation();
                 el.remove();
             }
@@ -786,126 +1422,81 @@
         // Request timeout: remove silently instead of showing the global toast.
         document.body.addEventListener('htmx:timeout', function (evt) {
             var el = evt.detail && evt.detail.elt;
-            if (el && _extSections.has(el.id)) {
+            if (isExtPanel204(el)) {
                 evt.stopImmediatePropagation();
                 el.remove();
             }
         }, true);
     }());
 
-    // -- Wikipedia summary: fill whatever height the card's row already --------
-    // gave it, rather than a fixed character count. `.pin-aux-grid > .card`
-    // stretches every card in a row to match its tallest sibling, so a fixed
-    // truncation length often leaves blank space below the text (short excerpt,
-    // tall row) or could in principle overflow it (long excerpt, short row).
-    // This clamps by measured height instead, recomputed against the card's
-    // actual rendered height - it only ever fits content into space the card
-    // already has, so it can't itself grow the row and create a stretch
-    // feedback loop. No pagination controls: overflow is simply hidden behind
-    // "Read more".
-    //
-    // The extract is now real block markup (headings/paragraphs/lists), not
-    // one flat run of text, so it's clamped by hiding whichever trailing
-    // block-level children don't fit rather than a single -webkit-line-clamp
-    // on the container (unreliable once children are block-level rather than
-    // inline text). The one child straddling the cutoff gets its own
-    // line-clamp applied instead of being hidden outright, since it's just
-    // one element and clamping *that* works exactly like the old approach.
+    // -- Plugin-panel tab strips (Regional Data, Location Data): handle -------
+    // 204/errors. Unlike the auto-loading cards above, a tab button's hx-target
+    // is a *shared* body div (not the button itself), so there's nothing to
+    // el.remove() - htmx also performs no swap at all on a 204, so without this
+    // the "Loading..." placeholder in the tab body is left stuck forever.
     (function () {
-        function clampExtract(section) {
-            var extract = section.querySelector('.wikipedia-extract');
-            var body = section.querySelector('.wikipedia-body');
-            var readMore = section.querySelector('.wikipedia-read-more');
-            if (!extract || !body || !readMore) return;
-
-            // .wikipedia-body has a static max-height in CSS so a long article can't
-            // itself set this row's height (that's what stops it from stretching
-            // shorter sibling cards to match). But that means the cap never grows
-            // back when a *different* reason stretches the row taller - e.g. a
-            // sibling card's own image finishing load - leaving spare room unused.
-            // .card-header sits outside .wikipedia-body, so whatever's left of the
-            // card's own (grid-stretched) height after subtracting it is what
-            // .wikipedia-body is actually allowed to fill; raise the cap to that.
-            var header = section.querySelector('.card-header');
-            var headerHeight = header ? header.getBoundingClientRect().height : 0;
-            var bodyBudget = section.getBoundingClientRect().height - headerHeight;
-            if (bodyBudget > 0) body.style.maxHeight = bodyBudget + 'px';
-
-            var children = Array.prototype.slice.call(extract.children);
-            children.forEach(function (el) {
-                el.style.display = '';
-                el.style.webkitLineClamp = '';
-                el.style.webkitBoxOrient = '';
-                el.style.overflow = '';
-            });
-            if (!children.length) return;
-
-            var readMoreStyle = getComputedStyle(readMore);
-            var readMoreSpace = readMore.getBoundingClientRect().height
-                + (parseFloat(readMoreStyle.marginTop) || 0)
-                + (parseFloat(readMoreStyle.marginBottom) || 0);
-            // .wikipedia-body reuses .card__body, which has its own bottom padding -
-            // exclude it so text doesn't run flush to the card's border.
-            var bodyPaddingBottom = parseFloat(getComputedStyle(body).paddingBottom) || 0;
-            var bodyBottom = body.getBoundingClientRect().bottom - bodyPaddingBottom;
-            var available = bodyBottom - extract.getBoundingClientRect().top - readMoreSpace;
-
-            if (extract.getBoundingClientRect().height <= available) return;
-
-            var extractTop = extract.getBoundingClientRect().top;
-            for (var i = 0; i < children.length; i++) {
-                var el = children[i];
-                var rect = el.getBoundingClientRect();
-                if (rect.bottom - extractTop <= available) continue;
-
-                var remaining = available - (rect.top - extractTop);
-                var lineHeight = parseFloat(getComputedStyle(el).lineHeight);
-                if (remaining > 0 && lineHeight) {
-                    el.style.display = '-webkit-box';
-                    el.style.webkitBoxOrient = 'vertical';
-                    el.style.overflow = 'hidden';
-                    el.style.webkitLineClamp = String(Math.max(1, Math.floor(remaining / lineHeight)));
-                } else {
-                    el.style.display = 'none';
-                }
-                for (var j = i + 1; j < children.length; j++) {
-                    children[j].style.display = 'none';
-                }
-                break;
+        function isPluginTabBtn(el) {
+            return !!(el && el.classList && el.classList.contains('pin-plugin-tab-btn'));
+        }
+        function tabBodyOf(el) {
+            var selector = el.getAttribute('hx-target');
+            return selector ? document.querySelector(selector) : null;
+        }
+        function showPlaceholder(el, message) {
+            var body = tabBodyOf(el);
+            if (body) {
+                body.innerHTML = '<p class="pin-plugin-tab-placeholder">' + message + '</p>';
             }
         }
-
-        function scheduleClamp(section) {
-            // Let this frame's layout (including any grid stretch driven by
-            // sibling cards) settle before measuring.
-            requestAnimationFrame(function () { clampExtract(section); });
-        }
-
         document.body.addEventListener('htmx:afterOnLoad', function (evt) {
             var el = evt.detail && evt.detail.elt;
-            if (!el || el.id !== 'wikipedia-section') return;
-            var section = document.getElementById('wikipedia-section');
-            if (!section || !section.querySelector('.wikipedia-extract')) return;
-
-            scheduleClamp(section);
-
-            var thumb = section.querySelector('.wikipedia-thumb');
-            if (thumb) thumb.addEventListener('load', function () { scheduleClamp(section); }, { once: true });
-
-            // Re-measure whenever the card's own rendered height changes for
-            // any reason - most commonly a sibling .pin-aux-grid card loading
-            // in and changing the row's stretched height. Our own clamp writes
-            // never grow the card past that height, so this can't self-trigger.
-            if (window.ResizeObserver) {
-                new ResizeObserver(function () { scheduleClamp(section); }).observe(section);
+            if (isPluginTabBtn(el) && evt.detail.xhr.status === 204) {
+                showPlaceholder(el, 'No data available.');
             }
         });
-
-        window.addEventListener('resize', function () {
-            var section = document.getElementById('wikipedia-section');
-            if (section) scheduleClamp(section);
-        });
+        document.body.addEventListener('htmx:responseError', function (evt) {
+            var el = evt.detail && evt.detail.elt;
+            if (!isPluginTabBtn(el)) return;
+            evt.stopImmediatePropagation();
+            showPlaceholder(el, 'This data is temporarily unavailable.');
+        }, true);
+        document.body.addEventListener('htmx:sendError', function (evt) {
+            var el = evt.detail && evt.detail.elt;
+            if (isPluginTabBtn(el)) {
+                evt.stopImmediatePropagation();
+                showPlaceholder(el, 'This data is temporarily unavailable.');
+            }
+        }, true);
+        document.body.addEventListener('htmx:timeout', function (evt) {
+            var el = evt.detail && evt.detail.elt;
+            if (isPluginTabBtn(el)) {
+                evt.stopImmediatePropagation();
+                showPlaceholder(el, 'This data is temporarily unavailable.');
+            }
+        }, true);
     }());
+
+    // -- Location Data: hide tabs confirmed to have no content -----------------
+    // location_data_overview already checks every source (Nominatim, Photon,
+    // Building Characteristics, Elevation) to build the Overview tab, so it
+    // knows which ones are settled but have nothing worth showing - it fires
+    // this event (HX-Trigger: pinLocationDataEmpty) rather than leaving those
+    // tabs sitting there only to land on "No data available." if ever clicked.
+    document.body.addEventListener('pinLocationDataEmpty', function (evt) {
+        var keys = (evt.detail && evt.detail.keys) || [];
+        var section = document.getElementById('location-data-section');
+        if (!section || !keys.length) return;
+        keys.forEach(function (key) {
+            var btn = section.querySelector('.pin-plugin-tab-btn[data-panel-key="' + key + '"]');
+            if (!btn) return;
+            var wasActive = btn.classList.contains('active');
+            btn.remove();
+            if (wasActive) {
+                var overviewBtn = section.querySelector('.pin-plugin-tab-btn');
+                if (overviewBtn) overviewBtn.click();
+            }
+        });
+    });
 
     // -- Media gallery: combines Smithsonian / Wikimedia Commons / Library of --
     // Congress results as each provider's own HTMX request completes, so one
@@ -923,35 +1514,155 @@
         var loaders = document.querySelectorAll('.media-provider-loader');
         if (!loaders.length) return;
         var pending = loaders.length;
+        var CSRF_TOKEN = '{{ csrf_token }}';
+        var activeTab = 'all';
+        var selecting = false;
+        var selectedKeys = new Set();
 
         function isMediaLoader(el) {
             return !!(el && el.classList && el.classList.contains('media-provider-loader'));
         }
 
+        function section() { return document.getElementById('media-gallery-section'); }
+        function grid() { return document.getElementById('media-gallery-grid'); }
+
         // Items with a real thumbnail image are more useful at a glance than
         // text-only records (e.g. LOC book/survey entries) - move them first.
-        // Stable within each group: relative arrival order from each provider
-        // is otherwise preserved.
-        function sortMediaGalleryByThumbnail(grid) {
-            var items = Array.prototype.slice.call(grid.querySelectorAll('.media-item'));
-            var withImage = items.filter(function (item) { return !!item.querySelector('img.media-item-thumb'); });
-            var withoutImage = items.filter(function (item) { return !item.querySelector('img.media-item-thumb'); });
-            withImage.concat(withoutImage).forEach(function (item) { grid.appendChild(item); });
+        // Under "Relevant first" (the default), explicitly-marked-relevant
+        // items win the tiebreak first. Stable within each group: relative
+        // arrival order from each provider is otherwise preserved.
+        function sortMediaGallery(g) {
+            var sortMode = section() ? (section().dataset.mediaSort || 'relevant') : 'relevant';
+            var items = Array.prototype.slice.call(g.querySelectorAll('.media-item'));
+            function isRelevant(item) { return sortMode === 'relevant' && item.classList.contains('media-item--relevant'); }
+            function hasImage(item) { return !!item.querySelector('img.media-item-thumb'); }
+            var groups = [[], [], [], []]; // relevant+image, relevant, image, neither
+            items.forEach(function (item) {
+                var r = isRelevant(item), i = hasImage(item);
+                if (r && i) groups[0].push(item);
+                else if (r) groups[1].push(item);
+                else if (i) groups[2].push(item);
+                else groups[3].push(item);
+            });
+            groups.flat().forEach(function (item) { g.appendChild(item); });
         }
 
+        // -- Source tabs -------------------------------------------------------
+        var TAB_LABELS = {
+            smithsonian: 'Smithsonian', wikimedia: 'Wikimedia', wikipedia_media: 'Wikipedia', loc: 'Library of Congress',
+            yelp: 'Yelp', google_images: 'Google Images', google_maps: 'Google Maps', searxng_images: 'Web Images',
+            internet_archive: 'Internet Archive', loopnet: 'LoopNet', cris_building: 'NY Historic Preservation (CRIS)',
+        };
+
+        // Builds the single combined tab strip: All | Mine | <source tabs> |
+        // Not Relevant. "All"/"Mine" are always present (even before any
+        // provider has responded, and even for a pin with no media at all -
+        // "Mine" must stay reachable so a first-time visitor can still get to
+        // the upload flow) so this runs once unconditionally at setup, not
+        // just after items exist. Source tabs only appear once there are 2+
+        // distinct sources ("photos" - the pin's own uploads - never gets one;
+        // that's what the "Mine" tab is for, since a same-shape tab here would
+        // misleadingly imply it shows every photo when it only shows the
+        // first 12, see PinController._photos_media_preview).
+        function rebuildMediaTabs() {
+            var g = grid();
+            var tabsEl = document.getElementById('media-tabs');
+            if (!g || !tabsEl) return;
+            var counts = {};
+            var notRelevantCount = 0;
+            var total = 0;
+            g.querySelectorAll('.media-item').forEach(function (item) {
+                var src = item.dataset.mediaSource;
+                var isNotRelevant = item.classList.contains('media-item--not-relevant');
+                total += 1;
+                if (src && src !== 'photos' && !isNotRelevant) counts[src] = (counts[src] || 0) + 1;
+                if (isNotRelevant) notRelevantCount += 1;
+            });
+            var countBadge = document.getElementById('media-count-badge');
+            if (countBadge) {
+                countBadge.textContent = String(total);
+                countBadge.hidden = total === 0;
+            }
+            var sources = Object.keys(counts);
+            var showSourceTabs = sources.length >= 2;
+            if (activeTab !== 'not_relevant' && activeTab !== 'all' && !(showSourceTabs && sources.includes(activeTab))) activeTab = 'all';
+            if (activeTab === 'not_relevant' && !notRelevantCount) activeTab = 'all';
+
+            var currentView = section().dataset.mediaView || 'all';
+            var html = '<button type="button" class="card-tab media-tab' + (currentView === 'all' && activeTab === 'all' ? ' active' : '') +
+                '" data-tab="all">All<span class="media-tab-count">' + total + '</span></button>';
+            html += '<button type="button" class="card-tab media-tab' + (currentView === 'mine' ? ' active' : '') +
+                '" data-tab="mine">Mine</button>';
+            if (showSourceTabs) {
+                sources.sort().forEach(function (src) {
+                    var label = TAB_LABELS[src] || src;
+                    html += '<button type="button" class="card-tab media-tab' + (currentView === 'all' && activeTab === src ? ' active' : '') +
+                        '" data-tab="' + src + '">' + label + '<span class="media-tab-count">' + counts[src] + '</span></button>';
+                });
+            }
+            if (notRelevantCount) {
+                html += '<button type="button" class="card-tab media-tab' + (currentView === 'all' && activeTab === 'not_relevant' ? ' active' : '') +
+                    '" data-tab="not_relevant">Not Relevant<span class="media-tab-count">' + notRelevantCount + '</span></button>';
+            }
+            tabsEl.innerHTML = html;
+            tabsEl.querySelectorAll('.media-tab').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    if (btn.dataset.tab === 'mine') { window.mediaSetView('mine'); return; }
+                    if (currentView !== 'all') window.mediaSetView('all');
+                    window.mediaSetTab(btn.dataset.tab);
+                });
+            });
+        }
+        rebuildMediaTabs();
+
+        // Reapplies the active tab's exclusion classes to whatever items exist
+        // right now, without touching the current pagination page - used both
+        // by an explicit tab click (see mediaSetTab) and by refreshMediaGallery,
+        // which must re-filter newly-arrived items from later providers without
+        // yanking the user back to page 1 of the tab they're already browsing.
+        function applyMediaTabFilter(tab) {
+            var g = grid();
+            if (!g) return;
+            var galleryEl = g.closest('.media-gallery');
+            if (galleryEl) galleryEl.classList.toggle('media-gallery--tab-not-relevant', tab === 'not_relevant');
+            g.querySelectorAll('.media-item').forEach(function (item) {
+                var isNotRelevant = item.classList.contains('media-item--not-relevant');
+                var excluded;
+                if (tab === 'all') excluded = false;
+                else if (tab === 'not_relevant') excluded = !isNotRelevant;
+                else excluded = isNotRelevant || item.dataset.mediaSource !== tab;
+                item.classList.toggle('media-tab-excluded', excluded);
+            });
+            document.querySelectorAll('#media-tabs .media-tab').forEach(function (btn) {
+                btn.classList.toggle('active', btn.dataset.tab === tab);
+            });
+        }
+
+        window.mediaSetTab = function (tab) {
+            activeTab = tab;
+            applyMediaTabFilter(tab);
+            var g = grid();
+            if (!g) return;
+            var card = g.closest('.card');
+            if (card) card.dataset.adaptivePaginationCurrentPage = '1';
+            if (window.initAdaptivePagination) window.initAdaptivePagination(document, true);
+        };
+
         function refreshMediaGallery() {
-            var grid = document.getElementById('media-gallery-grid');
-            if (!grid || !grid.querySelectorAll('.media-item').length) return;
-            var card = grid.closest('.card');
+            var g = grid();
+            if (!g || !g.querySelectorAll('.media-item').length) return;
+            var card = g.closest('.card');
             var userPaginated = !!(card && card.dataset.userPaginated === '1');
             if (!userPaginated) {
-                sortMediaGalleryByThumbnail(grid);
+                sortMediaGallery(g);
             }
             // New items (from this or a later provider) join pagination too;
             // already-marked items are unaffected by re-setting the attribute.
-            grid.querySelectorAll('.media-item').forEach(function (item) {
+            g.querySelectorAll('.media-item').forEach(function (item) {
                 item.setAttribute('data-adaptive-pagination-item', '');
             });
+            rebuildMediaTabs();
+            if (activeTab !== 'all') applyMediaTabFilter(activeTab);
             if (window.initAdaptivePagination) window.initAdaptivePagination(document, true);
         }
 
@@ -961,15 +1672,17 @@
             if (pending > 0) return;
             var loading = document.getElementById('media-gallery-loading');
             if (loading) loading.remove();
-            var grid = document.getElementById('media-gallery-grid');
-            var section = document.getElementById('media-gallery-section');
+            var g = grid();
+            var sec = section();
+            if (sec) sec.hidden = false;
             // Count actual media tiles, not the hidden debug-marker spans each
             // provider response also appends (even when it found nothing, so
-            // its query still shows up in the admin debug overlay) - otherwise
-            // an all-providers-empty pin would leave a header-only empty card.
-            if (!grid || !grid.querySelectorAll('.media-item').length) {
-                if (section) section.remove();
-            }
+            // its query still shows up in the admin debug overlay) - the
+            // section itself always stays visible (so "Mine" stays reachable
+            // for a first-time uploader) rather than vanishing outright, which
+            // previously looked indistinguishable from a rendering bug.
+            var empty = document.getElementById('media-gallery-empty');
+            if (empty) empty.hidden = !!(g && g.querySelectorAll('.media-item').length);
         }
 
         document.body.addEventListener('htmx:afterOnLoad', function (evt) {
@@ -981,8 +1694,8 @@
             // don't count it as finished or touch the gallery.
             if (evt.detail.xhr.getResponseHeader('UL-Panel-Pending') === '1') return;
             if (evt.detail.xhr.status === 200) {
-                var section = document.getElementById('media-gallery-section');
-                if (section) section.hidden = false;
+                var sec = section();
+                if (sec) sec.hidden = false;
                 refreshMediaGallery();
             }
             finishLoader(el);
@@ -1005,6 +1718,432 @@
             evt.stopImmediatePropagation();
             finishLoader(el);
         }, true);
+
+        // -- Settings menu: visibility filter + sort order ----------------------
+        window.mediaToggleSettingsMenu = function () {
+            var menu = document.getElementById('media-settings-menu');
+            var btn = document.getElementById('media-settings-btn');
+            if (!menu) return;
+            menu.hidden = !menu.hidden;
+            if (btn) btn.classList.toggle('is-active', !menu.hidden);
+        };
+        document.addEventListener('click', function (e) {
+            var menu = document.getElementById('media-settings-menu');
+            var btn = document.getElementById('media-settings-btn');
+            if (!menu || menu.hidden) return;
+            if (menu.contains(e.target) || (btn && btn.contains(e.target))) return;
+            menu.hidden = true;
+            if (btn) btn.classList.remove('is-active');
+        });
+        document.body.addEventListener('click', function (e) {
+            var visBtn = e.target.closest('[data-media-visibility]');
+            if (visBtn) {
+                var sec = section();
+                if (sec) {
+                    sec.classList.remove('media-gallery--show-hidden', 'media-gallery--only-relevant');
+                    var mode = visBtn.dataset.mediaVisibility;
+                    if (mode === 'show-hidden') sec.classList.add('media-gallery--show-hidden');
+                    if (mode === 'only-relevant') sec.classList.add('media-gallery--only-relevant');
+                    document.querySelectorAll('[data-media-visibility]').forEach(function (b) { b.classList.toggle('active', b === visBtn); });
+                    if (window.initAdaptivePagination) window.initAdaptivePagination(document, true);
+                }
+                return;
+            }
+            var sortBtn = e.target.closest('[data-media-sort]');
+            if (sortBtn) {
+                var sec2 = section();
+                var sort = sortBtn.dataset.mediaSort;
+                if (sec2) sec2.dataset.mediaSort = sort;
+                document.querySelectorAll('[data-media-sort]').forEach(function (b) { b.classList.toggle('active', b === sortBtn); });
+                var g2 = grid();
+                if (g2) { sortMediaGallery(g2); if (window.initAdaptivePagination) window.initAdaptivePagination(document, true); }
+                fetch('{% url "pin.media.sort" %}', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
+                    body: JSON.stringify({ sort: sort }),
+                });
+            }
+        });
+        document.querySelectorAll('[data-media-sort]').forEach(function (b) {
+            b.classList.toggle('active', b.dataset.mediaSort === (section() ? section().dataset.mediaSort : 'relevant'));
+        });
+        document.querySelector('[data-media-visibility="default"]').classList.add('active');
+
+        // -- Relevance marking ---------------------------------------------------
+        // Marking an item relevant also downloads and saves it as a real,
+        // durable Image row server-side (see PinController.media_relevance),
+        // so it survives the external provider's URL ever going dead - once
+        // that succeeds, swap this tile (and any future lightbox open of it)
+        // over to the local copy instead of the original external URL.
+        window.mediaSetRelevance = function (itemEl, isRelevant) {
+            if (!itemEl) return;
+            var source = itemEl.dataset.mediaSource;
+            var key = itemEl.dataset.mediaKey;
+            var url = itemEl.dataset.mediaUrl;
+            var wasRelevant = itemEl.dataset.mediaRelevant === 'true';
+            var wasNotRelevant = itemEl.dataset.mediaRelevant === 'false';
+            var nextRelevant = isRelevant && wasRelevant ? null : (!isRelevant && wasNotRelevant ? null : isRelevant);
+            applyRelevanceState(itemEl, nextRelevant);
+            rebuildMediaTabs();
+            applyMediaTabFilter(activeTab);
+            if (window.initAdaptivePagination) window.initAdaptivePagination(document, true);
+            fetch('{% url "pin.media.relevance" pin.slug %}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
+                body: JSON.stringify({
+                    source: source, item_key: key, url: url, is_relevant: nextRelevant,
+                    page_url: itemEl.dataset.mediaPageUrl || '', caption: itemEl.dataset.mediaCaption || '',
+                }),
+            }).then(function (resp) { return resp.json(); }).then(function (data) {
+                if (data.materialize_error && window.toastr) toastr.warning("Marked relevant, but couldn't save a local copy: " + data.materialize_error);
+                if (!data.image_url) return;
+                itemEl.dataset.mediaUrl = data.image_url;
+                itemEl.dataset.mediaThumb = data.image_url;
+                if (data.image_id) itemEl.dataset.imageId = data.image_id;
+                var thumbImg = itemEl.querySelector('.media-item-thumb');
+                if (thumbImg && thumbImg.tagName === 'IMG') thumbImg.src = data.image_url;
+            }).catch(function () { if (window.toastr) toastr.error('Failed to save.'); });
+        };
+
+        // Dragging a Media tile onto the map (map-annotations.ts's "drop"
+        // handler for the "text/media-item" MIME type) sets its coordinates
+        // via the same media_relevance endpoint used for relevance marking -
+        // an unmaterialized item is downloaded and saved locally in the same
+        // request, exactly as if the user had dropped a real gallery photo.
+        // The element itself is stashed on window (HTML5 drag-and-drop only
+        // carries string data through dataTransfer, not element references)
+        // so mediaApplyMaterializedDrop below can update this exact tile once
+        // the drop handler's fetch resolves.
+        window.mediaItemDragStart = function (e, itemEl) {
+            e.dataTransfer.effectAllowed = 'copy';
+            window._mediaDragItemEl = itemEl;
+            e.dataTransfer.setData('text/media-item', JSON.stringify({
+                source: itemEl.dataset.mediaSource,
+                key: itemEl.dataset.mediaKey,
+                url: itemEl.dataset.mediaUrl,
+                pageUrl: itemEl.dataset.mediaPageUrl || '',
+                caption: itemEl.dataset.mediaCaption || '',
+            }));
+        };
+
+        window.mediaApplyMaterializedDrop = function (itemEl, data) {
+            if (data.materialize_error && window.toastr) toastr.warning("Coordinates saved, but couldn't save a local copy: " + data.materialize_error);
+            if (!itemEl || !data.image_url) return;
+            applyRelevanceState(itemEl, true);
+            itemEl.dataset.mediaUrl = data.image_url;
+            itemEl.dataset.mediaThumb = data.image_url;
+            if (data.image_id) itemEl.dataset.imageId = data.image_id;
+            if (data.latitude != null) itemEl.dataset.lat = data.latitude;
+            if (data.longitude != null) itemEl.dataset.lng = data.longitude;
+            var thumbImg = itemEl.querySelector('.media-item-thumb');
+            if (thumbImg && thumbImg.tagName === 'IMG') thumbImg.src = data.image_url;
+            rebuildMediaTabs();
+            applyMediaTabFilter(activeTab);
+        };
+
+        function applyRelevanceState(itemEl, value) {
+            itemEl.dataset.mediaRelevant = value === true ? 'true' : (value === false ? 'false' : '');
+            itemEl.classList.toggle('media-item--relevant', value === true);
+            itemEl.classList.toggle('media-item--not-relevant', value === false);
+            var upBtn = itemEl.querySelector('.media-item-relevant-btn');
+            var downBtn = itemEl.querySelector('.media-item-not-relevant-btn');
+            if (upBtn) upBtn.classList.toggle('is-active', value === true);
+            if (downBtn) downBtn.classList.toggle('is-active', value === false);
+        }
+        window._mediaApplyRelevanceState = applyRelevanceState;
+
+        // -- All / Mine view switch -------------------------------------------------
+        // "All" is the combined adaptive grid (external providers + a capped
+        // preview of the pin's own photos); "Mine" swaps in the pin gallery
+        // panel (_photo_gallery.html, unchanged - see #pin-gallery-panel
+        // above) for full, unlimited photo management. Both panels' markup is
+        // always present (the "Mine" one loads eagerly on page load, same as
+        // every other panel on this page); switching views just toggles which
+        // is visible, so nothing needs re-fetching on every click.
+        window.mediaSetView = function (view) {
+            var sec = section();
+            if (sec) sec.dataset.mediaView = view;
+            document.querySelectorAll('[data-media-view-panel]').forEach(function (panel) {
+                panel.hidden = panel.dataset.mediaViewPanel !== view;
+            });
+            var settingsBtn = document.getElementById('media-settings-btn');
+            if (settingsBtn) settingsBtn.hidden = view !== 'all';
+            rebuildMediaTabs();
+            if (view === 'all' && window.initAdaptivePagination) window.initAdaptivePagination(document, true);
+        };
+
+        // The header's one "Select" button controls whichever view is
+        // currently showing - the "All" grid's own multi-select (external
+        // items + the read-only photo preview, which just won't have a
+        // checkbox to check - see pin_media_items.html) or the "Mine" gallery's
+        // (own photos: delete / send to wiki), never both at once.
+        window.mediaDispatchSelect = function () {
+            var sec = section();
+            var view = sec ? sec.dataset.mediaView : 'all';
+            if (view === 'mine' && typeof window.photosToggleSelectMode === 'function') {
+                window.photosToggleSelectMode();
+                return;
+            }
+            window.mediaToggleSelectMode();
+        };
+
+        // -- Multi-select mode ----------------------------------------------------
+        window.mediaToggleSelectMode = function () {
+            selecting = !selecting;
+            selectedKeys.clear();
+            var sec = section();
+            var btn = document.getElementById('media-select-btn');
+            if (sec) sec.classList.toggle('media-gallery--selecting', selecting);
+            if (btn) btn.classList.toggle('is-active', selecting);
+            document.querySelectorAll('#media-gallery-grid .media-item').forEach(function (item) {
+                item.classList.remove('is-selected');
+                var check = item.querySelector('.media-item-select-check');
+                if (check) check.hidden = !selecting;
+            });
+            if (window.ulBulkToolbar) window.ulBulkToolbar.clear('media');
+        };
+
+        window.mediaToggleSelect = function (evt, checkEl) {
+            evt.stopPropagation();
+            var item = checkEl.closest('.media-item');
+            if (!item) return;
+            var key = item.dataset.mediaSource + ':' + item.dataset.mediaKey;
+            var nowSelected = !item.classList.contains('is-selected');
+            item.classList.toggle('is-selected', nowSelected);
+            if (nowSelected) selectedKeys.add(key); else selectedKeys.delete(key);
+            if (window.ulBulkToolbar) {
+                window.ulBulkToolbar.sync('media', selectedKeys.size, {
+                    relevant: function () { window.mediaBulkSetRelevance(true); },
+                    not_relevant: function () { window.mediaBulkSetRelevance(false); },
+                    wiki: function () { window.mediaBulkSendToWiki(); },
+                    deselect: function () { window.mediaToggleSelectMode(); },
+                });
+            }
+        };
+
+        function selectedMediaItems() {
+            return Array.prototype.slice.call(document.querySelectorAll('#media-gallery-grid .media-item.is-selected'));
+        }
+
+        window.mediaBulkSetRelevance = function (isRelevant) {
+            selectedMediaItems().forEach(function (item) { window.mediaSetRelevance(item, isRelevant); });
+        };
+
+        window.mediaBulkSendToWiki = function () {
+            var items = selectedMediaItems();
+            if (!items.length) return;
+            if (!confirm('Send ' + items.length + ' photo' + (items.length === 1 ? '' : 's') + ' to the community wiki for this location?')) return;
+            var payload = items.map(function (item) {
+                return { source: item.dataset.mediaSource, url: item.dataset.mediaUrl, page_url: item.dataset.mediaPageUrl, caption: item.dataset.mediaCaption };
+            });
+            fetch('{% url "pin.media.send_to_wiki" pin.slug %}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
+                body: JSON.stringify({ items: payload }),
+            }).then(function (r) { return r.json().catch(function () { return {}; }); }).then(function (data) {
+                if (window.toastr) toastr.success((data.created || items.length) + ' photo(s) sent to the wiki.');
+                window.mediaToggleSelectMode();
+            }).catch(function () { if (window.toastr) toastr.error('Failed to send photos to the wiki.'); });
+        };
+
+        // -- Lightbox --------------------------------------------------------------
+        window.mediaOpenLightbox = function (thumbBtn) {
+            var itemEl = thumbBtn.closest('.media-item');
+            if (!itemEl) return;
+            var visible = Array.prototype.slice.call(document.querySelectorAll('#media-gallery-grid .media-item'))
+                .filter(function (el) { return !el.classList.contains('media-tab-excluded'); });
+            var list = visible.map(function (el) {
+                var relevant = el.dataset.mediaRelevant === 'true' ? true : (el.dataset.mediaRelevant === 'false' ? false : null);
+                return {
+                    url: el.dataset.mediaUrl,
+                    // Fallback for a full-res file the browser can't render
+                    // (e.g. a Wikimedia .tif result) - see _photo_lightbox.html.
+                    thumbUrl: el.dataset.mediaThumb || '',
+                    caption: el.dataset.mediaCaption || '',
+                    sourceUrl: el.dataset.mediaPageUrl || el.dataset.mediaUrl,
+                    sourceName: el.dataset.mediaSourceName || '',
+                    mediaSource: el.dataset.mediaSource,
+                    mediaKey: el.dataset.mediaKey,
+                    relevant: relevant,
+                    // Your own photos aren't "relevant"-markable (see
+                    // pin_media_items.html's source_key == "photos" branch) -
+                    // manage those from the section's "Mine" tab instead.
+                    canRelevance: el.dataset.mediaSource !== 'photos',
+                    // Only set once an item has been materialized (see
+                    // mediaSetRelevance) - enables "Set as cover photo" for a
+                    // relevant-marked item exactly like a real upload, since
+                    // by then it genuinely is one.
+                    imageId: el.dataset.imageId ? parseInt(el.dataset.imageId, 10) : null,
+                    // Own-photos preview tiles always carry these server-side
+                    // (pin.py's photos MediaItem builder); other tiles only
+                    // gain them once dropped onto the map (see
+                    // mediaApplyMaterializedDrop) - drives the lightbox's
+                    // small location map (_photo_lightbox.html).
+                    latitude: el.dataset.lat ? parseFloat(el.dataset.lat) : null,
+                    longitude: el.dataset.lng ? parseFloat(el.dataset.lng) : null,
+                };
+            });
+            var idx = visible.indexOf(itemEl);
+            if (window.galleryOpenLightboxItem) window.galleryOpenLightboxItem(list, idx < 0 ? 0 : idx);
+        };
+    }());
+
+    // -- Click-to-edit-in-place hero title (see .pin-name-editable, _page_hero.scss) --
+    // Mirrors trips/detail.html's identical trip-title pattern. Listeners are
+    // delegated on document.body (not attached directly to the hero span)
+    // because the hero can be replaced wholesale via an out-of-band swap
+    // (cover-photo changes, etc.) - direct listeners would silently die after
+    // that swap.
+    (function () {
+        var csrftoken = '{{ csrf_token }}';
+        var editUrl = '{% url "pin.edit" pin.slug %}';
+
+        function startEdit(el) {
+            if (el.querySelector('input')) return;
+            var rawValue = el.dataset.rawName || '';
+            var input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'pin-name-input';
+            input.value = rawValue;
+            input.maxLength = 255;
+
+            window.urbanlensSizeEditInPlaceInput(el, input);
+            var displayText = el.textContent;
+            el.textContent = '';
+            el.appendChild(input);
+            input.focus();
+            input.select();
+
+            var done = false;
+            function finish(save) {
+                if (done) return;
+                done = true;
+                var newValue = input.value.trim();
+                if (save && newValue && newValue !== rawValue.trim()) {
+                    var body = new URLSearchParams();
+                    body.set('name', newValue);
+                    fetch(editUrl, { method: 'POST', headers: { 'X-CSRFToken': csrftoken }, body: body })
+                        .then(function (r) { if (!r.ok) throw new Error(); })
+                        .then(function () {
+                            el.dataset.rawName = newValue;
+                            el.textContent = newValue;
+                            // The Details card (#pin-overview) shows this same
+                            // name too - refresh it via the same live-refresh
+                            // event external-data panels use (see pin.py's
+                            // _notify_panel_ready / index.html's #pin-overview
+                            // hx-trigger).
+                            document.body.dispatchEvent(new Event('pinOverviewChanged'));
+                            if (window.toastr) toastr.success('Pin renamed.');
+                        })
+                        .catch(function () {
+                            el.textContent = displayText;
+                            if (window.toastr) toastr.error('Failed to rename pin.');
+                        });
+                } else {
+                    el.textContent = displayText;
+                }
+            }
+            input.addEventListener('blur', function () { finish(true); });
+            input.addEventListener('keydown', function (e) {
+                e.stopPropagation();
+                if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+                else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+            });
+        }
+
+        document.body.addEventListener('click', function (e) {
+            var nameEl = e.target.closest('.pin-name-editable');
+            if (nameEl) startEdit(nameEl);
+        });
+        document.body.addEventListener('keydown', function (e) {
+            if (e.key !== 'Enter' && e.key !== ' ') return;
+            var el = e.target.closest('.pin-name-editable');
+            if (el && el === e.target) {
+                e.preventDefault();
+                startEdit(el);
+            }
+        });
+    }());
+
+    // -- Click-to-edit-in-place pin description (see .pin-description--editable,
+    // pin_overview_partial.html) - same pattern as the hero title above, but a
+    // multi-line <textarea> (Enter inserts a newline instead of saving) since
+    // descriptions can run much longer, and #pin-overview can itself be
+    // swapped wholesale (htmx reloads), so listeners are delegated on
+    // document.body rather than attached directly to the span.
+    (function () {
+        var csrftoken = '{{ csrf_token }}';
+        var editUrl = '{% url "pin.edit" pin.slug %}';
+
+        function startEdit(el) {
+            if (el.querySelector('textarea')) return;
+            var rawValue = el.dataset.rawDescription || '';
+            var textarea = document.createElement('textarea');
+            textarea.className = 'pin-description-input';
+            textarea.value = rawValue;
+            textarea.maxLength = 50000;
+            textarea.rows = 3;
+
+            window.urbanlensSizeEditInPlaceInput(el, textarea);
+            var displayText = el.textContent;
+            var wasEmpty = el.classList.contains('pin-description--empty');
+            el.textContent = '';
+            el.appendChild(textarea);
+            textarea.focus();
+            textarea.select();
+
+            function autoGrow() {
+                textarea.style.height = 'auto';
+                textarea.style.height = textarea.scrollHeight + 'px';
+            }
+            textarea.addEventListener('input', autoGrow);
+            autoGrow();
+
+            var done = false;
+            function finish(save) {
+                if (done) return;
+                done = true;
+                var newValue = textarea.value.trim();
+                if (save && newValue !== rawValue.trim()) {
+                    var body = new URLSearchParams();
+                    body.set('description', newValue);
+                    fetch(editUrl, { method: 'POST', headers: { 'X-CSRFToken': csrftoken }, body: body })
+                        .then(function (r) { if (!r.ok) throw new Error(); })
+                        .then(function () {
+                            el.dataset.rawDescription = newValue;
+                            el.textContent = newValue || 'Add a description...';
+                            el.classList.toggle('pin-description--empty', !newValue);
+                            if (window.toastr) toastr.success('Description updated.');
+                        })
+                        .catch(function () {
+                            el.textContent = displayText;
+                            el.classList.toggle('pin-description--empty', wasEmpty);
+                            if (window.toastr) toastr.error('Failed to update description.');
+                        });
+                } else {
+                    el.textContent = displayText;
+                    el.classList.toggle('pin-description--empty', wasEmpty);
+                }
+            }
+            textarea.addEventListener('blur', function () { finish(true); });
+            textarea.addEventListener('keydown', function (e) {
+                e.stopPropagation();
+                if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+            });
+        }
+
+        document.body.addEventListener('click', function (e) {
+            var descEl = e.target.closest('.pin-description--editable');
+            if (descEl) startEdit(descEl);
+        });
+        document.body.addEventListener('keydown', function (e) {
+            if (e.key !== 'Enter' && e.key !== ' ') return;
+            var el = e.target.closest('.pin-description--editable');
+            if (el && el === e.target) {
+                e.preventDefault();
+                startEdit(el);
+            }
+        });
     }());
 </script>
 {% endblock %}

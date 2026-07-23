@@ -1,3 +1,4 @@
+import contextlib
 from datetime import datetime
 import json
 import logging
@@ -7,37 +8,46 @@ import urllib.parse
 import urllib.request
 
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.core.exceptions import ValidationError
 from django.db import DatabaseError
-from django.db.models import Prefetch
+from django.db.models import Count, Prefetch
 from django.db.models.functions import Coalesce, Lower
 from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
-from django.shortcuts import render
+from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
-from geopy.exc import GeocoderTimedOut, GeocoderUnavailable
-from geopy.geocoders import Nominatim
 from rest_framework.viewsets import GenericViewSet
 
-from urbanlens.dashboard.forms.advanced_search import AdvancedSearchForm
 from urbanlens.dashboard.forms.search import SearchForm
-from urbanlens.dashboard.models.badges.model import (
+from urbanlens.dashboard.models.images.model import Image
+from urbanlens.dashboard.models.labels.model import (
     COLOR_CHOICES,
     ICON_CATEGORIES,
-    Badge,
+    Label,
 )
-from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin import Pin, PinQuerySet
 from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.models.saved_filter.model import SavedFilter
 from urbanlens.dashboard.models.site_settings.model import SiteSettings
 from urbanlens.dashboard.services.json_safety import safe_json_for_script
 from urbanlens.dashboard.services.map_pins import MapPinCache, MapPinPayloadService
 from urbanlens.dashboard.services.pagination import get_page
+from urbanlens.dashboard.services.pin_creation import PinCreationError, PinCreationForbiddenError, create_pin_for_profile
 from urbanlens.dashboard.services.redact import redact_secret
+from urbanlens.dashboard.services.saved_filter_cache import get_or_compute_matching_uuids
 from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)
 
+#: Default/fallback page size for the pin-list sidebar, used when the client
+#: hasn't measured a "how many rows fit in the container" size yet (e.g. the
+#: very first request of a session) or sends an invalid/missing page_size.
 _PIN_LIST_PAGE_SIZE = 25
+#: Bounds for the client-supplied page_size (see pin_list_panel) - the sidebar
+#: adapts this to the visible container height, but a corrupted or malicious
+#: value must not be able to force an unbounded query.
+_PIN_LIST_MIN_PAGE_SIZE = 5
+_PIN_LIST_MAX_PAGE_SIZE = 100
 
 _US_STATE_CODES: dict[str, str] = {
     "AL": "Alabama",
@@ -102,6 +112,42 @@ def _expand_state_codes(states_str: str) -> str:
     return ", ".join(_US_STATE_CODES.get(c, c) for c in codes)
 
 
+def _apply_toolbar_filters(query: PinQuerySet, profile: Profile, raw_ids: str) -> PinQuerySet:
+    """AND-narrow ``query`` by the bottom-right toolbar's active saved filters.
+
+    Each active filter is resolved and cached independently (see
+    ``services.saved_filter_cache``), then chained onto ``query`` as a
+    ``uuid__in`` restriction - equivalent to (and just as strict as) calling
+    ``filter_by_criteria`` once per filter, but reuses a warm cache when one
+    exists instead of re-running each filter's full query.
+
+    Security: ``uuid__in=ids`` is scoped to ``profile=profile``, so a uuid
+    that doesn't belong to (or doesn't exist for) this profile simply isn't
+    in ``saved_filters`` below and is silently ignored - fuzzing another
+    user's saved-filter uuid can never pull their pins into this profile's
+    results, and there is no separate error path that would reveal whether
+    a given uuid exists at all.
+
+    Args:
+        query: Already profile-scoped pin queryset to further restrict.
+        profile: The requesting user's own profile - both the filter lookup
+            and every pin query stay scoped to this profile.
+        raw_ids: Comma-separated ``SavedFilter`` uuids from the client
+            (``toolbar_filter_ids`` form/query field), or "".
+
+    Returns:
+        ``query`` further restricted by every resolvable active filter.
+    """
+    ids = [v for v in raw_ids.split(",") if v.strip()]
+    if not ids:
+        return query
+    saved_filters = SavedFilter.objects.filter(profile=profile, uuid__in=ids)
+    for saved_filter in saved_filters:
+        matching_uuids = get_or_compute_matching_uuids(profile, saved_filter)
+        query = query.filter(uuid__in=matching_uuids)
+    return query
+
+
 class MapController(LoginRequiredMixin, GenericViewSet):
     def record_geolocation_visit(self, request, *args, **kwargs):
         """Record same-day PinVisit rows for pins containing a device geolocation."""
@@ -128,15 +174,25 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         )
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        from urbanlens.dashboard.models.badges.model import KIND_USER
+        from urbanlens.dashboard.models.labels.model import KIND_USER
 
-        tags = Badge.objects.tags().visible_to(profile).ordered()
-        categories = Badge.objects.categories().ordered()
-        filter_badges = Badge.objects.exclude(kind=KIND_USER).visible_to(profile).ordered()
+        tags = Label.objects.tags().visible_to(profile).ordered()
+        categories = Label.objects.categories().ordered()
+        filter_labels = Label.objects.exclude(kind=KIND_USER).visible_to(profile).ordered()
         pin_count = Pin.objects.filter(profile=profile).root_pins().count()
 
-        filter_badges_list = list(filter_badges)
-        filter_badges_json = safe_json_for_script([{"id": b.id, "name": b.name, "kind": b.kind, "color": b.color or "", "icon": b.icon or ""} for b in filter_badges_list])
+        filter_labels_list = list(filter_labels)
+        filter_labels_json = safe_json_for_script([{"id": b.id, "name": b.name, "kind": b.kind, "color": b.color or "", "icon": b.icon or ""} for b in filter_labels_list])
+
+        from urbanlens.dashboard.models.custom_fields.model import CustomField, CustomFieldEntity
+
+        custom_filter_fields = list(CustomField.objects.for_entity(profile, CustomFieldEntity.PIN))
+        saved_filters = list(profile.saved_filters.all())
+        from urbanlens.dashboard.models.abstract.choices import SecurityLevel
+        from urbanlens.dashboard.models.abstract.security import SECURITY_FIELDS
+        from urbanlens.dashboard.models.pin_list.model import PinList
+
+        pin_lists = list(PinList.objects.for_profile(profile).order_by("name"))
 
         site = SiteSettings.get_current()
         show_pin_count = site.show_dev_admin_features(request.user)
@@ -150,8 +206,13 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 "openweathermap_api_key": settings.openweathermap_api_key,
                 "tags": tags,
                 "categories": categories,
-                "filter_badges": filter_badges_list,
-                "filter_badges_json": filter_badges_json,
+                "filter_labels": filter_labels_list,
+                "filter_labels_json": filter_labels_json,
+                "custom_filter_fields": custom_filter_fields,
+                "security_fields": SECURITY_FIELDS,
+                "security_level_choices": SecurityLevel.choices,
+                "saved_filters": saved_filters,
+                "pin_lists": pin_lists,
                 "icon_categories": ICON_CATEGORIES,
                 "color_choices": COLOR_CHOICES,
                 "profile_uuid": profile.uuid,
@@ -167,12 +228,11 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 "map_default_zoom": (profile.remembered_map_zoom if profile.map_center_mode == MapCenterMode.REMEMBER and profile.remembered_map_zoom else profile.map_default_zoom or 13),
                 "default_map_view": profile.default_map_view,
                 "map_dark_mode": profile.map_dark_mode,
+                # Live-updated by JS as the user switches layers - see the shared
+                # footer partial's `show_map_footer` doc comment.
+                "show_map_footer": True,
             },
         )
-
-    def add_pin(self, request, *args, **kwargs):
-        # Render the add form
-        return render(request, "dashboard/pages/map/add_location.html")
 
     def post_add_pin(self, request, *args, **kwargs):
         try:
@@ -183,7 +243,15 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             icon = request.POST.get("icon") or None
             color = request.POST.get("color") or None
             custom_icon = request.FILES.get("custom_icon") or None
-            badge_ids = request.POST.getlist("badge_ids")
+            if custom_icon:
+                from urbanlens.dashboard.models.images.model import MediaKind
+                from urbanlens.dashboard.services.images import image_upload_error
+
+                upload_error = image_upload_error(custom_icon, MediaKind.PHOTO)
+                if upload_error:
+                    message, status = upload_error
+                    return HttpResponse(f"Error: {message}", status=status)
+            label_ids = request.POST.getlist("label_ids")
             tag_ids = request.POST.getlist("tag_ids")
             category_ids = request.POST.getlist("category_ids")
             google_place_id = request.POST.get("google_place_id") or None
@@ -192,120 +260,53 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             # creating a new Location.
             place_canonical_name = request.POST.get("place_canonical_name") or None
 
-            if not latitude or not longitude:
-                if not address:
-                    return HttpResponse("Error: No address or lat/lon provided.", status=400)
-                if not request.user.profile.external_apis_enabled:
-                    return HttpResponse("Error: External lookups are turned off in your settings - drop a pin on the map instead.", status=403)
-                latitude, longitude = get_pin_by_address(address)
-                if not latitude or not longitude:
-                    return HttpResponse("Error: Unable to convert address to lat/lng.", status=400)
-
-            lat_f = float(latitude)
-            lon_f = float(longitude)
-
-            location, _ = Location.objects.get_or_create(latitude=lat_f, longitude=lon_f, defaults={"official_name": place_canonical_name})
-
-            # Locations whose bounding box also covers this point - when more than
-            # one matches, the client offers the user a choice (see below).
-            all_locations = list(Location.objects.get_all_for_point(lat_f, lon_f))
-
-            from urbanlens.dashboard.models.wiki.model import Wiki
-
-            pin = Pin.objects.create(
-                name=name,
-                name_is_user_provided=bool((name or "").strip()),
-                location=location,
-                # Link to the place's community wiki when one already exists;
-                # wikis are only ever created explicitly from the pin page.
-                wiki=Wiki.objects.get_for_location(location),
-                icon=icon,
-                custom_icon=custom_icon,
-                color=color,
-                profile=request.user.profile,
-            )
-
-            if badge_ids:
-                pin.badges.set(Badge.objects.location_badges().filter(id__in=badge_ids))
-            else:
-                if tag_ids:
-                    pin.badges.remove(*pin.badges.filter(kind="tag"))
-                    pin.badges.add(*Badge.objects.tags().filter(id__in=tag_ids))
-                if category_ids:
-                    pin.badges.remove(*pin.badges.filter(kind="category"))
-                    pin.badges.add(*Badge.objects.categories().filter(id__in=category_ids))
-
-            # Generate slug immediately so the "View Details" URL resolves without a
-            # separate lookup - Pin.slug is nullable and is not auto-populated by create().
-            pin.slug = pin.ensure_slug()
-
-            # When adding from a Places layer marker, pre-populate the GooglePlace
-            # link on both the pin and its location so subsequent views avoid an
-            # extra Places Details API call.
-            if google_place_id:
-                try:
-                    from urbanlens.dashboard.services.apis.locations.google.place_info import (
-                        GooglePlaceService,
-                    )
-                    from urbanlens.dashboard.services.locations.naming import (
-                        update_location_name_from_external_sources,
-                    )
-
-                    gp_service = GooglePlaceService()
-                    gp_service.ensure_linked_by_place_id(pin.location, google_place_id)
-                    if location:
-                        gp_service.ensure_linked_by_place_id(location, google_place_id)
-                    update_location_name_from_external_sources(location)
-                except Exception as gp_exc:
-                    logger.warning("Failed to link Google Place %s: %s", google_place_id, gp_exc)
-
-            # Pre-warm LocationCache for Wikipedia, NPS, and Google Places, plus the
-            # web-search results cache, so the pin detail page doesn't need to hit
-            # the APIs on first load.
-            if location and request.user.profile.external_apis_enabled:
-                from urbanlens.dashboard.services.celery import safely_enqueue_task
-                from urbanlens.dashboard.tasks import (
-                    prefetch_location_external_data,
-                    refresh_pin_web_search,
+            try:
+                result = create_pin_for_profile(
+                    request.user.profile,
+                    name=name,
+                    latitude=latitude,
+                    longitude=longitude,
+                    address=address,
+                    icon=icon,
+                    color=color,
+                    custom_icon=custom_icon,
+                    label_ids=label_ids,
+                    tag_ids=tag_ids,
+                    category_ids=category_ids,
+                    google_place_id=google_place_id,
+                    place_canonical_name=place_canonical_name,
                 )
+            except PinCreationForbiddenError as e:
+                return HttpResponse(f"Error: {e}", status=403)
+            except PinCreationError as e:
+                return HttpResponse(f"Error: {e}", status=400)
 
-                safely_enqueue_task(prefetch_location_external_data, location.pk, google_place_id=google_place_id)
-
-            from urbanlens.dashboard.models.subscriptions import (
-                SiteFeature,
-                user_has_feature,
-            )
-
-            if location and request.user.profile.external_apis_enabled and user_has_feature(request.user, SiteFeature.SEARCH):
-                from urbanlens.dashboard.services.celery import safely_enqueue_task
-                from urbanlens.dashboard.tasks import refresh_pin_web_search
-
-                safely_enqueue_task(refresh_pin_web_search, pin.pk)
-
-            if user_has_feature(request.user, SiteFeature.AI):
-                from urbanlens.dashboard.services.celery import safely_enqueue_task
-                from urbanlens.dashboard.tasks import suggest_pin_category
-
-                safely_enqueue_task(suggest_pin_category, pin.pk)
-
-            response = {"ok": True, "pin_slug": pin.slug or str(pin.uuid)}
+            pin = result.pin
+            response = {"ok": True, "pin_slug": pin.slug or str(pin.uuid), "pin_uuid": str(pin.uuid)}
             # When a coordinate falls inside multiple bounding boxes, tell the
             # client so it can offer the user a choice of which location to use.
-            if len(all_locations) > 1:
-                from django.urls import reverse
-
-                response["conflicting_locations"] = [
-                    {
+            if len(result.all_locations) > 1:
+                conflicting_locations = []
+                for loc in result.all_locations:
+                    is_current = loc.pk == pin.location_id
+                    entry = {
                         "uuid": str(loc.uuid),
                         "slug": loc.slug or str(loc.uuid),
                         "name": loc.display_name,  # Back-compat for existing JS consumers.
                         "display_name": loc.display_name,
-                        "is_current": loc.pk == location.pk,
+                        "is_current": is_current,
                         "wiki_url": reverse("location.wiki", kwargs={"location_slug": loc.slug or str(loc.uuid)}),
                     }
-                    for loc in all_locations
-                ]
-            from django.http import JsonResponse
+                    if not is_current:
+                        # A profile can only ever have one root pin per location - if this
+                        # candidate already has one, "Use this" can't relink the new pin
+                        # there (it would collide); the client offers to merge instead.
+                        existing_pin = Pin.objects.filter(profile=request.user.profile, location=loc, parent_pin__isnull=True).exclude(pk=pin.pk).first()
+                        if existing_pin is not None:
+                            entry["existing_pin_url"] = reverse("pin.details", kwargs={"pin_slug": existing_pin.slug or str(existing_pin.uuid)})
+                            entry["existing_pin_name"] = existing_pin.effective_name
+                    conflicting_locations.append(entry)
+                response["conflicting_locations"] = conflicting_locations
 
             return JsonResponse(response)
         except (ValueError, KeyError, DatabaseError) as e:
@@ -313,7 +314,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             return HttpResponse("Error: failed to create pin.", status=400)
 
     def autocomplete_local(self, request, *args, **kwargs):
-        """Fast autocomplete from local DB: pins, locations, aliases, badges, wiki.
+        """Fast autocomplete from local DB: pins, locations, aliases, labels, wiki.
 
         Returns JSON with pin/location suggestions ranked by relevance.  This is
         always the first source shown to the user because it requires no external
@@ -346,7 +347,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         if not request.user.profile.external_apis_enabled:
             return JsonResponse({"results": [], "source": "places", "disabled": True})
 
-        api_key = settings.google_unrestricted_api_key or settings.google_unrestricted_api_key
+        api_key = settings.google_unrestricted_api_key
         if not api_key:
             return JsonResponse({"results": [], "source": "places", "disabled": True})
 
@@ -380,7 +381,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         if not place_id:
             return JsonResponse({"error": "missing place_id"}, status=400)
 
-        api_key = settings.google_unrestricted_api_key or settings.google_unrestricted_api_key
+        api_key = settings.google_unrestricted_api_key
         if not api_key:
             return JsonResponse({"error": "no_api_key"}, status=503)
 
@@ -405,7 +406,13 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         except (TypeError, ValueError):
             return JsonResponse({"error": "invalid coordinates"}, status=400)
 
-        api_key = settings.google_domain_restricted_api_key or settings.google_unrestricted_api_key or settings.google_unrestricted_api_key
+        # Same opt-out gate as autocomplete_places: this fires on every map
+        # right-click, sending the clicked coordinates to Google - a user who
+        # turned off External Services must not trigger that call.
+        if not request.user.profile.external_apis_enabled:
+            return JsonResponse({"available": False, "reason": "disabled"})
+
+        api_key = settings.google_domain_restricted_api_key or settings.google_unrestricted_api_key
         if not api_key:
             return JsonResponse({"available": False, "reason": "no_key"})
 
@@ -428,15 +435,20 @@ class MapController(LoginRequiredMixin, GenericViewSet):
 
     def search_map_post(self, request, *args, **kwargs):
         logger.info("Searching map...")
-        search_form = SearchForm(request.POST)
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        search_form = SearchForm(request.POST, profile=profile)
         if search_form.is_valid():
-            profile, _ = Profile.objects.get_or_create(user=request.user)
             criteria = dict(search_form.cleaned_data)
-            # Prefer structured badge_groups (from formula bar) over legacy tag lists
-            parsed_groups = search_form.parse_badge_groups()
+            # Prefer structured label_groups (from formula bar) over legacy tag lists
+            parsed_groups = search_form.parse_label_groups()
             if parsed_groups is not None:
-                criteria["badge_groups"] = parsed_groups
-            query = Pin.objects.filter(profile=profile).filter_by_criteria(criteria)
+                criteria["label_groups"] = parsed_groups
+            if (custom_field_criteria := search_form.parse_custom_field_criteria()) is not None:
+                criteria["custom_fields"] = custom_field_criteria
+            criteria["include_regions"] = search_form.parse_region_geojson("include_regions")
+            criteria["exclude_regions"] = search_form.parse_region_geojson("exclude_regions")
+            query = Pin.objects.filter(profile=profile).root_pins().filter_by_criteria(criteria)
+            query = _apply_toolbar_filters(query, profile, request.POST.get("toolbar_filter_ids", ""))
             map_data = self.get_map_data(request, query)
             return render(request, "dashboard/pages/map/data.html", {"map_data": map_data})
 
@@ -444,7 +456,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         return HttpResponse(status=400, content="Invalid search criteria.")
 
     def pin_list_panel(self, request, *args, **kwargs):
-        """Render the paginated pin-list sidebar for the current filter criteria.
+        """Render the paginated pin-list sidebar for the current filter criteria and map viewport.
 
         Reads the same fields as ``SearchForm`` from the query string (sent via
         ``hx-include="#filter-form"`` on the client) so the list panel always
@@ -454,26 +466,48 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         a form submission.
 
         Args:
-            request: GET request, optionally carrying ``SearchForm`` fields and
-                a ``page`` parameter for pagination.
+            request: GET request, optionally carrying ``SearchForm`` fields, a
+                ``bounds`` "south,west,north,east" viewport box, a ``page``
+                parameter for pagination, and a ``page_size`` override - the
+                client measures how many rows actually fit in the sidebar's
+                scrollable container without a scrollbar and sends that back,
+                so pagination adapts to the container size instead of a fixed
+                count (see _refreshPinList/_pinListAdjustPageSize in
+                map/index.html).
 
         Returns:
             Rendered ``_pin_list_panel.html`` partial with the matching pins
-            for the requested page, plus the total match count.
+            for the requested page, plus the total match count - both scoped
+            to the current map viewport when ``bounds`` is present.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        query = Pin.objects.filter(profile=profile).root_pins().select_related("location").prefetch_related(Prefetch("badges", queryset=Badge.objects.exclude(kind="user").order_by("-order", "name")))
+        query = Pin.objects.filter(profile=profile).root_pins().select_related("location").prefetch_related(Prefetch("labels", queryset=Label.objects.exclude(kind="user").order_by("-order", "name")))
 
-        search_form = SearchForm(request.GET)
+        search_form = SearchForm(request.GET, profile=profile)
         if search_form.is_valid():
             criteria = dict(search_form.cleaned_data)
-            parsed_groups = search_form.parse_badge_groups()
+            parsed_groups = search_form.parse_label_groups()
             if parsed_groups is not None:
-                criteria["badge_groups"] = parsed_groups
+                criteria["label_groups"] = parsed_groups
+            if (custom_field_criteria := search_form.parse_custom_field_criteria()) is not None:
+                criteria["custom_fields"] = custom_field_criteria
+            criteria["include_regions"] = search_form.parse_region_geojson("include_regions")
+            criteria["exclude_regions"] = search_form.parse_region_geojson("exclude_regions")
             query = query.filter_by_criteria(criteria)
 
+        query = _apply_toolbar_filters(query, profile, request.GET.get("toolbar_filter_ids", ""))
+        bounds_param = request.GET.get("bounds", "")
+        bounds = _parse_bbox(bounds_param)
+        if bounds:
+            query = query.within_bounds(*bounds)
         query = query.order_by(Lower(Coalesce("name", "location__wiki__name", "location__official_name")))
-        page_obj = get_page(request, query, _PIN_LIST_PAGE_SIZE)
+
+        page_size = _PIN_LIST_PAGE_SIZE
+        with contextlib.suppress(TypeError, ValueError):
+            page_size = max(_PIN_LIST_MIN_PAGE_SIZE, min(_PIN_LIST_MAX_PAGE_SIZE, int(request.GET.get("page_size", page_size))))
+
+        page_obj = get_page(request, query, page_size)
+        extra_query_parts = [f"bounds={urllib.parse.quote(bounds_param)}" if bounds else "", f"page_size={page_size}"]
         return render(
             request,
             "dashboard/partials/pins/_pin_list_panel.html",
@@ -481,6 +515,9 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 "page_obj": page_obj,
                 "pins": page_obj.object_list,
                 "total_count": page_obj.paginator.count,
+                "max_pins_per_list": SiteSettings.get_current().max_pins_per_list,
+                "is_viewport_scoped": bool(bounds),
+                "pagination_extra_query": "&".join(part for part in extra_query_parts if part),
             },
         )
 
@@ -496,16 +533,21 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             uploader already has this exact file on the pin, or 413 if the
             upload would exceed the uploader's storage quota.
         """
+        from urbanlens.dashboard.models.images.model import MediaKind
         from urbanlens.dashboard.services.celery import safely_enqueue_task
-        from urbanlens.dashboard.services.images import compute_checksum
+        from urbanlens.dashboard.services.images import compute_checksum, image_upload_error
         from urbanlens.dashboard.services.storage import quota_error_for_upload
         from urbanlens.dashboard.tasks import process_image_upload
 
         image = request.FILES.get("image")
         if not image:
             return HttpResponse("No image provided.", status=400)
-        pin = Pin.objects.get(slug=pin_slug)
+        pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         profile, _ = Profile.objects.get_or_create(user=request.user)
+        upload_error = image_upload_error(image, MediaKind.PHOTO)
+        if upload_error:
+            message, status = upload_error
+            return HttpResponse(message, status=status)
         checksum = compute_checksum(image)
         if Image.objects.filter(pin=pin, profile=profile, checksum=checksum).exists():
             return HttpResponse("You already uploaded this photo to this pin.", status=409)
@@ -517,23 +559,12 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         return HttpResponse(status=200)
 
     def change_category(self, request, pin_slug, *args, **kwargs):
-        # TODO: Assess codebase, but this is probably deprecated since the addition of Badges more generically.
+        # TODO: Assess codebase, but this is probably deprecated since the addition of Labels more generically.
 
         category_id = request.POST.get("category")
-        pin = Pin.objects.get(slug=pin_slug)
+        pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         pin.change_category(category_id)
         return HttpResponseRedirect(reverse("view_map"))
-
-    def post_advanced_search(self, request, *args, **kwargs):
-        form = AdvancedSearchForm(request.POST)
-        if form.is_valid():
-            pins = Pin.objects.all().filter_by_criteria(form.cleaned_data)
-            return render(request, "dashboard/pages/map/index.html", {"pins": pins})
-        return None
-
-    def get_advanced_search(self, request, *args, **kwargs):
-        form = AdvancedSearchForm()
-        return render(request, "dashboard/pages/map/advanced_search.html", {"form": form})
 
     def map_pins_json(self, request, *args, **kwargs):
         """Return pin data as JSON with optional bbox filtering for two-phase map loading.
@@ -541,22 +572,11 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         Query params:
             bbox: "south,west,north,east" floats - restrict to this bounding box.
         """
-        from django.contrib.gis.geos import Polygon
-
         profile, _ = Profile.objects.get_or_create(user=request.user)
         query = Pin.objects.filter(profile=profile).root_pins().select_related("location")
 
-        bbox_str = request.GET.get("bbox", "").strip()
-        if bbox_str:
-            try:
-                parts = [float(x) for x in bbox_str.split(",")]
-                if len(parts) == 4:
-                    south, west, north, east = parts
-                    bbox_poly = Polygon.from_bbox((west, south, east, north))
-                    bbox_poly.srid = 4326
-                    query = query.filter(location__point__within=bbox_poly)
-            except (ValueError, TypeError) as e:
-                logger.warning("Invalid bbox parameter: %s -> %s", bbox_str, e)
+        if bbox := _parse_bbox(request.GET.get("bbox", "")):
+            query = query.within_bounds(*bbox)
 
         cursor = _safe_positive_int(request.GET.get("cursor"))
         limit = _safe_positive_int(request.GET.get("limit"))
@@ -578,6 +598,55 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         if cached_page.page.total is not None:
             payload["total"] = cached_page.page.total
         return JsonResponse(payload)
+
+    def map_child_pins_json(self, request, *args, **kwargs):
+        """Return the profile's child pins (all nesting depths) for the Child pins layer.
+
+        Child pins are pins nested under another pin via ``parent_pin`` (created
+        by merging pins or by adding detail pins on a pin's page). The main map
+        hides them by default; the "Child pins" layer renders this payload.
+
+        The same ``SearchForm`` criteria the filter panel posts are honoured
+        when present in the query string, so an active map filter narrows the
+        layer to matching child pins too.
+
+        Returns:
+            JsonResponse: ``{"pins": [{...to_detail_json(), child_count,
+            parent_slug, parent_name, parent_url}, ...]}``
+        """
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        query = (
+            Pin.objects.filter(profile=profile)
+            .detail_pins()
+            .select_related("location", "parent_pin", "parent_pin__location")
+            .prefetch_related(Prefetch("labels", queryset=Label.objects.exclude(kind="user").order_by("-order", "name")))
+            .annotate(child_count=Count("detail_pins", distinct=True))
+        )
+
+        search_form = SearchForm(request.GET, profile=profile)
+        if search_form.is_valid():
+            criteria = dict(search_form.cleaned_data)
+            parsed_groups = search_form.parse_label_groups()
+            if parsed_groups is not None:
+                criteria["label_groups"] = parsed_groups
+            if (custom_field_criteria := search_form.parse_custom_field_criteria()) is not None:
+                criteria["custom_fields"] = custom_field_criteria
+            criteria["include_regions"] = search_form.parse_region_geojson("include_regions")
+            criteria["exclude_regions"] = search_form.parse_region_geojson("exclude_regions")
+            query = query.filter_by_criteria(criteria)
+
+        pins = []
+        for child in query:
+            entry = child.to_detail_json()
+            entry["child_count"] = getattr(child, "child_count", 0) or 0
+            parent = child.parent_pin
+            if parent is not None:
+                parent_slug = parent.slug or str(parent.uuid)
+                entry["parent_slug"] = parent_slug
+                entry["parent_name"] = parent.effective_name
+                entry["parent_url"] = f"/dashboard/map/pin/{parent_slug}/"
+            pins.append(entry)
+        return JsonResponse({"pins": pins})
 
     def map_pins_meta(self, request, *args, **kwargs):
         """Return the latest pin update timestamp and app UUID for client-side cache invalidation.
@@ -619,7 +688,8 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         except Pin.DoesNotExist:
             try:
                 pin = Pin.objects.filter(profile=profile).select_related("location").get(uuid=pin_slug)
-            except (Pin.DoesNotExist, ValueError):
+            except (Pin.DoesNotExist, ValueError, ValidationError):
+                # ValidationError: pin_slug isn't a valid UUID string at all.
                 return JsonResponse({"error": "not found"}, status=404)
         map_data = self.get_map_data(request, Pin.objects.filter(pk=pin.pk).select_related("location"))
         if not map_data:
@@ -632,8 +702,8 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         """Quick-edit a pin from the map popup dialog.
 
         Accepts the same FormData fields as ``post_add_pin`` and applies them to
-        an existing pin looked up by slug or UUID.  Badges are replaced (not merged)
-        when ``badge_ids`` is provided.
+        an existing pin looked up by slug or UUID.  Labels are replaced (not merged)
+        when ``label_ids`` is provided.
 
         Args:
             pin_slug: Slug or UUID string of the pin to update.
@@ -646,7 +716,8 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 pin = Pin.objects.get(profile=request.user.profile, slug=pin_slug)
             except Pin.DoesNotExist:
                 pin = Pin.objects.get(profile=request.user.profile, uuid=pin_slug)
-        except (Pin.DoesNotExist, ValueError):
+        except (Pin.DoesNotExist, ValueError, ValidationError):
+            # ValidationError: pin_slug isn't a valid UUID string at all.
             return JsonResponse({"error": "not found"}, status=404)
 
         name = request.POST.get("name")
@@ -655,7 +726,15 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         icon = request.POST.get("icon")
         color = request.POST.get("color")
         custom_icon = request.FILES.get("custom_icon") or None
-        badge_ids = [bid for bid in request.POST.getlist("badge_ids") if bid]
+        if custom_icon:
+            from urbanlens.dashboard.models.images.model import MediaKind
+            from urbanlens.dashboard.services.images import image_upload_error
+
+            upload_error = image_upload_error(custom_icon, MediaKind.PHOTO)
+            if upload_error:
+                message, status = upload_error
+                return JsonResponse({"error": message}, status=status)
+        label_ids = [bid for bid in request.POST.getlist("label_ids") if bid]
 
         import contextlib
 
@@ -673,14 +752,17 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             pin.color = color or None
         if custom_icon:
             pin.custom_icon = custom_icon
+        elif request.POST.get("clear_custom_icon"):
+            pin.custom_icon = None
         pin.save()
 
-        if badge_ids:
-            from urbanlens.dashboard.models.badges.model import KIND_USER as _KIND_USER
+        if label_ids:
+            from urbanlens.dashboard.models.labels.model import KIND_USER as _KIND_USER
 
-            pin.badges.set(Badge.objects.exclude(kind=_KIND_USER).filter(id__in=badge_ids))
-        elif "badge_ids" in request.POST:
-            pin.badges.clear()
+            # visible_to: same foreign-label-id guard as post_add_pin.
+            pin.labels.set(Label.objects.exclude(kind=_KIND_USER).visible_to(request.user.profile).filter(id__in=label_ids))
+        elif "label_ids" in request.POST:
+            pin.labels.clear()
 
         return JsonResponse({"ok": True, "pin_slug": pin.slug or str(pin.uuid)})
 
@@ -748,7 +830,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
 
         # -- Google historical landmarks (Places API v1 - supports historical_landmark type) --
         if use_google:
-            api_key = settings.google_unrestricted_api_key or settings.google_unrestricted_api_key
+            api_key = settings.google_unrestricted_api_key
             if not api_key:
                 logger.info("Google Places skipped: no API key configured.")
             else:
@@ -882,7 +964,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         if not place_id:
             return JsonResponse({"error": "missing place_id"}, status=400)
 
-        api_key = settings.google_unrestricted_api_key or settings.google_unrestricted_api_key
+        api_key = settings.google_unrestricted_api_key
         if not api_key:
             return JsonResponse({"error": "no_api_key"}, status=503)
 
@@ -942,7 +1024,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             if pin.get("tags"):
                 tags = pin["tags"]
                 if tags and isinstance(tags[0], dict):
-                    pin["tags_data"] = [{"name": t["name"], "color": t.get("color"), "icon": t.get("icon")} for t in tags]
+                    pin["tags_data"] = [{"id": t.get("id"), "name": t["name"], "color": t.get("color"), "icon": t.get("icon")} for t in tags]
                     pin["tags"] = ", ".join(t["name"] for t in tags)
                 else:
                     pin["tags_data"] = [{"name": t} for t in tags]
@@ -980,6 +1062,30 @@ def _safe_positive_int(value: str | None) -> int | None:
     except (TypeError, ValueError):
         return None
     return parsed if parsed and parsed > 0 else None
+
+
+def _parse_bbox(bbox_str: str) -> tuple[float, float, float, float] | None:
+    """Parse a "south,west,north,east" bbox query param into its four floats.
+
+    Args:
+        bbox_str: Raw query-param value (may be empty or malformed).
+
+    Returns:
+        ``(south, west, north, east)``, or None when absent/invalid.
+    """
+    bbox_str = (bbox_str or "").strip()
+    if not bbox_str:
+        return None
+    try:
+        parts = [float(x) for x in bbox_str.split(",")]
+    except (TypeError, ValueError):
+        logger.warning("Invalid bbox parameter: %s", bbox_str)
+        return None
+    if len(parts) != 4:
+        logger.warning("Invalid bbox parameter: %s", bbox_str)
+        return None
+    south, west, north, east = parts
+    return south, west, north, east
 
 
 def _create_location_with_canonical_name(lat: float, lon: float, *, place_name: str | None = None) -> Location:
@@ -1030,19 +1136,3 @@ def _create_location_with_canonical_name(lat: float, lon: float, *, place_name: 
         longitude=lon,
         google_place=google_place,
     )
-
-
-def get_pin_by_address(address: str) -> tuple[float | None, float | None]:
-    try:
-        geolocator = Nominatim(user_agent="geoapiExercises")
-        pin = geolocator.geocode(address)
-        if pin:
-            return (pin.latitude, pin.longitude)
-
-    except GeocoderTimedOut:
-        logger.exception("Geocoder service timed out.")
-        raise
-    except GeocoderUnavailable:
-        logger.exception("Geocoder service unavailable.")
-        raise
-    return (None, None)

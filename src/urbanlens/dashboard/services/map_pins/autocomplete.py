@@ -27,6 +27,7 @@ class AutocompleteResult:
     icon: str  # Material Icons ligature name
     pin_slug: str | None = None
     place_id: str | None = None  # Google place_id for deferred coordinate resolution
+    is_child: bool = False  # True for child (sub) pins nested under a parent pin
 
     def to_dict(self) -> dict[str, Any]:
         """Serialise to a JSON-safe dict."""
@@ -40,6 +41,7 @@ class AutocompleteResult:
             "icon": self.icon,
             "pin_slug": self.pin_slug,
             "place_id": self.place_id,
+            "is_child": self.is_child,
         }
 
 
@@ -50,7 +52,7 @@ def search_local(query: str, profile) -> list[AutocompleteResult]:
     - Pin name (effective name)
     - Pin aliases (PinAlias)
     - Pin personal notes / description
-    - Badge / tag names assigned to the pin
+    - Label / tag names assigned to the pin
     - Location canonical name
     - Wiki aliases (WikiAlias / community wiki aliases)
     - Location description
@@ -76,17 +78,19 @@ def search_local(query: str, profile) -> list[AutocompleteResult]:
     seen_pin_ids: set[int] = set()
 
     # -- Pin search ---------------------------------------------------------------
-    # Single query with OR across all relevant text fields.
+    # Single query with OR across all relevant text fields. Deliberately not
+    # restricted to root pins: jumping to a child (sub) pin must always work,
+    # even though the map hides child pins unless their layer is on - the map
+    # turns the layer on when the user jumps to one (see _onLocationSelect).
     pin_qs = (
         Pin.objects.filter(profile=profile)
-        .root_pins()
-        .select_related("location__wiki")
-        .prefetch_related("badges", "aliases", "location__wiki__aliases")
+        .select_related("location__wiki", "parent_pin", "parent_pin__location")
+        .prefetch_related("labels", "aliases", "location__wiki__aliases")
         .filter(
             Q(name__icontains=q)
             | Q(aliases__name__icontains=q)
             | Q(description__icontains=q)
-            | Q(badges__name__icontains=q)
+            | Q(labels__name__icontains=q)
             | Q(location__official_name__icontains=q)
             | Q(location__wiki__name__icontains=q)
             | Q(location__wiki__aliases__name__icontains=q)
@@ -105,7 +109,11 @@ def search_local(query: str, profile) -> list[AutocompleteResult]:
         if lat is None or lng is None:
             continue
 
-        subtitle = _pin_match_subtitle(pin, q_lower)
+        is_child = pin.parent_pin_id is not None
+        if is_child and pin.parent_pin is not None:
+            subtitle = f"Sub pin of {pin.parent_pin.effective_name or 'a pin'}"
+        else:
+            subtitle = _pin_match_subtitle(pin, q_lower)
         results.append(
             AutocompleteResult(
                 type="pin",
@@ -113,9 +121,10 @@ def search_local(query: str, profile) -> list[AutocompleteResult]:
                 subtitle=subtitle,
                 lat=float(lat),
                 lng=float(lng),
-                zoom=16,
-                icon="push_pin",
+                zoom=17 if is_child else 16,
+                icon="subdirectory_arrow_right" if is_child else "push_pin",
                 pin_slug=pin.slug or str(pin.uuid),
+                is_child=is_child,
             ),
         )
 
@@ -178,10 +187,10 @@ def _pin_match_subtitle(pin, q_lower: str) -> str:
             snippet += "..."
         return snippet
 
-    # Badge / tag match
-    for badge in pin.badges.all():
-        if q_lower in badge.name.lower():
-            return f"Tagged: {badge.name}"
+    # Label / tag match
+    for label in pin.labels.all():
+        if q_lower in label.name.lower():
+            return f"Tagged: {label.name}"
 
     # Wiki/display name match
     if q_lower in loc_name:

@@ -2,11 +2,9 @@
 @use 'variables' as *;
 
 .setup-wizard {
-	max-width: 1000px;
+	max-width: 100rem;
 	margin: 2rem auto;
-	background: var(--ul-grey-0);
-	border: 1px solid var(--ul-grey-1a);
-	border-radius: 16px;
+	@include surface($radius: 16px);
 	overflow: hidden;
 	box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
 
@@ -18,7 +16,7 @@
 	&__sidebar {
 		width: 230px;
 		flex-shrink: 0;
-		background: linear-gradient(160deg, var(--ul-grey-9) 0%, var(--ul-grey-8) 100%);
+		background: rgba(0,0,0,0.3);
 		padding: 2rem 1.5rem;
 		display: flex;
 		flex-direction: column;
@@ -62,7 +60,7 @@
 
 	&__progress {
 		height: 3px;
-		background: var(--ul-grey-1a);
+		background: var(--ul-surface-border);
 		border-radius: 2px;
 		overflow: hidden;
 		margin-bottom: 2.25rem;
@@ -101,7 +99,7 @@
 			.step-icon {
 				border-color: var(--ul-accent, #0891b2);
 				background: var(--ul-accent, #0891b2);
-				color: var(--ul-grey-4);
+				color: var(--ul-grey-0);
 			}
 		}
 
@@ -205,8 +203,8 @@
 		align-items: flex-start;
 		gap: 0.6rem;
 		padding: 0.85rem;
-		background: var(--ul-grey-1);
-		border: 1px solid var(--ul-grey-1a);
+		background: rgba(0,0,0,0.2);
+		border: 1px solid var(--ul-surface-raised-border);
 		border-radius: 10px;
 
 		.material-symbols-outlined,
@@ -251,8 +249,8 @@
 		align-items: center;
 		flex-shrink: 0;
 		padding: 0 0.25em 0 10px;
-		background: var(--ul-grey-1, #f3f4f6);
-		border: 1.5px solid var(--ul-grey-1a);
+		background: var(--ul-surface-raised);
+		border: 1.5px solid var(--ul-surface-raised-border);
 		border-right: none;
 		border-radius: 8px 0 0 8px;
 		color: var(--ul-grey-6, #9aa0a6);
@@ -266,13 +264,13 @@
 		min-width: 0;
 		box-sizing: border-box;
 		border-radius: 0 8px 8px 0;
-		border: 1.5px solid var(--ul-grey-1a);
+		border: 1.5px solid var(--ul-surface-raised-border);
 		border-left: none;
 		padding: 8px 12px;
 		font-size: .9rem;
 		line-height: 1.4;
 		outline: none;
-		background: var(--ul-grey-1);
+		background: var(--ul-surface-raised);
 		color: var(--ul-grey-8);
 	}
 
@@ -286,10 +284,10 @@
 	#setup-username-input {
 		padding: 4px 0 4px 0;
 		margin: 0;
-		border: 1.5px solid var(--ul-grey-1a);
+		border: 1.5px solid var(--ul-surface-raised-border);
 		border-radius: 0 8px 8px 0;
 		border-left: none;
-		background: var(--ul-grey-1);
+		background: var(--ul-surface-raised);
 		color: var(--ul-grey-8);
 	}
 }
@@ -315,9 +313,9 @@
 	input[type="text"] {
 		font-size: 1.05rem;
 		padding: 0.6rem 0.85rem;
-		border: 2px solid var(--ul-grey-1a);
+		border: 2px solid var(--ul-surface-raised-border);
 		border-radius: 8px;
-		background: var(--ul-grey-0);
+		background: var(--ul-surface-raised);
 		color: var(--ul-grey-8);
 		transition: border-color 0.2s;
 		width: 100%;
@@ -389,18 +387,18 @@
 }
 
 .setup-title-suggestion-btn {
-	border: 1px solid var(--ul-grey-1a);
+	border: 1px solid var(--ul-surface-raised-border);
 	border-radius: 999px;
 	padding: 0.28rem 0.75rem;
 	font-size: 0.78rem;
-	background: var(--ul-grey-0);
+	background: var(--ul-surface-raised);
 	color: var(--ul-grey-8);
 	cursor: pointer;
 	transition: border-color 0.15s, background-color 0.15s;
 
 	&:hover {
 		border-color: var(--ul-accent, #0891b2);
-		background: var(--ul-grey-1);
+		background: var(--ul-hover-bg);
 	}
 }
 
@@ -409,9 +407,7 @@
 	align-items: center;
 	gap: 0.85rem;
 	padding: 1rem 1.15rem;
-	background: var(--ul-grey-1);
-	border: 1px solid var(--ul-grey-1a);
-	border-radius: 10px;
+	@include surface($radius: 10px, $rung: 2);
 
 	.preview-dot {
 		width: 12px;
@@ -429,12 +425,12 @@
 		align-items: center;
 		gap: 0.4rem;
 		padding: 0.3rem 0.75rem;
-		background: var(--ul-grey-0);
-		border: 1px solid var(--ul-grey-2);
+		background: var(--ul-surface-raised);
+		border: 1px solid var(--ul-surface-raised-border);
 		border-radius: 6px 6px 0 0;
 		font-size: 0.78rem;
 		color: var(--ul-grey-8);
-		max-width: 200px;
+		max-width: 20rem;
 
 		.material-symbols-outlined,
 		.material-icons { font-size: 0.85rem; color: var(--ul-accent, #0891b2); }
@@ -478,10 +474,8 @@
 }
 
 .setup-feature-card {
-	border: 1px solid var(--ul-grey-1a);
-	border-radius: 8px;
+	@include surface($radius: 8px, $rung: 2);
 	padding: 0.7rem 0.8rem;
-	background: var(--ul-grey-0);
 	display: flex;
 	flex-direction: column;
 	gap: 0.25rem;
@@ -533,7 +527,7 @@
 
 	&--missing {
 		.setup-feature-card__badge {
-			background: var(--ul-grey-1);
+			background: var(--ul-surface-raised);
 			color: var(--ul-grey-6);
 		}
 	}
@@ -576,7 +570,7 @@
 	&__body {
 		font-size: 0.95rem;
 		color: var(--ul-grey-7);
-		max-width: 380px;
+		max-width: 38rem;
 		line-height: 1.55;
 		margin: 0;
 
@@ -588,5 +582,13 @@
 		gap: 0.75rem;
 		align-items: center;
 		margin-top: 0.5rem;
+	}
+}
+
+// Dark mode
+[data-theme="dark"] {
+	.setup-stepper__item--active {
+		background: rgba(0,0,0,0.3);
+		color: #fff;
 	}
 }

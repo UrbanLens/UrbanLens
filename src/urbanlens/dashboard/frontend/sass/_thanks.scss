@@ -4,57 +4,22 @@
 
 .page-thanks {
 
+    --ul-text-secondary: #{$color-indigo-700};
+
     > div.container {
         max-width: 100%;
     }
 
     .attr-section-inner {
-        max-width: 1100px;
+        max-width: 110rem;
         margin: 0 auto;
         padding: 0 1.5rem;
+        background-color: var(--ul-grey-0a);
     }
 
-    .attr-hero {
-        padding: 3.5rem 1.5rem 2.75rem;
-        text-align: center;
-        background: linear-gradient(135deg, rgba(31, 111, 235, 0.20), rgba(23, 185, 120, 0.15));
-        color: var(--ul-grey-4);
-    }
-
-    .attr-hero-inner {
-        max-width: 760px;
-        margin: 0 auto;
-    }
-
-    .attr-eyebrow {
-        font-size: .7rem;
-        font-weight: 700;
-        letter-spacing: .16em;
-        text-transform: uppercase;
-        color: $color-indigo-300;
-        margin: 0 0 1rem;
-    }
-
-    .attr-title {
-        font-size: clamp(2rem, 4vw, 3rem);
-        font-weight: 800;
-        line-height: 1.15;
-        letter-spacing: -.03em;
-        color: var(--ul-grey-9);
-        margin: 0 0 1rem;
-
-        em {
-            font-style: normal;
-            color: $color-indigo-300;
-        }
-    }
-
-    .attr-subtitle {
-        font-size: 1.05rem;
-        color: $color-indigo-200;
-        line-height: 1.7;
-        margin: 0;
-    }
+    // Hero gradient banner now lives in the shared .ul-page-hero component
+    // (_page_hero.scss / partials/ui/_page_hero.html); the --wide modifier
+    // reproduces this page's wider inner column and larger type.
 
     .attr-section {
         padding: 3.5rem 0;
@@ -89,7 +54,7 @@
         font-size: 1rem;
         line-height: 1.65;
         color: var(--ul-grey-5);
-        max-width: 720px;
+        max-width: 72rem;
         margin: 0 0 2rem;
     }
 
@@ -115,7 +80,7 @@
     }
 
     .attr-card {
-        background: var(--ul-grey-0);
+        background: var(--ul-surface-raised);
         border: 1px solid var(--ul-border-subtle, rgba($color-indigo-900, .08));
         border-radius: .85rem;
         padding: 1.35rem 1.25rem 1.25rem;
@@ -145,7 +110,7 @@
         height: 2.5rem;
         border-radius: .65rem;
         background: rgba($color-indigo-500, .1);
-        color: $color-indigo-600;
+        color: var(--ul-text-secondary);
         margin-bottom: .85rem;
         .material-symbols-outlined,
         .material-icons {
@@ -163,7 +128,7 @@
     .attr-card-body {
         font-size: .9rem;
         line-height: 1.6;
-        color: var(--ul-text-secondary, #{$color-indigo-700});
+        color: var(--ul-text-secondary);
         margin: 0;
     }
 
@@ -180,7 +145,7 @@
         gap: 1rem;
         padding: 1rem 1.1rem;
         border-radius: .75rem;
-        background: var(--ul-grey-0);
+        background: var(--ul-surface-raised);
         border: 1px solid var(--ul-border-subtle, rgba($color-indigo-900, .08));
 
         h3 {
@@ -200,7 +165,7 @@
         p {
             font-size: .88rem;
             line-height: 1.55;
-            color: var(--ul-text-secondary, #{$color-indigo-700});
+            color: var(--ul-text-secondary);
             margin: 0;
         }
     }
@@ -236,8 +201,8 @@
         border-radius: 999px;
         font-size: .82rem;
         font-weight: 600;
-        color: $color-indigo-700;
-        background: var(--ul-grey-0);
+        color: var(--ul-text-secondary);
+        background: var(--ul-surface-raised);
         border: 1px solid rgba($color-indigo-500, .18);
         text-decoration: none;
         transition: background .15s ease, border-color .15s ease, color .15s ease;
@@ -274,7 +239,7 @@
         height: 100%;
         padding: 1.1rem .85rem;
         border-radius: .85rem;
-        background: var(--ul-grey-0);
+        background: var(--ul-surface-raised);
         border: 1px solid var(--ul-border-subtle, rgba($color-indigo-900, .08));
         text-decoration: none;
         text-align: center;
@@ -298,7 +263,7 @@
     .attr-contributor-login {
         font-size: .92rem;
         font-weight: 700;
-        color: $color-indigo-800;
+        color: var(--ul-text-secondary);
         line-height: 1.25;
         word-break: break-word;
     }
@@ -307,16 +272,16 @@
         font-size: .72rem;
         font-weight: 600;
         letter-spacing: .02em;
-        color: var(--ul-text-secondary, #{$color-indigo-700});
+        color: var(--ul-text-secondary);
     }
 
     .attr-contributors-empty {
         margin: 0;
         padding: 1rem 1.1rem;
         border-radius: .75rem;
-        background: var(--ul-grey-0);
+        background: var(--ul-surface-raised);
         border: 1px dashed rgba($color-indigo-500, .22);
-        color: var(--ul-text-secondary, #{$color-indigo-700});
+        color: var(--ul-text-secondary);
         line-height: 1.6;
     }
 
@@ -326,7 +291,7 @@
         gap: 1rem;
         padding: 1.25rem 1.35rem;
         border-radius: .85rem;
-        background: linear-gradient(135deg, rgba($color-indigo-500, .08), rgba($color-blue-500, .06));
+        background: linear-gradient(135deg, rgba(31, 111, 235, 0.2), rgba(23, 185, 120, 0.15));
         border: 1px solid rgba($color-indigo-500, .15);
     }
 
@@ -346,7 +311,7 @@
         font-size: .92rem;
         line-height: 1.6;
         margin: 0;
-        color: var(--ul-grey-5);
+        color: var(--ul-grey-8);
 
         a {
             font-weight: 600;
@@ -374,5 +339,11 @@
                 }
             }
         }
+    }
+}
+
+[data-theme="dark"] {
+    .page-thanks {
+        --ul-text-secondary: #{$color-indigo-100};
     }
 }

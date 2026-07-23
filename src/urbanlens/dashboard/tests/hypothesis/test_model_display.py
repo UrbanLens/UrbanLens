@@ -16,7 +16,7 @@ from django.db import IntegrityError, transaction
 from hypothesis import given, settings, strategies as st
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.aliases.model import PinAlias, WikiAlias
 from urbanlens.dashboard.models.markup.model import MarkupType, PinMarkup
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
@@ -27,7 +27,7 @@ _VISIT_SOURCES = list(VisitSource.values)
 
 # -- PinVisit ------------------------------------------------------------------
 
-class PinVisitStrTests(TestCase):
+class PinVisitStrTests(SimpleTestCase):
     """PinVisit.__str__ contains the pin_id and a YYYY-MM-DD date."""
 
     def _visit(self, pin_id: int, year: int, month: int, day: int) -> PinVisit:
@@ -61,7 +61,7 @@ class PinVisitStrTests(TestCase):
         self.assertIn(f"{d.year:04d}-{d.month:02d}-{d.day:02d}", s)
 
 
-class VisitSourceEnumTests(TestCase):
+class VisitSourceEnumTests(SimpleTestCase):
     """VisitSource has the expected members and values."""
 
     def test_manual_value(self) -> None:
@@ -183,7 +183,7 @@ class PinMarkupToJsonTests(TestCase):
         self.assertEqual(required, set(self.markup.to_json()))
 
 
-class MarkupTypeEnumTests(TestCase):
+class MarkupTypeEnumTests(SimpleTestCase):
     """MarkupType has the expected set of visual annotation kinds."""
 
     def test_has_line(self) -> None:
@@ -204,8 +204,11 @@ class MarkupTypeEnumTests(TestCase):
     def test_has_polygon(self) -> None:
         self.assertIn("polygon", MarkupType.values)
 
-    def test_exactly_six_members(self) -> None:
-        self.assertEqual(len(MarkupType.values), 6)
+    def test_has_pin(self) -> None:
+        self.assertIn("pin", MarkupType.values)
+
+    def test_exactly_seven_members(self) -> None:
+        self.assertEqual(len(MarkupType.values), 7)
 
     @given(st.sampled_from(_MARKUP_TYPES))
     @settings(max_examples=50, deadline=None)

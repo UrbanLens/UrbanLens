@@ -1,0 +1,36 @@
+{% include "dashboard/partials/ui/_dialog_header.html" with title="Share Map" %}
+<div class="ul-dialog-body map-share-body">
+  {% if shared_to %}
+    <div class="map-share-sent">
+      <i class="material-symbols-outlined map-share-sent-icon">check_circle</i>
+      <p><strong>{{ map.title|default:"This map" }}</strong> was shared with {{ shared_to.username }}.</p>
+    </div>
+    <div class="dialog-actions">
+      <button type="button" class="btn btn--primary" onclick="document.getElementById('markup-map-share-dialog').close()">Done</button>
+    </div>
+  {% else %}
+    <p class="map-share-intro">Share <strong>{{ map.title|default:"this map" }}</strong> with a friend you trust.</p>
+    {% if friends %}
+    <form hx-post="{% url 'markup_map.share.send' map.uuid %}" hx-target="#markup-map-share-dialog" hx-swap="innerHTML">
+      {% csrf_token %}
+      <div class="form-row">
+        <label for="markup-map-share-profile">Friend</label>
+        <select id="markup-map-share-profile" name="profile_id" required>
+          {% for friend in friends %}<option value="{{ friend.id }}">{{ friend.username }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-row">
+        <label for="markup-map-share-message">Message <small>(optional)</small></label>
+        <textarea id="markup-map-share-message" name="message" rows="2"
+                  placeholder="Let them know why you're sharing this map..."></textarea>
+      </div>
+      <div class="dialog-actions">
+        <button type="button" class="btn btn--ghost" onclick="document.getElementById('markup-map-share-dialog').close()">Cancel</button>
+        <button type="submit" class="btn btn--primary"><i class="material-symbols-outlined">ios_share</i> Share</button>
+      </div>
+    </form>
+    {% else %}
+      <p>You do not have any connected friends to share with yet.</p>
+    {% endif %}
+  {% endif %}
+</div>

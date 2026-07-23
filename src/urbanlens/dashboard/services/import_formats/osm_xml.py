@@ -18,10 +18,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
-# Only used to catch exceptions
-from xml.etree.ElementTree import ParseError  # nosec B405
-
-from defusedxml.ElementTree import fromstring as parse_xml
+from defusedxml.ElementTree import ParseError, fromstring as parse_xml
 
 from urbanlens.dashboard.services.import_formats.heuristics import pick_name_and_description
 

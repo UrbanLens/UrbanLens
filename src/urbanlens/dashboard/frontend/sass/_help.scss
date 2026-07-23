@@ -23,7 +23,7 @@
     gap: $space-lg;
     align-items: center;
     padding: $space-lg;
-    background: linear-gradient(135deg, var(--ul-color-accent-bg), var(--ul-color-success-bg));
+    background: linear-gradient(135deg, rgba(31, 111, 235, 0.2), rgba(23, 185, 120, 0.15));
 
     @include up($breakpoint-sm) {
         grid-template-columns: minmax(0, 1.25fr) minmax(240px, .75fr);
@@ -46,7 +46,7 @@
 }
 
 .help-import-lede {
-    max-width: 720px;
+    max-width: 72rem;
     font-size: 1.05rem;
     line-height: 1.7;
     color: var(--ul-grey-6);
@@ -152,7 +152,7 @@
     margin-top: 0;
 }
 
-// A plain <nav> would otherwise pick up Materialize's global top-navbar
+// A plain <nav> would otherwise pick up _reset.scss's global top-navbar
 // styling (pink background, fixed 56px height/line-height) - that clips this
 // link list down to a single visible row. The class gives us enough
 // specificity to reset it without !important.

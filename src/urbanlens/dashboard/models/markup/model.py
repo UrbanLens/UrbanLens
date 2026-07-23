@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 from django.core.validators import MaxLengthValidator
 from django.db.models import (
     CASCADE,
+    SET_NULL,
     BooleanField,
     CharField,
     FloatField,
@@ -16,6 +17,7 @@ from django.db.models import (
     Index,
     IntegerField,
     JSONField,
+    ManyToManyField,
     TextField,
 )
 
@@ -28,6 +30,8 @@ if TYPE_CHECKING:
     from django.db.models import QuerySet
 
     from urbanlens.dashboard.models.comments.model import Comment
+    from urbanlens.dashboard.models.direct_messages.model import DirectMessage
+    from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.safety.model import SafetyCheckin
     from urbanlens.dashboard.models.trips.model import TripComment
     from urbanlens.dashboard.models.visits.model import PinVisit
@@ -81,6 +85,9 @@ class MarkupMap(abstract.FrontendDashboardModel):
         zoom: Saved viewport zoom level.
         layer_mode: Base tile layer (street / satellite / topographic / dark).
         show_borders: Whether the geopolitical-borders overlay is enabled.
+        pin: Explicit, user-set link to the pin this map was created for, if any.
+        inferred_pins: Pins this map's geometry is detected to reveal (may be
+            several, or none, regardless of ``pin``).
     """
 
     title = CharField(max_length=200, blank=True, default="")
@@ -95,17 +102,70 @@ class MarkupMap(abstract.FrontendDashboardModel):
         on_delete=CASCADE,
         related_name="markup_maps",
     )
+    # The map this one was cloned from via "Add to my maps", if any. SET_NULL
+    # so a clone's provenance label can fall back to `shared_by` even after
+    # the original map is deleted.
+    cloned_from = ForeignKey(
+        "self",
+        on_delete=SET_NULL,
+        null=True,
+        blank=True,
+        related_name="clones",
+    )
+    # The profile who most recently sent this map to its current owner (via a
+    # DM attachment, a standalone map share, or a pin-share attachment) at the
+    # time it was cloned. Denormalized from the share event rather than
+    # derived from `cloned_from.profile` so the "From X" label survives even
+    # if the source map is later deleted, and so a forwarded chain always
+    # shows the immediate sender rather than the original creator.
+    shared_by = ForeignKey(
+        "dashboard.Profile",
+        on_delete=SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    # Direct association with the pin this map was created for (e.g. via the
+    # pin-share dialog's "New map" flow). Set immediately on creation,
+    # independent of whether the map is ever actually shared - distinct from
+    # PinShare.markup_map, which records a map attached to a specific share
+    # event. Backs the pin detail page's "Markup Maps" section.
+    pin = ForeignKey(
+        "dashboard.Pin",
+        on_delete=SET_NULL,
+        null=True,
+        blank=True,
+        related_name="associated_maps",
+    )
+    # Pins this map's geometry (saved viewport + markup) is detected to reveal,
+    # per services.map_pin_share_detection.detect_shared_pins - kept in sync by
+    # models.markup.signals any time the viewport or items change, independent
+    # of whether the map is ever actually shared. Deliberately separate from
+    # `pin` (a single explicit, user-set link): a map can geometrically point
+    # at several pins at once, and this set is a passive detection record
+    # consumed by search and pin-share tracking, never edited directly by a
+    # user, so it is unaffected by `pin` being cleared from the pin detail page.
+    inferred_pins: ManyToManyField[Pin, Pin] = ManyToManyField(
+        "dashboard.Pin",
+        blank=True,
+        related_name="inferred_maps",
+    )
 
     objects = MarkupMapManager()
 
     if TYPE_CHECKING:
         profile_id: int
+        cloned_from_id: int | None
+        shared_by_id: int | None
+        pin_id: int | None
         items: QuerySet[PinMarkup]
         safety_checkins: QuerySet[SafetyCheckin]
         attached_safety_checkins: QuerySet[SafetyCheckin]
         comments: QuerySet[Comment]
         trip_comments: QuerySet[TripComment]
         visits: QuerySet[PinVisit]
+        direct_messages: QuerySet[DirectMessage]
+        clones: QuerySet[MarkupMap]
 
     @property
     def attachment(self) -> tuple[str, Any] | None:
@@ -145,6 +205,30 @@ class MarkupMap(abstract.FrontendDashboardModel):
             references this map.
         """
         return self.attachment is not None
+
+    @property
+    def attachments(self) -> list[tuple[str, Any]]:
+        """Return every host object currently attached to this map.
+
+        Unlike :attr:`attachment` (which returns only the first match, for
+        the single "primary" link shown on a map's card), this enumerates
+        every safety check-in, comment, trip comment, visit, and direct
+        message that currently references this map - used to tell the owner
+        exactly where a delete will remove it from before they confirm.
+
+        Returns:
+            List of (kind, instance) tuples, kind one of ``safety_checkin``
+            / ``comment`` / ``trip_comment`` / ``visit`` / ``direct_message``.
+        """
+        results: list[tuple[str, Any]] = [
+            *(("safety_checkin", checkin) for checkin in self.safety_checkins.all()),
+            *(("safety_checkin", checkin) for checkin in self.attached_safety_checkins.all()),
+            *(("comment", comment) for comment in self.comments.select_related("pin", "wiki__location").all()),
+            *(("trip_comment", trip_comment) for trip_comment in self.trip_comments.select_related("trip").all()),
+            *(("visit", visit) for visit in self.visits.select_related("pin").all()),
+            *(("direct_message", message) for message in self.direct_messages.select_related("sender__user", "recipient__user").all()),
+        ]
+        return results
 
     def to_snapshot(self) -> dict:
         """Serialize this map (viewport + items) into the client snapshot format.
@@ -208,6 +292,8 @@ class MarkupMap(abstract.FrontendDashboardModel):
         indexes = [
             Index(fields=["uuid"], name="idxdb_mm_uuid"),
             Index(fields=["profile"], name="idxdb_mm_profile"),
+            Index(fields=["profile", "cloned_from"], name="idxdb_mm_profile_clonedfrom"),
+            Index(fields=["pin"], name="idxdb_mm_pin"),
         ]
 
 
@@ -370,6 +456,8 @@ class PinMarkup(abstract.FrontendDashboardModel):
                 # Drop the GeoJSON closing point - the client re-closes polygons.
                 points = ring[:-1] if len(ring) > 1 and ring[0] == ring[-1] else ring
                 shape["latlngs"] = [[c[1], c[0]] for c in points]
+            elif self.markup_type == MarkupType.PIN:
+                shape["latlngs"] = [[coordinates[1], coordinates[0]]]
             else:
                 return None
         except (TypeError, IndexError, ValueError):
@@ -426,6 +514,9 @@ class PinMarkup(abstract.FrontendDashboardModel):
             ring = [[ll[1], ll[0]] for ll in latlngs]
             ring.append(ring[0])
             geometry = {"type": "Polygon", "coordinates": [ring]}
+        elif shape_type == "pin" and latlngs:
+            markup_type = MarkupType.PIN
+            geometry = {"type": "Point", "coordinates": [latlngs[0][1], latlngs[0][0]]}
 
         if markup_type is None or geometry is None:
             return None

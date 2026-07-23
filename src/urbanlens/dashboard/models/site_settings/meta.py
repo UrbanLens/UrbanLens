@@ -18,6 +18,10 @@ class SearchProviderChoice(TextChoices):
 
     BRAVE = "brave", "Brave Search"
     GOOGLE = "google", "Google Custom Search"
+    SEARXNG = "searxng", "SearXNG (self-hosted, free)"
+    DUCKDUCKGO = "duckduckgo", "DuckDuckGo Instant Answer (free)"
+    MOJEEK = "mojeek", "Mojeek Search"
+    MARGINALIA = "marginalia", "Marginalia Search"
 
 
 class EnvironmentOverrideChoice(TextChoices):

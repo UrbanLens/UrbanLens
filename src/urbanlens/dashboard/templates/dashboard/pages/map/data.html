@@ -25,6 +25,9 @@
             longitude: "{{ pin.longitude }}",
             icon: "{{ pin.icon|default_if_none:''|escapejs }}",
             color: "{{ pin.color|default_if_none:''|escapejs }}",
+            own_icon: "{{ pin.own_icon|default_if_none:''|escapejs }}",
+            own_custom_icon_url: "{{ pin.own_custom_icon_url|default_if_none:''|escapejs }}",
+            own_color: "{{ pin.own_color|default_if_none:''|escapejs }}",
             uuid: "{{ pin.uuid }}",
             slug: "{{ pin.slug }}",
             name: "{{ pin.name|default_if_none:''|escapejs }}",
@@ -44,6 +47,12 @@
     })();
     {% endfor %}
     if (batch.length) clusterGroup.addLayers(batch);
+    if (window._fitToFilteredPinsOnce) {
+        window._fitToFilteredPinsOnce = false;
+        if (batch.length) {
+            try { map.fitBounds(L.featureGroup(batch).getBounds().pad(0.15)); } catch (e) { /* single pin or no valid bounds */ }
+        }
+    }
     if (window.updatePinCounter) window.updatePinCounter();
 }
 </script>

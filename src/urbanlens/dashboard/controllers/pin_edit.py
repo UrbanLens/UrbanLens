@@ -6,19 +6,18 @@ import json
 import logging
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db import DatabaseError
-from django.http import Http404, HttpResponse
+from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
+from django.template.loader import render_to_string
 from django.urls import reverse
 from django.views import View
 
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
-from urbanlens.dashboard.models.badges.model import Badge
+from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.model import Pin, PinType
 from urbanlens.dashboard.models.pin.note import PinNote
 from urbanlens.dashboard.models.reviews.model import Review
 from urbanlens.dashboard.services.text_limits import MAX_PIN_DESCRIPTION_LENGTH, text_length_error
-from urbanlens.dashboard.services.undo.service import stash_for_undo
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +84,7 @@ def _stat_item_context(pin: Pin, field: str) -> dict:
 
 
 def _overview_context(pin: Pin) -> dict:
-    from urbanlens.dashboard.models.badges.model import COLOR_CHOICES
+    from urbanlens.dashboard.models.labels.model import COLOR_CHOICES
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import PinType
 
@@ -109,15 +108,18 @@ def _overview_context(pin: Pin) -> dict:
     lat, lng = pin.effective_latitude, pin.effective_longitude
     overlapping_location_count = Location.objects.get_all_for_point(float(lat), float(lng)).count() if lat is not None and lng is not None else 0
 
+    from urbanlens.dashboard.services.ai.link_extraction import ai_extract_button_context
+
     return {
         "pin": pin,
         "client_version": _pin_version(pin),
         "pin_type_choices": PinType.choices,
-        "all_categories": Badge.objects.categories().ordered(),
+        "all_categories": Label.objects.categories().ordered(),
         "detail_pin_icon_choices": detail_pin_icon_choices,
         "color_choices": COLOR_CHOICES,
         "security_level_choices": SecurityLevel.choices,
         "overlapping_location_count": overlapping_location_count,
+        **ai_extract_button_context(pin.profile.user, pin.profile, pin),
         "pin_security_values": [
             ("fences", "Fences", pin.fences),
             ("alarms", "Alarms", pin.alarms),
@@ -131,55 +133,33 @@ def _overview_context(pin: Pin) -> dict:
     }
 
 
-def _ensure_location_address(location) -> None:
-    """Populate address fields on a Location that has coordinates but no street data.
+def _pin_hero_oob(request, pin: Pin, *, overlapping_location_count: int) -> str:
+    """Render the pin detail page hero as an out-of-band HTMX swap.
 
-    Calls the Google Geocoding API (with GeocodedLocation as an intermediate cache),
-    then writes the parsed components back to the Location row so the next request
-    reads directly from the DB with no API call.
+    The hero (with its Community Wiki box) lives in base.html's
+    ``{% block hero %}`` (see ``pages/location/index.html``), outside
+    ``#pin-overview`` - so ``PinOverviewView``'s slug backfill (see below)
+    would otherwise leave an already-loaded page's hero permanently stuck
+    showing "no wiki" until a full reload, even though the location now has
+    a slug and could show the create-wiki button.
     """
-    if not location or location.route:
-        return
-    lat = float(location.latitude) if location.latitude is not None else None
-    lng = float(location.longitude) if location.longitude is not None else None
-    if lat is None or lng is None:
-        return
-
-    try:
-        from urbanlens.dashboard.services.apis.locations.google.geocoding import GoogleGeocodingGateway, parse_address_components
-        from urbanlens.UrbanLens.settings.app import settings as app_settings
-
-        if not app_settings.google_unrestricted_api_key:
-            return
-
-        data = GoogleGeocodingGateway().geocode_coordinates(lat, lng)
-        if not data:
-            return
-        results = data.get("results", [])
-        if not results:
-            return
-
-        type_map = parse_address_components(results[0].get("address_components", []))
-
-        update_fields: list[str] = []
-
-        def _maybe_set(field: str, value: str | None) -> None:
-            if value and not getattr(location, field):
-                setattr(location, field, value)
-                update_fields.append(field)
-
-        _maybe_set("street_number", type_map.get("street_number"))
-        _maybe_set("route", type_map.get("route"))
-        _maybe_set("locality", type_map.get("locality"))
-        _maybe_set("administrative_area_level_1", type_map.get("administrative_area_level_1"))
-        _maybe_set("administrative_area_level_2", type_map.get("administrative_area_level_2"))
-        _maybe_set("zipcode", type_map.get("postal_code"))
-        _maybe_set("country", type_map.get("country"))
-
-        if update_fields:
-            location.save(update_fields=update_fields)
-    except (ImportError, OSError, ValueError, DatabaseError):
-        logger.exception("Reverse geocoding failed for location pk=%s", getattr(location, "pk", None))
+    cover_image = pin.cover_photo.image if pin.cover_photo and pin.cover_photo.image else None
+    return render_to_string(
+        request=request,
+        template_name="dashboard/partials/ui/_page_hero.html",
+        context={
+            "pin": pin,
+            "id": "pin-detail-hero",
+            "oob": True,
+            "body_template": "dashboard/partials/pins/_pin_detail_hero_body.html",
+            "back_url": reverse("map.view"),
+            "back_label": "Map",
+            "modifier": "top",
+            "hero_image_url": cover_image.url if cover_image else None,
+            "hero_cover_key": "pin",
+            "overlapping_location_count": overlapping_location_count,
+        },
+    )
 
 
 class PinOverviewView(LoginRequiredMixin, View):
@@ -193,9 +173,27 @@ class PinOverviewView(LoginRequiredMixin, View):
         if isinstance(result, HttpResponse):
             return result
         pin = result
-        if pin.location and not pin.location.route and pin.profile.external_apis_enabled:
-            _ensure_location_address(pin.location)
-        return render(request, "dashboard/partials/pins/pin_overview_partial.html", _overview_context(pin))
+        pin.backfill_wiki_link_slugs()
+        # Address and place-name backfills both happen in the background:
+        # neither may block this request on a live Google call. The rendered
+        # partial reads whatever the Location row / place-name cache already
+        # hold, and the next render of this Location (by any pin/user sharing
+        # its coordinates) finds the backfilled data instead of it staying
+        # permanently empty. (The address half used to be a synchronous
+        # geocoding call right here - the last inline external call on this
+        # page's render path.)
+        if pin.location and pin.profile.external_apis_enabled:
+            from urbanlens.dashboard.services.celery import safely_enqueue_task
+            from urbanlens.dashboard.tasks import backfill_location_address, resolve_location_place_name
+
+            if not pin.location.route:
+                safely_enqueue_task(backfill_location_address, pin.location_id)
+            if not pin.location.cached_place_name:
+                safely_enqueue_task(resolve_location_place_name, pin.location_id)
+        overview_context = _overview_context(pin)
+        overview_html = render_to_string(request=request, template_name="dashboard/partials/pins/pin_overview_partial.html", context=overview_context)
+        hero_html = _pin_hero_oob(request, pin, overlapping_location_count=overview_context["overlapping_location_count"])
+        return HttpResponse(overview_html + hero_html)
 
 
 class PinEditView(LoginRequiredMixin, View):
@@ -248,13 +246,19 @@ class PinEditView(LoginRequiredMixin, View):
         except (TypeError, ValueError):
             priority = pin.priority
 
+        # clear_rating distinguishes "explicitly submitted 0" (delete the
+        # Review row) from "field untouched, pin.rating just defaults to 0
+        # because no Review exists yet" (nothing to do) - collapsing both
+        # into rating=0 would either silently no-op a real clear request, or
+        # issue a pointless delete query on every unrelated quick-edit.
+        clear_rating = False
         try:
             if rating_raw is not None and str(rating_raw).strip():
                 rating = int(rating_raw)
                 if not (0 <= rating <= 5):
                     rating = pin.rating
                 elif rating == 0:
-                    rating = None
+                    clear_rating = True
             else:
                 rating = pin.rating
         except (TypeError, ValueError):
@@ -313,6 +317,7 @@ class PinEditView(LoginRequiredMixin, View):
             except ValueError:
                 return None
 
+        date_built = _parse_date(body.get("date_built", "")) if "date_built" in body else pin.date_built
         date_abandoned = _parse_date(body.get("date_abandoned", "")) if "date_abandoned" in body else pin.date_abandoned
         date_last_active = _parse_date(body.get("date_last_active", "")) if "date_last_active" in body else pin.date_last_active
 
@@ -334,6 +339,7 @@ class PinEditView(LoginRequiredMixin, View):
             pin.last_visited = last_visited
         for sf, val in security_values.items():
             setattr(pin, sf, val)
+        pin.date_built = date_built
         pin.date_abandoned = date_abandoned
         pin.date_last_active = date_last_active
         pin.save(
@@ -354,6 +360,7 @@ class PinEditView(LoginRequiredMixin, View):
                 "vps",
                 "plywood",
                 "locked",
+                "date_built",
                 "date_abandoned",
                 "date_last_active",
                 "updated",
@@ -367,31 +374,31 @@ class PinEditView(LoginRequiredMixin, View):
                 pin=pin,
                 defaults={"rating": rating},
             )
-        elif rating == 0:
-            Review.objects.filter(profile=request.user.profile, pin=pin).delete()
+        elif clear_rating:
+            Review.objects.for_pair(request.user.profile, pin).delete()
 
         # Category update: only runs when the field was explicitly submitted (partial requests preserve existing)
         if "categories" in body:
             category_raw = (body.get("categories") or "").strip()
             names = [n.strip().lower() for n in category_raw.split(",") if n.strip()]
             seen_names: set[str] = set()
-            pin.badges.remove(*pin.badges.filter(kind="category"))
+            pin.labels.remove(*pin.labels.filter(kind="category"))
             for name in names:
                 if name in seen_names:
                     continue
                 seen_names.add(name)
-                cat = Badge.objects.filter(name__iexact=name, kind="category", profile=pin.profile).first()
+                cat = Label.objects.filter(name__iexact=name, kind="category", profile=pin.profile).first()
                 if cat is None:
-                    cat, _ = Badge.objects.get_or_create(
+                    cat, _ = Label.objects.get_or_create(
                         name=name,
                         kind="category",
                         profile=pin.profile,
                     )
-                pin.badges.add(cat)
+                pin.labels.add(cat)
 
         # Reload from DB so all properties reflect saved state
         pin.refresh_from_db()
-        pin.badges.filter(kind="category")  # prime M2M cache
+        pin.labels.filter(kind="category")  # prime M2M cache
 
         # Quick-edit widgets (star ratings) submit exactly one field at a time. When the
         # client's last-known version still matches what was in the DB before this save,
@@ -464,27 +471,79 @@ class PinNoteDeleteView(LoginRequiredMixin, View):
         return HttpResponse("", status=200)
 
 
-class PinDeleteView(LoginRequiredMixin, View):
-    """Delete a pin owned by the current user.
+class PinDetachChildView(LoginRequiredMixin, View):
+    """Promote a child (sub) pin back to a top-level pin of its own.
 
-    DELETE /map/pin/<pin_slug>/delete/
+    POST /map/pin/<pin_slug>/detach-parent/
 
-    Returns a 200 with an HX-Redirect header so HTMX navigates to the map after deletion.
+    Returns 200 with an ``HX-Refresh`` header so the page re-renders as a
+    root pin, or 400 with a plain-text reason when detaching is impossible
+    (two top-level pins can't share one Location per profile).
     """
 
-    def delete(self, request, pin_slug):
+    def post(self, request, pin_slug):
         result = _pin_for_user(pin_slug, request)
         if isinstance(result, HttpResponse):
             return result
         pin = result
-        logger.info("User %s deleted pin %s", request.user.id, pin.id)
-        subtree = list(Pin.objects.filter(pk=pin.pk).with_descendants())
-        stash_for_undo("pin", subtree, request.user.profile)
-        for descendant in subtree:
-            descendant.delete()
+        if pin.parent_pin_id is None:
+            return HttpResponse("This pin is already a top-level pin.", status=400)
+        conflict = Pin.objects.filter(profile=pin.profile, location_id=pin.location_id, parent_pin__isnull=True).exclude(pk=pin.pk).exists()
+        if conflict:
+            return HttpResponse("You already have a top-level pin at this exact location. Move this sub pin slightly before detaching it.", status=400)
+        logger.info("User %s detached child pin %s from parent %s", request.user.id, pin.id, pin.parent_pin_id)
+        pin.parent_pin = None
+        pin.save(update_fields=["parent_pin"])
         response = HttpResponse("", status=200)
-        response["HX-Redirect"] = reverse("map.view")
+        response["HX-Refresh"] = "true"
         return response
+
+
+class PinPromoteChildrenView(LoginRequiredMixin, View):
+    """Promote a pin's direct children up one level, from the map popup.
+
+    POST /map/pin/<pin_slug>/promote-children/
+
+    Children move to this pin's own parent (or become top-level pins if this
+    pin has none); the pin itself is untouched. Returns JSON so the map popup
+    can update in place without a full page reload.
+    """
+
+    def post(self, request, pin_slug):
+        result = _pin_for_user(pin_slug, request)
+        if isinstance(result, HttpResponse):
+            return result
+        pin = result
+        child_count = Pin.objects.filter(parent_pin=pin).count()
+        if not child_count:
+            return JsonResponse({"error": "This pin has no child pins to promote."}, status=400)
+        promoted = pin.promote_children()
+        logger.info("User %s promoted %s child pin(s) of pin %s", request.user.id, promoted, pin.id)
+        return JsonResponse({"ok": True, "promoted": promoted})
+
+
+class PinSwapParentView(LoginRequiredMixin, View):
+    """Swap a child pin with its parent - the child becomes the parent, and vice versa.
+
+    POST /map/pin/<pin_slug>/swap-parent/
+
+    ``pin_slug`` is the child pin being promoted. Returns JSON with both
+    pins' slugs so the caller can redirect/re-render appropriately (the
+    detail page a user is currently viewing may no longer be the "top-level"
+    one after this).
+    """
+
+    def post(self, request, pin_slug):
+        result = _pin_for_user(pin_slug, request)
+        if isinstance(result, HttpResponse):
+            return result
+        pin = result
+        try:
+            old_parent = pin.swap_with_parent()
+        except ValueError as exc:
+            return JsonResponse({"error": str(exc)}, status=400)
+        logger.info("User %s swapped pin %s with its parent %s", request.user.id, pin.id, old_parent.id)
+        return JsonResponse({"ok": True, "new_parent_slug": pin.slug, "new_child_slug": old_parent.slug})
 
 
 class PinRelinkView(LoginRequiredMixin, View):
@@ -522,27 +581,53 @@ class PinRelinkView(LoginRequiredMixin, View):
         )
 
     def post(self, request, pin_slug, location_slug=None):
-        """Relink or detach the pin.
+        """Relink or detach the pin, or merge it into an existing pin at the target location.
 
         Args:
             request: The HTTP request.
-            pin_slug: UUID of the pin.
-            location_slug: Optional UUID of an existing Location to link to.
+            pin_slug: Slug (or uuid) of the pin.
+            location_slug: Optional slug (or uuid) of an existing Location to link to.
                 If omitted, detaches the pin (creates a fresh bare Location).
 
         Returns:
-            Re-rendered pin overview partial.
+            For the raw-fetch caller (map.html's location-conflict dialog,
+            identified by ``X-Requested-With``): a JSON verdict. Otherwise
+            (the HTMX-driven pin-location picker): the re-rendered pin
+            overview partial.
         """
         result = _pin_for_user(pin_slug, request)
         if isinstance(result, HttpResponse):
             return result
         pin = result
+        is_xhr = request.headers.get("X-Requested-With") == "XMLHttpRequest"
 
         from urbanlens.dashboard.models.location.model import Location
         from urbanlens.dashboard.models.wiki.model import Wiki
 
         if location_slug:
-            location = get_object_or_404(Location, slug=location_slug)
+            location = get_object_or_404(Location.objects.slug_or_uuid(location_slug))
+            # A profile can only ever have one root pin per location
+            # (db_pin_unique_location_per_profile) - if one already exists at the
+            # target, reassigning `pin.location` would collide with it. Merge
+            # into the existing pin instead (same reparent-as-child mechanism as
+            # PinBulkMergeView) rather than failing with an IntegrityError.
+            existing = Pin.objects.filter(profile=pin.profile, location=location, parent_pin__isnull=True).exclude(pk=pin.pk).first()
+            if existing is not None:
+                if not pin.would_create_cycle(existing):
+                    pin.parent_pin = existing
+                    pin.save(update_fields=["parent_pin"])
+                    pin.refresh_from_db()
+                if is_xhr:
+                    from django.urls import reverse
+
+                    return JsonResponse(
+                        {
+                            "merged": True,
+                            "existing_pin_url": reverse("pin.details", kwargs={"pin_slug": existing.slug or str(existing.uuid)}),
+                            "existing_pin_name": existing.effective_name,
+                        },
+                    )
+                return render(request, "dashboard/partials/pins/pin_overview_partial.html", _overview_context(pin))
         else:
             # Detach: create a new bare Location at this pin's coordinates.
             # Use the existing location's canonical name if available; otherwise
@@ -568,4 +653,6 @@ class PinRelinkView(LoginRequiredMixin, View):
         pin.save(update_fields=["location", "wiki"])
         pin.refresh_from_db()
 
+        if is_xhr:
+            return JsonResponse({"merged": False})
         return render(request, "dashboard/partials/pins/pin_overview_partial.html", _overview_context(pin))

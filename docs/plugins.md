@@ -42,6 +42,7 @@ class NpsPlugin(UrbanLensPlugin):
 | `get_satellite_providers()` | `SatelliteViewProvider` gateways for the satellite carousel |
 | `get_street_view_providers()` | `StreetViewProvider` gateways for the street-view carousel |
 | `get_name_providers()` | `NameProvider` sources of place-name candidates for a location (see below) |
+| `get_enrichment_sources()` | `EnrichmentSource` kinds of data the hourly background-enrichment task backfills for every pinned/wiki'd location (see below) |
 | `register(hooks)` | Arbitrary action/filter callbacks on the shared hook bus |
 
 Contributions across plugins are ordered by `(plugin.order, plugin.name)` — the imagery
@@ -67,10 +68,28 @@ def get_name_providers(self):
 
 Candidates from all plugins are cleaned, quality-gated (meaningless names and
 address-derived fragments like street or city names are rejected), and persisted as
-official aliases attributed to the provider's `source` slug. A `NameResolver` then picks
-the official name: a name that two or more sources agree on wins; otherwise the
-site-admin's source priority order (Settings → *Name source priority*) decides, with
-unlisted sources falling back to plugin order.
+official aliases attributed to the provider's `source` slug. Sources listed in
+`naming._FALLBACK_ONLY_SOURCES` (currently just Google Places, whose results are often
+generic/noisy) are dropped outright whenever any other source has a surviving
+candidate, and considered only when nothing else does. A `NameResolver` then picks the
+official name from what's left: a name that two or more sources agree on wins;
+otherwise the site-admin's source priority order (Site Admin → *Name source priority*)
+decides, with unlisted sources falling back to plugin order. This ordering is an
+admin-only decision - individual users cannot override it.
+
+### Enrichment sources
+
+An `EnrichmentSource` (`urbanlens.dashboard.services.enrichment`) is one kind of
+proactively backfillable data. The hourly `run_scheduled_enrichment` task computes how
+much of each declared `service_keys` rate limit is safely spendable (keeping the
+admin-configured buffer in reserve and pacing multi-day limits evenly), picks the
+highest-impact locations still missing the data, and calls `enrich()` for each with a
+stagger pause between items. Completion is tracked per source — usually via the
+existence of the source's `LocationCache` row, which `LocationCacheEnrichmentSource`
+handles declaratively (subclasses implement only `fetch(location)`). Sources whose
+`refreshes_names` is True get official names/aliases re-resolved after each cycle.
+An "attempted but found nothing" result must still persist a marker, so hopeless
+locations are never retried every cycle.
 
 ### Rules
 

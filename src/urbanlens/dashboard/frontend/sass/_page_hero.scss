@@ -1,0 +1,610 @@
+@use 'variables' as *;
+
+// Shared gradient hero banner for page tops (safety pages, Organize, Thanks &
+// Credits, ...). See partials/ui/_page_hero.html.
+//
+// The default variant assumes it sits at the top of a `.page-content`-padded
+// container and bleeds out to the edges to match. The --wide modifier (Thanks
+// & Credits) sits inside an already-flush container, so it skips the bleed
+// and widens the inner column instead. The --top modifier is for heroes
+// rendered in base.html's `{% block hero %}`, above and outside `.container`
+// entirely (see .ul-page-subnav below) - there's no padded parent to cancel
+// out, so it only bleeds horizontally and never pulls upward into the header.
+//
+// The default/--top box uses a fixed `height` (not `min-height`) with the
+// inner content vertically centered, so every page built from short,
+// developer-authored copy (a title, maybe a subtitle) renders at exactly the
+// same height - switching between pages (or tabs on a shared subnav, e.g.
+// Profile | Edit) never shifts where the subnav/content below it lands.
+// --wide and --profile carry their own sizing: --wide's copy is long-form and
+// one-off (Thanks & Credits only), and --profile's is user-generated (bio,
+// name) so it's bounded with a line-clamp instead - see _profile.scss.
+.ul-page-hero {
+    position: relative; // positioning context for a page's own corner-docked overlays (e.g. wiki's actions/notice)
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 2.5rem 1.25rem 2rem;
+    background: linear-gradient(135deg, rgba(31, 111, 235, 0.20), rgba(23, 185, 120, 0.15));
+    margin: -1.5rem -1.25rem 1.75rem;
+    height: 13.2rem;
+
+    @include up($breakpoint-sm) {
+        padding: 3.5rem 1.5rem 2.75rem;
+        margin: -2rem -2rem 2rem;
+        height: 14.5rem;
+    }
+
+
+    &--cover {
+        background-size: cover;
+        background-position: center;
+        overflow: hidden;
+        touch-action: pan-y;
+    }
+
+    &--cover::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: rgba(0, 0, 0, .18);
+        pointer-events: none;
+    }
+
+    &--cover &__inner {
+        position: relative;
+        z-index: 1;
+        padding: 1rem 1.25rem;
+        border-radius: 16px;
+        color: #fff;
+        // Was previously an inline style set once at initial page render
+        // (hero_image_url truthy) - it never got re-applied when the cover
+        // photo is set/cleared live via the lightbox's "Set as cover
+        // photo"/"Remove cover" actions (_applyCoverHeroUpdate only toggles
+        // the --cover class), so it either stuck around after removal or
+        // never appeared on a freshly-set cover. Tying it to this class
+        // keeps it in sync automatically.
+        background: rgba(0, 0, 0, .3);
+        backdrop-filter: blur(5px);
+        -webkit-backdrop-filter: blur(5px);
+    }
+
+    &--cover &__title,
+    &--cover &__subtitle,
+    &--cover &__back,
+    &--cover &__eyebrow {
+        color: #fff;
+        text-shadow: 0 1px 12px rgba(0, 0, 0, .45);
+    }
+
+    &__adjust {
+        position: absolute;
+        top: .7rem;
+        right: .7rem;
+        display: inline-flex;
+        align-items: center;
+        gap: .25rem;
+        border: 1px solid rgba(255, 255, 255, .35);
+        border-radius: 999px;
+        background: rgba(0, 0, 0, .35);
+        color: #fff;
+        padding: .25rem .55rem;
+        cursor: pointer;
+    }
+
+    &__cover-controls {
+        position: absolute;
+        right: .7rem;
+        bottom: .7rem;
+        display: flex;
+        align-items: center;
+        gap: .5rem;
+        padding: .35rem .55rem;
+        border-radius: 999px;
+        background: rgba(0, 0, 0, .45);
+        color: #fff;
+    }
+
+    &.is-adjusting-cover {
+        cursor: grab;
+    }
+
+    &.is-adjusting-cover:active {
+        cursor: grabbing;
+    }
+
+    &--wide {
+        margin: 0;
+        height: auto;
+        min-height: 13.2rem;
+    }
+
+    &--top {
+        margin-top: 0;
+        margin-left: 0;
+        margin-right: 0;
+    }
+
+    &--profile {
+        margin-top: 0;
+        margin-left: 0;
+        margin-right: 0;
+        height: 20rem;
+
+        @include up($breakpoint-xs) {
+            height: 8.5rem;
+        }
+
+        @include up($breakpoint-sm) {
+            height: 9rem;
+        }
+    }
+
+    // A subnav directly follows this hero (see .ul-page-subnav below) - drop
+    // the hero's own bottom margin so the two sit flush, no gap between them.
+    &:has(+ .ul-page-subnav) {
+        margin-bottom: 0;
+    }
+
+    &__inner {
+        max-width: 64rem;
+        margin: 0 auto;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: .4rem;
+    }
+
+    &--wide &__inner {
+        max-width: 76rem;
+    }
+
+    // Profile | Edit hero body: avatar beside identity, matching the old
+    // standalone .profile-hero card's layout (see _profile.scss). Wider than
+    // the other heroes' cap (100rem here vs 64rem generally) - on a wide
+    // screen the identity block (name/username, left) and the friendship/
+    // edit-profile actions (right) used to read as bunched toward the
+    // center, since .profile-name-row's space-between only spreads them
+    // across whatever width THIS container actually gets, not the full
+    // hero background. 100rem gives it more room to use on large screens
+    // without going fully edge-to-edge.
+    &--profile &__inner {
+        max-width: 100rem;
+        width: 100%;
+        flex-direction: row;
+        align-items: center;
+        text-align: left;
+        gap: 1.75rem;
+
+        @include down($breakpoint-xs) {
+            flex-direction: column;
+            text-align: center;
+        }
+    }
+
+    // Docked to the hero's own left edge (mirrors &__adjust's top-right dock)
+    // rather than stacked above the title - it used to sit inline as the
+    // __inner flex column's first item, pushing the centered title/subtitle
+    // down by its own height on every hero that sets back_url.
+    &__back {
+        position: absolute;
+        left: 1.25rem;
+        top: 50%;
+        transform: translateY(-50%);
+        z-index: 1;
+        display: inline-flex;
+        align-items: center;
+        gap: .3rem;
+        font-size: .82rem;
+        font-weight: 500;
+        color: var(--ul-grey-6);
+        text-decoration: none;
+        transition: color .15s;
+
+        @include up($breakpoint-sm) {
+            left: 1.5rem;
+        }
+
+        .material-symbols-outlined {
+            font-size: 1rem;
+        }
+
+        &:hover {
+            color: $color-blue-500;
+        }
+    }
+
+    &__eyebrow {
+        font-size: .7rem;
+        font-weight: 700;
+        letter-spacing: .16em;
+        text-transform: uppercase;
+        color: $color-indigo-300;
+        margin: 0 0 .5rem;
+    }
+
+    &__title {
+        font-size: 1.9rem;
+        font-weight: 800;
+        margin: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: .5rem;
+        color: var(--ul-grey-9);
+
+        @include up($breakpoint-sm) {
+            font-size: 2.4rem;
+        }
+
+        .material-symbols-outlined {
+            font-size: 1.5em;
+            color: $color-purple-300;
+        }
+
+        em {
+            font-style: normal;
+            color: var(--ul-text-secondary);
+        }
+    }
+
+    &--wide &__title {
+        font-size: clamp(2rem, 4vw, 3rem);
+        letter-spacing: -.03em;
+        line-height: 1.15;
+    }
+
+    &__subtitle {
+        margin: .1rem auto 0;
+        color: var(--ul-grey-7);
+        font-size: .92rem;
+        max-width: 34rem;
+    }
+
+    &--wide &__subtitle {
+        font-size: 1.05rem;
+        color: var(--ul-text-secondary);
+        line-height: 1.7;
+        max-width: none;
+    }
+}
+
+// Shared "flush below the hero" sub-navigation band, rendered via base.html's
+// `{% block subnav %}` (e.g. the Memories Timeline|Photos|Maps|... tabs and
+// the Settings Privacy|Connections|... tabs). It lives outside `.container`
+// so it can bleed edge-to-edge, matching `.ul-page-hero`'s own full-bleed
+// look - see `.ul-page-hero:has(+ .ul-page-subnav)` above, which removes the
+// hero's bottom margin so the two sit flush with no gap between them.
+.ul-page-subnav {
+    width: 100%;
+    background-color: var(--ul-grey-0b);
+    border-bottom: 1px solid var(--ul-grey-1a);
+
+    &__inner {
+        width: 100%;
+    }
+}
+
+// Shared tab strip for a `.ul-page-subnav` (Memories, Settings, Organize,
+// ...) - one canonical look for every subnav so pages don't grow their own
+// variant. _reset.scss paints every bare <nav> as a 56px salmon bar and
+// forces `nav i` icons to display:block/56px - this resets all of that back
+// to a plain underline tab strip, and works equally as <a> links (Memories,
+// which navigates between pages) or <button role="tab"> elements (Settings,
+// Organize, which switch panels client-side with no page load).
+//
+// The active modifier accepts both `.is-active` (Memories, server-rendered
+// per page load) and `.active` (Settings/Organize, JS-toggled on click) so
+// each page's existing state-toggling logic doesn't need to change.
+.ul-subnav-tabs {
+    display: flex;
+    gap: .25rem;
+    width: 100%;
+    height: auto;
+    line-height: normal;
+    color: inherit;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+
+    &::-webkit-scrollbar {
+        display: none;
+    }
+}
+
+.ul-subnav-tab {
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+    gap: .4rem;
+    padding: .6rem .9rem;
+    font-size: .9rem;
+    font-weight: 600;
+    color: var(--ul-grey-7);
+    text-decoration: none;
+    white-space: nowrap;
+    border: none;
+    background: none;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: color .15s ease, border-color .15s ease;
+
+    // Undo _reset.scss's `nav i` block-icon rule so the glyph sits inline.
+    .material-symbols-outlined {
+        display: inline-flex;
+        align-items: center;
+        height: auto;
+        line-height: 1;
+        font-size: 1.2rem;
+    }
+
+    &:focus,
+    &:active,
+    &:hover {
+        color: var(--ul-grey-8);
+        border-bottom-color: var(--ul-grey-4);
+    }
+
+    &.is-active,
+    &.active {
+        color: var(--ul-grey-9);
+        border-bottom-color: $color-deep-purple-500;
+        background-color: var(--ul-grey-0b);
+
+        .material-symbols-outlined { color: $color-deep-purple-500; }
+    }
+}
+
+// Dark Mode
+[data-theme="dark"] {
+    .ul-page-subnav {
+        background-color: var(--ul-grey-0);
+    }
+}
+// Pin detail layout fixes kept here to avoid touching the legacy CRLF pin-detail stylesheet.
+.pin-link-item {
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+}
+
+// .cf-panel-area is `display: contents` (see _custom_fields.scss) so its
+// children participate directly as .pin-lists-row grid items - but that
+// also means the `.pin-lists-row > * { align-self: stretch }` rule can't
+// reach them (they're grandchildren, not direct children), so they fall
+// back to the grid's `align-items: start` and don't match sibling card
+// heights. Stretch them explicitly instead of overriding display: flex,
+// which would collapse section-display custom fields into one flex row
+// inside a single grid cell instead of separate cards across the row.
+.pin-lists-row .cf-panel-area > .custom-fields-panel,
+.pin-lists-row .cf-panel-area > .cf-section-card {
+    align-self: stretch;
+}
+
+.pin-detail-hero-body {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: clamp(1rem, 3vw, 2rem);
+    width: min(100%, 76rem);
+}
+
+.pin-detail-hero-main {
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+// Click-to-rename hero title - same interaction/markup shape as the trip
+// hero's .trip-title-editable (_trips.scss), adapted for the pin.edit
+// endpoint. See location/index.html's inline script for the JS.
+.pin-name-editable {
+    display: inline-block;
+    cursor: pointer;
+    border-radius: 6px;
+    padding: .1rem .4rem;
+    transition: background .15s;
+
+    &:hover,
+    &:focus-visible {
+        background: var(--ul-grey-0a);
+        outline: none;
+    }
+}
+
+// Child/detail pin hero: the parent pin's name is the primary heading (it's
+// the recognizable "place"), styled as a link back to the parent's own detail
+// page; this pin's own editable name reads as a subtitle below it.
+.pin-detail-hero-parent-link {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    color: inherit;
+    text-decoration: none;
+    border-radius: 10px;
+    padding: .1rem .5rem;
+    transition: background .15s;
+
+    &:hover,
+    &:focus-visible {
+        background: var(--ul-grey-0a);
+        outline: none;
+        text-decoration: underline;
+    }
+}
+
+.pin-detail-hero-child-name {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: .3rem;
+}
+
+.pin-name-input {
+    font: inherit;
+    font-weight: inherit;
+    color: inherit;
+    background: var(--ul-control-bg);
+    border: 1px solid var(--ul-color-accent);
+    border-radius: 6px;
+    padding: .1rem .4rem;
+    outline: none;
+    min-width: 10rem;
+    text-align: center;
+}
+
+.pin-hero-wiki-box {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    flex: 0 1 24rem;
+    flex-direction: column;
+    max-width: 100%;
+    padding: .75rem .9rem;
+    border: 1px solid rgba(255, 255, 255, .32);
+    border-radius: 16px;
+    background: rgba(255, 255, 255, .18);
+    box-shadow: 0 14px 32px rgba(0, 0, 0, .18);
+    text-align: left;
+    backdrop-filter: blur(7px);
+    -webkit-backdrop-filter: blur(7px);
+    position: absolute;
+    top: 3rem;
+    right: 1rem;
+}
+
+.pin-hero-wiki-box > .material-symbols-outlined {
+    flex: 0 0 auto;
+    color: #fff;
+}
+
+.pin-hero-wiki-box-info {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.pin-hero-wiki-box-label {
+    color: rgba(255, 255, 255, .72);
+    font-size: .7rem;
+    font-weight: 700;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+}
+
+.pin-hero-wiki-box-link,
+.pin-hero-wiki-box--unlinked > span {
+    color: #fff;
+    font-size: .9rem;
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.pin-hero-wiki-box-link {
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+    min-width: 0;
+}
+
+.pin-hero-wiki-box-link:hover {
+    text-decoration: underline;
+}
+
+.pin-hero-wiki-box-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+}
+
+.pin-hero-wiki-box #pin-location-picker {
+    position: absolute;
+    top: calc(100% + .5rem);
+    right: 0;
+    z-index: 5;
+    width: min(28rem, 90vw);
+}
+
+// "Create a wiki" state - the whole box IS the button (not an icon+label
+// card with a separate nested button), same footprint as the populated
+// card above so nothing shifts position once a wiki exists.
+.pin-hero-wiki-box--create {
+    justify-content: center;
+    cursor: pointer;
+    border-style: dashed;
+    font: inherit;
+    font-weight: 700;
+    font-size: .85rem;
+    color: #fff;
+    transition: background-color .15s ease, border-color .15s ease, transform .1s ease;
+
+    .material-symbols-outlined {
+        color: #fff;
+    }
+
+    &:hover,
+    &:focus-visible {
+        background: rgba(255, 255, 255, .28);
+        border-color: rgba(255, 255, 255, .6);
+    }
+
+    &:active {
+        transform: scale(.98);
+    }
+
+    &:focus-visible {
+        outline: 2px solid var(--ul-color-accent-ring);
+        outline-offset: 2px;
+    }
+}
+
+// The glass-white treatment above assumes a photo backdrop (--cover) where
+// it needs to read over an arbitrary image. Without a cover photo the hero
+// is just the pastel gradient wash, and that same bright white glass reads
+// as a glaring patch against the rest of a dark-themed page - tint it dark
+// instead there, same as --cover's own overlay already does over photos.
+[data-theme="dark"] {
+    .ul-page-hero:not(.ul-page-hero--cover) .pin-hero-wiki-box {
+        background: rgba(0, 0, 0, .38);
+        border-color: rgba(255, 255, 255, .14);
+        box-shadow: 0 14px 32px rgba(0, 0, 0, .5);
+    }
+
+    .ul-page-hero:not(.ul-page-hero--cover) .pin-hero-wiki-box--create:hover,
+    .ul-page-hero:not(.ul-page-hero--cover) .pin-hero-wiki-box--create:focus-visible {
+        background: rgba(0, 0, 0, .55);
+        border-color: rgba(255, 255, 255, .3);
+    }
+}
+
+@include down($breakpoint-sm) {
+    .pin-detail-hero-body {
+        flex-direction: column;
+        justify-content: center;
+        text-align: center;
+    }
+
+    .pin-hero-wiki-box {
+        flex-basis: auto;
+        width: min(100%, 24rem);
+    }
+}
+
+#pin-detail-hero .ul-page-hero__inner {
+    width: min(100%, 82rem);
+    max-width: 82rem;
+}
+
+// The wiki box below the subtitle makes this hero's content taller than the
+// title+subtitle-only heroes the shared fixed height (.ul-page-hero above)
+// is sized for - grow instead of risking the wiki box overflowing/clipping.
+#pin-detail-hero.ul-page-hero {
+    height: auto;
+    min-height: 13.2rem;
+
+    @include up($breakpoint-sm) {
+        min-height: 14.5rem;
+    }
+}

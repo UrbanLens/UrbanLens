@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from urbanlens.dashboard.models.badges.serializer import BadgeSerializer
+from urbanlens.dashboard.models.labels.serializer import LabelSerializer
 from urbanlens.dashboard.models.wiki.model import Wiki
 
 
@@ -8,9 +8,9 @@ class WikiSerializer(serializers.ModelSerializer):
     official_name = serializers.ReadOnlyField()
     latitude = serializers.ReadOnlyField()
     longitude = serializers.ReadOnlyField()
-    categories = BadgeSerializer(many=True, read_only=True)
-    tags = BadgeSerializer(many=True, read_only=True)
-    statuses = BadgeSerializer(many=True, read_only=True)
+    categories = LabelSerializer(many=True, read_only=True)
+    tags = LabelSerializer(many=True, read_only=True)
+    statuses = LabelSerializer(many=True, read_only=True)
 
     class Meta:
         model = Wiki

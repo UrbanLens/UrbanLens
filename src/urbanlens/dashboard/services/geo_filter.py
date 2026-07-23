@@ -4,51 +4,19 @@ Provides ``is_usa_coordinates`` to determine whether a (lat, lng) pair falls
 within United States territory.  Used to guard USA-centric API services (NPS,
 LoopNet, Library of Congress, etc.) so calls are never wasted on non-US
 locations.
+
+The underlying boundary now lives in ``services.geo_boundary`` (``USA``), the
+generalized replacement for this module's old standalone bbox check - a
+plugin that needs an arbitrary geographic gate (a different country, a state,
+a hand-drawn polygon) should use ``GeoBoundary`` directly rather than adding a
+new bespoke helper here. This module's two functions are kept as thin
+convenience wrappers since several gateways already call them by name.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-
+from urbanlens.dashboard.services.geo_boundary import USA
 from urbanlens.dashboard.services.redact import redact_coordinate
-
-
-@dataclass(frozen=True, slots=True)
-class _BBox:
-    lat_min: float
-    lat_max: float
-    lng_min: float
-    lng_max: float
-
-    def contains(self, lat: float, lng: float) -> bool:
-        """Return True if (lat, lng) falls within this bounding box."""
-        return self.lat_min <= lat <= self.lat_max and self.lng_min <= lng <= self.lng_max
-
-
-# Approximate bounding boxes for US territories.
-# These are intentionally generous - false *negatives* (blocking a US location)
-# are worse than false *positives* (allowing a near-miss).
-_USA_BBOXES: tuple[_BBox, ...] = (
-    # Continental United States (conterminous)
-    _BBox(lat_min=24.396308, lat_max=49.384358, lng_min=-125.000000, lng_max=-66.934570),
-    # Alaska (main landmass + western islands)
-    _BBox(lat_min=54.800000, lat_max=71.538800, lng_min=-168.000000, lng_max=-130.000000),
-    # Aleutian Islands (cross the anti-meridian; split into two boxes)
-    _BBox(lat_min=51.200000, lat_max=54.800000, lng_min=-180.000000, lng_max=-130.000000),
-    _BBox(lat_min=51.200000, lat_max=54.800000, lng_min=171.000000, lng_max=180.000000),
-    # Hawaii
-    _BBox(lat_min=18.910361, lat_max=22.235097, lng_min=-160.300000, lng_max=-154.806000),
-    # Puerto Rico
-    _BBox(lat_min=17.831509, lat_max=18.516766, lng_min=-67.942848, lng_max=-65.221909),
-    # U.S. Virgin Islands
-    _BBox(lat_min=17.678268, lat_max=18.412655, lng_min=-65.154389, lng_max=-64.512674),
-    # Guam
-    _BBox(lat_min=13.182397, lat_max=13.706179, lng_min=144.573975, lng_max=144.954937),
-    # American Samoa
-    _BBox(lat_min=-14.731771, lat_max=-14.159447, lng_min=-170.846497, lng_max=-169.416504),
-    # Northern Mariana Islands
-    _BBox(lat_min=14.036565, lat_max=20.616555, lng_min=144.813338, lng_max=146.154418),
-)
 
 
 def is_usa_coordinates(lat: float | None, lng: float | None) -> bool:
@@ -64,15 +32,7 @@ def is_usa_coordinates(lat: float | None, lng: float | None) -> bool:
     Returns:
         ``True`` if within any US territory bounding box, ``False`` otherwise.
     """
-    if lat is None or lng is None:
-        return False
-    try:
-        lat_f = float(lat)
-        lng_f = float(lng)
-    except (TypeError, ValueError):
-        return False
-
-    return any(bbox.contains(lat_f, lng_f) for bbox in _USA_BBOXES)
+    return USA.contains(lat, lng)
 
 
 def require_usa(service: str, lat: float | None, lng: float | None) -> bool:

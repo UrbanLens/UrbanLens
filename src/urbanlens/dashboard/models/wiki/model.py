@@ -1,7 +1,7 @@
 """Wiki model - the community-editable page for a shared place.
 
 The Wiki holds everything a community collectively knows and edits about a
-place: its canonical name, description, security indicators, dates, badges,
+place: its canonical name, description, security indicators, dates, labels,
 aliases, comments, photos, child wikis (community detail markers, via the
 self-referential ``parent_wiki``) and edit history.  It links to a
 :class:`~urbanlens.dashboard.models.location.model.Location` for its current
@@ -34,7 +34,7 @@ if TYPE_CHECKING:
 
     from django.db.models import Manager as DjangoManager
 
-    from urbanlens.dashboard.models.badges.model import Badge
+    from urbanlens.dashboard.models.labels.model import Label
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.markup.model import PinMarkup
     from urbanlens.dashboard.models.profile.model import Profile
@@ -71,6 +71,13 @@ class Wiki(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addre
     date_last_active = DateField(null=True, blank=True)
 
     pin_type = CharField(choices=PinType.choices, default=PinType.LOCATION_MARKER, max_length=30)
+    # True when ``pin_type`` was explicitly chosen by an editor - mirrors
+    # Pin.pin_type_is_user_provided, and gates the same automatic
+    # building/parcel classification (see services.locations.site_scope).
+    pin_type_is_user_provided = BooleanField(
+        default=False,
+        help_text="Prevents automatic building/parcel classification from overwriting an editor-chosen type.",
+    )
 
     # Direct hex color override for this wiki's map marker (e.g. "#F44336").
     # Only meaningful for a child wiki (see parent_wiki below).
@@ -85,8 +92,8 @@ class Wiki(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addre
     detail_border_opacity = IntegerField(default=100)
 
     # Shared taxonomy - the real-world place's type, visible to all users.
-    badges = ManyToManyField(
-        "dashboard.Badge",
+    labels = ManyToManyField(
+        "dashboard.Label",
         blank=True,
         related_name="wikis",
     )
@@ -122,15 +129,32 @@ class Wiki(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addre
     # wiki page (see LocationWikiView.get). Once true, the wiki is community
     # content and its creator can no longer unilaterally delete it.
     viewed_by_other = BooleanField(default=False)
+    # Hero banner photo for the wiki page. Any Image tied to this wiki
+    # (community gallery uploads, or a materialized Media-gallery item, see
+    # services.media_materialize) is eligible; SET_NULL so deleting the photo
+    # just drops the banner rather than the wiki. Display is further gated by
+    # each viewer's own Profile.show_wiki_cover_photos preference.
+    cover_photo = ForeignKey(
+        "dashboard.Image",
+        on_delete=SET_NULL,
+        null=True,
+        blank=True,
+        related_name="wiki_covers",
+    )
 
     if TYPE_CHECKING:
         location_id: int
         parent_wiki_id: int | None
         created_by_id: int | None
+        cover_photo_id: int | None
         activities: DjangoManager[TripActivity]
         markup_items: DjangoManager[PinMarkup]
 
     objects = WikiManager()
+
+    #: Memoized parcel-vs-building scope for this instance - mirrors
+    #: ``Pin._site_scope_cache``; see ``services.locations.site_scope.is_site_scope``.
+    _site_scope_cache: bool | None = None
 
     # ------------------------------------------------------------------
     # Name/alias invariant
@@ -161,19 +185,26 @@ class Wiki(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addre
         persisted, an alias row for it is ensured. External naming refreshes
         create their attributed official alias rows *before* setting the name,
         so the ``get_or_create`` here finds them instead of mislabelling them
-        as user-provided.
+        as user-provided. ``name`` is also sanitized to a strict character set
+        before it's persisted (see ``sanitize_name``).
         """
-        from urbanlens.dashboard.services.locations.naming import is_meaningful_name
+        from urbanlens.dashboard.services.locations.naming import is_meaningful_name, sanitize_name
 
-        super().save(*args, **kwargs)
         update_fields = kwargs.get("update_fields")
+        if update_fields is None or "name" in update_fields:
+            self.name = sanitize_name(self.name) or ""
+        super().save(*args, **kwargs)
         if update_fields is not None and "name" not in update_fields:
             return
         if self.name != getattr(self, "_loaded_name", None) and is_meaningful_name(self.name):
             from urbanlens.dashboard.models.aliases.model import WikiAlias
 
+            new_name = (self.name or "").strip()
             try:
-                WikiAlias.objects.get_or_create(wiki=self, name=(self.name or "").strip())
+                # Case-insensitive lookup matches the alias uniqueness rule, so
+                # renaming to a different casing of an existing alias reuses
+                # that row instead of racing the DB constraint.
+                WikiAlias.objects.get_or_create(wiki=self, name__iexact=new_name, defaults={"name": new_name})
             except DatabaseError:
                 logger.debug("Could not ensure alias for wiki %s name %r", self.pk, self.name, exc_info=True)
         self._loaded_name = self.name
@@ -236,33 +267,33 @@ class Wiki(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addre
         return self.created_by_id is not None and self.created_by_id == profile.id and not self.viewed_by_other
 
     # ------------------------------------------------------------------
-    # Badge helpers
+    # Label helpers
     # ------------------------------------------------------------------
 
     @property
     def categories(self):
-        """Badges of kind "category" attached to this wiki."""
-        return self.badges.all().categories()
+        """Labels of kind "category" attached to this wiki."""
+        return self.labels.all().categories()
 
     @property
     def tags(self):
-        """Badges of kind "tag" attached to this wiki."""
-        return self.badges.all().tags()
+        """Labels of kind "tag" attached to this wiki."""
+        return self.labels.all().tags()
 
     @property
     def statuses(self):
-        """Badges of kind "status" attached to this wiki."""
-        return self.badges.all().statuses()
+        """Labels of kind "status" attached to this wiki."""
+        return self.labels.all().statuses()
 
-    def add_category(self, category_name: str, save: bool = True) -> Badge | None:
-        """Attach a category badge to this wiki by name, creating it if needed."""
-        from urbanlens.dashboard.models.badges.model import Badge
+    def add_category(self, category_name: str, save: bool = True) -> Label | None:
+        """Attach a category label to this wiki by name, creating it if needed."""
+        from urbanlens.dashboard.models.labels.model import Label
 
         category_name = category_name.lower()
         try:
-            category, _created = Badge.objects.get_or_create(name=category_name, kind="category", defaults={"profile": None})
+            category, _created = Label.objects.get_or_create(name=category_name, kind="category", defaults={"profile": None})
             if category:
-                self.badges.add(category)
+                self.labels.add(category)
                 if save:
                     self.save()
                 return category

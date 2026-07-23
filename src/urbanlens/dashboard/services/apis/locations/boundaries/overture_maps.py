@@ -25,9 +25,20 @@ separately, since it's a peer dependency, not a hard one, of overturemaps).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import ClassVar
+import math
+from typing import Any, ClassVar
 
-from urbanlens.dashboard.services.apis.locations.base import BOUNDARY_LOOKUP_BBOX_DEGREES, BBox, BoundaryProvider, best_containing_polygon, create_bbox, validate_bbox
+from django.contrib.gis.geos import Point
+
+from urbanlens.dashboard.services.apis.locations.base import (
+    BOUNDARY_LOOKUP_BBOX_DEGREES,
+    BBox,
+    BoundaryProvider,
+    _polygon_from_feature,
+    best_containing_polygon,
+    create_bbox,
+    validate_bbox,
+)
 
 # Adjust this import to wherever Gateway/Gateway actually live.
 from urbanlens.dashboard.services.gateway import Gateway
@@ -43,6 +54,29 @@ if TYPE_CHECKING:
     from django.contrib.gis.geos import Polygon
 
 
+_EARTH_RADIUS_M = 6_371_000.0
+
+
+def _haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Great-circle distance between two WGS-84 points, in meters."""
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    d_phi = math.radians(lat2 - lat1)
+    d_lambda = math.radians(lon2 - lon1)
+    a = math.sin(d_phi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(d_lambda / 2) ** 2
+    return 2 * _EARTH_RADIUS_M * math.asin(math.sqrt(a))
+
+
+def _clean_value(value: Any) -> Any:
+    """Turn Overture's pandas ``NaN``/blank-string "no value" markers into ``None``."""
+    if value is None:
+        return None
+    if isinstance(value, float) and math.isnan(value):
+        return None
+    if isinstance(value, str) and not value.strip():
+        return None
+    return value
+
+
 @dataclass(slots=True, kw_only=True)
 class OvertureMapsGateway(Gateway, BoundaryProvider):
     """Fetch Overture Maps theme data (buildings, addresses, places, ...) by bbox.
@@ -51,8 +85,16 @@ class OvertureMapsGateway(Gateway, BoundaryProvider):
         release: Pin a specific release tag (e.g. "2026-06-17.0"). Leave as
             None to always resolve the latest release via Overture's STAC
             catalog.
-        connect_timeout: Optional S3 connection timeout, seconds.
-        request_timeout: Optional S3 request timeout, seconds.
+        connect_timeout: S3 connection timeout, seconds. Defaults to a bound
+            rather than None (unbounded) - a slow/stalled S3 read otherwise
+            blocks the Celery worker running it well past the panel's own
+            soft/hard time limits, since pyarrow's read isn't itself
+            interruptible the way a plain requests call is. Pass None
+            explicitly to opt back into no timeout.
+        request_timeout: S3 request timeout, seconds. Same reasoning as
+            connect_timeout, just a larger bound since a range-read over a
+            GeoParquet shard can legitimately take longer than a bare TCP
+            connect.
     """
 
     service_key: ClassVar[str | None] = None  # no HTTP endpoint of ours to rate-limit
@@ -60,8 +102,8 @@ class OvertureMapsGateway(Gateway, BoundaryProvider):
     boundary_kind: ClassVar[str] = "building"
 
     release: str | None = None
-    connect_timeout: int | None = None
-    request_timeout: int | None = None
+    connect_timeout: int | None = 10
+    request_timeout: int | None = 30
     bbox_delta: float = BOUNDARY_LOOKUP_BBOX_DEGREES
 
     def __post_init__(self) -> None:
@@ -138,6 +180,101 @@ class OvertureMapsGateway(Gateway, BoundaryProvider):
             latitude,
             longitude,
         )
+
+    def get_building_attributes(self, latitude: float, longitude: float) -> dict[str, Any] | None:
+        """Return the pinned building's physical attributes from Overture's Buildings theme.
+
+        "Real estate" context Overture actually publishes (Overture has no
+        year-built field): the building class/subtype, height, floor count,
+        and roof construction, plus its primary name when Overture has one.
+
+        Args:
+            latitude: WGS-84 latitude.
+            longitude: WGS-84 longitude.
+
+        Returns:
+            Dict with ``class_``, ``subtype``, ``height_m``, ``num_floors``,
+            ``roof_shape``, ``roof_material``, ``primary_name`` (each ``None``
+            when Overture has no value), or None when no building footprint
+            contains the point.
+        """
+        point = Point(float(longitude), float(latitude), srid=4326)
+        best_area: float | None = None
+        best_properties: dict[str, Any] | None = None
+        for feature in _features_from_geodataframe(self.get_buildings(create_bbox(latitude, longitude, self.bbox_delta))):
+            polygon = _polygon_from_feature(feature)
+            if polygon is None or not (polygon.contains(point) or polygon.touches(point)):
+                continue
+            if best_area is None or polygon.area < best_area:
+                best_area = polygon.area
+                best_properties = feature.get("properties") or {}
+
+        if best_properties is None:
+            return None
+
+        names = _clean_value(best_properties.get("names"))
+        primary_name = names.get("primary") if isinstance(names, dict) else None
+        return {
+            "class_": _clean_value(best_properties.get("class")),
+            "subtype": _clean_value(best_properties.get("subtype")),
+            "height_m": _clean_value(best_properties.get("height")),
+            "num_floors": _clean_value(best_properties.get("num_floors")),
+            "roof_shape": _clean_value(best_properties.get("roof_shape")),
+            "roof_material": _clean_value(best_properties.get("roof_material")),
+            "primary_name": _clean_value(primary_name),
+        }
+
+    def get_nearby_places(self, latitude: float, longitude: float, *, radius_m: float = 150.0, limit: int = 5) -> list[dict[str, Any]]:
+        """Return named points of interest near a coordinate from Overture's Places theme.
+
+        Same free S3/parquet source already used for building footprints -
+        surfaces what's actually nearby (shops, landmarks, defunct
+        businesses), including an ``operating_status`` flag Overture derives
+        from crowd signals, which is useful "is this still open" context.
+
+        Args:
+            latitude: WGS-84 latitude.
+            longitude: WGS-84 longitude.
+            radius_m: Search radius in meters.
+            limit: Maximum number of places to return, nearest first.
+
+        Returns:
+            Dicts with ``name``, ``category``, ``confidence``,
+            ``operating_status``, ``distance_m``, nearest first; empty when
+            nothing named is within range.
+        """
+        candidates: list[dict[str, Any]] = []
+        for feature in _features_from_geodataframe(self.get_places(create_bbox(latitude, longitude, self.bbox_delta))):
+            geometry = feature.get("geometry") or {}
+            coordinates = geometry.get("coordinates") or (None, None)
+            place_lon, place_lat = coordinates[0], coordinates[1]
+            if place_lon is None or place_lat is None:
+                continue
+
+            properties = feature.get("properties") or {}
+            names = _clean_value(properties.get("names"))
+            primary_name = names.get("primary") if isinstance(names, dict) else None
+            if not primary_name:
+                continue  # unnamed POIs aren't useful location context
+
+            distance_m = _haversine_m(latitude, longitude, float(place_lat), float(place_lon))
+            if distance_m > radius_m:
+                continue
+
+            categories = _clean_value(properties.get("categories"))
+            primary_category = categories.get("primary") if isinstance(categories, dict) else None
+            candidates.append(
+                {
+                    "name": primary_name,
+                    "category": _clean_value(primary_category),
+                    "confidence": _clean_value(properties.get("confidence")),
+                    "operating_status": _clean_value(properties.get("operating_status")),
+                    "distance_m": round(distance_m, 1),
+                }
+            )
+
+        candidates.sort(key=lambda place: place["distance_m"])
+        return candidates[: max(1, limit)]
 
 
 def _features_from_geodataframe(frame) -> list[dict]:

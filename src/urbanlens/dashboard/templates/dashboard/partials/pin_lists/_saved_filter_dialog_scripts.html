@@ -1,0 +1,417 @@
+{% comment %}
+Shared JS for the saved-filter create/edit dialog (#saved-filter-form-dialog +
+_saved_filter_form_dialog.html) - the exact same markup and code back
+"New Filter"/"Edit" both on Organize's Filters tab
+(_organize_filters_panel.html) and the pin list detail page's "Match pins
+from a saved filter" row (pages/pin_lists/detail.html), so a fix or change
+here applies everywhere the dialog is used.
+
+Requires:
+  - Leaflet + Leaflet.draw already loaded (for the region map)
+  - A `<dialog id="saved-filter-form-dialog">` element already in the DOM.
+    Its optional `data-success-redirect` attribute controls where the page
+    navigates after a successful save/delete - pages that don't set it just
+    reload themselves in place.
+
+Context:
+  map_center_lat/lng - profile's default map center, for the region map
+{% endcomment %}
+<script>
+    const CSRF = document.querySelector('input[name=csrfmiddlewaretoken]')?.value || '{{ csrf_token }}';
+
+    function _sfAfterSaveOrDelete() {
+        const dialog = document.getElementById('saved-filter-form-dialog');
+        const redirectUrl = dialog?.dataset.successRedirect;
+        if (redirectUrl) window.location.href = redirectUrl;
+        else window.location.reload();
+    }
+
+    // -- Saved filter create/edit dialog --------------------------------------
+    window.savedFilterFormSubmit = function (event) {
+        event.preventDefault();
+        const form = event.target;
+        const action = form.dataset.action;
+        const body = new FormData(form);
+        fetch(action, { method: 'POST', headers: { 'X-CSRFToken': CSRF }, body })
+            .then((r) => r.text().then((text) => {
+                if (r.ok) return;
+                let message = text;
+                try {
+                    const data = text ? JSON.parse(text) : {};
+                    if (data.error) message = data.error;
+                } catch (e) { /* plain-text error body from the create endpoint */ }
+                return Promise.reject(message || 'Could not save this filter.');
+            }))
+            .then(_sfAfterSaveOrDelete)
+            .catch((message) => { if (typeof toastr !== 'undefined') toastr.error(String(message)); });
+        return false;
+    };
+
+    const SAVED_FILTER_DELETE_URL_TEMPLATE = "{% url 'saved_filters.delete' '00000000-0000-0000-0000-000000000000' %}";
+    window.savedFilterDelete = function (uuid, name) {
+        if (!confirm('Delete the saved filter "' + name + '"?')) return;
+        const url = SAVED_FILTER_DELETE_URL_TEMPLATE.replace('00000000-0000-0000-0000-000000000000', uuid);
+        fetch(url, { method: 'POST', headers: { 'X-CSRFToken': CSRF } })
+            .then((r) => {
+                if (!r.ok) return Promise.reject('Could not delete this filter.');
+                _sfAfterSaveOrDelete();
+            })
+            .catch((message) => { if (typeof toastr !== 'undefined') toastr.error(String(message)); });
+    };
+
+    // -- Saved filter visited toggle (mirrors the main map's fp-visits-* UI) --
+    function _sfSyncVisitUI(val) {
+        const hiddenEl = document.getElementById('sf-visits-hidden');
+        const resetBtn = document.getElementById('sf-visits-reset');
+        const datesEl  = document.getElementById('sf-visits-dates');
+        const chipYes  = document.getElementById('sf-visits-chip-yes');
+        const chipNo   = document.getElementById('sf-visits-chip-no');
+        if (hiddenEl) hiddenEl.value = val;
+        if (resetBtn) resetBtn.style.display = (val !== '') ? '' : 'none';
+        if (datesEl)  datesEl.style.display  = (val === 'yes') ? '' : 'none';
+        if (datesEl && val !== 'yes') {
+            datesEl.querySelectorAll('input[type=date]').forEach((el) => { el.value = ''; });
+        }
+        [chipYes, chipNo].forEach((c) => {
+            if (!c) return;
+            const r = c.querySelector('input[type=radio]');
+            if (r) r.checked = (r.value === val);
+        });
+    }
+
+    window.savedFilterResetVisits = function () {
+        _sfSyncVisitUI('');
+    };
+
+    function _sfInitVisits() {
+        const hiddenEl = document.getElementById('sf-visits-hidden');
+        if (!hiddenEl) return;
+        _sfSyncVisitUI(hiddenEl.value || '');
+        ['sf-visits-chip-yes', 'sf-visits-chip-no'].forEach((id) => {
+            const chip = document.getElementById(id);
+            if (!chip) return;
+            const radio = chip.querySelector('input[type=radio]');
+            if (!radio) return;
+            chip.addEventListener('mousedown', () => { chip.dataset.wasChecked = String(radio.checked); });
+            chip.addEventListener('click', () => {
+                _sfSyncVisitUI(chip.dataset.wasChecked === 'true' ? '' : radio.value);
+            });
+        });
+    }
+
+    // -- Saved filter region map (include/exclude polygons) ------------------
+    let _sfRegionMap = null;
+    let _sfRegionLayers = null;
+    let _sfActiveRegionMode = 'include';
+    const REGION_SEARCH_URL = "{% url 'region_search.search' %}";
+
+    window.savedFilterSetRegionMode = function (mode) {
+        _sfActiveRegionMode = mode;
+        document.querySelectorAll('.saved-filter-region-mode-btn').forEach((btn) => {
+            btn.classList.toggle('saved-filter-region-mode-btn--active', btn.dataset.regionMode === mode);
+        });
+    };
+
+    function _sfRegionStyle(mode) {
+        return mode === 'exclude'
+            ? { color: '#c62828', fillColor: '#c62828', fillOpacity: 0.25, weight: 2 }
+            : { color: '#2e7d32', fillColor: '#2e7d32', fillOpacity: 0.25, weight: 2 };
+    }
+
+    function _sfSaveRegions() {
+        const includeCoords = [];
+        const excludeCoords = [];
+        _sfRegionLayers.eachLayer((layer) => {
+            const geojson = layer.toGeoJSON().geometry;
+            const target = layer.options.regionType === 'exclude' ? excludeCoords : includeCoords;
+            if (geojson.type === 'Polygon') target.push(geojson.coordinates);
+            else if (geojson.type === 'MultiPolygon') geojson.coordinates.forEach((c) => target.push(c));
+        });
+        const includeInput = document.getElementById('saved-filter-include-regions');
+        const excludeInput = document.getElementById('saved-filter-exclude-regions');
+        if (includeInput) includeInput.value = includeCoords.length ? JSON.stringify({ type: 'MultiPolygon', coordinates: includeCoords }) : '';
+        if (excludeInput) excludeInput.value = excludeCoords.length ? JSON.stringify({ type: 'MultiPolygon', coordinates: excludeCoords }) : '';
+        _sfScheduleNameSuggestion();
+        // Plain property assignment above doesn't fire a DOM event, so anything
+        // listening on the form for 'change' (e.g. the standalone filter detail
+        // page's live preview map) would otherwise miss region edits entirely.
+        const form = document.getElementById('saved-filter-form');
+        if (form) form.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    // -- Saved filter label pickers (include/exclude) -------------------------
+    function _sfEscHtml(s) {
+        const div = document.createElement('div');
+        div.textContent = s || '';
+        return div.innerHTML;
+    }
+
+    function _sfMakeLabelPicker(fieldName) {
+        const root = document.querySelector('.saved-filter-label-picker[data-field-name="' + fieldName + '"]');
+        const chipsEl = document.getElementById('sf-label-chips-' + fieldName);
+        const searchEl = document.getElementById('sf-label-search-' + fieldName);
+        const suggEl = document.getElementById('sf-label-suggestions-' + fieldName);
+        const catalogEl = document.getElementById('sf-label-catalog-' + fieldName);
+        if (!root || !chipsEl || !searchEl || !suggEl || !catalogEl) return;
+
+        const candidates = [];
+        let selected = [];
+        catalogEl.querySelectorAll('[data-id]').forEach((el) => {
+            const item = { id: el.dataset.id, name: el.dataset.name, icon: el.dataset.icon, color: el.dataset.color };
+            candidates.push(item);
+            if (el.dataset.selected === '1') selected.push(item);
+        });
+
+        function syncHiddenInputs() {
+            root.querySelectorAll('input[data-sf-label-input]').forEach((el) => el.remove());
+            selected.forEach((item) => {
+                const input = document.createElement('input');
+                input.type = 'checkbox';
+                input.hidden = true;
+                input.checked = true;
+                input.name = fieldName;
+                input.value = item.id;
+                input.dataset.sfLabelInput = '1';
+                root.appendChild(input);
+            });
+        }
+
+        function notifyChanged() {
+            root.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+
+        function renderChips() {
+            chipsEl.innerHTML = '';
+            selected.forEach((item) => {
+                const chip = document.createElement('span');
+                chip.className = 'apdlg-label-chip-item';
+                if (item.color) chip.style.setProperty('--tag-color', item.color);
+                const iconHtml = item.icon ? `<span class="apdlg-chip-icon">${_sfEscHtml(item.icon)}</span>` : '';
+                chip.innerHTML = `${iconHtml}<span class="apdlg-chip-name">${_sfEscHtml(item.name)}</span><button type="button" class="apdlg-chip-remove" aria-label="Remove">x</button>`;
+                chip.querySelector('.apdlg-chip-remove').addEventListener('click', () => {
+                    selected = selected.filter((s) => s.id !== item.id);
+                    renderChips();
+                    notifyChanged();
+                });
+                chipsEl.appendChild(chip);
+            });
+            syncHiddenInputs();
+        }
+
+        function renderSuggestions(query) {
+            const q = (query || '').toLowerCase().trim();
+            const selectedIds = new Set(selected.map((s) => s.id));
+            const matches = candidates.filter((c) => !selectedIds.has(c.id) && (!q || c.name.toLowerCase().includes(q))).slice(0, 12);
+            if (!matches.length) { suggEl.hidden = true; suggEl.innerHTML = ''; return; }
+            suggEl.innerHTML = '';
+            matches.forEach((item) => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'apdlg-label-sugg-item';
+                const iconHtml = item.icon ? `<span class="apdlg-sugg-icon">${_sfEscHtml(item.icon)}</span>` : '';
+                btn.innerHTML = `${iconHtml}<span class="apdlg-sugg-name">${_sfEscHtml(item.name)}</span>`;
+                btn.addEventListener('click', () => {
+                    selected.push(item);
+                    renderChips();
+                    searchEl.value = '';
+                    suggEl.hidden = true;
+                    searchEl.focus();
+                    notifyChanged();
+                });
+                suggEl.appendChild(btn);
+            });
+            suggEl.hidden = false;
+        }
+
+        searchEl.addEventListener('input', () => renderSuggestions(searchEl.value));
+        searchEl.addEventListener('focus', () => renderSuggestions(searchEl.value));
+        searchEl.addEventListener('blur', () => setTimeout(() => { suggEl.hidden = true; }, 150));
+
+        renderChips();
+    }
+
+    window.initSavedFilterLabelPickers = function () {
+        _sfMakeLabelPicker('tags');
+        _sfMakeLabelPicker('exclude_tags');
+    };
+
+    // -- Saved filter name auto-suggestion ------------------------------------
+    // Pre-fills "Filter name" with a summary of whatever criteria are currently
+    // set (e.g. "4★+ · 2 tags included"), unless the user has typed their own
+    // name - matches the same summary shown on the Filters tab's cards
+    // (dashboard_tags.filter_criteria_summary), computed server-side so the
+    // suggestion always matches what would actually be saved.
+    const SAVED_FILTER_SUGGEST_NAME_URL = "{% url 'saved_filters.suggest_name' %}";
+    let _sfNameManuallyEdited = false;
+    let _sfSuggestTimer = null;
+    let _sfSuggestToken = 0;
+
+    function _sfFetchSuggestedName() {
+        const form = document.getElementById('saved-filter-form');
+        const nameInput = document.getElementById('saved-filter-name');
+        if (!form || !nameInput || _sfNameManuallyEdited) return;
+        const token = ++_sfSuggestToken;
+        fetch(SAVED_FILTER_SUGGEST_NAME_URL, { method: 'POST', headers: { 'X-CSRFToken': CSRF }, body: new FormData(form) })
+            .then((r) => (r.ok ? r.json() : null))
+            .then((data) => {
+                if (!data || token !== _sfSuggestToken || _sfNameManuallyEdited) return;
+                if (data.name) nameInput.value = data.name;
+            })
+            .catch(() => { /* best-effort suggestion - leave the name field as-is on failure */ });
+    }
+
+    function _sfScheduleNameSuggestion() {
+        if (_sfNameManuallyEdited) return;
+        clearTimeout(_sfSuggestTimer);
+        _sfSuggestTimer = setTimeout(_sfFetchSuggestedName, 400);
+    }
+
+    document.body.addEventListener('input', (e) => {
+        if (!e.target.closest || !e.target.closest('#saved-filter-form')) return;
+        if (e.target.id === 'saved-filter-name') {
+            _sfNameManuallyEdited = e.target.value.trim().length > 0;
+            return;
+        }
+        _sfScheduleNameSuggestion();
+    });
+    document.body.addEventListener('change', (e) => {
+        if (!e.target.closest || !e.target.closest('#saved-filter-form') || e.target.id === 'saved-filter-name') return;
+        _sfScheduleNameSuggestion();
+    });
+
+    function _sfAddRegionLayer(geojson, mode) {
+        if (!_sfRegionLayers) return;
+        const layers = L.geoJSON(geojson).getLayers();
+        layers.forEach((layer) => {
+            layer.options.regionType = mode;
+            layer.setStyle(_sfRegionStyle(mode));
+            _sfRegionLayers.addLayer(layer);
+        });
+        if (layers.length && _sfRegionMap) _sfRegionMap.fitBounds(_sfRegionLayers.getBounds());
+    }
+
+    window.initSavedFilterRegionMap = function (attempt) {
+        const mapEl = document.getElementById('saved-filter-region-map');
+        if (!mapEl) return;
+        // Leaflet + Leaflet.draw load via <script src> tags injected into the DOM the
+        // first time the Filters tab is opened (see _organize_filters_panel.html); if
+        // "New Filter" is clicked before those finish downloading, L/L.Draw won't exist
+        // yet - retry briefly instead of silently leaving the map container empty.
+        if (typeof L === 'undefined' || typeof L.Draw === 'undefined') {
+            if ((attempt || 0) < 40) setTimeout(() => window.initSavedFilterRegionMap((attempt || 0) + 1), 100);
+            return;
+        }
+
+        const centerLat = {{ map_center_lat|default:39.8283 }};
+        const centerLng = {{ map_center_lng|default:-98.5795 }};
+        const map = L.map(mapEl, { attributionControl: false }).setView([centerLat, centerLng], 4);
+        _sfRegionMap = map;
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+        const drawnItems = new L.FeatureGroup().addTo(map);
+        _sfRegionLayers = drawnItems;
+
+        const includeInput = document.getElementById('saved-filter-include-regions');
+        const excludeInput = document.getElementById('saved-filter-exclude-regions');
+        try { if (includeInput.value) _sfAddRegionLayer(JSON.parse(includeInput.value), 'include'); } catch (e) { /* malformed stored geometry - ignore */ }
+        try { if (excludeInput.value) _sfAddRegionLayer(JSON.parse(excludeInput.value), 'exclude'); } catch (e) { /* malformed stored geometry - ignore */ }
+
+        const drawControl = new L.Control.Draw({
+            draw: { polygon: { shapeOptions: _sfRegionStyle('include') }, marker: false, circle: false, circlemarker: false, rectangle: false, polyline: false },
+            edit: { featureGroup: drawnItems, remove: true },
+        });
+        map.addControl(drawControl);
+
+        map.on(L.Draw.Event.CREATED, (e) => {
+            e.layer.options.regionType = _sfActiveRegionMode;
+            e.layer.setStyle(_sfRegionStyle(_sfActiveRegionMode));
+            drawnItems.addLayer(e.layer);
+            _sfSaveRegions();
+        });
+        map.on(L.Draw.Event.EDITED, _sfSaveRegions);
+        map.on(L.Draw.Event.DELETED, _sfSaveRegions);
+
+        savedFilterSetRegionMode('include');
+        setTimeout(() => map.invalidateSize(), 0);
+    };
+
+    window.savedFilterSearchRegion = function () {
+        const input = document.getElementById('saved-filter-region-search-input');
+        const query = (input.value || '').trim();
+        const resultsEl = document.getElementById('saved-filter-region-search-results');
+        const messageEl = document.getElementById('saved-filter-region-search-message');
+        resultsEl.hidden = true;
+        resultsEl.innerHTML = '';
+        messageEl.hidden = true;
+        if (!query) return;
+        fetch(REGION_SEARCH_URL + '?q=' + encodeURIComponent(query))
+            .then((r) => r.json())
+            .then((data) => {
+                const results = data.results || [];
+                if (!results.length) {
+                    messageEl.textContent = 'No area boundary found for that place - try a broader name, like a city or neighborhood, or draw the region manually.';
+                    messageEl.hidden = false;
+                    return;
+                }
+                if (results.length === 1) {
+                    _sfAddRegionLayer(results[0].geojson, _sfActiveRegionMode);
+                    _sfSaveRegions();
+                    return;
+                }
+                results.forEach((result) => {
+                    const item = document.createElement('button');
+                    item.type = 'button';
+                    item.className = 'saved-filter-region-result';
+                    item.textContent = result.display_name;
+                    item.onclick = () => {
+                        _sfAddRegionLayer(result.geojson, _sfActiveRegionMode);
+                        _sfSaveRegions();
+                        resultsEl.hidden = true;
+                    };
+                    resultsEl.appendChild(item);
+                });
+                resultsEl.hidden = false;
+            })
+            .catch(() => {
+                messageEl.textContent = 'Could not search for that place right now.';
+                messageEl.hidden = false;
+            });
+    };
+
+    // The dialog's body (including the region map container) only exists after
+    // an HTMX swap, but the <dialog> is still closed (0x0) at that point, so
+    // Leaflet can't measure it yet - just reset the map state here and let
+    // savedFilterOpenDialog() do the actual init once the dialog is visible.
+    document.body.addEventListener('htmx:afterSwap', (e) => {
+        if (e.detail.target && e.detail.target.id === 'saved-filter-form-dialog') {
+            _sfRegionMap = null;
+            _sfRegionLayers = null;
+        }
+    });
+
+    // Opens the (already-swapped-in) saved-filter dialog, then initializes the
+    // region map - must happen in this order so the dialog has a real size
+    // when Leaflet measures its container.
+    window.savedFilterOpenDialog = function () {
+        document.getElementById('saved-filter-form-dialog').showModal();
+        window.initSavedFilterRegionMap();
+        window.initSavedFilterLabelPickers();
+        _sfInitVisits();
+        // Editing an existing filter already has a real name - don't clobber it
+        // with a fresh suggestion; a blank "New Filter" dialog starts eligible.
+        const nameInput = document.getElementById('saved-filter-name');
+        _sfNameManuallyEdited = !!(nameInput && nameInput.value.trim());
+    };
+
+    // Same init as savedFilterOpenDialog(), minus the modal - for the filter's
+    // own always-visible detail page (saved_filter_detail.html), where the
+    // form is part of the page itself rather than a dialog to open.
+    window.savedFilterInitInlinePage = function () {
+        window.initSavedFilterRegionMap();
+        window.initSavedFilterLabelPickers();
+        _sfInitVisits();
+        const nameInput = document.getElementById('saved-filter-name');
+        _sfNameManuallyEdited = !!(nameInput && nameInput.value.trim());
+    };
+</script>
+{% include "dashboard/partials/ui/_dual_range_slider_script.html" %}

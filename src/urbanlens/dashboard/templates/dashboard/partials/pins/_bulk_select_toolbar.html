@@ -4,11 +4,17 @@
     <button type="button" class="btn btn--ghost btn--sm" onclick="_clearSelection()">
         <i class="material-symbols-outlined">deselect</i> Clear
     </button>
+    <button type="button" class="btn btn--secondary btn--sm" id="bulk-select-list-btn" onclick="_openAddToListForSelection()" disabled>
+        <i class="material-symbols-outlined">playlist_add</i> Add to List
+    </button>
     <button type="button" class="btn btn--primary btn--sm" id="bulk-select-merge-btn" onclick="openBulkMergeDialog()" disabled>
         <i class="material-symbols-outlined">merge</i> Merge
     </button>
     <button type="button" class="btn btn--primary btn--sm" id="bulk-select-edit-btn" onclick="openBulkEditDialog()" disabled>
         <i class="material-symbols-outlined">edit</i> Edit
+    </button>
+    <button type="button" class="btn btn--secondary btn--sm" id="bulk-select-export-btn" onclick="document.getElementById('bulk-export-dialog').showModal()" disabled>
+        <i class="material-symbols-outlined">download</i> Export
     </button>
     <button type="button" class="btn btn--danger-filled btn--sm" id="bulk-select-delete-btn" onclick="openBulkDeleteDialog()" disabled>
         <i class="material-symbols-outlined">delete</i> Delete

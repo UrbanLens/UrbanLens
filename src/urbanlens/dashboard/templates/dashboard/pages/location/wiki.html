@@ -9,64 +9,63 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" crossorigin="" />
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"
     integrity="sha384-JP5UPxIO2Tm2o79Fb0tGYMa44jkWar53aBoCbd8ah0+LcCDoohTIYr+zIXyfGIJN" crossorigin="anonymous"></script>
+<script src="{% static 'js/cover-hero.js' %}"></script>
+<script src="{% static 'js/page-tabs.js' %}" defer></script>
+<script src="{% static 'js/article-editor.js' %}" defer></script>
+<script type="module" src="{% static 'dashboard/js/article-wysiwyg.js' %}"></script>
+{% endblock %}
+
+{% block hero %}
+{% include "dashboard/partials/ui/_page_hero.html" with id="wiki-hero" body_template="dashboard/partials/wiki/_wiki_detail_hero_body.html" modifier="top" %}
+{% endblock %}
+
+{% block subnav %}
+<div class="ul-page-subnav">
+    <div class="ul-page-subnav__inner">
+        {# -- Page tabs: Overview / Article / Comments / Edit History -- #}
+        <nav class="ul-subnav-tabs" data-page-tabs aria-label="Wiki sections">
+            <button type="button" class="ul-subnav-tab is-active" data-tab="overview">
+                <i class="material-symbols-outlined">dashboard</i><span>Overview</span>
+            </button>
+            <button type="button" class="ul-subnav-tab" data-tab="article">
+                <i class="material-symbols-outlined">article</i><span>Article</span>
+            </button>
+            <button type="button" class="ul-subnav-tab" data-tab="comments">
+                <i class="material-symbols-outlined">chat</i><span>Comments</span>
+                {% if wiki_comment_count %}<span class="page-tab-badge">{{ wiki_comment_count }}</span>{% endif %}
+            </button>
+            <button type="button" class="ul-subnav-tab" data-tab="history">
+                <i class="material-symbols-outlined">history</i><span>Changes</span>
+            </button>
+        </nav>
+    </div>
+</div>
 {% endblock %}
 
 {% block content %}
 <div class="wiki-page page-content">
     <div id="wiki-onboarding" class="page-onboarding page-onboarding--wiki" aria-live="polite"></div>
 
-    {# -- Wiki identity banner ---------------------------------------------- #}
-    <div class="wiki-banner">
-        <div class="wiki-banner-left">
-            <span class="wiki-badge">
-                <i class="material-symbols-outlined">public</i> Community Wiki
-            </span>
-            <h1 class="wiki-title">{{ wiki.name }}</h1>
-            {% if location.address %}
-            <p class="wiki-address">
-                <i class="material-symbols-outlined">place</i>
-                {{ location.address }}{% if location.city %}, {{ location.city }}{% endif %}{% if location.state %}, {{ location.state }}{% endif %}
-            </p>
-            {% endif %}
-        </div>
-        <div class="wiki-banner-right">
-            <div class="wiki-notice">
-                <i class="material-symbols-outlined">public</i>
-                <span>Community wiki - everything here is <strong>visible to all users</strong> who have this location pinned.</span>
-            </div>
-            <div class="wiki-banner-actions">
-                {# Lists collapsed sections for this wiki and lets the user bring them back individually - see the collapsible-sections script in themes/base.html #}
-                <div class="collapse-restore" data-collapse-restore-scope="wiki" hidden>
-                    <button type="button" class="btn btn--secondary btn--sm collapse-restore-toggle" aria-haspopup="true">
-                        <i class="material-symbols-outlined">visibility</i>
-                        Hidden sections
-                        <span class="badge collapse-restore-count">0</span>
-                    </button>
-                    <div class="collapse-restore-menu"></div>
-                </div>
-                <button type="button" class="wiki-edit-btn btn btn--primary"
-                        onclick="document.getElementById('wiki-edit-dialog').showModal()">
-                    <i class="material-symbols-outlined">edit_note</i>
-                    Suggest edits
-                </button>
-                {% if can_delete_wiki %}
-                <button type="button" class="wiki-delete-btn btn btn--danger"
-                        hx-delete="{% url 'location.wiki.delete' location.slug %}"
-                        hx-confirm="Delete this community wiki? No one else has viewed it yet, so this can't be undone by anyone but you. This cannot be undone."
-                        hx-target="body"
-                        title="No one else has viewed this wiki yet, so you can still delete it.">
-                    <i class="material-symbols-outlined">delete</i>
-                    Delete wiki
-                </button>
-                {% endif %}
-                {% if user_pin %}
-                <a href="{% url 'pin.details' user_pin.slug %}" class="wiki-back-link btn btn--secondary">
-                    <i class="material-symbols-outlined">arrow_back</i> Back to my pin
-                </a>
-                {% endif %}
-            </div>
-        </div>
+    {# -- Notice + suggest-edits/delete/back-to-pin actions now render inside #}
+    {# the hero itself (see _wiki_detail_hero_body.html) to save vertical space. #}
+
+    {% if show_wiki_cover_photo %}
+    {# -- Cover photo hero banner --------------------------------------------- #}
+    {{ wiki_cover_candidates|json_script:"wiki-cover-candidates" }}
+    <div class="cover-hero" id="wiki-cover-hero" style="background-image:url('{{ wiki.cover_photo.image.url }}')">
+        {% if wiki_cover_candidates %}
+        <button type="button" class="cover-hero-nav cover-hero-prev" onclick="window._coverHeroNav('wiki', -1)" title="Previous photo">
+            <i class="material-symbols-outlined">chevron_left</i>
+        </button>
+        <button type="button" class="cover-hero-nav cover-hero-next" onclick="window._coverHeroNav('wiki', 1)" title="Next photo">
+            <i class="material-symbols-outlined">chevron_right</i>
+        </button>
+        {% endif %}
+        <button type="button" class="cover-hero-remove" onclick="window._setCoverPhoto && window._setCoverPhoto(null)" title="Remove cover photo">
+            <i class="material-symbols-outlined">close</i>
+        </button>
     </div>
+    {% endif %}
 
     {# -- Other-location conflict notice ----------------------------------- #}
     {% if other_locations %}
@@ -78,11 +77,16 @@
                 {% if other_locations|length == 1 %}covers{% else %}cover{% endif %}
                 the same area as your pin.
             </strong>
-            Your pin is currently linked here. You may want to browse the alternatives or switch:
+            Your pin is currently linked here. You may want to switch to one of these instead:
             <div class="wiki-lcn-list">
                 {% for other in other_locations %}
                 <span class="wiki-lcn-item">
-                    <a href="{% url 'location.wiki' other.slug %}" class="wiki-lcn-link">{{ other.display_name }}</a>
+                    {# Not a link to other's own wiki page - the viewer hasn't pinned #}
+                    {# `other` yet, and a wiki page 404s for anyone without a pin at   #}
+                    {# its location (see resolve_visible_wiki) by design, so this can  #}
+                    {# never resolve until after the Switch button below relinks the  #}
+                    {# pin there first. #}
+                    <span class="wiki-lcn-link">{{ other.display_name }}</span>
                     {% if user_pin %}
                     <button type="button" class="wiki-lcn-switch-btn"
                             hx-post="{% url 'pin.link.to' user_pin.slug other.slug %}"
@@ -106,49 +110,12 @@
     </div>
     {% endif %}
 
+    <section class="page-tab-panel" data-tab-panel="overview">
     {# -- Body grid --------------------------------------------------------- #}
     <div class="wiki-body">
 
-        {# -- Description / dates (if any) --------------------------------- #}
-        {% if wiki.description or wiki.date_abandoned or wiki.effective_date_last_active %}
-        <div class="card wiki-card wiki-meta" data-collapse-scope="wiki" data-collapse-section="about">
-            <div class="card-header">
-                <i class="material-symbols-outlined">info</i>
-                <h2>About</h2>
-            </div>
-            <div class="card__body wiki-meta-body">
-                {% if wiki.description %}
-                <p id="wiki-field-description" class="wiki-description">{{ wiki.description }}</p>
-                {% endif %}
-                {% if wiki.date_abandoned or wiki.effective_date_last_active %}
-                <div class="wiki-meta-dates">
-                    {% if wiki.date_abandoned %}
-                    <span class="wiki-meta-date"><i class="material-symbols-outlined">event_busy</i> Abandoned {{ wiki.date_abandoned|date:"M j, Y" }}</span>
-                    {% endif %}
-                    {% if wiki.effective_date_last_active %}
-                    <span class="wiki-meta-date"><i class="material-symbols-outlined">history</i> Last active {{ wiki.effective_date_last_active|date:"M j, Y" }}</span>
-                    {% endif %}
-                </div>
-                {% endif %}
-                {# Security indicators - only shown when at least one is non-unknown #}
-                {% if wiki.fences != "unknown" or wiki.alarms != "unknown" or wiki.cameras != "unknown" or wiki.security != "unknown" or wiki.signs != "unknown" or wiki.vps != "unknown" or wiki.plywood != "unknown" or wiki.locked != "unknown" %}
-                <div class="security-indicators">
-                    <span class="security-indicators-label">Security</span>
-                    <div class="security-chips">
-                        {% if wiki.fences != "unknown" %}<span class="security-chip security-chip--{{ wiki.fences }}">Fences: {{ wiki.get_fences_display }}</span>{% endif %}
-                        {% if wiki.alarms != "unknown" %}<span class="security-chip security-chip--{{ wiki.alarms }}">Alarms: {{ wiki.get_alarms_display }}</span>{% endif %}
-                        {% if wiki.cameras != "unknown" %}<span class="security-chip security-chip--{{ wiki.cameras }}">Cameras: {{ wiki.get_cameras_display }}</span>{% endif %}
-                        {% if wiki.security != "unknown" %}<span class="security-chip security-chip--{{ wiki.security }}">Security: {{ wiki.get_security_display }}</span>{% endif %}
-                        {% if wiki.signs != "unknown" %}<span class="security-chip security-chip--{{ wiki.signs }}">Signs: {{ wiki.get_signs_display }}</span>{% endif %}
-                        {% if wiki.vps != "unknown" %}<span class="security-chip security-chip--{{ wiki.vps }}">VPS: {{ wiki.get_vps_display }}</span>{% endif %}
-                        {% if wiki.plywood != "unknown" %}<span class="security-chip security-chip--{{ wiki.plywood }}">Plywood: {{ wiki.get_plywood_display }}</span>{% endif %}
-                        {% if wiki.locked != "unknown" %}<span class="security-chip security-chip--{{ wiki.locked }}">Locked: {{ wiki.get_locked_display }}</span>{% endif %}
-                    </div>
-                </div>
-                {% endif %}
-            </div>
-        </div>
-        {% endif %}
+        {# -- Description / dates / security indicators (if any) ------------ #}
+        {% include "dashboard/partials/wiki/_wiki_about_card.html" with wiki=wiki %}
 
         {# -- Community stats card ------------------------------------------ #}
         <div class="card wiki-card wiki-stats" data-collapse-scope="wiki" data-collapse-section="stats">
@@ -199,7 +166,7 @@
             </div>
         </div>
 
-        {# Badges/categories hidden: global categories no longer exist #}
+        {# Labels/categories hidden: global categories no longer exist #}
 
         {# -- Aliases / Photos / Comments / Edit history: half-width on wide screens #}
         <div class="wiki-body-secondary">
@@ -218,53 +185,194 @@
                 <div class="card__body wiki-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
             </div>
 
-            {# -- Photo gallery ------------------------------------------------ #}
-            <div id="wiki-gallery-panel" class="card"
-                 hx-get="{% url 'location.wiki.gallery' location.slug %}"
-                 hx-trigger="load[!window.ulSectionCollapsed('wiki','gallery')], ul:unhide"
+            {# -- Ownership ------------------------------------------------------ #}
+            <div hx-get="{% url 'location.wiki.ownership' location.slug %}"
+                 hx-trigger="load[!window.ulSectionCollapsed('wiki','ownership')], ul:unhide"
                  hx-swap="outerHTML"
-                 data-collapse-scope="wiki" data-collapse-section="gallery">
+                 id="location-ownership-panel"
+                 class="card wiki-card ownership-panel"
+                 data-collapse-scope="wiki" data-collapse-section="ownership">
                 <div class="card-header">
-                    <i class="material-symbols-outlined">photo_library</i>
-                    <span>Photos</span>
-                </div>
-                <div class="card__body view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
-            </div>
-
-            {# -- Comments ------------------------------------------------------ #}
-            <div id="comment-panel"
-                 hx-get="{% url 'location.wiki.comments' location.slug %}"
-                 hx-trigger="load[!window.ulSectionCollapsed('wiki','comments')], ul:unhide"
-                 hx-swap="outerHTML"
-                 class="card wiki-card"
-                 data-collapse-scope="wiki" data-collapse-section="comments">
-                <div class="card-header">
-                    <i class="material-symbols-outlined">chat</i>
-                    <h2>Discussion</h2>
+                    <i class="material-symbols-outlined">real_estate_agent</i>
+                    <span>Ownership</span>
                 </div>
                 <div class="card__body wiki-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
             </div>
 
-            {# -- Edit history -------------------------------------------------- #}
-            <div class="card wiki-card wiki-tabs-card" data-collapse-scope="wiki" data-collapse-section="history">
+            {# -- Building Attributes (REData building number/name/year built) -- #}
+            <div hx-get="{% url 'location.wiki.building_attributes' location.slug %}"
+                 hx-trigger="load[!window.ulSectionCollapsed('wiki','building_attributes')], ul:unhide"
+                 hx-swap="outerHTML"
+                 id="location-building-attributes-panel"
+                 class="card wiki-card"
+                 data-ext-panel-204
+                 data-collapse-scope="wiki" data-collapse-section="building_attributes">
                 <div class="card-header">
-                    <i class="material-symbols-outlined">history</i>
-                    <h2>Edit History</h2>
+                    <i class="material-symbols-outlined">domain</i>
+                    <span>Building Attributes</span>
+                </div>
+                <div class="card__body wiki-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
+            </div>
+
+            {# -- Buildings on this property (REData / OSM) --------------------- #}
+            <div hx-get="{% url 'location.wiki.buildings' location.slug %}"
+                 hx-trigger="load[!window.ulSectionCollapsed('wiki','parcel_buildings')], ul:unhide"
+                 hx-swap="outerHTML"
+                 id="location-parcel-buildings-panel"
+                 class="card wiki-card"
+                 data-ext-panel-204
+                 data-collapse-scope="wiki" data-collapse-section="parcel_buildings">
+                <div class="card-header">
+                    <i class="material-symbols-outlined">apartment</i>
+                    <span>Buildings on this Property</span>
+                </div>
+                <div class="card__body wiki-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
+            </div>
+
+            {# -- Media (external providers + shared photos) -------------------- #}
+            {# Combined Media section mirroring the pin detail page: one grid    #}
+            {# with per-source tabs. External media (Wikimedia, Smithsonian, ... #}
+            {# ) appears automatically from the shared per-Location cache; only  #}
+            {# photos intentionally shared to the wiki show under "Photos".      #}
+            {# Thumbs are community votes - items sort highest net score first.  #}
+            {# See controllers/wiki_media.py and the wiki-media script below.    #}
+            <div id="wiki-media-section" class="card wiki-media media-gallery" data-media-view="all"
+                 data-collapse-scope="wiki" data-collapse-section="media">
+                <div class="card-header">
+                    <i class="material-symbols-outlined">collections</i>
+                    <span>Media</span>
+                    <span class="badge" id="wiki-media-count-badge" hidden></span>
+                </div>
+
+                <div class="card-tabs" id="wiki-media-tabs" role="tablist" aria-label="Media view"></div>
+
+                <div class="media-view-panel" data-media-view-panel="all">
+                    <div class="view-loading" id="wiki-media-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
+                    <div class="media-gallery-grid" id="wiki-media-grid"></div>
+                    <div class="media-gallery-empty" id="wiki-media-empty" hidden>
+                        <i class="material-symbols-outlined">collections</i>
+                        <p>No media found for this location yet.</p>
+                    </div>
+                </div>
+
+                <div class="media-view-panel" data-media-view-panel="manage" hidden>
+                    {# The unchanged wiki photo gallery (upload / Flickr import / #}
+                    {# cover photo / delete), lazy-loaded when "Manage" is first  #}
+                    {# opened - the wiki equivalent of the pin page's "Mine" tab. #}
+                    <div id="wiki-gallery-panel"
+                         hx-get="{% url 'location.wiki.gallery' location.slug %}"
+                         hx-trigger="ul:load-manage"
+                         hx-swap="outerHTML">
+                        <div class="view-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
+                    </div>
+                </div>
+            </div>
+            {# Hidden per-provider loaders - append their results into #wiki-media-grid. #}
+            <div class="media-provider-loader" id="wiki-media-loader-photos"
+                hx-get="{% url 'location.wiki.media' location.slug 'photos' %}"
+                hx-trigger="load" hx-target="#wiki-media-grid" hx-swap="beforeend" hx-timeout="25000" hidden></div>
+            <div class="media-provider-loader" id="wiki-media-loader-smithsonian"
+                hx-get="{% url 'location.wiki.media' location.slug 'smithsonian' %}"
+                hx-trigger="load" hx-target="#wiki-media-grid" hx-swap="beforeend" hx-timeout="25000" hidden></div>
+            <div class="media-provider-loader" id="wiki-media-loader-wikimedia"
+                hx-get="{% url 'location.wiki.media' location.slug 'wikimedia' %}"
+                hx-trigger="load" hx-target="#wiki-media-grid" hx-swap="beforeend" hx-timeout="25000" hidden></div>
+            <div class="media-provider-loader" id="wiki-media-loader-wikipedia_media"
+                hx-get="{% url 'location.wiki.media' location.slug 'wikipedia_media' %}"
+                hx-trigger="load" hx-target="#wiki-media-grid" hx-swap="beforeend" hx-timeout="25000" hidden></div>
+            <div class="media-provider-loader" id="wiki-media-loader-loc"
+                hx-get="{% url 'location.wiki.media' location.slug 'loc' %}"
+                hx-trigger="load" hx-target="#wiki-media-grid" hx-swap="beforeend" hx-timeout="25000" hidden></div>
+            <div class="media-provider-loader" id="wiki-media-loader-internet_archive"
+                hx-get="{% url 'location.wiki.media' location.slug 'internet_archive' %}"
+                hx-trigger="load" hx-target="#wiki-media-grid" hx-swap="beforeend" hx-timeout="25000" hidden></div>
+            <div class="media-provider-loader" id="wiki-media-loader-yelp"
+                hx-get="{% url 'location.wiki.media' location.slug 'yelp' %}"
+                hx-trigger="load" hx-target="#wiki-media-grid" hx-swap="beforeend" hx-timeout="25000" hidden></div>
+            <div class="media-provider-loader" id="wiki-media-loader-google_images"
+                hx-get="{% url 'location.wiki.media' location.slug 'google_images' %}"
+                hx-trigger="load" hx-target="#wiki-media-grid" hx-swap="beforeend" hx-timeout="25000" hidden></div>
+            <div class="media-provider-loader" id="wiki-media-loader-searxng_images"
+                hx-get="{% url 'location.wiki.media' location.slug 'searxng_images' %}"
+                hx-trigger="load" hx-target="#wiki-media-grid" hx-swap="beforeend" hx-timeout="25000" hidden></div>
+            <div class="media-provider-loader" id="wiki-media-loader-google_maps"
+                hx-get="{% url 'location.wiki.media' location.slug 'google_maps' %}"
+                hx-trigger="load" hx-target="#wiki-media-grid" hx-swap="beforeend" hx-timeout="25000" hidden></div>
+            <div class="media-provider-loader" id="wiki-media-loader-loopnet"
+                hx-get="{% url 'location.wiki.media' location.slug 'loopnet' %}"
+                hx-trigger="load" hx-target="#wiki-media-grid" hx-swap="beforeend" hx-timeout="25000" hidden></div>
+            <div class="media-provider-loader" id="wiki-media-loader-cris_building"
+                hx-get="{% url 'location.wiki.media' location.slug 'cris_building' %}"
+                hx-trigger="load" hx-target="#wiki-media-grid" hx-swap="beforeend" hx-timeout="25000" hidden></div>
+
+        </div>{# end wiki-body-secondary #}
+
+    </div>{# end wiki-body #}
+    </section>{# end overview tab #}
+
+    {# -- Article tab: the community's Wikipedia-style article --------------- #}
+    <section class="page-tab-panel" data-tab-panel="article" hidden>
+        <div class="card wiki-card article-card">
+            <div class="card__body">
+                <div id="article-panel"
+                     hx-get="{% url 'location.wiki.article' location.slug %}"
+                     hx-trigger="load"
+                     hx-swap="outerHTML">
+                    <div class="wiki-loading"><i class="material-icons spin">autorenew</i> Loading article...</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    {# -- Comments tab -------------------------------------------------------- #}
+    <section class="page-tab-panel" data-tab-panel="comments" hidden>
+        <div id="comment-panel"
+             hx-get="{% url 'location.wiki.comments' location.slug %}"
+             hx-trigger="load"
+             hx-swap="outerHTML"
+             class="card wiki-card">
+            <div class="card-header">
+                <i class="material-symbols-outlined">chat</i>
+                <h2>Discussion</h2>
+            </div>
+            <div class="card__body wiki-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
+        </div>
+    </section>
+
+    {# -- Edit history tab: field edits + article revisions ------------------- #}
+    <section class="page-tab-panel" data-tab-panel="history" hidden>
+        <div class="wiki-history-grid">
+            <div class="card wiki-card wiki-tabs-card">
+                <div class="card-header">
+                    <i class="material-symbols-outlined">edit_note</i>
+                    <h2>Page &amp; Field Edits</h2>
                 </div>
                 <div id="wiki-tab-content"
                      class="card__body wiki-tab-content"
                      hx-get="{% url 'location.wiki.history' location.slug %}"
-                     hx-trigger="load[!window.ulSectionCollapsed('wiki','history')], ul:unhide"
+                     hx-trigger="load"
                      hx-swap="innerHTML">
                     <div class="wiki-loading">
                         <i class="material-icons spin">autorenew</i> Loading...
                     </div>
                 </div>
             </div>
-
-        </div>{# end wiki-body-secondary #}
-
-    </div>{# end wiki-body #}
+            <div class="card wiki-card article-history-card">
+                <div class="card-header">
+                    <i class="material-symbols-outlined">history_edu</i>
+                    <h2>Article Revisions</h2>
+                </div>
+                <div class="card__body">
+                    <div id="article-history-panel"
+                         hx-get="{% url 'location.wiki.article.history' location.slug %}"
+                         hx-trigger="load"
+                         hx-swap="outerHTML">
+                        <div class="wiki-loading"><i class="material-icons spin">autorenew</i> Loading...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
 
     {# -- Suggest-edits dialog ----------------------------------------------- #}
     <dialog id="wiki-edit-dialog" class="wiki-edit-dialog ul-dialog">
@@ -347,6 +455,37 @@
      data-show-onboarding-tips="{{ request.user.profile.show_onboarding_tips|yesno:'1,' }}"></div>
 <script type="module" src="{% static 'dashboard/js/map-annotations.js' %}"></script>
 <script>
+    // -- External-data panels: handle 204 (no data) --------------------------
+    // HTMX does not perform a swap for 204 No Content responses, so a
+    // "Loading..." placeholder would otherwise stay visible forever - remove
+    // it explicitly. Mirrors the same data-ext-panel-204 handling on the pin
+    // detail page (dashboard/pages/location/index.html); only the Building
+    // Attributes card uses this on the wiki page today.
+    document.body.addEventListener('htmx:afterOnLoad', function (evt) {
+        var el = evt.detail && evt.detail.elt;
+        if (el && el.hasAttribute && el.hasAttribute('data-ext-panel-204') && evt.detail.xhr.status === 204) {
+            el.remove();
+        }
+    });
+</script>
+<script>
+(function () {
+    try {
+        var key = 'ul_recent_wikis_v1_{{ request.user.profile.id }}';
+        var entry = {
+            slug: '{{ location.slug|escapejs }}',
+            title: '{{ wiki.name|escapejs }}',
+            subtitle: '{{ location.address|default:"Community wiki"|truncatechars:80|escapejs }}',
+            url: '{% url 'location.wiki' location.slug %}'
+        };
+        var list = JSON.parse(window.localStorage.getItem(key) || '[]');
+        list = Array.isArray(list) ? list.filter(function (item) { return item.slug !== entry.slug; }) : [];
+        list.unshift(entry);
+        window.localStorage.setItem(key, JSON.stringify(list.slice(0, 10)));
+    } catch (e) {}
+}());
+</script>
+<script>
     // -- Suggest-edits form --------------------------------------------------
     document.getElementById('wiki-edit-form').addEventListener('submit', function (e) {
         e.preventDefault();
@@ -362,11 +501,22 @@
             if (resp.ok) {
                 toastr.success('Changes saved.');
                 document.getElementById('wiki-edit-dialog').close();
-                // Update visible fields without reload.
-                if (data.name) document.getElementById('wiki-field-name').textContent = data.name;
-                if (data.description !== undefined) {
-                    const dd = document.getElementById('wiki-field-description');
-                    if (dd) dd.textContent = data.description;
+                // Update visible fields without reload. The name uses the same
+                // wikiRenamed event the aliases panel's "Use this name" button
+                // fires, so every .wiki-title on the page stays in sync.
+                if (data.name) document.body.dispatchEvent(new CustomEvent('wikiRenamed', { detail: { name: data.name } }));
+                // Description, dates, and security chips all live in the "About"
+                // card - swap the whole thing so edits to any of them (not just
+                // description) show up immediately instead of only after reload.
+                if (resp.about_html !== undefined) {
+                    const existing = document.getElementById('wiki-about-card');
+                    if (existing) {
+                        existing.outerHTML = resp.about_html;
+                    } else if (resp.about_html) {
+                        // Card didn't exist yet (wiki had no description/dates/security
+                        // set) - insert it as the first card in the wiki body.
+                        document.querySelector('.wiki-body')?.insertAdjacentHTML('afterbegin', resp.about_html);
+                    }
                 }
                 // Refresh the history tab.
                 htmx.trigger('#wiki-tab-content', 'load');
@@ -380,6 +530,180 @@
     document.addEventListener('htmx:configRequest', (event) => {
         event.detail.headers['X-CSRFToken'] = csrftoken;
     });
+
+    // -- Wiki Media gallery --------------------------------------------------
+    // Combined external-media + shared-photo gallery with community voting.
+    // Each hidden loader (see the wiki-media-loader-* divs) appends its
+    // provider's tiles into #wiki-media-grid; this script (re)builds the
+    // source tabs, keeps the grid sorted by net vote score (highest first),
+    // and posts thumbs to location.wiki.media.vote. It mirrors the pin detail
+    // page's Media IIFE but is deliberately separate: the wiki ranks by votes
+    // and never hides down-voted items (they just rank lower). See
+    // controllers/wiki_media.py.
+    (function initWikiMedia() {
+        var TAB_LABELS = {
+            photos: 'Photos', smithsonian: 'Smithsonian', wikimedia: 'Wikimedia', wikipedia_media: 'Wikipedia',
+            loc: 'Library of Congress', yelp: 'Yelp', google_images: 'Google Images', google_maps: 'Google Maps',
+            searxng_images: 'Web Images',
+            internet_archive: 'Internet Archive', loopnet: 'LoopNet', cris_building: 'NY Historic Preservation (CRIS)',
+        };
+        var VOTE_URL = "{% url 'location.wiki.media.vote' location.slug %}";
+        var activeTab = 'all';
+        var manageLoaded = false;
+
+        function grid() { return document.getElementById('wiki-media-grid'); }
+        function section() { return document.getElementById('wiki-media-section'); }
+
+        function score(item) { return parseInt(item.dataset.voteScore || '0', 10) || 0; }
+
+        // Stable sort by descending net score - appendChild in order re-lays the
+        // grid without disturbing the relative order of equal-score items.
+        function sortByVotes() {
+            var g = grid();
+            if (!g) return;
+            Array.prototype.slice.call(g.querySelectorAll('.media-item'))
+                .sort(function (a, b) { return score(b) - score(a); })
+                .forEach(function (item) { g.appendChild(item); });
+        }
+
+        function rebuildTabs() {
+            var g = grid(), tabsEl = document.getElementById('wiki-media-tabs');
+            if (!g || !tabsEl) return;
+            var counts = {}, total = 0;
+            g.querySelectorAll('.media-item').forEach(function (item) {
+                var src = item.dataset.mediaSource;
+                total += 1;
+                if (src) counts[src] = (counts[src] || 0) + 1;
+            });
+            var badge = document.getElementById('wiki-media-count-badge');
+            if (badge) { badge.textContent = String(total); badge.hidden = total === 0; }
+            // Only resolve the loading/empty state once items actually exist -
+            // at init (and while providers are still responding) total is 0 but
+            // that's "still loading", not "nothing found". The all-empty case is
+            // settled by the grace-period timeout below instead.
+            if (total > 0) {
+                var loading = document.getElementById('wiki-media-loading');
+                if (loading) loading.hidden = true;
+                var empty = document.getElementById('wiki-media-empty');
+                if (empty) empty.hidden = true;
+            }
+
+            var currentView = section() ? section().dataset.mediaView : 'all';
+            if (activeTab !== 'all' && !counts[activeTab]) activeTab = 'all';
+            var html = '<button type="button" class="card-tab media-tab' + (currentView === 'all' && activeTab === 'all' ? ' active' : '') +
+                '" data-tab="all">All<span class="media-tab-count">' + total + '</span></button>';
+            html += '<button type="button" class="card-tab media-tab' + (currentView === 'manage' ? ' active' : '') +
+                '" data-tab="manage">Manage</button>';
+            Object.keys(counts).sort().forEach(function (src) {
+                html += '<button type="button" class="card-tab media-tab' + (currentView === 'all' && activeTab === src ? ' active' : '') +
+                    '" data-tab="' + src + '">' + (TAB_LABELS[src] || src) + '<span class="media-tab-count">' + counts[src] + '</span></button>';
+            });
+            tabsEl.innerHTML = html;
+            tabsEl.querySelectorAll('.media-tab').forEach(function (btn) {
+                btn.addEventListener('click', function () { onTabClick(btn.dataset.tab); });
+            });
+        }
+
+        function setView(view) {
+            var sec = section();
+            if (!sec) return;
+            sec.dataset.mediaView = view;
+            sec.querySelectorAll('.media-view-panel').forEach(function (p) { p.hidden = p.dataset.mediaViewPanel !== view; });
+        }
+
+        function highlightTab(tab) {
+            document.querySelectorAll('#wiki-media-tabs .media-tab').forEach(function (btn) {
+                btn.classList.toggle('active', btn.dataset.tab === tab);
+            });
+        }
+
+        function applyFilter(tab) {
+            var g = grid();
+            if (!g) return;
+            g.querySelectorAll('.media-item').forEach(function (item) {
+                item.classList.toggle('media-tab-excluded', tab !== 'all' && item.dataset.mediaSource !== tab);
+            });
+        }
+
+        function onTabClick(tab) {
+            if (tab === 'manage') {
+                setView('manage');
+                highlightTab('manage');
+                if (!manageLoaded) {
+                    manageLoaded = true;
+                    var panel = document.getElementById('wiki-gallery-panel');
+                    if (panel && window.htmx) window.htmx.trigger(panel, 'ul:load-manage');
+                }
+                return;
+            }
+            setView('all');
+            activeTab = tab;
+            applyFilter(tab);
+            highlightTab(tab);
+        }
+
+        // Each provider loader appends into #wiki-media-grid - re-sort + rebuild
+        // tabs once its tiles land. Ignore the self-polling pending loaders
+        // (UL-Panel-Pending) so an in-flight fetch doesn't churn the tabs.
+        document.body.addEventListener('htmx:afterSwap', function (evt) {
+            if (!evt.detail || !evt.detail.target || evt.detail.target.id !== 'wiki-media-grid') return;
+            if (evt.detail.xhr && evt.detail.xhr.getResponseHeader('UL-Panel-Pending')) return;
+            sortByVotes();
+            rebuildTabs();
+            applyFilter(activeTab);
+        });
+
+        function applyVoteState(itemEl, value) {
+            itemEl.dataset.mediaRelevant = value === true ? 'true' : (value === false ? 'false' : '');
+            itemEl.classList.toggle('media-item--relevant', value === true);
+            itemEl.classList.toggle('media-item--not-relevant', value === false);
+            var up = itemEl.querySelector('.media-item-vote-up-btn');
+            var down = itemEl.querySelector('.media-item-vote-down-btn');
+            if (up) up.classList.toggle('is-active', value === true);
+            if (down) down.classList.toggle('is-active', value === false);
+        }
+
+        window.wikiMediaVote = function (itemEl, isUp) {
+            if (!itemEl) return;
+            var wasUp = itemEl.dataset.mediaRelevant === 'true';
+            var wasDown = itemEl.dataset.mediaRelevant === 'false';
+            // Clicking your active thumb clears the vote back to neutral.
+            var next = isUp ? (wasUp ? null : true) : (wasDown ? null : false);
+            applyVoteState(itemEl, next);
+            fetch(VOTE_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
+                body: JSON.stringify({
+                    source: itemEl.dataset.mediaSource, item_key: itemEl.dataset.mediaKey,
+                    url: itemEl.dataset.mediaUrl, is_relevant: next,
+                }),
+            }).then(function (r) { return r.json(); }).then(function (data) {
+                if (data && typeof data.vote_score === 'number') {
+                    itemEl.dataset.voteScore = String(data.vote_score);
+                    var b = itemEl.querySelector('.media-item-votes');
+                    if (b) b.textContent = String(data.vote_score);
+                }
+                sortByVotes();
+                applyFilter(activeTab);
+            }).catch(function () { if (window.toastr) toastr.error('Failed to save your vote.'); });
+        };
+
+        rebuildTabs();
+
+        // If no provider has produced a single tile after a grace period (all
+        // sources 204'd, or the user has no external APIs enabled), stop the
+        // spinner and show the empty state instead of spinning forever - no
+        // grid swap fires in the zero-item case, so rebuildTabs never gets to.
+        setTimeout(function () {
+            var g = grid();
+            if (g && !g.querySelectorAll('.media-item').length) {
+                var loading = document.getElementById('wiki-media-loading');
+                if (loading) loading.hidden = true;
+                var empty = document.getElementById('wiki-media-empty');
+                if (empty) empty.hidden = false;
+            }
+        }, 15000);
+    }());
 
     // -- Pin the community-wiki notice to the corner once the header scrolls away --
     (function initWikiNoticeScroll() {
@@ -416,7 +740,9 @@
     // -- Community wiki onboarding -------------------------------------------
     (function initWikiOnboarding() {
         {% if not request.user.profile.show_onboarding_tips %}return;{% endif %}
-        const prefix = 'ul_onboarding_v1_wiki_{{ location.uuid|default:location.id }}';
+        // Global (per-user, not per-location) - see the matching comment in
+        // pages/location/index.html's initPinDetailOnboarding for why.
+        const prefix = 'ul_onboarding_v1_wiki';
         const sessionKey = prefix + '_later';
         const cards = [
             {
@@ -428,23 +754,24 @@
                 ready: function () { return !!document.querySelector('.wiki-edit-btn'); },
             },
             {
-                id: 'community-detail-pins', icon: 'add_location_alt', target: '#add-detail-btn',
+                id: 'community-detail-pins', icon: 'add_location_alt', target: '#markup-pin-button',
                 eyebrow: 'Shared map details', title: 'Add community detail pins for entrances and hazards',
                 body: 'Community detail pins appear on this wiki map for everyone. They are separate from your private detail pins on your personal pin page.',
-                button: 'Add detail pin', watchSelector: '#add-detail-btn',
-                action: function () { document.getElementById('add-detail-btn')?.click(); },
-                ready: function () { return !!document.getElementById('add-detail-btn'); },
+                button: 'Add detail pin', watchSelector: '#markup-pin-button',
+                action: function () { document.getElementById('markup-pin-button')?.click(); },
+                ready: function () { return !!document.getElementById('markup-pin-button'); },
             },
             {
-                id: 'wiki-photos', icon: 'photo_library', target: '#wiki-gallery-panel, #photo-gallery .gallery-upload-compact-btn',
+                id: 'wiki-photos', icon: 'photo_library', target: '#wiki-media-section',
                 eyebrow: 'Shared photos', title: 'Photos here are visible to the whole community',
-                body: 'Upload exterior, access, and historical photos that help other users. GPS-tagged images can be positioned directly on the wiki map.',
-                button: 'Upload a photo', watchSelector: '#wiki-gallery-panel .gallery-upload-compact-btn, #photo-gallery .gallery-upload-compact-btn',
+                body: 'Open the "Manage" tab in the Media section to upload exterior, access, and historical photos that help other users. GPS-tagged images can be positioned directly on the wiki map.',
+                button: 'Manage photos', watchSelector: '#wiki-media-tabs .media-tab[data-tab="manage"]',
                 action: function () {
-                    var btn = document.querySelector('#wiki-gallery-panel .gallery-upload-compact-btn, #photo-gallery .gallery-upload-compact-btn');
-                    if (btn) btn.click(); else document.getElementById('wiki-gallery-panel')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    var manageTab = document.querySelector('#wiki-media-tabs .media-tab[data-tab="manage"]');
+                    if (manageTab) manageTab.click();
+                    document.getElementById('wiki-media-section')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 },
-                ready: function () { return !!document.getElementById('wiki-gallery-panel'); },
+                ready: function () { return !!document.getElementById('wiki-media-section'); },
             },
         ];
         function dismissed(id) { try { return localStorage.getItem(prefix + '_' + id + '_dismissed') === '1'; } catch (_) { return false; } }

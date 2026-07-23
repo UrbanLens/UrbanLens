@@ -1,4 +1,7 @@
 {# Private annotation panel - only visible to the viewing user, never to the profile owner. #}
-<div class="profile-annotation-panel" id="profile-annotation-panel">
+<div class="profile-annotation-panel profile-private-zone" id="profile-annotation-panel">
+    <span class="profile-private-zone-cap profile-private-zone-cap--top" role="note"><i class="material-symbols-outlined" aria-hidden="true">lock</i> Only visible to you</span>
+    <p class="profile-private-zone-note">{{ subject.username }} never sees your notes, trust rating, or labels.</p>
     {% include "dashboard/partials/profile/profile_annotation_content.html" %}
+    <span class="profile-private-zone-cap profile-private-zone-cap--bottom" aria-hidden="true"><i class="material-symbols-outlined">lock</i> Only visible to you</span>
 </div>

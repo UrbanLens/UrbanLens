@@ -1,0 +1,101 @@
+{% load dashboard_tags %}
+{% comment %}
+Generic pin-detail info panel: a heading + optional chips, a row of quick
+facts, and an optional metadata grid, with an optional header/footer external
+link. Shared by every simple text-based external-data panel (Photon, Census
+TIGERweb, EPA Envirofacts, iNaturalist, GDELT, USGS Earthquake) so each one
+only needs a controller view building this context, not its own template/CSS.
+
+Context:
+    section_id, icon, title: panel identity (matches the placeholder's).
+    debug: optional DebugEntry for the admin overlay.
+    header_link: optional {url, label} - external link icon in the header.
+    heading_name: optional bold primary line under the header.
+    chips: optional list of short strings rendered as pill chips.
+    facts: optional list of {icon, text, href (optional)} shown as a row.
+    meta: optional list of {label, value, href (optional)} shown as a
+        definition-list grid; href renders the value as an external link.
+    footer_link: optional {url, label} - "View on X ->" link at the bottom.
+    pin, can_ai_extract: injected by the panel_info dispatcher. A link entry
+        (meta item or footer_link) that also sets ai_extract=True gets an AI
+        extraction button beside it - opt-in per link, so only links to real
+        content pages about the place (news articles, facility reports) offer
+        it, never provider homepages.
+{% endcomment %}
+<div id="{{ section_id }}" class="simple-info-panel {% if nested %}nested{% else %}card{% endif %}"
+     data-collapse-scope="pin" data-collapse-section="{{ section_id }}">
+    {% if debug %}
+    <span class="debug-marker" hidden
+          data-debug-source="{{ debug.source }}"
+          data-debug-query="{{ debug.query }}"
+          data-debug-cache="{{ debug.from_cache|yesno:'hit,miss' }}"
+          data-debug-count="{{ debug.count }}"></span>
+    {% endif %}
+    <div class="card-header">
+        <i class="material-symbols-outlined">{{ icon }}</i>
+        <h3>{{ title }}</h3>
+        {% if header_link %}
+        <a href="{{ header_link.url }}" target="_blank" rel="noopener noreferrer"
+           class="card-header-link" title="{{ header_link.label }}">
+            <i class="material-symbols-outlined">open_in_new</i>
+        </a>
+        {% endif %}
+    </div>
+
+    <div class="card__body simple-info-body">
+        {% if heading_name or chips %}
+        <div class="simple-info-heading">
+            {% if heading_name %}
+            <p class="simple-info-place-name">{{ heading_name }}</p>
+            {% endif %}
+            {% for chip in chips %}
+            <span class="simple-info-kind-chip">{{ chip }}</span>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {% if facts %}
+        <div class="simple-info-quick-facts">
+            {% for fact in facts %}
+            {% if fact.href %}
+            <a class="simple-info-fact" href="{{ fact.href }}" target="_blank" rel="noopener noreferrer">
+                <i class="material-symbols-outlined">{{ fact.icon }}</i>
+                <span>{{ fact.text }}</span>
+            </a>
+            {% else %}
+            <span class="simple-info-fact">
+                <i class="material-symbols-outlined">{{ fact.icon }}</i>
+                <span>{{ fact.text }}</span>
+            </span>
+            {% endif %}
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {% if meta %}
+        <dl class="simple-info-meta">
+            {% for entry in meta %}
+            <div class="simple-info-meta-item">
+                <dt>{{ entry.label }}</dt>
+                {% if entry.href %}
+                <dd>
+                    <a href="{{ entry.href }}" target="_blank" rel="noopener noreferrer">{{ entry.value }}</a>
+                    {% if entry.ai_extract %}{% include "dashboard/partials/pins/_ai_extract_button.html" with url=entry.href %}{% endif %}
+                </dd>
+                {% else %}
+                <dd>{{ entry.value }}</dd>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </dl>
+        {% endif %}
+
+        {% if footer_link %}
+        <a href="{{ footer_link.url }}" target="_blank" rel="noopener noreferrer" class="simple-info-view-link">
+            {{ footer_link.label }}
+            <i class="material-symbols-outlined">arrow_forward</i>
+        </a>
+        {% if footer_link.ai_extract %}{% include "dashboard/partials/pins/_ai_extract_button.html" with url=footer_link.url %}{% endif %}
+        {% endif %}
+    </div>
+</div>

@@ -1,0 +1,104 @@
+// Settings > Security: passkeys, authenticator app (TOTP), and backup codes.
+
+.passkey-list {
+    list-style: none;
+    margin: 0 0 1rem;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+}
+
+.passkey-list-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: .7rem .9rem;
+    border: 1px solid var(--ul-border, #e5e7eb);
+    border-radius: 10px;
+    background: var(--ul-surface, #fff);
+}
+
+.passkey-list-item-info {
+    display: flex;
+    align-items: center;
+    gap: .7rem;
+    min-width: 0;
+
+    > i.material-symbols-outlined {
+        font-size: 1.4rem;
+        color: var(--text-muted, #6b7280);
+        flex-shrink: 0;
+    }
+}
+
+.passkey-rename-form {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    margin-bottom: .2rem;
+}
+
+.passkey-name-input {
+    padding: .35rem .6rem;
+    border: 1px solid var(--ul-border, #d1d5db);
+    border-radius: 7px;
+    background: var(--ul-surface, #fff);
+    color: var(--text, #1f2937);
+    font-size: .85rem;
+}
+
+// -- Authenticator app (TOTP) setup ---------------------------------------------
+
+.totp-setup {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: .75rem;
+    max-width: 36rem;
+}
+
+.totp-qrcode {
+    width: 180px;
+    height: 180px;
+    border: 1px solid var(--ul-border, #e5e7eb);
+    border-radius: 10px;
+    padding: .5rem;
+    background: #fff;
+}
+
+.totp-manual-key {
+    display: inline-block;
+    padding: .15rem .4rem;
+    border-radius: 6px;
+    background: var(--ul-surface-alt, #f3f4f6);
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    letter-spacing: .04em;
+    word-break: break-all;
+}
+
+// -- Backup codes ----------------------------------------------------------------
+
+.backup-codes-reveal {
+    padding: .9rem 1rem;
+    margin-bottom: .85rem;
+    border: 1px dashed var(--ul-border, #d1d5db);
+    border-radius: 10px;
+    background: var(--ul-surface-alt, #f9fafb);
+}
+
+.backup-codes-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: .4rem .75rem;
+    list-style: none;
+    margin: .6rem 0 0;
+    padding: 0;
+
+    code {
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+        font-size: .9rem;
+        letter-spacing: .03em;
+    }
+}

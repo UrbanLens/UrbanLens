@@ -7,11 +7,11 @@ from unittest import mock
 from hypothesis import given, settings as hyp_settings, strategies as st
 from kombu.exceptions import KombuError
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.celery import PROGRESS_STATE, TaskProgress, get_task_progress, safely_enqueue_task, update_task_progress
 
 
-class TaskProgressTests(TestCase):
+class TaskProgressTests(SimpleTestCase):
     """TaskProgress serializes consistently for polling clients."""
 
     @given(state=st.sampled_from(["PENDING", "STARTED", "PROGRESS", "SUCCESS", "FAILURE", "REVOKED"]))
@@ -21,7 +21,7 @@ class TaskProgressTests(TestCase):
         self.assertEqual(payload["ready"], state in {"SUCCESS", "FAILURE", "REVOKED"})
 
 
-class UpdateTaskProgressTests(TestCase):
+class UpdateTaskProgressTests(SimpleTestCase):
     """update_task_progress clamps unsafe inputs and computes percentages."""
 
     @given(current=st.integers(min_value=-10_000, max_value=10_000), total=st.integers(min_value=-100, max_value=10_000))
@@ -43,7 +43,7 @@ class UpdateTaskProgressTests(TestCase):
         self.assertEqual(meta["message"], "Working")
 
 
-class GetTaskProgressTests(TestCase):
+class GetTaskProgressTests(SimpleTestCase):
     """get_task_progress normalizes Celery result backend states."""
 
     def test_success_uses_result_payload(self) -> None:
@@ -70,7 +70,7 @@ class GetTaskProgressTests(TestCase):
         self.assertEqual(progress.message, "Halfway")
 
 
-class SafelyEnqueueTaskTests(TestCase):
+class SafelyEnqueueTaskTests(SimpleTestCase):
     """safely_enqueue_task delegates to Celery and handles broker errors."""
 
     def test_uses_apply_async_without_countdown(self) -> None:

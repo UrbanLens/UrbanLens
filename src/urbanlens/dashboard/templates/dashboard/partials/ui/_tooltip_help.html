@@ -7,7 +7,7 @@ Usage:
 <button type="button"
         class="ul-tooltip-help"
         data-tooltip="{{ text }}"
-        {% if pos %}data-tooltip-pos="{{ pos }}"{% endif %}
+        data-tooltip-pos="{{ pos|default:'right' }}"
         {% if wide %}data-tooltip-wide{% endif %}
         aria-label="More information">
     <i class="material-icons" aria-hidden="true">info</i>

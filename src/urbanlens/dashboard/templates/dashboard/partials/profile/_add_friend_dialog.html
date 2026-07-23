@@ -1,0 +1,35 @@
+{% comment %}
+Shared "Add Friend" dialog, opened by {% include "dashboard/partials/profile/_add_friend_button.html" %}.
+
+Required:
+  target_profile_id - pk of the profile the request is being sent to
+  dialog_id          - must match the opening button's dialog_id
+
+Optional:
+  hx_target - if set, the form posts via HTMX and swaps this target in place
+              (e.g. "#friend_list"); otherwise it's a plain form post that
+              redirects back to the profile page (see friend.request view).
+{% endcomment %}
+<dialog id="{{ dialog_id|default:'add-friend-dialog' }}" class="invite-dialog ul-dialog">
+    <div class="dialog-header">
+        <span><i class="material-symbols-outlined">person_add</i> Add Friend</span>
+        <button type="button" class="dialog-close" onclick="this.closest('dialog').close()" aria-label="Close dialog">
+            <i class="material-symbols-outlined">close</i>
+        </button>
+    </div>
+    <div class="invite-dialog-body">
+        <p class="invite-dialog-hint">Optionally include a short note with your friend request.</p>
+        <form class="invite-form" method="post" action="{% url 'friend.request' target_profile_id %}"
+              {% if hx_target %}hx-post="{% url 'friend.request' target_profile_id %}" hx-target="{{ hx_target }}" hx-swap="outerHTML"{% endif %}
+              {% if hx_target %}hx-on::after-request="if(event.detail.successful) this.closest('dialog').close();"{% endif %}>
+            {% csrf_token %}
+            <textarea name="message" class="invite-email-input invite-message-input" rows="3" maxlength="1000"
+                placeholder="Say hello... (optional)"></textarea>
+            <div class="invite-form-actions">
+                <button type="submit" class="btn btn--primary">
+                    <i class="material-symbols-outlined">send</i> Send Request
+                </button>
+            </div>
+        </form>
+    </div>
+</dialog>

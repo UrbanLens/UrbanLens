@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from functools import cached_property
 import logging
 from typing import TYPE_CHECKING
 
@@ -56,6 +57,20 @@ class NotificationLog(abstract.DashboardModel):
         """True when this notification has not been read yet."""
         return self.status == Status.UNREAD
 
+    @cached_property
+    def _friend_request_friendship(self):
+        """The Friendship row backing a friend_request notification, or None.
+
+        Cached per-instance since both `is_friend_request_pending` and
+        `friend_request_resolution` need it and templates commonly read both.
+        """
+        if self.notification_type != NotificationType.FRIEND_REQUEST or not self.source_profile_id or not self.profile_id:
+            return None
+
+        from urbanlens.dashboard.models.friendship.model import Friendship
+
+        return Friendship.objects.between(self.source_profile_id, self.profile_id)
+
     @property
     def is_friend_request_pending(self) -> bool:
         """True when this is a friend_request notification still awaiting a response.
@@ -64,14 +79,32 @@ class NotificationLog(abstract.DashboardModel):
         marks notifications read, but the Accept/Decline buttons must stay visible
         until the recipient actually accepts or declines the request.
         """
-        if self.notification_type != NotificationType.FRIEND_REQUEST or not self.source_profile_id or not self.profile_id:
-            return False
-
         from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
-        from urbanlens.dashboard.models.friendship.model import Friendship
 
-        friendship = Friendship.objects.between(self.source_profile_id, self.profile_id)
+        friendship = self._friend_request_friendship
         return friendship is not None and friendship.status == FriendshipStatus.REQUESTED
+
+    @property
+    def friend_request_resolution(self) -> str | None:
+        """Returns "accepted"/"declined" once a friend_request notification's underlying
+        request has been resolved one way or the other, else None (still pending,
+        or this isn't a friend_request notification).
+
+        Without this, a friend_request notification's Accept/Decline buttons
+        disappear once resolved (see `is_friend_request_pending`) but the title/
+        message stayed frozen at "Sarah wants to be your friend." forever after -
+        looking like a dangling, unactionable request instead of a settled one.
+        """
+        from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
+
+        friendship = self._friend_request_friendship
+        if friendship is None:
+            return None
+        if friendship.status == FriendshipStatus.ACCEPTED:
+            return "accepted"
+        if FriendshipStatus.rejected(friendship.status):
+            return "declined"
+        return None
 
     class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_notifications"
@@ -85,21 +118,61 @@ class NotificationLog(abstract.DashboardModel):
 
 
 class NotificationPreference(abstract.DashboardModel):
-    """Per-user delivery preferences for each notification type."""
+    """Per-user delivery preferences for each notification type.
+
+    Site/email delivery is a single ``DeliveryPreference`` choice per type
+    (see below). WhatsApp and SMS are independent on/off toggles instead of
+    being folded into that enum: each is billed per message sent (unlike
+    email), so they default off, and a 4-way combined enum would need 16
+    string values to cover every combination - a plain boolean per channel
+    is simpler and keeps the existing site/email columns untouched.
+    """
 
     trip_updated = models.CharField(max_length=10, choices=DeliveryPreference.choices, default=DeliveryPreference.SITE)
+    trip_updated_whatsapp = models.BooleanField(default=False)
+    trip_updated_sms = models.BooleanField(default=False)
+
     friend_request = models.CharField(max_length=10, choices=DeliveryPreference.choices, default=DeliveryPreference.SITE)
+    friend_request_whatsapp = models.BooleanField(default=False)
+    friend_request_sms = models.BooleanField(default=False)
+
     message = models.CharField(max_length=10, choices=DeliveryPreference.choices, default=DeliveryPreference.SITE)
+    message_whatsapp = models.BooleanField(default=False)
+    message_sms = models.BooleanField(default=False)
+
     comment_reply = models.CharField(max_length=10, choices=DeliveryPreference.choices, default=DeliveryPreference.SITE)
+    comment_reply_whatsapp = models.BooleanField(default=False)
+    comment_reply_sms = models.BooleanField(default=False)
+
     comment_liked = models.CharField(max_length=10, choices=DeliveryPreference.choices, default=DeliveryPreference.SITE)
+    comment_liked_whatsapp = models.BooleanField(default=False)
+    comment_liked_sms = models.BooleanField(default=False)
+
     friend_accepted = models.CharField(max_length=10, choices=DeliveryPreference.choices, default=DeliveryPreference.SITE)
+    friend_accepted_whatsapp = models.BooleanField(default=False)
+    friend_accepted_sms = models.BooleanField(default=False)
+
     added_to_trip = models.CharField(max_length=10, choices=DeliveryPreference.choices, default=DeliveryPreference.SITE)
+    added_to_trip_whatsapp = models.BooleanField(default=False)
+    added_to_trip_sms = models.BooleanField(default=False)
+
     wiki_updated = models.CharField(max_length=10, choices=DeliveryPreference.choices, default=DeliveryPreference.SITE)
+    wiki_updated_whatsapp = models.BooleanField(default=False)
+    wiki_updated_sms = models.BooleanField(default=False)
+
     pin_shared = models.CharField(max_length=10, choices=DeliveryPreference.choices, default=DeliveryPreference.SITE)
+    pin_shared_whatsapp = models.BooleanField(default=False)
+    pin_shared_sms = models.BooleanField(default=False)
+
     visit_suggested = models.CharField(max_length=10, choices=DeliveryPreference.choices, default=DeliveryPreference.SITE)
+    visit_suggested_whatsapp = models.BooleanField(default=False)
+    visit_suggested_sms = models.BooleanField(default=False)
+
     # Defaults to BOTH (not SITE like the rest): this alerts pin owners that someone may be
     # missing at their pinned place - an email is the point when the recipient isn't logged in.
     wiki_safety_checkin = models.CharField(max_length=10, choices=DeliveryPreference.choices, default=DeliveryPreference.BOTH)
+    wiki_safety_checkin_whatsapp = models.BooleanField(default=False)
+    wiki_safety_checkin_sms = models.BooleanField(default=False)
 
     profile = models.OneToOneField(
         "dashboard.Profile",

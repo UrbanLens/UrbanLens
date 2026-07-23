@@ -1,0 +1,37 @@
+{% load dashboard_tags %}
+{# Pin or location label membership panel (tags, categories, and statuses). #}
+{# `embedded` drops the .card wrapper and the "Labels" header entirely for the #}
+{# pin detail page's combined Organization section: labels already have a #}
+{# universal look site-wide, so that context doesn't repeat a title for them - #}
+{# it's added/collapsed from the Organization card's own header instead. See #}
+{# location/index.html and _membership_panel_ctx(). #}
+{# `dialog_only` goes further still: no card, no header, no chip list at all - #}
+{# just the (invisible until opened) dialog, for call sites that swap into a #}
+{# bare slot div meant to hold nothing else (e.g. the photo gallery's label #}
+{# icon - see _photo_gallery.html's #photo-label-panel-slot). #}
+{% if embedded %}
+{# Organization's card-header lives on the pin detail page itself (see location/index.html) - #}
+{# push this panel's member count out to that header's badge via an OOB swap. #}
+<span class="badge" id="organization-count-badge" hx-swap-oob="true"{% if not member_ids %} hidden{% endif %}>{{ member_ids|length }}</span>
+{% endif %}
+<div class="tag-panel{% if not embedded and not dialog_only %} card{% endif %}{% if embedded %} tag-panel--embedded{% endif %}{% if dialog_only %} tag-panel--dialog-only{% endif %}" id="{{ panel_id }}"
+     {% if not embedded and not dialog_only %}data-collapse-scope="{{ collapse_scope }}" data-collapse-section="categories"{% endif %}>
+    {% if not embedded and not dialog_only %}
+    <div class="card-header">
+        <i class="material-symbols-outlined">label</i>
+        <h3>Labels</h3>
+        <button type="button" class="btn btn--icon-sm"
+                onclick="document.getElementById('{{ dialog_id_prefix }}{{ dialog_id_suffix }}').showModal()"
+                title="Add a label">
+            <i class="material-symbols-outlined">add</i>
+        </button>
+    </div>
+    {% endif %}
+
+    {% if not dialog_only %}
+    {% include "dashboard/partials/labels/_label_chips.html" with label_url_kind=label_url_kind membership_route=membership_route obj_uuid=obj_uuid panel_id=panel_id all_labels=all_labels member_ids=member_ids empty_text=empty_text %}
+    {% endif %}
+
+    {% include "dashboard/partials/labels/_label_dialog.html" with dialog_id_prefix=dialog_id_prefix dialog_id_suffix=dialog_id_suffix label_url_kind=label_url_kind membership_route=membership_route obj_uuid=obj_uuid panel_id=panel_id all_labels=all_labels member_ids=member_ids %}
+</div>
+{% include "dashboard/partials/labels/_label_dialog_js.html" %}

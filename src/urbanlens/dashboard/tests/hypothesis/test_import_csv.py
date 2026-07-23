@@ -10,13 +10,13 @@ from __future__ import annotations
 
 from hypothesis import given, settings as hyp_settings, strategies as st
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
 
 _hyp = hyp_settings(max_examples=40, deadline=None)
 
 
-class CsvRowIterLatLonTests(TestCase):
+class CsvRowIterLatLonTests(SimpleTestCase):
     """_csv_row_iter() falls back to explicit latitude/longitude columns when there's no URL column."""
 
     def setUp(self):
@@ -56,6 +56,30 @@ class CsvRowIterLatLonTests(TestCase):
         self.assertAlmostEqual(pins[0]["latitude"], 1.0)
         self.assertAlmostEqual(pins[0]["longitude"], 2.0)
 
+    def test_parking_location_column_is_recognized_as_a_url_column(self):
+        """UL-203: Google Takeout's Parking.csv export uses a "Parking location"
+        header for its URL column, not "URL" - every row previously fell
+        through to the generic latitude/longitude fallback (which Parking.csv
+        has none of) and was silently skipped, so the whole file failed to
+        import a single pin."""
+        csv_text = 'Parking location,Timestamp\n"https://maps.google.com/maps/search/3.0,4.0",2024-01-01T00:00:00Z'
+
+        pins = list(self.gateway._csv_row_iter(csv_text, self.profile))
+
+        self.assertEqual(len(pins), 1)
+        self.assertIsNotNone(pins[0])
+        self.assertAlmostEqual(pins[0]["latitude"], 3.0)
+        self.assertAlmostEqual(pins[0]["longitude"], 4.0)
+
+    def test_parking_location_column_name_is_matched_case_insensitively(self):
+        csv_text = 'PARKING LOCATION\n"https://maps.google.com/maps/search/5.0,6.0"'
+
+        pins = list(self.gateway._csv_row_iter(csv_text, self.profile))
+
+        self.assertEqual(len(pins), 1)
+        self.assertAlmostEqual(pins[0]["latitude"], 5.0)
+        self.assertAlmostEqual(pins[0]["longitude"], 6.0)
+
     def test_row_missing_coordinates_and_url_is_skipped(self):
         csv_text = "name,notes\nNo Coords,just some text"
 
@@ -83,7 +107,7 @@ class CsvRowIterLatLonTests(TestCase):
     @_hyp
     @given(
         name=st.text(
-            alphabet=st.characters(blacklist_categories=("Cs", "Cc"), blacklist_characters=",\r\n\""),
+            alphabet=st.characters(blacklist_categories=("Cs", "Cc"), blacklist_characters=',\r\n"'),
             min_size=1,
             max_size=40,
         ).map(str.strip).filter(bool),

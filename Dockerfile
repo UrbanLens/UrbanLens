@@ -37,7 +37,12 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive && \
         iputils-ping \
         libgdal-dev \
         wget \
-        gosu && \
+        gosu \
+        ffmpeg \
+        poppler-utils \
+        tesseract-ocr \
+        libreoffice-writer \
+        libreoffice-calc && \
     sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen && \
     locale-gen && \
     pg_dump --version && \

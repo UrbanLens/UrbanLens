@@ -1,0 +1,71 @@
+{% load dashboard_tags %}
+{% comment %}
+Reusable Parent/Child label picker used by the create, edit, and bulk-edit label dialogs.
+   mode='replace': selections fully replace the label's parents/children on save (create/edit forms).
+   mode='additive': selections are added to whatever's already related, never removed (bulk-edit).
+{% endcomment %}
+{% with rel_explainer_id=explainer_id|default:instance_id|add:'-rel-explainer' %}
+<div class="label-rel-picker" data-picker-id="{{ instance_id }}" data-mode="{{ mode }}">
+    <div class="label-rel-top-row">
+        <span class="form-label">{% if mode == 'additive' %}Add relationships{% else %}Relationships{% endif %}</span>
+        {% include 'dashboard/partials/ui/_page_explainer_anchor.html' with explainer_id=rel_explainer_id %}
+    </div>
+    {% if mode == 'additive' %}
+    <p class="form-hint">Selected labels are <strong>added</strong> as parents/children. Existing relationships are not removed.</p>
+    {% endif %}
+    {% include 'dashboard/partials/ui/_page_explainer.html' with explainer_id=rel_explainer_id modifier='text-only' kicker='How relationships work' heading='Parent and child labels nest automatically' body='Make a label the parent of another to group related items. Searching or filtering by a parent also matches all of its children — a “Churches” tag with “Cathedral” and “Chapel” as children will match pins tagged with either. A parent’s pin count also includes all of its children’s pins.' %}
+
+    <div class="label-rel-selected-section">
+        <div class="label-rel-selected-group">
+            <div class="label-rel-selected-header">
+                <h4 class="label-rel-selected-title"><i class="material-symbols-outlined">arrow_upward</i> Parents</h4>
+                <div class="label-rel-add-dropdown">
+                    <button type="button" class="label-rel-add-btn" onclick="LabelRelPicker.toggle('{{ instance_id }}', 'parent', this)">
+                        <i class="material-symbols-outlined">add</i> Add
+                    </button>
+                    {% include 'dashboard/partials/ui/_label_rel_popup.html' with instance_id=instance_id rel_type='parent' ns=ns candidates=candidates selected_ids=selected_ids %}
+                </div>
+            </div>
+            <div class="label-rel-selected-chips" id="{{ instance_id }}-sel-parent">
+                {% for b in initial_parents %}
+                <span class="label-rel-chip" data-id="{{ b.id }}">
+                    <span class="tag-chip" {% if b.color %}style="--tag-color:{{ b.color }}"{% endif %}>
+                        {% include 'dashboard/partials/ui/_label_rel_chip_body.html' with label=b show_kind=False %}
+                        {% if mode == 'replace' %}<input type="hidden" name="parent_ids" value="{{ b.id }}">{% endif %}
+                    </span>
+                    <button type="button" class="tag-chip-remove" title="Remove parent" onclick="LabelRelPicker.remove('{{ instance_id }}', this.closest('.label-rel-chip'))">&times;</button>
+                </span>
+                {% endfor %}
+            </div>
+            <p class="label-rel-empty-hint" {% if initial_parents %}hidden{% endif %}>No parents selected.</p>
+        </div>
+        <div class="label-rel-selected-group">
+            <div class="label-rel-selected-header">
+                <h4 class="label-rel-selected-title"><i class="material-symbols-outlined">arrow_downward</i> Children</h4>
+                <div class="label-rel-add-dropdown">
+                    <button type="button" class="label-rel-add-btn" onclick="LabelRelPicker.toggle('{{ instance_id }}', 'child', this)">
+                        <i class="material-symbols-outlined">add</i> Add
+                    </button>
+                    {% include 'dashboard/partials/ui/_label_rel_popup.html' with instance_id=instance_id rel_type='child' ns=ns candidates=candidates selected_ids=selected_ids %}
+                </div>
+            </div>
+            <div class="label-rel-selected-chips" id="{{ instance_id }}-sel-child">
+                {% for b in initial_children %}
+                <span class="label-rel-chip" data-id="{{ b.id }}">
+                    <span class="tag-chip" {% if b.color %}style="--tag-color:{{ b.color }}"{% endif %}>
+                        {% include 'dashboard/partials/ui/_label_rel_chip_body.html' with label=b show_kind=False %}
+                        {% if mode == 'replace' %}<input type="hidden" name="child_ids" value="{{ b.id }}">{% endif %}
+                    </span>
+                    <button type="button" class="tag-chip-remove" title="Remove child" onclick="LabelRelPicker.remove('{{ instance_id }}', this.closest('.label-rel-chip'))">&times;</button>
+                </span>
+                {% endfor %}
+            </div>
+            <p class="label-rel-empty-hint" {% if initial_children %}hidden{% endif %}>No children selected.</p>
+        </div>
+    </div>
+
+    <div class="label-rel-trash" id="{{ instance_id }}-trash">
+        <i class="material-symbols-outlined">delete</i> Drop here to remove
+    </div>
+</div>
+{% endwith %}

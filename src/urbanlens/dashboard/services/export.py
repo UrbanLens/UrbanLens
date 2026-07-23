@@ -23,28 +23,34 @@ VALID_EXPORT_TYPES = frozenset(
     {
         "profile",
         "pins",
-        "badges",
+        "labels",
         "connections",
         "visit_history",
         "comments",
         "photos",
         "trips",
         "settings",
+        "custom_fields",
         "google_takeout",
+        "direct_messages",
+        "pin_lists",
     },
 )
 
 _ORDERED_TYPES = [
     "profile",
     "settings",
+    "custom_fields",
     "pins",
     "google_takeout",
-    "badges",
+    "labels",
     "connections",
     "visit_history",
     "comments",
     "photos",
     "trips",
+    "pin_lists",
+    "direct_messages",
 ]
 
 
@@ -142,14 +148,17 @@ def run_export(user_id: int, export_types: list[str], export_dir_path: str, base
     exporters: dict[str, tuple[Any, str]] = {
         "profile": (_export_profile, "Exporting profile..."),
         "settings": (_export_settings, "Exporting settings..."),
+        "custom_fields": (_export_custom_fields, "Exporting custom fields..."),
         "pins": (_export_pins, "Exporting pins..."),
         "google_takeout": (_export_pins_google_takeout, "Exporting Google Takeout format..."),
-        "badges": (_export_badges, "Exporting badges..."),
+        "labels": (_export_labels, "Exporting labels..."),
         "connections": (_export_connections, "Exporting connections..."),
         "visit_history": (_export_visit_history, "Exporting visit history..."),
         "comments": (_export_comments, "Exporting comments..."),
         "photos": (_export_photos, "Exporting photos..."),
         "trips": (_export_trips, "Exporting trips..."),
+        "pin_lists": (_export_pin_lists, "Exporting lists..."),
+        "direct_messages": (_export_direct_messages, "Exporting direct messages..."),
     }
 
     try:
@@ -251,25 +260,89 @@ def _export_profile(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
         "birth_date": str(profile.birth_date) if profile.birth_date else None,
         "started_exploring": str(profile.started_exploring) if profile.started_exploring else None,
         "date_joined": str(profile.user.date_joined),
+        "contact": {
+            "phone_number": profile.phone_number or "",
+            "signal_username": profile.signal_username or "",
+            "discord_username": profile.discord_username or "",
+            "whatsapp_number": profile.whatsapp_number or "",
+            "telegram_username": profile.telegram_username or "",
+            "matrix_handle": profile.matrix_handle or "",
+        },
     }
     with open(os.path.join(temp_dir, "profile.json"), "w", encoding="utf-8") as fh:
         json.dump(data, fh, indent=2, ensure_ascii=False)
 
 
 def _export_settings(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
+    """Export every user-configurable Profile setting, plus per-notification-type delivery preferences.
+
+    Deliberately excludes fields that aren't really "settings": identity/PII
+    (covered by profile.json), internal bookkeeping (deletion_requested_at,
+    profile_setup_complete, tos_accepted_at, ...), and anything security-
+    sensitive (there is none stored directly on Profile - passkeys/TOTP/etc.
+    live in their own models and are never exported).
+    """
     data = {
         "theme_mode": profile.theme_mode,
         "guidance_level": profile.guidance_level,
+        "distance_units": profile.distance_units,
         "map_dark_mode": profile.map_dark_mode,
         "default_map_view": profile.default_map_view,
         "cluster_radius": profile.cluster_radius,
         "use_pin_cache": profile.use_pin_cache,
         "map_center_mode": profile.map_center_mode,
         "map_default_zoom": profile.map_default_zoom,
+        "map_center_latitude": str(profile.map_center_latitude) if profile.map_center_latitude is not None else None,
+        "map_center_longitude": str(profile.map_center_longitude) if profile.map_center_longitude is not None else None,
+        "map_custom_latitude": str(profile.map_custom_latitude) if profile.map_custom_latitude is not None else None,
+        "map_custom_longitude": str(profile.map_custom_longitude) if profile.map_custom_longitude is not None else None,
+        "remembered_map_lat": str(profile.remembered_map_lat) if profile.remembered_map_lat is not None else None,
+        "remembered_map_lng": str(profile.remembered_map_lng) if profile.remembered_map_lng is not None else None,
+        "remembered_map_zoom": profile.remembered_map_zoom,
         "markup_fill_color": profile.markup_fill_color,
         "markup_fill_opacity": profile.markup_fill_opacity,
         "markup_border_color": profile.markup_border_color,
         "markup_border_opacity": profile.markup_border_opacity,
+        "pin_detail_map_height": profile.pin_detail_map_height,
+        "media_gallery_sort": profile.media_gallery_sort,
+        "show_wiki_cover_photos": profile.show_wiki_cover_photos,
+        "auto_create_pin_article_from_wikipedia": profile.auto_create_pin_article_from_wikipedia,
+        "ai": {
+            "ai_enabled": profile.ai_enabled,
+            "ai_label_tags": profile.ai_label_tags,
+            "ai_label_categories": profile.ai_label_categories,
+            "ai_label_statuses": profile.ai_label_statuses,
+        },
+        "keyword_tagging": {
+            "keyword_tagging_enabled": profile.keyword_tagging_enabled,
+            "keyword_label_tags": profile.keyword_label_tags,
+            "keyword_label_categories": profile.keyword_label_categories,
+            "keyword_label_statuses": profile.keyword_label_statuses,
+        },
+        "photos": {
+            "generate_photo_keywords": profile.generate_photo_keywords,
+            "image_downscale_max_dimension": profile.image_downscale_max_dimension,
+            "video_downscale_max_height": profile.video_downscale_max_height,
+        },
+        "places_layers": {
+            "places_google_enabled": profile.places_google_enabled,
+            "places_nps_enabled": profile.places_nps_enabled,
+            "places_wikipedia_enabled": profile.places_wikipedia_enabled,
+        },
+        "tracking": {
+            "track_pin_visits": profile.track_pin_visits,
+            "track_routes": profile.track_routes,
+            "track_geolocation": profile.track_geolocation,
+        },
+        "community": {
+            "community_enabled": profile.community_enabled,
+            "sync_rating_to_wiki": profile.sync_rating_to_wiki,
+            "sync_vulnerability_to_wiki": profile.sync_vulnerability_to_wiki,
+            "sync_priority_to_wiki": profile.sync_priority_to_wiki,
+            "sync_danger_to_wiki": profile.sync_danger_to_wiki,
+            "sync_aliases": profile.sync_aliases,
+        },
+        "external_apis_enabled": profile.external_apis_enabled,
         "privacy": {
             "profile_visibility": profile.profile_visibility,
             "comment_visibility": profile.comment_visibility,
@@ -278,10 +351,96 @@ def _export_settings(profile: Any, temp_dir: str, *, base_url: str = "") -> None
             "viewer_photo_filter": profile.viewer_photo_filter,
             "trip_pin_location_visibility": profile.trip_pin_location_visibility,
             "contact_visibility": profile.contact_visibility,
+            "direct_message_visibility": profile.direct_message_visibility,
+            "online_status_visibility": profile.online_status_visibility,
+            "read_receipt_visibility": profile.read_receipt_visibility,
+            "typing_indicator_visibility": profile.typing_indicator_visibility,
+            "common_pins_visibility": profile.common_pins_visibility,
+            "direct_message_delete_after": profile.direct_message_delete_after,
+            "allow_friend_recommendations": profile.allow_friend_recommendations,
         },
+        "notification_preferences": _notification_preferences_dict(profile),
     }
     with open(os.path.join(temp_dir, "settings.json"), "w", encoding="utf-8") as fh:
         json.dump(data, fh, indent=2, ensure_ascii=False)
+
+
+def _notification_preferences_dict(profile: Any) -> dict[str, Any]:
+    """Every field on the user's NotificationPreference row (delivery channel per notification type).
+
+    Introspected via the model's own field list rather than hand-enumerated:
+    every field here really is a plain delivery-channel setting (no PII, no
+    relations besides the owning profile), so this stays correct automatically
+    as new notification types are added - unlike the rest of this file, which
+    hand-lists fields deliberately so a new *sensitive* Profile field is never
+    exported without a human noticing.
+    """
+    from urbanlens.dashboard.models.notifications.model import NotificationPreference
+
+    prefs = NotificationPreference.objects.filter(profile=profile).first()
+    if prefs is None:
+        return {}
+    skip = {"id", "profile", "created", "updated", "uuid"}
+    return {f.name: getattr(prefs, f.name) for f in NotificationPreference._meta.get_fields() if getattr(f, "concrete", False) and f.name not in skip}  # noqa: SLF001
+
+
+def _export_custom_fields(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
+    """Export the user's custom field definitions and every stored value.
+
+    Each field row carries its values inline, with targets referenced by UUID
+    (matching the UUIDs used in the other export files) plus a human-readable
+    label so the export is useful on its own.
+    """
+    from urbanlens.dashboard.models.custom_fields.model import CustomField, CustomFieldEntity
+
+    fields = (
+        CustomField.objects.filter(profile=profile)
+        .order_by("entity_type", "order", "name")
+        .prefetch_related(
+            "values__pin",
+            "values__image",
+            "values__target_profile",
+            "values__markup_map",
+        )
+    )
+
+    rows = []
+    for field in fields:
+        values = []
+        for value in field.values.all():
+            if field.entity_type == CustomFieldEntity.PIN and value.pin:
+                target_uuid, target_label = str(value.pin.uuid), value.pin.effective_name
+            elif field.entity_type == CustomFieldEntity.PHOTO and value.image:
+                target_uuid, target_label = str(value.image.uuid), value.image.caption or ""
+            elif field.entity_type == CustomFieldEntity.PROFILE and value.target_profile:
+                target_uuid, target_label = str(value.target_profile.uuid), value.target_profile.username
+            elif field.entity_type == CustomFieldEntity.MARKUP_MAP and value.markup_map:
+                target_uuid, target_label = str(value.markup_map.uuid), value.markup_map.title or ""
+            else:
+                continue
+            values.append(
+                {
+                    "target_type": field.entity_type,
+                    "target_uuid": target_uuid,
+                    "target_label": target_label,
+                    "value": value.export_value(),
+                },
+            )
+        rows.append(
+            {
+                "uuid": str(field.uuid),
+                "entity_type": field.entity_type,
+                "name": field.name,
+                "field_type": field.field_type,
+                "style": field.style,
+                "config": field.config or {},
+                "created": str(field.created),
+                "values": values,
+            },
+        )
+
+    with open(os.path.join(temp_dir, "custom_fields.json"), "w", encoding="utf-8") as fh:
+        json.dump(rows, fh, indent=2, ensure_ascii=False)
 
 
 def _export_pins(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
@@ -295,13 +454,22 @@ def _export_pins(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
     placement still has somewhere to land on import. On import, pins are
     re-linked to an existing nearby Location or get a new one created, the
     same way a manually-added pin or a Google Takeout import would be.
-    """
-    from urbanlens.dashboard.models.pin.model import Pin
 
-    pins = Pin.objects.filter(profile=profile).select_related("location").prefetch_related("badges").order_by("created")
+    Also carries the pin's own review rating, security indicators (fences,
+    alarms, cameras, ...), and private article (if any) - a pin article is
+    only ever visible to its owner (see ``models.article.Article.is_private``),
+    so it's fully covered by exporting it alongside the rest of this pin.
+    """
+    from urbanlens.dashboard.models.abstract.security import SECURITY_FIELDS
+    from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.models.reviews.model import Review
+
+    pins = Pin.objects.filter(profile=profile).select_related("location", "article").prefetch_related("labels").order_by("created")
+    ratings = dict(Review.objects.filter(profile=profile).values_list("pin_id", "rating"))
 
     rows = []
     for pin in pins:
+        article = getattr(pin, "article", None)
         rows.append(
             {
                 "uuid": str(pin.uuid),
@@ -310,10 +478,15 @@ def _export_pins(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
                 "icon": pin.icon or "",
                 "color": pin.color or "",
                 "priority": pin.priority,
+                "vulnerability": pin.vulnerability,
+                "danger": pin.danger,
+                "rating": ratings.get(pin.pk),
+                "security": {field_name: getattr(pin, field_name) for field_name, _label in SECURITY_FIELDS},
                 "pin_type": pin.pin_type,
                 "latitude": str(pin.effective_latitude) if pin.effective_latitude is not None else None,
                 "longitude": str(pin.effective_longitude) if pin.effective_longitude is not None else None,
                 "last_visited": str(pin.last_visited) if pin.last_visited else None,
+                "date_built": str(pin.date_built) if pin.date_built else None,
                 "date_abandoned": str(pin.date_abandoned) if pin.date_abandoned else None,
                 "date_last_active": str(pin.date_last_active) if pin.date_last_active else None,
                 "detail_bg_color": pin.detail_bg_color or "",
@@ -322,7 +495,8 @@ def _export_pins(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
                 "detail_border_opacity": pin.detail_border_opacity,
                 "created": str(pin.created),
                 "updated": str(pin.updated),
-                "badge_uuids": [str(b.uuid) for b in pin.badges.all()],
+                "label_uuids": [str(b.uuid) for b in pin.labels.all()],
+                "article": {"content": article.content} if article and article.content else None,
             },
         )
 
@@ -334,7 +508,7 @@ def _export_pins_google_takeout(profile: Any, temp_dir: str, *, base_url: str = 
     """Export pins as a Google Takeout-compatible CSV file."""
     from urbanlens.dashboard.models.pin.model import Pin
 
-    pins = Pin.objects.filter(profile=profile).select_related("location").prefetch_related("badges").order_by("created")
+    pins = Pin.objects.filter(profile=profile).select_related("location").prefetch_related("labels").order_by("created")
 
     buf = io.StringIO()
     writer = csv.writer(buf)
@@ -344,7 +518,7 @@ def _export_pins_google_takeout(profile: Any, temp_dir: str, *, base_url: str = 
         name = pin.effective_name
         note = pin.description or ""
         url = f"{base_url.rstrip('/')}/dashboard/map/pin/{pin.slug}/" if pin.slug else ""
-        tags = ", ".join(b.name for b in pin.badges.all() if hasattr(b, "name"))
+        tags = ", ".join(b.name for b in pin.labels.all() if hasattr(b, "name"))
         writer.writerow([name, note, url, tags, ""])
 
     gt_dir = os.path.join(temp_dir, "google_takeout")
@@ -352,51 +526,80 @@ def _export_pins_google_takeout(profile: Any, temp_dir: str, *, base_url: str = 
     pathlib.Path(os.path.join(gt_dir, "pins.csv")).write_text(buf.getvalue(), encoding="utf-8", newline="")
 
 
-def _export_badges(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
-    """Export all badges visible to the user, with pin assignments."""
-    from urbanlens.dashboard.models.badges.model import Badge
+def _export_labels(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
+    """Export all labels visible to the user, with pin assignments."""
+    from urbanlens.dashboard.models.labels.model import Label
 
-    # Export user-owned badges plus global badges that are assigned to the user's pins.
-    user_badges = Badge.objects.filter(profile=profile).prefetch_related("parents", "pins")
-    global_assigned = Badge.objects.filter(profile__isnull=True, pins__profile=profile).distinct().prefetch_related("parents", "pins")
+    # Export user-owned labels plus global labels that are assigned to the user's pins.
+    user_labels = Label.objects.filter(profile=profile).prefetch_related("parents", "pins")
+    global_assigned = Label.objects.filter(profile__isnull=True, pins__profile=profile).distinct().prefetch_related("parents", "pins")
 
     seen: set[int] = set()
     rows = []
 
-    for badge in list(user_badges) + list(global_assigned):
-        if badge.pk in seen:
+    for label in list(user_labels) + list(global_assigned):
+        if label.pk in seen:
             continue
-        seen.add(badge.pk)
+        seen.add(label.pk)
 
         rows.append(
             {
-                "uuid": str(badge.uuid),
-                "name": badge.name,
-                "description": badge.description or "",
-                "color": badge.color or "",
-                "icon": badge.icon or "",
-                "kind": badge.kind,
-                "order": badge.order,
-                "is_user_badge": badge.profile_id is not None,
-                "is_protected": badge.is_protected,
-                "parent_uuids": [str(p.uuid) for p in badge.parents.all()],
-                "pin_uuids": [str(p.uuid) for p in badge.pins.filter(profile=profile)],
+                "uuid": str(label.uuid),
+                "name": label.name,
+                "description": label.description or "",
+                "color": label.color or "",
+                "icon": label.icon or "",
+                "kind": label.kind,
+                "order": label.order,
+                "is_user_label": label.profile_id is not None,
+                "is_protected": label.is_protected,
+                "parent_uuids": [str(p.uuid) for p in label.parents.all()],
+                "pin_uuids": [str(p.uuid) for p in label.pins.filter(profile=profile)],
             },
         )
 
-    with open(os.path.join(temp_dir, "badges.json"), "w", encoding="utf-8") as fh:
+    with open(os.path.join(temp_dir, "labels.json"), "w", encoding="utf-8") as fh:
         json.dump(rows, fh, indent=2, ensure_ascii=False)
 
 
 def _export_connections(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
-    """Export friendship connections as a list of relationship records."""
+    """Export friendship connections as a list of relationship records.
+
+    Outgoing rows the RECIPIENT hasn't accepted (requested/declined/ignored)
+    are anonymized - identity nulled and the three states collapsed into one
+    ``"pending"`` value. Until a request is accepted, the sender must not be
+    able to learn who they reached, whether an invited email belongs to a
+    registered account, or how (or whether) the recipient responded - the
+    same rule the pending-requests widget enforces (see
+    ``controllers.friendship._friend_list_ctx``); an export that included the
+    real username/uuid/status would reopen that exact enumeration channel.
+    Sender-initiated states (accepted friendships being removed, blocks,
+    mutes) keep their identity: the sender necessarily already knows who
+    they acted on.
+    """
+    from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
     from urbanlens.dashboard.models.friendship.model import Friendship
 
     friendships = Friendship.objects.filter(from_profile=profile).select_related("to_profile__user").order_by("created")
     incoming = Friendship.objects.filter(to_profile=profile).select_related("from_profile__user").order_by("created")
 
+    hidden_outgoing_statuses = {FriendshipStatus.REQUESTED, FriendshipStatus.DECLINED, FriendshipStatus.IGNORED}
+
     rows = []
     for f in friendships:
+        if f.status in hidden_outgoing_statuses:
+            rows.append(
+                {
+                    "other_user_uuid": None,
+                    "other_username": None,
+                    "status": "pending",
+                    "relationship_type": f.relationship_type,
+                    "permissions": f.permissions,
+                    "direction": "outgoing",
+                    "created": str(f.created),
+                },
+            )
+            continue
         rows.append(
             {
                 "other_user_uuid": str(f.to_profile.uuid),
@@ -422,6 +625,66 @@ def _export_connections(profile: Any, temp_dir: str, *, base_url: str = "") -> N
         )
 
     with open(os.path.join(temp_dir, "connections.json"), "w", encoding="utf-8") as fh:
+        json.dump(rows, fh, indent=2, ensure_ascii=False)
+
+
+def _export_direct_messages(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
+    """Export every direct message the user sent or received, one row per message.
+
+    The exporting user's own content (body, attachments, whether they sent or
+    received it) is always included in full - "they should always be able to
+    see their own messages". The conversation partner's identity is passed
+    through `display_identity_for`, the same check the messages page itself
+    uses, so an export never reveals a partner's name/avatar beyond what the
+    user could currently see on screen (e.g. after being blocked or a privacy
+    change). Tombstoned/expired message bodies are also masked per the
+    viewer's own tombstone rules, for the same reason.
+    """
+    from urbanlens.dashboard.models.direct_messages.model import DirectMessage
+    from urbanlens.dashboard.services.direct_messages import display_identity_for
+
+    messages = DirectMessage.objects.involving(profile).select_related("sender", "recipient").prefetch_related("images").order_by("created")
+
+    identity_cache: dict[int, dict[str, Any]] = {}
+
+    def _identity(partner: Any) -> dict[str, Any]:
+        if partner.pk not in identity_cache:
+            identity_cache[partner.pk] = display_identity_for(profile, partner)
+        return identity_cache[partner.pk]
+
+    rows = []
+    for message in messages:
+        is_sender = message.sender_id == profile.pk
+        partner = message.recipient if is_sender else message.sender
+        tombstone = message.tombstone_text_for(profile.pk)
+        row: dict[str, Any] = {
+            "id": message.pk,
+            "direction": "sent" if is_sender else "received",
+            "partner_display_name": _identity(partner)["display_name"],
+            "is_tombstoned": bool(tombstone),
+            "image_count": message.images.count() if not tombstone else 0,
+            "has_map": bool(message.markup_map_id) and not tombstone,
+            "created": str(message.created),
+            "read": message.read_at is not None,
+        }
+        if tombstone:
+            row["body"] = tombstone
+        elif message.is_encrypted:
+            # End-to-end encrypted: the server has no plaintext. Export the raw
+            # ciphertext (only the user's own key can read it) plus a note, and
+            # offer an in-browser "download decrypted transcript" on the
+            # messages page for a readable copy.
+            row["body"] = None
+            row["encrypted"] = True
+            row["ciphertext"] = message.ciphertext
+            row["nonce"] = message.nonce
+            row["key_version"] = message.key_version
+            row["note"] = "End-to-end encrypted. Decrypt with your account's message key (see the messages page)."
+        else:
+            row["body"] = message.body
+        rows.append(row)
+
+    with open(os.path.join(temp_dir, "direct_messages.json"), "w", encoding="utf-8") as fh:
         json.dump(rows, fh, indent=2, ensure_ascii=False)
 
 
@@ -471,7 +734,7 @@ def _export_comments(profile: Any, temp_dir: str, *, base_url: str = "") -> None
 def _export_photos(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
     from urbanlens.dashboard.models.images.model import Image
 
-    images = Image.objects.filter(profile=profile).select_related("pin__location", "wiki").order_by("created")
+    images = Image.objects.filter(profile=profile).select_related("pin__location", "wiki").prefetch_related("labels").order_by("created")
 
     photos_dir = os.path.join(temp_dir, "photos")
     os.makedirs(photos_dir, exist_ok=True)
@@ -500,6 +763,7 @@ def _export_photos(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
                 "latitude": str(image.latitude) if image.latitude else None,
                 "longitude": str(image.longitude) if image.longitude else None,
                 "created": str(image.created),
+                "label_uuids": [str(label.uuid) for label in image.labels.all()],
             },
         )
 
@@ -528,4 +792,28 @@ def _export_trips(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
         )
 
     with open(os.path.join(temp_dir, "trips.json"), "w", encoding="utf-8") as fh:
+        json.dump(rows, fh, indent=2, ensure_ascii=False)
+
+
+def _export_pin_lists(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
+    from urbanlens.dashboard.models.pin_list.model import PinList
+
+    lists = PinList.objects.for_profile(profile).prefetch_related("items__pin").order_by("created")
+
+    rows = []
+    for pin_list in lists:
+        rows.append(
+            {
+                "uuid": str(pin_list.uuid),
+                "name": pin_list.name,
+                "description": pin_list.description or "",
+                "is_smart": pin_list.is_smart,
+                "smart_filter": pin_list.smart_filter,
+                "smart_boundary": json.loads(pin_list.smart_boundary.geojson) if pin_list.smart_boundary else None,
+                "created": str(pin_list.created),
+                "items": [{"pin_uuid": str(item.pin.uuid), "order": item.order, "added_via": item.added_via} for item in pin_list.items.all()],
+            },
+        )
+
+    with open(os.path.join(temp_dir, "pin_lists.json"), "w", encoding="utf-8") as fh:
         json.dump(rows, fh, indent=2, ensure_ascii=False)

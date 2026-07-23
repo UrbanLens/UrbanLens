@@ -19,7 +19,7 @@ from django.utils import timezone
 from hypothesis import given, settings as hyp_settings, strategies as st
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.controllers.visits import _sync_visit_photos, _visit_dialog_context
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.services.images import compute_checksum
@@ -30,7 +30,7 @@ _LAT = Decimal("41.500000")
 _LNG = Decimal("-73.500000")
 
 
-class ComputeChecksumTests(TestCase):
+class ComputeChecksumTests(SimpleTestCase):
     """compute_checksum() hashes file content deterministically and rewinds."""
 
     @given(content=st.binary(min_size=1, max_size=4096))

@@ -42,6 +42,12 @@ class ApiRateLimit(abstract.DashboardModel):
         help_text="Maximum calls allowed per calendar day (UTC). Leave blank for no daily limit.",
         validators=[MinValueValidator(1), MaxValueValidator(10_000_000)],
     )
+    calls_per_30_days = IntegerField(
+        null=True,
+        blank=True,
+        help_text="Maximum calls allowed per rolling 30-day window. Leave blank for no 30-day limit.",
+        validators=[MinValueValidator(1), MaxValueValidator(100_000_000)],
+    )
     usa_only = BooleanField(
         default=False,
         help_text=("Skip API calls for coordinates outside the United States. Enable for USA-centric services (NPS, LoopNet, Library of Congress, etc.)."),

@@ -15,13 +15,14 @@ from django.db.models import (
     IntegerField,
     Manager as DjangoManager,
     ManyToManyField,
+    Max,
     UUIDField,
 )
-from django.db.models.fields import BooleanField, CharField, DateField, DateTimeField, TextField
+from django.db.models.fields import BooleanField, CharField, DateField, DateTimeField, SlugField, TextField
 from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract
-from urbanlens.dashboard.models.trips.queryset import TripManager
+from urbanlens.dashboard.models.trips.queryset import TripCommentManager, TripManager, TripMembershipManager
 from urbanlens.dashboard.services.text_limits import (
     MAX_COMMENT_TEXT_LENGTH,
     MAX_TRIP_ACTIVITY_NOTES_LENGTH,
@@ -36,12 +37,22 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class Trip(abstract.FrontendDashboardModel):
+class Trip(abstract.PublicDashboardModel):
     """A planned trip shared among one or more users.
 
     The creator is the user who created the trip. Members includes the creator
     plus any additional users added. Only members can view and edit the trip.
+
+    URLs identify a trip by ``slug`` rather than ``uuid`` or a sequential id -
+    trips are private, and a predictable/sequential identifier (e.g.
+    "detroit-5") would hint at how many other trips exist. The slug is derived
+    from the trip name with a random (not sequential) numeric suffix on
+    collision - see ``PublicDashboardModel._generate_slug``.
     """
+
+    # Global uniqueness (unlike Pin's per-profile slug) since a trip has no
+    # natural per-user namespace - it's shared among all its members.
+    slug = SlugField(max_length=255, null=True, blank=True, unique=True)
 
     name = CharField(max_length=255)
     description = TextField(null=True, blank=True, max_length=MAX_TRIP_DESCRIPTION_LENGTH, validators=[MaxLengthValidator(MAX_TRIP_DESCRIPTION_LENGTH)])
@@ -119,13 +130,17 @@ class Trip(abstract.FrontendDashboardModel):
 
     @property
     def effective_end_date(self) -> date | None:
-        """``end_date`` if set, else the latest scheduled activity's date."""
+        """``end_date`` if set, else the latest scheduled activity's end (or start) date."""
         if self.end_date:
             return self.end_date
-        last = self.activities.filter(scheduled_at__isnull=False).order_by("-scheduled_at").first()
-        if last is None or last.scheduled_at is None:
+        latest = self.activities.filter(scheduled_at__isnull=False).aggregate(
+            last_start=Max("scheduled_at"),
+            last_end=Max("scheduled_end"),
+        )
+        candidates = [dt for dt in (latest["last_start"], latest["last_end"]) if dt is not None]
+        if not candidates:
             return None
-        return last.scheduled_at.date()
+        return max(candidates).date()
 
     @property
     def timeline_status(self) -> str:
@@ -149,7 +164,10 @@ class Trip(abstract.FrontendDashboardModel):
             return (end - start).days + 1
         return None
 
-    class Meta(abstract.DashboardModel.Meta):
+    def _slugify_base(self) -> str:
+        return self.name or str(self.uuid)
+
+    class Meta(abstract.PublicDashboardModel.Meta):
         db_table = "dashboard_trips"
         get_latest_by = "updated"
         indexes = [
@@ -282,10 +300,29 @@ class TripMembership(abstract.DashboardModel):
         ("maybe", "Maybe"),
     ]
 
+    # Whether an invited profile has consented to participate in trip planning.
+    # Separate from `rsvp` (are you actually coming?) - this instead gates
+    # whether the member can contribute at all (add/edit activities, comment,
+    # vote, add members). Defaults to "joined" so every pre-existing
+    # membership, and the creator's own row, stay fully functional; invite
+    # flows (TripCreateView, TripMembersView) set "invited" explicitly.
+    STATUS_INVITED = "invited"
+    STATUS_JOINED = "joined"
+    STATUS_CHOICES = [
+        ("invited", "Invited"),
+        ("joined", "Joined"),
+    ]
+
     rsvp = CharField(max_length=20, choices=RSVP_CHOICES, null=True, blank=True)
+    status = CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_JOINED)
     is_organizer = BooleanField(
         default=False,
         help_text="Organizers have the same trip-management rights as the creator.",
+    )
+    last_viewed_at = DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When this member last opened the trip detail page. Powers the 'recently viewed' list on the trips overview page.",
     )
 
     trip = ForeignKey(Trip, on_delete=CASCADE, related_name="memberships")
@@ -294,6 +331,8 @@ class TripMembership(abstract.DashboardModel):
         on_delete=CASCADE,
         related_name="trip_memberships",
     )
+
+    objects = TripMembershipManager()
 
     if TYPE_CHECKING:
         trip_id: int
@@ -318,6 +357,10 @@ class TripComment(abstract.DashboardModel):
 
     text = TextField(max_length=MAX_COMMENT_TEXT_LENGTH, validators=[MaxLengthValidator(MAX_COMMENT_TEXT_LENGTH)])
     image = ImageField(upload_to="comment_images/", null=True, blank=True)
+    # Mirrors dashboard.Comment.pending_scan - see its docstring. True from
+    # creation until tasks.scan_trip_comment_image clears a newly-uploaded
+    # image; hidden from other trip members until then.
+    pending_scan = BooleanField(default=False)
     # Standalone map (viewport + markup items) attached to this comment.
     markup_map = ForeignKey(
         "dashboard.MarkupMap",
@@ -326,6 +369,10 @@ class TripComment(abstract.DashboardModel):
         null=True,
         blank=True,
     )
+    # Set by MarkupMap's pre_delete signal when the attached map above is
+    # deleted, so the comment can keep showing "map removed" instead of
+    # silently losing all trace that one was ever here.
+    map_removed = BooleanField(default=False)
 
     trip = ForeignKey(
         Trip,
@@ -346,6 +393,8 @@ class TripComment(abstract.DashboardModel):
         null=True,
         blank=True,
     )
+
+    objects = TripCommentManager()
 
     if TYPE_CHECKING:
         markup_map_id: int | None

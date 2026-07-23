@@ -3,7 +3,7 @@
   {% for emoji, data in reactions.items %}
   <button type="button"
           class="reaction-pill{% if profile.id in data.reacted_by %} reaction-pill--mine{% endif %}"
-          hx-post="{% if react_url_name == 'trips.comment.react' %}{% url 'trips.comment.react' trip_uuid comment.id %}{% else %}{% url 'comment.react' comment.id %}{% endif %}"
+          hx-post="{% if react_url_name == 'trips.comment.react' %}{% url 'trips.comment.react' trip_slug comment.id %}{% else %}{% url 'comment.react' comment.id %}{% endif %}"
           hx-target="#comment-reactions-{{ comment.id }}"
           hx-swap="outerHTML"
           hx-vals='{"emoji": "{{ emoji }}"}'
@@ -22,7 +22,7 @@
       <button type="button"
               class="reaction-picker-emoji"
               data-emoji="{{ emoji }}"
-              hx-post="{% if react_url_name == 'trips.comment.react' %}{% url 'trips.comment.react' trip_uuid comment.id %}{% else %}{% url 'comment.react' comment.id %}{% endif %}"
+              hx-post="{% if react_url_name == 'trips.comment.react' %}{% url 'trips.comment.react' trip_slug comment.id %}{% else %}{% url 'comment.react' comment.id %}{% endif %}"
               hx-target="#comment-reactions-{{ comment.id }}"
               hx-swap="outerHTML"
               hx-vals='{"emoji": "{{ emoji }}"}'

@@ -17,6 +17,7 @@ from django.db.models import (
     ImageField,
     Index,
     IntegerField,
+    JSONField,
     OneToOneField,
     SlugField,
     TextChoices,
@@ -25,14 +26,15 @@ from django.db.models import (
 from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract
-from urbanlens.dashboard.models.profile.meta import DistanceUnit, GuidanceLevel, MapCenterMode, MapViewChoice, ThemeChoice, VisibilityChoice
+from urbanlens.dashboard.models.direct_messages.meta import MessageRetentionChoice
+from urbanlens.dashboard.models.profile.meta import DistanceUnit, GuidanceLevel, MapCenterMode, MapViewChoice, SyncAliasesDirection, ThemeChoice, VisibilityChoice
 from urbanlens.dashboard.models.profile.queryset import ProfileManager
 from urbanlens.dashboard.services.text_limits import MAX_PROFILE_BIO_LENGTH
 
 if TYPE_CHECKING:
     from django.db.models import Manager as DjangoManager
 
-    from urbanlens.dashboard.models.badges.queryset import BadgeManager
+    from urbanlens.dashboard.models.labels.queryset import LabelManager
     from urbanlens.dashboard.models.markup.model import PinMarkup
     from urbanlens.dashboard.models.notifications.model import NotificationLog
     from urbanlens.dashboard.models.trips import Trip, TripActivity, TripMembership
@@ -58,6 +60,22 @@ _COMMUNITY_GATED_VISIBILITY_FIELDS = (
     "viewer_photo_filter",
     "trip_pin_location_visibility",
     "contact_visibility",
+    "direct_message_visibility",
+    "online_status_visibility",
+    "read_receipt_visibility",
+    "typing_indicator_visibility",
+    "common_pins_visibility",
+)
+
+# Wiki-sync boolean fields forced to False while community_enabled is False -
+# there's no wiki to sync with once community features are off. sync_aliases
+# (a choice field, not a bool) is handled separately since its "off" value
+# isn't False - see save() below.
+_COMMUNITY_GATED_SYNC_FIELDS = (
+    "sync_rating_to_wiki",
+    "sync_vulnerability_to_wiki",
+    "sync_priority_to_wiki",
+    "sync_danger_to_wiki",
 )
 
 
@@ -168,12 +186,52 @@ class Profile(abstract.PublicDashboardModel):
         default=VisibilityChoice.FRIENDS,
         help_text="Who can see your contact methods (phone, Signal, Discord, etc.).",
     )
+    direct_message_visibility = CharField(
+        max_length=20,
+        choices=VisibilityChoice.choices,
+        default=VisibilityChoice.ANYTHING_IN_COMMON,
+        help_text="Who can send you direct messages.",
+    )
+    online_status_visibility = CharField(
+        max_length=20,
+        choices=VisibilityChoice.choices,
+        default=VisibilityChoice.FRIENDS,
+        help_text="Who can see when you're online in direct messages.",
+    )
+    read_receipt_visibility = CharField(
+        max_length=20,
+        choices=VisibilityChoice.choices,
+        default=VisibilityChoice.FRIENDS,
+        help_text="Who can see that you've read their direct messages.",
+    )
+    typing_indicator_visibility = CharField(
+        max_length=20,
+        choices=VisibilityChoice.choices,
+        default=VisibilityChoice.FRIENDS,
+        help_text="Who can see when you're typing a direct message reply.",
+    )
+    common_pins_visibility = CharField(
+        max_length=20,
+        choices=VisibilityChoice.choices,
+        default=VisibilityChoice.FRIENDS,
+        help_text="Who can see the specific pins you have in common with them. Requires both of you to allow it.",
+    )
+    direct_message_delete_after = CharField(
+        max_length=20,
+        choices=MessageRetentionChoice.choices,
+        default=MessageRetentionChoice.NEVER,
+        help_text="Messages you send are permanently deleted from our systems this long after the recipient reads them - this removes your own copy too. Set to Never to keep them indefinitely.",
+    )
+    allow_friend_recommendations = BooleanField(
+        default=True,
+        help_text="Let other users recommend you as a friend to people they're messaging.",
+    )
 
     # Style preferences
     theme_mode = CharField(
         max_length=10,
         choices=ThemeChoice.choices,
-        default=ThemeChoice.SYSTEM,
+        default=ThemeChoice.DARK,
     )
     guidance_level = CharField(
         max_length=10,
@@ -238,9 +296,26 @@ class Profile(abstract.PublicDashboardModel):
 
     # AI feature preferences (only relevant when the user has an AI subscription).
     ai_enabled = BooleanField(default=True, help_text="Allow AI features on your account.")
-    ai_badge_tags = BooleanField(default=True, help_text="AI can automatically suggest and add tags when a pin is created.")
-    ai_badge_categories = BooleanField(default=True, help_text="AI can automatically suggest and add categories when a pin is created.")
-    ai_badge_statuses = BooleanField(default=True, help_text="AI can automatically suggest and add statuses when a pin is created.")
+    ai_label_tags = BooleanField(default=False, help_text="AI can automatically suggest and add tags when a pin is created.")
+    ai_label_categories = BooleanField(default=False, help_text="AI can automatically suggest and add categories when a pin is created.")
+    ai_label_statuses = BooleanField(default=False, help_text="AI can automatically suggest and add statuses when a pin is created.")
+
+    # Keyword-based auto-tagging preferences. Unlike the AI settings above, this
+    # matching is local pattern/substring matching (built-in CATEGORY_PATTERNS plus
+    # each Label's own `keywords` field) - no external API call and no subscription
+    # required - so it defaults to on. Independent of the ai_* toggles: a user can
+    # keep free keyword tagging while leaving paid AI tagging off, or vice versa.
+    keyword_tagging_enabled = BooleanField(default=True, help_text="Allow keyword-based auto-tagging on your account.")
+    keyword_label_tags = BooleanField(default=True, help_text="Keyword matches can automatically add tags when a pin is created.")
+    keyword_label_categories = BooleanField(default=True, help_text="Keyword matches can automatically add categories when a pin is created.")
+    keyword_label_statuses = BooleanField(default=True, help_text="Keyword matches can automatically add a status when a pin is created.")
+
+    # Whether photo-keyword plugins run on this user's uploads to make their
+    # photos text-searchable. Applies to every enabled keywording strategy
+    # (embedded metadata tags, AI vision, classifiers); the AI-based providers
+    # additionally require the AI_PHOTO_PROCESSING subscription feature and the
+    # ai_enabled toggle above.
+    generate_photo_keywords = BooleanField(default=True, help_text="Automatically generate searchable keywords for photos you upload.")
 
     # Voluntary downscale cap (longest edge, px) for future photo uploads.
     # Null means "use whatever the site policy entitles me to". A value here can
@@ -248,10 +323,48 @@ class Profile(abstract.PublicDashboardModel):
     # letting users trade image resolution for more photos within their quota.
     image_downscale_max_dimension = IntegerField(null=True, blank=True)
 
+    # Voluntary downscale cap (height, px) for future video uploads - same
+    # tighten-only semantics as image_downscale_max_dimension above.
+    video_downscale_max_height = IntegerField(null=True, blank=True)
+
     # Places layer source preferences (only relevant when the user has the PLACES feature).
     places_google_enabled = BooleanField(default=True, help_text="Show Google historical landmarks in the Places layer.")
     places_nps_enabled = BooleanField(default=True, help_text="Show National Park Service locations in the Places layer.")
     places_wikipedia_enabled = BooleanField(default=True, help_text="Show Wikipedia-linked places in the Places layer.")
+
+    # When off, wiki pages never render their cover-photo hero banner for this
+    # viewer, regardless of whether the wiki has one set - lets a user opt out
+    # of community-uploaded imagery they haven't vetted themselves. Does not
+    # affect the viewer's own pin pages, which always show their chosen cover.
+    show_wiki_cover_photos = BooleanField(default=True, help_text="Show the community-selected cover photo banner on wiki pages.")
+
+    # Mirrors what already happens automatically for community wikis (see
+    # services.wiki_seed) - when a Wikipedia article is confidently matched to
+    # one of your pins and it doesn't have an article yet, start one from that
+    # extract instead of leaving it blank. Never overwrites an existing
+    # article (seeded or human-written) - see seed_pin_article_from_wikipedia's
+    # own guard. Off entirely disables this per-pin auto-population, not
+    # anything about the wiki-side equivalent (which has no toggle - articles
+    # are private to a pin's owner, community wikis are not).
+    auto_create_pin_article_from_wikipedia = BooleanField(default=True, help_text="When a Wikipedia article is matched to one of your pins, automatically start that pin's article from it (if it doesn't have one yet).")
+
+    # Whether pin detail pages may suggest reorganizing a pin's hierarchy -
+    # creating a child pin per building on a multi-building property, and
+    # nesting existing top-level pins that fall inside the property boundary.
+    # Off silences the suggestion everywhere at once; declining it on a single
+    # pin instead is per-pin and permanent (Pin.restructure_offer_dismissed).
+    # See services.pin_restructure.
+    suggest_pin_restructure = BooleanField(default=True, help_text="Offer to organize pins into buildings and sub pins when you open a property that has several.")
+
+    # Default ordering for the pin detail page's Media gallery. "relevant"
+    # surfaces items this user has explicitly marked relevant first (falling
+    # back to arrival order); "recent" ignores relevance marks entirely.
+    media_gallery_sort = CharField(max_length=20, choices=[("relevant", "Relevant first"), ("recent", "Most recent")], default="relevant")
+
+    # User-dragged height (px) for the pin detail page's map, from the resize
+    # handle on its bottom border. None means "use the default responsive
+    # height" (see PinController.set_map_height / _pin-detail.scss).
+    pin_detail_map_height = IntegerField(null=True, blank=True)
 
     # Memories preferences. Each independently controls whether a category of
     # visit/location history is ever saved - including from explicit user actions
@@ -265,10 +378,37 @@ class Profile(abstract.PublicDashboardModel):
     # or receive friend requests. Enforced in Pin.save()/Profile.save().
     community_enabled = BooleanField(default=True, help_text="Enable features that allow you to interact with other users. Community wikis, Trips, and Friend Requests are included in this.")
 
+    # Wiki sync preferences: automatically mirror star ratings and aliases
+    # between a pin's private details and its (shared) community wiki, so the
+    # user only has to set a value in one place. Rating/vulnerability/priority/
+    # danger are one-way (pin -> wiki, via WikiStatVote - see
+    # models.pin.signals); the wiki has no single owner, so there's no
+    # equivalent "wiki value" to pull back the other way. Aliases are additive
+    # in whichever direction(s) are enabled (see models.aliases.signals).
+    # All forced to their off value while community_enabled is False - see
+    # _COMMUNITY_GATED_SYNC_FIELDS below.
+    sync_rating_to_wiki = BooleanField(default=True, help_text="When you rate a pin, also count that rating on its community wiki.")
+    sync_vulnerability_to_wiki = BooleanField(default=True, help_text="When you set a pin's vulnerability, also count it on its community wiki.")
+    sync_priority_to_wiki = BooleanField(default=True, help_text="When you set a pin's priority, also count it on its community wiki.")
+    sync_danger_to_wiki = BooleanField(default=True, help_text="When you set a pin's danger, also count it on its community wiki.")
+    sync_aliases = CharField(
+        max_length=10,
+        choices=SyncAliasesDirection.choices,
+        default=SyncAliasesDirection.FROM_WIKI,
+        help_text="Automatically copy newly-added alternate names between a pin and its community wiki. Never deletes an alias on either side.",
+    )
+
     # Master switch for all external API calls made on your behalf (weather,
     # geocoding, place data, AI, etc). Individual services also have their own
     # toggles below/elsewhere that remain independently adjustable.
     external_apis_enabled = BooleanField(default=True, help_text="Allow external services (weather, geocoding, place data, AI) to retrieve anonymized research data for you.")
+
+    # Ordered list of enabled homepage widget keys (see services.home_widgets),
+    # e.g. ["stats", "recent_photos", ...]. Empty = never customized - the
+    # homepage falls back to every widget, in the registry's default order.
+    # Widgets omitted here are simply disabled, not deleted - re-enabling one
+    # in the customize dialog just adds its key back.
+    home_widget_layout = JSONField(default=list, blank=True)
 
     # Set when the user requests account deletion; cleared on cancel/undo.
     # A non-null value means the account is scheduled for hard deletion at
@@ -288,7 +428,7 @@ class Profile(abstract.PublicDashboardModel):
         trip_activities_added: DjangoManager[TripActivity]
         created_trips: DjangoManager[Trip]
         trips: DjangoManager[Trip]
-        custom_tags: BadgeManager
+        custom_labels: LabelManager
         trip_memberships: DjangoManager[TripMembership]
         notifications: DjangoManager[NotificationLog]
         triggered_notifications: DjangoManager[NotificationLog]
@@ -309,6 +449,13 @@ class Profile(abstract.PublicDashboardModel):
             forced = [field for field in _COMMUNITY_GATED_VISIBILITY_FIELDS if getattr(self, field) != VisibilityChoice.NO_ONE]
             for field in forced:
                 setattr(self, field, VisibilityChoice.NO_ONE)
+            sync_forced = [field for field in _COMMUNITY_GATED_SYNC_FIELDS if getattr(self, field)]
+            for field in sync_forced:
+                setattr(self, field, False)
+            if self.sync_aliases != SyncAliasesDirection.OFF:
+                self.sync_aliases = SyncAliasesDirection.OFF
+                sync_forced.append("sync_aliases")
+            forced = [*forced, *sync_forced]
             if forced and update_fields is not None:
                 kwargs["update_fields"] = [*update_fields, *forced]
         super().save(*args, **kwargs)
@@ -347,12 +494,14 @@ class Profile(abstract.PublicDashboardModel):
         """Whether button hover/focus hints should be shown."""
         return self.guidance_level != GuidanceLevel.NONE
 
-    def _best_known_point(self) -> tuple[float, float] | None:
+    def best_known_point(self) -> tuple[float, float] | None:
         """Return a representative (lat, lng) for this profile without extra computation.
 
         Uses already-persisted coordinates only - the explicit custom center, the
         cached pin centroid, or the last remembered map position - so it is cheap
         and side-effect free (it never triggers the O(n²) centroid computation).
+        This is the "where is this user" source for server-side "near me" filtering
+        (e.g. global search), since there is no live/persisted GPS position otherwise.
 
         Returns:
             A (latitude, longitude) tuple, or None if no coordinate is on record.
@@ -379,7 +528,7 @@ class Profile(abstract.PublicDashboardModel):
         """
         if self.distance_units:
             return self.distance_units
-        point = self._best_known_point()
+        point = self.best_known_point()
         if point is not None:
             return _units_for_point(*point)
         return DistanceUnit.KILOMETERS
@@ -483,7 +632,8 @@ class Profile(abstract.PublicDashboardModel):
 
         Returns:
             Dict with ``map_center_lat``, ``map_center_lng``, ``map_center_mode``,
-            ``gps_fallback_lat``, and ``gps_fallback_lng`` keys.
+            ``gps_fallback_lat``, ``gps_fallback_lng``, and
+            ``geolocation_tracking_allowed`` keys.
         """
         map_center = self.get_map_center()
         gps_fallback: tuple[float, float] | None = None
@@ -498,6 +648,12 @@ class Profile(abstract.PublicDashboardModel):
             "map_center_mode": self.map_center_mode,
             "gps_fallback_lat": gps_fallback[0] if gps_fallback else None,
             "gps_fallback_lng": gps_fallback[1] if gps_fallback else None,
+            # The GPS fix itself is still requested for map-centering (a purely
+            # client-side convenience), but the page must not relay it to the
+            # server via _recordGeolocationVisit when the profile has live
+            # location-tracking turned off - the request body would carry the
+            # user's exact coordinates regardless of the server no-op-ing it.
+            "geolocation_tracking_allowed": self.track_geolocation,
         }
 
     @staticmethod
@@ -516,6 +672,53 @@ class Profile(abstract.PublicDashboardModel):
         return Friendship.objects.filter(
             models.Q(from_profile=subject, to_profile=other) | models.Q(from_profile=other, to_profile=subject),
             status=FriendshipStatus.ACCEPTED,
+        ).exists()
+
+    @staticmethod
+    def are_blocked(subject: Profile, other: Profile) -> bool:
+        """Return True when either profile has blocked the other.
+
+        Blocking is checked in both directions deliberately: it must be an
+        absolute veto on contact regardless of who blocked whom, unlike
+        :meth:`are_friends` and the ``VisibilityChoice`` settings, which are
+        never consulted for it - a BLOCKED ``Friendship`` row exists whether
+        ``subject`` blocked ``other`` or the reverse.
+
+        Args:
+            subject: One profile of the pair.
+            other: The other profile.
+
+        Returns:
+            True when a BLOCKED Friendship row exists in either direction.
+        """
+        from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
+
+        return Friendship.objects.filter(
+            models.Q(from_profile=subject, to_profile=other) | models.Q(from_profile=other, to_profile=subject),
+            status=FriendshipStatus.BLOCKED,
+        ).exists()
+
+    @staticmethod
+    def has_pending_request_to(sender: Profile, recipient: Profile) -> bool:
+        """Return True when ``sender`` has an unanswered friend request to ``recipient``.
+
+        Sending a friend request deliberately opens the sender's own privacy
+        gates to the recipient - one way only - so the recipient can look at
+        who is asking before deciding (see :meth:`visibility_permits`).
+
+        Args:
+            sender: The profile that sent the request.
+            recipient: The profile the request was sent to.
+
+        Returns:
+            True when an unanswered Friendship row exists from sender to recipient.
+        """
+        from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
+
+        return Friendship.objects.filter(
+            from_profile=sender,
+            to_profile=recipient,
+            status__in=(FriendshipStatus.REQUESTED, FriendshipStatus.PENDING),
         ).exists()
 
     @staticmethod
@@ -590,12 +793,12 @@ class Profile(abstract.PublicDashboardModel):
         """
         from urbanlens.dashboard.models.trips.model import TripMembership
 
-        my_trips = set(TripMembership.objects.filter(profile=subject).values_list("trip_id", flat=True))
-        their_trips = set(TripMembership.objects.filter(profile=other).values_list("trip_id", flat=True))
+        my_trips = set(TripMembership.objects.trip_ids_for(subject))
+        their_trips = set(TripMembership.objects.trip_ids_for(other))
         return bool(my_trips & their_trips)
 
     @staticmethod
-    def visibility_permits(visibility: str, subject: Profile, other: Profile) -> bool:
+    def visibility_permits(visibility: str, subject: Profile, other: Profile, *, allow_pending_request: bool = True) -> bool:
         """Return True if ``subject``'s ``visibility`` setting permits ``other``.
 
         Shared evaluator for every per-field ``VisibilityChoice`` setting on
@@ -604,11 +807,19 @@ class Profile(abstract.PublicDashboardModel):
 
         Accepted friends qualify for every option except NO_ONE - a friend is
         never more of a stranger than someone who merely shares a pin or trip.
+        A pending friend request *sent by* ``subject`` counts the recipient as
+        a friend too (one way only): asking someone to connect deliberately
+        lets them see who is asking. Set ``allow_pending_request=False`` for
+        settings that shouldn't extend that courtesy - e.g. contact info like
+        a phone number is more sensitive than "who's asking to connect" and
+        should wait for the request to actually be accepted.
 
         Args:
             visibility: The ``VisibilityChoice`` value being evaluated.
             subject: The profile whose setting is being checked.
             other: The profile requesting access.
+            allow_pending_request: Whether an unanswered request from
+                ``subject`` to ``other`` should count as passing the gate.
 
         Returns:
             True when ``other`` satisfies the visibility requirement.
@@ -618,6 +829,8 @@ class Profile(abstract.PublicDashboardModel):
         if visibility == VisibilityChoice.NO_ONE:
             return False
         if Profile.are_friends(subject, other):
+            return True
+        if allow_pending_request and Profile.has_pending_request_to(subject, other):
             return True
         if visibility == VisibilityChoice.FRIENDS:
             return False
@@ -647,8 +860,24 @@ class Profile(abstract.PublicDashboardModel):
         # This viewer's filter must allow the uploader.
         return self.visibility_permits(self.viewer_photo_filter, self, uploader)
 
+    def can_view_comments_from(self, author: Profile) -> bool:
+        """Return True if this profile is allowed to see comments written by ``author``.
+
+        Evaluated through ``author``'s ``comment_visibility`` setting - a
+        comment is community content, but its author may still restrict who
+        on that page can see (and react to) what they wrote.
+        """
+        if self == author:
+            return True
+        return self.visibility_permits(author.comment_visibility, author, self)
+
     def can_view_contact_info(self, viewer: Profile | None) -> bool:
         """Return True if viewer may see this profile's contact methods.
+
+        Unlike most visibility settings, a merely-pending friend request does
+        not unlock this - contact details like a phone number are more
+        sensitive than "who's asking to connect" and wait for an accepted
+        friendship.
 
         Args:
             viewer: The profile requesting access, or None for anonymous visitors.
@@ -662,7 +891,40 @@ class Profile(abstract.PublicDashboardModel):
             return True
         if viewer is None:
             return False
-        return self.visibility_permits(self.contact_visibility, self, viewer)
+        return self.visibility_permits(self.contact_visibility, self, viewer, allow_pending_request=False)
+
+    def accepts_direct_messages_from(self, sender: Profile) -> bool:
+        """Return True if ``sender`` may send this profile a direct message.
+
+        A BLOCKED relationship in either direction is an absolute veto,
+        checked before anything else - it overrides even the "already
+        messaged them, so they can always reply" exception below, since
+        blocking someone you've previously messaged must still stop them
+        from replying. Short of that, evaluates this profile's
+        ``direct_message_visibility`` setting through the shared
+        ``visibility_permits`` evaluator, with one addition: a profile that
+        has already messaged the sender can always be replied to, regardless
+        of the setting - starting a conversation is an implicit invitation
+        to answer.
+
+        Args:
+            sender: The profile attempting to send a message.
+
+        Returns:
+            True when the sender passes the direct_message_visibility setting
+            or this profile previously messaged the sender, and neither
+            profile has blocked the other.
+        """
+        if self.pk == sender.pk:
+            return False
+        if Profile.are_blocked(self, sender):
+            return False
+        if self.visibility_permits(self.direct_message_visibility, self, sender):
+            return True
+
+        from urbanlens.dashboard.models.direct_messages.model import DirectMessage
+
+        return DirectMessage.objects.filter(sender=self, recipient=sender).exists()
 
     def can_view_profile(self, viewer: Profile | None) -> bool:
         """Return True if viewer may see this profile's identity (name, etc).
@@ -671,7 +933,9 @@ class Profile(abstract.PublicDashboardModel):
             viewer: The profile requesting access, or None for anonymous visitors.
 
         Returns:
-            True when the viewer passes the profile_visibility setting.
+            True when the viewer passes the profile_visibility setting, or
+            holds an active temporary access grant (e.g. from an `@friend`
+            recommendation in chat - see `DirectMessageTemporaryAccess`).
         """
         if viewer is not None and self.pk == viewer.pk:
             return True
@@ -679,7 +943,35 @@ class Profile(abstract.PublicDashboardModel):
             return True
         if viewer is None:
             return False
-        return self.visibility_permits(self.profile_visibility, self, viewer)
+        if self.visibility_permits(self.profile_visibility, self, viewer):
+            return True
+
+        from urbanlens.dashboard.models.direct_messages.temporary_access import DirectMessageTemporaryAccess
+
+        return DirectMessageTemporaryAccess.grants_access(self.pk, viewer.pk)
+
+    def can_view_common_pins_with(self, viewer: Profile | None) -> bool:
+        """Return True if viewer may see the specific pins this profile has in common with them.
+
+        Deliberately mutual, unlike every other per-field visibility setting on
+        this model: revealing which locations a pair of users have both pinned
+        exposes information about *both* of them, not just this profile, so
+        both ``self.common_pins_visibility`` and ``viewer.common_pins_visibility``
+        must independently permit the other - one profile's setting can never
+        be overridden by the other's.
+
+        Args:
+            viewer: The profile requesting access, or None for anonymous visitors.
+
+        Returns:
+            True when both profiles' ``common_pins_visibility`` settings permit
+            the other.
+        """
+        if viewer is None or self.pk == viewer.pk:
+            return False
+        if not self.visibility_permits(self.common_pins_visibility, self, viewer):
+            return False
+        return viewer.visibility_permits(viewer.common_pins_visibility, viewer, self)
 
     def __str__(self):
         return self.username

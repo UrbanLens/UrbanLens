@@ -22,8 +22,18 @@
                  {% if slide.heading is not None %}data-heading="{{ slide.heading|floatformat:0 }}"{% endif %}
                  {% if slide.latitude is not None %}data-lat="{{ slide.latitude|floatformat:5 }}"{% endif %}
                  {% if slide.longitude is not None %}data-lng="{{ slide.longitude|floatformat:5 }}"{% endif %}>
-                {% if forloop.first and google_maps_api_key %}
-                {# First slide: interactive embed so the user can pan/look around. #}
+                {% if forloop.first and google_maps_api_key and slide.source == "Google Street View" %}
+                {# First slide, confirmed fetched from Google server-side: try an #}
+                {# interactive embed so the user can pan/look around. This uses the #}
+                {# Maps Embed API (a separate client-side key/referrer restriction #}
+                {# from the Static Street View API used to fetch slide.img_src #}
+                {# server-side, so it can still fail - e.g. an unauthorized-referrer #}
+                {# rejection page rendered by Google itself, inside the iframe, #}
+                {# which we have no way to detect from our own JS since it's a #}
+                {# same-origin-policy-protected cross-origin frame). The always- #}
+                {# available static image (already fetched successfully, or it #}
+                {# wouldn't be here) is one click away via .sv-embed-fallback-btn #}
+                {# below rather than us silently trusting the embed to work. #}
                 {% with sv_lat=slide.latitude|default:pin.effective_latitude sv_lng=slide.longitude|default:pin.effective_longitude %}
                 {% if sv_lat and sv_lng %}
                 <iframe class="sv-embed"
@@ -32,6 +42,14 @@
                         loading="eager"
                         referrerpolicy="no-referrer-when-downgrade"
                         title="Interactive Street View"></iframe>
+                <img src="{{ slide.img_src }}"
+                     class="sv-img sv-img--fallback"
+                     hidden
+                     alt="{{ slide.source }} - {{ slide.date }}">
+                <button type="button" class="sv-embed-fallback-btn" onclick="_svShowStaticFallback(this)"
+                        title="If the interactive view above isn't working, switch to a static image instead">
+                    Trouble viewing this? Show static image
+                </button>
                 {% else %}
                 <img src="{{ slide.img_src }}"
                      class="sv-img"
@@ -50,19 +68,23 @@
         </div>
 
         <div class="sv-controls">
+            {% if slides|length > 1 %}
             <button class="sv-btn sv-prev" onclick="_svPrev()" aria-label="Previous image"
                     title="Previous image">
                 <i class="material-symbols-outlined">chevron_left</i>
             </button>
+            {% endif %}
             <div class="sv-meta">
                 <span class="sv-source"></span>
                 <span class="sv-date"></span>
                 <span class="sv-heading"></span>
             </div>
+            {% if slides|length > 1 %}
             <button class="sv-btn sv-next" onclick="_svNext()" aria-label="Next image"
                     title="Next image">
                 <i class="material-symbols-outlined">chevron_right</i>
             </button>
+            {% endif %}
         </div>
 
         <div class="sv-dots" id="sv-dots"></div>
@@ -70,67 +92,14 @@
 
     <script>
     (function () {
-        var _svIdx = 0;
-
-        function _svSlides() {
-            var c = document.getElementById('sv-carousel');
-            return c ? Array.from(c.querySelectorAll('.sv-slide')) : [];
-        }
-
-        function _svShow(idx) {
-            var slides = _svSlides();
-            if (!slides.length) return;
-            _svIdx = ((idx % slides.length) + slides.length) % slides.length;
-            slides.forEach(function (s, i) { s.classList.toggle('is-active', i === _svIdx); });
-            var active = slides[_svIdx];
-            if (!active) return;
-            document.querySelector('#sv-carousel .sv-source').textContent = active.dataset.source || '';
-            document.querySelector('#sv-carousel .sv-date').textContent   = active.dataset.date   || '';
-            var headingEl = document.querySelector('#sv-carousel .sv-heading');
-            headingEl.textContent = 'heading' in active.dataset
-                ? '⇨ ' + active.dataset.heading + '°'
-                : '';
-            _svRebuildDots(slides.length);
-        }
-
-        function _svRebuildDots(count) {
-            var el = document.getElementById('sv-dots');
-            if (!el) return;
-            el.innerHTML = '';
-            for (var i = 0; i < count; i++) {
-                var dot = document.createElement('button');
-                dot.type = 'button';
-                dot.className = 'sat-dot' + (i === _svIdx ? ' is-active' : '');
-                dot.setAttribute('aria-label', 'Slide ' + (i + 1));
-                (function (idx) { dot.addEventListener('click', function () { _svShow(idx); }); }(i));
-                el.appendChild(dot);
-            }
-        }
-
-        window._svRemoveSlide = function (img) {
-            var slide = img.closest('.sv-slide');
-            if (!slide) return;
-            var wasActive = slide.classList.contains('is-active');
-            slide.remove();
-            var slides = _svSlides();
-            if (!slides.length) {
-                var c = document.getElementById('sv-carousel');
-                if (c) {
-                    c.innerHTML = '<div class="view-unavailable"><i class="material-symbols-outlined">broken_image</i>'
-                        + '<span>No street-level imagery available for this location.</span></div>';
-                }
-                return;
-            }
-            if (wasActive) {
-                _svIdx = Math.max(0, Math.min(_svIdx, slides.length - 1));
-            }
-            _svShow(_svIdx);
-        };
-
-        window._svPrev = function () { _svShow(_svIdx - 1); };
-        window._svNext = function () { _svShow(_svIdx + 1); };
-
-        _svShow(0);
+        // Control functions (_svShow/_svRemoveSlide/_svPrev/_svNext) live in
+        // map-annotations.ts, loaded once at page load - NOT here, since HTMX
+        // inserts this fragment's DOM (including <img onerror>) before it executes
+        // any <script> found within the same fragment, which previously let a
+        // fast-failing image call _svRemoveSlide before it had been defined yet.
+        // This trailing call is safe: it only needs the DOM above to already be
+        // present, not any image to have finished loading.
+        if (window._svShow) window._svShow(0);
     }());
     </script>
 

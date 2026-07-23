@@ -2,12 +2,12 @@
 @use 'variables' as *;
 
 // -- Welcome onboarding cards --------------------------------------------------
-// Big, tappable category cards (Memories / Community / External Services) on
+// Big, tappable category cards (History / Community / External Services) on
 // the first-login /welcome/ page. Each wraps a checkbox so the whole card
 // toggles the setting; the .ul-switch in the corner shows current state.
 
 $onboarding-card-accents: (
-    'memories': $color-indigo-500,
+    'history': $color-indigo-500,
     'community': $color-teal-500,
     'external': $color-purple-500,
 );
@@ -16,6 +16,8 @@ $onboarding-card-accents: (
 // (see _profile.scss) for the tabbed Settings page. The welcome page has no
 // section header/sidebar, so it stays single-column here.
 .settings-section.onboarding-section {
+    background: rgba(0,0,0,0.07);
+
     @include up($breakpoint-md) {
         display: block;
     }
@@ -30,11 +32,63 @@ $onboarding-card-accents: (
     color: var(--ul-grey-9);
     margin: 0 0 1.25rem;
     padding-bottom: 0.85rem;
-    border-bottom: 1px solid var(--ul-grey-1a);
+    border-bottom: 1px solid var(--ul-surface-border);
 
     .material-symbols-outlined {
         font-size: 1.35rem;
         color: var(--primary-color);
+    }
+}
+
+// -- Privacy intro + "customize features" reveal --------------------------
+// Sits above the History/Community/External-Services cards. Most new users
+// leave the toggle off and never see the cards at all; checking it slides
+// .onboarding-feature-cards-wrap open via a grid-rows animation (0fr -> 1fr),
+// which - unlike max-height - animates cleanly to the content's natural height.
+
+.onboarding-privacy-intro {
+    padding: 1.25rem 1.5rem;
+    @include surface;
+    margin-bottom: 1.75rem;
+}
+
+.onboarding-privacy-copy {
+    font-size: .9rem;
+    line-height: 1.6;
+    color: var(--ul-grey-7);
+    margin: 0 0 .85rem;
+
+    &:last-of-type {
+        margin-bottom: 1.1rem;
+    }
+}
+
+.onboarding-customize-toggle {
+    display: flex;
+    align-items: center;
+    gap: .65rem;
+    cursor: pointer;
+    width: fit-content;
+}
+
+.onboarding-customize-label {
+    font-size: .95rem;
+    font-weight: 600;
+    color: var(--ul-grey-9);
+}
+
+.onboarding-feature-cards-wrap {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows .3s ease;
+
+    &.is-open {
+        grid-template-rows: 1fr;
+    }
+
+    > .onboarding-feature-cards-inner {
+        overflow: hidden;
+        min-height: 0;
     }
 }
 
@@ -55,14 +109,14 @@ $onboarding-card-accents: (
     flex-direction: column;
     gap: 0.65rem;
     padding: 1.5rem;
-    border: 2px solid var(--ul-grey-1a);
+    border: 2px solid var(--ul-surface-border);
     border-radius: $radius-md;
-    background: var(--ul-grey-0);
+    background: var(--ul-surface);
     cursor: pointer;
     transition: border-color .15s, box-shadow .15s, transform .15s;
 
     &:hover {
-        border-color: var(--ul-grey-3a);
+        border-color: var(--ul-surface-2-border);
         box-shadow: 0 4px 16px rgba(0, 0, 0, .08);
         transform: translateY(-2px);
     }
@@ -84,8 +138,8 @@ $onboarding-card-accents: (
     // than a colored/glowing highlight, which would read as "active/selected") so
     // the off state reads as muted at a glance, backed up by the icon slash + ribbon.
     &:has(.onboarding-card-switch input:not(:checked)) {
-        background: var(--ul-grey-1);
-        border-color: var(--ul-grey-2a);
+        background: var(--ul-surface-raised);
+        border-color: var(--ul-surface-raised-border);
 
         .onboarding-card-title,
         .onboarding-card-desc {
@@ -148,7 +202,7 @@ $onboarding-card-accents: (
     justify-content: center;
     overflow: hidden;
     border-radius: $radius-sm;
-    background: var(--ul-grey-0);
+    background: var(--ul-surface-raised);
     transition: background .15s;
 
     .material-symbols-outlined {
@@ -174,7 +228,7 @@ $onboarding-card-accents: (
 }
 
 .onboarding-card:has(.onboarding-card-switch input:not(:checked)) .onboarding-card-icon {
-    background: var(--ul-grey-2a);
+    background: var(--ul-surface-2);
 
     .material-symbols-outlined {
         color: var(--ul-grey-6);
@@ -211,13 +265,13 @@ $onboarding-card-accents: (
     $accent-dark: color.adjust($accent, $lightness: -15%);
 
     .onboarding-card--#{$name} {
-        background: rgba($accent-dark, .07);
+        background: rgba($accent-dark, .4);
 
         .onboarding-card-icon {
-            background: rgba($accent, .12);
+            background: rgba($accent, .4);
 
             .material-symbols-outlined {
-                color: $accent;
+                color: #fff;
             }
         }
     }
@@ -226,14 +280,12 @@ $onboarding-card-accents: (
 // -- TOS agreement block ---------------------------------------------------
 // Plain-language snippet + required checkbox shown at the end of the /welcome/
 // form, right before the submit button. Kept visually distinct from the
-// Memories/Community/External-Services cards above since checking it isn't a
+// History/Community/External-Services cards above since checking it isn't a
 // feature toggle - it's a one-time, non-reversible agreement.
 
 .onboarding-tos {
     padding: 1.25rem 1.5rem;
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: $radius-md;
-    background: var(--ul-grey-1);
+    @include surface;
     margin-bottom: 1.75rem;
 }
 

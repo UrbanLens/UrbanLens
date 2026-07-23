@@ -1,0 +1,30 @@
+
+<div id="google-photos-picker-grid">
+    <form hx-post="{% url 'pin.google_photos.import' pin.slug %}"
+          hx-target="#pin-import-photos-body"
+          hx-swap="innerHTML"
+          class="immich-picker-form">
+        {% csrf_token %}
+        <input type="hidden" name="session_id" value="{{ session_id }}">
+        {% if assets %}
+        <div class="immich-picker-grid">
+            {% for asset in assets %}
+            <label class="immich-picker-item{% if asset.already_imported %} immich-picker-item--disabled{% endif %}">
+                <input type="checkbox" name="media_item_ids" value="{{ asset.id }}" {% if asset.already_imported %}disabled{% endif %}>
+                <img src="{% url 'pin.google_photos.thumbnail' pin.slug session_id asset.id %}" loading="lazy" alt="">
+                {% if asset.already_imported %}<span class="immich-picker-note">Already imported</span>{% endif %}
+            </label>
+            {% endfor %}
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn--primary btn--submit">
+                <i class="material-symbols-outlined">download</i>
+                Import selected
+            </button>
+            <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
+        </div>
+        {% else %}
+        <p class="immich-picker-empty">No photos were picked.</p>
+        {% endif %}
+    </form>
+</div>

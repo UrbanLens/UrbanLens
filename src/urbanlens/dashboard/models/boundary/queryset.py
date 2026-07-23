@@ -150,9 +150,11 @@ class BoundaryManager(abstract.DashboardManager.from_queryset(BoundaryQuerySet))
     def resolve_for_pin(self, pin: Pin, boundary_type: str) -> tuple[GEOSGeometry | None, str | None]:
         """Resolve the polygon that applies to a pin, with its source.
 
-        Property order: pin's own row → parent pin's effective property (detail
-        pins) → wiki-customized row → location-default generated polygon →
-        circle fallback around the location's coordinates.
+        Property order: pin's own row → parent pin's effective property, but
+        only when this pin sits inside it (a detail pin placed outside its
+        parent's property must not inherit that property's boundary) →
+        wiki-customized row → location-default generated polygon → circle
+        fallback around the location's coordinates.
 
         Building order: pin's own row → parent pin's effective building, but
         only when this pin sits inside it (detail pins for other buildings on
@@ -178,17 +180,18 @@ class BoundaryManager(abstract.DashboardManager.from_queryset(BoundaryQuerySet))
                 return row.generated_polygon, "generated"
 
         if pin.parent_pin_id and (parent_pin := pin.parent_pin) is not None:
-            # Detail pins resolve through their parent; the parent's own chain
-            # already covers wiki/location/circle fallbacks.
             parent_polygon, _parent_source = self.resolve_for_pin(parent_pin, boundary_type)
-            if parent_polygon is None:
+            if parent_polygon is not None:
+                point = self._pin_point(pin)
+                if point is not None and (parent_polygon.contains(point) or parent_polygon.touches(point)):
+                    return parent_polygon, "inherited"
+            if boundary_type != BoundaryType.PROPERTY:
+                # Buildings: a detail pin outside the parent's building has no
+                # building of its own - no further fallback.
                 return None, None
-            if boundary_type == BoundaryType.PROPERTY:
-                return parent_polygon, "inherited"
-            point = self._pin_point(pin)
-            if point is not None and (parent_polygon.contains(point) or parent_polygon.touches(point)):
-                return parent_polygon, "inherited"
-            return None, None
+            # Property: a detail pin outside the parent's property boundary
+            # (or whose parent has none) falls through to its own
+            # wiki/location/circle chain below, using its own Location.
 
         # Prefer the pin's explicitly chosen wiki; fall back to the location's
         # wiki for pins that were never explicitly linked (e.g. bulk imports).

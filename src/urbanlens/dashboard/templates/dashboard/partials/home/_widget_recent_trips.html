@@ -1,0 +1,22 @@
+{% comment %}
+Recent trip activity widget. Context: home_recent_trips (Trip queryset, past
+trips with a comment in the last 7 days).
+{% endcomment %}
+{% if home_recent_trips %}
+<section class="home-widget ul-section" data-widget-key="recent_trips">
+    <div class="home-widget-heading">
+        <span class="home-widget-icon"><i class="material-symbols-outlined">luggage</i></span>
+        <div><h3>Recent trips</h3><p>Past trips with new comments in the last week.</p></div>
+        <a href="{% url 'trips.list' %}" class="home-widget-link">All trips</a>
+    </div>
+    <div class="home-card-strip">
+        {% for trip in home_recent_trips %}
+        <a class="home-mini-card" href="{% url 'trips.detail' trip.slug %}">
+            <i class="material-symbols-outlined">map</i>
+            <strong>{{ trip.name }}</strong>
+            <span>{{ trip.timeline_status|title }}{% if trip.effective_start_date %} · {{ trip.effective_start_date|date:"M j" }}{% endif %}</span>
+        </a>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}

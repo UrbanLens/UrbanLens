@@ -1,0 +1,20 @@
+{% comment %}
+Profile | Edit tab strip for the current user's own profile pages.
+
+Context:
+  active - "profile" or "edit" (which tab is current)
+{% endcomment %}
+<nav class="ul-subnav-tabs" aria-label="Profile views">
+    <a href="{% url 'profile.view' %}"
+       class="ul-subnav-tab {% if active == 'profile' %}is-active{% endif %}"
+       {% if active == 'profile' %}aria-current="page"{% endif %}>
+        <i class="material-symbols-outlined">person</i>
+        <span>Profile</span>
+    </a>
+    <a href="{% url 'profile.edit' %}"
+       class="ul-subnav-tab {% if active == 'edit' %}is-active{% endif %}"
+       {% if active == 'edit' %}aria-current="page"{% endif %}>
+        <i class="material-symbols-outlined">edit</i>
+        <span>Edit</span>
+    </a>
+</nav>

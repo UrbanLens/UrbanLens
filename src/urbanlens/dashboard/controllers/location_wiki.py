@@ -13,8 +13,9 @@ import logging
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.gis.geos import GEOSGeometry, MultiPolygon, Polygon
-from django.http import Http404, HttpResponse, JsonResponse
+from django.http import Http404, HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
+from django.template.loader import render_to_string
 from django.urls import reverse
 from django.views import View
 
@@ -25,9 +26,11 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
 from urbanlens.dashboard.models.wiki_stat_vote import WikiStatField, WikiStatVote
+from urbanlens.dashboard.services.locations import site_scope
 from urbanlens.dashboard.services.text_limits import MAX_WIKI_DESCRIPTION_LENGTH, text_length_error
 from urbanlens.dashboard.services.undo.handlers.wiki import with_wiki_descendants
 from urbanlens.dashboard.services.undo.service import stash_for_undo
+from urbanlens.dashboard.services.wiki_access import resolve_visible_wiki
 
 logger = logging.getLogger(__name__)
 
@@ -91,13 +94,6 @@ def _wiki_stat_context(wiki: Wiki, field: str, profile: Profile | None) -> dict:
     }
 
 
-def _resolve_wiki(location_slug: str) -> tuple[Location, Wiki]:
-    """Resolve the Location for a slug and its existing Wiki (404 when absent)."""
-    location = get_object_or_404(Location, slug=location_slug)
-    wiki = get_object_or_404(Wiki, location=location)
-    return location, wiki
-
-
 class LocationWikiView(LoginRequiredMixin, View):
     """Main wiki page for a place.
 
@@ -105,8 +101,7 @@ class LocationWikiView(LoginRequiredMixin, View):
     """
 
     def get(self, request, location_slug):
-        location, wiki = _resolve_wiki(location_slug)
-        profile, _ = Profile.objects.get_or_create(user=request.user)
+        location, wiki, profile = resolve_visible_wiki(request, location_slug)
 
         # First view by someone other than the creator retires their
         # self-service delete eligibility (see Wiki.can_be_deleted_by).
@@ -135,7 +130,7 @@ class LocationWikiView(LoginRequiredMixin, View):
         else:
             other_locations = Location.objects.none()
 
-        from urbanlens.dashboard.models.badges.model import COLOR_CHOICES
+        from urbanlens.dashboard.models.labels.model import COLOR_CHOICES
         from urbanlens.dashboard.models.pin.model import PinType
 
         detail_pin_icon_choices = [
@@ -155,13 +150,25 @@ class LocationWikiView(LoginRequiredMixin, View):
             ("emergency", "Emergency"),
         ]
 
+        show_wiki_cover_photo = bool(profile.show_wiki_cover_photos and wiki.cover_photo_id)
+        wiki_cover_candidates: list[dict] = []
+        if show_wiki_cover_photo:
+            from urbanlens.dashboard.models.images.model import Image
+
+            wiki_cover_candidates = [{"id": img.pk, "url": img.image.url} for img in Image.objects.filter(wiki=wiki).visible_to(profile).exclude(pk=wiki.cover_photo_id).order_by("-created")[:20] if img.image]
+
         return render(
             request,
             "dashboard/pages/location/wiki.html",
             {
                 "wiki": wiki,
                 "location": location,
+                "profile": profile,
+                "show_wiki_cover_photo": show_wiki_cover_photo,
+                "wiki_cover_candidates": wiki_cover_candidates,
                 "can_delete_wiki": wiki.can_be_deleted_by(profile),
+                "is_site_scope": site_scope.is_site_scope(wiki),
+                "wiki_comment_count": wiki.comments.count(),
                 "pin_count_display": pin_count_display,
                 "first_pinned": first_pinned,
                 "wiki_stats": [_wiki_stat_context(wiki, field, profile) for field in WikiStatField.values],
@@ -186,6 +193,84 @@ class LocationWikiView(LoginRequiredMixin, View):
                     ("plywood", "Plywood", wiki.plywood),
                     ("locked", "Locked", wiki.locked),
                 ],
+                "show_map_footer": True,
+            },
+        )
+
+
+class WikiBuildingAttributesPanelView(LoginRequiredMixin, View):
+    """GET: the wiki's shared Building Attributes card (REData building number/name/year built).
+
+    Location-scoped (``LocationCache``, not a Pin), so this reads whatever
+    ``RedataBuildingAttributesEnrichmentSource``'s background enrichment cycle
+    (or a visiting pin's own on-demand panel fetch) already cached - the wiki
+    page never triggers a live REData fetch itself, mirroring how the
+    Ownership card only ever shows already-known ``WikiOwner`` rows.
+    """
+
+    def get(self, request: HttpRequest, location_slug: str) -> HttpResponse:
+        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+        from urbanlens.dashboard.plugins.builtin.redata_building_attributes import _render_building_attributes
+
+        location, wiki, _profile = resolve_visible_wiki(request, location_slug)
+        # A parcel-scope wiki describes grounds, not a structure - the buildings
+        # panel stands in for this card there (see services.locations.site_scope).
+        if site_scope.is_site_scope(wiki):
+            return HttpResponse(status=204)
+        cached = LocationCache.get_fresh(location, "redata_building_attributes")
+        if cached is None:
+            return HttpResponse(status=204)
+
+        context = _render_building_attributes(cached.data or {})
+        if context is None:
+            return HttpResponse(status=204)
+
+        return render(
+            request,
+            "dashboard/partials/pins/_simple_info_panel.html",
+            {
+                "section_id": "location-building-attributes-panel",
+                "icon": "domain",
+                "title": "Building Attributes",
+                **context,
+            },
+        )
+
+
+class WikiParcelBuildingsPanelView(LoginRequiredMixin, View):
+    """GET: the wiki's shared list of every building standing on this property.
+
+    The community counterpart to ``PinController.parcel_buildings``, rendering
+    the same partial from the same location-scoped ``LocationCache`` row. Like
+    the Building Attributes card beside it, this never triggers a live fetch -
+    it shows whatever ``ParcelBuildingsEnrichmentSource``'s background cycle
+    (or a visiting pin's own panel fetch) already cached.
+
+    Rows never link anywhere: a child wiki is a marker on this page's own map,
+    not a page of its own.
+    """
+
+    def get(self, request: HttpRequest, location_slug: str) -> HttpResponse:
+        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+        from urbanlens.dashboard.plugins.builtin.parcel_buildings import building_rows
+
+        location, wiki, _profile = resolve_visible_wiki(request, location_slug)
+        cached = LocationCache.get_fresh(location, site_scope.PARCEL_BUILDINGS_CACHE_SOURCE)
+        if cached is None:
+            return HttpResponse(status=204)
+
+        buildings = (cached.data or {}).get("buildings") or []
+        if not buildings:
+            return HttpResponse(status=204)
+
+        return render(
+            request,
+            "dashboard/partials/pins/_parcel_buildings_panel.html",
+            {
+                "section_id": "location-parcel-buildings-panel",
+                "icon": "apartment",
+                "title": "Buildings on this Property",
+                "rows": building_rows(buildings, list(wiki.child_wikis.select_related("location"))),
             },
         )
 
@@ -202,8 +287,7 @@ class LocationWikiDeleteView(LoginRequiredMixin, View):
     """
 
     def delete(self, request, location_slug):
-        location, wiki = _resolve_wiki(location_slug)
-        profile, _ = Profile.objects.get_or_create(user=request.user)
+        location, wiki, profile = resolve_visible_wiki(request, location_slug)
 
         if not wiki.can_be_deleted_by(profile):
             return JsonResponse({"error": "This wiki can no longer be deleted - it's already been viewed by someone else."}, status=403)
@@ -231,8 +315,7 @@ class LocationWikiEditView(LoginRequiredMixin, View):
     """
 
     def post(self, request, location_slug):
-        _location, wiki = _resolve_wiki(location_slug)
-        profile, _ = Profile.objects.get_or_create(user=request.user)
+        _location, wiki, profile = resolve_visible_wiki(request, location_slug)
 
         try:
             body = json.loads(request.body) if request.body else {}
@@ -289,7 +372,11 @@ class LocationWikiEditView(LoginRequiredMixin, View):
             changes=changes,
         )
 
-        return JsonResponse({"ok": True, "changes": list(changes.keys())})
+        # Description, dates, and security indicators all render together in the
+        # "About" card - send back the freshly-rendered fragment so the client can
+        # swap it in place instead of leaving edited-but-unrendered fields stale.
+        about_html = render_to_string("dashboard/partials/wiki/_wiki_about_card.html", {"wiki": wiki}, request=request)
+        return JsonResponse({"ok": True, "changes": list(changes.keys()), "about_html": about_html})
 
 
 def _render_history(request, location: Location, wiki: Wiki):
@@ -360,7 +447,7 @@ class LocationWikiHistoryView(LoginRequiredMixin, View):
     """
 
     def get(self, request, location_slug):
-        location, wiki = _resolve_wiki(location_slug)
+        location, wiki, _profile = resolve_visible_wiki(request, location_slug)
         return _render_history(request, location, wiki)
 
 
@@ -373,9 +460,8 @@ class LocationWikiRevertView(LoginRequiredMixin, View):
     """
 
     def post(self, request, location_slug, edit_id: int):
-        location, wiki = _resolve_wiki(location_slug)
+        location, wiki, profile = resolve_visible_wiki(request, location_slug)
         target_edit = get_object_or_404(WikiEdit, id=edit_id, wiki=wiki)
-        profile, _ = Profile.objects.get_or_create(user=request.user)
 
         if target_edit.reverted:
             return JsonResponse({"error": "This edit has already been reverted."}, status=400)
@@ -411,9 +497,8 @@ class LocationWikiEditDeleteView(LoginRequiredMixin, View):
     """
 
     def post(self, request, location_slug, edit_id: int):
-        location, wiki = _resolve_wiki(location_slug)
+        location, wiki, profile = resolve_visible_wiki(request, location_slug)
         target_edit = get_object_or_404(WikiEdit, id=edit_id, wiki=wiki)
-        profile, _ = Profile.objects.get_or_create(user=request.user)
 
         if target_edit.editor_id != profile.id:
             return JsonResponse({"error": "You can only permanently delete your own edits."}, status=403)
@@ -443,8 +528,7 @@ class WikiStatVoteView(LoginRequiredMixin, View):
     def post(self, request, location_slug, field):
         if field not in WikiStatField.values:
             raise Http404
-        _location, wiki = _resolve_wiki(location_slug)
-        profile, _ = Profile.objects.get_or_create(user=request.user)
+        _location, wiki, profile = resolve_visible_wiki(request, location_slug)
 
         try:
             value = int(request.POST.get("value") or 0)

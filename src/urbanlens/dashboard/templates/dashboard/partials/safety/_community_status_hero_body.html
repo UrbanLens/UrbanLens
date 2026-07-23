@@ -1,0 +1,12 @@
+{% load humanize %}
+{% comment %}
+Hero body for safety/community_status.html. Expects `checkin` in context.
+{% endcomment %}
+<h1 class="ul-page-hero__title">
+    <span class="safety-checkin-status-badge safety-checkin-status-badge--{{ checkin.status }}">{{ checkin.get_status_display }}</span>
+    {{ checkin.title }}
+</h1>
+<p class="ul-page-hero__subtitle" title="{{ checkin.checkin_by|date:'N j, Y g:i A' }}">
+    <a href="{% url 'profile.view_user' checkin.profile.slug|default:checkin.profile.uuid %}">{{ checkin.profile.username }}</a>
+    was expected to check in {{ checkin.checkin_by|naturaltime }}.
+</p>

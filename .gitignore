@@ -1,5 +1,6 @@
 # Server state - Could contain sensitive details
 *.log
+.deploy.lock
 
 # Compiled code
 __pycache__/
@@ -48,3 +49,7 @@ src/urbanlens/frontend/static/icons/unused/
 .claude/*.json
 sample_data/*.jpg
 src/urbanlens/media/
+docs/prompts/
+docs/screenshots/
+src/urbanlens/logs/*
+CLAUDE.md

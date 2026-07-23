@@ -1,8 +1,10 @@
 import {
   confirmAction,
   getCsrfToken,
+  htmxProcess,
   toast
-} from "./categories-agkcnzxy.js";
+} from "./article-wysiwyg-5jnnp4sj.js";
+import"./article-wysiwyg-2vd5xdaq.js";
 
 // src/urbanlens/dashboard/frontend/ts/shared/map-layers.ts
 var TILE_DEFS = {
@@ -275,7 +277,13 @@ function createMapLayers(map, options = {}) {
     }
   }
   function toggleCustom(key) {
-    custom[key]?.toggle();
+    const layer = custom[key];
+    if (!layer)
+      return;
+    const wasActive = layer.isActive();
+    layer.toggle();
+    if (key === "details" && wasActive)
+      setOverlay("borders", false);
     syncButtons();
   }
   function registerToggle(key, toggle) {
@@ -449,8 +457,12 @@ function readConfig(el) {
     detailPinsJsonUrl: d.detailPinsJsonUrl || "",
     detailPinCreateUrl: d.detailPinCreateUrl || "",
     detailPinEditUrlTemplate: d.detailPinEditUrlTemplate || "",
+    pinShareDialogUrl: d.pinShareDialogUrl || "",
+    detailPinsSendToWikiUrl: d.detailPinsSendToWikiUrl || "",
     boundaryUrl: d.boundaryUrl || "",
     photoGalleryJsonUrl: d.photoGalleryJsonUrl || "",
+    nearbyPinsJsonUrl: d.nearbyPinsJsonUrl || "",
+    mediaRelevanceUrl: d.mediaRelevanceUrl || "",
     markupFillOpacity: d.markupFillOpacity ? Number.parseInt(d.markupFillOpacity, 10) : 87,
     markupBorderOpacity: d.markupBorderOpacity ? Number.parseInt(d.markupBorderOpacity, 10) : 100,
     showOnboardingTips: d.showOnboardingTips === "1"
@@ -471,13 +483,14 @@ function init() {
     const center = map.getCenter();
     window._openCommentMapComposer({ context, initialView: { lat: center.lat, lng: center.lng, zoom: map.getZoom() } });
   };
-  const map = L.map("map", { scrollWheelZoom: false }).setView([mapCenterLat, mapCenterLng], 15);
+  const map = L.map("map", { scrollWheelZoom: false, attributionControl: false }).setView([mapCenterLat, mapCenterLng], 15);
   window.map = map;
   map.createPane("markupPane").style.zIndex = "550";
   map.createPane("boundaryPane").style.zIndex = "540";
+  const SCROLL_ZOOM_ENABLE_DELAY_MS = 350;
   let scrollEnableTimer;
   mapEl.addEventListener("mouseenter", () => {
-    scrollEnableTimer = setTimeout(() => map.scrollWheelZoom.enable(), 750);
+    scrollEnableTimer = setTimeout(() => map.scrollWheelZoom.enable(), SCROLL_ZOOM_ENABLE_DELAY_MS);
   });
   mapEl.addEventListener("mouseleave", () => {
     clearTimeout(scrollEnableTimer);
@@ -527,16 +540,101 @@ function init() {
     window.addEventListener("resize", onResize);
     window.addEventListener("orientationchange", () => setTimeout(() => map.invalidateSize(), 300));
   })();
-  const detailPinColors = { building: "#6b7280", entrance: "#16a34a", poi: "#d97706", danger: "#dc2626", other: "#7c3aed", location: "#2563eb" };
-  const detailPinIcons = { building: "business", entrance: "door_front", poi: "star", danger: "warning", other: "info", location: "place" };
+  (() => {
+    const wrapper = document.getElementById("pin-detail-map-wrapper");
+    const handle = document.getElementById("pin-detail-map-resize-handle");
+    if (!wrapper || !handle)
+      return;
+    const MIN_HEIGHT_PX = 320;
+    const MAX_HEIGHT_PX = 1200;
+    let startY = 0;
+    let startHeight = 0;
+    function onPointerMove(e) {
+      const delta = e.clientY - startY;
+      const newHeight = Math.max(MIN_HEIGHT_PX, Math.min(MAX_HEIGHT_PX, startHeight + delta));
+      wrapper.style.height = `${newHeight}px`;
+      map.invalidateSize();
+    }
+    function onPointerUp() {
+      handle.classList.remove("is-dragging");
+      document.removeEventListener("pointermove", onPointerMove);
+      document.removeEventListener("pointerup", onPointerUp);
+      const finalHeight = Math.round(wrapper.getBoundingClientRect().height);
+      fetch("/dashboard/map/pin/map-height/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
+        body: JSON.stringify({ height: finalHeight })
+      }).catch(() => {
+        toast.error("Failed to save map size.");
+      });
+    }
+    handle.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      startY = e.clientY;
+      startHeight = wrapper.getBoundingClientRect().height;
+      handle.classList.add("is-dragging");
+      document.addEventListener("pointermove", onPointerMove);
+      document.addEventListener("pointerup", onPointerUp);
+    });
+  })();
+  const detailPinColors = { parcel: "#0f766e", building: "#6b7280", entrance: "#16a34a", poi: "#d97706", danger: "#dc2626", other: "#7c3aed", location: "#2563eb" };
+  const detailPinIcons = { parcel: "crop_free", building: "business", entrance: "door_front", poi: "star", danger: "warning", other: "info", location: "place" };
   const detailPinLayer = L.layerGroup();
   const markupLayer = L.layerGroup();
   const detailsLayer = L.layerGroup([detailPinLayer, markupLayer]).addTo(map);
   const photoLayer = L.layerGroup().addTo(map);
+  const nearbyLayer = L.layerGroup();
+  let nearbyActive = false;
+  let nearbyFetchPromise = null;
+  function buildNearbyMarker(pin) {
+    if (pin.latitude == null || pin.longitude == null)
+      return null;
+    const iconName = pin.icon || "place";
+    const inner = /^[a-z_]+$/.test(iconName) ? `<i class="material-icons nearby-pin-icon">${escHtml(iconName)}</i>` : `<span class="nearby-pin-emoji">${escHtml(iconName)}</span>`;
+    const marker = L.marker([pin.latitude, pin.longitude], {
+      icon: L.divIcon({ className: "nearby-pin-marker-wrap", html: `<span class="nearby-pin-marker">${inner}</span>`, iconSize: [26, 26], iconAnchor: [13, 13] })
+    });
+    marker.bindPopup(`
+            <div class="pin-popup nearby-pin-popup">
+                <div class="popup-title">${escHtml(pin.name || "Pin")}</div>
+                <div class="popup-actions"><a href="${escHtml(pin.url || "#")}" class="view-full-pin">View Details</a></div>
+            </div>`);
+    return marker;
+  }
+  function loadNearbyPins() {
+    if (!cfg.nearbyPinsJsonUrl)
+      return Promise.resolve();
+    nearbyFetchPromise = fetch(cfg.nearbyPinsJsonUrl, { headers: { "X-Requested-With": "XMLHttpRequest" } }).then((r) => r.ok ? r.json() : { pins: [] }).then((data) => {
+      nearbyLayer.clearLayers();
+      (data.pins || []).forEach((pin) => {
+        const m = buildNearbyMarker(pin);
+        if (m)
+          nearbyLayer.addLayer(m);
+      });
+    }).catch(() => {});
+    return nearbyFetchPromise;
+  }
+  function setNearbyActive(on) {
+    if (on === nearbyActive)
+      return;
+    nearbyActive = on;
+    if (on) {
+      nearbyLayer.addTo(map);
+      if (!nearbyFetchPromise)
+        loadNearbyPins();
+    } else {
+      map.removeLayer(nearbyLayer);
+    }
+  }
   createMapLayers(map, {
     root: document.getElementById("detail-map-layers"),
     apiKey: cfg.openweathermapApiKey || null,
     defaultBase: cfg.defaultMapView,
+    onAttribution: (text) => {
+      const el = document.getElementById("page-footer-attribution-text");
+      if (el)
+        el.textContent = text;
+    },
     custom: {
       details: {
         isActive: () => map.hasLayer(detailsLayer),
@@ -545,6 +643,10 @@ function init() {
       photos: {
         isActive: () => map.hasLayer(photoLayer),
         toggle: () => map.hasLayer(photoLayer) ? map.removeLayer(photoLayer) : photoLayer.addTo(map)
+      },
+      nearby: {
+        isActive: () => nearbyActive,
+        toggle: () => setNearbyActive(!nearbyActive)
       }
     }
   });
@@ -605,14 +707,14 @@ function init() {
     document.querySelectorAll(".detail-pin-list-item").forEach((li) => li.classList.remove("is-highlighted"));
   }
   function refreshPanelHeader() {
-    const panel = document.getElementById("detail-pin-list-panel");
+    const handle = document.getElementById("detail-pin-list-handle");
     const countLabel = document.getElementById("detail-pin-count-label");
     const total = detailPins.length + toolbar.getMarkupItems().length + photoPanelItems.length;
-    if (!panel)
-      return;
-    panel.style.display = total ? "" : "none";
     if (countLabel)
       countLabel.textContent = `${total} Layer${total === 1 ? "" : "s"}`;
+    if (handle)
+      handle.style.display = total ? "" : "none";
+    refreshDetailPinSelectButton();
   }
   function buildDetailList() {
     const ul = document.getElementById("detail-pin-list-ul");
@@ -627,18 +729,18 @@ function init() {
       li.className = "detail-pin-list-item";
       li.dataset.uuid = dp.uuid;
       li.dataset.kind = "pin";
+      const meta = dp.owner_name ? `<span class="detail-pin-list-item-meta">in ${escHtml(dp.owner_name)}</span>` : dp.added_by ? `<span class="detail-pin-list-item-meta">by ${dp.is_mine ? "you" : escHtml(dp.added_by)}</span>` : "";
       li.innerHTML = `
                 <span class="material-icons detail-pin-list-item-icon" style="color:${escHtml(color)}">${escHtml(icon)}</span>
                 <span class="detail-pin-list-item-name">${escHtml(dp.name)}</span>
-                ${dp.added_by ? `<span class="detail-pin-list-item-meta">by ${dp.is_mine ? "you" : escHtml(dp.added_by)}</span>` : ""}
-                <button type="button" class="detail-pin-list-item-delete" title="Delete pin">
-                    <i class="material-symbols-outlined">close</i>
-                </button>`;
+                ${meta}
+                ${dp.owner_name ? "" : `<button type="button" class="detail-pin-list-item-delete" title="Delete pin"><i class="material-symbols-outlined">close</i></button>`}`;
       li.addEventListener("click", (e) => {
         if (e.target.closest(".detail-pin-list-item-delete"))
           return;
         highlightDetailPin(dp.uuid);
-        openDetailPinEditDialog(dp);
+        if (!dp.owner_name)
+          openDetailPinEditDialog(dp);
       });
       li.querySelector(".detail-pin-list-item-delete")?.addEventListener("click", async (e) => {
         e.stopPropagation();
@@ -661,14 +763,16 @@ function init() {
       li.dataset.uuid = item.uuid;
       li.dataset.kind = "markup";
       const displayName = item.label || item.markup_type.charAt(0).toUpperCase() + item.markup_type.slice(1);
+      const ownerMeta = item.owner_name ? `<span class="detail-pin-list-item-meta">in ${escHtml(item.owner_name)}</span>` : "";
       li.innerHTML = `
                 <span class="material-icons detail-pin-list-item-icon" style="color:${escHtml(item.color)}">${escHtml(markupIcon[item.markup_type] || "edit")}</span>
                 <span class="detail-pin-list-item-name">${escHtml(displayName)}</span>
-                <button type="button" class="detail-pin-list-item-delete" title="Delete">
-                    <i class="material-symbols-outlined">close</i>
-                </button>`;
+                ${ownerMeta}
+                ${item.owner_name ? "" : `<button type="button" class="detail-pin-list-item-delete" title="Delete"><i class="material-symbols-outlined">close</i></button>`}`;
       li.addEventListener("click", (e) => {
         if (e.target.closest(".detail-pin-list-item-delete"))
+          return;
+        if (item.owner_name)
           return;
         toolbar.openMarkupEditDialog(item);
       });
@@ -687,22 +791,251 @@ function init() {
       ul.appendChild(li);
     });
   }
-  document.getElementById("detail-pin-list-toggle")?.addEventListener("click", () => {
-    const drawer = document.getElementById("detail-pin-list-drawer");
-    const chevron = document.getElementById("detail-pin-list-chevron");
-    const open = drawer.style.display !== "none";
-    if (!open) {
-      const wrapper = document.querySelector(".map-wrapper");
-      const bottomControls = document.querySelector(".map-bottom-controls");
-      const panel = document.getElementById("detail-pin-list-panel");
-      if (wrapper && bottomControls && panel) {
-        const available = wrapper.getBoundingClientRect().bottom - bottomControls.getBoundingClientRect().height - panel.getBoundingClientRect().top - 24;
-        drawer.style.maxHeight = `${Math.max(120, Math.min(320, available))}px`;
-      }
+  function toggleDetailPinListPanel() {
+    const panel = document.getElementById("detail-pin-list-panel");
+    const handle = document.getElementById("detail-pin-list-handle");
+    if (!panel)
+      return;
+    const isOpen = panel.classList.toggle("open");
+    if (handle) {
+      handle.classList.toggle("open", isOpen);
+      handle.setAttribute("aria-expanded", String(isOpen));
+      const icon = handle.querySelector(".material-symbols-outlined, .material-icons");
+      if (icon)
+        icon.textContent = isOpen ? "chevron_left" : "chevron_right";
     }
-    drawer.style.display = open ? "none" : "";
-    chevron?.classList.toggle("open", !open);
-  });
+  }
+  window._toggleDetailPinListPanel = toggleDetailPinListPanel;
+  const SAT_LAST_SOURCE_KEY = "ul_sat_last_source";
+  function _satRememberSource(source) {
+    if (!source)
+      return;
+    try {
+      localStorage.setItem(SAT_LAST_SOURCE_KEY, source);
+    } catch {}
+  }
+  function _satLastSource() {
+    try {
+      return localStorage.getItem(SAT_LAST_SOURCE_KEY);
+    } catch {
+      return null;
+    }
+  }
+  let _satIdx = 0;
+  function _satSlides() {
+    const c = document.getElementById("sat-carousel");
+    return c ? Array.from(c.querySelectorAll(".sat-slide")) : [];
+  }
+  function _satShow(idx) {
+    const slides = _satSlides();
+    if (!slides.length)
+      return;
+    _satIdx = (idx % slides.length + slides.length) % slides.length;
+    slides.forEach((s, i) => s.classList.toggle("is-active", i === _satIdx));
+    const active = slides[_satIdx];
+    if (!active)
+      return;
+    const source = document.querySelector("#sat-carousel .sat-source");
+    const date = document.querySelector("#sat-carousel .sat-date");
+    const detail = document.querySelector("#sat-carousel .sat-detail");
+    if (source)
+      source.textContent = active.dataset.source || "";
+    if (date)
+      date.textContent = active.dataset.date || "";
+    if (detail)
+      detail.textContent = active.dataset.detail || "";
+    _satRememberSource(active.dataset.source || "");
+    _satRebuildDots(slides.length);
+  }
+  function _satRebuildDots(count) {
+    const prev = document.querySelector("#sat-carousel .sat-prev");
+    const next = document.querySelector("#sat-carousel .sat-next");
+    if (prev)
+      prev.hidden = count <= 1;
+    if (next)
+      next.hidden = count <= 1;
+    const el = document.getElementById("sat-dots");
+    if (!el)
+      return;
+    el.innerHTML = "";
+    for (let i = 0;i < count; i++) {
+      const dot = document.createElement("button");
+      dot.type = "button";
+      dot.className = "sat-dot" + (i === _satIdx ? " is-active" : "");
+      dot.setAttribute("aria-label", `Slide ${i + 1}`);
+      dot.addEventListener("click", () => _satShow(i));
+      el.appendChild(dot);
+    }
+  }
+  window._satRemoveSlide = function(img) {
+    const slide = img.closest(".sat-slide");
+    if (!slide)
+      return;
+    const wasActive = slide.classList.contains("is-active");
+    slide.remove();
+    const slides = _satSlides();
+    if (!slides.length) {
+      const c = document.getElementById("sat-carousel");
+      if (c) {
+        c.innerHTML = '<div class="view-unavailable"><i class="material-symbols-outlined">broken_image</i>' + "<span>No satellite imagery available for this location.</span></div>";
+      }
+      return;
+    }
+    if (wasActive)
+      _satIdx = Math.max(0, Math.min(_satIdx, slides.length - 1));
+    _satShow(_satIdx);
+  };
+  window._satPrev = function() {
+    _satShow(_satIdx - 1);
+  };
+  window._satNext = function() {
+    _satShow(_satIdx + 1);
+  };
+  window._satShowRemembered = function() {
+    const slides = _satSlides();
+    if (!slides.length)
+      return;
+    const lastSource = _satLastSource();
+    const idx = lastSource ? slides.findIndex((s) => s.dataset.source === lastSource) : -1;
+    _satShow(idx >= 0 ? idx : 0);
+  };
+  window._satShow = _satShow;
+  let _svIdx = 0;
+  function _svSlides() {
+    const c = document.getElementById("sv-carousel");
+    return c ? Array.from(c.querySelectorAll(".sv-slide")) : [];
+  }
+  function _svShow(idx) {
+    const slides = _svSlides();
+    if (!slides.length)
+      return;
+    _svIdx = (idx % slides.length + slides.length) % slides.length;
+    slides.forEach((s, i) => s.classList.toggle("is-active", i === _svIdx));
+    const active = slides[_svIdx];
+    if (!active)
+      return;
+    const source = document.querySelector("#sv-carousel .sv-source");
+    const date = document.querySelector("#sv-carousel .sv-date");
+    const heading = document.querySelector("#sv-carousel .sv-heading");
+    if (source)
+      source.textContent = active.dataset.source || "";
+    if (date)
+      date.textContent = active.dataset.date || "";
+    if (heading)
+      heading.textContent = active.dataset.heading !== undefined ? `⇨ ${active.dataset.heading}°` : "";
+    _svRebuildDots(slides.length);
+  }
+  function _svRebuildDots(count) {
+    const prev = document.querySelector("#sv-carousel .sv-prev");
+    const next = document.querySelector("#sv-carousel .sv-next");
+    if (prev)
+      prev.hidden = count <= 1;
+    if (next)
+      next.hidden = count <= 1;
+    const el = document.getElementById("sv-dots");
+    if (!el)
+      return;
+    el.innerHTML = "";
+    for (let i = 0;i < count; i++) {
+      const dot = document.createElement("button");
+      dot.type = "button";
+      dot.className = "sv-dot" + (i === _svIdx ? " is-active" : "");
+      dot.setAttribute("aria-label", `Slide ${i + 1}`);
+      dot.addEventListener("click", () => _svShow(i));
+      el.appendChild(dot);
+    }
+  }
+  window._svShowStaticFallback = function(btn) {
+    const slide = btn.closest(".sv-slide");
+    if (!slide)
+      return;
+    const iframe = slide.querySelector(".sv-embed");
+    const staticImg = slide.querySelector(".sv-img--fallback");
+    if (iframe)
+      iframe.hidden = true;
+    if (staticImg)
+      staticImg.hidden = false;
+    btn.hidden = true;
+  };
+  window._svRemoveSlide = function(img) {
+    const slide = img.closest(".sv-slide");
+    if (!slide)
+      return;
+    const wasActive = slide.classList.contains("is-active");
+    slide.remove();
+    const slides = _svSlides();
+    if (!slides.length) {
+      const c = document.getElementById("sv-carousel");
+      if (c) {
+        c.innerHTML = '<div class="view-unavailable"><i class="material-symbols-outlined">broken_image</i>' + "<span>No street-level imagery available for this location.</span></div>";
+      }
+      return;
+    }
+    if (wasActive)
+      _svIdx = Math.max(0, Math.min(_svIdx, slides.length - 1));
+    _svShow(_svIdx);
+  };
+  window._svPrev = function() {
+    _svShow(_svIdx - 1);
+  };
+  window._svNext = function() {
+    _svShow(_svIdx + 1);
+  };
+  window._svShow = _svShow;
+  async function promotePinToParent(entry) {
+    if (!entry.slug || !entry.url)
+      return;
+    if (!await confirmAction({ title: "Make this the parent pin?", message: `"${entry.name || "This pin"}" will become the parent, and the current pin will become its child. Everything else - name, notes, reviews, photos, visit history - stays with each pin.`, confirmLabel: "Swap" })) {
+      return;
+    }
+    fetch(`/dashboard/map/pin/${encodeURIComponent(entry.slug)}/swap-parent/`, {
+      method: "POST",
+      headers: { "X-CSRFToken": getCsrfToken() }
+    }).then((r) => r.json().then((data) => ({ ok: r.ok, data }))).then(({ ok, data }) => {
+      if (!ok) {
+        toast.error(data.error || "Could not swap these pins.");
+        return;
+      }
+      toast.success("Pins swapped - taking you to the new parent pin.");
+      window.location.href = entry.url;
+    }).catch(() => toast.error("Could not swap these pins."));
+  }
+  function detailPinPopupContent(entry) {
+    const el = document.createElement("div");
+    el.className = "pin-popup child-pin-popup";
+    const owner = entry.owner_name ? `<div class="popup-child-parent"><i class="material-symbols-outlined">subdirectory_arrow_right</i> Inside ${escHtml(entry.owner_name)}</div>` : "";
+    el.innerHTML = `
+            <div class="popup-title">${escHtml(entry.name || "Sub pin")}</div>
+            ${owner}
+            ${entry.description ? `<div class="popup-desc">${escHtml(entry.description)}</div>` : ""}
+            <div class="popup-actions">
+                ${entry.url ? `<a href="${escHtml(entry.url)}" class="view-full-pin">View Details</a>` : ""}
+            </div>`;
+    if (!entry.owner_name) {
+      const actions = el.querySelector(".popup-actions");
+      const promoteBtn = document.createElement("button");
+      promoteBtn.type = "button";
+      promoteBtn.className = "promote-pin-button";
+      promoteBtn.title = "Make this the parent pin";
+      promoteBtn.innerHTML = '<i class="material-symbols-outlined">swap_vert</i>';
+      promoteBtn.addEventListener("click", () => {
+        map.closePopup();
+        promotePinToParent(entry);
+      });
+      actions.appendChild(promoteBtn);
+      const editBtn = document.createElement("button");
+      editBtn.type = "button";
+      editBtn.className = "edit-pin-button";
+      editBtn.title = "Edit sub pin";
+      editBtn.innerHTML = '<i class="material-symbols-outlined">edit</i>';
+      editBtn.addEventListener("click", () => {
+        map.closePopup();
+        openDetailPinEditDialog(entry);
+      });
+      actions.appendChild(editBtn);
+    }
+    return el;
+  }
   function loadDetailPins() {
     fetch(cfg.detailPinsJsonUrl).then((r) => r.json()).then((data) => {
       detailPinLayer.clearLayers();
@@ -713,6 +1046,9 @@ function init() {
           return;
         const entry = {
           uuid: dp.uuid,
+          slug: dp.slug,
+          url: dp.url,
+          owner_name: dp.owner_name,
           name: dp.name,
           pin_type: dp.pin_type,
           icon: dp.icon,
@@ -728,10 +1064,19 @@ function init() {
           longitude: dp.longitude,
           marker: null
         };
-        const marker = L.marker([dp.latitude, dp.longitude], { icon: detailIcon(entry), draggable: true });
-        if (dp.name)
-          marker.bindTooltip(dp.name, { permanent: false, direction: "top", className: "detail-pin-tooltip" });
-        marker.on("click", () => openDetailPinEditDialog(entry));
+        const marker = L.marker([dp.latitude, dp.longitude], { icon: detailIcon(entry), draggable: !entry.owner_name });
+        if (entry.url) {
+          marker.bindPopup(detailPinPopupContent(entry));
+        } else {
+          marker.on("click", () => openDetailPinEditDialog(entry));
+        }
+        marker.on("click", (e) => {
+          if (!detailSelectMode || entry.owner_name)
+            return;
+          marker.closePopup();
+          L.DomEvent.stop(e);
+          toggleDpSelection(entry.uuid);
+        });
         marker.on("dragend", () => {
           const pos = marker.getLatLng();
           fetch(`${dpEditBase}${dp.uuid}/`, {
@@ -758,6 +1103,201 @@ function init() {
       buildDetailList();
     }).catch((err) => console.warn("Could not load detail pins:", err));
   }
+  let detailSelectMode = false;
+  const selectedDpUuids = new Set;
+  let dpDragSelectRect = null;
+  function detailSelectableEntries() {
+    return detailPins.filter((d) => !d.owner_name);
+  }
+  function refreshDetailPinSelectButton() {
+    const btn = document.getElementById("select-detail-pins-button");
+    if (!btn)
+      return;
+    if (!cfg.pinSlug) {
+      btn.remove();
+      return;
+    }
+    const hasSelectable = detailSelectableEntries().length > 0;
+    btn.disabled = !hasSelectable;
+    btn.setAttribute("data-tooltip", hasSelectable ? "Select multiple child pins to promote or delete" : "This pin has no child pins to select");
+    if (!hasSelectable && detailSelectMode)
+      exitDetailPinSelectMode();
+  }
+  function toggleDetailPinSelectMode() {
+    if (detailSelectMode)
+      exitDetailPinSelectMode();
+    else
+      enterDetailPinSelectMode();
+  }
+  window.toggleDetailPinSelectMode = toggleDetailPinSelectMode;
+  function enterDetailPinSelectMode() {
+    if (detailSelectMode || !detailSelectableEntries().length)
+      return;
+    detailSelectMode = true;
+    document.getElementById("select-detail-pins-button")?.classList.add("active");
+    document.getElementById("map")?.classList.add("select-mode");
+    map.dragging.disable();
+  }
+  function exitDetailPinSelectMode() {
+    if (!detailSelectMode)
+      return;
+    detailSelectMode = false;
+    document.getElementById("select-detail-pins-button")?.classList.remove("active");
+    document.getElementById("map")?.classList.remove("select-mode");
+    map.dragging.enable();
+    clearDpSelection();
+  }
+  function toggleDpSelection(uuid) {
+    if (selectedDpUuids.has(uuid))
+      selectedDpUuids.delete(uuid);
+    else
+      selectedDpUuids.add(uuid);
+    const dp = detailPins.find((d) => d.uuid === uuid);
+    dp?.marker?.getElement()?.classList.toggle("is-selected", selectedDpUuids.has(uuid));
+    renderDetailBulkToolbar();
+  }
+  function clearDpSelection() {
+    selectedDpUuids.forEach((uuid) => {
+      detailPins.find((d) => d.uuid === uuid)?.marker?.getElement()?.classList.remove("is-selected");
+    });
+    selectedDpUuids.clear();
+    window.ulBulkToolbar?.clear("detailpins");
+  }
+  function renderDetailBulkToolbar() {
+    const n = selectedDpUuids.size;
+    window.ulBulkToolbar?.sync("detailpins", n, n ? {
+      promote: doPromoteSelectedDp,
+      ...cfg.pinShareDialogUrl ? { share: doShareSelectedDp } : {},
+      ...cfg.detailPinsSendToWikiUrl ? { wiki: doSendSelectedDpToWiki } : {},
+      delete: doDeleteSelectedDp,
+      deselect: clearDpSelection
+    } : {});
+  }
+  async function doPromoteSelectedDp() {
+    const uuids = Array.from(selectedDpUuids);
+    if (!uuids.length)
+      return;
+    const n = uuids.length;
+    if (!await confirmAction({ title: "Promote child pins?", message: `Promote ${n} sub pin${n === 1 ? "" : "s"} to top-level pins on your main map?`, confirmLabel: "Promote" }))
+      return;
+    const results = await Promise.all(uuids.map((uuid) => {
+      const slug = detailPins.find((d) => d.uuid === uuid)?.slug || uuid;
+      return fetch(`/dashboard/map/pin/${encodeURIComponent(slug)}/detach-parent/`, {
+        method: "POST",
+        headers: { "X-CSRFToken": getCsrfToken() }
+      }).then((r) => r.ok);
+    }));
+    const promoted = results.filter(Boolean).length;
+    if (promoted)
+      toast.success(`${promoted} pin${promoted === 1 ? "" : "s"} promoted.`);
+    if (promoted < n)
+      toast.warning(`${n - promoted} pin${n - promoted === 1 ? "" : "s"} could not be promoted (location conflict).`);
+    clearDpSelection();
+    loadDetailPins();
+  }
+  async function doShareSelectedDp() {
+    if (!cfg.pinShareDialogUrl)
+      return;
+    const uuids = Array.from(selectedDpUuids);
+    if (!uuids.length)
+      return;
+    const dialog = document.getElementById("pin-share-dialog");
+    if (!dialog)
+      return;
+    const url = `${cfg.pinShareDialogUrl}?children=${uuids.map(encodeURIComponent).join(",")}`;
+    const html = await fetch(url, { headers: { "X-Requested-With": "XMLHttpRequest" } }).then((r) => r.ok ? r.text() : "").catch(() => "");
+    if (!html) {
+      toast.error("Failed to open the share dialog.");
+      return;
+    }
+    dialog.innerHTML = html;
+    htmxProcess(dialog);
+    dialog.showModal();
+    clearDpSelection();
+  }
+  async function doSendSelectedDpToWiki() {
+    if (!cfg.detailPinsSendToWikiUrl)
+      return;
+    const uuids = Array.from(selectedDpUuids);
+    if (!uuids.length)
+      return;
+    const body = new URLSearchParams;
+    uuids.forEach((uuid) => body.append("child_pin_uuids", uuid));
+    const response = await fetch(cfg.detailPinsSendToWikiUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded", "X-CSRFToken": getCsrfToken() },
+      body
+    }).catch(() => null);
+    if (response?.ok) {
+      const trigger = response.headers.get("HX-Trigger");
+      if (trigger) {
+        try {
+          const parsed = JSON.parse(trigger);
+          if (parsed.showToast)
+            toast[parsed.showToast.level]?.(parsed.showToast.message);
+        } catch {}
+      }
+    } else {
+      toast.error("Failed to send sub pins to the wiki.");
+    }
+    clearDpSelection();
+  }
+  async function doDeleteSelectedDp() {
+    const uuids = Array.from(selectedDpUuids);
+    if (!uuids.length)
+      return;
+    const n = uuids.length;
+    if (!await confirmAction({ title: "Delete child pins?", message: `Delete ${n} sub pin${n === 1 ? "" : "s"}? This also removes reviews, visit history, and notes.`, confirmLabel: "Delete" }))
+      return;
+    const results = await Promise.all(uuids.map((uuid) => fetch(`${dpEditBase}${uuid}/`, { method: "DELETE", headers: { "X-CSRFToken": getCsrfToken() } }).then((r) => r.ok)));
+    const deleted = results.filter(Boolean).length;
+    if (deleted)
+      toast.success(`${deleted} pin${deleted === 1 ? "" : "s"} deleted.`);
+    if (deleted < n)
+      toast.warning(`${n - deleted} pin${n - deleted === 1 ? "" : "s"} could not be deleted.`);
+    clearDpSelection();
+    loadDetailPins();
+  }
+  (function initDetailPinDragSelect() {
+    mapEl.addEventListener("mousedown", (e) => {
+      if (!detailSelectMode || e.button !== 0)
+        return;
+      const startLL = map.mouseEventToLatLng(e);
+      const startX = e.clientX;
+      const startY = e.clientY;
+      let dragging = false;
+      function onMove(ev) {
+        if (!dragging && Math.hypot(ev.clientX - startX, ev.clientY - startY) < 6)
+          return;
+        dragging = true;
+        if (dpDragSelectRect)
+          map.removeLayer(dpDragSelectRect);
+        dpDragSelectRect = L.rectangle(L.latLngBounds(startLL, map.mouseEventToLatLng(ev)), {
+          color: "#1E88E5",
+          weight: 2,
+          fillOpacity: 0.08,
+          dashArray: "4 4",
+          interactive: false
+        }).addTo(map);
+      }
+      function onUp(ev) {
+        document.removeEventListener("mousemove", onMove);
+        if (dpDragSelectRect) {
+          map.removeLayer(dpDragSelectRect);
+          dpDragSelectRect = null;
+        }
+        if (!dragging)
+          return;
+        const bounds = L.latLngBounds(startLL, map.mouseEventToLatLng(ev));
+        detailSelectableEntries().forEach((dp) => {
+          if (dp.marker && !selectedDpUuids.has(dp.uuid) && bounds.contains(dp.marker.getLatLng()))
+            toggleDpSelection(dp.uuid);
+        });
+      }
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp, { once: true });
+    });
+  })();
   const toolbar = window.createMarkupToolbar(map, markupLayer, {
     markupJsonUrl: cfg.markupJsonUrl,
     markupCreateUrl: cfg.markupCreateUrl,
@@ -772,7 +1312,6 @@ function init() {
   window.startMarkupDraw = toolbar.startMarkupDraw;
   window.startShapeDraw = toolbar.startShapeDraw;
   window.startTextPlacement = toolbar.startTextPlacement;
-  window.toggleAddDetailMenu = toolbar.toggleAddDetailMenu;
   window.closeMarkupPanel = toolbar.closeMarkupPanel;
   window._closeMarkupDraw = toolbar.closeOrFinishDraw;
   window.deleteMarkupEdit = toolbar.deleteMarkupEdit;
@@ -788,10 +1327,12 @@ function init() {
       iconAnchor: [size / 2, size / 2]
     });
   }
-  function addPhotoMarker(imgId, url, lat, lng) {
+  function addPhotoMarker(imgId, url, lat, lng, ownerName) {
     if (photoMarkers[imgId])
       photoLayer.removeLayer(photoMarkers[imgId].marker);
-    const marker = L.marker([lat, lng], { icon: makePhotoIcon(url, 44, false), draggable: true });
+    const marker = L.marker([lat, lng], { icon: makePhotoIcon(url, 44, false), draggable: !ownerName });
+    if (ownerName)
+      marker.bindTooltip(`Photo from ${ownerName}`, { permanent: false, direction: "top", className: "detail-pin-tooltip" });
     marker.on("dragend", () => {
       const pos = marker.getLatLng();
       const prevLat = photoMarkers[imgId].lat;
@@ -950,6 +1491,52 @@ function init() {
     buildPhotoPanel();
     refreshPanelHeader();
   });
+  mapEl.addEventListener("dragover", (e) => {
+    if (!cfg.mediaRelevanceUrl || !e.dataTransfer?.types.includes("text/media-item"))
+      return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+    mapEl.classList.add("photo-drop-target");
+  });
+  mapEl.addEventListener("dragleave", () => mapEl.classList.remove("photo-drop-target"));
+  mapEl.addEventListener("drop", (e) => {
+    const raw = e.dataTransfer?.getData("text/media-item");
+    if (!cfg.mediaRelevanceUrl || !raw)
+      return;
+    e.preventDefault();
+    mapEl.classList.remove("photo-drop-target");
+    const itemEl = window._mediaDragItemEl;
+    window._mediaDragItemEl = undefined;
+    let item;
+    try {
+      item = JSON.parse(raw);
+    } catch {
+      return;
+    }
+    const rect = mapEl.getBoundingClientRect();
+    const latlng = map.containerPointToLatLng([e.clientX - rect.left, e.clientY - rect.top]);
+    fetch(cfg.mediaRelevanceUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
+      body: JSON.stringify({
+        source: item.source,
+        item_key: item.key,
+        url: item.url,
+        is_relevant: true,
+        page_url: item.pageUrl,
+        caption: item.caption,
+        latitude: latlng.lat,
+        longitude: latlng.lng
+      })
+    }).then((r) => r.json()).then((data) => {
+      window.mediaApplyMaterializedDrop?.(itemEl, data);
+      if (data.image_id && data.latitude != null && data.longitude != null) {
+        window._galleryAddMarker({ id: data.image_id, url: data.image_url, latitude: data.latitude, longitude: data.longitude });
+      } else if (data.materialize_error) {
+        toast.warning(`Couldn't save a local copy: ${data.materialize_error}`);
+      }
+    }).catch(() => toast.error("Failed to save photo location."));
+  });
   document.querySelectorAll(".map-panel-tab").forEach((btn) => {
     btn.addEventListener("click", () => {
       document.querySelectorAll(".map-panel-tab").forEach((b) => b.classList.remove("is-active"));
@@ -964,7 +1551,7 @@ function init() {
     (data.images || []).forEach((img) => {
       photoPanelItems.push({ id: img.id, url: img.url, lat: img.latitude, lng: img.longitude, mine: img.is_mine });
       if (img.latitude != null && img.longitude != null)
-        addPhotoMarker(img.id, img.url, img.latitude, img.longitude);
+        addPhotoMarker(img.id, img.url, img.latitude, img.longitude, img.child_pin_name);
     });
     buildPhotoPanel();
     refreshPanelHeader();
@@ -1006,14 +1593,19 @@ function init() {
       map.removeLayer(mainMarker);
     }
   }
-  function addGeoJSONPolygons(group, geojson, style) {
+  function addGeoJSONPolygons(group, geojson, style, label) {
     const rings = geojson.type === "MultiPolygon" ? geojson.coordinates : geojson.type === "Polygon" ? [geojson.coordinates] : null;
+    const bindLabel = (layer) => {
+      if (label)
+        layer.bindTooltip(label, { sticky: true, direction: "top", className: "boundary-tooltip" });
+      return layer;
+    };
     if (rings) {
       rings.forEach((ringSet) => {
-        group.addLayer(L.polygon(ringSet.map((ring) => ring.map((c) => [c[1], c[0]])), style));
+        group.addLayer(bindLabel(L.polygon(ringSet.map((ring) => ring.map((c) => [c[1], c[0]])), style)));
       });
     } else {
-      L.geoJSON(geojson, { style }).eachLayer((l) => group.addLayer(l));
+      L.geoJSON(geojson, { style }).eachLayer((l) => group.addLayer(bindLabel(l)));
     }
   }
   function loadBoundary(type, geojson, source) {
@@ -1023,8 +1615,10 @@ function init() {
     boundarySources[type] = geojson ? source || null : null;
     if (!geojson)
       return;
-    const style = type === "property" && source === "circle" ? CIRCLE_STYLE : BOUNDARY_STYLES[type];
-    addGeoJSONPolygons(group, geojson, style);
+    const isCircle = type === "property" && source === "circle";
+    const style = isCircle ? CIRCLE_STYLE : BOUNDARY_STYLES[type];
+    const label = type === "property" ? isCircle ? "Approximate property area" : "Property boundary" : "Building boundary";
+    addGeoJSONPolygons(group, geojson, style, label);
   }
   function boundaryHasRealPolygon(type) {
     return Boolean(savedBoundaries[type]) && boundarySources[type] !== "circle";
@@ -1038,7 +1632,7 @@ function init() {
     detailBuildingItems.clearLayers();
     (data.detail_buildings || []).forEach((entry) => {
       if (entry.polygon)
-        addGeoJSONPolygons(detailBuildingItems, entry.polygon, DETAIL_BUILDING_STYLE);
+        addGeoJSONPolygons(detailBuildingItems, entry.polygon, DETAIL_BUILDING_STYLE, "Building boundary (from a sub pin)");
     });
     setMainMarkerVisible(!boundaryHasRealPolygon("property"));
     if (!boundaryBoundsFitted) {
@@ -1079,10 +1673,7 @@ function init() {
     }, 100);
   }
   function setBoundaryEditButtonsVisible(visible) {
-    const btns = document.getElementById("edit-boundary-btns");
     const controls = document.getElementById("boundary-save-controls");
-    if (btns)
-      btns.style.display = visible ? "" : "none";
     if (controls)
       controls.style.display = visible ? "none" : "";
   }
@@ -1251,6 +1842,7 @@ function init() {
   let dpCreatedUuid = null;
   let dpAutoSaveTimer;
   let dpAutoSaveUuid = null;
+  let dpTypeTouched = false;
   function currentDpIcon() {
     return detailIcon({
       pin_type: document.getElementById("dp-type").value,
@@ -1267,10 +1859,9 @@ function init() {
     scheduleDpAutoSave();
   }
   function collectDpFormData() {
-    return {
+    const data = {
       name: document.getElementById("dp-name").value.trim(),
       description: document.getElementById("dp-description").value.trim(),
-      pin_type: document.getElementById("dp-type").value,
       icon: document.getElementById("dp-icon").value || null,
       color: document.getElementById("dp-color").value || null,
       bg_color: document.getElementById("dp-bg-color").value || null,
@@ -1280,6 +1871,9 @@ function init() {
       latitude: document.getElementById("dp-lat").value,
       longitude: document.getElementById("dp-lon").value
     };
+    if (dpTypeTouched)
+      data.pin_type = document.getElementById("dp-type").value;
+    return data;
   }
   function createDpImmediately(lat, lng) {
     const data = collectDpFormData();
@@ -1347,6 +1941,7 @@ function init() {
   }
   function resetDpForm() {
     document.getElementById("detail-pin-form").reset();
+    dpTypeTouched = false;
     document.getElementById("dp-lat").value = "";
     document.getElementById("dp-lon").value = "";
     document.getElementById("dp-icon").value = "";
@@ -1363,7 +1958,6 @@ function init() {
     buildCircleSwatches("dp-border-swatches", "dp-border-color", "", updateDpMarkerIcon);
   }
   function openAddPinDialog() {
-    closeAddDetailMenuIfOpen();
     toolbar.closeMarkupPanel();
     dpMode = "add";
     editingDp = null;
@@ -1378,13 +1972,7 @@ function init() {
     document.getElementById("detail-pin-panel").style.display = "";
     map.on("click", onMainMapClickForDp);
   }
-  function closeAddDetailMenuIfOpen() {
-    const menu = document.getElementById("add-detail-menu");
-    if (menu && menu.style.display !== "none")
-      toolbar.toggleAddDetailMenu();
-  }
   function openDetailPinEditDialog(dp) {
-    closeAddDetailMenuIfOpen();
     toolbar.closeMarkupPanel();
     dpMode = "edit";
     editingDp = dp;
@@ -1466,7 +2054,10 @@ function init() {
     document.getElementById("dp-border-opacity-val").textContent = this.value;
     updateDpMarkerIcon();
   });
-  document.getElementById("dp-type")?.addEventListener("change", updateDpMarkerIcon);
+  document.getElementById("dp-type")?.addEventListener("change", () => {
+    dpTypeTouched = true;
+    updateDpMarkerIcon();
+  });
   document.getElementById("dp-name")?.addEventListener("input", scheduleDpAutoSave);
   document.getElementById("dp-description")?.addEventListener("input", scheduleDpAutoSave);
   document.getElementById("detail-pin-form")?.addEventListener("submit", (e) => {

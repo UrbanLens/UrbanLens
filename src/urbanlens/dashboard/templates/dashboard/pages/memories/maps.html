@@ -1,5 +1,6 @@
 {% extends 'dashboard/themes/base.html' %}
 {% load static %}
+{% load memories_components %}
 
 {% block header %}
 {# Leaflet powers the map thumbnails and the expand dialogs. #}
@@ -11,18 +12,22 @@
 
 {% block title %}Maps{% endblock %}
 
+{% block hero %}
+{% include "dashboard/partials/ui/_page_hero.html" with icon="map" title="Your maps" subtitle="Every map you've drawn - on safety check-ins, comments, and visit logs - in one place." modifier="top" %}
+{% endblock %}
+
+{% block subnav %}
+<div class="ul-page-subnav">
+    <div class="ul-page-subnav__inner">
+        {% memories_tabs "maps" %}
+    </div>
+</div>
+{% endblock %}
+
 {% block content %}
 <div id="memories-maps-page">
-    <div class="memories-header">
-        <div>
-            <h1 class="memories-title"><i class="material-symbols-outlined">map</i> Your maps</h1>
-            <p class="memories-subtitle">Every map you've drawn - on safety check-ins, comments, and visit logs - in one place.</p>
-        </div>
-    </div>
 
     <div class="page-inner">
-        {% include "dashboard/partials/memories/_photos_tabs.html" with active="maps" %}
-
         {% if map_cards %}
         <div class="memories-maps-grid">
             {% for card in map_cards %}
@@ -30,16 +35,25 @@
             <article class="memories-map-card" id="memories-map-card-{{ card.map.uuid }}">
                 {% include "dashboard/partials/map/_map_view_preview.html" with map_id="mm-"|add:uuid_str %}
                 <div class="memories-map-card-body">
-                    <h3 class="memories-map-card-title">{{ card.map.title|default:"Untitled map" }}</h3>
+                    <h3 class="memories-map-card-title memories-map-card-title--editable" tabindex="0" role="button"
+                        data-map-uuid="{{ card.map.uuid }}" data-raw-title="{{ card.map.title }}"
+                        title="Click to rename">{{ card.map.title|default:"Untitled map" }}</h3>
+                    {% include "dashboard/partials/map/_markup_map_from_badge.html" with map=card.map %}
                     <p class="memories-map-card-meta">
                         {{ card.item_count }} annotation{{ card.item_count|pluralize }} ·
                         updated {{ card.map.updated|date:"M j, Y" }}
                     </p>
-                    {% if card.attachment_label %}
-                    <a class="memories-map-card-link" href="{{ card.attachment_url }}">
-                        <i class="material-symbols-outlined">link</i>
-                        {{ card.attachment_label }}
-                    </a>
+                    {% if card.attachments %}
+                    <ul class="memories-map-card-attachments">
+                        {% for entry in card.attachments %}
+                        <li>
+                            <a class="memories-map-card-link" href="{{ entry.url }}">
+                                <i class="material-symbols-outlined">link</i>
+                                {{ entry.label }}
+                            </a>
+                        </li>
+                        {% endfor %}
+                    </ul>
                     {% else %}
                     <p class="memories-map-card-meta memories-map-card-meta--draft">
                         <i class="material-symbols-outlined">draft</i>
@@ -47,16 +61,24 @@
                     </p>
                     {% endif %}
                     <div class="memories-map-card-actions">
-                        <button type="button" class="btn btn--ghost btn--sm memories-map-delete-btn"
+                        <button type="button" class="btn btn--ghost btn--sm"
+                                hx-get="{% url 'markup_map.share.dialog' card.map.uuid %}"
+                                hx-target="#markup-map-share-dialog" hx-swap="innerHTML"
+                                hx-on::after-request="if(event.detail.successful){document.getElementById('markup-map-share-dialog').showModal()}">
+                            <i class="material-symbols-outlined">ios_share</i> Share
+                        </button>
+                        <button type="button" class="btn btn--ghost btn--sm btn--danger-hover memories-map-delete-btn"
                                 data-delete-url="{% url 'markup_map.delete' card.map.uuid %}"
                                 data-card-id="memories-map-card-{{ card.map.uuid }}"
-                                {% if card.attachment_label %}data-attached="1"{% endif %}>
+                                {% if card.attachments %}
+                                data-attachment-labels="{% for entry in card.attachments %}{{ entry.label }}{% if not forloop.last %}||{% endif %}{% endfor %}"
+                                {% endif %}>
                             <i class="material-symbols-outlined">delete</i> Delete
                         </button>
                     </div>
                 </div>
             </article>
-            {% include "dashboard/partials/map/_map_view_dialog.html" with map_id="mm-"|add:uuid_str map_data=card.snapshot title=card.map.title|default:"Map" %}
+            {% include "dashboard/partials/map/_map_view_dialog.html" with map_id="mm-"|add:uuid_str map_data=card.snapshot title=card.map.title|default:"Map" map_obj=card.map %}
             {% endwith %}
             {% endfor %}
         </div>
@@ -82,17 +104,99 @@
     </div>
 </div>
 
+{# -- Share map dialog (content loaded via HTMX from markup_map.share.dialog) -- #}
+<dialog id="markup-map-share-dialog" class="pin-share-dialog ul-dialog"></dialog>
+
+{% url 'markup_map.view_state' '00000000-0000-0000-0000-000000000000' as markup_view_state_url_template %}
+<script>
+// Map titles: click-to-edit in place. Reuses the same view_state endpoint
+// the map editor widget already autosaves title/viewport changes through
+// (see controllers/markup.py's _apply_view_state) - passing only `title`
+// leaves the map's viewport/layer fields untouched.
+(function () {
+    var urlTemplate = '{{ markup_view_state_url_template }}';
+
+    function startEdit(titleEl) {
+        if (titleEl.querySelector('input')) return; // already editing
+        var rawTitle = titleEl.dataset.rawTitle || '';
+        var input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'memories-map-card-title-input';
+        input.maxLength = 200;
+        input.value = rawTitle;
+        input.placeholder = 'Untitled map';
+
+        window.urbanlensSizeEditInPlaceInput(titleEl, input);
+        var displayText = titleEl.textContent;
+        titleEl.textContent = '';
+        titleEl.appendChild(input);
+        input.focus();
+        input.select();
+
+        var done = false;
+        function finish(save) {
+            if (done) return;
+            done = true;
+            if (save && input.value.trim() !== rawTitle.trim()) {
+                var newTitle = input.value.trim();
+                fetch(urlTemplate.replace('00000000-0000-0000-0000-000000000000', titleEl.dataset.mapUuid), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
+                    body: JSON.stringify({ title: newTitle }),
+                })
+                    .then(function (r) { if (!r.ok) throw new Error(); })
+                    .then(function () {
+                        titleEl.dataset.rawTitle = newTitle;
+                        titleEl.textContent = newTitle || 'Untitled map';
+                        toastr.success('Map renamed.');
+                    })
+                    .catch(function () {
+                        titleEl.textContent = displayText;
+                        toastr.error('Failed to rename map.');
+                    });
+            } else {
+                titleEl.textContent = displayText;
+            }
+        }
+
+        input.addEventListener('blur', function () { finish(true); });
+        input.addEventListener('keydown', function (e) {
+            // Stop this from bubbling to titleEl's own keydown listener below -
+            // Enter/Space here (including a space typed into the new title
+            // itself) would otherwise re-trigger startEdit() the instant this
+            // input is removed from the DOM by finish().
+            e.stopPropagation();
+            if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+            else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+        });
+    }
+
+    document.querySelectorAll('.memories-map-card-title--editable').forEach(function (titleEl) {
+        titleEl.addEventListener('click', function () { startEdit(titleEl); });
+        titleEl.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); startEdit(titleEl); }
+        });
+    });
+}());
+</script>
+
 <script>
 // Delete buttons: confirm (extra warning when the map is attached to
 // something), then POST to the delete endpoint and drop the card.
 document.querySelectorAll('.memories-map-delete-btn').forEach(function (btn) {
     btn.addEventListener('click', async function () {
-        var attached = btn.dataset.attached === '1';
+        var labels = btn.dataset.attachmentLabels ? btn.dataset.attachmentLabels.split('||') : [];
+        var message;
+        if (!labels.length) {
+            message = 'Delete this map and all its annotations?';
+        } else {
+            message = 'Deleting this map will remove it from:\n\n'
+                + labels.map(function (label) { return '• ' + label; }).join('\n')
+                + '\n\nAny text there will stay, but a "map removed" notice will show in its place. Delete it?';
+        }
         var ok = await window.confirmDialog({
             title: 'Delete map',
-            message: attached
-                ? 'This map is attached to the item linked on its card - deleting it removes the map there too. Delete it?'
-                : 'Delete this map and all its annotations?',
+            message: message,
             confirmLabel: 'Delete',
         });
         if (!ok) return;

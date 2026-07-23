@@ -1,0 +1,43 @@
+// Wikipedia-style page tabs (Overview / Article / Comments / Edit History)
+// used on the pin detail and community wiki pages. See js/page-tabs.js.
+// The tab strip itself is the shared .ul-subnav-tabs/.ul-subnav-tab look
+// (_page_hero.scss); this file only holds the bits that stay page-tabs-
+// specific (the badge and the hidden-panel rule).
+@use 'variables' as *;
+
+.page-tab-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.35rem;
+    height: 1.35rem;
+    padding: 0 .35rem;
+    border-radius: $radius-full;
+    background: var(--ul-grey-1);
+    color: var(--ul-grey-7);
+    font-size: .72rem;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.ul-subnav-tab.is-active .page-tab-badge {
+    background: var(--ul-primary-color);
+    color: #fff;
+}
+
+.page-tab-panel[hidden] {
+    display: none !important;
+}
+
+@media (max-width: $breakpoint-xs) {
+    // Scoped to [data-page-tabs] (pin detail + wiki only) rather than every
+    // .ul-subnav-tab consumer (Memories, Settings, Organize also use the
+    // shared look but shouldn't lose their labels on small screens).
+    [data-page-tabs] .ul-subnav-tab {
+        padding: .55rem .75rem;
+
+        span:not(.page-tab-badge) {
+            display: none; // icons only on tiny screens
+        }
+    }
+}

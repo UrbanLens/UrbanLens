@@ -1,59 +1,42 @@
 {% extends 'dashboard/themes/base.html' %}
 
+{% block hero %}
+{% include "dashboard/partials/ui/_page_hero.html" with icon="flight_takeoff" title="Trips" subtitle="Plan a trip with your friends, or just yourself." modifier="top" %}
+{% endblock %}
+
+{% block subnav %}
+<div class="ul-page-subnav">
+    <div class="ul-page-subnav__inner">
+        {% include "dashboard/partials/trips/_trips_subnav.html" with active="list" %}
+    </div>
+</div>
+{% endblock %}
+
 {% block content %}
 <div class="trips-page page-content">
 
-    <div class="trips-header">
-        <div class="trips-header-left">
-            <h1 class="trips-title">
-                <i class="material-symbols-outlined">flight_takeoff</i>
-                Plan
-                {% include "dashboard/partials/ui/_tooltip_help.html" with text="Create trips, invite friends, attach pins, and track activities along your route." wide=True %}
-            </h1>
-            <p class="trips-subtitle">Your trips, routes, and shared plans in one place.</p>
-        </div>
-        <div class="trips-header-right">
-            {% if calendar_account %}
-            <button type="button" class="btn btn--secondary"
-                    title="Import events from your Google Calendar as trips"
-                    hx-get="{% url 'trips.calendar.import' %}"
-                    hx-target="#calendar-import-dialog"
-                    hx-swap="innerHTML"
-                    hx-on::after-request="if(event.detail.successful){document.getElementById('calendar-import-dialog').showModal()}">
-                <i class="material-symbols-outlined">calendar_month</i>
-                Google Calendar
-                <span class="htmx-indicator"><i class="material-icons rotating">refresh</i></span>
-            </button>
-            {% else %}
-            <a href="{% url 'trips.calendar.connect' %}" class="btn btn--secondary"
-               title="Connect your own Google Calendar to import events as trips and export trips as events">
-                <i class="material-symbols-outlined">calendar_month</i>
-                Connect Google Calendar
-            </a>
-            {% endif %}
-            <button type="button" class="btn btn--primary"
-                    onclick="document.getElementById('create-trip-dialog').showModal()">
-                <i class="material-symbols-outlined">add</i>
-                New Trip
-            </button>
-        </div>
+    <div class="trips-header-right trips-actions-row">
+        {% if calendar_account %}
+        <button type="button" class="btn btn--secondary"
+                title="Import events from your Google Calendar as trips"
+                hx-get="{% url 'trips.calendar.import' %}"
+                hx-target="#calendar-import-dialog"
+                hx-swap="innerHTML"
+                hx-on::after-request="if(event.detail.successful){document.getElementById('calendar-import-dialog').showModal()}">
+            <i class="material-symbols-outlined">calendar_month</i>
+            Google Calendar
+            <span class="htmx-indicator"><i class="material-icons rotating">refresh</i></span>
+        </button>
+        {% endif %}
+        <button type="button" class="btn btn--primary"
+                onclick="document.getElementById('create-trip-dialog').showModal()">
+            <i class="material-symbols-outlined">add</i>
+            New Trip
+        </button>
     </div>
 
-    {# -- View toggle + sort controls ---------------------------------------- #}
+    {# -- Sort control --------------------------------------------------------- #}
     <div class="trips-toolbar">
-        <div class="view-toggle-group trips-view-toggle" role="group" aria-label="Choose how trips are displayed">
-            <button type="button" class="btn btn--secondary view-toggle-btn view-toggle-btn--active" data-view="list"
-                    onclick="tripsSetView('list')" title="Show trips as a list">
-                <i class="material-symbols-outlined" aria-hidden="true">view_list</i>
-                List
-            </button>
-            <button type="button" class="btn btn--secondary view-toggle-btn" data-view="calendar"
-                    onclick="tripsSetView('calendar')" title="Show trips on a calendar">
-                <i class="material-symbols-outlined" aria-hidden="true">calendar_month</i>
-                Calendar
-            </button>
-        </div>
-
         <div class="trip-sort-control" id="trips-sort-control">
             <label for="trip-sort-select" class="trip-sort-label">
                 <i class="material-symbols-outlined" aria-hidden="true">sort</i>
@@ -79,124 +62,12 @@
 <dialog id="calendar-import-dialog" class="trip-create-dialog ul-dialog"></dialog>
 
 {# -- Create trip dialog --------------------------------------------------- #}
-<dialog id="create-trip-dialog" class="trip-create-dialog ul-dialog">
-    {% include "dashboard/partials/ui/_dialog_header.html" with title="New Trip" %}
-    <form hx-post="{% url 'trips.create' %}?sort={{ sort }}&dir={{ dir }}"
-          hx-target="#trip-list"
-          hx-swap="innerHTML"
-          hx-on::after-request="if(event.detail.successful){this.closest('dialog').close();this.reset();_tripHideDates('trip-create')}"
-          class="trip-create-form">
-        {% csrf_token %}
-        <div class="form-row">
-            <label for="trip-name">Trip name <span class="required">*</span></label>
-            <input type="text" name="name" id="trip-name" required
-                   placeholder="e.g. Detroit Factory Run" maxlength="255">
-        </div>
-        <div class="form-row">
-            <label for="trip-description">Description</label>
-            <textarea name="description" id="trip-description" rows="3"
-                      placeholder="What's the plan?"></textarea>
-        </div>
-        <div class="form-row trip-dates-toggle-row">
-            <button type="button" class="btn btn--ghost trip-add-dates-btn" id="trip-create-dates-toggle"
-                    data-tooltip="Dates are set automatically once you add confirmed activities to the trip. Click here to set them yourself instead."
-                    data-tooltip-pos="right" data-tooltip-wide
-                    onclick="_tripRevealDates('trip-create')">
-                <i class="material-symbols-outlined">event</i> Add dates
-            </button>
-        </div>
-        <div class="form-row form-row--two-col trip-dates-row" id="trip-create-dates-row" hidden>
-            <div>
-                <label for="trip-start">Start date</label>
-                <input type="date" name="start_date" id="trip-start">
-            </div>
-            <div>
-                <label for="trip-end">End date</label>
-                <input type="date" name="end_date" id="trip-end">
-            </div>
-        </div>
-        {% if friends %}
-        <div class="form-row">
-            <label>Invite friends</label>
-            <ul class="trip-invite-friend-list">
-                {% for friend in friends %}
-                <li class="trip-invite-friend-item">
-                    <label class="trip-invite-friend-label">
-                        <input type="checkbox" name="invite_profile_ids" value="{{ friend.id }}">
-                        {% if friend.avatar %}
-                        <img class="trip-invite-friend-avatar" src="{{ friend.avatar.url }}" alt="">
-                        {% else %}
-                        <span class="trip-invite-friend-avatar trip-invite-friend-avatar--placeholder">{{ friend.username|first|upper }}</span>
-                        {% endif %}
-                        <span class="trip-invite-friend-name">{{ friend.full_name|default:friend.username }}</span>
-                    </label>
-                </li>
-                {% endfor %}
-            </ul>
-        </div>
-        {% endif %}
-        <div class="form-actions">
-            <button type="submit" class="btn btn--primary btn--lg btn--submit">Create Trip</button>
-            <button type="button" class="btn btn--ghost"
-                    onclick="this.closest('dialog').close()">Cancel</button>
-        </div>
-    </form>
-</dialog>
+{% include "dashboard/partials/trips/_create_trip_dialog.html" with source="list" %}
 {% endblock %}
 
 {% block scripts %}
 <script>
     (function () {
-        var VIEW_STORAGE_KEY = 'trips_list_view';
-        var _tripsCalMonthOffset = 0;
-
-        function escapeHtml(value) {
-            var div = document.createElement('div');
-            div.textContent = value == null ? '' : String(value);
-            return div.innerHTML;
-        }
-
-        function getStoredView() {
-            return localStorage.getItem(VIEW_STORAGE_KEY) === 'calendar' ? 'calendar' : 'list';
-        }
-
-        function applyView(view) {
-            document.querySelectorAll('.trips-view').forEach(function (el) {
-                el.hidden = el.dataset.tripsView !== view;
-            });
-            document.querySelectorAll('.trips-view-toggle .view-toggle-btn').forEach(function (btn) {
-                btn.classList.toggle('view-toggle-btn--active', btn.dataset.view === view);
-            });
-            var sortControl = document.getElementById('trips-sort-control');
-            if (sortControl) { sortControl.hidden = (view !== 'list'); }
-            if (view === 'calendar') { window.tripsCalRender(); }
-        }
-
-        // -- Trip dates: hidden until "Add dates" is clicked -------------------
-        window._tripRevealDates = function (prefix) {
-            var row = document.getElementById(prefix + '-dates-row');
-            var toggle = document.getElementById(prefix + '-dates-toggle');
-            if (row) { row.hidden = false; }
-            if (toggle) { toggle.hidden = true; }
-            var startInput = document.getElementById(prefix === 'trip-create' ? 'trip-start' : 'edit-trip-start');
-            if (startInput) { startInput.focus(); }
-        };
-        window._tripHideDates = function (prefix) {
-            var row = document.getElementById(prefix + '-dates-row');
-            var toggle = document.getElementById(prefix + '-dates-toggle');
-            if (row) { row.hidden = true; }
-            if (toggle) { toggle.hidden = false; }
-        };
-
-        window.tripsSetView = function (view) {
-            localStorage.setItem(VIEW_STORAGE_KEY, view);
-            applyView(view);
-        };
-
-        window.tripsApplyStoredView = function () {
-            applyView(getStoredView());
-        };
-
         window.tripsApplySort = function (value) {
             var parts = value.split(':');
             var url = new URL(window.location.href);
@@ -204,73 +75,6 @@
             url.searchParams.set('dir', parts[1]);
             window.location.href = url.toString();
         };
-
-        window.tripsCalNav = function (delta) {
-            _tripsCalMonthOffset += delta;
-            window.tripsCalRender();
-        };
-
-        window.tripsCalRender = function () {
-            var dataEl = document.getElementById('trips-cal-data');
-            var gridEl = document.getElementById('trips-cal-grid');
-            var labelEl = document.getElementById('trips-cal-month-label');
-            if (!dataEl || !gridEl || !labelEl) { return; }
-
-            var trips;
-            try { trips = JSON.parse(dataEl.textContent); } catch (e) { trips = []; }
-
-            var today = new Date();
-            var base = new Date(today.getFullYear(), today.getMonth() + _tripsCalMonthOffset, 1);
-            var year = base.getFullYear();
-            var month = base.getMonth();
-            labelEl.textContent = base.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
-
-            function toDate(iso) {
-                if (!iso) { return null; }
-                var parts = iso.split('-').map(Number);
-                return new Date(parts[0], parts[1] - 1, parts[2]);
-            }
-
-            var startWeekday = new Date(year, month, 1).getDay();
-            var daysInMonth = new Date(year, month + 1, 0).getDate();
-
-            var html = '';
-            ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].forEach(function (d) {
-                html += '<div class="cal-cell cal-cell--header">' + d + '</div>';
-            });
-            for (var i = 0; i < startWeekday; i++) {
-                html += '<div class="cal-cell cal-cell--empty"></div>';
-            }
-            for (var day = 1; day <= daysInMonth; day++) {
-                var cellDate = new Date(year, month, day);
-                var dayTrips = trips.filter(function (t) {
-                    var s = toDate(t.start);
-                    if (!s) { return false; }
-                    var e = toDate(t.end) || s;
-                    return cellDate >= s && cellDate <= e;
-                });
-                var isToday = cellDate.toDateString() === today.toDateString();
-                html += '<div class="cal-cell' + (dayTrips.length ? ' cal-cell--has-events' : '') + (isToday ? ' cal-cell--today' : '') + '">';
-                html += '<span class="cal-day-num">' + day + '</span>';
-                if (dayTrips.length) {
-                    html += '<div class="cal-events">';
-                    dayTrips.slice(0, 3).forEach(function (t) {
-                        html += '<a class="cal-event cal-event--' + escapeHtml(t.status) + '" href="' + escapeHtml(t.url) + '" title="' + escapeHtml(t.name) + '">' + escapeHtml(t.name) + '</a>';
-                    });
-                    if (dayTrips.length > 3) {
-                        html += '<span class="cal-event-more">+' + (dayTrips.length - 3) + ' more</span>';
-                    }
-                    html += '</div>';
-                }
-                html += '</div>';
-            }
-            gridEl.innerHTML = html;
-        };
-
-        document.addEventListener('DOMContentLoaded', window.tripsApplyStoredView);
-        document.body.addEventListener('htmx:afterSwap', function (e) {
-            if (e.target && e.target.id === 'trip-list') { window.tripsApplyStoredView(); }
-        });
     })();
 </script>
 {% endblock %}

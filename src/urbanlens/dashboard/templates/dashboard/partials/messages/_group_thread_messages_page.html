@@ -1,0 +1,15 @@
+{% comment %}
+One older page of a group thread, prepended by the infinite-scroll-up
+sentinel in `_group_thread.html`. Context: `group`, `thread_messages`,
+`viewer_id`, `my_slug`, `has_more_older`, `oldest_message_id`.
+{% endcomment %}
+{% if has_more_older %}
+<li class="dm-load-older" id="dm-load-older-sentinel"
+    hx-get="{% url 'messages.group.older' group.uuid %}?before={{ oldest_message_id }}"
+    hx-trigger="revealed" hx-target="this" hx-swap="outerHTML">
+  <span class="dm-load-older__spinner">
+    <i class="material-symbols-outlined">progress_activity</i> Loading earlier messages…
+  </span>
+</li>
+{% endif %}
+{% include "dashboard/partials/messages/_group_message_items.html" %}

@@ -4,8 +4,7 @@
 
 <div class="ul-dialog-body">
     <p class="calendar-import-account">
-        Review what will be created. Uncheck anything you don't want - no trips
-        are created and no invitations are sent until you confirm.
+        Review what will be created. Uncheck anything you don't want.
     </p>
 
     <form hx-post="{% url 'trips.calendar.import' %}"
@@ -36,6 +35,14 @@
                 {% if entry.trip_kwargs.description %}
                 <p class="calendar-import-preview-desc">{{ entry.trip_kwargs.description|truncatechars:180 }}</p>
                 {% endif %}
+
+                <label class="calendar-import-preview-option">
+                    <input type="checkbox" name="auto_sync_{{ entry.event_id }}" value="1">
+                    <span class="calendar-import-preview-option-text">
+                        Keep this trip in sync with the calendar event
+                        <span class="calendar-import-note">Future changes to the trip will update the event. Changes made on Google Calendar are not pulled back.</span>
+                    </span>
+                </label>
 
                 {% if entry.location %}
                 <label class="calendar-import-preview-option">
@@ -79,14 +86,14 @@
                 <i class="material-symbols-outlined">download</i>
                 Import {{ importable_count }} trip{{ importable_count|pluralize }}
             </button>
-            <button type="button" class="btn btn--ghost"
+            <button type="button" class="btn btn--secondary"
                     hx-get="{% url 'trips.calendar.import' %}"
                     hx-target="#calendar-import-dialog"
                     hx-swap="innerHTML">
                 <i class="material-symbols-outlined">arrow_back</i>
                 Back
             </button>
-            <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
+            <button type="button" class="btn btn--secondary" onclick="this.closest('dialog').close()">Cancel</button>
         </div>
     </form>
 </div>

@@ -1,13 +1,23 @@
-{# Inner content for profile annotation panel - swapped via HTMX (innerHTML). #}
+{# Inner content for profile annotation panel - swapped via HTMX (outerHTML, since this template's root element carries the target id). #}
 <div id="profile-annotation-inner">
 
     <div class="profile-annotation-header">
-        <i class="material-symbols-outlined">lock</i>
         <span class="profile-annotation-title">My Private Notes</span>
-        <span class="profile-annotation-badge chip">
-            <i class="material-icons">visibility_off</i>
-            Only visible to you
-        </span>
+    </div>
+
+    {# -- Nickname --------------------------------------------------------------- #}
+    <div class="profile-annotation-nickname">
+        <p class="profile-annotation-label">Nickname</p>
+        <input type="text"
+               class="profile-annotation-nickname-input"
+               name="nickname"
+               value="{{ nickname }}"
+               maxlength="100"
+               placeholder="Give {{ subject.username }} a private nickname..."
+               hx-post="{% url 'profile.nickname' subject.slug %}"
+               hx-trigger="keyup changed delay:700ms"
+               hx-target="#profile-annotation-inner"
+               hx-swap="outerHTML">
     </div>
 
     {# -- Trust rating ---------------------------------------------------------- #}
@@ -23,7 +33,7 @@
                     hx-vals='{"rating": "{{ star }}"}'
                     hx-post="{% url 'profile.trust' subject.slug %}"
                     hx-target="#profile-annotation-inner"
-                    hx-swap="innerHTML"
+                    hx-swap="outerHTML"
                     title="{% if star <= trust_rating and trust_rating == star %}Clear trust rating{% else %}Set trust to {{ star }}{% endif %}">
                 <i class="material-icons">{% if star <= trust_rating %}star{% else %}star_border{% endif %}</i>
             </button>
@@ -35,7 +45,7 @@
                     hx-vals='{"rating": "0"}'
                     hx-post="{% url 'profile.trust' subject.slug %}"
                     hx-target="#profile-annotation-inner"
-                    hx-swap="innerHTML"
+                    hx-swap="outerHTML"
                     title="Clear trust rating">
                 <i class="material-symbols-outlined">close</i>
             </button>
@@ -43,53 +53,72 @@
         </div>
     </div>
 
-    {# -- People badges -------------------------------------------------------- #}
-    <div class="profile-annotation-badges">
+    {# -- People labels -------------------------------------------------------- #}
+    <div class="profile-annotation-labels">
         <p class="profile-annotation-label">Labels</p>
         <div class="profile-annotation-chips" id="pab-chips">
-            {% for badge in user_badges %}
-            {% if badge.id in assigned_badge_ids %}
+            {% for label in user_labels %}
+            {% if label.id in assigned_label_ids %}
             <button type="button"
-                    class="profile-badge-chip profile-badge-chip--on"
-                    style="--badge-color: {{ badge.color|default:'#6b7280' }}"
-                    hx-post="{% url 'profile.badge_toggle' subject.slug badge.id %}"
+                    class="profile-label-chip profile-label-chip--on"
+                    style="--label-color: {{ label.color|default:'#6b7280' }}"
+                    hx-post="{% url 'profile.label_toggle' subject.slug label.id %}"
                     hx-target="#profile-annotation-inner"
-                    hx-swap="innerHTML"
-                    title="Remove {{ badge.name }}">
-                {% if badge.icon %}<span class="profile-badge-chip-icon">{{ badge.icon }}</span>{% endif %}
-                {{ badge.name }}
-                <i class="material-icons profile-badge-chip-remove">close</i>
+                    hx-swap="outerHTML"
+                    title="Remove {{ label.name }}">
+                {% if label.icon %}<span class="profile-label-chip-icon">{{ label.icon }}</span>{% endif %}
+                {{ label.name }}
+                <i class="material-icons profile-label-chip-remove">close</i>
             </button>
             {% endif %}
             {% endfor %}
 
-            {% if unassigned_badges %}
+            {% if unassigned_labels %}
             <details class="pab-add-picker">
                 <summary class="pab-add-btn" title="Add a label">
                     <i class="material-symbols-outlined">add</i> Add label
                 </summary>
                 <div class="pab-add-list">
-                    {% for badge in unassigned_badges %}
+                    {% for label in unassigned_labels %}
                     <button type="button"
-                            class="profile-badge-chip"
-                            style="--badge-color: {{ badge.color|default:'#6b7280' }}"
-                            hx-post="{% url 'profile.badge_toggle' subject.slug badge.id %}"
+                            class="profile-label-chip"
+                            style="--label-color: {{ label.color|default:'#6b7280' }}"
+                            hx-post="{% url 'profile.label_toggle' subject.slug label.id %}"
                             hx-target="#profile-annotation-inner"
-                            hx-swap="innerHTML"
-                            title="Add {{ badge.name }}">
-                        {% if badge.icon %}<span class="profile-badge-chip-icon">{{ badge.icon }}</span>{% endif %}
-                        {{ badge.name }}
+                            hx-swap="outerHTML"
+                            title="Add {{ label.name }}">
+                        {% if label.icon %}<span class="profile-label-chip-icon">{{ label.icon }}</span>{% endif %}
+                        {{ label.name }}
                     </button>
                     {% endfor %}
                 </div>
             </details>
             {% endif %}
 
-            {% if not user_badges %}
+            {% if not user_labels %}
             <span class="profile-annotation-empty">No labels yet - create some in Organize → People</span>
             {% endif %}
         </div>
     </div>
+
+    {# -- Custom fields (viewer's own people fields; hidden when none defined) -- #}
+    {% if custom_field_rows %}
+    <div class="profile-annotation-custom-fields">
+        <p class="profile-annotation-label">Custom Fields</p>
+        <div class="cf-value-rows">
+            {% for row in custom_field_rows %}
+            <div class="cf-value-row">
+                <label class="cf-value-label" title="{{ row.field.get_field_type_display }} field">
+                    <i class="material-symbols-outlined cf-type-icon">{{ row.field.type_icon }}</i>
+                    {{ row.field.name }}
+                </label>
+                {% url 'profile.custom_field_value' subject.slug row.field.id as post_url %}
+                {% include "dashboard/partials/custom_fields/_value_input.html" with field=row.field value=row.value ref_choices=row.ref_choices post_url=post_url hx_target="#profile-annotation-inner" %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
 
     {# -- Notes list ----------------------------------------------------------- #}
     <div class="profile-annotation-notes">
@@ -108,7 +137,7 @@
                     <button type="button" class="pan-note-delete-btn btn-icon btn-icon--danger"
                             hx-post="{% url 'profile.note.delete' subject.slug note.pk %}"
                             hx-target="#profile-annotation-inner"
-                            hx-swap="innerHTML"
+                            hx-swap="outerHTML"
                             hx-confirm="Delete this note?"
                             title="Delete note">
                         <i class="material-symbols-outlined">delete</i>
@@ -123,7 +152,7 @@
                           hx-post="{% url 'profile.note.edit' subject.slug note.pk %}"
                           hx-trigger="keyup changed delay:700ms"
                           hx-target="#profile-annotation-inner"
-                          hx-swap="innerHTML"
+                          hx-swap="outerHTML"
                           name="content">{{ note.content }}</textarea>
                 <div class="pan-note-edit-actions">
                     <button type="button" class="btn btn--ghost btn--sm" onclick="panToggleEdit({{ note.pk }})">Done</button>
@@ -135,14 +164,14 @@
         <form class="pan-compose"
               hx-post="{% url 'profile.note' subject.slug %}"
               hx-target="#profile-annotation-inner"
-              hx-swap="innerHTML">
+              hx-swap="outerHTML">
             {% csrf_token %}
             <textarea name="content"
                       class="pan-note-textarea pan-compose-textarea"
                       placeholder="Add a private note..."
                       rows="2"></textarea>
             <div class="pan-compose-actions">
-                <button type="submit" class="btn btn--primary pan-compose-submit">
+                <button type="submit" class="btn btn--secondary pan-compose-submit">
                     <i class="material-symbols-outlined">add</i> Add Private Note
                 </button>
             </div>
@@ -150,3 +179,18 @@
     </div>
 
 </div>
+<script>
+(function () {
+    // Fallback for browsers without CSS field-sizing support (see .pan-note-textarea
+    // in _profile.scss). This whole panel is swapped via htmx on every note/trust/label
+    // action, so the listener is attached fresh each time rather than once on page load.
+    document.querySelectorAll('#profile-annotation-inner .pan-note-textarea').forEach(function (el) {
+        var resize = function () {
+            el.style.height = 'auto';
+            el.style.height = el.scrollHeight + 'px';
+        };
+        resize();
+        el.addEventListener('input', resize);
+    });
+}());
+</script>

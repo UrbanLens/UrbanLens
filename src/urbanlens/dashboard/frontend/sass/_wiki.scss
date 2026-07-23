@@ -4,87 +4,86 @@
 // Responsive location wiki layout.
 // Reuses the shared card/card-header/card__body structure used by pin details.
 
-.wiki-page {
-    //width: 90em;
-    //padding: 1.5rem 1rem 3rem;
-
-    // -- Banner ------------------------------------------------------------
-    .wiki-banner {
-        display: flex;
-        align-items: flex-start;
-        justify-content: space-between;
-        gap: 1.5rem;
-        background: linear-gradient(135deg, $color-blue-700 0%, $color-cyan-700 100%);
-        border-radius: 18px;
-        padding: clamp(1.15rem, 3vw, 2rem);
-        box-shadow: 0 18px 45px rgba(8, 47, 73, .18);
-        color: var(--ul-grey-9);
-        margin-bottom: 1.5rem;
-        flex-wrap: wrap;
-    }
-
-    .wiki-badge {
+// -- Wiki hero: suggest-edits/delete/back-to-pin actions + community-wiki
+// notice, docked into the shared hero's top corners instead of their own row
+// below it (see _wiki_detail_hero_body.html) - these live outside .wiki-page
+// entirely since the hero itself renders in base.html's {% block hero %},
+// above and outside .wiki-page's own container. #wiki-hero got its own
+// `position: relative` from the shared .ul-page-hero rule, so these can dock
+// to its corners rather than the whole page.
+#wiki-hero {
+    // Badge/title/address render via the shared _page_hero.html component -
+    // these rules only add what its generic hero classes don't already
+    // provide. (Previously nested under `.wiki-page`, which never actually
+    // matched here - the hero renders in base.html's `{% block hero %}`,
+    // above and outside `.wiki-page`'s own container - so this had silently
+    // never applied; moved here as part of the same hero cleanup.)
+    .wiki-eyebrow {
         display: inline-flex;
         align-items: center;
         gap: .35rem;
-        background: rgba(255, 255, 255, .18);
-        border: 1px solid rgba(255, 255, 255, .35);
-        border-radius: 999px;
-        padding: .25rem .75rem;
-        font-size: .78rem;
-        font-weight: 600;
-        letter-spacing: .04em;
-        text-transform: uppercase;
-        margin-bottom: .5rem;
-        .material-symbols-outlined,
-        .material-icons {
-            font-size: .9rem;
-        }
-    }
-
-    .wiki-title {
-        font-size: 1.75rem;
-        font-weight: 700;
-        margin: 0 0 .4rem;
-        line-height: 1.2;
     }
 
     .wiki-address {
         display: flex;
         align-items: center;
+        justify-content: center;
         gap: .3rem;
-        font-size: .88rem;
-        opacity: .85;
-        margin: 0;
+
         .material-symbols-outlined,
         .material-icons {
             font-size: 1rem;
         }
     }
 
+    .wiki-hero-actions {
+        position: absolute;
+        top: 1rem;
+        left: 1.25rem;
+        display: flex;
+        align-items: center;
+        gap: .5rem;
+        flex-wrap: wrap;
+        z-index: 5;
+
+        @include down($breakpoint-sm) {
+            position: static;
+            justify-content: center;
+            margin-top: .6rem;
+        }
+    }
+
     .wiki-notice {
-        position: fixed;
-        top: 6rem;
-        right: calc(5vw + 2rem);
+        position: absolute;
+        top: 1rem;
+        right: 1.25rem;
         display: flex;
         align-items: flex-start;
         gap: .5rem;
         background: linear-gradient(135deg, $color-purple-700 0%, $color-indigo-700 100%);
-        border: 1px solid var(--ul-grey-1a);
+        border: 1px solid var(--ul-surface-border);
         border-radius: 10px;
         padding: .65rem 1rem;
         font-size: .83rem;
-        max-width: 320px;
+        max-width: 22rem;
         line-height: 1.45;
-        z-index: 99;
+        // Low z-index is fine here: while unpinned, this notice sits inside the
+        // page header above the map, so it never actually overlaps map controls.
+        z-index: 5;
         transition: top .3s ease, right .3s ease;
+        box-shadow: 0px 5px 20px rgba(0,0,0,0.5);
 
         // Once the header has scrolled out of view, the notice would otherwise
         // float in the middle of the page since it's position: fixed - tuck it
-        // into the top-right corner instead.
+        // into the top-right corner instead. This is the state that can actually
+        // overlap the map, so it needs to be above the map's own controls/toolbar
+        // (z-index 1000, see .map-buttons / _layout.scss) - matches the convention
+        // already established in _pin_lists.scss.
         &.wiki-notice--pinned {
+            position: fixed;
             top: 0.2rem;
             right: 0.5rem;
+            z-index: 1200;
         }
 
         .material-symbols-outlined,
@@ -97,20 +96,50 @@
         strong {
             opacity: 1;
         }
+
+        @include down($breakpoint-sm) {
+            position: static;
+            max-width: none;
+            margin-top: .6rem;
+
+            &.wiki-notice--pinned {
+                position: fixed;
+            }
+        }
     }
 
-    .wiki-banner-actions {
-        display: flex;
-        align-items: center;
-        gap: .6rem;
-        margin-top: 4rem;
-        flex-wrap: wrap;
+    // The corner-docked actions/notice above need more room than short
+    // eyebrow/title/subtitle copy alone once they drop into normal flow on
+    // narrow screens - grow past the shared hero's fixed height instead of
+    // overflowing it (mirrors .ul-page-hero--wide's own height:auto escape
+    // hatch, scoped to this hero only so no other page is affected).
+    @include down($breakpoint-sm) {
+        height: auto;
+        min-height: 13.2rem;
+        padding-bottom: 1.5rem;
     }
+}
 
-    .wiki-back-link {
-        border-color: transparent;
-        color: var(--ul-grey-9);
+// Shared "delete" styling for both the hero's "Delete wiki" button and the
+// Edit History tab's per-entry "Revert + delete" button (wiki_history.html
+// combines this with .wiki-revert-btn) - kept as one unscoped rule since
+// both buttons use this exact class name and should look identical.
+.wiki-delete-btn {
+    background: $color-red-600;
+    border-color: $color-red-600;
+    color: #fff;
+    opacity: .85;
+
+    &:hover {
+        background: $color-red-700;
+        border-color: $color-red-700;
+        opacity: 1;
     }
+}
+
+.wiki-page {
+    //width: 90em;
+    //padding: 1.5rem 1rem 3rem;
 
     .wiki-meta {
         grid-column: 1;
@@ -126,6 +155,31 @@
             color: var(--ul-grey-8);
             margin: 0 0 .6rem;
             line-height: 1.55;
+        }
+
+        // Links row (_pin_links_row.html, shared with the pin details page) -
+        // its .field-label/.field-value/.detail-item styling normally only
+        // exists scoped to the pin page's own flex-wrap grid layout, which
+        // this card doesn't have, so the row rendered with no styling at all
+        // (no label weight, no chip spacing) - give it its own plain-row
+        // treatment that fits .wiki-meta-body's column layout instead.
+        .detail-item {
+            display: flex;
+            flex-direction: column;
+            gap: .3rem;
+        }
+
+        .field-label {
+            font-size: .78rem;
+            font-weight: 600;
+            color: var(--ul-grey-5);
+            text-transform: uppercase;
+            letter-spacing: .04em;
+        }
+
+        .field-value {
+            font-size: .9rem;
+            color: var(--ul-grey-8);
         }
 
         .wiki-meta-dates {
@@ -210,14 +264,14 @@
         align-items: center;
         gap: .6rem;
         padding: .85rem 1.1rem;
-        background: linear-gradient(180deg, rgba(8, 145, 178, .18), rgba(255, 255, 255, 0));
+        background: linear-gradient(180deg, rgba(8, 145, 178, 0.05), rgba(0,0,0,0.15));
         .material-symbols-outlined,
         .material-icons {
             font-size: 1.1rem;
             color: $color-cyan-600;
         }
 
-        h2, h3, span {
+        h2, h3, span:not(.badge) {
             margin: 0;
             font-size: .95rem;
             font-weight: 600;
@@ -225,6 +279,22 @@
             color: var(--ul-grey-9);
             text-align: left;
         }
+
+        // The count badge sits snug next to the title instead of also
+        // stretching (flex:1 above) and splitting the header's width evenly
+        // with it, which pushed the badge out to the horizontal midpoint.
+        .badge {
+            flex: 0 0 auto;
+        }
+    }
+
+    // A dark-theme rule in _layout.scss ([data-theme="dark"] .card .card-header)
+    // outranks the light-mode gradient above by specificity, unconditionally
+    // darkening every card header including the wiki's - restore the wiki's
+    // intended blue tint in dark mode too (equal specificity, later in the
+    // compiled stylesheet, so it wins the cascade tie).
+    [data-theme="dark"] & .card-header {
+        background: linear-gradient(180deg, rgba(8, 145, 178, .18), rgba(255, 255, 255, 0));
     }
 
     .card__body {
@@ -250,7 +320,7 @@
         padding: .5rem 1.1rem;
 
         &:not(:last-child) {
-            border-bottom: 1px solid var(--ul-grey-1a);
+            border-bottom: 1px solid var(--ul-surface-border);
         }
 
         &.full {
@@ -332,7 +402,7 @@
         flex-direction: column;
         gap: .35rem;
         padding-bottom: .85rem;
-        border-bottom: 1px solid var(--ul-grey-1a);
+        border-bottom: 1px solid var(--ul-surface-border);
 
         &:last-child {
             padding-bottom: 0;
@@ -382,6 +452,9 @@
         // size for @include map-query-container to safely contain against
         // (`contain: size` collapses an "auto" height to 0 otherwise).
         height: clamp(320px, 52vw, 560px);
+        // Clips the off-canvas (translateX(-100%)) .detail-pin-list-panel so
+        // it doesn't bleed into the page to the left of the map card.
+        overflow: hidden;
         @include map-query-container;
     }
 
@@ -443,16 +516,12 @@
     }
 
     .wiki-history-item {
-        border: 1px solid var(--ul-grey-1a);
-        ;
-        border-radius: 10px;
+        @include surface($radius: 10px, $rung: 2);
         padding: .75rem 1rem;
-        background: var(--ul-grey-0);
         position: relative;
 
         &--reverted {
             opacity: .55;
-            background: var(--ul-grey-0);
         }
     }
 
@@ -535,7 +604,7 @@
         border-radius: 4px;
         padding: .1rem .35rem;
         font-size: .82rem;
-        max-width: 200px;
+        max-width: 20rem;
         @include truncate;
     }
 
@@ -550,7 +619,7 @@
         border-radius: 4px;
         padding: .1rem .35rem;
         font-size: .82rem;
-        max-width: 200px;
+        max-width: 20rem;
         @include truncate;
     }
 
@@ -564,7 +633,7 @@
         padding: .3rem .7rem;
         border-radius: 6px;
         border-color: $color-red-300;
-        background: var(--ul-grey-0);
+        background: var(--ul-surface);
         color: $color-red-600;
         font-size: .78rem;
         opacity: .7;
@@ -575,18 +644,8 @@
         }
     }
 
-    .wiki-delete-btn {
-        background: $color-red-600;
-        border-color: $color-red-600;
-        color: #fff;
-        opacity: .85;
-
-        &:hover {
-            background: $color-red-700;
-            border-color: $color-red-700;
-            opacity: 1;
-        }
-    }
+    // .wiki-delete-btn styling (shared with the hero's "Delete wiki" button)
+    // now lives as a top-level rule near the top of this file.
 
     // -- Suggest-edits dialog ----------------------------------------------
     .wiki-edit-notice {
@@ -595,7 +654,7 @@
         gap: .5rem;
         margin: .5rem 1rem .75rem;
         padding: .55rem .75rem;
-        background: var(--ul-grey-0a);
+        background: var(--ul-surface-raised);
         border-radius: 8px;
         font-size: .82rem;
         color: $color-blue-700;
@@ -627,7 +686,7 @@
             input,
             textarea {
                 padding: .45rem .65rem;
-                border: 1px solid var(--ul-grey-1a);
+                border: 1px solid var(--ul-surface-raised-border);
                 border-radius: 8px;
                 font-size: .88rem;
                 outline: none;
@@ -650,5 +709,306 @@
             gap: .5rem;
             padding-top: .25rem;
         }
+    }
+}
+
+[data-theme="dark"] {
+    .wiki-page {
+        .card-header {
+            background: linear-gradient(180deg, rgba(8, 145, 178, 0.05), rgba(0,0,0,0.15));
+        }
+        .wiki-card-header {
+            background: var(--ul-grey-1);
+            border-bottom-color: var(--ul-grey-1a);
+
+            h2 {
+                color: var(--ul-grey-8);
+            }
+        }
+
+        .wiki-card-desc {
+            color: var(--ul-grey-7);
+        }
+
+        .wiki-dl-row {
+
+            dt {
+                color: var(--ul-grey-6);
+            }
+
+            dd {
+                color: var(--ul-grey-8);
+            }
+        }
+
+        .wiki-stat-label {
+            color: var(--ul-grey-7);
+        }
+
+        .wiki-bbox-controls {
+            background: var(--ul-grey-1);
+            border-top-color: var(--ul-grey-1a);
+        }
+
+        .wiki-action-btn {
+            border-color: var(--ul-grey-3b);
+            color: var(--ul-grey-8);
+
+            &:hover {
+                background: var(--ul-grey-1);
+                border-color: var(--ul-grey-3b);
+            }
+        }
+
+        .wiki-loading {
+            color: var(--ul-grey-6);
+        }
+
+        .wiki-history-item {
+
+            &--reverted {
+                background: var(--ul-grey-1);
+            }
+        }
+
+        .wiki-history-editor {
+            color: var(--ul-grey-8);
+        }
+
+        .wiki-history-date {
+            color: var(--ul-grey-6);
+        }
+
+        .wiki-history-badge--reverted {
+            background: rgba($color-amber-800, .3);
+            color: $color-amber-300;
+        }
+
+        .wiki-change-field {
+            color: var(--ul-grey-7);
+        }
+
+        .wiki-change-arrow {
+            color: var(--ul-grey-6);
+        }
+
+        .wiki-change-from {
+            background: rgba($color-red-700, .18);
+            color: $color-red-300;
+        }
+
+        .wiki-change-to {
+            background: rgba($color-green-700, .18);
+            color: $color-green-300;
+        }
+
+        .wiki-revert-btn {
+            border-color: rgba($color-red-600, .4);
+            color: $color-red-400;
+
+            &:hover {
+                background: rgba($color-red-600, .08);
+                border-color: $color-red-400;
+            }
+        }
+
+        .wiki-history-empty {
+            color: var(--ul-grey-6);
+        }
+    }
+
+    // Unscoped like its light-mode counterpart near the top of this file -
+    // shared by the hero's "Delete wiki" button (now outside .wiki-page) and
+    // the Edit History tab's per-entry revert+delete button (still inside it).
+    .wiki-delete-btn {
+        background: $color-red-700;
+        border-color: $color-red-700;
+        color: #fff;
+
+        &:hover {
+            background: $color-red-600;
+            border-color: $color-red-600;
+        }
+    }
+}
+// -- Wiki Media gallery (external providers + shared photos, with voting) -------
+// The pin detail page's Media tiles are styled under
+// `body.page-location-details .pin-detail-grid` and don't reach the wiki, so
+// the same class names are re-styled here for the wiki's own Media section
+// (see pages/location/wiki.html + controllers/wiki_media.py). Unlike the pin
+// page, down-voted items are NOT hidden: the wiki ranks by net vote score and
+// keeps everything visible, so there is deliberately no
+// `.media-item--not-relevant { display: none }` rule here.
+.wiki-media {
+    .media-view-panel[hidden] { display: none; }
+
+    .media-gallery-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 108px), 1fr));
+        gap: clamp(.5rem, 1.5vw, .85rem);
+        padding: .75rem;
+        min-height: 8rem;
+        max-height: 40rem;
+        overflow: auto;
+    }
+
+    .media-gallery-empty {
+        grid-column: 1 / -1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: .4rem;
+        padding: 2rem;
+        color: var(--ul-grey-5);
+        font-size: .9rem;
+
+        &[hidden] { display: none; }
+        .material-symbols-outlined { font-size: 2.5rem; }
+    }
+
+    .media-item {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+        max-width: 24rem;
+        margin-inline: auto;
+        text-decoration: none;
+        color: inherit;
+        background: var(--ul-surface-raised);
+        border: 1px solid var(--ul-surface-raised-border);
+        border-radius: 10px;
+        overflow: hidden;
+        box-shadow: 0 1px 2px rgba(15, 23, 42, .05), 0 1px 3px rgba(15, 23, 42, .04);
+        transition: transform .2s cubic-bezier(.22, 1, .36, 1), box-shadow .2s ease;
+
+        &[hidden] { display: none; }
+
+        &:hover,
+        &:focus-within {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(15, 23, 42, .08), 0 2px 4px rgba(15, 23, 42, .06);
+        }
+    }
+    // Excluded by the active source tab - actually hide (matches pin behavior).
+    .media-item.media-tab-excluded { display: none !important; }
+
+    .media-item-source {
+        position: absolute;
+        top: .4rem;
+        left: .4rem;
+        z-index: 1;
+        padding: .15rem .5rem;
+        font-size: .65rem;
+        font-weight: 600;
+        color: #fff;
+        background: rgba(15, 23, 42, .72);
+        border-radius: 999px;
+    }
+
+    .media-item-thumb-btn {
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+        padding: 0;
+        border: none;
+        background: none;
+        font: inherit;
+        color: inherit;
+        text-align: inherit;
+        cursor: pointer;
+    }
+
+    .media-item-thumb {
+        display: block;
+        width: 100%;
+        min-height: 96px;
+        max-height: 220px;
+        aspect-ratio: 4 / 5;
+        object-fit: cover;
+        object-position: top center;
+        background: linear-gradient(145deg, var(--ul-surface-raised) 0%, var(--ul-surface-raised-border) 100%);
+    }
+
+    .media-item-thumb-fallback {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 96px;
+        color: var(--ul-grey-4, #94a3b8);
+
+        .material-symbols-outlined,
+        .material-icons { font-size: 2rem; }
+    }
+
+    .media-item-caption {
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        padding: .5rem .6rem .6rem;
+        font-size: .72rem;
+        font-weight: 500;
+        line-height: 1.45;
+        color: var(--ul-grey-7, #475569);
+        background: var(--ul-surface-raised-border);
+    }
+
+    // -- Vote actions: kept always-visible (the score is the point, and the
+    // buttons must be reachable on touch devices with no hover).
+    .media-item-actions--wiki {
+        position: absolute;
+        right: .35rem;
+        bottom: .35rem;
+        z-index: 2;
+        display: flex;
+        align-items: center;
+        gap: .25rem;
+    }
+
+    .media-item-action-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 1.7rem;
+        height: 1.7rem;
+        padding: 0;
+        border: none;
+        border-radius: 50%;
+        background: rgba(15, 23, 42, .72);
+        color: #fff;
+        cursor: pointer;
+        backdrop-filter: blur(2px);
+        transition: background .12s ease, transform .12s ease;
+
+        .material-symbols-outlined { font-size: 1rem; }
+
+        &:hover { background: rgba(15, 23, 42, .9); transform: scale(1.08); }
+        &.is-active { background: var(--ul-primary-color); }
+    }
+    .media-item-vote-down-btn.is-active { background: var(--ul-danger, #dc2626); }
+
+    // Net community score chip between the up/down buttons.
+    .media-item-votes {
+        min-width: 1.4rem;
+        padding: 0 .3rem;
+        font-size: .72rem;
+        font-weight: 700;
+        text-align: center;
+        color: #fff;
+        background: rgba(15, 23, 42, .72);
+        border-radius: 999px;
+        backdrop-filter: blur(2px);
+    }
+
+    // Source-tab count pill (.card-tab / .card-tabs base styling is global).
+    .media-tab-count {
+        margin-left: .35rem;
+        padding: 0 .4rem;
+        font-size: .68rem;
+        font-weight: 700;
+        border-radius: 999px;
+        background: var(--ul-surface-sunken, rgba(0, 0, 0, .06));
     }
 }

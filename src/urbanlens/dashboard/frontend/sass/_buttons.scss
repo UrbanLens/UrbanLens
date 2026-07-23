@@ -22,9 +22,16 @@
 	}
 
 	&:disabled {
-		background: var(--ul-grey-4);
+		// These exact colors (not the grey-* tokens) are what's actually been
+		// rendering here - Materialize's disabled-button rule used !important
+		// and always won, masking the token-based values above. Kept unchanged
+		// on purpose; revisit as a deliberate design decision, not in passing.
+		background-color: #DFDFDF;
 		border-color: var(--ul-grey-5b);
-		color: var(--ul-grey-9a);
+		color: #9F9F9F;
+		box-shadow: none;
+		cursor: default;
+		pointer-events: none;
 	}
 
 	.material-symbols-outlined,
@@ -65,6 +72,8 @@
 	}
 
 	&--ghost {
+		background: rgba(0,0,0,0.3);
+		backdrop-filter: blur(10px);
 		border-color: var(--ul-grey-2b);
 		color: var(--ul-grey-7);
 
@@ -90,9 +99,20 @@
 		color: $color-red-1300;
 		border-color: $danger-border;
 		background: $danger-bg;
+	}
 
+	&--danger-hover {
+		background: var(--ul-grey-0);
+		border-color: var(--ul-grey-1);
+	}
+
+	&--danger,
+	&--danger-hover {
+		&:active,
 		&:focus,
 		&:hover {
+			color: $color-red-1300;
+			border-color: $danger-border;
 			background: color.scale($danger-bg, $lightness: -4%);
 
 			i.material-symbols-outlined,
@@ -134,7 +154,11 @@
 			font-size: 1.1rem;
 		}
 	}
-	
+
+	&--icon-sm {
+		@include icon-btn(28px);
+	}
+
     &--social {
         @extend .btn--primary;
         gap: .7rem;
@@ -153,7 +177,7 @@
 
 	&--active {
 		background: var(--secondary-color);
-		color: var(--ul-grey-9);
+		color: #000;
 	}
 	
     &--yes {

@@ -1,0 +1,24 @@
+{# Google Calendar settings subsection - loaded via HTMX (GoogleCalendarSettingsSectionView). Context: calendar_account #}
+<div id="google-calendar-settings-body" class="settings-subsection-body">
+    {% if calendar_account %}
+    <p class="settings-help">
+        Connected as <strong>{{ calendar_account.google_email|default:"your Google account" }}</strong>.
+    </p>
+    <div class="settings-actions">
+        <button type="button" class="btn btn--danger"
+                hx-post="{% url 'settings.google_calendar.disconnect' %}"
+                hx-target="#google-calendar-settings-body"
+                hx-swap="outerHTML"
+                hx-confirm="Disconnect your Google Calendar? Trips already exported stay on your calendar, but importing events and exporting trips stops working until you reconnect.">
+            <i class="material-symbols-outlined">link_off</i>
+            Disconnect Google Calendar
+        </button>
+    </div>
+    {% else %}
+    <p class="settings-help">Connect your Google Calendar to import events as trips and export trips as calendar events.</p>
+    <a href="{% url 'trips.calendar.connect' %}?next=settings.view" class="btn btn--primary">
+        <i class="material-symbols-outlined">link</i>
+        Connect Google Calendar
+    </a>
+    {% endif %}
+</div>

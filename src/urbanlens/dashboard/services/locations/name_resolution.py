@@ -27,6 +27,7 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from urbanlens.dashboard.models.location.model import Location
+    from urbanlens.dashboard.models.profile.model import Profile
 
 logger = logging.getLogger(__name__)
 
@@ -157,16 +158,25 @@ class RuleBasedNameResolver(NameResolver):
     The winning group's surface form is the member from its highest-priority
     source. There are deliberately no numeric confidence scores - agreement
     count and admin-configured priority are the only signals.
+
+    ``override_source``, when set, skips all of the above: the first
+    candidate from that source wins outright, even against a two-source
+    agreement. Used to make REData's building name dominate when naming a
+    detail (child) pin's location - see :func:`default_name_resolver`.
     """
 
-    def __init__(self, priority: Sequence[str] = ()) -> None:
+    def __init__(self, priority: Sequence[str] = (), *, override_source: str | None = None) -> None:
         """Initialize the resolver.
 
         Args:
             priority: Source slugs in descending priority. Unknown slugs are
                 ignored; sources missing from the list rank after listed ones.
+            override_source: When set and at least one candidate comes from
+                this source, that candidate wins outright, bypassing the
+                agreement/priority ranking entirely.
         """
         self._priority_rank: dict[str, int] = {slug: rank for rank, slug in enumerate(priority)}
+        self._override_source = override_source
 
     def _rank(self, source: str, arrival_index: int) -> tuple[int, int]:
         """Sort key for one source: listed sources first, then arrival order."""
@@ -185,6 +195,11 @@ class RuleBasedNameResolver(NameResolver):
         Returns:
             The winning candidate, or None when ``candidates`` is empty.
         """
+        if self._override_source is not None:
+            override = next((candidate for candidate in candidates if candidate.source == self._override_source), None)
+            if override is not None:
+                return override
+
         groups: dict[str, list[tuple[int, NameCandidate]]] = {}
         order: list[str] = []
         for index, candidate in enumerate(candidates):
@@ -210,16 +225,42 @@ class RuleBasedNameResolver(NameResolver):
         return min(groups[best_key], key=lambda item: self._rank(item[1].source, item[0]))[1]
 
 
-def default_name_resolver() -> NameResolver:
+#: Name-provider source whose candidate wins outright when naming a detail
+#: (child) pin's location - see the ``location`` handling below. Hardcodes a
+#: specific plugin's source slug into this core module, the same kind of
+#: named-source special-case as ``naming._FALLBACK_ONLY_SOURCES``.
+_CHILD_PIN_PREFERRED_SOURCE = "redata_building"
+
+
+def default_name_resolver(profile: Profile | None = None, *, location: Location | None = None) -> NameResolver:
     """Return the resolver used for official-name selection.
 
-    This is the single seam where a future AI-backed resolver plugs in
-    (e.g. switched by a SiteSettings choice); today it is always the
-    rule-based resolver driven by the admin-configured source priority.
+    This is the single seam where a future AI-backed resolver plugs in (e.g.
+    switched by a SiteSettings choice); today it is always the rule-based
+    resolver driven by the site-wide admin-configured source priority. Name
+    resolution is an intentionally system-driven decision - individual users
+    cannot override the source ordering with their own preference.
+
+    Args:
+        profile: The profile whose action triggered this resolution, if any.
+            Unused by the current resolver but kept for a future
+            profile-aware (e.g. AI-backed) resolver to consume.
+        location: The location being named, if known. When it has at least
+            one detail (child) pin (``Pin.parent_pin`` - see
+            ``models.pin.model``), REData's building name is given outright
+            priority over every other source for naming it - a child pin
+            typically represents one specific building within a larger
+            property, so the county/CRIS-sourced building name is a much
+            stronger signal there than for an ordinary root pin, where it
+            still competes normally via the admin-configured priority order.
 
     Returns:
         The resolver to use for official-name selection.
     """
     from urbanlens.dashboard.models.site_settings.model import SiteSettings
 
-    return RuleBasedNameResolver(SiteSettings.get_current().name_source_priority_list)
+    override_source = None
+    if location is not None and location.pk and location.pins.filter(parent_pin__isnull=False).exists():
+        override_source = _CHILD_PIN_PREFERRED_SOURCE
+
+    return RuleBasedNameResolver(SiteSettings.get_current().name_source_priority_list, override_source=override_source)

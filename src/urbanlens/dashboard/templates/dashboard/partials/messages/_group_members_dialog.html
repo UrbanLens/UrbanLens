@@ -1,0 +1,69 @@
+{% comment %}
+Group members dialog: list the active members; the creator can remove members
+and add new ones (search reuses the group member-search endpoint). Injected
+into #dm-share-dialog-host by the messages page JS. Context: `group`,
+`memberships`, `is_manager`, `viewer_id`.
+
+Each membership.profile has been run through resolve_visible_identities
+(controllers/group_chats.py), which sets display_name/display_avatar_url/
+is_masked/avatar_color_class directly on it - a member added by someone
+else may not be friends with everyone here, so their real name/avatar only
+shows when their own privacy settings permit this viewer to see it.
+{% endcomment %}
+<dialog id="dm-group-members-dialog" class="dm-share-dialog ul-dialog">
+  <div class="dialog-header">
+    <span>Members of {{ group.name }}</span>
+    <button type="button" class="dialog-close" onclick="this.closest('dialog').close()">
+      <i class="material-symbols-outlined">close</i>
+    </button>
+  </div>
+
+  <div class="dm-share-step">
+    <ul class="dm-group-member-list" role="list">
+      {% for membership in memberships %}
+      <li class="dm-group-member-row">
+        <span class="msg-avatar" aria-hidden="true">
+          {% if membership.profile.display_avatar_url %}
+          <img src="{{ membership.profile.display_avatar_url }}" alt="" class="msg-avatar-img">
+          {% else %}
+          <span class="msg-avatar-initial {{ membership.profile.avatar_color_class }}">{{ membership.profile.display_name|first|upper }}</span>
+          {% endif %}
+        </span>
+        <span class="dm-group-member-row__name">
+          {{ membership.profile.display_name }}
+          {% if membership.profile_id == group.creator_id %}<span class="dm-group-member-row__badge">creator</span>{% endif %}
+        </span>
+        {% if is_manager and membership.profile_id != viewer_id %}
+        <button type="button" class="btn btn--ghost btn--sm dm-group-member-row__remove"
+                hx-post="{% url 'messages.group.members.remove' group.uuid %}"
+                hx-vals='{"profile_id": "{{ membership.profile_id }}"}'
+                hx-target="#dm-thread-pane" hx-swap="innerHTML"
+                hx-confirm="Remove {{ membership.profile.display_name }} from “{{ group.name }}”?"
+                onclick="this.closest('dialog').close()">
+          <i class="material-symbols-outlined">person_remove</i> Remove
+        </button>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+
+    {% if is_manager %}
+    <form class="dm-group-add-members" id="dm-group-add-members-form"
+          hx-post="{% url 'messages.group.members.add' group.uuid %}"
+          hx-target="#dm-thread-pane" hx-swap="innerHTML">
+      <h4 class="dm-group-add-members__title">Add people</h4>
+      <p class="dm-group-add-members__hint">New members only see messages sent after they join.</p>
+      <input type="search" class="dm-share-filter" placeholder="Search people..."
+             name="q" autocomplete="off"
+             hx-get="{% url 'messages.group.member_search' %}"
+             hx-trigger="input changed delay:300ms, search"
+             hx-target="#dm-group-add-member-results"
+             hx-swap="innerHTML">
+      <div id="dm-group-add-member-results" class="dm-recipient-results"></div>
+      <div id="dm-group-add-member-picked" class="dm-group-picked-chips"></div>
+      <button type="submit" class="btn btn--primary btn--sm" id="dm-group-add-members-submit" disabled
+              onclick="this.closest('dialog').close()">Add to group</button>
+    </form>
+    {% endif %}
+  </div>
+</dialog>

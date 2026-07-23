@@ -1,0 +1,45 @@
+{# Diff of one revision against its predecessor, shown inside the history tab. #}
+<div class="article-diff">
+    <div class="article-diff-header">
+        <div class="article-diff-title">
+            <i class="material-symbols-outlined">difference</i>
+            <strong>
+                {% if previous %}Changes in this revision{% else %}Initial version{% endif %}
+            </strong>
+            <span class="article-history-meta">
+                {{ revision.editor_display_name }}
+                &middot; {{ revision.created|date:"M d, Y H:i" }}
+                {% if revision.edit_summary %}&middot; <em>{{ revision.edit_summary }}</em>{% endif %}
+            </span>
+        </div>
+        <div class="article-diff-actions">
+            {% if not is_current %}
+            <button type="button" class="btn btn--secondary"
+                    hx-post="{{ scope.urls.history }}{{ revision.id }}/restore/"
+                    hx-target="#article-history-panel"
+                    hx-swap="outerHTML"
+                    hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+                    hx-confirm="Restore the article to this version? The current version stays in history.">
+                <i class="material-symbols-outlined">settings_backup_restore</i> Restore this version
+            </button>
+            {% endif %}
+            <button type="button" class="btn btn--icon-sm" title="Close"
+                    onclick="document.getElementById('article-revision-detail').replaceChildren()">
+                <i class="material-symbols-outlined">close</i>
+            </button>
+        </div>
+    </div>
+    {% if diff_rows %}
+    <div class="article-diff-body">
+        {% for row in diff_rows %}
+        {% if row.kind == "skip" %}
+        <div class="article-diff-line article-diff-line--skip"><span>&#8942; unchanged lines hidden &#8942;</span></div>
+        {% else %}
+        <div class="article-diff-line article-diff-line--{{ row.kind }}"><span class="article-diff-gutter">{% if row.kind == "add" %}+{% elif row.kind == "del" %}&minus;{% endif %}</span><span class="article-diff-text">{{ row.text }}</span></div>
+        {% endif %}
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="article-diff-body article-diff-body--empty">No text changes (identical content).</div>
+    {% endif %}
+</div>

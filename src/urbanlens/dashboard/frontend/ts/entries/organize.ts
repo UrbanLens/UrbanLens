@@ -1,18 +1,18 @@
 import { installGlobalOrganizeIconPicker } from "../shared/organize-icon-picker";
 import { installGlobalColorPicker } from "../shared/color-picker";
-import { installGlobalBadgeRelPicker } from "../shared/badge-rel-picker";
+import { installGlobalLabelRelPicker } from "../shared/label-rel-picker";
 import { installOrgFilterEngine } from "../shared/organize-filter-engine";
-import { installOrgBulkToolbar, installOrgTabSwitching, createOrganizeHeader, orgHeader } from "../shared/organize-header";
+import { installOrgBulkToolbar, installOrgTabSwitching, installOrgSectionSwitching, createOrganizeHeader, orgHeader } from "../shared/organize-header";
 import { OrgTabManager, type OrgTabManagerConfig } from "../shared/organize-tab-manager";
 import { initOrganizePriority } from "../shared/organize-priority";
 import { initOnboardingTour } from "../shared/onboarding-tour";
 
 installGlobalOrganizeIconPicker();
 installGlobalColorPicker();
-installGlobalBadgeRelPicker();
+installGlobalLabelRelPicker();
 
 /** Live preview for the "upload custom icon" file inputs on organize's create dialogs. */
-function showBadgeCustomPreview(input: HTMLInputElement, previewId: string): void {
+function showLabelCustomPreview(input: HTMLInputElement, previewId: string): void {
     const file = input.files?.[0];
     if (!file) return;
     const preview = document.getElementById(previewId) as HTMLImageElement | null;
@@ -25,22 +25,29 @@ function showBadgeCustomPreview(input: HTMLInputElement, previewId: string): voi
     reader.readAsDataURL(file);
 }
 function showTagCustomPreview(input: HTMLInputElement): void {
-    showBadgeCustomPreview(input, "new-tag-custom-preview");
+    showLabelCustomPreview(input, "new-tag-custom-preview");
 }
-window.showBadgeCustomPreview = showBadgeCustomPreview;
+window.showLabelCustomPreview = showLabelCustomPreview;
 window.showTagCustomPreview = showTagCustomPreview;
 declare global {
     interface Window {
-        showBadgeCustomPreview: typeof showBadgeCustomPreview;
+        showLabelCustomPreview: typeof showLabelCustomPreview;
         showTagCustomPreview: typeof showTagCustomPreview;
     }
 }
 
+/** Destination-tab metadata for label-kind conversion, shared by the single-item
+ *  kindChanged handler and the bulk-convert path below. */
+const KIND_ROWS_TARGET: Record<string, string> = { tag: "#tag-rows", category: "#category-rows", status: "#status-rows" };
+const KIND_TAB_KEY: Record<string, string> = { tag: "tags", category: "categories", status: "status" };
+
 function buildTabConfig(rows: HTMLElement, overrides: Partial<OrgTabManagerConfig> & Pick<OrgTabManagerConfig, "ns" | "nsCapitalized">): OrgTabManagerConfig {
+    const page = document.querySelector<HTMLElement>(".organize-page");
+    const rowsUrls: Record<string, string | undefined> = { tag: page?.dataset.rowsUrlTag, category: page?.dataset.rowsUrlCategory, status: page?.dataset.rowsUrlStatus };
     const convertTargets: OrgTabManagerConfig["convertTargets"] = [];
-    if (rows.dataset.convertCategoryUrl) convertTargets.push({ kind: "category", label: "Categories", endpoint: rows.dataset.convertCategoryUrl });
-    if (rows.dataset.convertTagUrl) convertTargets.push({ kind: "tag", label: "Tags", endpoint: rows.dataset.convertTagUrl });
-    if (rows.dataset.convertStatusUrl) convertTargets.push({ kind: "status", label: "Statuses", endpoint: rows.dataset.convertStatusUrl });
+    if (rows.dataset.convertCategoryUrl) convertTargets.push({ kind: "category", label: "Categories", endpoint: rows.dataset.convertCategoryUrl, rowsUrl: rowsUrls.category, rowsTarget: KIND_ROWS_TARGET.category, tabKey: KIND_TAB_KEY.category });
+    if (rows.dataset.convertTagUrl) convertTargets.push({ kind: "tag", label: "Tags", endpoint: rows.dataset.convertTagUrl, rowsUrl: rowsUrls.tag, rowsTarget: KIND_ROWS_TARGET.tag, tabKey: KIND_TAB_KEY.tag });
+    if (rows.dataset.convertStatusUrl) convertTargets.push({ kind: "status", label: "Statuses", endpoint: rows.dataset.convertStatusUrl, rowsUrl: rowsUrls.status, rowsTarget: KIND_ROWS_TARGET.status, tabKey: KIND_TAB_KEY.status });
 
     const base: OrgTabManagerConfig = {
         ns: overrides.ns,
@@ -157,7 +164,7 @@ function initTabs(): void {
         ).init();
     }
 
-    const peopleRows = document.getElementById("people-badge-rows");
+    const peopleRows = document.getElementById("people-label-rows");
     if (peopleRows) {
         new OrgTabManager(
             buildTabConfig(peopleRows, {
@@ -187,7 +194,7 @@ function initTabs(): void {
                     descValueId: "people-bulk-description-value",
                     descNochangeId: "people-bulk-description-nochange",
                 },
-                newForm: null,
+                newForm: { dialogId: "new-people-form", iconPickerId: "new-people", colorPickerId: "new-people-color-picker", colorValueId: "new-people-color-value" },
             }),
         ).init();
     }
@@ -262,8 +269,6 @@ function initKindChangedListener(): void {
         category: page?.dataset.rowsUrlCategory,
         status: page?.dataset.rowsUrlStatus,
     };
-    const rowTargets: Record<string, string> = { tag: "#tag-rows", category: "#category-rows", status: "#status-rows" };
-    const tabKeys: Record<string, string> = { tag: "tags", category: "categories", status: "status" };
 
     document.body.addEventListener("htmx:afterRequest", (e) => {
         const detail = (e as CustomEvent).detail as { xhr?: XMLHttpRequest; successful?: boolean };
@@ -271,10 +276,35 @@ function initKindChangedListener(): void {
         const kindChanged = detail.xhr.getResponseHeader("X-Kind-Changed");
         if (!kindChanged) return;
         const url = rowUrls[kindChanged];
-        const target = rowTargets[kindChanged];
+        const target = KIND_ROWS_TARGET[kindChanged];
         if (url && target) window.htmx?.ajax("GET", url, { target, swap: "innerHTML" });
-        const tabKey = tabKeys[kindChanged];
+        const tabKey = KIND_TAB_KEY[kindChanged];
         if (tabKey) document.querySelector<HTMLElement>(`.organize-tab[data-tab="${tabKey}"]`)?.click();
+    });
+}
+
+/**
+ * Label edits (icon, color, name, kind, merges, bulk actions) change how pins
+ * render on the map without touching any Pin row, so the map's own staleness
+ * check (Max(Pin.updated)) can never detect them on its own. Flag the shared
+ * cross-page `ul_pins_dirty` marker so the map forces a refresh on its next
+ * poll or load, same as the bulk pin importer already does. Same mutations
+ * also feed the Display Order tab's priority list, which is otherwise only
+ * ever built once at initial page load - tell it to refetch too. (The
+ * priority list's own reorder save uses a plain fetch(), not htmx, so this
+ * doesn't loop back on itself.)
+ */
+function initPinCacheInvalidation(): void {
+    document.body.addEventListener("htmx:afterRequest", (e) => {
+        const detail = (e as CustomEvent).detail as { xhr?: XMLHttpRequest; successful?: boolean; requestConfig?: { verb?: string } };
+        if (!detail.xhr || !detail.successful) return;
+        if (detail.requestConfig?.verb?.toLowerCase() === "get") return;
+        try {
+            localStorage.setItem("ul_pins_dirty", "1");
+        } catch {
+            // localStorage unavailable (private browsing, quota) - map falls back to its 2 min poll.
+        }
+        document.body.dispatchEvent(new Event("refreshPriority"));
     });
 }
 
@@ -284,27 +314,27 @@ function initConsolidatedDialogOpener(): void {
         const id = detail.target?.id;
         if (!id) return;
 
-        if (id === "badge-edit-dialog-body") {
+        if (id === "label-edit-dialog-body") {
             const body = detail.target!;
-            const titleEl = document.getElementById("badge-edit-dialog-title");
+            const titleEl = document.getElementById("label-edit-dialog-title");
             if (titleEl) {
-                if (body.querySelector(".organize-badge-merge-form")) {
+                if (body.querySelector(".organize-label-merge-form")) {
                     const mergeName = body.querySelector(".tag-merge-source-name");
                     titleEl.textContent = mergeName ? `Merge ${mergeName.textContent?.trim()}` : "Merge";
-                } else if (body.querySelector(".organize-badge-customize-form")) {
+                } else if (body.querySelector(".organize-label-customize-form")) {
                     titleEl.textContent = "Customize Display";
                 } else if (body.querySelector(".tag-global-edit-form")) {
                     titleEl.textContent = "Edit Global Tag";
                 } else {
                     const kindInput = body.querySelector<HTMLInputElement>('input[name="kind"]:checked');
                     const titles: Record<string, string> = { tag: "Tag", category: "Category", status: "Status" };
-                    titleEl.textContent = `Edit ${titles[kindInput?.value ?? ""] ?? "Badge"}`;
+                    titleEl.textContent = `Edit ${titles[kindInput?.value ?? ""] ?? "Label"}`;
                 }
             }
-            const dialog = document.getElementById("badge-edit-dialog") as HTMLDialogElement | null;
+            const dialog = document.getElementById("label-edit-dialog") as HTMLDialogElement | null;
             if (dialog && !dialog.open) dialog.showModal();
-        } else if (id === "people-badge-edit-dialog-body") {
-            const dialog = document.getElementById("people-badge-edit-dialog") as HTMLDialogElement | null;
+        } else if (id === "people-label-edit-dialog-body") {
+            const dialog = document.getElementById("people-label-edit-dialog") as HTMLDialogElement | null;
             if (dialog && !dialog.open) dialog.showModal();
         }
     });
@@ -318,8 +348,10 @@ function init(): void {
     installOrgBulkToolbar();
     createOrganizeHeader(page.dataset.activeTab ?? "tags");
     installOrgTabSwitching();
+    installOrgSectionSwitching();
     initConsolidatedDialogOpener();
     initKindChangedListener();
+    initPinCacheInvalidation();
     initOnboarding();
 
     initTabs();

@@ -1,0 +1,969 @@
+// Wikipedia-style articles for pins and community wikis: read layout with a
+// contents box and references, the Markdown editor, and revision history/diffs.
+@use 'variables' as *;
+
+$article-serif: Georgia, 'Times New Roman', Times, serif;
+
+// Deliberately not a boxed dashboard container - reads as a plain page of
+// content (like about/index.html), not an editing tool bolted onto a card.
+// .card's own background/border/box-shadow (_layout.scss) are stripped here
+// rather than overridden piecemeal at each declaration.
+.article-card {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+}
+
+// Article/Wikipedia sub-tabs (index.html) - the generic .card-tabs/.card-tab
+// strip, lightened to match this page's deliberately-not-boxed look (see
+// .article-card above) instead of its usual opaque card-header background.
+.article-subtabs {
+    background: transparent;
+    padding: 0 0 0 .1rem;
+    margin-bottom: .5rem;
+
+    @include up($breakpoint-sm) {
+        padding-left: 1rem;
+    }
+}
+
+.article-card > .card__body {
+    padding: .5rem 0 1rem;
+
+    @include up($breakpoint-sm) {
+        padding: .5rem 1rem 1rem;
+    }
+
+    // Room for the fixed-bottom save bar once it's actually showing (see
+    // .article-editor-footer below) so it never overlaps the article's own
+    // last line/the Cancel button never sits over real content.
+    &:has([data-article-editor][data-dirty="1"]) {
+        padding-bottom: 6rem;
+    }
+}
+
+// -- Read layout: contents box + body ---------------------------------------
+
+.article-layout--with-toc {
+    display: grid;
+    grid-template-columns: minmax(200px, 250px) minmax(0, 1fr);
+    gap: 1.75rem;
+    align-items: start;
+
+    @media (max-width: $breakpoint-sm) {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+.article-toc {
+    position: sticky;
+    top: 1rem;
+    padding: .85rem 1rem;
+    border: 1px solid var(--ul-grey-1b);
+    border-radius: $radius-sm;
+    background: var(--ul-grey-0);
+    font-size: .88rem;
+
+    @media (max-width: $breakpoint-sm) {
+        position: static;
+    }
+}
+
+.article-toc-title {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    font-weight: 700;
+    color: var(--ul-grey-8);
+    margin-bottom: .5rem;
+
+    .material-symbols-outlined {
+        font-size: 1.1rem;
+        color: var(--ul-primary-color);
+    }
+}
+
+.article-toc-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: .3rem;
+
+    a {
+        color: var(--ul-primary-color);
+        text-decoration: none;
+
+        &:hover {
+            text-decoration: underline;
+        }
+    }
+}
+
+.article-toc-item--l3 { padding-left: .9rem; }
+.article-toc-item--l4,
+.article-toc-item--l5,
+.article-toc-item--l6 { padding-left: 1.8rem; }
+
+// -- Article body (also reused by the editor preview) -----------------------
+
+.article-body {
+    line-height: 1.65;
+    font-size: .98rem;
+    color: var(--ul-grey-8);
+    overflow-wrap: break-word;
+
+    h2, h3, h4, h5, h6 {
+        font-family: $article-serif;
+        font-weight: 500;
+        color: var(--ul-grey-9);
+        margin: 1.6em 0 .5em;
+        scroll-margin-top: 4.5rem; // clear the sticky nav when jumping to anchors
+
+        &:first-child {
+            margin-top: .25em;
+        }
+    }
+
+    h2 {
+        font-size: 1.45rem;
+        padding-bottom: .25rem;
+        border-bottom: 1px solid var(--ul-grey-1b); // the classic Wikipedia section rule
+    }
+
+    h3 { font-size: 1.2rem; }
+    h4 { font-size: 1.05rem; }
+
+    p { margin: 0 0 .85em; }
+
+    a {
+        color: var(--ul-primary-color);
+
+        &:hover { text-decoration: underline; }
+
+        // Chromium/WebKit force an I-beam cursor - and report it back via
+        // getComputedStyle, not just render it - for anything inside a
+        // contenteditable region (the always-editable WYSIWYG canvas -
+        // _article_panel.html has no separate read-only mode), regardless of
+        // any author `cursor` CSS, even `!important` (confirmed live: no
+        // amount of CSS specificity changes the computed value). The actual
+        // fix is in article-wysiwyg.ts, which briefly flips a hovered link to
+        // contenteditable="false" - the one thing that genuinely changes
+        // Chromium's editability determination for cursor purposes - and
+        // undoes it again before mousedown, so click-to-position-cursor and
+        // the Ctrl/Cmd+click-to-open handler both still see a normal editable
+        // link. This rule is just the cursor value the browser then honors
+        // once that attribute is off; harmless outside the editor too
+        // (comments/diffs/previews aren't contenteditable, so this never
+        // fires there and the fallback default `<a>` cursor already applies).
+        cursor: pointer;
+    }
+
+    // Wikipedia-style external-link arrow
+    a.article-external-link::after {
+        content: '\2197';
+        font-size: .7em;
+        vertical-align: super;
+        margin-left: .15em;
+        opacity: .7;
+    }
+
+    ul, ol { margin: 0 0 .85em; padding-left: 1.6em; }
+    li { margin-bottom: .25em; }
+
+    blockquote {
+        margin: 0 0 .85em;
+        padding: .5rem 1rem;
+        border-left: 3px solid var(--ul-grey-2);
+        background: var(--ul-grey-0);
+        color: var(--ul-grey-7);
+    }
+
+    code {
+        padding: .1em .35em;
+        border-radius: $radius-xs;
+        background: var(--ul-grey-0b);
+        font-size: .88em;
+    }
+
+    pre {
+        padding: .75rem 1rem;
+        border-radius: $radius-sm;
+        background: var(--ul-grey-0b);
+        overflow-x: auto;
+
+        code { padding: 0; background: transparent; }
+    }
+
+    img {
+        max-width: 100%;
+        border-radius: $radius-sm;
+    }
+
+    hr {
+        border: none;
+        border-top: 1px solid var(--ul-grey-1b);
+        margin: 1.5rem 0;
+    }
+
+    table {
+        border-collapse: collapse;
+        margin: 0 0 1em;
+        font-size: .92rem;
+        display: block;
+        max-width: 100%;
+        overflow-x: auto;
+
+        th, td {
+            border: 1px solid var(--ul-grey-1b);
+            padding: .4rem .7rem;
+            text-align: left;
+        }
+
+        th {
+            background: var(--ul-grey-0);
+            font-weight: 600;
+        }
+    }
+
+    sup.footnote-ref a {
+        text-decoration: none;
+        font-weight: 600;
+    }
+
+    // References (footnotes) section, Wikipedia flavor
+    section.footnotes {
+        margin-top: 2rem;
+        font-size: .88rem;
+        color: var(--ul-grey-7);
+
+        h2 {
+            font-size: 1.45rem;
+            color: var(--ul-grey-9);
+        }
+
+        .footnotes-list { padding-left: 1.8em; }
+
+        .footnote-backref {
+            text-decoration: none;
+            margin-left: .25em;
+        }
+    }
+}
+
+// -- Empty state ------------------------------------------------------------
+
+// Compact intro shown above the (always-editable) canvas when nothing has
+// been written yet - not a standalone empty-state screen, since the canvas
+// itself is right there ready to type into (no "Edit"/"Start the article"
+// button to click - see article-panel's data-article-editor contract).
+.article-editor-wysiwyg-hint,
+.article-empty-hint-block {
+    display: flex;
+    align-items: flex-start;
+    gap: .6rem;
+    max-width: 40rem;
+    margin: 0 auto;
+    padding: 1rem 2rem;
+    background: rgba(0,0,0,0.2);
+    border-radius: 15px;
+
+    h3 { margin: 0 0 .2rem; color: var(--ul-grey-8); font-size: 1.05rem; }
+}
+
+.article-editor-form {
+    padding: 1rem;
+    background: rgba(0,0,0,0.1);
+}
+
+.article-empty-icon {
+    flex-shrink: 0;
+    font-size: 1.6rem !important;
+    color: var(--ul-grey-3);
+    margin-top: .1rem;
+}
+
+.article-empty-hint {
+    max-width: 34rem;
+    margin: 0;
+    color: var(--ul-grey-6);
+    font-size: .88rem;
+}
+
+// -- Editor -----------------------------------------------------------------
+
+.article-editor-toolbar {
+    display: flex;
+    align-items: center;
+    gap: .15rem;
+    flex-wrap: wrap;
+    padding: .35rem;
+    border: 1px solid var(--ul-grey-1b);
+    border-bottom: none;
+    border-radius: $radius-sm $radius-sm 0 0;
+    background: var(--ul-grey-0);
+}
+
+// The whole toolbar (format buttons + preview toggle) is Source-mode-only
+// content - the WYSIWYG canvas gets its formatting from the bubble/slash
+// menus instead (see article-wysiwyg.ts). Previously only its *children*
+// were hidden here, leaving an empty bordered strip behind that read like a
+// dashboard card header sitting above the content - hide the whole bar.
+[data-editor-mode="wysiwyg"] .article-editor-toolbar {
+    display: none;
+}
+
+// Floating toolbar docked to the bottom-right of the viewport - Source/Visual
+// switch + Clear, with room for more tools later. Always visible in both
+// editor modes (deliberately outside .article-editor-toolbar, which is
+// Source-mode-only). bottom: 4rem clears the site's own sticky .page-footer
+// (_nav.scss - ~3.25rem tall, z-index 9999, stuck to the viewport bottom on
+// every page) so that bar never sits on top of - and eats clicks meant for -
+// this toolbar. Pushed up further still once the save/cancel footer is also
+// showing (data-dirty), so the two floating bars never overlap each other.
+.article-floating-toolbar {
+    position: fixed;
+    right: 10.25rem;
+    bottom: 4rem;
+    z-index: 400;
+    display: flex;
+    flex-direction: column;
+    gap: .35rem;
+    padding: .35rem;
+    border: 1px solid var(--ul-surface-raised-border);
+    border-radius: $radius-md;
+    background: color-mix(in srgb, var(--ul-surface-raised) 92%, transparent);
+    backdrop-filter: blur(20px) saturate(1.15);
+    -webkit-backdrop-filter: blur(20px) saturate(1.15);
+    box-shadow: 0 4px 20px rgba(15, 23, 42, .14);
+
+    [data-article-editor][data-dirty="1"] & {
+        bottom: 8rem;
+    }
+
+    .article-tool {
+        color: var(--ul-grey-6);
+
+        &:hover {
+            color: var(--ul-grey-9);
+        }
+    }
+}
+
+.article-toolbar-format-group {
+    display: flex;
+    align-items: center;
+    gap: .15rem;
+    flex-wrap: wrap;
+}
+
+// WYSIWYG mode gets its formatting from the selection bubble menu and "/"
+// block menu instead (see article-wysiwyg.ts) - the Markdown cheat sheet is
+// Source-mode-only (the toolbar itself - format buttons and live-preview
+// toggle - is already hidden as a whole above).
+[data-editor-mode="wysiwyg"] .article-editor-help {
+    display: none;
+}
+
+.article-tool {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    padding: .3rem .45rem;
+    border: none;
+    border-radius: $radius-xs;
+    background: transparent;
+    color: var(--ul-grey-7);
+    cursor: pointer;
+    font-size: .82rem;
+
+    .material-symbols-outlined { font-size: 1.15rem; }
+
+    &:hover {
+        background: var(--ul-hover-bg);
+        color: var(--ul-grey-9);
+    }
+
+    &.is-active {
+        background: var(--ul-color-accent-bg);
+        color: var(--ul-color-accent-fg);
+    }
+}
+
+.article-tool-sep {
+    width: 1px;
+    height: 1.25rem;
+    margin: 0 .25rem;
+    background: var(--ul-grey-1b);
+}
+
+.article-toolbar-spacer { flex: 1; }
+
+.article-editor-split {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.article-panel--preview-open .article-editor-split {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+
+    @media (max-width: $breakpoint-sm) {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+.article-editor-textarea {
+    width: 100%;
+    min-height: 24rem;
+    padding: .85rem 1rem;
+    border: 1px solid var(--ul-grey-1b);
+    border-radius: 0 0 $radius-sm $radius-sm;
+    background: var(--ul-control-bg);
+    color: var(--ul-grey-9);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: .9rem;
+    line-height: 1.6;
+    resize: vertical;
+
+    &:focus {
+        outline: 2px solid var(--ul-color-accent-ring);
+        outline-offset: -1px;
+    }
+}
+
+.article-panel--preview-open .article-editor-textarea {
+    border-radius: 0 0 0 $radius-sm;
+}
+
+// -- WYSIWYG canvas (see frontend/ts/entries/article-wysiwyg.ts) -------------
+// TipTap mounts its own contenteditable `.ProseMirror` element as a child of
+// `[data-article-canvas]` - box-matches .article-editor-textarea above so
+// swapping between Source and visual mode doesn't shift layout. The
+// contenteditable itself gets the shared `.article-body` class (editorProps
+// in the TS entry), so headings/lists/tables/quotes/code all render with the
+// exact same typography as read mode and the preview pane - no separate
+// typography rules needed here, only editor chrome.
+.article-editor-canvas {
+    min-height: 24rem;
+    overflow-y: auto;
+
+    &[hidden] { display: none; }
+}
+
+.article-panel--preview-open .article-editor-canvas {
+    border-radius: 0 0 0 $radius-sm;
+}
+
+.article-editor-canvas .ProseMirror {
+    min-height: 24rem;
+    padding: .85rem 1rem;
+    outline: none;
+
+    p.is-editor-empty:first-child::before {
+        content: attr(data-placeholder);
+        float: left;
+        height: 0;
+        color: var(--ul-grey-4);
+        pointer-events: none;
+    }
+
+    img {
+        max-width: 100%;
+        border-radius: $radius-xs;
+    }
+
+    table .selectedCell {
+        background: color-mix(in srgb, var(--ul-color-accent-bg) 55%, transparent);
+    }
+}
+
+.article-mode-toggle.is-active {
+    background: var(--ul-color-accent-bg);
+    color: var(--ul-color-accent-fg);
+}
+
+.article-editor-preview {
+    border: 1px solid var(--ul-grey-1b);
+    border-left: none;
+    border-radius: 0 0 $radius-sm 0;
+    background: var(--ul-grey-0a);
+    overflow-y: auto;
+    max-height: 42rem;
+
+    @media (max-width: $breakpoint-sm) {
+        border-left: 1px solid var(--ul-grey-1b);
+        border-top: none;
+        border-radius: 0 0 $radius-sm $radius-sm;
+    }
+}
+
+.article-editor-preview-inner {
+    padding: .85rem 1rem;
+}
+
+.article-preview-empty {
+    color: var(--ul-grey-5);
+    font-style: italic;
+}
+
+.article-editor-help {
+    margin-top: .6rem;
+    font-size: .85rem;
+    color: var(--ul-grey-6);
+
+    summary {
+        display: inline-flex;
+        align-items: center;
+        gap: .35rem;
+        cursor: pointer;
+        user-select: none;
+
+        .material-symbols-outlined { font-size: 1rem; }
+    }
+}
+
+.article-editor-help-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: .35rem .9rem;
+    padding: .6rem .25rem 0;
+
+    code {
+        background: var(--ul-grey-0b);
+        padding: .05em .3em;
+        border-radius: $radius-xs;
+    }
+}
+
+// A collapsible explainer (native <details>, no JS needed) rather than a
+// permanent line of chrome - only shown in WYSIWYG mode, see rule below.
+.article-editor-wysiwyg-hint {
+    display: none;
+    color: var(--ul-grey-5);
+    font-size: .82rem;
+
+    summary {
+        display: inline-flex;
+        align-items: center;
+        gap: .4rem;
+        cursor: pointer;
+        user-select: none;
+        list-style: none; // hide the default disclosure triangle - the icon carries that role
+
+        &::-webkit-details-marker { display: none; }
+    }
+
+    p {
+        margin: .35rem 0 0 1.45rem; // aligns under the summary text, past its icon
+    }
+
+    code {
+        padding: .05em .35em;
+        border-radius: $radius-xs;
+        background: var(--ul-grey-0b);
+        color: var(--ul-grey-7);
+    }
+
+    .material-symbols-outlined { font-size: 1.05rem; }
+}
+
+[data-editor-mode="wysiwyg"] .article-editor-wysiwyg-hint {
+    display: block;
+}
+
+// -- Bubble menu (format-on-selection) and slash command menu (block insert)
+// TipTap's BubbleMenu/FloatingMenu extensions position and show/hide these
+// elements automatically; only their own chrome is styled here. Always a
+// dark floating surface regardless of site theme, same convention as the
+// tooltip system (--ul-tooltip-*), for contrast against any page content.
+.article-bubble-menu {
+    display: flex;
+    align-items: center;
+    gap: .1rem;
+    padding: .25rem;
+    border-radius: $radius-sm;
+    background: var(--ul-tooltip-bg);
+    border: 1px solid var(--ul-tooltip-border);
+    box-shadow: var(--ul-tooltip-shadow);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    z-index: 60;
+}
+
+.article-bubble-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    border: none;
+    border-radius: $radius-xs;
+    background: transparent;
+    color: var(--ul-tooltip-fg);
+    cursor: pointer;
+
+    .material-symbols-outlined { font-size: 1.15rem; }
+
+    &:hover { background: rgba(255, 255, 255, .14); }
+
+    &.is-active {
+        background: var(--ul-primary-color);
+        color: #fff;
+    }
+}
+
+.article-slash-menu {
+    display: flex;
+    flex-direction: column;
+    gap: .1rem;
+    min-width: 13rem;
+    max-height: 18rem;
+    overflow-y: auto;
+    padding: .35rem;
+    border-radius: $radius-sm;
+    background: var(--ul-tooltip-bg);
+    border: 1px solid var(--ul-tooltip-border);
+    box-shadow: var(--ul-tooltip-shadow);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    z-index: 60;
+}
+
+.article-slash-item {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    padding: .4rem .55rem;
+    border: none;
+    border-radius: $radius-xs;
+    background: transparent;
+    color: var(--ul-tooltip-fg);
+    font-size: .85rem;
+    text-align: left;
+    cursor: pointer;
+
+    .material-symbols-outlined { font-size: 1.1rem; opacity: .85; }
+
+    &:hover,
+    &.is-selected {
+        background: var(--ul-primary-color);
+        color: #fff;
+    }
+}
+
+.article-slash-empty {
+    padding: .5rem .6rem;
+    color: var(--ul-tooltip-fg);
+    opacity: .7;
+    font-size: .82rem;
+}
+
+// "+" shown on an empty line - clicking it types "/" to open the same slash
+// menu above, so there's exactly one insertion popup to maintain.
+.article-floating-plus {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.6rem;
+    height: 1.6rem;
+    margin-left: -4rem;
+    border: 1px solid var(--ul-grey-2);
+    border-radius: $radius-xs;
+    background: var(--ul-control-bg);
+    color: var(--ul-grey-6);
+    cursor: pointer;
+
+    .material-symbols-outlined { font-size: 1.05rem; }
+
+    &:hover {
+        background: var(--ul-hover-bg);
+        color: var(--ul-grey-9);
+        border-color: var(--ul-grey-3);
+    }
+}
+
+// Hidden until the user has actually changed something (root's
+// [data-dirty="1"], set by article-editor.js's textarea `input` listener -
+// already reset for free on every save/cancel/restore, since those all swap
+// in a fresh #article-panel with no data-dirty attribute at all) - then
+// appears as a save bar fixed to the bottom of the viewport instead of
+// permanently occupying in-page space below an article that's just being
+// read. Same floating-surface treatment as .ul-bulk-bar (_gallery.scss).
+.article-editor-footer {
+    display: none;
+}
+
+[data-article-editor][data-dirty="1"] .article-editor-footer {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    flex-wrap: wrap;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 4rem;
+    z-index: 500;
+    max-width: 70rem;
+    margin: 0 auto;
+    padding: .75rem 1.25rem;
+    padding-bottom: calc(.75rem + env(safe-area-inset-bottom, 0px));
+    background: color-mix(in srgb, var(--ul-surface-raised) 92%, transparent);
+    backdrop-filter: blur(20px) saturate(1.15);
+    -webkit-backdrop-filter: blur(20px) saturate(1.15);
+    border: 1px solid var(--ul-surface-raised-border);
+    border-radius: $radius-md $radius-md 0 0;
+    box-shadow:
+        0 -10px 40px rgba(15, 23, 42, .14),
+        0 -2px 8px rgba(15, 23, 42, .08);
+    animation: article-footer-slide-up .25s cubic-bezier(.34, 1.56, .64, 1);
+}
+
+@keyframes article-footer-slide-up {
+    from { transform: translateY(100%); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
+.article-summary-input {
+    flex: 1;
+    min-width: 220px;
+    padding: .5rem .75rem;
+    border: 1px solid var(--ul-grey-1b);
+    border-radius: $radius-sm;
+    background: var(--ul-control-bg);
+    color: var(--ul-grey-9);
+    font-size: .88rem;
+}
+
+.article-char-count {
+    color: var(--ul-grey-5);
+    font-size: .78rem;
+    white-space: nowrap;
+
+    &--warn { color: var(--ul-color-danger-text); font-weight: 600; }
+}
+
+.article-editor-actions {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    margin-left: auto;
+}
+
+// -- Revision history -------------------------------------------------------
+
+.article-history-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.article-history-row {
+    border-bottom: 1px solid var(--ul-grey-1);
+
+    &:last-child { border-bottom: none; }
+
+    &--current .article-history-number { color: var(--ul-primary-color); }
+}
+
+.article-history-main {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    padding: .55rem .25rem;
+}
+
+.article-history-number {
+    font-weight: 700;
+    font-size: .82rem;
+    color: var(--ul-grey-5);
+    min-width: 2.2rem;
+}
+
+.article-history-summary {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: .1rem;
+}
+
+.article-history-meta {
+    font-size: .85rem;
+    color: var(--ul-grey-6);
+
+    strong { color: var(--ul-grey-8); }
+}
+
+.article-history-edit-summary {
+    font-size: .85rem;
+    font-style: italic;
+    color: var(--ul-grey-7);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.article-history-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: .2rem;
+    margin-left: .35rem;
+    padding: .05rem .45rem;
+    border-radius: $radius-full;
+    background: var(--ul-grey-1);
+    color: var(--ul-grey-7);
+    font-size: .7rem;
+    font-weight: 600;
+
+    .material-symbols-outlined { font-size: .85rem; }
+
+    &--current {
+        background: var(--ul-color-success-bg);
+        border: 1px solid var(--ul-color-success-border);
+    }
+}
+
+.article-history-delta {
+    font-size: .82rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+
+    &--add { color: $color-green-700; }
+    &--del { color: $color-red-700; }
+
+    [data-theme="dark"] & {
+        &--add { color: $color-green-300; }
+        &--del { color: $color-red-300; }
+    }
+}
+
+.article-history-actions {
+    display: flex;
+    align-items: center;
+    gap: .25rem;
+}
+
+.article-history-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: .5rem;
+    padding: 1.75rem 1rem;
+    text-align: center;
+    color: var(--ul-grey-6);
+    font-size: .9rem;
+
+    .material-symbols-outlined {
+        font-size: 2.2rem;
+        color: var(--ul-grey-3);
+    }
+
+    p { margin: 0; max-width: 30rem; }
+}
+
+// Two-column history layout on the wiki page (field edits + article revisions)
+.wiki-history-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(28rem, 100%), 1fr));
+    gap: 1rem;
+    align-items: start;
+}
+
+// -- Revision diff ----------------------------------------------------------
+
+.article-revision-detail:not(:empty) {
+    margin-bottom: 1rem;
+}
+
+.article-diff {
+    border: 1px solid var(--ul-grey-1b);
+    border-radius: $radius-sm;
+    overflow: hidden;
+}
+
+.article-diff-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .75rem;
+    flex-wrap: wrap;
+    padding: .6rem .85rem;
+    background: var(--ul-grey-0);
+    border-bottom: 1px solid var(--ul-grey-1b);
+}
+
+.article-diff-title {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    flex-wrap: wrap;
+    font-size: .9rem;
+
+    .material-symbols-outlined {
+        font-size: 1.1rem;
+        color: var(--ul-primary-color);
+    }
+}
+
+.article-diff-actions {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+}
+
+.article-diff-body {
+    max-height: 24rem;
+    overflow: auto;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: .82rem;
+    line-height: 1.5;
+
+    &--empty {
+        padding: .85rem;
+        font-family: inherit;
+        color: var(--ul-grey-6);
+        font-style: italic;
+    }
+}
+
+.article-diff-line {
+    display: flex;
+    gap: .5rem;
+    padding: .05rem .85rem;
+    white-space: pre-wrap;
+    word-break: break-word;
+
+    &--add {
+        background: rgba($color-green-500, .14);
+        .article-diff-gutter { color: $color-green-700; }
+    }
+
+    &--del {
+        background: rgba($color-red-500, .12);
+        .article-diff-gutter { color: $color-red-700; }
+    }
+
+    &--skip {
+        justify-content: center;
+        padding: .3rem;
+        color: var(--ul-grey-5);
+        background: var(--ul-grey-0);
+        font-size: .75rem;
+    }
+}
+
+.article-diff-gutter {
+    width: 1ch;
+    flex: none;
+    font-weight: 700;
+    user-select: none;
+}
+
+.article-diff-text {
+    flex: 1;
+    min-width: 0;
+}

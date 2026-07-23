@@ -1,0 +1,149 @@
+// AI link-extraction review page (pages/ai/extractions.html) - the unlinked
+// page reached from each run's completion notification.
+
+@use 'variables' as *;
+
+.ai-extractions-page {
+    max-width: 56rem;
+    margin: 0 auto;
+}
+
+.ai-extractions-limit {
+    color: var(--ul-grey-6);
+    font-size: .85rem;
+    margin: 0 0 1rem;
+}
+
+.ai-extractions-empty {
+    color: var(--ul-grey-6);
+    font-size: .9rem;
+
+    .material-symbols-outlined {
+        font-size: 1rem;
+        vertical-align: middle;
+    }
+}
+
+.ai-extractions-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: .9rem;
+}
+
+.ai-extraction-item {
+    @include surface($radius: 10px);
+    padding: .9rem 1.1rem;
+
+    &--failed { border-left: 3px solid var(--ul-color-danger-accent, #e05555); }
+    &--success { border-left: 3px solid $color-green-600; }
+}
+
+.ai-extraction-meta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: .35rem 1rem;
+    font-size: .85rem;
+}
+
+.ai-extraction-status {
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+    font-weight: 600;
+    color: var(--ul-grey-7);
+
+    .material-symbols-outlined { font-size: 1rem; }
+
+    &--success { color: $color-green-600; }
+    &--failed { color: var(--ul-color-danger-accent, #e05555); }
+}
+
+.ai-extraction-pin {
+    display: inline-flex;
+    align-items: center;
+    gap: .2rem;
+    color: var(--primary-color);
+
+    .material-symbols-outlined { font-size: 1rem; }
+}
+
+.ai-extraction-date {
+    margin-left: auto;
+    color: var(--ul-grey-5);
+    font-size: .78rem;
+}
+
+.ai-extraction-url {
+    display: block;
+    margin-top: .25rem;
+    font-size: .8rem;
+    color: var(--ul-grey-6);
+    word-break: break-all;
+
+    &:hover { color: var(--primary-color); }
+}
+
+.ai-extraction-error {
+    margin: .5rem 0 0;
+    font-size: .85rem;
+    color: var(--ul-color-danger-accent, #e05555);
+}
+
+.ai-extraction-results {
+    list-style: none;
+    margin: .6rem 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: .35rem;
+}
+
+.ai-extraction-result {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: .3rem .75rem;
+    font-size: .85rem;
+    padding: .35rem .5rem;
+    border-radius: 6px;
+    background: var(--ul-surface-raised);
+}
+
+.ai-extraction-result-label {
+    font-weight: 600;
+    color: var(--ul-grey-8);
+    flex: 0 0 8.5rem;
+}
+
+.ai-extraction-result-value {
+    color: var(--ul-grey-8);
+    word-break: break-word;
+}
+
+.ai-extraction-result-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: .15rem;
+    font-size: .72rem;
+    border-radius: 999px;
+    padding: .05rem .5rem;
+    background: var(--ul-surface-border);
+    color: var(--ul-grey-6);
+
+    .material-symbols-outlined { font-size: .85rem; }
+
+    &--applied {
+        background: rgba(52, 168, 83, .14);
+        color: $color-green-600;
+    }
+}
+
+.ai-extraction-result-note {
+    flex-basis: 100%;
+    color: var(--ul-grey-5);
+    font-size: .76rem;
+}

@@ -53,7 +53,7 @@ def get_app_version() -> str:
     r"""Return the semantic application version from pyproject.toml or the installed package.
 
     Returns:
-        Semantic version string such as ``0.4.0b0``.
+        Semantic version string such as ``0.5.0b0``.
     """
     try:
         with PYPROJECT_PATH.open("rb") as pyproject_file:
@@ -289,9 +289,12 @@ def trigger_development_app_reload() -> tuple[bool, str]:
     """
     logger.info("Attempting to reload the server...")
     parent_cmd = _parent_process_command()
+    # signal.SIGHUP isn't defined on Windows, but gunicorn (and thus this
+    # branch) only ever runs on Linux, where SIGHUP is always signal 1.
+    sighup = getattr(signal, "SIGHUP", 1)
     if "gunicorn" in parent_cmd:
         try:
-            os.kill(os.getppid(), signal.SIGHUP)
+            os.kill(os.getppid(), sighup)
         except OSError:
             logger.warning("could not signal gunicorn master to reload", exc_info=True)
             return False, "Could not signal the application server to reload."

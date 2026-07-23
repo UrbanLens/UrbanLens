@@ -27,8 +27,10 @@ from typing import TYPE_CHECKING, ClassVar
 if TYPE_CHECKING:
     from urbanlens.dashboard.plugins.hooks import HookRegistry
     from urbanlens.dashboard.services.apis.locations.base import SatelliteViewProvider, StreetViewProvider
+    from urbanlens.dashboard.services.enrichment import EnrichmentSource
     from urbanlens.dashboard.services.external_data import PanelSource
     from urbanlens.dashboard.services.locations.name_resolution import NameProvider
+    from urbanlens.dashboard.services.photo_keywords import PhotoKeywordProvider
     from urbanlens.dashboard.services.rate_limiter import ServiceDefaults
 
 
@@ -119,6 +121,37 @@ class UrbanLensPlugin:
         Returns:
             Provider gateway instances; empty when the plugin contributes
             no street-level imagery.
+        """
+        return []
+
+    def get_enrichment_sources(self) -> list[EnrichmentSource]:
+        """Background-enrichment sources contributed by this plugin.
+
+        Sources run inside the hourly scheduled enrichment task
+        (``tasks.run_scheduled_enrichment``), which proactively backfills
+        high-value data (names, aliases, addresses, boundaries, ...) for every
+        pinned/wiki'd Location while staying inside each service's configured
+        rate limits. Each source tracks its own per-location completion, so
+        contributing one never affects when another provider runs.
+
+        Returns:
+            EnrichmentSource instances; empty when the plugin contributes no
+            background enrichment.
+        """
+        return []
+
+    def get_photo_keyword_providers(self) -> list[PhotoKeywordProvider]:
+        """Photo keywording strategies contributed by this plugin.
+
+        Providers run in the background after each photo upload (when the
+        uploader has keyword generation enabled) and store their own
+        ``ImageKeyword`` rows attributed to their slug, making photos
+        text-searchable in global search. Multiple plugins may contribute
+        providers simultaneously; each stores keywords independently.
+
+        Returns:
+            PhotoKeywordProvider instances; empty when the plugin contributes
+            no photo keywording.
         """
         return []
 

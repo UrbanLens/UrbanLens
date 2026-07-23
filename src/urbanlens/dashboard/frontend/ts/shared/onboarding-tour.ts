@@ -31,6 +31,14 @@ export interface OnboardingTourConfig {
  */
 export function initOnboardingTour(config: OnboardingTourConfig): void {
     const sessionKey = `${config.prefix}_later`;
+    // The card currently on screen, if any - tracked so a tab change (or any
+    // other retryEvent) can tell whether it's still relevant, not just
+    // whether *a* card happens to be showing. Without this, a card whose
+    // target lives on one Organize tab (e.g. "drag-priority", anchored to
+    // #priority-list) stayed on screen after switching to an unrelated tab,
+    // since tryShow() used to bail out early whenever any card was visible,
+    // never re-checking that specific card's own ready() after the switch.
+    let activeCard: OnboardingCard | null = null;
 
     function dismissed(id: string): boolean {
         try {
@@ -60,9 +68,21 @@ export function initOnboardingTour(config: OnboardingTourConfig): void {
             return false;
         }
     }
+    function isCardTargetVisible(card: OnboardingCard): boolean {
+        // A card's target selector often stays present in the DOM even on an
+        // unrelated tab (tab switching just toggles a panel's `hidden`
+        // attribute rather than removing its content), so ready()'s plain
+        // existence check alone can't tell a truly-gone target apart from one
+        // that's merely off-screen right now. offsetParent is null for any
+        // element that (or whose ancestor) has display:none - a reliable,
+        // cheap "is this actually rendered" signal.
+        const el = document.querySelector<HTMLElement>(card.target);
+        return !!el && el.offsetParent !== null;
+    }
     function clear(): void {
         document.querySelector(config.hostSelector)?.replaceChildren();
         document.querySelectorAll(".onboarding-focus").forEach((el) => el.classList.remove("onboarding-focus"));
+        activeCard = null;
     }
     function registerAutoDismiss(card: OnboardingCard): void {
         if (dismissed(card.id) || !card.watchSelector) return;
@@ -74,6 +94,7 @@ export function initOnboardingTour(config: OnboardingTourConfig): void {
         const host = document.querySelector(config.hostSelector);
         if (!host) return;
         clear();
+        activeCard = card;
         document.querySelector(card.target)?.classList.add("onboarding-focus");
         const el = document.createElement("section");
         el.className = "page-onboarding-card";
@@ -104,19 +125,21 @@ export function initOnboardingTour(config: OnboardingTourConfig): void {
     }
     function tryShow(): void {
         if (laterSet()) return;
-        const card = config.cards.find((c) => c.ready() && !dismissed(c.id));
+        // Re-validate the card already on screen (if any) instead of just
+        // leaving it up indefinitely - its target may no longer apply after
+        // whatever triggered this call (e.g. switching Organize tabs away
+        // from the one its target lives on).
+        if (activeCard && (!activeCard.ready() || !isCardTargetVisible(activeCard))) clear();
+        if (document.querySelector(".page-onboarding-card")) return;
+        const card = config.cards.find((c) => c.ready() && isCardTargetVisible(c) && !dismissed(c.id));
         if (card) show(card);
     }
 
     config.cards.forEach(registerAutoDismiss);
     setTimeout(tryShow, config.initialDelayMs ?? 900);
     if (config.retryEvent) {
-        document.addEventListener(config.retryEvent, () => {
-            if (!document.querySelector(".page-onboarding-card")) setTimeout(tryShow, 250);
-        });
+        document.addEventListener(config.retryEvent, () => setTimeout(tryShow, 250));
     } else {
-        document.body.addEventListener("htmx:afterSettle", () => {
-            if (!document.querySelector(".page-onboarding-card")) setTimeout(tryShow, 250);
-        });
+        document.body.addEventListener("htmx:afterSettle", () => setTimeout(tryShow, 250));
     }
 }

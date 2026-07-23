@@ -1,0 +1,21 @@
+{% comment %}
+Stats grid widget - counts across everything the signed-in user has created.
+Context: home_stats (list of {label, value, icon}), from home_dashboard_context().
+{% endcomment %}
+<section class="home-widget home-widget--stats ul-section" data-widget-key="stats">
+    <div class="home-widget-heading">
+        <span class="home-widget-icon"><i class="material-symbols-outlined">bar_chart</i></span>
+        <div><h3>Your stats</h3><p>Everything you've built so far.</p></div>
+    </div>
+    <div class="home-stats-grid" aria-label="Your activity stats">
+        {% for stat in home_stats %}
+            {% if stat.value > 0 %}
+                <div class="home-stat">
+                    <span class="home-stat-icon"><i class="material-symbols-outlined">{{ stat.icon }}</i></span>
+                    <span class="home-stat-value">{{ stat.value }}</span>
+                    <span class="home-stat-label">{{ stat.label }}</span>
+                </div>
+            {% endif %}
+        {% endfor %}
+    </div>
+</section>

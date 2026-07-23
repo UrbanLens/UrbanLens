@@ -29,7 +29,7 @@ class AvatarService:
     """
 
     ANIMAL_EMOJIS: dict[str, str] = {
-        "badger": "🦡",
+        "labelr": "🦡",
         "bear": "🐻",
         "beetle": "🪲",
         "bison": "🦬",
@@ -136,8 +136,8 @@ class AvatarService:
 
         candidates = list(cls.ANIMAL_EMOJIS.items())
         n = min(n, len(candidates), len(cls.COLORS))
-        chosen_animals = _random.sample(candidates, n)
-        chosen_colors = _random.sample(cls.COLORS, n)
+        chosen_animals = _random.sample(candidates, n)  # nosec B311 - cosmetic avatar suggestions, not security-sensitive
+        chosen_colors = _random.sample(cls.COLORS, n)  # nosec B311 - cosmetic avatar suggestions, not security-sensitive
         return [{"animal": animal, "emoji": emoji, "color": chosen_colors[i]} for i, (animal, emoji) in enumerate(chosen_animals)]
 
     @classmethod

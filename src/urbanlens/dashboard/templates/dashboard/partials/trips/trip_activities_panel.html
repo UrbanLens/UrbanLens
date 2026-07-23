@@ -1,4 +1,5 @@
 <div id="trip-activities-panel" class="trip-panel card"
+     {% if oob %}hx-swap-oob="true"{% endif %}
      data-trip-start="{{ trip.start_date|date:'Y-m-d'|default:'' }}"
      data-trip-end="{{ trip.end_date|date:'Y-m-d'|default:'' }}"
      data-all-completed="{% if all_activities_completed %}true{% else %}false{% endif %}"
@@ -8,39 +9,37 @@
         <span>Activities</span>
         {% if activities_with_index %}<span class="badge">{{ activities_with_index|length }}</span>{% endif %}
         <div class="card-header-actions">
-            <button type="button" class="btn btn--secondary view-toggle-btn" id="trip-show-completed-btn"
-                    data-view="completed"
-                    title="Show completed activities"
-                    onclick="window.tripToggleShowCompleted()">
-                <i class="material-symbols-outlined">check_circle</i>
-            </button>
             <div class="view-toggle-group" role="group" aria-label="Activities view">
-                <button type="button" class="btn btn--secondary view-toggle-btn view-toggle-btn--active"
+                <button type="button" class="btn btn--secondary view-toggle-btn view-toggle-btn--active view-toggle-btn--icon"
                         data-view="list" title="List view"
                         onclick="tripSetView('list')">
                     <i class="material-symbols-outlined">view_list</i>
                 </button>
-                <button type="button" class="btn btn--secondary view-toggle-btn"
+                <button type="button" class="btn btn--secondary view-toggle-btn view-toggle-btn--icon"
                         data-view="calendar" title="Calendar view"
                         onclick="tripSetView('calendar')">
                     <i class="material-symbols-outlined">date_range</i>
                 </button>
             </div>
-            <button type="button" class="btn btn--sm btn--primary"
+            {% if viewer_has_joined %}
+            <button type="button" class="btn btn--icon-sm"
                     onclick="document.getElementById('add-activity-dialog').showModal()">
                 <i class="material-symbols-outlined">add</i>
             </button>
+            {% endif %}
         </div>
     </div>
 
     {# -- Tabs ------------------------------------------------------------- #}
     <div class="activity-tabs">
-        <button type="button" class="activity-tab activity-tab--active" data-tab="all"
-                onclick="tripSetTab('all')">All</button>
+        <button type="button" class="activity-tab activity-tab--active" data-tab="upcoming"
+                onclick="tripSetTab('upcoming')">Upcoming</button>
         <button type="button" class="activity-tab" data-tab="proposed"
-                onclick="tripSetTab('proposed')">Proposed</button>
+                {% if not proposed_count %}disabled title="No proposed activities"{% endif %} onclick="tripSetTab('proposed')">Proposed</button>
         <button type="button" class="activity-tab" data-tab="confirmed"
-                onclick="tripSetTab('confirmed')">Confirmed</button>
+                {% if not confirmed_count %}disabled title="No confirmed activities"{% endif %} onclick="tripSetTab('confirmed')">Confirmed</button>
+        <button type="button" class="activity-tab" data-tab="completed"
+                {% if not completed_count %}disabled title="No completed activities"{% endif %} onclick="tripSetTab('completed')">Completed</button>
     </div>
 
     {# -- List view -------------------------------------------------------- #}
@@ -65,9 +64,9 @@
                 data-act-status="{{ act.status }}"
                 data-act-location-hidden="{{ act.location_hidden|yesno:'true,false' }}"
                 data-act-can-manage="{{ item.can_manage|yesno:'true,false' }}"
-                data-edit-url="{% url 'trips.activity.edit' trip.uuid act.id %}"
-                data-delete-url="{% url 'trips.activity.delete' trip.uuid act.id %}"
-                data-status-url="{% url 'trips.activity.status' trip.uuid act.id %}"
+                data-edit-url="{% url 'trips.activity.edit' trip.slug act.id %}"
+                data-delete-url="{% url 'trips.activity.delete' trip.slug act.id %}"
+                data-status-url="{% url 'trips.activity.status' trip.slug act.id %}"
                 {% if act_index %}onmouseenter="if(window.tripHighlightMarker)window.tripHighlightMarker({{ act.id }},true)"
                 onmouseleave="if(window.tripHighlightMarker)window.tripHighlightMarker({{ act.id }},false)"{% endif %}>
 
@@ -90,13 +89,31 @@
                 {% endif %}
 
                 <div class="trip-activity-body">
-                    <span class="trip-activity-name{% if item.effective_location_hidden %} trip-activity-name--secret{% endif %}">
-                        {% if item.effective_location_hidden %}
-                            Secret Location
-                        {% else %}
+                    <div class="trip-activity-title-row">
+                        {% if item.pin_slug and not item.effective_location_hidden %}
+                        <a href="{% url 'pin.details' item.pin_slug %}" class="trip-activity-name">
                             {{ act.effective_title }}
+                        </a>
+                        {% else %}
+                        <span class="trip-activity-name{% if item.effective_location_hidden %} trip-activity-name--secret{% endif %}">
+                            {% if item.effective_location_hidden %}
+                                Secret Location
+                            {% else %}
+                                {{ act.effective_title }}
+                            {% endif %}
+                        </span>
                         {% endif %}
+                        <span class="trip-activity-status-chip trip-activity-status-chip--{{ act.status }}">
+                            {% if act.status == 'proposed' %}Proposed
+                            {% elif act.status == 'confirmed' %}Confirmed
+                            {% else %}Completed{% endif %}
+                        </span>
+                    </div>
+                    {% if not item.has_coords and not item.effective_location_hidden %}
+                    <span class="trip-weather-na" title="No location set - this activity won't show a weather forecast">
+                        <i class="material-symbols-outlined">location_off</i> Needs location
                     </span>
+                    {% endif %}
                     {% if act.scheduled_at %}
                     <span class="trip-activity-time">
                         <i class="material-symbols-outlined">schedule</i>
@@ -119,16 +136,16 @@
                     <span class="trip-activity-notes">{{ act.notes }}</span>
                     {% endif %}
                     {% if act.added_by %}
-                    <span class="trip-activity-attr">Added by {% if act.added_by.user == request.user %}you{% else %}<a href="{% url 'profile.view_user' act.added_by.slug %}" class="trip-attr-link">{{ act.added_by.user.username }}</a>{% endif %}</span>
+                    <span class="trip-activity-attr">Added by {% if act.added_by.user == request.user %}you{% elif act.added_by.is_masked %}{{ act.added_by.display_name }}{% else %}<a href="{{ act.added_by.display_profile_url }}" class="trip-attr-link">{{ act.added_by.user.get_full_name|default:act.added_by.user.username }}</a>{% endif %}</span>
                     {% endif %}
 
-                    {# -- Voting (proposed activities only) ------------------ #}
-                    {% if act.status == 'proposed' %}
+                    {# -- Voting (proposed activities only, joined members only) #}
+                    {% if act.status == 'proposed' and viewer_has_joined %}
                     <div class="activity-vote-row">
                         <button type="button"
                                 class="activity-vote-btn{% if item.user_vote == 'up' %} activity-vote-btn--active activity-vote-btn--up{% endif %}"
                                 title="Vote up"
-                                hx-post="{% url 'trips.activity.vote' trip.uuid act.id %}"
+                                hx-post="{% url 'trips.activity.vote' trip.slug act.id %}"
                                 hx-vals='{"vote": "up"}'
                                 hx-target="#trip-activities-panel"
                                 hx-swap="outerHTML">
@@ -138,7 +155,7 @@
                         <button type="button"
                                 class="activity-vote-btn{% if item.user_vote == 'down' %} activity-vote-btn--active activity-vote-btn--down{% endif %}"
                                 title="Vote down"
-                                hx-post="{% url 'trips.activity.vote' trip.uuid act.id %}"
+                                hx-post="{% url 'trips.activity.vote' trip.slug act.id %}"
                                 hx-vals='{"vote": "down"}'
                                 hx-target="#trip-activities-panel"
                                 hx-swap="outerHTML">
@@ -149,7 +166,7 @@
                         <button type="button"
                                 class="activity-vote-btn activity-vote-btn--clear"
                                 title="Clear my vote"
-                                hx-post="{% url 'trips.activity.vote' trip.uuid act.id %}"
+                                hx-post="{% url 'trips.activity.vote' trip.slug act.id %}"
                                 hx-vals='{"vote": ""}'
                                 hx-target="#trip-activities-panel"
                                 hx-swap="outerHTML">
@@ -161,20 +178,20 @@
                 </div>
 
                 <div class="trip-activity-actions">
-                    {% if act.status != 'completed' %}
+                    {% if act.status != 'completed' and viewer_has_joined %}
                     <button type="button"
                             class="detail-pin-action-btn trip-complete-btn"
                             title="Mark as completed"
-                            onclick="tripOpenCompleteDialog('{% url 'trips.activity.complete' trip.uuid act.id %}', '{% if act.scheduled_at %}{{ act.scheduled_at|date:"Y-m-d" }}{% endif %}')">
+                            onclick="tripOpenCompleteDialog('{% url 'trips.activity.complete' trip.slug act.id %}', '{% if act.scheduled_at %}{{ act.scheduled_at|date:"Y-m-d" }}{% endif %}')">
                         <i class="material-symbols-outlined">check</i>
                     </button>
                     <button type="button"
                             class="detail-pin-action-btn trip-status-btn {% if act.status == 'confirmed' %}trip-status-btn--confirmed{% else %}trip-status-btn--proposed{% endif %}"
                             title="{% if act.status == 'confirmed' %}Mark as proposed{% else %}Mark as confirmed{% endif %}"
-                            hx-post="{% url 'trips.activity.status' trip.uuid act.id %}"
+                            hx-post="{% url 'trips.activity.status' trip.slug act.id %}"
                             hx-target="#trip-activities-panel"
                             hx-swap="outerHTML">
-                        <i class="material-icons">{% if act.status == 'confirmed' %}check_circle{% else %}radio_button_unchecked{% endif %}</i>
+                        <i class="material-icons">{% if act.status == 'confirmed' %}help{% else %}radio_button_unchecked{% endif %}</i>
                     </button>
                     {% endif %}
                     <button type="button" class="detail-pin-action-btn"
@@ -184,7 +201,7 @@
                     </button>
                     <button type="button" class="detail-pin-action-btn"
                             title="Remove activity"
-                            hx-delete="{% url 'trips.activity.delete' trip.uuid act.id %}"
+                            hx-delete="{% url 'trips.activity.delete' trip.slug act.id %}"
                             hx-target="#trip-activities-panel"
                             hx-swap="outerHTML"
                             hx-confirm="Remove this activity?"
@@ -201,6 +218,9 @@
             All activities for this trip have been completed.
         </p>
         {% endif %}
+        <p class="trip-panel-empty trip-panel-empty--tab" hidden>
+            Nothing in this view.
+        </p>
         {% else %}
         <p class="trip-panel-empty">No activities yet.</p>
         {% endif %}

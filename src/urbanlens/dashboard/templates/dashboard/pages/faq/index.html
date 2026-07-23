@@ -17,15 +17,18 @@
 </section>
 
 {# -- Quick jump nav --------------------------------------------------------- #}
-<nav class="faq-jump" aria-label="FAQ categories">
-    <div class="faq-jump-inner">
-        <a href="#getting-started" class="faq-jump-link">Getting started</a>
-        <a href="#privacy-sharing" class="faq-jump-link">Privacy &amp; sharing</a>
-        <a href="#features" class="faq-jump-link">Features</a>
-        <a href="#safety" class="faq-jump-link">Safety</a>
-        <a href="#account-data" class="faq-jump-link">Account &amp; data</a>
+<div class="ul-page-subnav">
+    <div class="ul-page-subnav__inner">
+        <nav class="ul-subnav-tabs" aria-label="FAQ categories">
+            <a href="#getting-started" class="ul-subnav-tab" data-faq-tab>Getting started</a>
+            <a href="#privacy-sharing" class="ul-subnav-tab" data-faq-tab>Privacy &amp; sharing</a>
+            <a href="#features" class="ul-subnav-tab" data-faq-tab>Features</a>
+            <a href="#safety" class="ul-subnav-tab" data-faq-tab>Safety</a>
+            <a href="#account-data" class="ul-subnav-tab" data-faq-tab>Account &amp; data</a>
+            <a href="#external-connections" class="ul-subnav-tab" data-faq-tab>External connections</a>
+        </nav>
     </div>
-</nav>
+</div>
 
 {# -- Getting started -------------------------------------------------------- #}
 <section class="faq-section" id="getting-started">
@@ -65,13 +68,57 @@
 
             <details class="faq-item">
                 <summary class="faq-item-summary">
+                    <span>Is this a social media site?</span>
+                    <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
+                </summary>
+                <div class="faq-item-body">
+                    <p>
+                        Not really.
+                    </p>
+                    <p>
+                        It's almost the opposite. This is an antisocial media site.
+                    </p>
+                    <p>
+                        Social media sites center around sharing things broadly, and only reel it in as exceptions. Everything is some version of "public" by default, because that's the point of social media. So it's easy to find people, and to be found, and easy to make your thoughts and content visible to the world.
+                    </p>
+                    <p>
+                        UrbanLens centers around private tools, just for you. The social components of the site are the exceptions to the core functionality, and that core functionality doesn't require anyone else to be a useful tool. Here, it's easy to be invisible, and easy to keep your content private, just for you.
+                    </p>
+                </div>
+            </details>
+
+            <details class="faq-item">
+                <summary class="faq-item-summary">
                     <span>Is UrbanLens free?</span>
                     <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
                 </summary>
                 <div class="faq-item-body">
                     <p>
-                        Yes, as in speech and beer; UrbanLens is free, and open source. It's run by one person, who pays for hosting, and every other expense out of pocket. Some external APIs are limited for that reason. You can check out the source code on our
-                        <a href="https://github.com/UrbanLens/UrbanLens">GitHub page</a>.
+                        Yes, as in speech and beer; UrbanLens is free, and open source. It's run by one person, who pays for hosting, and every other expense out of pocket. Some external APIs are limited for that reason. You can check out the source code on our <a href="https://github.com/UrbanLens/UrbanLens">GitHub page</a>.
+                    </p>
+                    <p>
+                        It's not out of the question that I'll offer subscriptions in the future to access some features that would cost me a lot of money to support. For instance: AI tools. If I do that, I won't ask anyone to pay for stuff that doesn't cost me money. The point is to make a tool for people, not to create a business.
+                    </p>
+                </div>
+            </details>
+
+            <details class="faq-item">
+                <summary class="faq-item-summary">
+                    <span>Is the site as reliable as Google Maps?</span>
+                    <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
+                </summary>
+                <div class="faq-item-body">
+                    <p>
+                        Really? That's the standard for success? Come on.
+                    </p>
+                    <p>
+                        It depends on what you mean by "reliable". But, no.
+                    </p>
+                    <p>
+                        UrbanLens is still in beta, and I'm still working on it. I wrote the code all from scratch, and it's hosted on my own server that I built myself in my basement. I can't stress enough that I'm just one person.
+                    </p>
+                    <p>
+                        I promise to do my best to keep the site up and protect any data you store on it. But you should not store anything on this site that you don't have another copy of somewhere else, and you shouldn't give up any other tools you're currently using quite yet.
                     </p>
                 </div>
             </details>
@@ -83,12 +130,12 @@
                 </summary>
                 <div class="faq-item-body">
                     <p>
-                        I've put a ton of work into ensuring that you can use the site anonymously until you make an intentional decision to opt in to being more public. But if you want even more anonymity, you have three options:
+                        I've put a ton of work into ensuring that you can use the site anonymously until you make an intentional decision to be more public. If you want even more anonymity, you have three options:
                     </p>
                     <ol class="faq-ordered-list">
                         <li>You can run the code on your own hardware, and then your data will never leave your network. This requires some technical knowledge, but I've tried to make it easy, and I'm willing to help if you get stuck. You will not have any community features this way, unless you invite a bunch of friends to be your community.</li>
-                        <li>You can use this site, but register from a <a href="https://proton.me/mail">proton email address</a> and use a fake name. We go out of our way not to store information about you. You can verify that yourself by asking your favorite AI to assess <a href="https://github.com/UrbanLens/UrbanLens">our code</a>.</li>
-                        <li>You can disable 3 groups of features during registration, which will really limit your experience, but if that's your thing, I support you. That will prevent you from accidentally opting in to sharing your stuff.</li>
+                        <li>You can use this site, but register from a <a href="https://proton.me/mail">proton email address</a> and use a fake name. I go out of my way not to store information about you. You can verify that yourself by asking your favorite AI to assess <a href="https://github.com/UrbanLens/UrbanLens">the code</a>.</li>
+                        <li>You can disable 3 groups of features during registration, which will really limit your experience, but if that's your thing, I support you. If you do that, you will be prevented from opting in to sharing your stuff, even if you try.</li>
                     </ol>
                 </div>
             </details>
@@ -142,19 +189,19 @@
                         The site is setup very carefully to ensure that no one has any special privileges to your data. The privacy controls you set apply to everyone, even the site admin. You can verify this by looking at our code. The version we're running shows at the bottom left of every page, and if you're not a programmer, AI tools can help you understand the codebase and verify your data is safe.
                     </p>
                     <p>
-                        But let's also have a reality check.
+                        But let's also have a reality check, because I think setting good examples is important.
                     </p>
                     <p>
                         Anytime someone else owns the hardware your data is stored on, there is a pathway for them to see your data. Even if your data is encrypted, the hardware owner could intercept the data before encryption, or brute force the encryption key. If any mapping site out there tells you they can't see your pins without telling you this caveat, they're lying to you.
                     </p>
                     <p>
-                        I put a ton of time into trying to design something that didn't even store coordinates on my server, in order to get past this problem. If you look back through the git history, you can probably find a bunch of notes I wrote about it. I experimented with several ideas, and got part of the way through designing a peer-to-peer network before I came to the conclusion that this problem might be intractable.
+                        In order to get past this problem, I put a ton of time into designing something that didn't even store coordinates on my server. If you look back through the git history, you can probably find a bunch of notes I wrote about it. I experimented with several ideas, and got part of the way through designing a peer-to-peer network before I came to the conclusion that this problem might be intractable.
                     </p>
                     <p>
                         So the best I can do is show you every line of code in my application, and promise that I won't hack into my own software in order to see your pins. And if you're worried about it, you should take my code and put it on your own machine, where nobody has access except you.
                     </p>
                     <p>
-                        Please don't trust anyone else who doesn't explain this to you, and makes you assurances they can't keep.
+                        Please don't trust anyone who doesn't explain this to you, and makes you assurances they can't keep.
                     </p>
                 </div>
             </details>
@@ -166,7 +213,7 @@
                 </summary>
                 <div class="faq-item-body">
                     <p>
-                        A wiki is a community-editable page that is only accessible to people who already have the pin on their map.</p>
+                        A wiki is only accessible to people who already have the pin on their map.</p>
                     <p>
                         It's entirely separate from your personal pin. It's opt-in, so most wikis are going to be blank, unless someone decides to add information to them.
                     </p>
@@ -213,11 +260,11 @@
                     <ul>
                         <li>If your pins are in saved lists in Google Maps, you'll be given a chance to create different tags for each list that you import, so you don't have to redo the organizational system you already set up.</li>
                         <li>During import, you can click a checkbox to have an AI help you tag them, too. It does its best. Try not to hurt its feelings.</li>
-                        <li>When you upload photos, you can opt in to have UrbanLens read GPS coordinates from the EXIF metadata and suggest a matching pin.</li>
+                        <li>When you upload photos, you can have UrbanLens read GPS coordinates from the EXIF metadata and suggest a matching pin.</li>
                         <li>A friend of mine had a loose text file of notes about places... so I support that, too. Upload a text file and an AI will help out. Your mileage may vary.</li>
                         <li>Importing your location history can automatically make pins for you, if you want it to. The location history file is deleted immediately, just like all the other stuff you import.</li>
-                        <li>If you want to add friends, you can tag each other in trips you've been on, and that will make pins and mark things as visited for both of you. (You still have to click an "accept" button. I'm sorry, I know clicking buttons is hard.)</li>
-                        <li>You can opt in to marking places as visited just by logging into the site while you're there. You have to have reception for this, and it doesn't really seem like the easiest way to do it, but I tested it and it works.</li>
+                        <li>If you want to add friends, you can tag each other in trips you've been on, and that will make pins and mark things as visited for both of you. (You still have to click an "accept" button, because consent is a thing.)</li>
+                        <li>You can opt in to marking places as visited just by logging into the site while you're there. You have to have reception for this, and it doesn't really seem like the easiest way to do it, but it works.</li>
                         <li>Group trips make pins. So do safety checkins. And as many other things as I could think of.</li>
                         <li>Once you have your pins here, you can nest them into categories and tags in a whole bunch of configurations, which lets you search and filter in cool ways. Like... you could make your map only display pins that are in the "church" and "want to go" categories, but not in the "no entry" or "demolished" categories, and then you can keep adding filters onto that.</li>
                     </ul>
@@ -250,6 +297,9 @@
                     </p>
                     <p>
                         When these external APIs are contacted, we only send the minimum amount of data needed to get a relevant response. That usually means just the name of the place, or the coordinates.
+                    </p>
+                    <p>
+                        You can turn this off during registration, or from your settings page.
                     </p>
                 </div>
             </details>
@@ -314,7 +364,7 @@
 <section class="faq-section" id="account-data">
     <div class="faq-section-inner">
         <div class="faq-section-label">Account &amp; data</div>
-        <h2 class="faq-section-title">Your data, your rules.</h2>
+        <h2 class="faq-section-title">How we handle your data.</h2>
 
         <div class="faq-list">
             <details class="faq-item">
@@ -324,14 +374,36 @@
                 </summary>
                 <div class="faq-item-body">
                     <p>
-                        Yes. Any data we store about you is visible on your own profile page - there's no hidden
-                        user data on UrbanLens that isn't displayed back to you. We don't even store your ip.
+                        Yes. Any data we store about you is visible on your own profile page or your account
+                        Settings - there's no hidden user data on UrbanLens that isn't displayed back to you.
+                        We don't even store your ip.
                     </p>
                     <p>
                         But it's time for another reality check about ip addresses.
                     </p>
                     <p>
                         UrbanLens relies on services from other open source software, too, like a web server to handle your web traffic, a caching layer to make the site fast, and more. Some of those services see details about you, like your ip address, just because of the nature of web traffic. Sometimes those details are put into log files. I rotate those log files regularly, and no one without access to my server could ever see them in the first place... but, that's no reason not to use a VPN. They cost like $3 a month.
+                    </p>
+                </div>
+            </details>
+
+            <details class="faq-item">
+                <summary class="faq-item-summary">
+                    <span>What are you doing to protect my data?</span>
+                    <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
+                </summary>
+                <div class="faq-item-body">
+                    <p>
+                        The site data is stored on a RAID 10 array, so multiple drives need to fail before any data is lost. It's backed up as reasonably close to 3-2-1 as I can manage. The drives are encrypted on the server at rest, and only decrypted when the server is online. Any sensitive data in the database is also encrypted at rest on top of that. HTTPs also encrypts your data in transit, and direct messages are end-to-end encrypted on top of everything above.
+                    </p>
+                    <p>
+                        Regular database backups are run automatically and kept for a long time. Cloudflare, and other infrastructure, provide several additional protections for site reliability. The codebase has a rigorous CI/CD process that tests it for vulnerabilities every time it's changed, and it's automatically run through an AI that tries to identify any issues that managed to sneak in.
+                    </p>
+                    <p>
+                        There's also an export tool, so you can make your own backups and import them somewhere else any time you'd like.
+                    </p>
+                    <p>
+                        I could go on. I'm proud of it... but you still shouldn't count on it to store anything you can't bear to lose.
                     </p>
                 </div>
             </details>
@@ -351,6 +423,30 @@
                     </p>
                     <p>
                         There's an export tool you can use to get a copy of your data before you do that.
+                    </p>
+                </div>
+            </details>
+
+            <details class="faq-item" id="faq-e2ee">
+                <summary class="faq-item-summary">
+                    <span>What's a "recovery key", and why does UrbanLens want me to save one?</span>
+                    <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
+                </summary>
+                <div class="faq-item-body">
+                    <p>
+                        Your direct messages are end-to-end encrypted. That's a fancy way of saying: they're scrambled on your device before they're sent, and only you and the person you're talking to can unscramble them. Even if someone hacked into the site and stole the entire database, they wouldn't be able to read your messages.
+                    </p>
+                    <p>
+                        To make that work, your browser generates a secret key for you the first time you log in. That key is what actually unlocks your messages. Normally you never think about it - your password unlocks it automatically, on any device, every time you log in.
+                    </p>
+                    <p>
+                        The recovery key is a backup plan for the one situation your password can't cover: if you ever reset your password using the "forgot password" email link, the site can't use it to unlock your old key the normal way. Same thing if you signed up with Google or Discord and never set a password at all, and you're logging in from a brand new device. In both of those cases, the recovery key is what lets you keep reading your old encrypted messages instead of losing access to them.
+                    </p>
+                    <p>
+                        So... save it somewhere safe when the site shows it to you. A password manager is perfect for this. If you ever lose both your password-based access <em>and</em> your recovery key, there's genuinely no way for anyone, including me, to get your old encrypted messages back - that's the tradeoff for that level of privacy. You can always start fresh with a new key from Settings, you'll just lose access to messages sent before that point.
+                    </p>
+                    <p>
+                        One caveat: attachments like photos and shared maps in direct messages aren't encrypted yet, just the text of the messages themselves. Also... this only protects against someone getting a copy of the database - it doesn't protect you if someone in the real world steals your unlocked phone. Obviously.
                     </p>
                 </div>
             </details>
@@ -386,6 +482,67 @@
     </div>
 </section>
 
+{# -- External connections ------------------------------------------------------ #}
+<section class="faq-section faq-section--alt" id="external-connections">
+    <div class="faq-section-inner">
+        <div class="faq-section-label">External connections</div>
+        <h2 class="faq-section-title">Linking other services.</h2>
+
+        <div class="faq-list">
+            <details class="faq-item" id="faq-immich-what">
+                <summary class="faq-item-summary">
+                    <span>What is Immich?</span>
+                    <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
+                </summary>
+                <div class="faq-item-body">
+                    <p>
+                        <a href="https://immich.app/" target="_blank" rel="noopener">Immich</a> is a self-hosted
+                        alternative to Google Photos. It's a free, open source photo and video management app you run yourself, on your own hardware. Like UrbanLens, it's built around the idea that you should own
+                        your own data.
+                    </p>
+                    <p>
+                        If you already run an Immich server, you can connect it under Settings, which will allow you to search and
+                        import photos near a pin straight from that pin's detail page, instead of having to find them by
+                        hand. This will only work if you have location metadata stored in the photos you take. 
+                    </p>
+                    <p>
+                        UrbanLens only talks to your own server using the API key you provide - nothing gets
+                        sent anywhere else.
+                    </p>
+                </div>
+            </details>
+
+            <details class="faq-item" id="faq-immich-api-key">
+                <summary class="faq-item-summary">
+                    <span>How do I get an Immich API key?</span>
+                    <i class="material-symbols-outlined faq-item-chevron">expand_more</i>
+                </summary>
+                <div class="faq-item-body">
+                    <p>
+                        API keys are generated from your own Immich server, not from UrbanLens:
+                    </p>
+                    <ol class="faq-ordered-list">
+                        <li>Log in to your Immich server's web app.</li>
+                        <li>Click your profile picture in the top right, then choose <strong>Account Settings</strong>.</li>
+                        <li>Open the <strong>API Keys</strong> tab.</li>
+                        <li>Click <strong>New API Key</strong>, give it a name (e.g. "UrbanLens"), and save it.</li>
+                        <li>Copy the key right away - Immich only shows it to you once.</li>
+                    </ol>
+                    <p>
+                        Paste that key, along with your server's URL, into the Immich connection form under
+                        Settings. If you ever lose the key, just generate a new one on your Immich server and
+                        reconnect.
+                    </p>
+                    <p>
+                        If you ever want to disconnect your Immich server, go back to Immich and delete the API key,
+                        and UrbanLens will no longer have an ability to access it.
+                    </p>
+                </div>
+            </details>
+        </div>
+    </div>
+</section>
+
 {# -- CTA ------------------------------------------------------------------ #}
 <section class="faq-cta-section">
     <div class="faq-cta-inner">
@@ -406,4 +563,47 @@
     </div>
 </section>
 
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    // <details> elements don't open themselves just because they're the
+    // linked hash target - open and scroll to it manually so links from
+    // elsewhere in the app (e.g. "What is this?" on the recovery-key dialog)
+    // land on an expanded answer instead of a collapsed summary line.
+    function openHashTarget() {
+        if (!location.hash) return;
+        var target = document.getElementById(location.hash.slice(1));
+        if (target && target.tagName === 'DETAILS') {
+            target.open = true;
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    }
+    document.addEventListener('DOMContentLoaded', openHashTarget);
+    window.addEventListener('hashchange', openHashTarget);
+
+    // Highlight the quick-jump tab for whichever section is in view, matching
+    // the .is-active/.active treatment every other page's .ul-subnav-tab gets -
+    // this page has no separate "current page" to mark server-side since the
+    // tabs are same-page anchors, so track it client-side instead.
+    var tabs = document.querySelectorAll('[data-faq-tab]');
+    var sections = [];
+    tabs.forEach(function (tab) {
+        var section = document.getElementById(tab.getAttribute('href').slice(1));
+        if (section) sections.push({ tab: tab, section: section });
+    });
+    if (sections.length && 'IntersectionObserver' in window) {
+        var observer = new IntersectionObserver(function (entries) {
+            entries.forEach(function (entry) {
+                if (!entry.isIntersecting) return;
+                sections.forEach(function (pair) {
+                    pair.tab.classList.toggle('active', pair.section === entry.target);
+                });
+            });
+        }, { rootMargin: '-45% 0px -50% 0px' });
+        sections.forEach(function (pair) { observer.observe(pair.section); });
+    }
+}());
+</script>
 {% endblock %}

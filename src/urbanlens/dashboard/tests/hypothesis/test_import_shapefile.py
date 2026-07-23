@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pyogrio.errors
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.import_formats.shapefile import (
     ShapefileBundle,
     extract_shapefile_bundles,
@@ -21,7 +21,7 @@ from urbanlens.dashboard.services.import_formats.shapefile import (
 _SAMPLE_SHAPEFILE_DIR = Path(__file__).resolve().parents[5] / "sample_data" / "sample_shapefile"
 
 
-class ExtractShapefileBundlesTests(TestCase):
+class ExtractShapefileBundlesTests(SimpleTestCase):
     """extract_shapefile_bundles() groups same-stem sidecar files."""
 
     def test_complete_bundle_grouped(self):
@@ -87,7 +87,7 @@ class ExtractShapefileBundlesTests(TestCase):
         self.assertEqual(remaining, [("places.kml", b"<kml/>")])
 
 
-class ShapefileToDictTests(TestCase):
+class ShapefileToDictTests(SimpleTestCase):
     """shapefile_to_dict() converts a real Shapefile bundle into pins."""
 
     def setUp(self):

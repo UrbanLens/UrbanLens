@@ -1,6 +1,7 @@
 {% extends 'dashboard/themes/base.html' %}
 {% load static %}
 {% load map_components %}
+{% load memories_components %}
 
 {% block header %}
 {% if has_memory_data %}
@@ -15,6 +16,18 @@
 
 {% block title %}Memories{% endblock %}
 
+{% block hero %}
+{% include "dashboard/partials/ui/_page_hero.html" with icon="auto_awesome_motion" title="Memories" subtitle="Everywhere you've been - routes, trips, visits, and photos, on one map and timeline." modifier="top" %}
+{% endblock %}
+
+{% block subnav %}
+<div class="ul-page-subnav">
+    <div class="ul-page-subnav__inner">
+        {% memories_tabs "timeline" %}
+    </div>
+</div>
+{% endblock %}
+
 {% block content %}
 <div id="memories-page" class="memories-tab-page"
      data-feed-url="{% url 'memories.data' %}"
@@ -24,21 +37,15 @@
      data-map-lat="{{ map_center_lat|default:'null' }}"
      data-map-lng="{{ map_center_lng|default:'null' }}">
 
-    {% if has_memory_data %}
-    <div class="memories-header">
-        <div>
-            <h1 class="memories-title"><i class="material-symbols-outlined">auto_awesome_motion</i> Memories</h1>
-            <p class="memories-subtitle">Everywhere you've been - routes, trips, visits, and photos, on one map and timeline.</p>
-        </div>
-        <button type="button" class="btn btn--secondary" id="memories-import-btn"
-                hx-get="{% url 'pin.import.form' %}?variant=memories" hx-target="#importPinsModal" hx-swap="innerHTML">
-            <i class="material-symbols-outlined">upload</i> Import routes &amp; history
-        </button>
-    </div>
-    {% endif %}
-
     <div class="page-inner">
-        {% include "dashboard/partials/memories/_photos_tabs.html" with active="timeline" unlogged_visits_count=unlogged_visits|length %}
+        {% if has_memory_data %}
+        <div class="memories-toolbar">
+            <button type="button" class="btn btn--secondary" id="memories-import-btn"
+                    hx-get="{% url 'pin.import.form' %}?variant=memories" hx-target="#importPinsModal" hx-swap="innerHTML">
+                <i class="material-symbols-outlined">upload</i> Import routes &amp; history
+            </button>
+        </div>
+        {% endif %}
 
         {% if not has_memory_data %}
         {% if not unlogged_visits %}
@@ -53,7 +60,12 @@
         </div>
         {% endif %}
         {% else %}
-        {% include 'dashboard/partials/memories/_hero_stats.html' %}
+        <div id="memories-hero-stats"
+            hx-get="{% url 'memories.hero_stats' %}"
+            hx-trigger="memoriesFeedRefresh from:body"
+            hx-swap="innerHTML">
+            {% include 'dashboard/partials/memories/_hero_stats.html' %}
+        </div>
 
         <div id="memories-on-this-day"
             hx-get="{% url 'memories.on_this_day' %}"
@@ -90,6 +102,8 @@
 
         <div class="memories-map-wrap">
             <div id="memories-map"></div>
+            {# -- Map toolbar (tools only; shared component - same as the main map) -- #}
+            {% map_toolbar "screenshot" panel_id="memories-map-buttons" %}
             {# Shared layers panel - same component and engine as the main map. #}
             {% map_layers_panel "street,terrain,satellite,borders" panel_id="memories-map-layers" %}
         </div>
@@ -138,9 +152,25 @@
 
     // -- Map setup ------------------------------------------------------------
     var map = L.map('memories-map', { attributionControl: false }).setView([mapLat, mapLng], 6);
+    // Read by the shared top-right toolbar's screenshot tool (window._openMapToolbarScreenshot, themes/base.html).
+    window.map = map;
     // Shared layers engine + panel - the exact same component as the main map
     // (see {% templatetag openblock %} map_layers_panel {% templatetag closeblock %} above).
-    window.MapLayers.create(map, { root: document.getElementById('memories-map-layers') });
+    // Attribution renders in the page footer (show_map_footer=True) instead of
+    // an on-map overlay - attributionControl is disabled above.
+    // defaultBase/darkMode/storageKey mirror the main map's own values
+    // (map/index.html) exactly, including the "remember" storage key format,
+    // so this map's starting layer never diverges from the main map's.
+    window.MapLayers.create(map, {
+        root: document.getElementById('memories-map-layers'),
+        defaultBase: '{{ default_map_view|default:"street" }}',
+        darkMode: '{{ map_dark_mode|default:"light" }}',
+        storageKey: 'ul_layers_v1_{{ profile.uuid }}',
+        onAttribution: function (text) {
+            var el = document.getElementById('page-footer-attribution-text');
+            if (el) el.textContent = text;
+        },
+    });
 
     var routesPane = map.createPane('memoriesRoutesPane');
     routesPane.style.zIndex = 410;

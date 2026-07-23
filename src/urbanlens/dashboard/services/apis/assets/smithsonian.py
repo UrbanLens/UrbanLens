@@ -22,6 +22,24 @@ class SmithsonianGateway(MediaProvider):
     service_key: ClassVar[str] = "smithsonian"
     display_name: ClassVar[str] = "Smithsonian Open Access"
     paid_service: ClassVar[bool] = False
+    # Unlike LOCJsonGateway (which reverted quoting because its parser mishandled
+    # punctuation inside quoted phrases), the Smithsonian API's own documented
+    # filter syntax (e.g. ``online_media_type:"Images"``) confirms its query
+    # parser is a Solr/Elasticsearch-family engine with real phrase-quoting
+    # semantics, so an exact-phrase name search is safe to rely on here.
+    quote_name: ClassVar[bool] = True
+    quote_locality: ClassVar[bool] = True
+    # A raw, unquoted street address (house number + generic street-type word)
+    # is treated as independent OR terms by this class of query parser and
+    # coincidentally matches unrelated records across the ~19M-object
+    # collection - same failure mode documented on LOCJsonGateway. Smithsonian
+    # metadata essentially never carries a literal street address anyway.
+    include_address: ClassVar[bool] = False
+    # A bare, unquoted "United States" is one of the most common phrases in a
+    # US federal collection and would otherwise contribute noise as an
+    # independent OR term.
+    search_with_country: ClassVar[bool] = False
+    reject_address_derived_names: ClassVar[bool] = True
 
     api_key: str
     base_url: str = "https://api.si.edu/openaccess/api/v1.0/search"

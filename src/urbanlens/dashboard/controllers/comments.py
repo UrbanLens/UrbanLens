@@ -8,7 +8,8 @@ import re
 from typing import TypedDict
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.http import HttpRequest, HttpResponse, JsonResponse
+from django.db.models import Q
+from django.http import Http404, HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import NoReverseMatch, reverse
 from django.views import View
@@ -28,6 +29,7 @@ from urbanlens.dashboard.services.map_snapshot import (
 from urbanlens.dashboard.services.mentions import render_comment_text, viewer_pinned_uuids
 from urbanlens.dashboard.services.pagination import get_page
 from urbanlens.dashboard.services.text_limits import MAX_COMMENT_TEXT_LENGTH, text_length_error
+from urbanlens.dashboard.services.wiki_access import location_visible_to, resolve_visible_wiki
 
 # Re-exported so existing imports (e.g. tests) keep resolving from this module.
 __all__ = ["_parse_map_data", "_sanitize_markup_color", "_sanitize_markup_shapes", "_sanitize_number"]
@@ -43,6 +45,121 @@ def _profile(request) -> Profile:
     return profile
 
 
+def comment_image_error(image_file) -> str | None:
+    """Validate an image attached to a comment (pin, wiki, or trip) before accepting it.
+
+    Shared by all three comment POST handlers - comments don't go through
+    the ``Image`` model, so they can't reuse ``services.images.image_upload_error``
+    directly, but every upload still gets the same size/content-type checks
+    before it's ever saved. The antivirus scan itself is deliberately
+    skipped here - it's slow and occasionally unavailable (a clamd hiccup
+    used to fail the whole comment submission outright) - and instead runs
+    asynchronously after the comment is created (see ``start_comment_image_scan``
+    and ``tasks.scan_comment_image``/``scan_trip_comment_image``), with the
+    comment hidden from other viewers until it clears.
+
+    Args:
+        image_file: The uploaded file from ``request.FILES.get("image")``.
+
+    Returns:
+        A user-facing error message if the file should be rejected, or None.
+    """
+    from urbanlens.dashboard.models.images.model import MediaKind
+    from urbanlens.dashboard.services.images import image_upload_error
+
+    upload_error = image_upload_error(image_file, MediaKind.PHOTO, skip_malware_scan=True)
+    return upload_error[0] if upload_error else None
+
+
+def start_comment_image_scan(comment) -> None:
+    """Mark a newly-uploaded comment image pending and queue its background malware scan.
+
+    Call immediately after saving a brand-new image upload onto a comment
+    (never for one attached via "Choose Existing" - that file was already
+    scanned on its original upload, see ``attach_existing_comment_image``).
+    Sets ``pending_scan`` so the comment is hidden from every other viewer
+    (see ``_build_context``/``trip._render_trip_comments``) until the scan
+    clears it, then enqueues the appropriate task for whichever comment type
+    this is.
+
+    Args:
+        comment: The just-created ``Comment`` or ``TripComment``, already
+            carrying its new image.
+    """
+    from urbanlens.dashboard.models.trips.model import TripComment
+    from urbanlens.dashboard.services.celery import safely_enqueue_task
+    from urbanlens.dashboard.tasks import scan_comment_image, scan_trip_comment_image
+
+    comment.pending_scan = True
+    comment.save(update_fields=["pending_scan"])
+    task = scan_trip_comment_image if isinstance(comment, TripComment) else scan_comment_image
+    safely_enqueue_task(task, comment.pk)
+
+
+def attach_existing_comment_image(comment: Comment, existing_image_id: str, profile: Profile) -> None:
+    """Copy one of the poster's own already-uploaded photos onto a comment.
+
+    Backs the "Choose Existing" tab of the comment/Notes image-attach dialog
+    (base.html's ``_openCommentAttachImageDialog``), so posting a photo
+    already shared elsewhere doesn't require re-uploading a duplicate. Copies
+    the file rather than pointing the comment at the same storage the source
+    ``Image`` uses, so deleting either later doesn't orphan the other -
+    deliberately skips re-running ``comment_image_error`` too, since the
+    source file already passed those checks (size/content-type/malware) on
+    its original upload.
+
+    Args:
+        comment: The already-created comment to attach the photo to.
+        existing_image_id: The ``Image.pk`` submitted by the picker.
+        profile: The poster - only their own photos are eligible, same scope
+            ``CommentImagePickerView`` lists.
+
+    Silently no-ops on a bad/foreign id rather than failing the whole post -
+    it only ever comes from a picker listing the poster's own photos, so a
+    mismatch means stale client state, not something worth a hard error.
+    """
+    import os
+
+    from django.core.files.base import ContentFile
+
+    from urbanlens.dashboard.models.images.model import Image
+
+    source = Image.objects.uploaded_by(profile).filter(pk=existing_image_id).first()
+    if not source:
+        return
+    comment.image.save(os.path.basename(source.image.name), ContentFile(source.image.read()), save=True)
+
+
+class CommentImagePickerView(LoginRequiredMixin, View):
+    """GET /comments/images/picker/ - list the caller's own uploaded photos to attach.
+
+    Companion to the plain upload flow for comment/Notes image attachments
+    (``#comment-image-composer``'s "Choose Existing" tab): lets the poster
+    reuse one of their own photos instead of uploading a duplicate. Entirely
+    generic - just the caller's own ``Image`` rows, no comment-specific
+    filtering - mirroring how ``DirectMessageMapPickerView`` is reused as-is
+    for the analogous "Choose Existing" tab on the map-attach dialog.
+    """
+
+    def get(self, request: HttpRequest) -> HttpResponse:
+        """Render the picker list of the caller's own photo uploads.
+
+        Args:
+            request: The HTTP request, optionally carrying a ``q`` search term.
+
+        Returns:
+            Rendered HTML fragment listing matching photos.
+        """
+        from urbanlens.dashboard.models.images.model import Image, MediaKind
+
+        profile = _profile(request)
+        query = (request.GET.get("q") or "").strip()
+        candidates = Image.objects.uploaded_by(profile).filter(media_type=MediaKind.PHOTO)
+        if query:
+            candidates = candidates.filter(caption__icontains=query)
+        return render(request, "dashboard/partials/comments/_comment_image_picker.html", {"candidates": candidates[:50], "query": query})
+
+
 def _render_comments(request, context: dict) -> HttpResponse:
     return render(request, "dashboard/partials/comments/comment_panel.html", context)
 
@@ -51,7 +168,7 @@ def _build_context(comments_qs, profile: Profile, request: HttpRequest, **extra)
     pinned = viewer_pinned_uuids(profile)
     top_level_qs = (
         comments_qs.filter(parent__isnull=True)
-        .select_related("profile__user", "markup_map")
+        .select_related("profile__user", "markup_map", "pin", "pin__location")
         .prefetch_related(
             "reactions__profile",
             "replies__reactions__profile",
@@ -73,13 +190,41 @@ def _build_context(comments_qs, profile: Profile, request: HttpRequest, **extra)
     # Set of profile IDs whose images should be blurred for this viewer.
     blurred_profiles: set[int] = {p.pk for p in all_commenters if p != profile and not profile.can_view_photos_from(p)}
 
+    # A comment's content is already all-or-nothing gated below by
+    # can_view_comments_from (comment_visibility) - but once it passes that
+    # gate, the author's own name/avatar weren't separately masked per their
+    # profile_visibility (docs/PROBLEMS.md gap). Wiki/trip comments can have
+    # many different authors a viewer might not otherwise have standing to
+    # see; pin comments are always self-authored (the pin owner is the only
+    # possible viewer), so this is a no-op there (resolve_visible_identity
+    # never masks a profile from itself).
+    from urbanlens.dashboard.services.identity_visibility import mask_profile_references
+
+    author_refs: list[Profile] = []
+    for c in top_level:
+        author_refs.append(c.profile)
+        author_refs.extend(r.profile for r in c.replies.all())
+    mask_profile_references(profile, author_refs)
+
     rendered = []
     for c in top_level:
+        if not profile.can_view_comments_from(c.profile):
+            continue
+        # A newly-uploaded image is scanned asynchronously (tasks.scan_comment_image) -
+        # until that clears pending_scan, the comment stays visible only to
+        # its own author, never to any other viewer (see
+        # controllers.comments.start_comment_image_scan).
+        if c.pending_scan and c.profile != profile:
+            continue
         html = render_comment_text(c.text, pinned)
         if html is None:
             continue
         replies_rendered = []
         for r in c.replies.all():
+            if not profile.can_view_comments_from(r.profile):
+                continue
+            if r.pending_scan and r.profile != profile:
+                continue
             r_html = render_comment_text(r.text, pinned)
             if r_html is None:
                 continue
@@ -96,11 +241,19 @@ def _build_context(comments_qs, profile: Profile, request: HttpRequest, **extra)
                 "rendered_text": html,
                 "reactions": _aggregate_reactions(c.reactions.all()),
                 "replies": replies_rendered,
+                # A reply whose parent was deleted also has parent=None, so it
+                # queries identically to a genuine top-level comment (see
+                # top_level_qs above) - this distinguishes the two so the
+                # template can render a "[Original comment deleted]"
+                # placeholder above it instead of showing it as if it had
+                # always stood on its own (UL-219).
+                "parent_was_deleted": c.parent_deleted,
             },
         )
     return {
         "rendered_comments": rendered,
         "page_obj": page_obj,
+        "total_comment_count": comments_qs.count(),
         "profile": profile,
         "blurred_profiles": blurred_profiles,
         "allowed_emojis": sorted(_ALLOWED_EMOJIS),
@@ -111,6 +264,43 @@ def _build_context(comments_qs, profile: Profile, request: HttpRequest, **extra)
 # -- Pin comments --------------------------------------------------------------
 
 
+def _pin_comments_context(pin, profile: Profile, request: HttpRequest) -> dict:
+    """Build the Notes panel context for a pin, aggregating child pins' notes on ``?children=1``.
+
+    Mirrors the page-wide "show sub pin details" toggle already applied to the
+    map, photo gallery, and visit history (see ``controllers.visits._render_visit_history``)
+    - a note left on a child pin must not be invisible from the parent's own
+    Notes tab just because it happens to live on a nested row. Posting and
+    deleting still always act on the exact pin passed in; only the *listing*
+    aggregates.
+
+    Args:
+        pin: The pin whose Notes panel is being rendered.
+        profile: The viewing profile (always the pin's owner - notes are private).
+        request: The current request, read for the ``children`` flag and pagination.
+
+    Returns:
+        The context dict for ``comment_panel.html``.
+    """
+    from urbanlens.dashboard.models.pin.model import Pin
+
+    include_children = request.GET.get("children") == "1"
+    if include_children:
+        subtree = Pin.objects.filter(pk=pin.pk).with_descendants()
+        comments_qs = Comment.objects.filter(pin__in=subtree)
+    else:
+        comments_qs = pin.comments.all()
+    return _build_context(
+        comments_qs,
+        profile,
+        request,
+        pin=pin,
+        context_type="pin",
+        include_children=include_children,
+        extra_query="children=1" if include_children else "",
+    )
+
+
 class PinCommentsView(LoginRequiredMixin, View):
     """GET/POST comment panel for a Pin."""
 
@@ -119,7 +309,7 @@ class PinCommentsView(LoginRequiredMixin, View):
 
         pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         profile = _profile(request)
-        ctx = _build_context(pin.comments.all(), profile, request, pin=pin, context_type="pin")
+        ctx = _pin_comments_context(pin, profile, request)
         return _render_comments(request, ctx)
 
     def post(self, request, pin_slug):
@@ -129,23 +319,29 @@ class PinCommentsView(LoginRequiredMixin, View):
         profile = _profile(request)
         text = request.POST.get("text", "").strip()
         image = request.FILES.get("image")
+        existing_image_id = request.POST.get("existing_image_id", "").strip()
         map_data = _parse_map_data(request)
-        if not text and not image and not map_data:
+        if not text and not image and not existing_image_id and not map_data:
             return HttpResponse("Please add some text, a photo, or a map.", status=400)
         length_error = text_length_error(text, MAX_COMMENT_TEXT_LENGTH, "Comment")
         if length_error:
             return HttpResponse(length_error, status=400)
+        if image and (image_error := comment_image_error(image)):
+            return HttpResponse(image_error, status=400)
         parent_id = request.POST.get("parent_id")
         parent = None
         if parent_id:
             parent = get_object_or_404(Comment, id=parent_id, pin=pin)
-        comment = Comment.objects.create(pin=pin, profile=profile, text=text, parent=parent, markup_map=materialize_markup_map(profile, map_data))
+        comment = Comment.objects.create(pin=pin, profile=profile, text=text, parent=parent, markup_map=materialize_markup_map(profile, map_data, context=pin))
         if image:
             comment.image = image
             comment.save(update_fields=["image"])
+            start_comment_image_scan(comment)
+        elif existing_image_id:
+            attach_existing_comment_image(comment, existing_image_id, profile)
         if parent and parent.profile != profile:
             _notify_reply(profile, parent, reply=comment)
-        ctx = _build_context(pin.comments.all(), profile, request, pin=pin, context_type="pin")
+        ctx = _pin_comments_context(pin, profile, request)
         return _render_comments(request, ctx)
 
 
@@ -157,60 +353,49 @@ class PinCommentDeleteView(LoginRequiredMixin, View):
 
         pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         profile = _profile(request)
-        comment = get_object_or_404(Comment, id=comment_id, pin=pin)
+        # A deletable comment may live on any descendant, not just the exact
+        # pin in the URL - the aggregated view's delete buttons post back here
+        # for a note authored on a child pin.
+        subtree = Pin.objects.filter(pk=pin.pk).with_descendants()
+        comment = get_object_or_404(Comment, id=comment_id, pin__in=subtree)
         if comment.profile != profile:
             return HttpResponse("Forbidden", status=403)
         markup_map = comment.markup_map
         comment.delete()
         if markup_map is not None:
             markup_map.delete()
-        return HttpResponse("", status=200)
+        # Replies to a deleted comment survive (parent FK is SET_NULL), becoming
+        # orphaned top-level comments. Re-render the whole panel rather than just
+        # removing the deleted <li>, so those replies stay visible in place
+        # instead of disappearing until the next reload.
+        ctx = _pin_comments_context(pin, profile, request)
+        return _render_comments(request, ctx)
 
 
 # -- Wiki comments -------------------------------------------------------------
 
 
-def _resolve_wiki(location_slug):
-    from urbanlens.dashboard.models.location.model import Location
-    from urbanlens.dashboard.models.wiki.model import Wiki
-
-    location = get_object_or_404(Location, slug=location_slug)
-    wiki = get_object_or_404(Wiki, location=location)
-    return location, wiki
-
-
 class WikiCommentsView(LoginRequiredMixin, View):
     """GET/POST comment panel for a wiki."""
 
-    def _get_wiki_and_profile(self, request, location_slug):
-        from urbanlens.dashboard.models.pin.model import Pin
-
-        location, wiki = _resolve_wiki(location_slug)
-        profile = _profile(request)
-        # Must have this place pinned to comment on its wiki.
-        if not Pin.objects.filter(profile=profile, location=location).exists():
-            return None, None
-        return profile, wiki
-
     def get(self, request, location_slug):
-        profile, wiki = self._get_wiki_and_profile(request, location_slug)
-        if profile is None:
-            return HttpResponse("You must have this location pinned to view wiki comments.", status=403)
+        _location, wiki, profile = resolve_visible_wiki(request, location_slug)
         ctx = _build_context(wiki.comments.all(), profile, request, wiki=wiki, location=wiki.location, context_type="wiki")
         return _render_comments(request, ctx)
 
     def post(self, request, location_slug):
-        profile, wiki = self._get_wiki_and_profile(request, location_slug)
-        if profile is None:
-            return HttpResponse("You must have this location pinned to leave a comment.", status=403)
+        _location, wiki, profile = resolve_visible_wiki(request, location_slug)
         text = request.POST.get("text", "").strip()
         image = request.FILES.get("image")
+        existing_image_id = request.POST.get("existing_image_id", "").strip()
         map_data = _parse_map_data(request)
-        if not text and not image and not map_data:
+        if not text and not image and not existing_image_id and not map_data:
             return HttpResponse("Please add some text, a photo, or a map.", status=400)
         length_error = text_length_error(text, MAX_COMMENT_TEXT_LENGTH, "Comment")
         if length_error:
             return HttpResponse(length_error, status=400)
+        if image and (image_error := comment_image_error(image)):
+            return HttpResponse(image_error, status=400)
         parent_id = request.POST.get("parent_id")
         parent = None
         if parent_id:
@@ -220,11 +405,14 @@ class WikiCommentsView(LoginRequiredMixin, View):
             profile=profile,
             text=text,
             parent=parent,
-            markup_map=materialize_markup_map(profile, map_data),
+            markup_map=materialize_markup_map(profile, map_data, context=wiki),
         )
         if image:
             comment.image = image
             comment.save(update_fields=["image"])
+            start_comment_image_scan(comment)
+        elif existing_image_id:
+            attach_existing_comment_image(comment, existing_image_id, profile)
         if parent and parent.profile != profile:
             _notify_reply(profile, parent, reply=comment)
         ctx = _build_context(wiki.comments.all(), profile, request, wiki=wiki, location=wiki.location, context_type="wiki")
@@ -235,8 +423,7 @@ class WikiCommentDeleteView(LoginRequiredMixin, View):
     """DELETE /location/<slug>/wiki/comments/<int>/delete/"""
 
     def delete(self, request, location_slug, comment_id):
-        _location, wiki = _resolve_wiki(location_slug)
-        profile = _profile(request)
+        _location, wiki, profile = resolve_visible_wiki(request, location_slug)
         comment = get_object_or_404(Comment, id=comment_id, wiki=wiki)
         if comment.profile != profile:
             return HttpResponse("Forbidden", status=403)
@@ -244,7 +431,12 @@ class WikiCommentDeleteView(LoginRequiredMixin, View):
         comment.delete()
         if markup_map is not None:
             markup_map.delete()
-        return HttpResponse("", status=200)
+        # Replies to a deleted comment survive (parent FK is SET_NULL), becoming
+        # orphaned top-level comments. Re-render the whole panel rather than just
+        # removing the deleted <li>, so those replies stay visible in place
+        # instead of disappearing until the next reload.
+        ctx = _build_context(wiki.comments.all(), profile, request, wiki=wiki, location=wiki.location, context_type="wiki")
+        return _render_comments(request, ctx)
 
 
 # -- Reactions ------------------------------------------------------------------
@@ -255,11 +447,26 @@ class CommentReactionView(LoginRequiredMixin, View):
 
     def post(self, request, comment_id):
         profile = _profile(request)
-        comment = get_object_or_404(Comment, id=comment_id)
+        # Only comments the user can actually see: comments on their own pins,
+        # or on wikis for locations they have pinned themselves. An unscoped
+        # id lookup would let sequential-id probing react to (and read
+        # reaction rows of) comments on private pins or wikis the requester
+        # can't otherwise view.
+        comment = get_object_or_404(
+            Comment.objects.filter(Q(pin__profile=profile) | Q(wiki__isnull=False)).select_related("wiki__location", "profile"),
+            id=comment_id,
+        )
+        if comment.wiki_id and not location_visible_to(comment.wiki.location, profile):
+            raise Http404
+        # Page-level visibility isn't enough on its own - the comment's own
+        # author may further restrict who can see (and react to) it via their
+        # comment_visibility privacy setting.
+        if not profile.can_view_comments_from(comment.profile):
+            raise Http404
         emoji = request.POST.get("emoji", "")
         if emoji not in _ALLOWED_EMOJIS:
             return HttpResponse("Invalid emoji.", status=400)
-        reaction = Reaction.objects.filter(profile=profile, emoji=emoji, comment=comment).first()
+        reaction = Reaction.objects.existing(profile, emoji, comment=comment)
         if reaction:
             reaction.delete()
         else:
@@ -269,18 +476,20 @@ class CommentReactionView(LoginRequiredMixin, View):
 
 
 class TripCommentReactionView(LoginRequiredMixin, View):
-    """POST /trips/<uuid>/comments/<int>/react/  - toggle reaction on a TripComment."""
+    """POST /trips/<slug>/comments/<int>/react/  - toggle reaction on a TripComment."""
 
-    def post(self, request, trip_uuid, comment_id):
+    def post(self, request, trip_slug, comment_id):
         from urbanlens.dashboard.models.trips.model import Trip, TripComment
 
         profile = _profile(request)
-        trip = get_object_or_404(Trip, uuid=trip_uuid)
+        trip = get_object_or_404(Trip, slug=trip_slug)
+        if not (trip.creator == profile or trip.profiles.filter(pk=profile.pk).exists()):
+            return HttpResponse("Forbidden", status=403)
         comment = get_object_or_404(TripComment, id=comment_id, trip=trip)
         emoji = request.POST.get("emoji", "")
         if emoji not in _ALLOWED_EMOJIS:
             return HttpResponse("Invalid emoji.", status=400)
-        reaction = Reaction.objects.filter(profile=profile, emoji=emoji, trip_comment=comment).first()
+        reaction = Reaction.objects.existing(profile, emoji, trip_comment=comment)
         if reaction:
             reaction.delete()
         else:
@@ -314,7 +523,7 @@ def _render_trip_reaction_row(request, comment, profile: Profile) -> HttpRespons
             "reactions": reactions,
             "profile": profile,
             "react_url_name": "trips.comment.react",
-            "trip_uuid": comment.trip.uuid,
+            "trip_slug": comment.trip.slug,
             "allowed_emojis": _ALLOWED_EMOJIS,
         },
     )
@@ -365,7 +574,7 @@ def _comment_url(comment) -> str:
     anchor = f"#comment-{comment.id}"
     try:
         if hasattr(comment, "trip_id") and comment.trip_id:
-            return reverse("trips.detail", kwargs={"trip_uuid": comment.trip.uuid}) + anchor
+            return reverse("trips.detail", kwargs={"trip_slug": comment.trip.slug}) + anchor
         if hasattr(comment, "pin_id") and comment.pin_id:
             return reverse("pin.details", kwargs={"pin_slug": comment.pin.slug or str(comment.pin.uuid)}) + anchor
         if hasattr(comment, "wiki_id") and comment.wiki_id and comment.wiki.location_id:

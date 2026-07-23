@@ -12,7 +12,9 @@
     let hideTimer = null;
 
     function usesFloat(el) {
-        return el && el.getAttribute('data-tooltip-float') === 'true';
+        // Floating (JS-positioned, escapes overflow:hidden) is the default for every
+        // [data-tooltip] trigger; opt out per-trigger with data-tooltip-float="false".
+        return !!el && el.getAttribute('data-tooltip-float') !== 'false';
     }
 
     function show(trigger) {
@@ -99,6 +101,10 @@
     });
 
     // -- Touch / coarse pointer: tap to toggle ---------------------------------
+    // Click-to-toggle only applies on touch/coarse-pointer devices - on a
+    // mouse, hover/focus (above) already shows the tooltip, so a click on the
+    // trigger itself should behave normally (e.g. actually follow an <a href>
+    // instead of having the tooltip logic call preventDefault() on it).
     document.addEventListener('click', e => {
         const trigger = e.target.closest('[data-tooltip]');
 
@@ -108,14 +114,14 @@
             return;
         }
 
+        if (!window.matchMedia('(hover: none), (pointer: coarse)').matches) return;
+
         if (usesFloat(trigger)) {
             e.preventDefault();
             e.stopPropagation();
             activeTrigger === trigger ? hide() : show(trigger);
             return;
         }
-
-        if (!window.matchMedia('(hover: none), (pointer: coarse)').matches) return;
 
         e.preventDefault();
         e.stopPropagation();

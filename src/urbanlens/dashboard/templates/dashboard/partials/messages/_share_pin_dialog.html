@@ -1,0 +1,33 @@
+{% comment %}
+`@pin` share dialog: pick one of the sender's own pins. Picking one stages it
+as a composer attachment (mirrors the photo/map chips) and closes the dialog -
+the actual share is sent from the normal composer, alongside whatever the
+sender is typing and any map/photo also attached. Injected into
+#dm-share-dialog-host by pages/messages/index.html's inline JS.
+Context: `partner`, `pins` - or `group`, `pins` when sharing into a group
+chat (the staged share then posts to the group share endpoint instead).
+{% endcomment %}
+<dialog id="dm-share-dialog" class="dm-share-dialog ul-dialog" data-kind="pin" data-field-name="pin_slug"{% if group %} data-group-uuid="{{ group.uuid }}"{% endif %}>
+  <div class="dialog-header">
+    <span>Share a pin with {% if group %}{{ group.name }}{% else %}{{ partner.username }}{% endif %}</span>
+    <button type="button" class="dialog-close" onclick="this.closest('dialog').close()">
+      <i class="material-symbols-outlined">close</i>
+    </button>
+  </div>
+
+  <div class="dm-share-step">
+    <input type="search" class="dm-share-filter" placeholder="Search your pins..." oninput="window.dmFilterShareList(this)">
+    <ul class="dm-share-list">
+      {% for pin in pins %}
+      <li class="dm-share-list-item" data-search="{{ pin.display_label|lower }}">
+        <button type="button" class="dm-share-pick-btn" data-value="{{ pin.slug }}" data-label="{{ pin.display_label }}"
+                data-lat="{{ pin.effective_latitude }}" data-lng="{{ pin.effective_longitude }}"
+                onclick="window.dmSharePick(this)">
+          <i class="material-symbols-outlined">location_on</i> {{ pin.display_label }}
+        </button>
+      </li>
+      {% endfor %}
+    </ul>
+    {% if not pins %}<p class="dm-share-empty">You don't have any pins yet.</p>{% endif %}
+  </div>
+</dialog>

@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime
 import json
 import logging
-from typing import TYPE_CHECKING, TypedDict
+from typing import TYPE_CHECKING, Any, TypedDict
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import DateField, Min
@@ -32,6 +32,7 @@ from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
 from urbanlens.dashboard.services.map_snapshot import materialize_markup_map, parse_map_data
 from urbanlens.dashboard.services.memories.aggregator import BBox, get_memory_events
 from urbanlens.dashboard.services.memories.distance import total_travel_distance_km
+from urbanlens.dashboard.services.memories.journal import get_journal_entries
 from urbanlens.dashboard.services.memories.unlogged import unlogged_visited_pins
 from urbanlens.dashboard.services.units import km_to_display, unit_label
 from urbanlens.dashboard.services.visit_invites import resolve_suggest_participant_ids, sync_external_participants
@@ -40,21 +41,133 @@ from urbanlens.dashboard.services.visits import add_visited_status, create_visit
 if TYPE_CHECKING:
     from django.http import HttpRequest
 
+    from urbanlens.dashboard.models.markup.share import MarkupMapShare
     from urbanlens.dashboard.models.pin_share.model import PinShare
 
 logger = logging.getLogger(__name__)
 
 _DEFAULT_WINDOW_DAYS = 90
 _ON_THIS_DAY_LIMIT = 10
+_MAX_BULK_VISITS = 60  # matches unlogged.UNLOGGED_VISIT_LIMIT - never more pins than the page can show
+_VISITS_BULK_ACTIONS = [
+    {"action": "log", "icon": "check", "label": "Log visit on this date"},
+    {"action": "unmark", "icon": "cancel", "label": "Not visited"},
+]
 
 
 class _ShareGroup(TypedDict):
-    """One pin's entry in the Sharing page's ``share_groups`` list."""
+    """One place's entry in the Sharing page's ``share_groups`` list.
 
-    pin: Pin
+    ``pin`` is None for location-only shares (e.g. coordinates detected in a
+    DM the sender never pinned) - ``place_label`` always carries a
+    displayable name either way.
+    """
+
+    pin: Pin | None
+    place_label: str
     shares: list[PinShare]
     chain_total: int
     reshare_count: int
+
+
+class _MapShareGroup(TypedDict):
+    """One map's entry in the Sharing page's ``map_share_groups`` list."""
+
+    map: MarkupMap
+    shares: list[MarkupMapShare]
+    attachment_label: str | None
+    attachment_url: str | None
+
+
+class _IncomingShareGroup(TypedDict):
+    """One pin's entry in the Sharing page's ``incoming_share_groups`` list.
+
+    Unlike :class:`_ShareGroup`, there's no chain/reshare count here - the
+    chain machinery is rooted at the *sender's* side, and the recipient only
+    ever sees their own inbound shares of a given pin.
+    """
+
+    pin: Pin | None
+    place_label: str
+    shares: list[PinShare]
+
+
+class _IncomingMapShareGroup(TypedDict):
+    """One map's entry in the Sharing page's ``incoming_map_share_groups`` list."""
+
+    map: MarkupMap
+    shares: list[MarkupMapShare]
+
+
+def _attachment_label_url(kind: str, host: Any, *, markup_map: MarkupMap) -> tuple[str | None, str | None]:
+    """Resolve a human label and link for one (kind, host) attachment entry.
+
+    Args:
+        kind: One of ``safety_checkin`` / ``comment`` / ``trip_comment`` /
+            ``visit`` / ``direct_message``.
+        host: The attached instance matching *kind*.
+        markup_map: The map being described - only needed to tell which side
+            of a ``direct_message`` is "the other person" (this map's owner
+            sent it, so the label always names the recipient).
+
+    Returns:
+        Tuple of (label, url), or (None, None) when the host can't be
+        resolved to a link (e.g. a comment on a wiki with no location).
+    """
+    if kind == "safety_checkin":
+        return f"Safety check-in: {host.title}", reverse("safety.checkin.detail", args=[host.slug or host.uuid])
+    if kind == "comment" and host.pin_id:
+        return f"Comment on {host.pin.effective_name}", reverse("pin.details", args=[host.pin.slug])
+    if kind == "comment":
+        return f"Comment on {host.wiki.name}", reverse("location.wiki", args=[host.wiki.location.slug])
+    if kind == "trip_comment":
+        return f"Comment on trip: {host.trip.name}", reverse("trips.detail", args=[host.trip.slug])
+    if kind == "visit":
+        label = f"Visit to {host.pin.effective_name} on {host.visited_at:%b} {host.visited_at.day}, {host.visited_at.year}"
+        return label, reverse("pin.details", args=[host.pin.slug])
+    if kind == "direct_message":
+        recipient = host.recipient if host.sender_id == markup_map.profile_id else host.sender
+        return f"Direct message to {recipient.username}", reverse("messages.conversation", args=[recipient.slug])
+    return None, None
+
+
+def _map_attachment_info(markup_map: MarkupMap) -> tuple[str | None, str | None]:
+    """Resolve a human label and link for the map's single "primary" attachment.
+
+    Args:
+        markup_map: The map to inspect.
+
+    Returns:
+        Tuple of (label, url), or (None, None) when the map is an unattached
+        draft.
+    """
+    attachment = markup_map.attachment
+    if attachment is None:
+        return None, None
+    kind, host = attachment
+    return _attachment_label_url(kind, host, markup_map=markup_map)
+
+
+def _map_attachment_entries(markup_map: MarkupMap) -> list[dict[str, str]]:
+    """Resolve a label + link for every place a map is currently attached to.
+
+    Unlike :func:`_map_attachment_info` (the single "primary" link shown
+    under a map's title), this lists every comment, trip comment, safety
+    check-in, visit, and direct message referencing the map - so the owner
+    can see (and jump to) each one before deleting it.
+
+    Args:
+        markup_map: The map to inspect.
+
+    Returns:
+        List of ``{"label": ..., "url": ...}`` dicts, one per attachment.
+    """
+    entries: list[dict[str, str]] = []
+    for kind, host in markup_map.attachments:
+        label, url = _attachment_label_url(kind, host, markup_map=markup_map)
+        if label:
+            entries.append({"label": label, "url": url or ""})
+    return entries
 
 
 def _unlogged_band_context(profile: Profile) -> dict[str, object]:
@@ -73,19 +186,27 @@ def _unlogged_band_context(profile: Profile) -> dict[str, object]:
     }
 
 
-def _toast(message: str, level: str = "success") -> HttpResponse:
+def _toast(message: str, level: str = "success", *, unlogged_count: int | None = None) -> HttpResponse:
     """Return an empty HTMX response that removes the swapped card and fires a toast.
 
     Args:
         message: Text to display in the toast.
         level: toastr level (``success``/``info``/``warning``/``error``).
+        unlogged_count: When given, also tells the shared _photos_tabs.html nav
+            (outside this card's own swap target) to update or remove its
+            "Visits" tab label instead of leaving it stale, and refreshes the
+            Visits page's map markers (see pin-select-map.js).
 
     Returns:
         An empty-body response carrying an ``HX-Trigger`` header; swapping it with
         ``outerHTML`` removes the card while the toast fires.
     """
+    triggers: dict[str, object] = {"showToast": {"message": message, "level": level}}
+    if unlogged_count is not None:
+        triggers["unloggedVisitsCountChanged"] = {"count": unlogged_count}
+        triggers["refreshQueue"] = True
     response = HttpResponse("")
-    response["HX-Trigger"] = json.dumps({"showToast": {"message": message, "level": level}})
+    response["HX-Trigger"] = json.dumps(triggers)
     return response
 
 
@@ -173,6 +294,43 @@ def _earliest_memory_date(profile: Profile) -> datetime.date | None:
     return min(candidates) if candidates else None
 
 
+def _compute_hero_stats(profile: Profile) -> tuple[dict[str, object], bool]:
+    """Build the Memories page's hero-stat tiles (distance, places, photos, trips, active span).
+
+    Shared by the initial page render and ``MemoriesHeroStatsView`` (the latter
+    lets the tiles refresh in place after an in-page action like logging a
+    visit or adding photos, instead of only updating on the next full reload).
+
+    Args:
+        profile: The profile whose memories to summarize.
+
+    Returns:
+        (hero_stats context dict for _hero_stats.html, has_memory_data flag).
+    """
+    route_count = Route.objects.for_profile(profile).count()
+    total_distance_km = total_travel_distance_km(profile)
+    units = profile.effective_distance_units
+    places_visited = PinVisit.objects.filter(pin__profile=profile).values("pin_id").distinct().count()
+    photo_count = Image.objects.filter(profile=profile).count()
+    trip_count = TripMembership.objects.trip_ids_for(profile).distinct().count()
+    has_memory_data = any((route_count, places_visited, photo_count, trip_count))
+
+    today = timezone.now().date()
+    earliest = _earliest_memory_date(profile)
+    active_count, active_unit = _active_span(earliest, today)
+
+    hero_stats = {
+        "total_distance": round(km_to_display(total_distance_km, units), 1),
+        "distance_unit": unit_label(units),
+        "places_visited": places_visited,
+        "photo_count": photo_count,
+        "trip_count": trip_count,
+        "active_count": active_count,
+        "active_unit": active_unit,
+    }
+    return hero_stats, has_memory_data
+
+
 class MemoriesView(LoginRequiredMixin, View):
     """Memories page - map + timeline of everywhere a profile has been.
 
@@ -190,18 +348,10 @@ class MemoriesView(LoginRequiredMixin, View):
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
 
-        route_count = Route.objects.for_profile(profile).count()
-        # Distance traveled = recorded route length + travel between consecutive visits.
-        total_distance_km = total_travel_distance_km(profile)
-        units = profile.effective_distance_units
-        places_visited = PinVisit.objects.filter(pin__profile=profile).values("pin_id").distinct().count()
-        photo_count = Image.objects.filter(profile=profile).count()
-        trip_count = TripMembership.objects.filter(profile=profile).values("trip_id").distinct().count()
-        has_memory_data = any((route_count, places_visited, photo_count, trip_count))
+        hero_stats, has_memory_data = _compute_hero_stats(profile)
 
         today = timezone.now().date()
         earliest = _earliest_memory_date(profile)
-        active_count, active_unit = _active_span(earliest, today)
 
         return render(
             request,
@@ -210,20 +360,39 @@ class MemoriesView(LoginRequiredMixin, View):
                 "profile": profile,
                 "page_name": "memories",
                 "has_memory_data": has_memory_data,
-                "hero_stats": {
-                    "total_distance": round(km_to_display(total_distance_km, units), 1),
-                    "distance_unit": unit_label(units),
-                    "places_visited": places_visited,
-                    "photo_count": photo_count,
-                    "trip_count": trip_count,
-                    "active_count": active_count,
-                    "active_unit": active_unit,
-                },
+                "hero_stats": hero_stats,
                 "earliest_date": earliest.isoformat() if earliest else today.isoformat(),
                 **_unlogged_band_context(profile),
                 **profile.get_map_center_template_context(),
+                "default_map_view": profile.default_map_view,
+                "map_dark_mode": profile.map_dark_mode,
+                "show_map_footer": True,
             },
         )
+
+
+class MemoriesHeroStatsView(LoginRequiredMixin, View):
+    """HTMX partial - the hero-stat tiles at the top of the Memories page.
+
+    GET /memories/hero-stats/
+
+    Re-fetched via ``memoriesFeedRefresh`` (the same trigger already fired after
+    logging a visit or uploading photos) so distance/places/photos/trips/active-span
+    stay current after an in-page action, not just on the next full reload.
+    """
+
+    def get(self, request: HttpRequest):
+        """Render the hero-stats partial.
+
+        Args:
+            request: The HTTP request.
+
+        Returns:
+            Rendered ``_hero_stats.html`` partial.
+        """
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        hero_stats, _has_memory_data = _compute_hero_stats(profile)
+        return render(request, "dashboard/partials/memories/_hero_stats.html", {"hero_stats": hero_stats})
 
 
 class MemoriesFeedDataView(LoginRequiredMixin, View):
@@ -389,7 +558,7 @@ class MemoriesVisitView(LoginRequiredMixin, View):
             visit = get_object_or_404(PinVisit, id=visit_id, pin=pin)
             visit.visited_at = visited_at
             visit.notes = notes
-            visit.markup_map = materialize_markup_map(profile, map_data, existing_map=visit.markup_map)
+            visit.markup_map = materialize_markup_map(profile, map_data, existing_map=visit.markup_map, context=pin)
             visit.save()
             created = False
         else:
@@ -400,7 +569,7 @@ class MemoriesVisitView(LoginRequiredMixin, View):
                 visited_at=visited_at,
                 notes=notes,
                 source=VisitSource.MANUAL,
-                markup_map=materialize_markup_map(profile, map_data),
+                markup_map=materialize_markup_map(profile, map_data, context=pin),
             )
             add_visited_status(pin)
             created = True
@@ -435,15 +604,21 @@ class MemoriesVisitView(LoginRequiredMixin, View):
 
         sync_external_participants(request, visit)
 
+        band_context = _unlogged_band_context(profile)
         response = render(
             request,
             "dashboard/partials/memories/_unlogged_visits.html",
-            _unlogged_band_context(profile),
+            band_context,
         )
         response["HX-Trigger"] = json.dumps(
             {
                 "showToast": {"message": "Visit logged." if created else "Details saved.", "level": "success"},
                 "memoriesFeedRefresh": True,
+                # The "Visits" tab label lives outside #memories-unlogged-band, in
+                # the shared _photos_tabs.html nav - tell it to catch up.
+                "unloggedVisitsCountChanged": {"count": len(unlogged_visited_pins(profile))},
+                # Refreshes the Visits page's map markers (see pin-select-map.js).
+                "refreshQueue": True,
             },
         )
         return response
@@ -465,24 +640,124 @@ class MemoriesVisitsView(LoginRequiredMixin, View):
             Rendered Visits page listing every visited-but-unlogged pin.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
+        band_context = _unlogged_band_context(profile)
         return render(
             request,
             "dashboard/pages/memories/visits.html",
             {
                 "profile": profile,
                 "page_name": "memories",
-                **_unlogged_band_context(profile),
+                "bulk_actions": _VISITS_BULK_ACTIONS,
+                # The map (and its attribution) only renders when there are
+                # unlogged visits to plot - see visits.html's {% if unlogged_visits %}.
+                "show_map_footer": bool(band_context["unlogged_visits"]),
+                **band_context,
             },
         )
 
 
+class MemoriesVisitsMapDataView(LoginRequiredMixin, View):
+    """Lightweight JSON of every visited-but-unlogged pin, for the Visits page map.
+
+    GET /memories/visits/map-data/
+
+    Mirrors ``PinSuggestionMapDataView`` (Memories > Locations) - see
+    ``static/js/pin-select-map.js``, which drives both pages' maps.
+    """
+
+    def get(self, request: HttpRequest) -> JsonResponse:
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        pins = unlogged_visited_pins(profile)
+        data = [
+            {
+                "id": pin.slug,
+                "latitude": pin.effective_latitude,
+                "longitude": pin.effective_longitude,
+                "name": pin.effective_name,
+                "last_visited": pin.last_visited.date().isoformat() if pin.last_visited else None,
+            }
+            for pin in pins
+        ]
+        return JsonResponse({"pins": data})
+
+
+class MemoriesVisitsBulkActionView(LoginRequiredMixin, View):
+    """Quick-log or un-mark many visited-but-unlogged pins at once.
+
+    POST /memories/visits/bulk/<action>/, JSON body
+    ``{"pin_slugs": [...], "visited_date": "YYYY-MM-DD"}`` (``visited_date``
+    only read for ``log``).
+
+    Modeled on ``PinSuggestionBulkActionView`` (Memories > Locations):
+    non-owned, already-resolved, or nonexistent slugs are silently skipped
+    rather than erroring the whole batch.
+
+    - ``log``: creates a dated ``PinVisit`` for each pin, dated
+      ``visited_date`` (defaulting to today when omitted) - the same minimal
+      path as the single-item quick-log form (date only, no
+      notes/photos/participants/map).
+    - ``unmark``: clears each pin's "visited" status entirely, same as the
+      single-item "Not visited" button.
+    """
+
+    def post(self, request: HttpRequest, action: str) -> JsonResponse:
+        if action not in {"log", "unmark"}:
+            raise Http404
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        try:
+            body = json.loads(request.body)
+        except (json.JSONDecodeError, TypeError, UnicodeDecodeError):
+            return JsonResponse({"error": "Invalid request body."}, status=400)
+
+        raw_slugs = body.get("pin_slugs") if isinstance(body, dict) else None
+        if not isinstance(raw_slugs, list) or not raw_slugs:
+            return JsonResponse({"error": "No pins provided."}, status=400)
+        if len(raw_slugs) > _MAX_BULK_VISITS:
+            return JsonResponse({"error": f"Too many pins at once (max {_MAX_BULK_VISITS})."}, status=400)
+
+        if action == "log" and not visit_logging_allowed(profile):
+            return JsonResponse({"error": "Visit logging is turned off - enable it in Settings to log a visit."}, status=403)
+
+        visited_date = timezone.now().date()
+        if action == "log":
+            raw_date = body.get("visited_date") if isinstance(body, dict) else None
+            if raw_date:
+                try:
+                    visited_date = datetime.date.fromisoformat(raw_date)
+                except (TypeError, ValueError):
+                    return JsonResponse({"error": "Invalid date."}, status=400)
+
+        pins = Pin.objects.filter(profile=profile, slug__in=raw_slugs).visited_without_record()
+        processed = 0
+        for pin in pins:
+            try:
+                if action == "unmark":
+                    remove_visited_status(pin)
+                else:
+                    visited_at = datetime.datetime.combine(visited_date, datetime.time.min, tzinfo=datetime.UTC)
+                    PinVisit.objects.create(pin=pin, visited_at=visited_at, source=VisitSource.MANUAL)
+                    add_visited_status(pin)
+                    sync_last_visited(pin)
+                processed += 1
+            except Exception:
+                logger.exception("Bulk unlogged-visit action '%s' failed for pin %s", action, pin.pk)
+        return JsonResponse({"ok": True, "processed": processed, "requested": len(raw_slugs)})
+
+
 class MemoriesSharingView(LoginRequiredMixin, View):
-    """The "Sharing" subpage of Memories - every pin the user has shared.
+    """The "Sharing" subpage of Memories - every pin and map shared to/from the user.
 
     Groups the profile's sent :class:`PinShare` rows by pin, listing who each
     pin was shared with, and how far the share travelled: the chain count
     follows reshares transitively (A→B, B→C and B→D, D→E and D→F counts 5
-    shares for A's pin).
+    shares for A's pin). Sent :class:`MarkupMapShare` rows are grouped by map
+    the same way, minus the reshare-chain machinery PinShare has.
+
+    Also lists the mirror image - pins and maps *received* from other
+    profiles - grouped the same way but without any chain/reshare counts
+    (those are rooted at the sender's side) and linking through the
+    recipient-scoped share-detail routes rather than the sender's own
+    pin/map pages, which the recipient has no access to.
 
     GET /memories/sharing/
     """
@@ -494,17 +769,22 @@ class MemoriesSharingView(LoginRequiredMixin, View):
             request: The HTTP request.
 
         Returns:
-            Rendered Sharing page listing every shared pin with its
-            recipients and chain-wide reshare counts.
+            Rendered Sharing page listing every shared pin and map with
+            their recipients (and, for pins, chain-wide reshare counts).
         """
+        from urbanlens.dashboard.models.markup.share import MarkupMapShare
         from urbanlens.dashboard.models.pin_share.model import PinShare
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        shares = PinShare.objects.filter(from_profile=profile).select_related("pin__location__wiki", "to_profile__user").order_by("-created")
+        shares = PinShare.objects.sent_by(profile).select_related("pin__location__wiki", "location__wiki", "to_profile__user").order_by("-created")
 
-        shares_by_pin: dict[int, list[PinShare]] = {}
+        # Group by pin when there is one; location-only shares (e.g.
+        # coordinates typed into a DM the sender never pinned) group by the
+        # shared Location instead so they don't all collapse into one bucket.
+        shares_by_pin: dict[tuple[str, int | None], list[PinShare]] = {}
         for share in shares:
-            shares_by_pin.setdefault(share.pin_id, []).append(share)
+            key = ("pin", share.pin_id) if share.pin_id is not None else ("location", share.location_id)
+            shares_by_pin.setdefault(key, []).append(share)
 
         share_groups: list[_ShareGroup] = []
         for pin_shares in shares_by_pin.values():
@@ -513,12 +793,49 @@ class MemoriesSharingView(LoginRequiredMixin, View):
             share_groups.append(
                 {
                     "pin": pin_shares[0].pin,
+                    "place_label": pin_shares[0].place_label,
                     "shares": pin_shares,
                     "chain_total": chain_total,
                     # Shares made further down the chain by other users.
                     "reshare_count": chain_total - len(own_ids),
                 },
             )
+
+        map_shares = MarkupMapShare.objects.filter(from_profile=profile).select_related("markup_map", "to_profile__user").order_by("-created")
+
+        map_shares_by_map: dict[int, list[MarkupMapShare]] = {}
+        for map_share in map_shares:
+            map_shares_by_map.setdefault(map_share.markup_map_id, []).append(map_share)
+
+        map_share_groups: list[_MapShareGroup] = []
+        for map_shares_for_map in map_shares_by_map.values():
+            markup_map = map_shares_for_map[0].markup_map
+            label, url = _map_attachment_info(markup_map)
+            map_share_groups.append(
+                {
+                    "map": markup_map,
+                    "shares": map_shares_for_map,
+                    "attachment_label": label,
+                    "attachment_url": url,
+                },
+            )
+
+        incoming_shares = PinShare.objects.received_by(profile).select_related("pin__location__wiki", "location__wiki", "from_profile__user").order_by("-created")
+
+        incoming_shares_by_pin: dict[tuple[str, int | None], list[PinShare]] = {}
+        for share in incoming_shares:
+            key = ("pin", share.pin_id) if share.pin_id is not None else ("location", share.location_id)
+            incoming_shares_by_pin.setdefault(key, []).append(share)
+
+        incoming_share_groups: list[_IncomingShareGroup] = [{"pin": pin_shares[0].pin, "place_label": pin_shares[0].place_label, "shares": pin_shares} for pin_shares in incoming_shares_by_pin.values()]
+
+        incoming_map_shares = MarkupMapShare.objects.filter(to_profile=profile).select_related("markup_map", "from_profile__user").order_by("-created")
+
+        incoming_map_shares_by_map: dict[int, list[MarkupMapShare]] = {}
+        for map_share in incoming_map_shares:
+            incoming_map_shares_by_map.setdefault(map_share.markup_map_id, []).append(map_share)
+
+        incoming_map_share_groups: list[_IncomingMapShareGroup] = [{"map": map_shares_for_map[0].markup_map, "shares": map_shares_for_map} for map_shares_for_map in incoming_map_shares_by_map.values()]
 
         return render(
             request,
@@ -527,6 +844,11 @@ class MemoriesSharingView(LoginRequiredMixin, View):
                 "profile": profile,
                 "page_name": "memories",
                 "share_groups": share_groups,
+                "map_share_groups": map_share_groups,
+                "sent_count": len(shares) + len(map_shares),
+                "incoming_share_groups": incoming_share_groups,
+                "incoming_map_share_groups": incoming_map_share_groups,
+                "received_count": len(incoming_shares) + len(incoming_map_shares),
                 **_unlogged_band_context(profile),
             },
         )
@@ -552,7 +874,7 @@ class MemoriesMapsView(LoginRequiredMixin, View):
             Rendered Maps page listing every markup map the user created.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        maps = MarkupMap.objects.for_profile(profile).prefetch_related("items").order_by("-updated")
+        maps = MarkupMap.objects.for_profile(profile).select_related("shared_by__user").prefetch_related("items").order_by("-updated")
         return render(
             request,
             "dashboard/pages/memories/maps.html",
@@ -571,35 +893,54 @@ class MemoriesMapsView(LoginRequiredMixin, View):
 
         Returns:
             Dict with the map, its snapshot (for the Leaflet thumbnail), item
-            count, and - when attached - a human label + link for the host.
+            count, the primary attachment's label + link, and the full list
+            of every place (comments, trip comments, check-ins, visits, DMs)
+            the map is currently attached to.
         """
-        kind, label, url = None, None, None
-        attachment = markup_map.attachment
-        if attachment is not None:
-            kind, host = attachment
-            if kind == "safety_checkin":
-                label = f"Safety check-in: {host.title}"
-                url = reverse("safety.checkin.detail", args=[host.slug or host.uuid])
-            elif kind == "comment" and host.pin_id:
-                label = f"Comment on {host.pin.effective_name}"
-                url = reverse("pin.details", args=[host.pin.slug])
-            elif kind == "comment":
-                label = f"Comment on {host.wiki.name}"
-                url = reverse("location.wiki", args=[host.wiki.location.slug])
-            elif kind == "trip_comment":
-                label = f"Comment on trip: {host.trip.name}"
-                url = reverse("trips.detail", args=[host.trip.uuid])
-            elif kind == "visit":
-                label = f"Visit to {host.pin.effective_name} on {host.visited_at:%b} {host.visited_at.day}, {host.visited_at.year}"
-                url = reverse("pin.details", args=[host.pin.slug])
+        label, url = _map_attachment_info(markup_map)
+        attachments = _map_attachment_entries(markup_map)
         return {
             "map": markup_map,
             "snapshot": markup_map.to_snapshot(),
             "item_count": len(markup_map.items.all()),
-            "attachment_kind": kind,
             "attachment_label": label,
             "attachment_url": url,
+            "attachments": attachments,
         }
+
+
+class MemoriesJournalView(LoginRequiredMixin, View):
+    """The "Journal" subpage of Memories - visit notes, ratings, and comments by date.
+
+    Merges every visit the profile added notes to, every pin they've rated,
+    and every comment they've posted (on pins, wikis, or trips) into a single
+    feed sorted newest-first, so a profile's own written history reads like a
+    diary instead of being scattered across pin/wiki/trip pages.
+
+    GET /memories/journal/
+    """
+
+    def get(self, request: HttpRequest) -> HttpResponse:
+        """Render the journal page.
+
+        Args:
+            request: The HTTP request.
+
+        Returns:
+            Rendered Journal page listing the profile's visit notes, ratings,
+            and comments, newest first.
+        """
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        return render(
+            request,
+            "dashboard/pages/memories/journal.html",
+            {
+                "profile": profile,
+                "page_name": "memories",
+                "journal_entries": get_journal_entries(profile),
+                **_unlogged_band_context(profile),
+            },
+        )
 
 
 class MemoriesUnloggedActionView(LoginRequiredMixin, View):
@@ -608,7 +949,7 @@ class MemoriesUnloggedActionView(LoginRequiredMixin, View):
     POST /memories/unlogged/<pin_slug>/<action>/
     where action is "dismiss" (hide the suggestion without changing the pin's
     visited status) or "unmark" (clear the pin's visited status entirely, e.g.
-    a stray "Visited" badge or import glitch the user never actually visited).
+    a stray "Visited" label or import glitch the user never actually visited).
     """
 
     def _get_pin(self, request: HttpRequest, pin_slug: str) -> Pin:
@@ -618,12 +959,12 @@ class MemoriesUnloggedActionView(LoginRequiredMixin, View):
     def dismiss(self, request: HttpRequest, pin: Pin) -> HttpResponse:
         """Hide the pin from the unlogged-visits queue without touching its visited status."""
         Pin.objects.filter(pk=pin.pk).update(unlogged_visit_dismissed=True)
-        return _toast("Removed from your list.", "info")
+        return _toast("Removed from your list.", "info", unlogged_count=len(unlogged_visited_pins(pin.profile)))
 
     def unmark(self, request: HttpRequest, pin: Pin) -> HttpResponse:
-        """Clear the pin's "Visited" status/badge so it drops out of the queue entirely."""
+        """Clear the pin's "Visited" status/label so it drops out of the queue entirely."""
         remove_visited_status(pin)
-        return _toast('"Visited" status removed.', "info")
+        return _toast('"Visited" status removed.', "info", unlogged_count=len(unlogged_visited_pins(pin.profile)))
 
     _ACTIONS = {"dismiss": dismiss, "unmark": unmark}
 

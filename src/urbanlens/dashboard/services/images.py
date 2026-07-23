@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 from datetime import datetime
+from decimal import Decimal
 import hashlib
 import io
 import logging
@@ -17,9 +18,10 @@ from PIL import Image as PILImage
 from PIL.ExifTags import GPSTAGS, TAGS
 
 if TYPE_CHECKING:
+    from django.core.files.uploadedfile import UploadedFile
     from django.http import HttpRequest
 
-    from urbanlens.dashboard.models.images.model import Image
+    from urbanlens.dashboard.models.images.model import Image, MediaKind
     from urbanlens.dashboard.models.profile.model import Profile
 
 logger = logging.getLogger(__name__)
@@ -35,6 +37,64 @@ _FORMAT_EXTENSIONS = {"JPEG": ".jpg", "PNG": ".png", "WEBP": ".webp", "TIFF": ".
 # Cap for binary EXIF payloads (e.g. MakerNote blobs) stored as hex in the
 # JSON snapshot; larger values are summarized instead of embedded.
 _EXIF_BYTES_HEX_LIMIT = 4096
+
+
+def coerce_coordinates(data: Any) -> tuple[Decimal, Decimal]:
+    """Validate and convert a mapping's ``latitude``/``longitude`` entries into Decimals.
+
+    Shared by ``parse_reposition_payload`` (raw JSON body) and any caller
+    that already has a parsed request-data mapping (e.g. DRF's
+    ``request.data``). Centralized because ``Decimal("abc")`` raises
+    ``decimal.InvalidOperation`` (an ``ArithmeticError``, not a
+    ``ValueError``), and ``Decimal("nan")`` parses fine and Postgres
+    ``numeric`` happily stores NaN, so neither is safe to skip validating.
+
+    Args:
+        data: The parsed request payload, expected to be a mapping with
+            ``latitude``/``longitude`` keys.
+
+    Returns:
+        ``(latitude, longitude)`` as finite, in-range Decimals.
+
+    Raises:
+        ValueError: On a non-mapping payload, missing keys,
+            non-numeric/non-finite values, or out-of-range coordinates.
+    """
+    try:
+        latitude = Decimal(str(data["latitude"]))
+        longitude = Decimal(str(data["longitude"]))
+    except (KeyError, TypeError, ValueError, ArithmeticError) as exc:
+        raise ValueError("Invalid request data.") from exc
+    if not (latitude.is_finite() and longitude.is_finite()):
+        raise ValueError("Coordinates must be finite numbers.")
+    if abs(latitude) > 90 or abs(longitude) > 180:
+        raise ValueError("Coordinates out of range.")
+    return latitude, longitude
+
+
+def parse_reposition_payload(body: bytes) -> tuple[Decimal, Decimal]:
+    """Parse a photo-reposition JSON payload into validated latitude/longitude Decimals.
+
+    Shared by the pin/wiki/safety gallery reposition endpoints, which all
+    accept ``{"latitude": ..., "longitude": ...}`` from a dragged map marker.
+
+    Args:
+        body: The raw request body.
+
+    Returns:
+        ``(latitude, longitude)`` as finite, in-range Decimals.
+
+    Raises:
+        ValueError: On malformed JSON, a non-object payload, missing keys,
+            non-numeric/non-finite values, or out-of-range coordinates.
+    """
+    import json
+
+    try:
+        data = json.loads(body)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Invalid request data.") from exc
+    return coerce_coordinates(data)
 
 
 def _get_gps_ifd(image_file: IO[bytes]) -> dict[int, Any] | None:
@@ -89,6 +149,50 @@ def extract_gps_coords(image_file: IO[bytes]) -> tuple[float, float] | None:
         # (e.g. "GPS on, no fix yet"), which decode to NaN/Inf - not usable.
         return None
     return lat, lng
+
+
+def extract_gps_direction(image_file: IO[bytes]) -> float | None:
+    """Return the compass bearing the camera was pointing, or None if absent.
+
+    Prefers ``GPSImgDirection`` (the direction the camera itself was facing -
+    what a "same place, same angle over time" comparison actually needs);
+    falls back to ``GPSDestBearing`` (direction *to* a destination point) only
+    when a device wrote that instead, which happens on some cameras. Neither
+    tag's *Ref* companion (``"T"`` true north vs ``"M"`` magnetic north) is
+    preserved as a separate field - like ``GPSLatitudeRef``/``GPSLongitudeRef``
+    above, it's a single already-decided reference frame per photo, not a
+    per-record ambiguity worth threading through the rest of the app for.
+
+    Args:
+        image_file: The uploaded/stored image file to read EXIF from.
+
+    Returns:
+        A bearing in degrees, normalized to ``[0, 360)``, or ``None`` if the
+        image has no GPS IFD or neither direction tag.
+    """
+    try:
+        gps_ifd = _get_gps_ifd(image_file)
+    except Exception as exc:
+        logger.debug("EXIF GPS direction extraction failed: %s", exc)
+        return None
+    finally:
+        with contextlib.suppress(Exception):
+            image_file.seek(0)
+
+    if not gps_ifd:
+        return None
+    gps_data = {GPSTAGS.get(k, k): v for k, v in gps_ifd.items()}
+    raw = gps_data.get("GPSImgDirection", gps_data.get("GPSDestBearing"))
+    if raw is None:
+        return None
+    try:
+        direction = float(raw) % 360.0
+    except (TypeError, ValueError, ZeroDivisionError):
+        return None
+    if not math.isfinite(direction):
+        # Same zero-denominator-rational failure mode as extract_gps_coords.
+        return None
+    return direction
 
 
 def extract_taken_at(image_file: IO[bytes]) -> datetime | None:
@@ -327,11 +431,13 @@ def extract_exif_data(image_file: IO[bytes]) -> dict[str, Any] | None:
             image_file.seek(0)
 
 
-def downscale_stored_image(image: Image, max_dimension: int | None, convert_webp: bool) -> int | None:
+def downscale_stored_image(image: Image, max_dimension: int | None, convert_webp: bool, strip_gps: bool = False) -> int | None:
     """Downscale and/or re-encode an Image's stored file in place.
 
     The stored file is replaced only when processing actually shrinks it (or a
-    WebP conversion was requested); otherwise it is left untouched. The
+    WebP conversion was requested), unless ``strip_gps`` removed an embedded
+    GPS tag - that always forces a re-save regardless of the resulting size,
+    since leaving the original file in place would defeat the point. The
     caller is responsible for persisting ``image.image.name`` and the returned
     size to the database - this function only touches storage.
 
@@ -339,6 +445,10 @@ def downscale_stored_image(image: Image, max_dimension: int | None, convert_webp
         image: The Image row whose stored file to process.
         max_dimension: Longest-edge cap in pixels, or None to keep dimensions.
         convert_webp: Whether to re-encode the file as WebP.
+        strip_gps: When True, removes any embedded GPS EXIF tag from the
+            stored file's own metadata (independent of the derived
+            ``Image.latitude``/``longitude`` fields, which the caller controls
+            separately).
 
     Returns:
         The new stored size in bytes when the file was replaced, else None.
@@ -357,9 +467,16 @@ def downscale_stored_image(image: Image, max_dimension: int | None, convert_webp
             return None
         needs_resize = max_dimension is not None and max(img.size) > max_dimension
         needs_convert = convert_webp and source_format != "WEBP"
-        if not needs_resize and not needs_convert:
-            return None
         exif_bytes = img.info.get("exif")
+        has_gps = False
+        if strip_gps and exif_bytes:
+            exif = img.getexif()
+            if exif.get_ifd(0x8825):  # 34853 - GPSInfo IFD
+                del exif[0x8825]
+                exif_bytes = exif.tobytes()
+                has_gps = True
+        if not needs_resize and not needs_convert and not has_gps:
+            return None
         icc_profile = img.info.get("icc_profile")
         img.load()
 
@@ -387,8 +504,10 @@ def downscale_stored_image(image: Image, max_dimension: int | None, convert_webp
     img.save(buffer, format=target_format, **save_kwargs)
     new_size = buffer.tell()
 
-    # A pure resize that somehow grew the file is not worth keeping.
-    if not needs_convert and new_size >= old_size:
+    # A pure resize that somehow grew the file is not worth keeping - unless
+    # stripping GPS was the whole reason we're here, in which case keeping the
+    # smaller-but-still-tagged original would defeat the point.
+    if not needs_convert and not has_gps and new_size >= old_size:
         return None
 
     from django.core.files.base import ContentFile
@@ -421,6 +540,58 @@ def compute_checksum(image_file: IO[bytes]) -> str:
         digest.update(chunk)
     image_file.seek(0)
     return digest.hexdigest()
+
+
+def image_upload_error(file_obj: UploadedFile, declared_media_type: MediaKind, *, skip_malware_scan: bool = False) -> tuple[str, int] | None:
+    """Run every pre-storage safety check an uploaded file must pass, in order.
+
+    Every endpoint that creates an ``Image`` row from a user-uploaded file
+    should call this immediately before ``Image.objects.create(...)`` -
+    checks, in order: the site-wide max file size, magic-byte content-type
+    sniffing (catching a mislabeled/spoofed upload before it's trusted as
+    whatever ``declared_media_type`` claims), and antivirus scanning. Quota
+    is deliberately NOT checked here - it's scope-dependent (per-pin,
+    per-wiki, per-profile) and each call site already checks it separately
+    against the right queryset.
+
+    Args:
+        file_obj: The uploaded file.
+        declared_media_type: The ``MediaKind`` the caller expects/classified
+            this upload as.
+        skip_malware_scan: When True, skips the antivirus scan - only the
+            fast, local size/content-type checks run. For callers that scan
+            asynchronously after accepting the upload (see
+            ``controllers.comments``/``tasks.scan_comment_image``) instead of
+            blocking the request on a clamd round-trip.
+
+    Returns:
+        ``(message, status_code)`` for the first failing check, or ``None``
+        if the file passes every check and is safe to store.
+    """
+    from urbanlens.dashboard.services.content_sniffing import content_type_mismatch_error
+    from urbanlens.dashboard.services.storage import file_size_error_for_upload
+
+    size_error = file_size_error_for_upload(file_obj.size)
+    if size_error:
+        return size_error, 413
+
+    sniff_error = content_type_mismatch_error(file_obj, declared_media_type)
+    if sniff_error:
+        return sniff_error, 400
+
+    if skip_malware_scan:
+        return None
+
+    from urbanlens.dashboard.services.malware_scan import MalwareScanUnavailableError, malware_error_for_upload
+
+    try:
+        malware_error = malware_error_for_upload(file_obj)
+    except MalwareScanUnavailableError:
+        return "Our antivirus scanner is temporarily unavailable. Please try again shortly.", 503
+    if malware_error:
+        return malware_error, 422
+
+    return None
 
 
 def image_to_gallery_json(img: Image, request: HttpRequest, viewer_profile: Profile | None = None) -> dict:

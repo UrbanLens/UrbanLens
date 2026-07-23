@@ -5,4 +5,3 @@ from urbanlens.dashboard.models.abstract.queryset import DashboardManager, Dashb
 from urbanlens.dashboard.models.abstract.model import DashboardModel, PublicDashboardModel, FrontendDashboardModel
 from urbanlens.dashboard.models.abstract.security import SecurityModel
 from urbanlens.dashboard.models.abstract.serializer import Serializer
-from urbanlens.dashboard.models.abstract.viewset import ViewSet

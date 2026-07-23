@@ -1,0 +1,51 @@
+{# Wires dragging for every .cf-fixed-item overlay: pointer-drag by the handle, #}
+{# position clamped to the viewport (mirroring the server's own clamp in #}
+{# CustomFieldPositionView) and saved as viewport percentages so it applies to #}
+{# every pin detail page for this user. Re-runs after each HTMX swap; already- #}
+{# wired items are skipped via a dataset flag. #}
+<script>
+(function () {
+    var MAX_LEFT = 92, MAX_TOP = 88;
+    document.querySelectorAll('.cf-fixed-item').forEach(function (item) {
+        if (item.dataset.cfDragWired) { return; }
+        item.dataset.cfDragWired = '1';
+        var handle = item.querySelector('.cf-fixed-handle');
+        if (!handle) { return; }
+        var dragging = false, offsetX = 0, offsetY = 0;
+
+        function onMove(e) {
+            if (!dragging) { return; }
+            var leftPct = (e.clientX - offsetX) / window.innerWidth * 100;
+            var topPct = (e.clientY - offsetY) / window.innerHeight * 100;
+            item.style.left = Math.min(Math.max(leftPct, 0), MAX_LEFT) + '%';
+            item.style.top = Math.min(Math.max(topPct, 0), MAX_TOP) + '%';
+        }
+
+        function onUp() {
+            if (!dragging) { return; }
+            dragging = false;
+            item.classList.remove('is-dragging');
+            document.removeEventListener('pointermove', onMove);
+            document.removeEventListener('pointerup', onUp);
+            fetch(item.dataset.cfPositionUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': window.csrftoken || '' },
+                body: JSON.stringify({ left: parseFloat(item.style.left), top: parseFloat(item.style.top) })
+            }).catch(function () {
+                if (window.toastr) { toastr.error('Failed to save the field position.'); }
+            });
+        }
+
+        handle.addEventListener('pointerdown', function (e) {
+            e.preventDefault();
+            var rect = item.getBoundingClientRect();
+            offsetX = e.clientX - rect.left;
+            offsetY = e.clientY - rect.top;
+            dragging = true;
+            item.classList.add('is-dragging');
+            document.addEventListener('pointermove', onMove);
+            document.addEventListener('pointerup', onUp);
+        });
+    });
+}());
+</script>

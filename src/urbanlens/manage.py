@@ -3,8 +3,8 @@ Django's command-line utility for administrative tasks.
 """
 #!/usr/bin/env python
 import os
-import sys
 from pathlib import Path
+import sys
 
 # Ensure /app/src is on sys.path when running this file directly.
 PROJECT_SRC = Path(__file__).resolve().parents[1]  # .../src
@@ -20,8 +20,22 @@ _ENV_VARS_TO_PRINT = [
     "UL_UNSAFE_ALLOW_HTTP",
 ]
 
+#: Set in the environment after the startup block has been printed, so child
+#: processes that re-enter manage.py (bin/init.py running collectstatic then
+#: migrate, the runserver autoreloader) don't repeat it.
+STARTUP_ENV_PRINTED_FLAG = "UL_STARTUP_ENV_PRINTED"
+
 def _print_startup_env() -> None:
-    """Print key environment variables before Django initialises."""
+    """Print key environment variables before Django initialises.
+
+    Prints at most once per process tree: the ``UL_STARTUP_ENV_PRINTED``
+    environment flag is set after printing, and inherited environments that
+    already carry it (later manage.py invocations from the same parent, the
+    autoreload child process) skip the block entirely.
+    """
+    if os.environ.get(STARTUP_ENV_PRINTED_FLAG):
+        return
+    os.environ[STARTUP_ENV_PRINTED_FLAG] = "1"
     print("--- UrbanLens startup environment ---", flush=True)
     for var in _ENV_VARS_TO_PRINT:
         val = os.environ.get(var)
@@ -36,7 +50,7 @@ def _print_startup_env() -> None:
 
 def main():
     """Run administrative tasks."""
-    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'urbanlens.UrbanLens.settings')
+    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "urbanlens.UrbanLens.settings")
     _print_startup_env()
     try:
         from django.core.management import execute_from_command_line
@@ -49,5 +63,5 @@ def main():
     execute_from_command_line(sys.argv)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

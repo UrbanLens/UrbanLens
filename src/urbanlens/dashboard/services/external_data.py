@@ -39,17 +39,21 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 import logging
+import time
 from typing import TYPE_CHECKING, ClassVar
 
+from celery.exceptions import SoftTimeLimitExceeded
 from django.core.cache import cache
 from django.utils import timezone
 
+from urbanlens.dashboard.services.apis.assets.base import MediaItem
 from urbanlens.dashboard.services.rate_limiter import RateLimitExceededError, RequestCancelledError, ServiceDisabledError
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.services.apis.assets.base import MediaProvider
     from urbanlens.dashboard.services.apis.locations.base import SatelliteSlide, SatelliteViewProvider, StreetViewProvider, StreetViewSlide
+    from urbanlens.dashboard.services.geo_boundary import GeoBoundary
 
 logger = logging.getLogger(__name__)
 
@@ -107,6 +111,16 @@ class PanelSource(ABC):
         outer_class: CSS classes for the pending placeholder's outer element.
         outer_is_card: True when the section element is itself the card (the
             satellite/street layout) rather than wrapping an inner card div.
+        queue: Celery queue this source's fetch is dispatched to. Defaults to
+            the dedicated ``panel_fetch`` queue (a high-concurrency thread
+            pool - see docker-compose.yml's celery-worker-panels service),
+            appropriate for the common case of "one or two small HTTP calls."
+            Override to ``"celery"`` (the default queue, prefork pool) for a
+            source whose fetch does real CPU-bound work (e.g. Overture's
+            GeoParquet/Shapely geometry parsing) - many of those running at
+            once on a thread pool would cause GIL contention that slows down
+            every other panel sharing it, defeating the point of splitting
+            the queue in the first place.
     """
 
     key: ClassVar[str]
@@ -115,6 +129,7 @@ class PanelSource(ABC):
     title: ClassVar[str] = ""
     outer_class: ClassVar[str] = ""
     outer_is_card: ClassVar[bool] = False
+    queue: ClassVar[str] = "panel_fetch"
 
     def scope(self, pin: Pin) -> str:
         """Cache-key scope identifying which rows/entries this pin's fetch fills.
@@ -137,6 +152,22 @@ class PanelSource(ABC):
     def skip_key(self, pin: Pin) -> str:
         """Suppression cache key set after a failed/disabled fetch."""
         return f"ulfetch:skip:{self.key}:{self.scope(pin)}"
+
+    def gate(self, pin: Pin) -> bool:
+        """Whether this source has enough information to fetch for ``pin``.
+
+        Checked before scheduling a fetch so a source with nothing to work
+        with (e.g. no coordinates, no address, no name) degrades to a quiet
+        204 instead of polling forever. The default always allows the fetch;
+        override when a source needs a precondition beyond "has a Location".
+
+        Args:
+            pin: The pin whose panel is being rendered.
+
+        Returns:
+            True when a fetch is worth scheduling.
+        """
+        return True
 
     @abstractmethod
     def is_ready(self, pin: Pin) -> bool:
@@ -181,7 +212,97 @@ class LocationCachePanelSource(PanelSource, ABC):
         return LocationCache.get_fresh(pin.location, self.cache_source) is not None
 
 
-class MediaPanelSource(LocationCachePanelSource):
+class InfoPanelSource(LocationCachePanelSource, ABC):
+    """Base for panels that render through the generic ``_simple_info_panel.html`` template.
+
+    A subclass owns only ``fetch`` (writing to its ``LocationCache`` row,
+    inherited from ``LocationCachePanelSource``) and ``render_context``
+    (turning that row's cached data into the template's context shape). The
+    URL, controller dispatch, readiness/pending polling, and debug-overlay
+    wiring are all fully generic (see ``PinController.panel_info``), so a new
+    panel of this shape needs only a new ``InfoPanelSource`` subclass in a
+    plugin - no new route, controller method, or template block.
+
+    Panels with genuinely bespoke markup (their own JS, a listings grid, a
+    map, ...) don't fit this shape and should keep a dedicated controller
+    method, route, and template instead of forcing themselves in here.
+    """
+
+    @abstractmethod
+    def render_context(self, pin: Pin, data: dict) -> dict | None:
+        """Build ``_simple_info_panel.html``'s context from cached data.
+
+        ``section_id``/``icon``/``title`` are filled in by the caller from
+        this source's own class attributes - don't include them here.
+
+        Args:
+            pin: The pin whose panel is being rendered.
+            data: The ``LocationCache`` row's ``data`` dict (``{}`` when the
+                fetch found nothing).
+
+        Returns:
+            A context dict (may include ``heading_name``, ``chips``,
+            ``meta``, ``header_link``, ``footer_link``), or None when there's
+            nothing worth showing (renders a 204).
+        """
+
+    def debug_count(self, data: dict) -> int:
+        """Item count reported in the debug overlay.
+
+        Defaults to 1 (one record found); override for panels whose cached
+        data represents a list of distinct results.
+
+        Args:
+            data: The ``LocationCache`` row's ``data`` dict.
+        """
+        return 1
+
+
+class CoordinateGatedInfoPanelSource(InfoPanelSource, ABC):
+    """An ``InfoPanelSource`` that only makes sense when the pin has coordinates.
+
+    Attributes:
+        geo_boundary: Restricts this panel to a geographic region (see
+            ``services.geo_boundary``); None means unrestricted.
+    """
+
+    geo_boundary: ClassVar[GeoBoundary | None] = None
+
+    def gate(self, pin: Pin) -> bool:
+        """Skip scheduling a fetch for a pin with no usable coordinates, or outside ``geo_boundary``."""
+        lat, lng = pin.effective_latitude, pin.effective_longitude
+        if not (lat and lng):
+            return False
+        return self.geo_boundary is None or self.geo_boundary.contains(lat, lng)
+
+
+class GalleryMediaSource(LocationCachePanelSource, ABC):
+    """Base for anything that can appear as a source tab in the Media gallery.
+
+    The pin detail page's Media gallery combines results from several
+    unrelated providers (archive/media search engines, business directories,
+    imagery APIs, ...) behind one uniform per-source loader/tab. Each
+    provider needs only its own ``fetch`` (writing to its ``LocationCache``
+    row, inherited scheduling/readiness/failure handling from
+    ``LocationCachePanelSource``) and ``media_items`` (turning that row's
+    ``data`` back into displayable items) - the gallery controller and
+    template are otherwise oblivious to which provider it's rendering.
+    """
+
+    @abstractmethod
+    def media_items(self, data: dict) -> list[MediaItem]:
+        """Turn this source's cached ``LocationCache.data`` into gallery items.
+
+        Args:
+            data: The ``LocationCache`` row's ``data`` dict for this source
+                (``{}`` when the fetch found nothing).
+
+        Returns:
+            The items to render as ``.media-item`` tiles; may be empty.
+        """
+
+
+class MediaPanelSource(GalleryMediaSource):
     """One provider of the combined Media gallery (Smithsonian, Wikimedia, LOC).
 
     Instantiated once per provider; ``make_gateway`` builds the concrete
@@ -222,12 +343,35 @@ class MediaPanelSource(LocationCachePanelSource):
         Returns:
             Ordered, de-duplicated list of query strings; may be empty.
         """
-        search_term = pin.get_unique_search_name(include_country=gateway.search_with_country, quote_name=gateway.quote_name)
+        if gateway.reject_address_derived_names and pin.location is not None:
+            from urbanlens.dashboard.services.locations.naming import is_address_derived_name
+
+            fallback_name = pin.meaningful_official_name or pin.meaningful_name
+            # A pin with no real landmark name falls back to its raw street
+            # address as the "name" - a query built from that has no genuine
+            # narrowing power (just a house number and a generic street-type
+            # word), so a provider whose relevance ranking treats query words
+            # as independent OR terms is skipped entirely rather than fed a
+            # guaranteed-noisy query (see LOCJsonGateway).
+            if fallback_name and is_address_derived_name(fallback_name, pin.location):
+                return []
+
+        search_term = pin.get_unique_search_name(
+            include_country=gateway.search_with_country,
+            quote_name=gateway.quote_name,
+            include_address=gateway.include_address,
+            quote_locality=gateway.quote_locality,
+        )
         if not search_term:
             return []
         terms = [search_term]
         if gateway.multi_query:
-            narrow_term = pin.get_unique_search_name(include_country=gateway.search_with_country, quote_name=gateway.quote_name, include_address=False)
+            narrow_term = pin.get_unique_search_name(
+                include_country=gateway.search_with_country,
+                quote_name=gateway.quote_name,
+                include_address=False,
+                quote_locality=gateway.quote_locality,
+            )
             if narrow_term and narrow_term not in terms:
                 terms.append(narrow_term)
         return terms
@@ -243,6 +387,17 @@ class MediaPanelSource(LocationCachePanelSource):
             return
         gateway.get_media(pin.location, terms)
 
+    def gate(self, pin: Pin) -> bool:
+        """Geo-restricted providers and pins with no usable search name are skipped."""
+        gateway = self.make_gateway()
+        if gateway.geo_boundary is not None and not gateway.geo_boundary.contains(pin.effective_latitude, pin.effective_longitude):
+            return False
+        return bool(self.search_terms(pin, gateway))
+
+    def media_items(self, data: dict) -> list[MediaItem]:
+        """Rebuild ``MediaItem``s from this provider's cached ``{"items": [...]}``."""
+        return [MediaItem(**item) for item in (data or {}).get("items", [])]
+
 
 class BoundaryPanelSource(PanelSource):
     """Auto-generated default boundaries stored on the Location's Boundary rows.
@@ -255,6 +410,12 @@ class BoundaryPanelSource(PanelSource):
     """
 
     key = "boundary"
+    # Stays on the default (prefork) queue, not the fast thread-pool queue -
+    # generate_location_boundaries does real CPU-bound work (gunzipping
+    # building-footprint shards, shapely geometry ops), and several of those
+    # running concurrently on a thread pool would cause enough GIL contention
+    # to slow down every other panel sharing it. See PanelSource.queue.
+    queue = "celery"
 
     def scope(self, pin: Pin) -> str:
         """Location-scoped: default boundaries are keyed by Location."""
@@ -491,15 +652,18 @@ def schedule_panel_fetch(source_key: str, pin: Pin) -> bool:
     """
     source = get_panel_source(source_key)
     if source is None:
+        logger.warning("schedule_panel_fetch: unknown source '%s' for pin %s", source_key, getattr(pin, "pk", None))
         return False
     if not pin.profile.external_apis_enabled:
         return False
     if cache.get(source.skip_key(pin)):
+        logger.debug("schedule_panel_fetch: %s for pin %s is suppressed, skipping", source_key, pin.pk)
         return False
     if cache.add(source.flight_key(pin), 1, FLIGHT_TTL_SECONDS):
         from urbanlens.dashboard.tasks import fetch_panel_source
 
-        fetch_panel_source.delay(source_key, pin.pk)
+        logger.debug("schedule_panel_fetch: dispatching %s for pin %s to queue '%s'", source_key, pin.pk, source.queue)
+        fetch_panel_source.apply_async(args=[source_key, pin.pk], queue=source.queue)
     return True
 
 
@@ -529,13 +693,32 @@ def run_panel_fetch(source_key: str, pin: Pin) -> None:
         # skip without recording a failure so the panel just stays absent.
         cache.delete(source.flight_key(pin))
         return
+
+    started = time.monotonic()
+    logger.debug("Panel fetch %s for pin %s starting on queue '%s'", source_key, pin.pk, source.queue)
     try:
         source.fetch(pin)
     except (RateLimitExceededError, ServiceDisabledError) as exc:
-        logger.info("Panel fetch %s for pin %s skipped: %s", source_key, pin.pk, exc)
+        logger.debug("Panel fetch %s for pin %s skipped: %s", source_key, pin.pk, exc)
         cache.set(source.skip_key(pin), 1, DISABLED_SKIP_TTL_SECONDS)
-    except Exception:
-        logger.exception("Panel fetch %s for pin %s failed", source_key, pin.pk)
+    except SoftTimeLimitExceeded:
+        # Celery's own worker log already recorded the soft time limit at
+        # WARNING with full task context; a second ERROR-level traceback here
+        # would just be noise for the same event. Suppress like any other
+        # failure and let the task end - re-raising would still hit the hard
+        # time limit before doing anything useful with the remaining budget.
+        logger.warning(
+            "Panel fetch %s for pin %s hit its soft time limit after %.1fs; suppressing for %ss",
+            source_key,
+            pin.pk,
+            time.monotonic() - started,
+            FAILURE_SKIP_TTL_SECONDS,
+        )
         cache.set(source.skip_key(pin), 1, FAILURE_SKIP_TTL_SECONDS)
+    except Exception:
+        logger.exception("Panel fetch %s for pin %s failed after %.1fs", source_key, pin.pk, time.monotonic() - started)
+        cache.set(source.skip_key(pin), 1, FAILURE_SKIP_TTL_SECONDS)
+    else:
+        logger.debug("Panel fetch %s for pin %s finished in %.1fs", source_key, pin.pk, time.monotonic() - started)
     finally:
         cache.delete(source.flight_key(pin))

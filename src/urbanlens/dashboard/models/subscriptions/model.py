@@ -10,6 +10,7 @@ from django.db.models import CASCADE, CharField, DateTimeField, ForeignKey, Inte
 from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.subscriptions.queryset import PendingSubscriptionGrantManager, SubscriptionRoleManager, UserSubscriptionManager
 
 if TYPE_CHECKING:
     from django.contrib.auth.base_user import AbstractBaseUser
@@ -19,8 +20,24 @@ class SiteFeature(TextChoices):
     """Feature flags that can be unlocked by subscription roles."""
 
     AI = "ai", "AI features"
+    # Deliberately separate from AI: vision calls on every upload cost far more
+    # than the text features AI covers, so admins grant this tier explicitly
+    # (it is not part of the VIP canonical set).
+    AI_PHOTO_PROCESSING = "ai_photo_processing", "AI photo processing"
     PLACES = "places", "Places layer (Google Places landmarks)"
     SEARCH = "search", "Web search engines"
+    # Deliberately separate from the VIP canonical set: video files are far
+    # larger than photos, so admins grant this tier explicitly to manage
+    # storage cost rather than bundling it into every VIP subscription.
+    VIDEO_UPLOADS = "video_uploads", "Video uploads"
+    # Documents are converted to PDF and OCR'd on upload (see services.documents),
+    # which costs meaningfully more CPU than a photo upload - kept as its own
+    # grant for the same reason as VIDEO_UPLOADS.
+    DOCUMENT_UPLOADS = "document_uploads", "Document uploads"
+    # Nearby-facility/feature research tabs on the pin detail page (e.g. EPA's
+    # nearby-regulated-facilities list) - separate from each plugin's own
+    # unconditional "data about this exact pin" card, which everyone gets.
+    NEARBY_RESEARCH = "nearby_research", "Nearby research data"
 
 
 class SubscriptionRole(abstract.DashboardModel):
@@ -57,13 +74,15 @@ class SubscriptionRole(abstract.DashboardModel):
         help_text="Max user-triggered emails per 30 days for this role. Blank uses the site default; 0 means unlimited.",
     )
 
+    objects = SubscriptionRoleManager()
+
     class Meta(abstract.DashboardModel.Meta):
         ordering = ["name"]
 
     # Canonical features every VIP role must include.  Add new SiteFeature values here
     # when they should be automatically granted to VIPs; ensure_defaults will merge them
     # into existing rows without removing any admin-configured extras.
-    _VIP_CANONICAL_FEATURES: frozenset[str] = frozenset({SiteFeature.AI, SiteFeature.PLACES, SiteFeature.SEARCH})
+    _VIP_CANONICAL_FEATURES: frozenset[str] = frozenset({SiteFeature.AI, SiteFeature.PLACES, SiteFeature.SEARCH, SiteFeature.NEARBY_RESEARCH})
 
     # Default storage quota (GB) granted to the built-in VIP role on creation.
     _VIP_DEFAULT_STORAGE_QUOTA_GB: int = 500
@@ -119,6 +138,8 @@ class UserSubscription(abstract.DashboardModel):
         role_id: int
         granted_by_id: int
 
+    objects = UserSubscriptionManager()
+
     class Meta(abstract.DashboardModel.Meta):
         ordering = ["-created"]
         constraints = [
@@ -160,6 +181,8 @@ class PendingSubscriptionGrant(abstract.DashboardModel):
         role_id: int
         granted_by_id: int
 
+    objects = PendingSubscriptionGrantManager()
+
     class Meta(abstract.DashboardModel.Meta):
         ordering = ["-created"]
 
@@ -170,26 +193,24 @@ class PendingSubscriptionGrant(abstract.DashboardModel):
 
 
 def user_has_feature(user: AbstractBaseUser | AnonymousUser, feature: SiteFeature | str) -> bool:
-    """Return whether the user has an active role granting the feature.
+    """Return whether the user has the feature, via the site default or an active role.
 
     Anonymous users never have subscription-backed features. Site admins are
-    treated as having every subscription tier and feature. Keeping this guard
-    in the helper lets callers use ``request.user`` directly without duplicating
-    authentication/type checks throughout controllers and context processors.
+    treated as having every subscription tier and feature. Authenticated users
+    also get whatever ``SiteSettings.default_features`` grants everyone, even
+    with no subscription at all. Keeping this guard in the helper lets callers
+    use ``request.user`` directly without duplicating authentication/type checks
+    throughout controllers and context processors.
     """
     if not isinstance(user, User) or not user.is_authenticated:
         return False
     if user.has_perm("dashboard.view_site_admin"):
         return True
-    now = timezone.now()
-    subscriptions = (
-        UserSubscription.objects.filter(
-            user=user,
-            revoked_at__isnull=True,
-        )
-        .filter(Q(expires_at__isnull=True) | Q(expires_at__gt=now))
-        .select_related("role")
-    )
+    from urbanlens.dashboard.models.site_settings import SiteSettings
+
+    if SiteSettings.get_current().grants(feature):
+        return True
+    subscriptions = UserSubscription.objects.active_for(user).select_related("role")
     return any(subscription.role.grants(feature) for subscription in subscriptions)
 
 
@@ -204,21 +225,13 @@ def active_subscription_roles(user: AbstractBaseUser | AnonymousUser) -> list[Su
     """
     if not isinstance(user, User) or not user.is_authenticated:
         return []
-    now = timezone.now()
-    subscriptions = (
-        UserSubscription.objects.filter(
-            user=user,
-            revoked_at__isnull=True,
-        )
-        .filter(Q(expires_at__isnull=True) | Q(expires_at__gt=now))
-        .select_related("role")
-    )
+    subscriptions = UserSubscription.objects.active_for(user).select_related("role")
     return [subscription.role for subscription in subscriptions]
 
 
 def grant_subscription(user: User, role: SubscriptionRole, granted_by: User, months: int | None) -> UserSubscription:
     """Create or update an active grant for a user and role."""
-    subscription = UserSubscription.objects.filter(user=user, role=role, revoked_at__isnull=True).first()
+    subscription = UserSubscription.objects.not_revoked().filter(user=user, role=role).first()
     if subscription is None:
         subscription = UserSubscription(user=user, role=role, granted_by=granted_by)
     subscription.set_duration_months(months)

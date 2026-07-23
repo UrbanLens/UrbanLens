@@ -7,18 +7,31 @@
         <i class="material-symbols-outlined">calendar_add_on</i>
     </a>
     {% elif calendar_link %}
+    <button type="button" class="btn-icon{% if calendar_link.auto_sync %} btn-icon--active{% endif %}"
+            title="{% if calendar_link.auto_sync %}Auto-sync is on - future changes to this trip update the calendar event automatically. Click to turn off.{% else %}Turn on auto-sync to push future trip changes to this calendar event automatically.{% endif %}"
+            hx-post="{% url 'trips.calendar.autosync' trip.slug %}"
+            hx-vals='{"auto_sync": "{% if calendar_link.auto_sync %}0{% else %}1{% endif %}"}'
+            hx-target="#trip-calendar-button"
+            hx-swap="outerHTML">
+        <i class="material-symbols-outlined">{% if calendar_link.auto_sync %}sync{% else %}sync_disabled{% endif %}</i>
+    </button>
     <button type="button" class="btn-icon"
             title="Remove this trip from your Google Calendar"
-            hx-delete="{% url 'trips.calendar.export' trip.uuid %}"
+            hx-delete="{% url 'trips.calendar.export' trip.slug %}"
             hx-target="#trip-calendar-button"
             hx-swap="outerHTML"
             hx-confirm="Remove this trip from your Google Calendar?">
         <i class="material-symbols-outlined">event_busy</i>
     </button>
     {% else %}
+    <label class="calendar-export-autosync" title="Keep this trip in sync with Google Calendar after adding it - future changes will update the event automatically">
+        <input type="checkbox" id="calendar-autosync-{{ trip.uuid }}" name="auto_sync" value="1">
+        <span>Auto-sync</span>
+    </label>
     <button type="button" class="btn-icon"
             title="Add this trip to your Google Calendar (creates an event for the trip and each scheduled activity)"
-            hx-post="{% url 'trips.calendar.export' trip.uuid %}"
+            hx-post="{% url 'trips.calendar.export' trip.slug %}"
+            hx-include="#calendar-autosync-{{ trip.uuid }}"
             hx-target="#trip-calendar-button"
             hx-swap="outerHTML">
         <i class="material-symbols-outlined">calendar_add_on</i>

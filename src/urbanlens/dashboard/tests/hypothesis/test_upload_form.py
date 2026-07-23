@@ -14,13 +14,13 @@ from unittest.mock import MagicMock
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.utils.datastructures import MultiValueDict
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.forms.upload_datafile import UploadDataFile, _MultipleFileField, _MultipleFileInput
 
 
 # -- _MultipleFileInput --------------------------------------------------------
 
-class MultipleFileInputValueFromDatadictTests(TestCase):
+class MultipleFileInputValueFromDatadictTests(SimpleTestCase):
     """value_from_datadict calls files.getlist(name) and returns the result."""
 
     def _widget(self) -> _MultipleFileInput:
@@ -50,7 +50,7 @@ class MultipleFileInputValueFromDatadictTests(TestCase):
 
 # -- _MultipleFileField --------------------------------------------------------
 
-class MultipleFileFieldCleanTests(TestCase):
+class MultipleFileFieldCleanTests(SimpleTestCase):
     """_MultipleFileField.clean validates each file individually."""
 
     def _field(self) -> _MultipleFileField:
@@ -137,7 +137,7 @@ class UploadDataFileFormTests(TestCase):
 
 # -- _MultipleFileField - falsy file filtering ---------------------------------
 
-class MultipleFileFieldFalsyFilterTests(TestCase):
+class MultipleFileFieldFalsyFilterTests(SimpleTestCase):
     """_MultipleFileField.clean skips falsy entries in the list (the `if f` guard)."""
 
     def _field(self) -> _MultipleFileField:

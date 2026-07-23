@@ -1,0 +1,11 @@
+{% load humanize %}
+{% comment %}
+Hero body for safety/detail.html. Expects `checkin` in context.
+The #safety-status-badge and #safety-title-text ids are updated live by
+detail.html's inline scripts (safetyStatusUpdate / autosave).
+{% endcomment %}
+<h1 class="ul-page-hero__title">
+    <span class="safety-checkin-status-badge safety-checkin-status-badge--{{ checkin.status }}" id="safety-status-badge">{{ checkin.get_status_display }}</span>
+    <span id="safety-title-text">{{ checkin.title }}</span>
+</h1>
+<p class="ul-page-hero__subtitle" title="{{ checkin.checkin_by|date:'N j, Y g:i A' }}">Check in {{ checkin.checkin_by|naturaltime }}</p>

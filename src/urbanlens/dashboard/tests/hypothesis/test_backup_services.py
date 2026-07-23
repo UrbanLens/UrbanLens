@@ -11,7 +11,7 @@ from unittest import mock
 
 from hypothesis import given, settings as hyp_settings, strategies as st
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.backups import backup_files, collect_backup_stats, scheduled_backup_due
 
 
@@ -28,7 +28,7 @@ def _touch(path: Path, when: datetime, size: int = 1) -> None:
     os.utime(path, (timestamp, timestamp))
 
 
-class BackupFilesTests(TestCase):
+class BackupFilesTests(SimpleTestCase):
     """backup_files returns existing files newest-first."""
 
     def test_returns_only_files_sorted_by_mtime_descending(self) -> None:
@@ -49,7 +49,7 @@ class BackupFilesTests(TestCase):
         self.assertEqual(backup_files(missing), [])
 
 
-class ScheduledBackupDueTests(TestCase):
+class ScheduledBackupDueTests(SimpleTestCase):
     """scheduled_backup_due respects enablement, frequency, and latest backup time."""
 
     def test_disabled_backups_are_never_due(self) -> None:
@@ -77,7 +77,7 @@ class ScheduledBackupDueTests(TestCase):
         self.assertEqual(due, elapsed_hours >= frequency_hours)
 
 
-class CollectBackupStatsTests(TestCase):
+class CollectBackupStatsTests(SimpleTestCase):
     """collect_backup_stats summarizes backup directory contents."""
 
     def test_collects_count_latest_size_and_settings(self) -> None:

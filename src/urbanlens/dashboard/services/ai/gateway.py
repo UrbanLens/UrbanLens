@@ -5,7 +5,7 @@ from decimal import Decimal
 from functools import singledispatchmethod
 import logging
 import re
-from typing import Any, Generic, TypeVar
+from typing import Any, ClassVar, Generic, TypeVar
 
 import tiktoken
 
@@ -33,6 +33,16 @@ class LLMGateway[Response](ABC):
     instructions: str
     project_description: str
     max_tokens: int = MAX_TOKENS
+
+    #: Cost per thousand (sent, received) tokens, keyed by the provider's own
+    #: model identifier (as returned by ``_lookup_model``). Each provider
+    #: subclass owns its own catalog since model names and pricing units are
+    #: provider-specific - a base-class table can only ever describe one
+    #: provider's models, silently mis-costing every other gateway.
+    MODEL_COSTS: ClassVar[dict[str, tuple[Decimal, Decimal]]] = {}
+    #: Fallback estimate for a model absent from ``MODEL_COSTS`` (unrecognized
+    #: or a provider that hasn't populated its catalog yet).
+    DEFAULT_COST_PER_THOUSAND: ClassVar[tuple[Decimal, Decimal]] = (Decimal("0.01"), Decimal("0.03"))
 
     def __init__(
         self,
@@ -137,20 +147,11 @@ class LLMGateway[Response](ABC):
             Decimal('0.15')
 
         """
-        match self.model:
-            case "gpt-5.2":
-                cost_per_thousand_sent = Decimal("0.00175")
-                cost_per_thousand_received = Decimal("0.014")
-            case "gpt-5-mini":
-                cost_per_thousand_sent = Decimal("0.00025")
-                cost_per_thousand_received = Decimal("0.002")
-            case "gpt-5-nano":
-                cost_per_thousand_sent = Decimal("0.00005")
-                cost_per_thousand_received = Decimal("0.0004")
-            case _:
-                logger.warning("Model not recognized. Using default costs.")
-                cost_per_thousand_sent = Decimal("0.01")
-                cost_per_thousand_received = Decimal("0.03")
+        costs = self.MODEL_COSTS.get(self.model)
+        if costs is None:
+            logger.warning("Model not recognized (%s). Using default costs.", self.model)
+            costs = self.DEFAULT_COST_PER_THOUSAND
+        cost_per_thousand_sent, cost_per_thousand_received = costs
 
         sent_cost = self.sent_tokens * cost_per_thousand_sent / 1000
         received_cost = self.received_tokens * cost_per_thousand_received / 1000

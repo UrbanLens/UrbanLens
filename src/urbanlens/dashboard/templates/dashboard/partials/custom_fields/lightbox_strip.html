@@ -1,0 +1,15 @@
+{# Compact custom-fields strip shown under the photo / markup-map lightboxes. #}
+{# Context: rows ({field, value} dicts), url_name, target_arg. #}
+{# The whole strip re-renders on each save (hx-target on the wrapping div). #}
+<div class="cf-lightbox-strip">
+    {% for row in rows %}
+    <div class="cf-lightbox-item">
+        <label class="cf-value-label" title="{{ row.field.get_field_type_display }} field">
+            <i class="material-symbols-outlined cf-type-icon">{{ row.field.type_icon }}</i>
+            {{ row.field.name }}
+        </label>
+        {% url url_name target_arg as post_url %}
+        {% include "dashboard/partials/custom_fields/_value_input.html" with field=row.field value=row.value ref_choices=row.ref_choices post_url=post_url hx_target="closest .cf-lightbox-strip" include_field_id=True %}
+    </div>
+    {% endfor %}
+</div>

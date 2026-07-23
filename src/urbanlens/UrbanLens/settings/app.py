@@ -8,7 +8,6 @@ from typing import Annotated, Any, Self
 from django import conf
 from django.conf import LazySettings
 from django.core.management.utils import get_random_secret_key
-
 from pydantic import Field, field_validator, model_validator
 from pydantic._internal._model_construction import ModelMetaclass
 from pydantic_core import Url
@@ -30,10 +29,14 @@ _ENV_FILE_PATHS = [
 
 
 def _default_allowed_hosts() -> list[str]:
-    """Local dev defaults to a wildcard-friendly host list; other environments lock down to the canonical domain."""
-    if os.getenv("UL_ENVIRONMENT", EnvironmentTypes.LOCAL).lower() == EnvironmentTypes.LOCAL:
-        return ["urbanlens.org", "localhost", "127.0.0.1"]
-    return ["urbanlens.org"]
+    """Return the default ``ALLOWED_HOSTS`` list for the current environment.
+
+    ``localhost`` and ``127.0.0.1`` are always included so Docker's internal
+    ``curl http://localhost:8000/health/`` healthchecks (see docker-compose.yml)
+    succeed without opening the app to arbitrary public Host headers. Override
+    the full list via ``UL_ALLOWED_HOSTS`` when deploying to a custom domain.
+    """
+    return ["urbanlens.org", "localhost", "127.0.0.1"]
 
 
 class AppSettingsMeta(ModelMetaclass):
@@ -60,7 +63,24 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     app_version: str = Field(default="", description="Semantic application version from pyproject.toml")
     environment_name: str = Field(default=EnvironmentTypes.LOCAL, description="The name of the environment")
     debug_override: bool | None = Field(description="Whether or not to enable debugging", alias="DEBUG", default=None)
-    secret_key: str = Field(default=get_random_secret_key(), description="The secret key")
+    # default_factory, not default=get_random_secret_key() - a plain `default=` value is
+    # computed once at class-definition time rather than per instantiation, which is
+    # the standard pydantic mutable/computed-default footgun even though it's harmless
+    # here specifically (AppSettingsMeta makes this class a process-wide singleton).
+    # NOTE: this field has no wired env var in any deployment (UL_SECRET_KEY is never
+    # set) - nothing outside this file should ever read it as if it were stable across
+    # processes. dashboard/models/fields.py used to and that was a real bug; see its
+    # comment for the fix (falls back to Django's actual SECRET_KEY instead).
+    secret_key: str = Field(default_factory=get_random_secret_key, description="The secret key")
+    field_encryption_key: str | None = Field(
+        default=None,
+        description=(
+            "Base64 key used to encrypt sensitive database fields (e.g. Immich API keys) via Fernet. "
+            "When unset, a key is derived from Django's SECRET_KEY (DJANGO_SECRET_KEY) so existing installs "
+            "keep working without a new required secret - set this explicitly in production so field "
+            "encryption survives a SECRET_KEY rotation."
+        ),
+    )
     root_urlconf: str = Field(default="urbanlens.UrbanLens.urls", description="The root urlconf")
     admin_username: str = Field(default="Admin", description="The username to use for the admin user")
     admin_email: str = Field(default="admin@yourdomain.com", description="The email to use for the admin user")
@@ -82,6 +102,18 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     backup_enabled: bool = Field(default=True, description="Whether scheduled database backups are enabled")
     backup_frequency_hours: int = Field(default=24, description="How often scheduled database backups should run, in hours")
     backup_retention: int = Field(default=30, description="The number of backup files to retain")
+    clamav_enabled: bool = Field(
+        default=True,
+        description=(
+            "Whether every user-uploaded file (photo/video/document, article images) is scanned for "
+            "malware via a clamd daemon before it's stored. Uploads are rejected if the scanner is "
+            "enabled but unreachable (fail closed). Set UL_CLAMAV_ENABLED=false for local development, "
+            "where no clamd container is running."
+        ),
+    )
+    clamav_host: str = Field(default="urbanlens_clamav", description="Hostname of the clamd daemon (see the clamav service in docker-compose.yml)")
+    clamav_port: int = Field(default=3310, description="Port of the clamd daemon")
+    clamav_timeout_seconds: float = Field(default=15.0, description="Socket timeout for a single clamd scan request")
     allow_dev_toolbar_for_non_admins: bool = Field(
         default=False,
         description=(
@@ -122,18 +154,34 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     google_search_tenant: str | None = Field(default=None, description="The google search tenant")
     google_client_id: str | None = Field(default=None, description="The google client id")
     google_client_secret: str | None = Field(default=None, description="The google client secret")
+    flickr_api_key: str | None = Field(default=None, description="The Flickr API (consumer) key, for the per-user photo import OAuth 1.0a flow")
+    flickr_api_secret: str | None = Field(default=None, description="The Flickr API (consumer) secret")
     apple_maps_api_key: str | None = Field(default=None, description="The apple maps JWT (pre-generated from Apple Developer private key)")
     usgs_api_key: str | None = Field(default=None, description="The USGS M2M application token (from EarthExplorer account settings)")
     usgs_username: str | None = Field(default=None, description="The USGS EarthExplorer username (required alongside usgs_api_key for M2M auth)")
     mapbox_api_key: str | None = Field(default=None, description="The Mapbox public access token (pk.* token)")
     bing_maps_api_key: str | None = Field(default=None, description="The Bing Maps API key (from Azure portal)")
+    azure_maps_subscription_key: str | None = Field(default=None, description="The Azure Maps subscription key (Azure Portal -> Azure Maps account -> Authentication)")
+    ollama_base_url: str | None = Field(default=None, description="Base URL of a self-hosted Ollama server (e.g. http://localhost:11434) for local, free AI photo-keyword generation")
+    ollama_vision_model: str = Field(default="llava", description="Ollama vision model name used for photo keyword generation")
     mapillary_access_token: str | None = Field(default=None, description="The Mapillary client access token")
     brave_search_api_key: str | None = Field(default=None, description="The Brave Search API key")
+    searxng_base_url: str | None = Field(default=None, description="Base URL of a self-hosted or trusted SearXNG instance (e.g. https://searx.example.com), no API key required")
+    searxng_image_engines: Annotated[list[str], NoDecode] = Field(default_factory=list, description="Override the SearXNG image engines queried by the Web Images media provider (comma-separated engine names as configured in the instance's settings.yml); empty uses the built-in default list")
+    mojeek_api_key: str | None = Field(default=None, description="The Mojeek Search API key")
+    marginalia_api_key: str | None = Field(default=None, description="The Marginalia Search API key ('public' is Marginalia's own shared testing key when unset)")
     smithsonian_api_key: str | None = Field(default=None, description="The smithsonian key")
+    yelp_api_key: str | None = Field(default=None, description="The Yelp Fusion API key (private key, server-side only)")
     openweathermap_api_key: str | None = Field(default=None, description="The openweathermap key")
     nps_api_key: str | None = Field(default=None, description="The national park service api key")
+    redata_api_url: str | None = Field(default=None, description="Base URL of the REData property-records service (e.g. https://redata.example.com), no trailing slash needed")
+    redata_api_key: str | None = Field(default=None, description="Bearer API key for REData's external API - needs at least the parcels:read scope")
     discord_client_secret: str | None = Field(default=None, description="The discord client secret")
     discord_client_id: str | None = Field(default=None, description="The discord client ID")
+    twilio_account_sid: str | None = Field(default=None, description="The Twilio account SID, for outbound SMS/WhatsApp notifications")
+    twilio_auth_token: str | None = Field(default=None, description="The Twilio auth token")
+    twilio_sms_from_number: str | None = Field(default=None, description="The Twilio phone number SMS notifications are sent from (E.164 format)")
+    twilio_whatsapp_from_number: str | None = Field(default=None, description="The Twilio-approved WhatsApp sender number (E.164 format, without the 'whatsapp:' prefix)")
 
     # DB
     database_engine: str = Field(default="psqlextra.backend", description="The database engine")
@@ -150,6 +198,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         env_file=_ENV_FILE_PATHS,
         env_prefix="UL_",
         str_strip_whitespace=True,
+        env_ignore_empty=True,
         extra="ignore",
     )
 
@@ -205,7 +254,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         }
 
     @property
-    def databases(self) -> dict[str, dict[str, str | None]]:
+    def databases(self) -> dict[str, dict[str, Any]]:
         return conf.settings.DATABASES
 
     @property
@@ -216,7 +265,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     def django(self) -> LazySettings:
         return conf.settings
 
-    @field_validator("allowed_hosts", "plugin_modules", "disabled_plugins", mode="before")
+    @field_validator("allowed_hosts", "plugin_modules", "disabled_plugins", "searxng_image_engines", mode="before")
     @classmethod
     def _split_comma_separated(cls, value: Any) -> Any:
         """Allow list-valued settings to be provided as comma-separated strings via env vars."""

@@ -9,7 +9,7 @@
 {% endblock %}
 
 {% block content %}
-{% with shared_name=share.shared_name|default:pin.display_label %}
+{% with shared_name=share.shared_name|default:share.place_label %}
 <div class="pin-detail-grid">
   <div class="pin-details location-details pin-share-detail-card card">
     <div class="card-header"><i class="material-symbols-outlined">ios_share</i><span>Shared Pin</span></div>
@@ -38,6 +38,38 @@
       {% if pin.description %}<div class="detail-row full-width"><span class="field-label">Description</span><span class="field-value">{{ pin.description }}</span></div>{% endif %}
       {% if pin.address_basic %}<div class="detail-row full-width"><span class="field-label">Address</span><span class="field-value">{{ pin.address_basic }}</span></div>{% endif %}
     </div>
+
+    {% if bundled_shares %}
+    <div class="pin-share-bundle">
+      <h3 class="pin-share-section-title"><i class="material-symbols-outlined">subdirectory_arrow_right</i> Includes {{ bundled_shares|length }} sub pin{{ bundled_shares|length|pluralize }}</h3>
+      <p class="pin-share-section-hint">Accepting adds these nested pins to your map along with the main pin.</p>
+      <ul class="pin-share-bundle-list">
+        {% for child_share in bundled_shares %}
+        <li class="pin-share-bundle-item">
+          <i class="material-symbols-outlined">subdirectory_arrow_right</i>
+          <span>{{ child_share.pin.display_label }}</span>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    {% if share.markup_map_id %}
+    <div class="pin-share-attached-map">
+      <h3 class="pin-share-section-title"><i class="material-symbols-outlined">map</i> Attached map</h3>
+      {# stringformat first: `add` on a str + raw int returns '', emptying the viewer id. #}
+      {% with share_id_str=share.id|stringformat:"s" %}
+      {% include "dashboard/partials/map/_map_view_preview.html" with map_id="pinshare-"|add:share_id_str %}
+      {% include "dashboard/partials/map/_map_view_dialog.html" with map_id="pinshare-"|add:share_id_str map_data=share.markup_map.to_snapshot title=share.markup_map.title|default:"Attached map" map_obj=share.markup_map %}
+      {% endwith %}
+      <form method="post" action="{% url 'markup_map.clone' share.markup_map.uuid %}">
+        {% csrf_token %}
+        <button type="submit" class="btn btn--ghost btn--sm">
+          <i class="material-symbols-outlined">add_location_alt</i> Add to my maps
+        </button>
+      </form>
+    </div>
+    {% endif %}
 
     {% if share.images.all %}
     <div class="pin-share-photos">
@@ -72,6 +104,8 @@
   <div class="location-map pin-map card"><div class="card-header"><i class="material-symbols-outlined">place</i><h3>Location</h3></div>
     <div id="shared-pin-map-wrap" style="position:relative;height:420px">
       <div id="shared-pin-map" style="height:100%"></div>
+      {# -- Map toolbar (tools only; shared component - same as the main map) -- #}
+      {% map_toolbar "screenshot" panel_id="shared-pin-map-buttons" %}
       <div class="map-bottom-controls">
         {% map_layers_panel "street,satellite" panel_id="shared-pin-map-layers" extra_class="map-layers-panel--inline" %}
       </div>
@@ -80,13 +114,26 @@
 </div>
 <script>
 (function(){
-  const lat = {{ pin.effective_latitude|default:'null' }};
-  const lng = {{ pin.effective_longitude|default:'null' }};
-  if (lat === null || lng === null) return;
-  const map = L.map('shared-pin-map').setView([lat, lng], 16);
+  const lat = {{ share.shared_location.latitude|default:'null' }};
+  const lng = {{ share.shared_location.longitude|default:'null' }};
+  const hasCoords = lat !== null && lng !== null;
+  // Continental-US fallback view when there's no location yet (a hidden/rejected
+  // share) so the map still initializes and window.map is still assigned below -
+  // otherwise the toolbar's screenshot tool falls back to its own hardcoded default.
+  const map = L.map('shared-pin-map', { attributionControl: false }).setView(hasCoords ? [lat, lng] : [39.8283, -98.5795], hasCoords ? 16 : 4);
+  // Read by the shared top-right toolbar's screenshot tool (window._openMapToolbarScreenshot, themes/base.html).
+  window.map = map;
   // Shared layers engine + panel - the exact same component as the main map.
-  window.MapLayers.create(map, { root: document.getElementById('shared-pin-map-layers') });
-  L.marker([lat, lng]).addTo(map).bindPopup('{{ shared_name|escapejs }}').openPopup();
+  // Attribution renders in the page footer (show_map_footer=True) instead of
+  // an on-map overlay - attributionControl is disabled above.
+  window.MapLayers.create(map, {
+    root: document.getElementById('shared-pin-map-layers'),
+    onAttribution: function (text) {
+      const el = document.getElementById('page-footer-attribution-text');
+      if (el) el.textContent = text;
+    },
+  });
+  if (hasCoords) L.marker([lat, lng]).addTo(map).bindPopup('{{ shared_name|escapejs }}').openPopup();
 })();
 </script>
 {% endwith %}

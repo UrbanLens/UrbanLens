@@ -1,11 +1,19 @@
 {% extends 'dashboard/themes/base.html' %}
+
+{% block hero %}
+{% include "dashboard/partials/ui/_page_hero.html" with icon="workspace_premium" title="Subscription Access" subtitle="Gift subscription access to users." modifier="top" %}
+{% endblock %}
+
+{% block subnav %}
+<div class="ul-page-subnav">
+    <div class="ul-page-subnav__inner">
+        {% include "dashboard/partials/admin/_site_admin_tabs.html" with active="subscriptions" %}
+    </div>
+</div>
+{% endblock %}
+
 {% block content %}
 <div class="site-admin-page page-content subscription-admin-page">
-  <div class="site-admin-header">
-    <h1 class="site-admin-title"><i class="material-symbols-outlined">workspace_premium</i> Subscription Access</h1>
-    <p class="site-admin-subtitle">Gift subscription access to users.</p>
-    <div class="site-admin-breadcrumb"><a href="{% url 'site_admin_home' %}" class="site-admin-breadcrumb__link"><i class="material-symbols-outlined">arrow_back</i> Admin Home</a></div>
-  </div>
   {% if saved %}
   <div class="site-admin-notice site-admin-notice--success">
     <i class="material-symbols-outlined">check_circle</i>
@@ -19,29 +27,69 @@
   </div>
   {% endif %}
   <section class="site-admin-card ul-section card subscription-types-card">
-    <div class="card-header"><i class="material-symbols-outlined">workspace_premium</i><span>Subscription types</span></div>
+    <div class="card-header"><i class="material-symbols-outlined">workspace_premium</i><span>Subscription types &amp; features</span></div>
+    <p class="form-help">Toggle which features each subscription type grants. Changes save automatically.</p>
     <ul class="subscription-types-list">
+      <li class="subscription-types-list__item">
+        <div class="subscription-types-list__heading">
+          <span class="role-pill role-pill--default"><i class="material-symbols-outlined">public</i> No subscription (everyone)</span>
+          <span class="subscription-types-list__description">Baseline features every user gets, subscribed or not.</span>
+        </div>
+        <form class="inline-sub-form inline-sub-form--features"
+              data-field-group="default_features" data-role="__default__"
+              hx-post="{% url 'site_admin_subscriptions' %}"
+              hx-trigger="change delay:700ms"
+              hx-swap="none">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="default_features">
+          <div class="feature-toggle-grid">
+            {% for value, label in site_features %}
+            <label class="feature-toggle">
+              <input type="checkbox" name="features" value="{{ value }}" {% if value in site_settings.feature_set %}checked{% endif %}>
+              <span>{{ label }}</span>
+            </label>
+            {% endfor %}
+          </div>
+          <span class="subscription-save-status" aria-live="polite" aria-atomic="true"></span>
+        </form>
+      </li>
       {% for role in roles %}
       <li class="subscription-types-list__item">
         <div class="subscription-types-list__heading">
           <span class="role-pill"><i class="material-symbols-outlined">auto_awesome</i> {{ role.name }}</span>
           {% if role.description %}<span class="subscription-types-list__description">{{ role.description }}</span>{% endif %}
         </div>
-        <div class="subscription-types-list__features">
-          {% for label in role.feature_labels %}
-          <span class="ul-chip"><i class="material-symbols-outlined">check</i> {{ label }}</span>
-          {% empty %}
-          <span class="subscription-types-list__no-features">No features included.</span>
-          {% endfor %}
-        </div>
+        <form class="inline-sub-form inline-sub-form--features"
+              data-field-group="role_features" data-role="{{ role.slug }}"
+              hx-post="{% url 'site_admin_subscriptions' %}"
+              hx-trigger="change delay:700ms"
+              hx-swap="none">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="role_features">
+          <input type="hidden" name="role_slug" value="{{ role.slug }}">
+          <div class="feature-toggle-grid">
+            {% for value, label in site_features %}
+            <label class="feature-toggle">
+              <input type="checkbox" name="features" value="{{ value }}" {% if value in role.feature_set %}checked{% endif %}>
+              <span>{{ label }}</span>
+            </label>
+            {% endfor %}
+          </div>
+          <span class="subscription-save-status" aria-live="polite" aria-atomic="true"></span>
+        </form>
       </li>
       {% endfor %}
     </ul>
   </section>
   <div class="subscription-grid">
-    <section class="site-admin-card ul-section card">
+    <section class="site-admin-card ul-section card subscription-grant-form-card">
       <div class="card-header"><i class="material-symbols-outlined">add_moderator</i><span>Grant role</span></div>
-      <form method="post" class="site-admin-form">{% csrf_token %}
+      <form method="post" class="site-admin-form"
+            hx-post="{% url 'site_admin_subscriptions' %}"
+            hx-target="#subscription-grants-list"
+            hx-swap="outerHTML"
+            hx-on::after-request="if(event.detail.successful){this.reset()}">
+        {% csrf_token %}
         <input type="hidden" name="action" value="grant">
         <div class="form-row"><label for="user_identifier">Username or email</label><input id="user_identifier" name="user_identifier" placeholder="jane or jane@example.com" required></div>
         <div class="form-row"><label for="role_slug">Role</label><select id="role_slug" name="role_slug">{% for role in roles %}<option value="{{ role.slug }}">{{ role.name }}</option>{% endfor %}</select></div>
@@ -49,7 +97,14 @@
         <div class="form-actions"><button class="btn btn--primary btn--lg" type="submit"><i class="material-symbols-outlined">verified_user</i> Grant access</button></div>
       </form>
     </section>
-    <section class="site-admin-card ul-section card">
+    <section class="site-admin-card ul-section card subscription-active-grants-card">
+      <div class="card-header">
+        <i class="material-symbols-outlined">manage_accounts</i>
+        <span>Your active grants</span>
+      </div>
+      {% include "dashboard/partials/site_admin/_subscription_grants_list.html" %}
+    </section>
+    <section class="site-admin-card ul-section card subscription-quota-card">
       <div class="card-header"><i class="material-symbols-outlined">database</i><span>Role storage quotas</span></div>
       <p class="form-help">
         Storage quota (GB) granted to users holding each role - the largest applicable quota wins.
@@ -59,7 +114,11 @@
         <ul class="subscription-list__items">
           {% for role in roles %}
           <li class="subscription-list__item">
-            <form method="post" class="inline-sub-form">
+            <form class="inline-sub-form"
+                  data-field-group="role_quota" data-role="{{ role.slug }}"
+                  hx-post="{% url 'site_admin_subscriptions' %}"
+                  hx-trigger="change delay:700ms"
+                  hx-swap="none">
               {% csrf_token %}
               <input type="hidden" name="action" value="role_quota">
               <input type="hidden" name="role_slug" value="{{ role.slug }}">
@@ -67,14 +126,14 @@
               <label for="role-quota-{{ role.slug }}">Quota (GB)</label>
               <input type="number" id="role-quota-{{ role.slug }}" name="storage_quota_gb"
                      value="{{ role.storage_quota_gb|default_if_none:'' }}" min="0" step="1" placeholder="Site default">
-              <button class="btn btn--ghost" type="submit">Save</button>
+              <span class="subscription-save-status" aria-live="polite" aria-atomic="true"></span>
             </form>
           </li>
           {% endfor %}
         </ul>
       </div>
     </section>
-    <section class="site-admin-card ul-section card">
+    <section class="site-admin-card ul-section card subscription-email-limits-card">
       <div class="card-header"><i class="material-symbols-outlined">outgoing_mail</i><span>Role email limits</span></div>
       <p class="form-help">
         Outbound email caps (invitations etc.) for users holding each role - the largest applicable
@@ -84,7 +143,11 @@
         <ul class="subscription-list__items">
           {% for role in roles %}
           <li class="subscription-list__item">
-            <form method="post" class="inline-sub-form">
+            <form class="inline-sub-form"
+                  data-field-group="role_email_limits" data-role="{{ role.slug }}"
+                  hx-post="{% url 'site_admin_subscriptions' %}"
+                  hx-trigger="change delay:700ms"
+                  hx-swap="none">
               {% csrf_token %}
               <input type="hidden" name="action" value="role_email_limits">
               <input type="hidden" name="role_slug" value="{{ role.slug }}">
@@ -98,77 +161,8 @@
               <label for="role-email-month-{{ role.slug }}">Month</label>
               <input type="number" id="role-email-month-{{ role.slug }}" name="email_limit_per_month"
                      value="{{ role.email_limit_per_month|default_if_none:'' }}" min="0" step="1" placeholder="Default">
-              <button class="btn btn--ghost" type="submit">Save</button>
+              <span class="subscription-save-status" aria-live="polite" aria-atomic="true"></span>
             </form>
-          </li>
-          {% endfor %}
-        </ul>
-      </div>
-    </section>
-    <section class="site-admin-card ul-section card">
-      <div class="card-header">
-        <i class="material-symbols-outlined">manage_accounts</i>
-        <span>Your active grants</span>
-      </div>
-      <div class="subscription-list">
-        <div class="subscription-list__head" aria-hidden="true">
-          <span class="subscription-list__col subscription-list__col--user">User</span>
-          <span class="subscription-list__col subscription-list__col--role">Role</span>
-          <span class="subscription-list__col subscription-list__col--expires">Expires</span>
-          <span class="subscription-list__col subscription-list__col--actions">Actions</span>
-        </div>
-        <ul class="subscription-list__items">
-          {% for grant in grants %}
-          <li class="subscription-list__item">
-            <div class="subscription-list__col subscription-list__col--user">
-              <span class="subscription-list__label">User</span>
-              <div class="subscription-list__value">
-                <strong class="subscription-list__username">{{ grant.user.username }}</strong>
-                <span class="subscription-list__email">{{ grant.user.email }}</span>
-              </div>
-            </div>
-            <div class="subscription-list__col subscription-list__col--role">
-              <span class="subscription-list__label">Role</span>
-              <div class="subscription-list__value">
-                <span class="role-pill">
-                  <i class="material-symbols-outlined">auto_awesome</i>
-                  {{ grant.role.name }}
-                </span>
-              </div>
-            </div>
-            <div class="subscription-list__col subscription-list__col--expires">
-              <span class="subscription-list__label">Expires</span>
-              <div class="subscription-list__value">
-                {% if grant.expires_at %}
-                {{ grant.expires_at|date:'M j, Y' }}
-                {% else %}
-                <span class="subscription-list__indefinite">Indefinite</span>
-                {% endif %}
-              </div>
-            </div>
-            <div class="subscription-list__col subscription-list__col--actions">
-              <span class="subscription-list__label">Actions</span>
-              <div class="subscription-list__value">
-                <form method="post" class="inline-sub-form">
-                  {% csrf_token %}
-                  <input type="hidden" name="subscription_id" value="{{ grant.id }}">
-                  <select name="duration_months">
-                    <option value="1">1 month</option>
-                    <option value="3">3 months</option>
-                    <option value="6">6 months</option>
-                    <option value="12">12 months</option>
-                    <option value="indefinite">Indefinite</option>
-                  </select>
-                  <button class="btn btn--ghost" name="action" value="update">Update</button>
-                  <button class="btn btn--danger" name="action" value="revoke">Revoke</button>
-                </form>
-              </div>
-            </div>
-          </li>
-          {% empty %}
-          <li class="subscription-list__empty">
-            <i class="material-symbols-outlined">inbox</i>
-            <span>No active subscription grants yet.</span>
           </li>
           {% endfor %}
         </ul>
@@ -176,4 +170,54 @@
     </section>
   </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    function getRow(el) { return el && el.closest('.subscription-list__item, .subscription-types-list__item'); }
+
+    function setStatus(row, state, text) {
+        var el = row && row.querySelector('.subscription-save-status');
+        if (!el) return;
+        el.className = 'subscription-save-status is-' + state;
+        el.textContent = text;
+        clearTimeout(el._t);
+        if (state === 'saved' || state === 'error') {
+            el._t = setTimeout(function () {
+                el.style.transition = 'opacity .5s';
+                el.style.opacity = '0';
+                el._t = setTimeout(function () {
+                    el.className = 'subscription-save-status';
+                    el.style.transition = '';
+                    el.style.opacity = '';
+                }, 500);
+            }, 2500);
+        }
+    }
+
+    document.body.addEventListener('htmx:beforeRequest', function (evt) {
+        var form = evt.target.closest('.inline-sub-form');
+        if (!form) return;
+        setStatus(getRow(form), 'saving', 'Saving...');
+    });
+
+    document.body.addEventListener('htmx:afterRequest', function (evt) {
+        var form = evt.target.closest('.inline-sub-form');
+        if (!form) return;
+        var status = evt.detail && evt.detail.xhr && evt.detail.xhr.status;
+        if (!(status >= 200 && status < 300)) {
+            setStatus(getRow(form), 'error', 'Save failed (' + (status || '?') + ')');
+        }
+    });
+
+    document.body.addEventListener('roleSettingsSaved', function (evt) {
+        var detail = evt.detail || {};
+        var form = document.querySelector(
+            '.inline-sub-form[data-field-group="' + detail.field_group + '"][data-role="' + detail.role + '"]'
+        );
+        setStatus(getRow(form), 'saved', 'Saved');
+    });
+}());
+</script>
 {% endblock %}

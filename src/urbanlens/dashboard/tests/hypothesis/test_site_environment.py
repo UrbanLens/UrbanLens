@@ -187,30 +187,33 @@ class ShowDevAdminFeaturesTests(TestCase):
         with patch.object(app_settings, "allow_dev_toolbar_for_non_admins", new=True):
             self.assertTrue(self.site.show_dev_admin_features(self.non_admin))
 
-    def test_non_admin_does_not_see_it_when_enabled_in_staging(self) -> None:
+    def test_non_admin_sees_it_when_enabled_in_staging(self) -> None:
+        """Staging was deliberately added to the allowed set (commit 74930ea9)
+        so QA accounts can use the toolbar there - still gated behind the
+        explicit UL_ALLOW_DEV_TOOLBAR_FOR_NON_ADMINS opt-in."""
         self._set_override(EnvironmentOverrideChoice.STAGING)
         with patch.object(app_settings, "allow_dev_toolbar_for_non_admins", new=True):
-            self.assertFalse(self.site.show_dev_admin_features(self.non_admin))
+            self.assertTrue(self.site.show_dev_admin_features(self.non_admin))
 
     def test_non_admin_does_not_see_it_when_enabled_in_production(self) -> None:
         self._set_override(EnvironmentOverrideChoice.PRODUCTION)
         with patch.object(app_settings, "allow_dev_toolbar_for_non_admins", new=True):
             self.assertFalse(self.site.show_dev_admin_features(self.non_admin))
 
-    @given(st.sampled_from([EnvironmentTypes.DEVELOPMENT, EnvironmentTypes.LOCAL, EnvironmentTypes.TESTING]))
+    @given(st.sampled_from([EnvironmentTypes.DEVELOPMENT, EnvironmentTypes.LOCAL, EnvironmentTypes.TESTING, EnvironmentTypes.STAGING]))
     @_hyp
     def test_non_admin_allowed_environments(self, env_type: str) -> None:
-        """Hypothesis: with the flag on, dev/local/testing all grant non-admins the toolbar."""
+        """Hypothesis: with the flag on, dev/local/testing/staging all grant non-admins the toolbar."""
         with (
             patch.object(app_settings, "allow_dev_toolbar_for_non_admins", new=True),
             patch.object(self.site, "get_effective_environment_type", return_value=env_type),
         ):
             self.assertTrue(self.site.show_dev_admin_features(self.non_admin))
 
-    @given(st.sampled_from([EnvironmentTypes.PRODUCTION, EnvironmentTypes.STAGING]))
+    @given(st.sampled_from([EnvironmentTypes.PRODUCTION]))
     @_hyp
     def test_non_admin_disallowed_environments(self, env_type: str) -> None:
-        """Hypothesis: even with the flag on, staging/production never grant non-admins the toolbar."""
+        """Hypothesis: even with the flag on, production never grants non-admins the toolbar."""
         with (
             patch.object(app_settings, "allow_dev_toolbar_for_non_admins", new=True),
             patch.object(self.site, "get_effective_environment_type", return_value=env_type),

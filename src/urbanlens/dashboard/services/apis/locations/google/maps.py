@@ -10,8 +10,7 @@ import re
 from typing import TYPE_CHECKING, Any, ClassVar
 
 # Only used to catch exceptions
-from xml.etree.ElementTree import ParseError as XMLParseError  # nosec B405
-
+from defusedxml.ElementTree import ParseError as XMLParseError
 from django.core.cache import cache
 from django.db import DatabaseError
 from fastkml import kml
@@ -22,24 +21,73 @@ from shapely.errors import ShapelyError
 from shapely.geometry import shape as shapely_shape
 
 from urbanlens.core.cache_keys import make_cache_key
-from urbanlens.dashboard.models.badges.meta import KIND_TAG
-from urbanlens.dashboard.models.badges.model import Badge
+from urbanlens.dashboard.models.labels.meta import KIND_TAG
+from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.location import Location
 from urbanlens.dashboard.models.pin import Pin
 from urbanlens.dashboard.services.apis.locations.base import SatelliteSlide, SatelliteViewProvider, StreetViewProvider, StreetViewSlide
 from urbanlens.dashboard.services.apis.locations.google.geocoding import GoogleGeocodingGateway
 from urbanlens.dashboard.services.apis.locations.google.place_info import GooglePlaceService
-from urbanlens.dashboard.services.badges.style_suggestions import suggest_badge_style
 from urbanlens.dashboard.services.import_formats.heuristics import (
     DEFAULT_LATITUDE_KEYS,
     DEFAULT_LONGITUDE_KEYS,
     pick_latlon,
     pick_name_and_description,
 )
+from urbanlens.dashboard.services.import_formats.html_description import extract_image_urls, extract_link_urls, strip_html
+from urbanlens.dashboard.services.labels.style_suggestions import suggest_label_style
 from urbanlens.dashboard.services.redact import redact_coordinate, redact_text
+from urbanlens.dashboard.services.text_limits import MAX_PIN_DESCRIPTION_LENGTH
 from urbanlens.UrbanLens.settings.app import settings
 
+if TYPE_CHECKING:
+    from urbanlens.dashboard.models.profile.model import Profile
+
 _CID_RE = re.compile(r"!1s0x[0-9a-fA-F]+:0x([0-9a-fA-F]+)")
+
+#: Column names (case-insensitive) that hold a Google Maps URL to extract
+#: coordinates/CID from. Google Takeout's various per-category CSV exports
+#: don't agree on a header name for this: starred/saved-place list exports
+#: use "URL", but the Timeline "Parking" export uses "Parking location" -
+#: UL-203: every row in Parking.csv silently failed to import (no coordinate
+#: column matched at all) because only the literal "URL" header was checked.
+_TAKEOUT_URL_COLUMN_KEYS: tuple[str, ...] = ("url", "parking location")
+
+
+def _attach_description_extras(pin: Pin, image_urls: list[str], link_urls: list[str], profile: Profile) -> None:
+    """Best-effort: attach a freshly-created pin's extracted image/link URLs.
+
+    Only meant for pins the import just created - an existing pin merged into
+    by ``get_nearby_or_create`` is never touched, matching how its description
+    itself is left alone on a merge.
+
+    Args:
+        pin: The newly created pin.
+        image_urls: ``<img src="...">`` URLs pulled from its raw description.
+        link_urls: ``<a href="...">``/bare URLs pulled from its raw description.
+        profile: The importing user - becomes each photo's uploader.
+    """
+    from urbanlens.dashboard.models.images.model import ImageSource
+    from urbanlens.dashboard.models.links.model import MAX_LINK_URL_LENGTH, PinLink
+    from urbanlens.dashboard.services.media_materialize import MaterializeError, materialize_media_item
+
+    for url in link_urls:
+        if len(url) > MAX_LINK_URL_LENGTH:
+            continue
+        try:
+            PinLink.objects.create(pin=pin, url=url)
+        except DatabaseError:
+            logger.warning("Skipping malformed link %r extracted from import description for pin %s", url, pin.pk, exc_info=True)
+
+    for url in image_urls:
+        try:
+            image = materialize_media_item(location=pin.location, profile=profile, source=ImageSource.GOOGLE_MAPS, url=url)
+        except MaterializeError as exc:
+            logger.warning("Skipping image %r extracted from import description for pin %s: %s", url, pin.pk, exc)
+            continue
+        if image.pin_id is None:
+            image.pin = pin
+            image.save(update_fields=["pin", "updated"])
 
 
 def _notify_pin_import_parse_failure(fmt: str) -> None:
@@ -87,11 +135,15 @@ logger = logging.getLogger(__name__)
 
 def _google_maps_api_key() -> str:
     """
-    Enforces that the Google Maps API key is set.
+    Reads the configured Google Maps API key, if any.
+
+    Deliberately does not raise when unset - most of GoogleMapsGateway's own
+    methods (file-format parsing in particular) never touch the network, and
+    the ones that do (e.g. ``_generate_satellite_slides``) already check
+    ``self.api_key`` themselves before making a request, matching how
+    BingMapsGateway/MapboxGateway treat their own optional keys.
     """
-    if not settings.google_unrestricted_api_key:
-        raise ValueError("Google Maps API key is not set")
-    return settings.google_unrestricted_api_key
+    return settings.google_unrestricted_api_key or ""
 
 
 @dataclass(kw_only=True)
@@ -284,7 +336,8 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         gateway = GoogleGeocodingGateway()
         reader = csv.DictReader(file_contents.splitlines())
         for row in reader:
-            url = row.get("URL", "")
+            lowered_row = {str(k).strip().lower(): v for k, v in row.items() if k is not None}
+            url = next((lowered_row[key] for key in _TAKEOUT_URL_COLUMN_KEYS if lowered_row.get(key)), "")
             if url:
                 try:
                     latitude, longitude = gateway.extract_coordinates_from_url(url)
@@ -350,7 +403,11 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         Event shapes:
 
         - ``{type: "start", total: N}``
-        - ``{type: "progress", current, total, percent, created, exists, skipped, name}``
+        - ``{type: "progress", current, total, percent, created, exists, skipped, outcome, name}``
+          (``outcome`` is this specific item's own result - "created"/"exists"/
+          "skipped" - the other counts are running totals across the whole
+          import, not this item's; a per-item log needs ``outcome`` to label
+          each row correctly)
         - ``{type: "complete", total, created, exists, skipped}``
         - ``{type: "error", message}``
 
@@ -486,6 +543,12 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                 for pin_data in pin_iter:
                     current += 1
                     pin_name = ""
+                    # Per-item outcome for this exact pin, reported alongside the
+                    # running totals below - the frontend log needs to know what
+                    # happened to *this* pin, not just the cumulative counts, to
+                    # label each streamed row correctly (see the "outcome" field
+                    # on the yielded progress event).
+                    outcome = "skipped"
 
                     if pin_data is None:
                         skipped_count += 1
@@ -496,6 +559,14 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                             pin_data["location"] = location
                             pin_data.setdefault("latitude", location.latitude)
                             pin_data.setdefault("longitude", location.longitude)
+                        raw_description = pin_data.get("description") or ""
+                        image_urls = extract_image_urls(raw_description)
+                        link_urls = extract_link_urls(raw_description)
+                        if raw_description:
+                            # Pin.save() never calls full_clean(), so nothing else
+                            # enforces the model's own MaxLengthValidator on this
+                            # direct create path - clamp defensively.
+                            pin_data["description"] = strip_html(raw_description)[:MAX_PIN_DESCRIPTION_LENGTH]
 
                         pin_name = pin_data.get("name") or (location.display_name if location else "")
                         lookup_lat = pin_data.get("latitude") or (location.latitude if location else None)
@@ -510,10 +581,14 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                             if pin:
                                 if created:
                                     created_count += 1
+                                    outcome = "created"
+                                    if image_urls or link_urls:
+                                        _attach_description_extras(pin, image_urls, link_urls, user_profile)
                                 else:
                                     exists_count += 1
+                                    outcome = "exists"
                                 if tags:
-                                    pin.badges.add(*tags)
+                                    pin.labels.add(*tags)
                                 if file_pins is not None:
                                     file_pins.append(pin)
                                 # Backfill: if the import carried a CID but no existing
@@ -521,7 +596,10 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                                 # have returned a Location that still lacks one.  Set it
                                 # now so future imports resolve via CID instead of coords.
                                 if cid is not None and location is None and pin.location_id and not pin.location.cid:
-                                    GooglePlaceService().set_cid_for_entity(pin.location, cid)
+                                    # fetch_if_missing=False: never block the import loop
+                                    # on a live Places call per pin - the name resolves
+                                    # lazily the next time the location/pin is viewed.
+                                    GooglePlaceService().set_cid_for_entity(pin.location, cid, fetch_if_missing=False)
                             else:
                                 skipped_count += 1
                         except (DatabaseError, ValueError, OSError) as exc:
@@ -538,6 +616,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                             "created": created_count,
                             "exists": exists_count,
                             "skipped": skipped_count,
+                            "outcome": outcome,
                             "name": pin_name,
                         },
                     )
@@ -545,17 +624,17 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                 # Apply a per-file tag to every pin produced from this file.
                 if file_pins:
                     try:
-                        from urbanlens.dashboard.models.badges.model import Badge
+                        from urbanlens.dashboard.models.labels.model import Label
 
                         tag_name = _filename_stem(filename)
-                        file_tag = Badge.objects.filter(
+                        file_tag = Label.objects.filter(
                             profile=user_profile,
                             name__iexact=tag_name,
                             kind=KIND_TAG,
                         ).first()
                         if file_tag is None:
-                            style = suggest_badge_style(tag_name, user_profile)
-                            file_tag = Badge.objects.create(
+                            style = suggest_label_style(tag_name, user_profile)
+                            file_tag = Label.objects.create(
                                 profile=user_profile,
                                 kind=KIND_TAG,
                                 name=tag_name,
@@ -563,10 +642,10 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                                 color=style.color,
                             )
                         for pin in file_pins:
-                            pin.badges.add(file_tag)
+                            pin.labels.add(file_tag)
                     except Exception as exc:
                         # TODO: Catch specific exception
-                        logger.exception("Unable to add badge to pins: %s", exc)
+                        logger.exception("Unable to add label to pins: %s", exc)
         except (DatabaseError, OSError, ValueError, RuntimeError) as exc:
             logger.exception("Unexpected error during streaming import: %s", exc)
             yield sse({"type": "error", "message": "Import failed unexpectedly."})
@@ -704,7 +783,12 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                     "name": (p.get("name") or "")[:255],
                     "lat": float(lat),
                     "lng": float(lng),
-                    "description": (p.get("description") or "")[:500],
+                    # The preview UI never displays this - it's only carried through
+                    # so the confirm step (which re-uses this exact dict, not a fresh
+                    # parse of the file) has the real description to save. A tight
+                    # display-oriented cutoff here used to silently truncate every
+                    # saved pin's description to 500 characters.
+                    "description": (p.get("description") or "")[:MAX_PIN_DESCRIPTION_LENGTH],
                     "cid": p.get("cid"),
                 },
             )
@@ -720,10 +804,10 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
 
         Each ``confirmed_lists`` entry must have:
             - ``stem`` (str): list name used for category creation.
-            - ``create_category`` (bool): create a ``kind="category"`` badge from *stem*.
-            - ``badge_ids`` (list[int]): badge IDs to apply to every pin in the list.
+            - ``create_category`` (bool): create a ``kind="category"`` label from *stem*.
+            - ``label_ids`` (list[int]): label IDs to apply to every pin in the list.
             - ``pins`` (list[dict]): dicts with ``name``, ``lat``, ``lng``,
-              ``description``, ``cid``, and ``badge_ids`` (list[int]) fields.
+              ``description``, ``cid``, and ``label_ids`` (list[int]) fields.
               Imports never create community wiki entries or hit external APIs;
               wikis are created explicitly by the user from the pin detail page.
 
@@ -753,14 +837,14 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         try:
             for lst in confirmed_lists:
                 stem = lst.get("stem", "")
-                list_badge_ids = lst.get("badge_ids") or []
+                list_label_ids = lst.get("label_ids") or []
                 create_category = bool(lst.get("create_category", False))
 
-                list_badges = list(Badge.objects.filter(id__in=list_badge_ids)) if list_badge_ids else []
+                list_labels = list(Label.objects.filter(id__in=list_label_ids)) if list_label_ids else []
 
-                category_badge = None
+                category_label = None
                 if create_category and stem:
-                    category_badge, _ = Badge.objects.get_or_create(
+                    category_label, _ = Label.objects.get_or_create(
                         profile=user_profile,
                         name__iexact=stem,
                         defaults={"name": stem, "kind": "category"},
@@ -769,17 +853,24 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                 for pin_dict in lst.get("pins", []):
                     current += 1
                     pin_name = (pin_dict.get("name") or "")[:255]
+                    # Per-item outcome for this exact pin - see the matching comment
+                    # in import_pins_streaming above for why this is needed alongside
+                    # the running totals.
+                    outcome = "skipped"
                     lat = pin_dict.get("lat")
                     lng = pin_dict.get("lng")
                     description = pin_dict.get("description") or ""
                     cid = pin_dict.get("cid")
-                    pin_badge_ids = pin_dict.get("badge_ids") or []
+                    pin_label_ids = pin_dict.get("label_ids") or []
+
+                    image_urls = extract_image_urls(description)
+                    link_urls = extract_link_urls(description)
+                    description = strip_html(description)[:MAX_PIN_DESCRIPTION_LENGTH]
 
                     try:
                         location = Location.objects.by_cid(cid).first() if cid else None
 
                         pin_defaults: dict[str, Any] = {
-                            "profile": user_profile,
                             "name": pin_name,
                             "description": description,
                         }
@@ -804,6 +895,9 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                         if pin:
                             if created:
                                 created_count += 1
+                                outcome = "created"
+                                if image_urls or link_urls:
+                                    _attach_description_extras(pin, image_urls, link_urls, user_profile)
                                 if auto_tag:
                                     from urbanlens.dashboard.services.celery import safely_enqueue_task
                                     from urbanlens.dashboard.tasks import suggest_pin_category
@@ -811,18 +905,36 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                                     safely_enqueue_task(suggest_pin_category, pin.pk)
                             else:
                                 exists_count += 1
+                                outcome = "exists"
+                                # Fill in a still-blank, non-user-provided name from
+                                # this later import (UL-207: pins imported without
+                                # names, then re-imported from a source - e.g.
+                                # Google Takeout's Labelled Places - that does have
+                                # them). get_nearby_or_create's `defaults` are only
+                                # ever applied when creating a new row, never to an
+                                # existing one it merges into, so without this the
+                                # name stays blank forever. Matches
+                                # name_is_user_provided's documented contract:
+                                # "external API naming refreshes may replace
+                                # placeholder/auto-generated labels only while this
+                                # is False."
+                                if pin_name and not pin.name and not pin.name_is_user_provided:
+                                    pin.name = pin_name
+                                    pin.save(update_fields=["name"])
 
-                            if list_badges:
-                                pin.badges.add(*list_badges)
-                            if category_badge:
-                                pin.badges.add(category_badge)
-                            if pin_badge_ids:
-                                extra = list(Badge.objects.filter(id__in=pin_badge_ids))
+                            if list_labels:
+                                pin.labels.add(*list_labels)
+                            if category_label:
+                                pin.labels.add(category_label)
+                            if pin_label_ids:
+                                extra = list(Label.objects.filter(id__in=pin_label_ids))
                                 if extra:
-                                    pin.badges.add(*extra)
+                                    pin.labels.add(*extra)
 
                             if cid and not location and pin.location_id and not pin.location.cid:
-                                GooglePlaceService().set_cid_for_entity(pin.location, cid)
+                                # fetch_if_missing=False: never block the import loop
+                                # on a live Places call per pin.
+                                GooglePlaceService().set_cid_for_entity(pin.location, cid, fetch_if_missing=False)
                         else:
                             skipped_count += 1
 
@@ -840,6 +952,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                             "created": created_count,
                             "exists": exists_count,
                             "skipped": skipped_count,
+                            "outcome": outcome,
                             "name": pin_name,
                         },
                     )
@@ -882,11 +995,18 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                 if children:
                     yield from GoogleMapsGateway._iter_kml_placemarks(children)
 
+    # fastkml matches elements by exact namespace URI, so an `https://` KML/GX/Atom
+    # namespace (seen from some third-party exporters, e.g. multiplottr.com) fails to
+    # match its `http://`-only schema and silently yields zero features - no exception,
+    # just an empty pin list. Normalize to `http://` before parsing.
+    _KML_NAMESPACE_RE = re.compile(rb"https://((?:www\.)?(?:opengis\.net|google\.com/kml|w3\.org)/)")
+
     def takeout_kml_to_dict(self, file_contents: bytes, user_profile: Profile) -> list[dict[str, Any]]:
         try:
             # lxml refuses to parse a `str` containing an `<?xml ... encoding=...?>`
             # declaration (which every Google Takeout KML/KMZ has), so the raw
             # bytes must be passed through undecoded and let lxml sniff the encoding.
+            file_contents = self._KML_NAMESPACE_RE.sub(rb"http://\1", file_contents)
             k = kml.KML.from_string(file_contents)  # type: ignore[arg-type]
 
             pins: list[dict[str, Any]] = []
@@ -992,38 +1112,5 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         except (json.JSONDecodeError, KeyError, ValueError) as e:
             logger.exception("Failed to import pins from GeoJSON: %s", e)
             raise
-
-        return pins
-
-    def takeout_csv_to_dict(self, file_contents: str, user_profile: Profile) -> list[dict[str, Any]]:
-        pins: list[dict[str, Any]] = []
-        gateway = GoogleGeocodingGateway()
-        try:
-            reader = csv.DictReader(file_contents.splitlines())
-
-            for row in reader:
-                # Extract coordinates from URL if available
-                url = row.get("URL", "")
-                if not url:
-                    logger.error("No url to extract coordinates from: row -> %s", row)
-                    continue
-
-                latitude, longitude = gateway.extract_coordinates_from_url(url)
-
-                pins.append(
-                    {
-                        "latitude": latitude,
-                        "longitude": longitude,
-                        "profile": user_profile,
-                        "name": row.get("Title", ""),
-                        "description": row.get("Note", "") + " " + row.get("Comment", "").strip(),
-                    },
-                )
-
-        except (csv.Error, KeyError, ValueError) as e:
-            logger.exception("Failed to import pins from CSV: %s", e)
-            raise
-
-        logger.info("Converted %s pins from CSV file to dicts.", len(pins))
 
         return pins

@@ -20,7 +20,7 @@ from django.urls import reverse
 from django.utils import timezone
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.controllers.site_admin import (
     _app_uptime,
     _dir_size_mb,
@@ -86,7 +86,7 @@ class MonthlySeriesLabelTests(TestCase):
 # -- _server_uptime ------------------------------------------------------------
 
 
-class ServerUptimeTests(TestCase):
+class ServerUptimeTests(SimpleTestCase):
     """_app_uptime reports app process uptime via the monotonic clock."""
 
     def _uptime_at(self, elapsed_seconds: float) -> str:
@@ -120,7 +120,7 @@ class ServerUptimeTests(TestCase):
 # -- _dir_size_mb --------------------------------------------------------------
 
 
-class DirSizeMbTests(TestCase):
+class DirSizeMbTests(SimpleTestCase):
     """_dir_size_mb returns megabytes and handles missing paths gracefully."""
 
     def test_nonexistent_path_returns_zero(self) -> None:
@@ -282,6 +282,72 @@ class SiteAdminStatsViewContextTests(TestCase):
     def test_avg_pins_per_user_is_non_negative(self) -> None:
         ctx = self._get_kpi_context()
         self.assertGreaterEqual(ctx["avg_pins_per_user"], 0)
+
+
+class SiteAdminHomeViewTests(TestCase):
+    """The admin homepage renders without waiting on infra/git I/O.
+
+    Service health (Postgres/Valkey/Celery/nginx pings) and the git update
+    check (a git fetch) are real I/O - SiteAdminHomeStatusPartialView fetches
+    them lazily via HTMX instead of SiteAdminHomeView blocking on them.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.user: User = baker.make(User)
+        add_user_to_site_admin_group(self.user)
+        self.client = Client()
+        self.client.force_login(self.user)
+
+    def test_home_page_does_not_collect_infrastructure_stats(self) -> None:
+        with mock.patch(
+            "urbanlens.dashboard.services.infrastructure_stats.collect_infrastructure_service_stats",
+        ) as collect:
+            response = self.client.get(reverse("site_admin_home"))
+        self.assertEqual(response.status_code, 200)
+        collect.assert_not_called()
+
+    def test_home_page_does_not_check_git_update_status(self) -> None:
+        with mock.patch("urbanlens.core.version.get_git_update_status") as get_status:
+            response = self.client.get(reverse("site_admin_home"))
+        self.assertEqual(response.status_code, 200)
+        get_status.assert_not_called()
+
+    def test_home_page_context_has_fast_counts(self) -> None:
+        response = self.client.get(reverse("site_admin_home"))
+        self.assertIn("total_users", response.context)
+        self.assertIn("total_pins", response.context)
+        self.assertIn("app_version", response.context)
+
+    def test_status_partial_requires_permission(self) -> None:
+        client = Client()
+        client.force_login(baker.make(User))
+        response = client.get(reverse("site_admin_home_status"))
+        self.assertEqual(response.status_code, 403)
+
+    def test_status_partial_returns_health_and_git_context(self) -> None:
+        response = self.client.get(reverse("site_admin_home_status"))
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("unhealthy_services", response.context)
+        self.assertIn("total_services", response.context)
+        self.assertIn("git_has_newer_commits", response.context)
+        self.assertIn("git_branch", response.context)
+
+    def test_status_partial_reports_unhealthy_count(self) -> None:
+        from urbanlens.dashboard.services.infrastructure_stats import InfrastructureServiceStat
+
+        fake_services = (
+            InfrastructureServiceStat(key="postgres", name="PostgreSQL", icon="storage", status="healthy", status_label="Connected", metrics=()),
+            InfrastructureServiceStat(key="valkey", name="Valkey", icon="memory", status="unhealthy", status_label="Down", metrics=()),
+        )
+        with mock.patch(
+            "urbanlens.dashboard.services.infrastructure_stats.collect_infrastructure_service_stats",
+            return_value=fake_services,
+        ):
+            response = self.client.get(reverse("site_admin_home_status"))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["unhealthy_services"], 1)
+        self.assertEqual(response.context["total_services"], 2)
 
 
 class SiteAdminPullLatestCodeViewTests(TestCase):

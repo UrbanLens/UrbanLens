@@ -1,0 +1,70 @@
+"""Shared template components for the Memories section.
+
+* ``{% memories_tabs active %}`` renders the Timeline | Photos | Maps |
+  Sharing | Visits tab strip (``partials/memories/_photos_tabs.html``). The
+  tag computes the unlogged-visits count itself, so every Memories subpage
+  shows an identical nav without each view having to supply the count.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from django import template
+
+register = template.Library()
+
+
+@register.inclusion_tag("dashboard/partials/memories/_photos_tabs.html", takes_context=True)
+def memories_tabs(context: template.Context, active: str) -> dict[str, Any]:
+    """Render the Memories section's tab strip.
+
+    The "Visits" tab only appears when the viewer has visited-but-unlogged
+    pins; the count is reused from the page context when the view already
+    fetched it (e.g. for the unlogged-visits band), and computed here
+    otherwise so no subpage can accidentally drop the tab.
+
+    The "Locations" tab (batch-scan pin suggestions from the Immich sweep and
+    the Tools-page folder scanner) only appears when the viewer has pending
+    suggestions, following the same pattern as "Visits".
+
+    Args:
+        context: The calling template's context (used for ``request`` and
+            optional prefetched ``unlogged_visits``/``suggestions`` lists).
+        active: Which tab is current - ``"timeline"``, ``"photos"``,
+            ``"maps"``, ``"sharing"``, ``"visits"``, or ``"locations"``.
+
+    Returns:
+        Context for ``partials/memories/_photos_tabs.html``.
+    """
+    unlogged = context.get("unlogged_visits")
+    pin_suggestions_count = context.get("pin_suggestions_count")
+    profile = None
+
+    def _get_profile():
+        nonlocal profile
+        if profile is None:
+            from urbanlens.dashboard.models.profile.model import Profile
+
+            profile, _ = Profile.objects.get_or_create(user=context["request"].user)
+        return profile
+
+    if unlogged is not None:
+        unlogged_count = len(unlogged)
+    else:
+        unlogged_count = 0
+        request = context.get("request")
+        if request is not None and request.user.is_authenticated:
+            from urbanlens.dashboard.services.memories.unlogged import unlogged_visited_pins
+
+            unlogged_count = len(unlogged_visited_pins(_get_profile()))
+
+    if pin_suggestions_count is None:
+        pin_suggestions_count = 0
+        request = context.get("request")
+        if request is not None and request.user.is_authenticated:
+            from urbanlens.dashboard.models.pin_suggestions.model import PinSuggestion
+
+            pin_suggestions_count = PinSuggestion.objects.for_profile(_get_profile()).pending().count()
+
+    return {"active": active, "unlogged_visits_count": unlogged_count, "pin_suggestions_count": pin_suggestions_count}

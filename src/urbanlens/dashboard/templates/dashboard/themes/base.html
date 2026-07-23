@@ -35,6 +35,9 @@
     {% include 'dashboard/partials/layout/_account_deletion_banner.html' %}
     {% include 'dashboard/partials/layout/header.html' %}
 
+    {% block hero %}{% endblock %}
+    {% block subnav %}{% endblock %}
+
     <div class="container">
         {% block content %}{% endblock %}
     </div>
@@ -45,6 +48,24 @@
     {% if show_dev_toolbar %}
     {% include 'dashboard/partials/layout/_dev_toolbar.html' %}
     {% endif %}
+
+    {% comment %}
+    Fixed bottom-left tools menu, shared across every page. Currently only surfaces
+       sections the user collapsed on the current page (see the collapsible-sections
+       script below), but it's built to hold other page tools later - see _updateRestoreControls.
+    {% endcomment %}
+    <div class="tools-fab" id="tools-fab" hidden>
+        <div class="tools-fab-menu" id="tools-fab-menu" hidden>
+            <div class="tools-fab-group" data-tools-fab-group="collapse-restore" hidden>
+                <div class="tools-fab-group-title">Hidden sections</div>
+                <div class="collapse-restore-menu"></div>
+            </div>
+        </div>
+        <button type="button" class="tools-fab-btn" id="tools-fab-btn" aria-haspopup="true" aria-expanded="false" aria-label="Tools">
+            <i class="material-symbols-outlined">menu</i>
+            <span class="tools-fab-badge collapse-restore-count" hidden>0</span>
+        </button>
+    </div>
 
     <!--  Scripts-->
     <script>
@@ -104,7 +125,11 @@
             });
             document.body.addEventListener('htmx:sendError', function () { _toastError('Network error sending request.'); });
             document.body.addEventListener('htmx:timeout', function () { _toastError('Request timed out.'); });
-            document.body.addEventListener('htmx:abort', function () { _toastError('Request was cancelled.'); });
+            // No htmx:abort handler: hx-sync="this:replace" (the map filter form's
+            // rapid-filter-change guard) aborts a still-in-flight request every
+            // time a newer one supersedes it - that's routine, expected behavior,
+            // not a failure, and was surfacing as a spurious "Request was
+            // cancelled" error toast on ordinary filter interactions.
 
             var nativeFetch = window.fetch;
             if (nativeFetch && !nativeFetch.__urbanLensWrapped) {
@@ -184,6 +209,22 @@
             span.setAttribute('aria-hidden', 'true');
             span.innerHTML = '<i class="material-icons">' + (icon || 'description') + '</i>';
             img.replaceWith(span);
+        };
+
+        // Every click-to-edit-in-place field (pin name/description, trip
+        // title/description, profile bio/name/contact fields, pin list
+        // title/description, memories map titles, ...) swaps a text element
+        // for an <input>/<textarea> of the same field. Left unsized, the new
+        // control falls back to its own intrinsic/min-width, which is usually
+        // far narrower than real content once ever typed in - the swap reads
+        // as the text abruptly shrinking. Call this with the *display*
+        // element (still showing its real text/value) and the element about
+        // to replace it, before the display element's content is cleared or
+        // replaced, to floor the replacement at the same on-screen size.
+        window.urbanlensSizeEditInPlaceInput = function (displayEl, inputEl) {
+            var rect = displayEl.getBoundingClientRect();
+            if (rect.width > 0) inputEl.style.minWidth = rect.width + 'px';
+            if (rect.height > 0) inputEl.style.minHeight = rect.height + 'px';
         };
     </script>
     <script>
@@ -337,11 +378,11 @@
             var q = _query(ta);
             if (!q || q.query.length < 1) { _hide(ta); return; }
             var ctx = ta.dataset.contextType || '';
-            var tripUuid = ta.dataset.tripUuid || '';
+            var tripSlug = ta.dataset.tripSlug || '';
             var isNum = /^\d+$/.test(q.query);
 
-            if (isNum && ctx === 'trip' && tripUuid) {
-                fetch('/dashboard/trips/' + encodeURIComponent(tripUuid) + '/map-data/', {
+            if (isNum && ctx === 'trip' && tripSlug) {
+                fetch('/dashboard/trips/' + encodeURIComponent(tripSlug) + '/map-data/', {
                     headers: { 'X-Requested-With': 'XMLHttpRequest' }
                 })
                 .then(function (r) { return r.json(); })
@@ -553,7 +594,14 @@
           <i class="material-symbols-outlined">close</i>
         </button>
       </div>
-      <div class="comment-map-composer-body">
+      {# Only shown when the caller passes opts.existingMapPicker (currently just #}
+      {# the DM composer) - every other caller (comments/visits/trips/screenshot) #}
+      {# never sees this and keeps the exact single-panel dialog it always had.  #}
+      <div class="cmc-tabs" id="cmc-tabs" hidden role="tablist">
+        <button type="button" class="cmc-tab is-active" id="cmc-tab-btn-draw" data-tab="draw" role="tab" aria-selected="true">Draw New</button>
+        <button type="button" class="cmc-tab" id="cmc-tab-btn-existing" data-tab="existing" role="tab" aria-selected="false">Choose Existing</button>
+      </div>
+      <div class="comment-map-composer-body" id="cmc-tab-panel-draw">
         <div class="comment-map-composer-controls">
           <label class="cmcc-label">Go to</label>
           {# Shared jump-to search component - same multi-source search as the #}
@@ -566,8 +614,7 @@
         {# and needs its own identity for browsing later on Memories > Maps.   #}
         <div class="comment-map-composer-controls cmcc-title-row" id="cmc-title-row" hidden>
           <label class="cmcc-label" for="cmc-title-input">Title</label>
-          <input type="text" id="cmc-title-input" class="cmcc-title-input" maxlength="200"
-                 placeholder="Leave blank to use a default title">
+          <input type="text" id="cmc-title-input" class="cmcc-title-input" maxlength="200">
         </div>
         <div id="comment-map-composer-map" class="comment-map-composer-map"></div>
         <div class="comment-map-composer-toolbar">
@@ -594,6 +641,9 @@
           <button type="button" class="cmc-tool-btn" data-tool="polygon" title="Polygon">
             <i class="material-symbols-outlined">pentagon</i>
           </button>
+          <button type="button" class="cmc-tool-btn cmc-locate-btn" id="cmc-pin-location" title="Pin my location">
+            <i class="material-symbols-outlined">my_location</i>
+          </button>
           <span class="cmc-toolbar-sep"></span>
           <button type="button" class="cmc-undo-btn" id="cmc-undo" title="Undo last shape">
             <i class="material-symbols-outlined">undo</i>
@@ -619,9 +669,60 @@
           <span class="cmc-hint-text" id="cmc-hint"></span>
         </div>
       </div>
+
+      {# Existing-map picker tab - only populated/shown via opts.existingMapPicker. #}
+      <div class="cmc-existing-panel" id="cmc-tab-panel-existing" hidden>
+        <input type="search" id="cmc-existing-search" class="cmcc-title-input cmc-existing-search"
+               placeholder="Search your maps..." autocomplete="off">
+        <div id="cmc-existing-list" class="cmc-existing-list">
+          <p class="form-hint">Loading your maps&hellip;</p>
+        </div>
+      </div>
+
       <div class="dialog-footer">
+        <span class="cmc-attribution" id="cmc-attribution" aria-live="polite"></span>
         <button type="button" class="btn btn--ghost" id="comment-map-composer-cancel">Cancel</button>
         <button type="button" class="btn btn--primary" id="comment-map-composer-save">Attach map</button>
+      </div>
+    </dialog>
+
+    {# -- Attach-a-photo dialog for comments/Notes (pin, wiki, and trip #}
+    {# comments all share _comment_compose.html) - "Upload New" (a plain file #}
+    {# picker) or "Choose Existing" (one of the poster's own already-uploaded #}
+    {# photos, via CommentImagePickerView). Reuses the .cmc-tabs/.cmc-tab #}
+    {# strip styling from the map composer above for a consistent look. #}
+    <dialog id="comment-image-composer" class="comment-image-composer-dialog ul-dialog">
+      <div class="dialog-header">
+        <span>Attach a Photo</span>
+        <button type="button" class="dialog-close" id="comment-image-composer-close">
+          <i class="material-symbols-outlined">close</i>
+        </button>
+      </div>
+      <div class="cmc-tabs" id="cip-tabs" role="tablist">
+        <button type="button" class="cmc-tab is-active" id="cip-tab-btn-upload" data-tab="upload" role="tab" aria-selected="true">Upload New</button>
+        <button type="button" class="cmc-tab" id="cip-tab-btn-existing" data-tab="existing" role="tab" aria-selected="false">Choose Existing</button>
+      </div>
+      <div class="cip-tab-panel" id="cip-tab-panel-upload">
+        <label class="cip-upload-dropzone" for="cip-file-input">
+          <i class="material-symbols-outlined">add_photo_alternate</i>
+          <span>Click to choose a photo</span>
+          <input type="file" id="cip-file-input" accept="image/*" hidden>
+        </label>
+        <div class="cip-upload-preview" id="cip-upload-preview" hidden>
+          <img id="cip-upload-preview-img" alt="">
+          <span id="cip-upload-preview-name"></span>
+        </div>
+      </div>
+      <div class="cip-tab-panel" id="cip-tab-panel-existing" hidden>
+        <input type="search" id="cip-existing-search" class="cmcc-title-input cmc-existing-search"
+               placeholder="Search your photos..." autocomplete="off">
+        <div id="cip-existing-list" class="cip-existing-list">
+          <p class="form-hint">Loading your photos&hellip;</p>
+        </div>
+      </div>
+      <div class="dialog-footer">
+        <button type="button" class="btn btn--ghost" id="comment-image-composer-cancel">Cancel</button>
+        <button type="button" class="btn btn--primary" id="comment-image-composer-save" disabled>Attach photo</button>
       </div>
     </dialog>
 
@@ -638,6 +739,7 @@
         </div>
         <div class="confirm-dialog-footer">
             <button type="button" id="confirm-dialog-cancel" class="btn btn--ghost">Cancel</button>
+            <button type="button" id="confirm-dialog-alt" class="btn btn--secondary" hidden>No</button>
             <button type="button" id="confirm-dialog-ok" class="btn btn--danger-filled">Confirm</button>
         </div>
     </dialog>
@@ -646,6 +748,7 @@
         var _resolve = null;
         var dlg = document.getElementById('confirm-dialog');
         var okBtn = document.getElementById('confirm-dialog-ok');
+        var altBtn = document.getElementById('confirm-dialog-alt');
 
         function _done(result) {
             if (_resolve) { var r = _resolve; _resolve = null; r(result); }
@@ -655,9 +758,12 @@
         document.getElementById('confirm-dialog-cancel').addEventListener('click', function () { _done(false); });
         document.getElementById('confirm-dialog-x').addEventListener('click', function () { _done(false); });
         okBtn.addEventListener('click', function () { _done(true); });
+        altBtn.addEventListener('click', function () { _done('alt'); });
         // Catches all close paths: backdrop click, Escape key, and direct .close() calls
         dlg.addEventListener('close', function () { _done(false); });
 
+        // Resolves with true (confirm), false (cancel/dismiss), or 'alt' when
+        // opts.altLabel was given and the user picked the alternative action.
         window.confirmDialog = function (opts) {
             if (typeof opts === 'string') opts = { message: opts };
             opts = opts || {};
@@ -666,10 +772,71 @@
                 (opts.message || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/\n/g, '<br>');
             okBtn.textContent = opts.confirmLabel || 'Confirm';
             okBtn.className = (opts.danger === false) ? 'btn btn--primary' : 'btn--danger-filled';
+            altBtn.hidden = !opts.altLabel;
+            if (opts.altLabel) altBtn.textContent = opts.altLabel;
             return new Promise(function (resolve) {
                 _resolve = resolve;
                 dlg.showModal();
             });
+        };
+
+        // -- Confirm-before-leaving for untrusted community-added links (wiki links) --
+        // Returning false from the onclick= that calls this cancels the native
+        // navigation; a confirmed click re-opens the url itself via window.open,
+        // since the original click's user-activation is already spent by the
+        // time the async confirmDialog promise resolves.
+        window.urbanlensConfirmExternalLink = function (event, url) {
+            event.preventDefault();
+            window.confirmDialog({
+                title: 'Leaving this site',
+                message: 'This link was added by the community and leads to an external, untrusted site:\n' + url,
+                confirmLabel: 'Continue',
+                danger: false,
+            }).then(function (ok) { if (ok) window.open(url, '_blank', 'noopener'); });
+            return false;
+        };
+
+        // -- Shared pin delete flow (map popup, pin edit dialog, pin detail page) --
+        // Confirms the delete, then lets the server veto with a 409 when the pin
+        // has child pins so the user decides whether those are deleted too or kept.
+        // Resolves with true (deleted), false (user cancelled), or null (request failed).
+        window.deletePinCascade = async function (pinUuid, pinName, csrfToken) {
+            var confirmed = await window.confirmDialog({
+                title: 'Delete Pin',
+                message: 'Delete "' + (pinName || 'this pin') + '"?\n\nYou can restore it from Settings → Undo History.',
+                confirmLabel: 'Delete',
+            });
+            if (!confirmed) return false;
+
+            var url = '/dashboard/rest/pins/' + encodeURIComponent(pinUuid) + '/';
+            async function _send(query) {
+                return fetch(url + (query || ''), {
+                    method: 'DELETE',
+                    headers: { 'X-CSRFToken': csrfToken },
+                });
+            }
+
+            var response;
+            try { response = await _send(''); } catch (e) { return null; }
+
+            if (response.status === 409) {
+                var data = null;
+                try { data = await response.json(); } catch (e) { /* non-JSON 409 */ }
+                if (!data || !data.requires_children_decision) return null;
+                var n = data.children || 0;
+                var plural = n === 1 ? '' : 's';
+                var them = n === 1 ? 'it' : 'them';
+                var choice = await window.confirmDialog({
+                    title: 'Delete child pins too?',
+                    message: 'This pin has ' + n + ' sub pin' + plural + '.\n\nDelete ' + them + ' as well, or keep ' + them + ' on your map?',
+                    confirmLabel: 'Delete all',
+                    altLabel: 'Keep sub pin' + plural,
+                });
+                if (!choice) return false;
+                try { response = await _send(choice === 'alt' ? '?children=keep' : '?children=delete'); } catch (e) { return null; }
+            }
+
+            return response.ok ? true : null;
         };
     }());
     </script>
@@ -728,8 +895,52 @@
         // the main map / pin detail / wiki pages): Save persists a brand-new,
         // standalone MarkupMap directly instead of writing to a hidden form field.
         var _standaloneMode = false;
-        var _standaloneContext = null;    // { pinSlug } | { locationSlug } | null
+        var _standaloneContext = null;    // { pinSlug } | { locationSlug } | { tripName } | null
         var _standaloneOnSaved = null;    // optional callback(uuid)
+        var _titleSuggestToken = 0;       // invalidates stale reverse-geocode responses on dialog reopen/move
+
+        // Best-effort place name for a lat/lng, sized to the given Leaflet zoom
+        // level (street when zoomed way in, country/state when zoomed way out).
+        // Nominatim's reverse endpoint is free/unauthenticated - same direct-fetch
+        // pattern the address search bar already uses (location-search-engine.ts).
+        function _reverseGeocodeTitle(lat, lng, zoom) {
+            var nomZoom = Math.max(3, Math.min(18, Math.round(zoom || 12)));
+            var url = 'https://nominatim.openstreetmap.org/reverse?lat=' + lat + '&lon=' + lng +
+                '&format=json&zoom=' + nomZoom + '&addressdetails=1';
+            return fetch(url, { headers: { Accept: 'application/json', 'Accept-Language': 'en' } })
+                .then(function (r) { return r.ok ? r.json() : null; })
+                .then(function (data) {
+                    var addr = (data && data.address) || {};
+                    var city = addr.city || addr.town || addr.village || addr.municipality || addr.county || '';
+                    if (zoom >= 16) return addr.road || addr.pedestrian || addr.neighbourhood || addr.suburb || city || addr.state || addr.country || '';
+                    if (zoom <= 5) return addr.country || addr.state || city || '';
+                    return city || addr.state || addr.country || '';
+                })
+                .catch(function () { return ''; });
+        }
+
+        // Prefill the (standalone-only) title field with a best-effort suggestion
+        // so users aren't left staring at a blank input: the host trip's name when
+        // launched from a trip map, otherwise a reverse-geocoded place name sized
+        // to the current zoom. This is only ever a suggestion - the user can edit
+        // or clear it, and the backend still defaults an empty title on its own,
+        // so a slow/failed lookup just leaves the field blank as before.
+        function _suggestTitle() {
+            if (!_standaloneMode) return;
+            var token = ++_titleSuggestToken;
+            if (_standaloneContext && _standaloneContext.tripName) {
+                _titleInput.value = _standaloneContext.tripName;
+                return;
+            }
+            if (!_composerMap) return;
+            var center = _composerMap.getCenter();
+            var zoom = _composerMap.getZoom();
+            _reverseGeocodeTitle(center.lat, center.lng, zoom).then(function (name) {
+                if (token !== _titleSuggestToken) return;  // dialog reopened/moved on
+                if (_titleInput.value.trim()) return;       // user already typed something
+                if (name) _titleInput.value = name;
+            });
+        }
 
         var _dialog = document.getElementById('comment-map-composer');
         var _colorPicker = document.getElementById('cmc-color');
@@ -737,10 +948,77 @@
         var _titleRow = document.getElementById('cmc-title-row');
         var _titleInput = document.getElementById('cmc-title-input');
 
+        // -- Existing-map picker tab (only used when a caller passes opts.existingMapPicker) --
+        var _tabsEl = document.getElementById('cmc-tabs');
+        var _tabBtnDraw = document.getElementById('cmc-tab-btn-draw');
+        var _tabBtnExisting = document.getElementById('cmc-tab-btn-existing');
+        var _panelDraw = document.getElementById('cmc-tab-panel-draw');
+        var _panelExisting = document.getElementById('cmc-tab-panel-existing');
+        var _existingSearch = document.getElementById('cmc-existing-search');
+        var _existingList = document.getElementById('cmc-existing-list');
+        var _existingMapPicker = null;   // { fetchUrl, onPick } | null
+        var _existingSearchToken = 0;    // invalidates stale search responses
+
+        function _switchComposerTab(tab) {
+            var onExisting = tab === 'existing';
+            _tabBtnDraw.classList.toggle('is-active', !onExisting);
+            _tabBtnDraw.setAttribute('aria-selected', String(!onExisting));
+            _tabBtnExisting.classList.toggle('is-active', onExisting);
+            _tabBtnExisting.setAttribute('aria-selected', String(onExisting));
+            _panelDraw.hidden = onExisting;
+            _panelExisting.hidden = !onExisting;
+            _saveBtn.hidden = onExisting;
+            if (onExisting) {
+                _loadExistingMaps('');
+                if (_existingSearch) _existingSearch.focus();
+            }
+        }
+
+        function _loadExistingMaps(query) {
+            if (!_existingMapPicker) return;
+            var token = ++_existingSearchToken;
+            _existingList.innerHTML = '<p class="form-hint">Loading your maps&hellip;</p>';
+            var url = _existingMapPicker.fetchUrl + (query ? '?q=' + encodeURIComponent(query) : '');
+            fetch(url, { credentials: 'same-origin' })
+                .then(function (r) { return r.text(); })
+                .then(function (html) {
+                    if (token !== _existingSearchToken) return; // a newer search superseded this one
+                    _existingList.innerHTML = html;
+                })
+                .catch(function () {
+                    if (token !== _existingSearchToken) return;
+                    _existingList.innerHTML = '<p class="form-hint">Could not load your maps. Please try again.</p>';
+                });
+        }
+
+        if (_tabBtnDraw) _tabBtnDraw.addEventListener('click', function () { _switchComposerTab('draw'); });
+        if (_tabBtnExisting) _tabBtnExisting.addEventListener('click', function () { _switchComposerTab('existing'); });
+        if (_existingSearch) {
+            var _existingSearchDebounce = null;
+            _existingSearch.addEventListener('input', function () {
+                clearTimeout(_existingSearchDebounce);
+                var value = _existingSearch.value.trim();
+                _existingSearchDebounce = setTimeout(function () { _loadExistingMaps(value); }, 300);
+            });
+        }
+        if (_existingList) {
+            _existingList.addEventListener('click', function (e) {
+                var item = e.target.closest('.dm-map-picker-item');
+                if (!item || !_existingMapPicker) return;
+                _existingMapPicker.onPick(item.dataset.mapUuid);
+                _closeComposer();
+            });
+        }
+
         // -- Open composer -----------------------------------------------------
         // Accepts either a host form element (existing comment/visit/trip-comment
-        // usage - back-compat) or an options object { form, context, onSaved }
-        // with no form, which switches on standalone mode.
+        // usage - back-compat) or an options object
+        // { form, context, onSaved, existingMapPicker, startTab } with no form,
+        // which switches on standalone mode. existingMapPicker (currently only
+        // passed by the DM composer) reveals the tab strip and a second
+        // "Choose Existing" tab backed by { fetchUrl, onPick(uuid) }; every
+        // other caller never sets it, so the dialog looks exactly as it always
+        // has for them.
         window._openCommentMapComposer = function (formOrOptions) {
             if (typeof L === 'undefined') {
                 toastr.warning('Map feature is not available on this page. Try from a pin or wiki page.');
@@ -752,18 +1030,27 @@
             _standaloneMode = !form;
             _standaloneContext = opts.context || null;
             _standaloneOnSaved = opts.onSaved || null;
+            _existingMapPicker = opts.existingMapPicker || null;
 
             _titleRow.hidden = !_standaloneMode;
             _titleInput.value = '';
             _saveBtn.textContent = _standaloneMode ? 'Save map' : 'Attach map';
 
-            // Restore existing map_data if the form already has one
+            _tabsEl.hidden = !_existingMapPicker;
+            _switchComposerTab(_existingMapPicker && opts.startTab === 'existing' ? 'existing' : 'draw');
+
+            // Restore existing map_data if the form already has one, or if the
+            // caller passed a snapshot directly (e.g. "Edit" on a received map:
+            // there is no form, just a fetched MarkupMap.to_snapshot payload
+            // to seed the composer with so the user can adjust and re-send it).
             var existing = null;
             if (form) {
                 var hiddenField = form.querySelector('.comment-map-data-field');
                 if (hiddenField && hiddenField.value) {
                     try { existing = JSON.parse(hiddenField.value); } catch (_) {}
                 }
+            } else if (opts.existingData) {
+                existing = opts.existingData;
             }
 
             _dialog.showModal();
@@ -777,7 +1064,12 @@
 
             var mapEl = document.getElementById('comment-map-composer-map');
             if (!_composerMap) {
-                _composerMap = L.map(mapEl, { zoomControl: true });
+                // attributionControl: false - the required attribution text is
+                // rendered in the dialog-footer (#cmc-attribution) instead of
+                // floating over the map, matching the main map's page-footer
+                // attribution rather than an on-map overlay.
+                _composerMap = L.map(mapEl, { zoomControl: true, attributionControl: false });
+                var cmcAttributionEl = document.getElementById('cmc-attribution');
                 // Shared layers engine bound to the strip rendered by
                 // {% templatetag openblock %} map_layers_panel variant="strip" {% templatetag closeblock %} in this dialog.
                 _composerLayers = window.MapLayers.create(_composerMap, {
@@ -785,6 +1077,9 @@
                     onStateChange: function (state) {
                         _composerLayerMode = state.base;
                         _composerShowBorders = state.borders;
+                    },
+                    onAttribution: function (text) {
+                        if (cmcAttributionEl) cmcAttributionEl.textContent = text;
                     },
                 });
                 _composerMarkupLayer = L.layerGroup().addTo(_composerMap);
@@ -870,9 +1165,37 @@
             // and re-request any tiles needed for the current view.
             _composerMap.invalidateSize();
 
+            _suggestTitle();
             _redrawMarkup();
             if (_composerSession) _composerSession.deactivate();
         };
+
+        // -- Shared top-right map toolbar -----------------------------------------
+        // Every map on the site (main map, pin detail, wiki, safety check-ins,
+        // trip activity map, memories overview) renders the same toolbar markup
+        // (see map_components.py's map_toolbar()/_map_toolbar.html) so the
+        // screenshot tool behaves identically everywhere: it opens this same
+        // composer dialog, seeded with the calling map's current view.
+        window._openMapToolbarScreenshot = function (map, context) {
+            var opts = { context: context || null };
+            if (map && typeof map.getCenter === 'function') {
+                opts.initialView = { lat: map.getCenter().lat, lng: map.getCenter().lng, zoom: map.getZoom() };
+            }
+            window._openCommentMapComposer(opts);
+        };
+
+        // Collapse/expand toggle, delegated so it works for every toolbar
+        // instance on the page without per-page wiring.
+        document.addEventListener('click', function (e) {
+            var toggle = e.target.closest('.map-toolbar-collapse');
+            if (!toggle) return;
+            var panel = toggle.closest('.map-buttons');
+            if (!panel) return;
+            var collapsed = panel.classList.toggle('collapsed');
+            var icon = toggle.querySelector('i');
+            if (icon) icon.textContent = collapsed ? 'chevron_left' : 'chevron_right';
+            toggle.dataset.tooltip = collapsed ? 'Expand toolbar' : 'Collapse toolbar';
+        });
 
         // Current stroke-width slider value (also font-size fallback for text).
         function _composerWidth() {
@@ -918,8 +1241,26 @@
                     .then(function (r) { return r.json(); })
                     .then(function (data) {
                         if (!data.ok) throw new Error();
-                        toastr.success('Map saved.');
                         if (_standaloneOnSaved) _standaloneOnSaved(data.uuid);
+                        // Ask before closing (not after) - the composer's map is
+                        // still live and visible, so MapExport.download has a
+                        // real rendered container to screenshot rather than one
+                        // already hidden behind a closed dialog.
+                        return window.confirmDialog({
+                            title: 'Map created',
+                            message: 'Your map has been saved. Download it as a JPEG now?',
+                            confirmLabel: 'Download',
+                            danger: false,
+                        });
+                    })
+                    .then(function (shouldDownload) {
+                        if (shouldDownload) {
+                            window.MapExport.download(_composerMap, {
+                                layers: _composerLayers,
+                                getShapes: function () { return _composerShapes; },
+                                filename: 'map-screenshot.jpg',
+                            });
+                        }
                         _closeComposer();
                     })
                     .catch(function () { toastr.error('Failed to save map.'); })
@@ -970,6 +1311,24 @@
             });
         });
 
+        // Wire the read-only viewer's Edit button: seeds the shared composer
+        // with this map's own snapshot (already embedded on the page via
+        // json_script - no extra request needed) and saves the result as a
+        // brand-new MarkupMap. The map being viewed is never mutated, so a
+        // shared/received map stays exactly as its owner left it.
+        document.addEventListener('click', function (e) {
+            var editBtn = e.target.closest('.comment-map-edit-btn');
+            if (!editBtn || !window._openCommentMapComposer) return;
+            var mapId = editBtn.dataset.mapId;
+            var script = document.getElementById('comment-map-data-' + mapId);
+            var data = null;
+            if (script) { try { data = JSON.parse(script.textContent); } catch (_) {} }
+            if (!data) { toastr.error("Couldn't load this map to edit."); return; }
+            var dlg = document.getElementById('comment-map-dialog-' + mapId);
+            if (dlg && dlg.open) dlg.close();
+            window._openCommentMapComposer({ existingData: data });
+        });
+
         // Wire chip buttons (event delegation - forms are dynamic via HTMX)
         document.addEventListener('click', function (e) {
             if (e.target.closest('.comment-map-chip-remove')) {
@@ -983,13 +1342,36 @@
         });
 
         // -- Tool selection ----------------------------------------------------
-        document.querySelectorAll('.cmc-tool-btn').forEach(function (btn) {
+        document.querySelectorAll('.cmc-tool-btn[data-tool]').forEach(function (btn) {
             btn.addEventListener('click', function () {
                 if (!_composerSession) return;
                 var tool = btn.dataset.tool;
                 if (_composerSession.getCurrentTool() === tool) { _composerSession.deactivate(); }
                 else { _composerSession.startTool(tool); }
             });
+        });
+
+        // -- Pin my location: drop a marker instantly, no multi-click draw session needed --
+        document.getElementById('cmc-pin-location').addEventListener('click', function () {
+            if (!navigator.geolocation) {
+                toastr.warning('Geolocation is not available in this browser.');
+                return;
+            }
+            navigator.geolocation.getCurrentPosition(
+                function (pos) {
+                    _composerShapes.push({
+                        type: 'pin',
+                        latlngs: [[pos.coords.latitude, pos.coords.longitude]],
+                        color: _colorPicker ? _colorPicker.value : '#e74c3c',
+                    });
+                    _redrawMarkup();
+                    if (_composerMap) _composerMap.panTo([pos.coords.latitude, pos.coords.longitude]);
+                },
+                function () {
+                    toastr.warning("Couldn't get your location. Check your browser's location permission.");
+                },
+                { enableHighAccuracy: true, timeout: 10000 },
+            );
         });
 
         document.getElementById('cmc-undo').addEventListener('click', function () {
@@ -1018,14 +1400,19 @@
         // without Leaflet never touch it.
         function _ensureComposerSearch() {
             if (_composerSearch || typeof window.LocationSearchEngine === 'undefined') return;
+            // One-time cleanup: this key used to be unscoped, leaking one
+            // user's typed search queries to the next user on a shared
+            // browser (UL-239). See map/index.html's identical cleanup.
+            try { localStorage.removeItem('ul_composer_search_history_v1'); } catch (e) {}
             _composerSearch = window.LocationSearchEngine.attach('cmcc', {
-                historyKey: 'ul_composer_search_history_v1',
+                historyKey: 'ul_composer_search_history_v1_{{ request.user.profile.uuid|default:"" }}',
                 sources: {
                     localPins: { url: '{% url "map.autocomplete.local" %}' },
                     osmNominatim: true,
                     googlePlaces: { url: '{% url "map.autocomplete.places" %}' },
                 },
                 resolvePlaceUrl: '{% url "map.resolve_place" %}',
+                pinCacheProfileUuid: '{{ request.user.profile.uuid|default:"" }}',
                 enableMyLocation: true,
                 defaultZoom: 15,
                 onSelect: function (result) {
@@ -1118,13 +1505,19 @@
             el.style.height = Math.round(window.innerHeight * 0.6) + 'px';
             el.style.minHeight = '300px';
 
-            var viewMap = L.map(el);
+            // attributionControl: false - shown in the dialog's own toolbar
+            // (#comment-map-attribution-<id>) instead of floating over the map.
+            var viewMap = L.map(el, { attributionControl: false });
+            var viewAttributionEl = document.getElementById('comment-map-attribution-' + commentId);
             // The layer strip is server-rendered inside the dialog by the
             // shared _map_view_dialog.html partial ({% templatetag openblock %} map_layers_panel {% templatetag closeblock %}).
             var viewLayers = window.MapLayers.create(viewMap, {
                 root: dlg.querySelector('.map-layers-strip'),
                 defaultBase: data.layer_mode || 'street',
                 initialOverlays: data.show_borders ? ['borders'] : [],
+                onAttribution: function (text) {
+                    if (viewAttributionEl) viewAttributionEl.textContent = text;
+                },
             });
             _fitMapToMarkup(viewMap, data);
 
@@ -1143,25 +1536,54 @@
             }, { once: true });
         };
 
+        // -- Render a small non-interactive Leaflet map into `el` -------------
+        // Shared by the .comment-map-thumb renderer below and the DM
+        // composer's attach-preview chip (which fetches the same snapshot
+        // shape via markup_map.snapshot instead of reading a json_script tag).
+        // Caller is responsible for sizing `el` (height/width) before calling.
+        window._renderMapThumb = function (el, data, refLatLng) {
+            if (typeof L === 'undefined') return null;
+            var tmap = L.map(el, { zoomControl: false, attributionControl: false, dragging: false,
+                                      scrollWheelZoom: false, doubleClickZoom: false, touchZoom: false });
+            window.MapLayers.tileLayer(data.layer_mode || 'street').addTo(tmap);
+            if (data.show_borders) window.MapLayers.bordersOverlay().addTo(tmap);
+            _fitMapToMarkup(tmap, data);
+            tmap.invalidateSize();
+            var mg = L.layerGroup().addTo(tmap);
+            (data.markup || []).forEach(function (s) { MarkupEngine.renderShape(s, mg); });
+            if (refLatLng) _makeRefMarker(refLatLng[0], refLatLng[1]).addTo(tmap);
+            return tmap;
+        };
+
         // -- Render thumbnail map inside .comment-map-thumb --------------------
-        // Runs on DOMContentLoaded and after HTMX swaps
+        // Runs on DOMContentLoaded and after HTMX swaps. Also exposed on
+        // window: a couple of call sites replace a pane's innerHTML directly
+        // (fetch-based fallbacks that predate htmx.ajax) and need to re-run
+        // this manually since a raw innerHTML assignment fires no htmx events.
+        window._initThumbs = _initThumbs;
         function _initThumbs() {
             if (typeof L === 'undefined') return;  // Leaflet not loaded on this page
+            // Click-binding is a separate pass from thumbnail rendering below -
+            // Array.forEach aborts entirely on an uncaught exception, and one
+            // malformed map's Leaflet render throwing must never be able to
+            // leave every *later* preview on the page permanently unclickable
+            // (the "Expand map" button/title link still work regardless since
+            // they're plain onclick attributes, which is what made this class
+            // of bug easy to miss - only the click-anywhere-on-thumb path broke).
+            document.querySelectorAll('.comment-map-preview').forEach(function (preview) {
+                var id = preview.dataset.commentId;
+                if (preview.dataset.expandBound) return;
+                preview.dataset.expandBound = '1';
+                preview.classList.add('comment-map-preview--clickable');
+                preview.addEventListener('click', function (e) {
+                    if (e.target.closest('.comment-map-expand-btn')) return;
+                    if (id) window._expandCommentMap(id);
+                });
+            });
+
             document.querySelectorAll('.comment-map-preview').forEach(function (preview) {
                 var id = preview.dataset.commentId;
                 var thumb = preview.querySelector('.comment-map-thumb');
-
-                // Clicking anywhere on the preview (not just the "Expand" button)
-                // opens the read-only, larger map viewer.
-                if (!preview.dataset.expandBound) {
-                    preview.dataset.expandBound = '1';
-                    preview.classList.add('comment-map-preview--clickable');
-                    preview.addEventListener('click', function (e) {
-                        if (e.target.closest('.comment-map-expand-btn')) return;
-                        if (id) window._expandCommentMap(id);
-                    });
-                }
-
                 if (!thumb || thumb.dataset.initialized) return;
                 var script = document.getElementById('comment-map-data-' + id);
                 if (!script) return;
@@ -1173,17 +1595,18 @@
                 // regardless of whether the compiled CSS has loaded yet.
                 thumb.style.height = '180px';
                 thumb.style.width = '100%';
-                var tmap = L.map(thumb, { zoomControl: false, attributionControl: false, dragging: false,
-                                          scrollWheelZoom: false, doubleClickZoom: false, touchZoom: false });
-                window.MapLayers.tileLayer(data.layer_mode || 'street').addTo(tmap);
-                if (data.show_borders) window.MapLayers.bordersOverlay().addTo(tmap);
-                _fitMapToMarkup(tmap, data);
-                tmap.invalidateSize();
-                var mg = L.layerGroup().addTo(tmap);
-                (data.markup || []).forEach(function (s) { MarkupEngine.renderShape(s, mg); });
-
-                var refLatLng = _readMarkerLatLng(preview);
-                if (refLatLng) _makeRefMarker(refLatLng[0], refLatLng[1]).addTo(tmap);
+                // Leaflet calls L.DomEvent.disableClickPropagation() on the map
+                // container in _initContainer, so clicks inside the thumb never
+                // bubble up to the preview's own click listener above. Bind
+                // directly on the thumb too so clicking the map itself works.
+                thumb.addEventListener('click', function () {
+                    if (id) window._expandCommentMap(id);
+                });
+                try {
+                    window._renderMapThumb(thumb, data, _readMarkerLatLng(preview));
+                } catch (err) {
+                    console.error('Failed to render map thumbnail', id, err);
+                }
             });
         }
 
@@ -1195,9 +1618,167 @@
             var text = ((form.querySelector('[name=text]') || {}).value || '').trim();
             var imgInput = form.querySelector('[name=image]');
             var hasImage = !!(imgInput && imgInput.files && imgInput.files.length > 0);
+            var existingImageField = form.querySelector('.comment-existing-image-field');
+            var hasExistingImage = !!(existingImageField && existingImageField.value);
             var mapField = form.querySelector('.comment-map-data-field');
             var hasMap = !!(mapField && mapField.value);
-            return !!(text || hasImage || hasMap);
+            return !!(text || hasImage || hasExistingImage || hasMap);
+        };
+
+        // Reset the image attachment UI on a successful post (mirrors
+        // _clearCommentMap) - form.reset() already restores the hidden
+        // existing_image_id field's default empty value, but the preview
+        // text isn't a form control so it needs clearing separately.
+        window._clearCommentImage = function (form) {
+            var preview = form && form.querySelector('.comment-image-preview');
+            if (preview) preview.textContent = '';
+        };
+
+        // -- Attach-a-photo button for comments/Notes - "Upload New" (plain
+        // file picker) or "Choose Existing" (one of the poster's own already-
+        // uploaded photos, via CommentImagePickerView). Single shared dialog
+        // reused across every "Attach photo" button on the page, same as
+        // #comment-map-composer above; state is closed over the form passed
+        // to whichever call opened it most recently.
+        window._openCommentAttachImageDialog = function (form) {
+            var dialog = document.getElementById('comment-image-composer');
+            if (!dialog) return;
+            var fileInput = document.getElementById('cip-file-input');
+            var uploadPreview = document.getElementById('cip-upload-preview');
+            var uploadPreviewImg = document.getElementById('cip-upload-preview-img');
+            var uploadPreviewName = document.getElementById('cip-upload-preview-name');
+            var saveBtn = document.getElementById('comment-image-composer-save');
+            var tabBtnUpload = document.getElementById('cip-tab-btn-upload');
+            var tabBtnExisting = document.getElementById('cip-tab-btn-existing');
+            var panelUpload = document.getElementById('cip-tab-panel-upload');
+            var panelExisting = document.getElementById('cip-tab-panel-existing');
+            var existingSearch = document.getElementById('cip-existing-search');
+            var existingList = document.getElementById('cip-existing-list');
+
+            var pickedFile = null;
+            var pickedExistingId = null;
+
+            function updateSaveEnabled() {
+                saveBtn.disabled = !pickedFile && !pickedExistingId;
+            }
+
+            function switchTab(tab) {
+                var onExisting = tab === 'existing';
+                tabBtnUpload.classList.toggle('is-active', !onExisting);
+                tabBtnUpload.setAttribute('aria-selected', String(!onExisting));
+                tabBtnExisting.classList.toggle('is-active', onExisting);
+                tabBtnExisting.setAttribute('aria-selected', String(onExisting));
+                panelUpload.hidden = onExisting;
+                panelExisting.hidden = !onExisting;
+                if (onExisting) loadExisting('');
+            }
+
+            function loadExisting(query) {
+                existingList.innerHTML = '<p class="form-hint">Loading your photos&hellip;</p>';
+                var url = '{% url "comments.image_picker" %}' + (query ? '?q=' + encodeURIComponent(query) : '');
+                fetch(url, { credentials: 'same-origin' })
+                    .then(function (r) { return r.text(); })
+                    .then(function (html) { existingList.innerHTML = html; })
+                    .catch(function () { existingList.innerHTML = '<p class="form-hint">Could not load your photos. Please try again.</p>'; });
+            }
+
+            tabBtnUpload.onclick = function () { switchTab('upload'); };
+            tabBtnExisting.onclick = function () { switchTab('existing'); };
+
+            fileInput.onchange = function () {
+                pickedFile = (fileInput.files && fileInput.files[0]) || null;
+                pickedExistingId = null;
+                if (pickedFile) {
+                    uploadPreviewImg.src = URL.createObjectURL(pickedFile);
+                    uploadPreviewName.textContent = pickedFile.name;
+                    uploadPreview.hidden = false;
+                } else {
+                    uploadPreview.hidden = true;
+                }
+                updateSaveEnabled();
+            };
+
+            existingList.onclick = function (e) {
+                var item = e.target.closest('.cip-picker-item');
+                if (!item) return;
+                var prev = existingList.querySelector('.cip-picker-item.is-selected');
+                if (prev) prev.classList.remove('is-selected');
+                item.classList.add('is-selected');
+                pickedExistingId = item.dataset.imageId;
+                pickedFile = null;
+                updateSaveEnabled();
+            };
+
+            if (existingSearch) {
+                var debounce = null;
+                existingSearch.oninput = function () {
+                    clearTimeout(debounce);
+                    var value = existingSearch.value.trim();
+                    debounce = setTimeout(function () { loadExisting(value); }, 300);
+                };
+            }
+
+            saveBtn.onclick = function () {
+                var fileInputOnForm = form.querySelector('.comment-image-input');
+                var existingIdField = form.querySelector('.comment-existing-image-field');
+                var preview = form.querySelector('.comment-image-preview');
+                if (pickedFile && fileInputOnForm) {
+                    var dt = new DataTransfer();
+                    dt.items.add(pickedFile);
+                    fileInputOnForm.files = dt.files;
+                    if (existingIdField) existingIdField.value = '';
+                    if (preview) preview.textContent = '📎 ' + pickedFile.name;
+                } else if (pickedExistingId) {
+                    if (existingIdField) existingIdField.value = pickedExistingId;
+                    if (fileInputOnForm) fileInputOnForm.value = '';
+                    if (preview) preview.textContent = '📎 Photo attached';
+                }
+                dialog.close();
+            };
+
+            document.getElementById('comment-image-composer-cancel').onclick = function () { dialog.close(); };
+            document.getElementById('comment-image-composer-close').onclick = function () { dialog.close(); };
+
+            pickedFile = null;
+            pickedExistingId = null;
+            fileInput.value = '';
+            uploadPreview.hidden = true;
+            updateSaveEnabled();
+            switchTab('upload');
+            dialog.showModal();
+        };
+
+        // -- Attach-a-map button for comments/Notes (pin, wiki, and trip
+        // comments all share _comment_compose.html) - opens the same composer
+        // dialog as everywhere else, but also offers "Choose Existing" so the
+        // user isn't forced to redraw a map they've already made. Picking one
+        // fetches its snapshot (the same shape the "Draw New" Save button
+        // already writes into this field) and drops it straight into the
+        // form's hidden field - materialize_markup_map (services/map_snapshot.py)
+        // then clones it into a comment-owned MarkupMap on submit, exactly like
+        // a freshly-drawn map, so no backend changes were needed for this.
+        var _commentMapSnapshotUrlTemplate = '{% url "markup_map.snapshot" map_uuid="11111111-1111-1111-1111-111111111111" %}';
+        window._openCommentAttachMapDialog = function (form) {
+            if (!window._openCommentMapComposer) return;
+            window._openCommentMapComposer({
+                form: form,
+                existingMapPicker: {
+                    fetchUrl: '{% url "messages.attach_map.picker" %}',
+                    onPick: function (uuid) {
+                        var url = _commentMapSnapshotUrlTemplate.replace('11111111-1111-1111-1111-111111111111', uuid);
+                        fetch(url, { credentials: 'same-origin' })
+                            .then(function (r) { return r.ok ? r.json() : null; })
+                            .then(function (data) {
+                                if (!data) { if (window.toastr) toastr.error('Could not load that map.'); return; }
+                                var hiddenField = form.querySelector('.comment-map-data-field');
+                                if (hiddenField) hiddenField.value = JSON.stringify(data);
+                                var chip = form.querySelector('.comment-map-chip');
+                                if (chip) chip.hidden = false;
+                            })
+                            .catch(function () { if (window.toastr) toastr.error('Could not load that map.'); });
+                    },
+                },
+            });
         };
 
     }());
@@ -1214,9 +1795,9 @@
     // wiki and trip pages.
     //
     // Because collapsing hides the section entirely, there's no header left to
-    // click to bring it back. Any element with [data-collapse-restore-scope]
-    // is populated with a list of that scope's currently-collapsed sections
-    // (see _updateRestoreControls) so the user can restore them individually.
+    // click to bring it back. The fixed bottom-left #tools-fab (see below in
+    // this template) lists the current page's collapsed sections so the user
+    // can restore them individually (see _updateRestoreControls).
     (function () {
         function _key(scope, section) { return 'ul-collapsed:' + scope + ':' + section; }
 
@@ -1241,7 +1822,16 @@
             var scope = container.dataset.collapseScope;
             var section = container.dataset.collapseSection;
             if (!scope || !section) return;
-            var collapsed = _isCollapsed(scope, section);
+            // data-collapse-if-empty (set server-side per section - e.g. Links,
+            // Custom Fields, Ownership - whenever that section currently has no
+            // content) collapses by default alongside the normal stored
+            // preference, but is deliberately never written to localStorage via
+            // _setCollapsed - it's re-derived from the section's actual content
+            // on every load, not a sticky choice. The toggle button still works
+            // normally on top of it: expanding un-collapses for this view (see
+            // the click handler below), and if the section is still empty next
+            // visit, it re-collapses on its own rather than staying stuck open.
+            var collapsed = _isCollapsed(scope, section) || container.dataset.collapseIfEmpty === 'true';
             container.classList.toggle('is-collapsed', collapsed);
             var btn = container.querySelector('.section-collapse-btn');
             if (btn) btn.setAttribute('aria-expanded', String(!collapsed));
@@ -1298,55 +1888,93 @@
             _applyState(container);
         }
 
-        // Fills in every [data-collapse-restore-scope] control with the list of
-        // currently-collapsed sections sharing its scope, hiding the control
-        // entirely when nothing in that scope is collapsed.
+        // A page only ever uses one collapse scope at a time (pin, wiki, trip, ...),
+        // so the single global tools menu (#tools-fab) can auto-detect which scope
+        // is active instead of every page having to declare its own restore control.
+        function _currentScope() {
+            var el = document.querySelector('[data-collapse-scope]');
+            return el ? el.dataset.collapseScope : null;
+        }
+
+        function _closeToolsFab() {
+            var menu = document.getElementById('tools-fab-menu');
+            var btn = document.getElementById('tools-fab-btn');
+            if (menu) menu.hidden = true;
+            if (btn) btn.setAttribute('aria-expanded', 'false');
+        }
+
+        // Fills the "Hidden sections" group of the global tools menu with the
+        // current scope's collapsed sections, hiding that group - and the whole
+        // FAB, since it has nothing else in it yet - when nothing is collapsed.
         function _updateRestoreControls() {
-            document.querySelectorAll('[data-collapse-restore-scope]').forEach(function (control) {
-                var scope = control.dataset.collapseRestoreScope;
-                var hiddenSections = document.querySelectorAll('[data-collapse-scope="' + scope + '"][data-collapse-section].is-collapsed');
-                var menu = control.querySelector('.collapse-restore-menu');
-                var countEl = control.querySelector('.collapse-restore-count');
+            var fab = document.getElementById('tools-fab');
+            var group = fab && fab.querySelector('[data-tools-fab-group="collapse-restore"]');
+            if (!fab || !group) return;
 
-                if (!hiddenSections.length) {
-                    control.hidden = true;
-                    control.classList.remove('is-open');
-                    if (menu) menu.innerHTML = '';
-                    return;
-                }
+            var scope = _currentScope();
+            // A pin/wiki detail page renders every subpage tab's markup at once
+            // (data-tab-panel, plus nested data-article-subtab wrappers), only
+            // toggling `hidden` to switch which one is visible - so a section
+            // collapsed on one tab (e.g. Overview) would otherwise still show up
+            // here while viewing an unrelated tab (e.g. Article) that has nothing
+            // to do with it. `.closest('[hidden]')` excludes anything nested
+            // inside a currently-hidden tab/subtab wrapper, regardless of how
+            // many levels deep - only sections on the tab actually being viewed
+            // are offered for restore.
+            var hiddenSections = scope
+                ? Array.prototype.filter.call(
+                    document.querySelectorAll('[data-collapse-scope="' + scope + '"][data-collapse-section].is-collapsed'),
+                    function (section) { return !section.closest('[hidden]'); },
+                  )
+                : [];
+            var restoreMenu = group.querySelector('.collapse-restore-menu');
+            var countEl = fab.querySelector('.collapse-restore-count');
 
-                control.hidden = false;
-                if (countEl) countEl.textContent = String(hiddenSections.length);
-                if (!menu) return;
+            group.hidden = !hiddenSections.length;
+            fab.hidden = !hiddenSections.length;
+            if (countEl) {
+                countEl.hidden = !hiddenSections.length;
+                countEl.textContent = String(hiddenSections.length);
+            }
+            if (!hiddenSections.length) {
+                _closeToolsFab();
+                if (restoreMenu) restoreMenu.innerHTML = '';
+                return;
+            }
 
-                menu.innerHTML = '';
-                hiddenSections.forEach(function (section) {
-                    var item = document.createElement('button');
-                    item.type = 'button';
-                    item.className = 'collapse-restore-item';
-                    item.innerHTML = '<i class="material-symbols-outlined">visibility</i>';
-                    item.append(section.dataset.collapseLabel || section.dataset.collapseSection);
-                    item.addEventListener('click', function () {
-                        section.classList.remove('is-collapsed');
-                        var toggleBtn = section.querySelector('.section-collapse-btn');
-                        if (toggleBtn) toggleBtn.setAttribute('aria-expanded', 'true');
-                        _setCollapsed(scope, section.dataset.collapseSection, false);
-                        // Section was hidden before its hx-get ever fired (see the
-                        // hx-trigger="load[...]" skip condition) - its content was
-                        // never loaded, so kick off that request now.
-                        if (section.getAttribute('hx-get') && window.htmx) {
-                            htmx.trigger(section, 'ul:unhide');
-                        }
-                        var innerLoader = section.querySelector('[hx-get][hx-trigger*="ul:unhide"]');
-                        if (innerLoader && window.htmx) {
-                            htmx.trigger(innerLoader, 'ul:unhide');
-                        }
-                        _updateRestoreControls();
-                    });
-                    menu.appendChild(item);
+            restoreMenu.innerHTML = '';
+            hiddenSections.forEach(function (section) {
+                var item = document.createElement('button');
+                item.type = 'button';
+                item.className = 'collapse-restore-item';
+                item.innerHTML = '<i class="material-symbols-outlined">visibility</i>';
+                item.append(section.dataset.collapseLabel || section.dataset.collapseSection);
+                item.addEventListener('click', function () {
+                    section.classList.remove('is-collapsed');
+                    var toggleBtn = section.querySelector('.section-collapse-btn');
+                    if (toggleBtn) toggleBtn.setAttribute('aria-expanded', 'true');
+                    _setCollapsed(scope, section.dataset.collapseSection, false);
+                    // Section was hidden before its hx-get ever fired (see the
+                    // hx-trigger="load[...]" skip condition) - its content was
+                    // never loaded, so kick off that request now.
+                    if (section.getAttribute('hx-get') && window.htmx) {
+                        htmx.trigger(section, 'ul:unhide');
+                    }
+                    var innerLoader = section.querySelector('[hx-get][hx-trigger*="ul:unhide"]');
+                    if (innerLoader && window.htmx) {
+                        htmx.trigger(innerLoader, 'ul:unhide');
+                    }
+                    _updateRestoreControls();
                 });
+                restoreMenu.appendChild(item);
             });
         }
+
+        // Exposed so page-specific tab switches that don't go through
+        // page-tabs.js's `ul:tabShown` event (e.g. the Article tab's own
+        // internal Article/Wikipedia sub-tab toggle) can still refresh which
+        // collapsed sections are currently visible/restorable.
+        window.ulRefreshCollapseRestore = _updateRestoreControls;
 
         function _scanAll() {
             document.querySelectorAll('[data-collapse-scope][data-collapse-section]').forEach(_ensureToggle);
@@ -1354,10 +1982,12 @@
         }
 
         document.addEventListener('click', function (e) {
-            var restoreToggle = e.target.closest('.collapse-restore-toggle');
-            if (restoreToggle) {
-                var control = restoreToggle.closest('[data-collapse-restore-scope]');
-                if (control) control.classList.toggle('is-open');
+            var fabToggle = e.target.closest('#tools-fab-btn');
+            if (fabToggle) {
+                var menu = document.getElementById('tools-fab-menu');
+                var opening = !!(menu && menu.hidden);
+                if (menu) menu.hidden = !opening;
+                fabToggle.setAttribute('aria-expanded', String(opening));
                 return;
             }
 
@@ -1373,20 +2003,56 @@
                 return;
             }
 
-            // Click outside an open restore menu closes it.
-            document.querySelectorAll('[data-collapse-restore-scope].is-open').forEach(function (control) {
-                if (!control.contains(e.target)) control.classList.remove('is-open');
-            });
+            // Click outside the open tools menu closes it.
+            var fab = document.getElementById('tools-fab');
+            var openMenu = document.getElementById('tools-fab-menu');
+            if (fab && openMenu && !openMenu.hidden && !fab.contains(e.target)) {
+                _closeToolsFab();
+            }
         });
 
         document.addEventListener('DOMContentLoaded', _scanAll);
         document.addEventListener('htmx:afterSettle', _scanAll);
+        // page-tabs.js dispatches this on every tab switch (pin/wiki detail
+        // pages render every tab's markup at once, just toggling `hidden`) -
+        // refresh the restore list immediately rather than waiting for the
+        // next htmx settle, so switching away from a tab with collapsed
+        // sections hides them from the FAB right away.
+        document.body.addEventListener('ul:tabShown', _updateRestoreControls);
     }());
     </script>
 
     {% include 'dashboard/partials/ui/_tooltips_script.html' %}
     {% include 'dashboard/partials/ui/_page_explainer_script.html' %}
     {% include 'dashboard/partials/layout/_notification_push.html' %}
+    {% if e2ee_needs_oauth_enroll %}
+    <script src="{% static 'dashboard/js/e2ee.js' %}"></script>
+    <script>
+        // Passwordless (OAuth) account with no message-encryption keys yet:
+        // enroll transparently in the background. The recovery key stays
+        // viewable in Settings > Direct Messages while this device holds the
+        // decrypted key, so nothing is lost if the toast goes unnoticed.
+        (function () {
+            UrbanLensE2EE.init({
+                selfSlug: null,
+                urls: {
+                    loginParams: "{% url 'e2ee.login_params' %}",
+                    enroll: "{% url 'e2ee.enroll' %}",
+                    keys: "{% url 'e2ee.keys' %}",
+                    rewrap: "{% url 'e2ee.rewrap' %}",
+                    reset: "{% url 'e2ee.reset' %}",
+                    partnerKeyBase: "{% url 'e2ee.keys' %}",
+                    conversationKeyBase: "{% url 'e2ee.conversation_key' 'e2ee-slug-token' %}".replace("e2ee-slug-token/", ""),
+                    login: "{% url 'login' %}",
+                    faqUrl: "{% url 'faq' %}#faq-e2ee",
+                },
+            });
+            UrbanLensE2EE.enrollOauthIfNeeded().catch(function (error) {
+                console.error("E2EE OAuth enrollment failed", error);
+            });
+        }());
+    </script>
+    {% endif %}
     {% block scripts %}{% endblock %}
 
 </body>

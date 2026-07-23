@@ -77,7 +77,7 @@ class MapPinCache:
     which allows fast keyset pages and targeted updates when one pin changes.
     """
 
-    VERSION = "v1"
+    VERSION = "v2"
     TTL_SECONDS = 2 * 60 * 60
     LOCK_SECONDS = 30
 

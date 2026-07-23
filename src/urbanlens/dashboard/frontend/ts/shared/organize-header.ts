@@ -186,7 +186,7 @@ export function installOrgBulkToolbar(): void {
         if (deleteBtn) deleteBtn.hidden = !opts.hasDel;
     };
 
-    // When exactly one badge is selected, "Edit" should open that badge's own
+    // When exactly one label is selected, "Edit" should open that label's own
     // single-edit dialog rather than the bulk-edit dialog.
     window._orgOpenSingleEdit = (dataAttr, id) => {
         const card = document.querySelector(`[${dataAttr}="${id}"]`);
@@ -236,6 +236,67 @@ export function installOrgTabSwitching(): void {
             return;
         }
         window._orgBulk?.deselect?.();
+    });
+}
+
+// ── Section switching (Labels | Lists | Filters) --------------------------
+// A second, independent tab tier above `.organize-tab`/`.organize-panel`:
+// switches between the three top-level sections of the Organize page. Lists
+// and Filters lazy-load their content via HTMX the first time they're shown
+// (hx-trigger="revealed" on `.organize-section-panel`, see organize/index.html) -
+// this only ever toggles which section is visible, it never touches that content.
+// Kept in sync with the server-side hero branch in organize/index.html's
+// {% block hero %} - the section switch below is client-side only (no page
+// reload), so the hero has to be updated here too or it stays stuck on
+// whatever section was active on the initial page load.
+const ORG_SECTION_HERO: Record<string, { icon: string; title: string; subtitle: string }> = {
+    labels: { icon: "tune", title: "Organize", subtitle: "Manage the tags, categories, statuses, and people labels used to organize your data." },
+    lists: { icon: "bookmarks", title: "Lists", subtitle: "Group your pins into curated collections you can browse, share, and filter by." },
+    filters: { icon: "filter_alt", title: "Filters", subtitle: "Save reusable filter criteria to quickly narrow down pins on the map and elsewhere." },
+};
+
+function updateOrgSectionHero(section: string): void {
+    const hero = ORG_SECTION_HERO[section];
+    if (!hero) return;
+    const titleEl = document.querySelector<HTMLElement>(".ul-page-hero__title");
+    const iconEl = titleEl?.querySelector<HTMLElement>(".material-symbols-outlined");
+    const subtitleEl = document.querySelector<HTMLElement>(".ul-page-hero__subtitle");
+    if (iconEl) iconEl.textContent = hero.icon;
+    if (titleEl) {
+        // _page_hero.html's server-rendered markup is `<h1>{icon}{title}</h1>`,
+        // which Django's whitespace between tags turns into a whitespace-only
+        // text node BEFORE the icon too - `.find()` without filtering picked
+        // that one, so the title got written before the icon instead of after
+        // it, leaving the real (never-updated) title text node still showing
+        // the old section's name next to the icon.
+        const textNode = Array.from(titleEl.childNodes).find((n) => n.nodeType === Node.TEXT_NODE && !!n.textContent?.trim());
+        if (textNode) textNode.textContent = ` ${hero.title} `;
+    }
+    if (subtitleEl) subtitleEl.textContent = hero.subtitle;
+}
+
+export function installOrgSectionSwitching(): void {
+    const tabs = document.querySelectorAll<HTMLElement>(".organize-section-tab");
+    const panels = document.querySelectorAll<HTMLElement>(".organize-section-panel");
+    if (!tabs.length) return;
+
+    tabs.forEach((tab) => {
+        tab.addEventListener("click", () => {
+            const section = tab.dataset.section;
+            if (!section) return;
+            tabs.forEach((t) => t.classList.toggle("is-active", t === tab));
+            panels.forEach((p) => {
+                p.hidden = p.id !== `panel-${section}`;
+            });
+            updateOrgSectionHero(section);
+            const url = new URL(window.location.href);
+            // "labels" isn't a real ?tab= value server-side - it's implied by
+            // whichever label sub-tab (tags/categories/...) was last active,
+            // which installOrgTabSwitching persists to localStorage.
+            const tabParam = section === "labels" ? (localStorage.getItem("organize_tab") ?? "tags") : section;
+            url.searchParams.set("tab", tabParam);
+            window.history.replaceState({}, "", url.toString());
+        });
     });
 }
 

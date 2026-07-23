@@ -1,0 +1,79 @@
+{% comment %}
+Conversation list for the messages page sidebar. Context: `conversations`
+(merged 1:1 + group rows from services.direct_messages.all_conversations_for),
+`active_slug` (slug of the open 1:1 conversation, or empty string),
+`active_group_uuid` (uuid of the open group conversation, or empty), and
+`viewer_id` (the viewing profile's pk, for tombstone-aware previews).
+{% endcomment %}
+{% load dashboard_tags %}
+<div id="dm-conversation-list">
+  {% if conversations %}
+  <ul class="dm-conv-list" role="list">
+    {% for conv in conversations %}
+    <li>
+      {% if conv.kind == "group" %}
+      <a class="dm-conv-item dm-conv-item--group{% if conv.unread_count %} dm-conv-item--unread{% endif %}{% if active_group_uuid and conv.group.uuid|stringformat:'s' == active_group_uuid %} dm-conv-item--active{% endif %}"
+         href="{% url 'messages.group' conv.group.uuid %}"
+         hx-get="{% url 'messages.group' conv.group.uuid %}"
+         hx-target="#dm-thread-pane"
+         hx-swap="innerHTML"
+         hx-push-url="true"
+         data-group-uuid="{{ conv.group.uuid }}">
+        <span class="msg-avatar msg-avatar--lg msg-avatar--group" aria-hidden="true">
+          <i class="material-symbols-outlined">groups</i>
+        </span>
+        <span class="dm-conv-item__text">
+          <span class="dm-conv-item__top">
+            <span class="dm-conv-item__name-group">
+              <span class="dm-conv-item__name">{{ conv.group.name }}</span>
+              {% if conv.is_muted %}<i class="material-symbols-outlined dm-conv-item__muted-icon" title="Notifications muted">volume_off</i>{% endif %}
+            </span>
+            <span class="dm-conv-item__time">{{ conv.last_activity|human_timesince }}</span>
+          </span>
+          <span class="dm-conv-item__bottom">
+            <span class="dm-conv-item__preview"{% if conv.last_message.is_encrypted %} data-e2ee-preview data-ct="{{ conv.last_message.ciphertext }}" data-nonce="{{ conv.last_message.nonce }}" data-kv="{{ conv.last_message.key_version }}" data-group="{{ conv.group.uuid }}"{% endif %}>{% if conv.last_message %}{{ conv.last_sender_display_name }}: {{ conv.last_message|message_preview:viewer_id|truncatechars:60 }}{% else %}{{ conv.member_count }} member{{ conv.member_count|pluralize }}{% endif %}</span>
+            {% if conv.unread_count %}<span class="msg-unread-pill">{{ conv.unread_count }}</span>{% endif %}
+          </span>
+        </span>
+      </a>
+      {% else %}
+      <a class="dm-conv-item{% if conv.unread_count %} dm-conv-item--unread{% endif %}{% if conv.partner.slug == active_slug and active_slug %} dm-conv-item--active{% endif %}"
+         href="{% url 'messages.conversation' conv.partner.slug %}"
+         hx-get="{% url 'messages.conversation' conv.partner.slug %}"
+         hx-target="#dm-thread-pane"
+         hx-swap="innerHTML"
+         hx-push-url="true"
+         data-partner-slug="{{ conv.partner.slug }}">
+        <span class="msg-avatar msg-avatar--lg" aria-hidden="true">
+          {% if conv.display_avatar_url %}
+          <img src="{{ conv.display_avatar_url }}" alt="" class="msg-avatar-img">
+          {% else %}
+          <span class="msg-avatar-initial">{{ conv.display_name|first|upper }}</span>
+          {% endif %}
+        </span>
+        <span class="dm-conv-item__text">
+          <span class="dm-conv-item__top">
+            <span class="dm-conv-item__name-group">
+              <span class="dm-conv-item__name">{{ conv.display_name }}</span>
+              {% if conv.is_muted %}<i class="material-symbols-outlined dm-conv-item__muted-icon" title="Notifications muted">volume_off</i>{% endif %}
+            </span>
+            <span class="dm-conv-item__time">{{ conv.last_message.created|human_timesince }}</span>
+          </span>
+          <span class="dm-conv-item__bottom">
+            <span class="dm-conv-item__preview"{% if conv.last_message.is_encrypted %} data-e2ee-preview data-ct="{{ conv.last_message.ciphertext }}" data-nonce="{{ conv.last_message.nonce }}" data-kv="{{ conv.last_message.key_version }}" data-partner="{{ conv.partner.slug }}"{% endif %}>{% if conv.last_message.sender_id != conv.partner.pk %}You: {% endif %}{{ conv.last_message|message_preview:viewer_id|truncatechars:70 }}</span>
+            {% if conv.unread_count %}<span class="msg-unread-pill">{{ conv.unread_count }}</span>{% endif %}
+          </span>
+        </span>
+      </a>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <div class="dm-conv-empty">
+    <i class="material-symbols-outlined" aria-hidden="true">forum</i>
+    <p>No conversations yet.</p>
+    <p class="dm-conv-empty__hint">Use <strong>New message</strong> to start one.</p>
+  </div>
+  {% endif %}
+</div>

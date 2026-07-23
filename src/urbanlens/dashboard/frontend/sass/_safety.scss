@@ -99,34 +99,26 @@
     }
 }
 
-.safety-header {
+// Gradient hero header now lives in the shared .ul-page-hero component
+// (_page_hero.scss / partials/ui/_page_hero.html), reused across the safety
+// pages, Organize, and Thanks & Credits.
+
+// Action row below the hero (New check-in, cancel/check-in/delete, mark
+// safe, ...) - kept out of the decorative hero itself, mirroring
+// .pin-lists-toolbar.
+.safety-toolbar {
     display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 1rem;
-    margin-bottom: 1.5rem;
     flex-wrap: wrap;
-}
-
-.safety-title {
-    font-size: 1.6rem;
-    font-weight: 700;
-    margin: 0 0 .25rem;
-    display: flex;
     align-items: center;
+    justify-content: flex-end;
     gap: .5rem;
-    color: var(--ul-grey-8);
+    margin-bottom: 1.5rem;
 
-    .material-symbols-outlined {
-        font-size: 1.7rem;
-        color: $color-red-500;
+    // display:flex overrides the HTML [hidden] attribute - be explicit
+    // (contact_portal.html toggles this element's own [hidden] attribute).
+    &[hidden] {
+        display: none;
     }
-}
-
-.safety-subtitle {
-    margin: 0;
-    color: var(--ul-grey-7);
-    font-size: .9rem;
 }
 
 .safety-empty-state {
@@ -141,8 +133,8 @@
         height: 72px;
         margin: 0 auto 1.25rem;
         border-radius: 50%;
-        background: linear-gradient(135deg, var(--ul-grey-0a));
-        border: 1px solid var(--ul-grey-1a);
+        background: var(--ul-surface-raised);
+        border: 1px solid var(--ul-surface-raised-border);
         display: flex;
         align-items: center;
         justify-content: center;
@@ -168,46 +160,11 @@
     }
 }
 
-.safety-defaults-summary {
-    padding: 1rem 1.25rem;
-    display: flex;
-    flex-direction: column;
-    gap: .6rem;
-
-    // display:flex overrides the HTML [hidden] attribute - be explicit
-    &[hidden] {
-        display: none;
-    }
-}
-
-.safety-defaults-summary-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: .25rem .75rem;
-    font-size: .9rem;
-}
-
-.safety-defaults-summary-label {
-    color: var(--ul-grey-6);
-    min-width: 9rem;
-}
-
-.safety-defaults-summary-value {
-    color: var(--ul-grey-8);
-    font-weight: 600;
-    overflow-wrap: anywhere;
-}
-
 .safety-defaults-form {
     padding: 1rem 1.25rem;
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
-
-    // display:flex overrides the HTML [hidden] attribute - be explicit
-    &[hidden] {
-        display: none;
-    }
 }
 
 .safety-checkin-list {
@@ -278,14 +235,14 @@
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: .03em;
-    background: var(--ul-grey-1a);
+    background: var(--ul-surface-raised);
     color: var(--ul-grey-7);
 
     &--awaiting_checkin,
     &--overdue { background: rgba($color-yellow-500, .18); color: $color-yellow-700; }
     &--found_safe,
     &--checked_in { background: rgba($color-green-500, .18); color: $color-green-700; }
-    &--cancelled { background: var(--ul-grey-1a); color: var(--ul-grey-6); }
+    &--cancelled { background: var(--ul-surface-raised); color: var(--ul-grey-6); }
 }
 
 .safety-badge {
@@ -293,12 +250,53 @@
     padding: .1rem .5rem;
     border-radius: 999px;
     font-size: .75rem;
-    background: var(--ul-grey-1a);
+    background: var(--ul-surface-raised);
     color: var(--ul-grey-7);
 
     &--success { background: rgba($color-green-500, .18); color: $color-green-700; }
     &--warning { background: rgba($color-yellow-500, .18); color: $color-yellow-700; }
-    &--muted { background: var(--ul-grey-1a); color: var(--ul-grey-6); }
+    &--muted { background: var(--ul-surface-raised); color: var(--ul-grey-6); }
+}
+
+// -- Check-ins shared with you (registered emergency contact) ------------------
+
+.safety-shared-with-you {
+    margin-bottom: 2rem;
+}
+
+.safety-shared-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.safety-shared-item {
+    border-bottom: 1px solid var(--ul-surface-border);
+
+    &:last-child { border-bottom: none; }
+}
+
+.safety-shared-link {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: .6rem;
+    padding: .85rem 1.25rem;
+    text-decoration: none;
+    color: inherit;
+
+    &:hover { background: var(--ul-hover-bg); }
+}
+
+.safety-shared-title {
+    font-weight: 600;
+    color: var(--ul-grey-8);
+}
+
+.safety-shared-owner {
+    font-size: .85rem;
+    color: var(--ul-grey-6);
+    margin-left: auto;
 }
 
 // -- Defaults autosave ---------------------------------------------------------
@@ -323,9 +321,7 @@
     position: fixed;
     z-index: $z-dropdown;
     padding: .25rem .6rem;
-    border-radius: 999px;
-    background: var(--ul-grey-0);
-    border: 1px solid var(--ul-grey-1a);
+    @include surface($radius: 999px, $rung: null);
     box-shadow: var(--ul-shadow-md);
     pointer-events: none;
     transition: opacity .25s ease;
@@ -334,10 +330,6 @@
     &.is-hidden {
         opacity: 0;
     }
-}
-
-.safety-defaults-close-btn {
-    @include icon-btn(28px);
 }
 
 .safety-section-card {
@@ -378,8 +370,8 @@
     gap: .35rem;
     padding: .2rem .3rem .2rem .3rem;
     border-radius: 999px;
-    background: var(--ul-grey-0a);
-    border: 1px solid var(--ul-grey-1a);
+    background: var(--ul-surface-raised);
+    border: 1px solid var(--ul-surface-raised-border);
     font-size: .85rem;
     color: var(--ul-grey-8);
 }
@@ -485,9 +477,7 @@
     top: calc(100% + .25rem);
     left: 0;
     right: 0;
-    background: var(--ul-grey-0a);
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: $radius-sm;
+    @include surface($radius: $radius-sm, $rung: null);
     box-shadow: var(--ul-shadow-md);
     overflow: hidden;
 }
@@ -584,7 +574,7 @@
     height: 96px;
     object-fit: cover;
     border-radius: 8px;
-    border: 1px solid var(--ul-grey-1a);
+    border: 1px solid var(--ul-surface-raised-border);
 }
 
 .safety-contact-status-list {
@@ -601,7 +591,7 @@
         justify-content: space-between;
         gap: .5rem;
         padding-bottom: .6rem;
-        border-bottom: 1px solid var(--ul-grey-0b);
+        border-bottom: 1px solid var(--ul-surface-border);
 
         &:last-child {
             padding-bottom: 0;
@@ -629,7 +619,7 @@
         justify-content: space-between;
         gap: 1rem;
         padding-bottom: 1rem;
-        border-bottom: 1px solid var(--ul-grey-0b);
+        border-bottom: 1px solid var(--ul-surface-border);
 
         strong { color: var(--ul-grey-8); }
 
@@ -715,10 +705,8 @@
 }
 
 .safety-attached-map-card {
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: $radius-sm;
+    @include surface($radius: $radius-sm);
     overflow: hidden;
-    background: var(--ul-grey-0a);
 }
 
 .safety-attached-map-body {

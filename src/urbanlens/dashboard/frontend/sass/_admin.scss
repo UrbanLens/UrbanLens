@@ -6,10 +6,24 @@
 .subscription-grid {
     display: grid;
     grid-template-columns: minmax(280px, .9fr) 1.4fr;
+    grid-template-areas:
+        "grant    quotas"
+        "grants   emails";
+    align-items: start;
     gap: 1rem;
+
+    .subscription-grant-form-card { grid-area: grant; }
+    .subscription-active-grants-card { grid-area: grants; }
+    .subscription-quota-card { grid-area: quotas; }
+    .subscription-email-limits-card { grid-area: emails; }
 
     @media (max-width: 900px) {
         grid-template-columns: 1fr;
+        grid-template-areas:
+            "grant"
+            "grants"
+            "quotas"
+            "emails";
     }
 }
 
@@ -30,6 +44,11 @@
         .material-icons {
             font-size: .95rem;
         }
+
+        &--default {
+            background: var(--ul-grey-3);
+            color: var(--ul-grey-8);
+        }
     }
 }
 
@@ -40,16 +59,21 @@
 .subscription-types-list {
     list-style: none;
     margin: 0;
-    padding: 0 1rem 1.25rem;
+    padding: 1rem 1rem 1.25rem;
     display: flex;
     flex-direction: column;
     gap: .6rem;
 
     &__item {
         padding: .85rem;
-        background: var(--ul-grey-0);
-        border: 1px solid var(--ul-grey-1a);
-        border-radius: 10px;
+        @include surface($radius: 10px, $rung: 2);
+        box-shadow: 0 4px 16px rgba(15, 23, 42, .06);
+        transition: border-color .15s, box-shadow .15s;
+
+        &:hover {
+            border-color: $color-blue-300;
+            box-shadow: 0 6px 20px rgba(15, 23, 42, .08);
+        }
     }
 
     &__heading {
@@ -57,23 +81,11 @@
         align-items: center;
         flex-wrap: wrap;
         gap: .6rem;
-        margin-bottom: .5rem;
+        margin-bottom: .65rem;
     }
 
     &__description {
         font-size: .85rem;
-        color: var(--ul-grey-6);
-    }
-
-    &__features {
-        display: flex;
-        flex-wrap: wrap;
-        gap: .4rem;
-    }
-
-    &__no-features {
-        font-size: .82rem;
-        font-style: italic;
         color: var(--ul-grey-6);
     }
 }
@@ -81,7 +93,7 @@
 $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px, .75fr) minmax(220px, 1.35fr);
 
 .subscription-list {
-    padding: 0 1rem 1.25rem;
+    padding: 1rem 1rem 1.25rem;
 
     &__head {
         display: grid;
@@ -110,9 +122,7 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
         gap: .75rem;
         align-items: center;
         padding: .85rem;
-        background: var(--ul-grey-0);
-        border: 1px solid var(--ul-grey-1a);
-        border-radius: 10px;
+        @include surface($radius: 10px, $rung: 2);
         box-shadow: 0 4px 16px rgba(15, 23, 42, .06);
         transition: border-color .15s, box-shadow .15s;
 
@@ -163,8 +173,8 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
         padding: 2.5rem 1rem;
         color: var(--ul-grey-6);
         font-size: .9rem;
-        background: var(--ul-grey-0);
-        border: 1px dashed var(--ul-grey-1a);
+        background: var(--ul-surface-raised);
+        border: 1px dashed var(--ul-surface-raised-border);
         border-radius: 10px;
 
         .material-symbols-outlined,
@@ -201,20 +211,148 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     align-items: center;
     flex-wrap: wrap;
 
-    select {
-        min-width: 7.5rem;
+    select,
+    input[type="number"] {
+        min-width: 5rem;
         padding: .45rem .65rem;
-        border: 1.5px solid var(--ul-grey-1a);
+        border: 1.5px solid var(--ul-surface-raised-border);
         border-radius: 8px;
         font-size: .85rem;
         color: var(--ul-grey-8);
-        background: var(--ul-grey-0);
+        background: var(--ul-surface-raised);
         outline: none;
         transition: border-color .15s;
 
         &:focus {
             border-color: $color-blue-500;
         }
+    }
+
+    select {
+        min-width: 7.5rem;
+    }
+
+    input[type="number"] {
+        width: 5.5rem;
+    }
+
+    label {
+        font-size: .8rem;
+        color: var(--ul-grey-6);
+    }
+
+    &--features {
+        align-items: flex-start;
+    }
+}
+
+.feature-toggle-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .4rem;
+    flex: 1 1 auto;
+}
+
+.feature-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    padding: .3rem .7rem;
+    border-radius: $radius-full;
+    border: 1.5px solid var(--ul-surface-raised-border);
+    background: var(--ul-surface-raised);
+    color: var(--ul-grey-7);
+    font-size: .82rem;
+    font-weight: 500;
+    cursor: pointer;
+    user-select: none;
+    transition: background .15s, border-color .15s, color .15s;
+
+    input {
+        position: absolute;
+        opacity: 0;
+        width: 0;
+        height: 0;
+    }
+
+    &:hover {
+        border-color: $color-blue-300;
+    }
+
+    &:has(input:checked) {
+        background: linear-gradient(135deg, #ede9fe, #cffafe);
+        border-color: transparent;
+        color: var(--ul-grey-8);
+        font-weight: 700;
+    }
+
+    &:has(input:focus-visible) {
+        outline: 2px solid $color-blue-500;
+        outline-offset: 1px;
+    }
+}
+
+.subscription-save-status {
+    margin-left: auto;
+    font-size: .72rem;
+    font-weight: 600;
+    opacity: 0;
+    transition: opacity .25s;
+    white-space: nowrap;
+
+    &.is-saving {
+        color: var(--ul-grey-6);
+        opacity: 1;
+    }
+
+    &.is-saved {
+        color: $color-green-600;
+        opacity: 1;
+    }
+
+    &.is-error {
+        color: $color-red-600;
+        opacity: 1;
+    }
+}
+
+.subscription-grant-actions {
+    &__toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: .3rem;
+        padding: .3rem .65rem;
+        border: 1.5px solid var(--ul-surface-border);
+        border-radius: 8px;
+        font-size: .8rem;
+        font-weight: 600;
+        color: var(--ul-grey-7);
+        cursor: pointer;
+        list-style: none;
+        user-select: none;
+
+        &::-webkit-details-marker {
+            display: none;
+        }
+
+        &:hover {
+            background: var(--ul-hover-bg);
+            color: var(--ul-grey-8);
+        }
+
+        .material-symbols-outlined {
+            font-size: 1.05rem;
+        }
+    }
+
+    &__form {
+        margin-top: .5rem;
+        justify-content: flex-start;
+    }
+
+    &[open] &__toggle {
+        background: var(--ul-hover-bg);
+        border-color: $color-blue-300;
     }
 }
 
@@ -232,11 +370,84 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     flex-wrap: wrap;
     align-items: center;
     gap: .5rem;
-    margin-bottom: 1rem;
+    margin-bottom: .75rem;
 
     .ul-notice {
         margin: 0;
         flex: 1 1 280px;
+    }
+}
+
+.api-limits-search {
+    position: relative;
+    flex: 1 1 220px;
+    max-width: 32rem;
+
+    .material-symbols-outlined {
+        position: absolute;
+        left: .6rem;
+        top: 50%;
+        transform: translateY(-50%);
+        font-size: 1.1rem;
+        color: var(--ul-grey-5);
+        pointer-events: none;
+    }
+
+    input {
+        width: 100%;
+        padding: .45rem .6rem .45rem 2rem;
+        font-size: .85rem;
+        border-radius: $radius-sm;
+        border: 1px solid var(--ul-surface-raised-border);
+        background: var(--ul-surface-raised);
+        color: var(--ul-grey-9);
+
+        &:focus {
+            outline: none;
+            border-color: var(--primary-color);
+        }
+    }
+}
+
+.api-limits-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .35rem;
+    margin-bottom: 1rem;
+
+    .api-limits-tab {
+        display: inline-flex;
+        align-items: center;
+        gap: .35rem;
+        padding: .4rem .75rem;
+        border-radius: $radius-full;
+        border: 1px solid var(--ul-surface-raised-border);
+        background: var(--ul-surface-raised);
+        color: var(--ul-grey-6);
+        font-size: .8rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background .15s, color .15s, border-color .15s;
+
+        .api-limits-tab-count {
+            font-size: .7rem;
+            font-weight: 700;
+            opacity: .7;
+        }
+
+        &:hover {
+            border-color: var(--primary-color);
+        }
+
+        &.is-active {
+            background: var(--primary-color);
+            border-color: var(--primary-color);
+            color: #fff;
+
+            .api-limits-tab-count {
+                opacity: .85;
+            }
+        }
     }
 }
 
@@ -384,7 +595,7 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
 
 .api-limit-fields {
     display: grid;
-    grid-template-columns: auto minmax(72px, 1fr) minmax(72px, 1fr);
+    grid-template-columns: auto minmax(64px, 1fr) minmax(64px, 1fr) minmax(64px, 1fr);
     gap: .55rem .65rem;
     align-items: end;
 
@@ -396,10 +607,15 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
         grid-column: 1 / -1;
 
         textarea {
-            min-height: 2.1rem;
+            min-height: 4.4rem;
             resize: vertical;
             font-size: .82rem;
             line-height: 1.35;
+            padding: .4rem .55rem;
+            border-radius: $radius-sm;
+            border: 1px solid var(--ul-surface-raised-border);
+            background: var(--ul-surface-raised);
+            color: var(--ul-grey-9);
         }
     }
 
@@ -408,11 +624,11 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
         margin: 0;
         white-space: nowrap;
         gap: .4rem;
+        display: flex;
+        align-items: center;
 
-        .settings-toggle-input {
-            margin-top: 0;
-            width: .95rem;
-            height: .95rem;
+        .ul-switch {
+            flex-shrink: 0;
         }
 
         .settings-toggle-label {
@@ -426,6 +642,16 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
         min-width: 0;
         padding: .4rem .55rem;
         font-size: .82rem;
+        border-radius: $radius-sm;
+        border: 1px solid var(--ul-surface-raised-border);
+        background: var(--ul-surface-raised);
+        color: var(--ul-grey-9);
+    }
+
+    input[type="number"]:focus,
+    textarea:focus {
+        outline: none;
+        border-color: var(--primary-color);
     }
 
     @media (max-width: 420px) {
@@ -443,32 +669,6 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     //max-width: 680px;
     //margin: 2rem auto;
     //padding: 0 1rem;
-}
-
-.site-admin-header {
-    margin-bottom: 1.5rem;
-}
-
-.site-admin-title {
-    font-size: 1.5rem;
-    font-weight: 700;
-    display: flex;
-    align-items: center;
-    gap: .4rem;
-    color: var(--ul-grey-8);
-    margin: 0 0 .25rem;
-
-    .material-symbols-outlined,
-    .material-icons {
-        font-size: 1.6rem;
-        color: $color-blue-500;
-    }
-}
-
-.site-admin-subtitle {
-    color: var(--ul-grey-7);
-    font-size: .9rem;
-    margin: 0;
 }
 
 .site-admin-notice {
@@ -493,15 +693,31 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     }
 }
 
+// Cards flow into as many columns as fit at 340px+ each, so the many
+// single/few-field settings cards pack side by side on wide screens instead
+// of each stacking full-width for just one input.
+.site-admin-settings-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    align-items: start;
+    gap: 1rem;
+}
+
 .site-admin-card {
-    margin-bottom: 1.5rem;
+    margin-bottom: 0;
+
+    &--wide {
+        @include up($breakpoint-lg) {
+            grid-column: span 2;
+        }
+    }
 }
 
 .site-admin-form {
-    padding: 1.25rem 1rem;
+    padding: 1rem;
 
     .form-row {
-        margin-bottom: 1.25rem;
+        margin-bottom: 1rem;
     }
 
     label {
@@ -523,8 +739,7 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     input[type="number"] {
         width: 120px;
         padding: .5rem .75rem;
-        border: 1.5px solid var(--ul-grey-1a);
-        ;
+        border: 1.5px solid var(--ul-surface-raised-border);
         border-radius: 8px;
         font-size: .9rem;
         color: var(--ul-grey-8);
@@ -540,6 +755,11 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
         padding-top: .5rem;
     }
 
+    // Sub-element (__item/__handle/__rank/__label/__move/__btn/__toggle) styling
+    // for this markup now lives unscoped in _tags.scss, so it also applies to
+    // the same dashboard/partials/ui/_priority_list.html partial used outside
+    // site-admin (e.g. the settings page) - only this page-specific container
+    // override (max-width, tighter gap) stays here.
     .priority-list {
         list-style: none;
         margin: 0 0 .5rem;
@@ -547,111 +767,7 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
         display: flex;
         flex-direction: column;
         gap: .4rem;
-        max-width: 480px;
-    }
-
-    .priority-list__item {
-        display: flex;
-        align-items: center;
-        gap: .6rem;
-        padding: .5rem .65rem;
-        border: 1.5px solid var(--ul-grey-1a);
-        border-radius: 8px;
-        background: var(--ul-grey-0);
-        cursor: grab;
-
-        &:active {
-            cursor: grabbing;
-        }
-
-        &--dragging {
-            opacity: .5;
-        }
-
-        &--unranked {
-            cursor: default;
-            opacity: .55;
-            border-style: dashed;
-
-            .priority-list__handle,
-            .priority-list__move {
-                visibility: hidden;
-            }
-        }
-
-        &--empty {
-            color: var(--ul-grey-6);
-            font-size: .85rem;
-            border: none;
-            padding: .25rem 0;
-            cursor: default;
-        }
-    }
-
-    .priority-list__handle {
-        color: var(--ul-grey-5);
-        font-size: 1.1rem;
-    }
-
-    .priority-list__rank {
-        font-size: .75rem;
-        font-weight: 700;
-        color: var(--ul-grey-6);
-        min-width: 1.25rem;
-        text-align: center;
-    }
-
-    .priority-list__label {
-        flex: 1;
-        font-size: .9rem;
-        font-weight: 500;
-        color: var(--ul-grey-8);
-        text-transform: none;
-        letter-spacing: normal;
-    }
-
-    .priority-list__move {
-        display: flex;
-        gap: .15rem;
-    }
-
-    .priority-list__btn {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 1.6rem;
-        height: 1.6rem;
-        border: none;
-        background: transparent;
-        border-radius: 6px;
-        color: var(--ul-grey-6);
-        cursor: pointer;
-
-        i {
-            font-size: 1rem;
-        }
-
-        &:hover {
-            background: var(--ul-grey-1);
-            color: var(--ul-grey-8);
-        }
-    }
-
-    .priority-list__toggle {
-        display: flex;
-        align-items: center;
-        gap: .3rem;
-        font-size: .75rem;
-        font-weight: 500;
-        color: var(--ul-grey-6);
-        text-transform: none;
-        letter-spacing: normal;
-        white-space: nowrap;
-        cursor: pointer;
-
-        input {
-            cursor: pointer;
-        }
+        max-width: 48rem;
     }
 }
 
@@ -692,9 +808,7 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     display: flex;
     align-items: center;
     gap: .9rem;
-    background: var(--ul-grey-1);
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: 10px;
+    @include surface($radius: 10px);
     padding: 1rem 1.1rem;
 }
 
@@ -756,7 +870,7 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     td {
         padding: .55rem .9rem;
         text-align: left;
-        border-bottom: 1px solid var(--ul-grey-1a);
+        border-bottom: 1px solid var(--ul-surface-border);
     }
 
     th {
@@ -890,85 +1004,15 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     gap: .25rem;
 }
 
-// -- Admin breadcrumb ----------------------------------------------------------
-
-.site-admin-breadcrumb {
-    margin-bottom: .75rem;
-}
-
-.site-admin-breadcrumb__link {
-    display: inline-flex;
-    align-items: center;
-    gap: .3rem;
-    font-size: .82rem;
-    font-weight: 500;
-    color: var(--ul-grey-6);
-    text-decoration: none;
-    transition: color .15s;
-
-    .material-symbols-outlined,
-    .material-icons {
-        font-size: 1rem;
-    }
-
-    &:hover {
-        color: $color-blue-500;
-    }
-}
-
 // -- Admin homepage ------------------------------------------------------------
 
-.admin-home-hero {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 1.5rem;
-    flex-wrap: wrap;
-    padding: 1.5rem 1.75rem;
-    background: linear-gradient(135deg, var(--ul-grey-1) 0%, var(--ul-grey-1b) 100%);
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: 14px;
-    margin-bottom: 1.5rem;
-}
-
-.admin-home-hero__left {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-}
-
-.admin-home-hero__icon {
+.admin-home-status-row {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 56px;
-    height: 56px;
-    border-radius: 14px;
-    background: rgba($color-blue-500, .12);
-    flex-shrink: 0;
-
-    .material-symbols-outlined,
-    .material-icons {
-        font-size: 1.9rem;
-        color: $color-blue-500;
-    }
-}
-
-.admin-home-hero__title {
-    font-size: 1.5rem;
-    font-weight: 700;
-    color: var(--ul-grey-9);
-    margin: 0 0 .2rem;
-}
-
-.admin-home-hero__sub {
-    font-size: .88rem;
-    color: var(--ul-grey-6);
-    margin: 0;
-    display: flex;
-    align-items: center;
-    gap: .6rem;
+    gap: .5rem;
     flex-wrap: wrap;
+    margin-bottom: 1.5rem;
 }
 
 .admin-home-status {
@@ -994,13 +1038,11 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
         background: rgba($color-amber-500, .12);
         color: $color-amber-600;
     }
-}
 
-.admin-home-hero__meta {
-    display: flex;
-    gap: .5rem;
-    flex-wrap: wrap;
-    align-items: flex-start;
+    &--pending {
+        background: var(--ul-grey-2);
+        color: var(--ul-grey-6);
+    }
 }
 
 .admin-home-meta-pill {
@@ -1010,9 +1052,7 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     font-size: .78rem;
     font-weight: 500;
     color: var(--ul-grey-6);
-    background: var(--ul-grey-0);
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: 999px;
+    @include surface($radius: 999px);
     padding: .3rem .75rem;
 
     .material-symbols-outlined,
@@ -1036,9 +1076,7 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     gap: .75rem;
     flex: 1 1 150px;
     min-width: 140px;
-    background: var(--ul-grey-1b);
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: 10px;
+    @include surface($radius: 10px);
     padding: .9rem 1.1rem;
 
     .material-symbols-outlined,
@@ -1104,11 +1142,6 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     gap: 1rem;
     margin-bottom: 2rem;
 
-    > a {
-        background-color: var(--ul-grey-1b);
-        border-color: var(--ul-grey-1a);
-    }
-
     @include up(120rem) {
         grid-template-columns: repeat(5, minmax(20rem, 1fr));
     }
@@ -1119,9 +1152,7 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     align-items: flex-start;
     gap: 1rem;
     padding: 1.25rem 1.1rem;
-    background: var(--ul-grey-1);
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: 12px;
+    @include surface($radius: 12px);
     text-decoration: none;
     color: inherit;
     transition: border-color .15s, box-shadow .15s, transform .1s;
@@ -1204,9 +1235,9 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
         align-items: center;
         gap: .5rem;
         padding: .55rem .85rem;
-        border: 1.5px solid var(--ul-grey-1a);
+        border: 1.5px solid var(--ul-surface-raised-border);
         border-radius: 8px;
-        background: var(--ul-grey-0);
+        background: var(--ul-surface-raised);
         transition: border-color .15s;
 
         &:focus-within {
@@ -1267,9 +1298,7 @@ $users-list-cols: minmax(180px, 1.3fr) minmax(170px, 1.15fr) minmax(110px, .75fr
         gap: .75rem;
         align-items: center;
         padding: .85rem;
-        background: var(--ul-grey-0);
-        border: 1px solid var(--ul-grey-1a);
-        border-radius: 10px;
+        @include surface($radius: 10px, $rung: 2);
         box-shadow: 0 4px 16px rgba(15, 23, 42, .06);
         transition: border-color .15s, box-shadow .15s;
 
@@ -1390,7 +1419,7 @@ $users-list-cols: minmax(180px, 1.3fr) minmax(170px, 1.15fr) minmax(110px, .75fr
 
     &__storage-bar {
         width: 100%;
-        max-width: 140px;
+        max-width: 14rem;
         margin-bottom: .3rem;
     }
 
@@ -1401,6 +1430,17 @@ $users-list-cols: minmax(180px, 1.3fr) minmax(170px, 1.15fr) minmax(110px, .75fr
         white-space: nowrap;
     }
 
+    &__col--actions &__value {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: .4rem;
+    }
+
+    &__inline-form {
+        display: inline-flex;
+    }
+
     &__empty {
         display: flex;
         align-items: center;
@@ -1409,8 +1449,8 @@ $users-list-cols: minmax(180px, 1.3fr) minmax(170px, 1.15fr) minmax(110px, .75fr
         padding: 2.5rem 1rem;
         color: var(--ul-grey-6);
         font-size: .9rem;
-        background: var(--ul-grey-0);
-        border: 1px dashed var(--ul-grey-1a);
+        background: var(--ul-surface-raised);
+        border: 1px dashed var(--ul-surface-raised-border);
         border-radius: 10px;
 
         .material-symbols-outlined,
@@ -1514,12 +1554,19 @@ $users-list-cols: minmax(180px, 1.3fr) minmax(170px, 1.15fr) minmax(110px, .75fr
         color: var(--ul-grey-8);
     }
 
+    .feature-toggle {
+        color: var(--ul-grey-7);
+
+        &:has(input:checked) {
+            background: linear-gradient(135deg, rgba($color-indigo-600, .3), rgba($color-blue-500, .25));
+            color: var(--ul-grey-8);
+        }
+    }
+
     .subscription-list,
     .users-list {
         &__item,
         &__empty {
-            background: var(--ul-grey-1);
-            border-color: var(--ul-grey-3b);
             box-shadow: none;
 
             &:hover {
@@ -1532,32 +1579,16 @@ $users-list-cols: minmax(180px, 1.3fr) minmax(170px, 1.15fr) minmax(110px, .75fr
         }
     }
 
-    .users-admin-search__field {
-        background: var(--ul-grey-1);
-        border-color: var(--ul-grey-3b);
-
-        &:focus-within {
-            border-color: color.adjust($primary-color, $lightness: 10%);
-        }
+    .users-admin-search__field:focus-within {
+        border-color: color.adjust($primary-color, $lightness: 10%);
     }
 
     .inline-sub-form select {
-        background: var(--ul-grey-1);
-        border-color: var(--ul-grey-3b);
         color: var(--ul-grey-8);
 
         &:focus {
             border-color: color.adjust($primary-color, $lightness: 10%);
         }
-    }
-
-    .admin-home-hero {
-        background: linear-gradient(135deg, var(--ul-black) 0%, var(--ul-grey-0a) 100%);
-    }
-
-    .admin-home-meta-pill {
-        background: var(--ul-grey-2);
-        border-color: var(--ul-grey-3b);
     }
 
     .admin-nav-card {
@@ -1573,16 +1604,4 @@ $users-list-cols: minmax(180px, 1.3fr) minmax(170px, 1.15fr) minmax(110px, .75fr
         box-shadow: 0 0 0 1px rgba($color-blue-500, .15);
     }
 
-    .api-limit-fields input[type="number"] {
-        background: var(--ul-grey-1);
-        border-color: var(--ul-grey-3b);
-
-        &:focus {
-            border-color: color.adjust($primary-color, $lightness: 10%);
-        }
-    }
-
-    .stats-skeleton {
-        background: var(--ul-grey-2);
-    }
 }

@@ -1,0 +1,462 @@
+{% comment %}
+Shared photo lightbox - single source of truth for every full-size photo
+viewer on the site (pin detail / location wiki / safety check-in galleries,
+Memories > Photos, the user profile page). Include once per page; open it via
+`window.galleryOpenLightboxItem(list, idx)`, where `list` is an array of
+normalized items:
+  {url, thumbUrl, caption, author, copyright, sourceUrl, sourceName, takenAt,
+   imageId, canRelevance, relevant, mediaSource, mediaKey, latitude, longitude}
+`latitude`/`longitude` (numbers, or omitted/null) draw the small location map
+in the side panel - see #lightbox-location below. The marker is draggable
+(and drags persist via `window.galleryRepositionImage`, reusing whichever
+gallery context - pin/wiki/safety - is on the page) only when both `imageId`
+and that function are present; otherwise the map renders read-only.
+`thumbUrl` is optional - a browser-safe fallback shown in place of `url` if
+the full-resolution file fails to load (e.g. a Wikimedia .tif result).
+
+Context:
+  lightbox_id            - DOM id for the <dialog> (default "gallery-lightbox").
+  show_cover_action      - whether to render the "Set as cover photo" button
+                            (only meaningful when photos belong to a single
+                            pin/location, e.g. pin detail or location wiki).
+  cover_photo_url         - POST endpoint for "Set as cover photo"; blank hides it.
+  current_cover_image_id - the pin/wiki's current cover_photo id (if any), so
+                            the button can offer "Remove cover photo" instead
+                            of "Set as cover photo" for that image.
+  cover_hero_key          - "pin" or "wiki": which on-page cover-hero banner
+                            (see partials/js/cover-hero.js) to live-update
+                            when the cover changes - drives the "#<key>-cover-
+                            hero" element id and the "<key>" passed to
+                            window._coverHeroNav. Blank when the page has no
+                            such banner (e.g. safety check-ins).
+  cover_hero_enabled      - whether the banner should actually be shown once
+                            a cover exists (the wiki hero also depends on the
+                            viewer's show_wiki_cover_photos preference, which
+                            a live update must keep respecting).
+  pin_media_relevance_url - POST endpoint for the pin Media gallery's relevant/
+                            not-relevant marking; blank when not applicable
+                            (harmless even if set - only used for items with
+                            canRelevance true, which pages outside the pin
+                            Media gallery never set).
+  show_attachment_points  - whether to load "Shared via" (wiki/DM) info for
+                            the current item's owner (see
+                            PhotoAttachmentPointsView) - only the profile
+                            photo strip sets this; every other lightbox use
+                            leaves it off so it doesn't fire a needless
+                            request per photo.
+{% endcomment %}
+{% with lightbox_id=lightbox_id|default:"gallery-lightbox" %}
+<dialog id="{{ lightbox_id }}" class="gallery-lightbox ul-dialog">
+  <div class="lightbox-inner">
+    <div class="lightbox-media-area">
+      <button type="button" class="lightbox-close" onclick="document.getElementById('{{ lightbox_id }}').close()">
+        <i class="material-symbols-outlined">close</i>
+      </button>
+      <button type="button" id="lightbox-prev-btn" class="lightbox-nav lightbox-prev" onclick="galleryLightboxNav(-1)">
+        <i class="material-symbols-outlined">chevron_left</i>
+      </button>
+      <img id="lightbox-img" src="" alt="" class="lightbox-img">
+      <span id="lightbox-fallback-note" class="lightbox-fallback-note" hidden>
+        <i class="material-symbols-outlined">image</i> Showing a smaller preview - the full-size file isn't viewable in this browser
+      </span>
+      <button type="button" id="lightbox-next-btn" class="lightbox-nav lightbox-next" onclick="galleryLightboxNav(1)">
+        <i class="material-symbols-outlined">chevron_right</i>
+      </button>
+    </div>
+    <div class="lightbox-side-panel">
+      <p id="lightbox-caption" class="lightbox-caption"></p>
+      <div id="lightbox-meta" class="lightbox-meta">
+        <p id="lightbox-source-name" class="lightbox-meta-line" hidden></p>
+        <p id="lightbox-author" class="lightbox-meta-line" hidden></p>
+        <p id="lightbox-taken-at" class="lightbox-meta-line" hidden></p>
+        <p id="lightbox-copyright" class="lightbox-meta-line" hidden></p>
+        <a id="lightbox-source-link" class="lightbox-meta-line lightbox-source-link" target="_blank" rel="noopener noreferrer" hidden>
+          <i class="material-symbols-outlined">open_in_new</i><span>View source</span>
+        </a>
+      </div>
+      <div id="lightbox-location" class="lightbox-location" hidden>
+        <div id="lightbox-location-map" class="lightbox-location-map"></div>
+        <p id="lightbox-location-hint" class="lightbox-location-hint" hidden>
+          <i class="material-symbols-outlined">drag_pan</i> Drag the marker to update this photo's location
+        </p>
+      </div>
+      <div id="lightbox-relevance-actions" class="lightbox-relevance-actions" hidden>
+        <button type="button" id="lightbox-relevant-btn" class="btn btn--ghost btn--sm" onclick="window._lightboxSetRelevance(true)">
+          <i class="material-symbols-outlined">thumb_up</i> Relevant
+        </button>
+        <button type="button" id="lightbox-not-relevant-btn" class="btn btn--ghost btn--sm" onclick="window._lightboxSetRelevance(false)">
+          <i class="material-symbols-outlined">thumb_down</i> Not relevant
+        </button>
+      </div>
+      {% if show_cover_action %}
+      <div id="lightbox-cover-actions" class="lightbox-relevance-actions" hidden>
+        <button type="button" id="lightbox-cover-btn" class="btn btn--ghost btn--sm" onclick="window._lightboxSetCover()">
+          <i class="material-symbols-outlined">wallpaper</i> Set as cover photo
+        </button>
+      </div>
+      {% endif %}
+      {# Custom fields (viewer's own photo fields; loads empty for photos that aren't theirs) #}
+      <div id="lightbox-custom-fields" class="lightbox-custom-fields"></div>
+      {% if show_attachment_points %}
+      <div id="lightbox-attachment-points"></div>
+      {% endif %}
+    </div>
+  </div>
+</dialog>
+
+<script>
+(function () {
+  var LIGHTBOX_ID = '{{ lightbox_id }}';
+  var CSRF_TOKEN = '{{ csrf_token }}';
+  var PIN_MEDIA_RELEVANCE_URL = '{{ pin_media_relevance_url|default:"" }}';
+  var COVER_PHOTO_URL = '{{ cover_photo_url|default:"" }}';
+  var CF_PHOTO_URL_TEMPLATE = '{% url "custom_fields.photo" 0 %}';
+  var SHOW_ATTACHMENT_POINTS = {% if show_attachment_points %}true{% else %}false{% endif %};
+  var ATTACHMENT_POINTS_URL_TEMPLATE = SHOW_ATTACHMENT_POINTS ? '{% url "profile.photo.attachments" 0 %}' : '';
+  // Mutated in place as the cover photo is changed live (see _setCoverPhoto).
+  var CURRENT_COVER_ID = {{ current_cover_image_id|default:"null" }};
+  var COVER_HERO_KEY = '{{ cover_hero_key|default:"" }}';
+  var COVER_HERO_ENABLED = {% if cover_hero_enabled %}true{% else %}false{% endif %};
+
+  // Ordered list of normalized items currently shown, plus the visible index.
+  var _lightboxList = [];
+  var _lightboxIdx = 0;
+
+  // The side panel's small location map - a single Leaflet instance torn down
+  // and recreated per photo shown (see _setLightboxLocation), same pattern as
+  // memories/photos.html's confirm-pin map. Also torn down when the dialog
+  // itself closes, so a stale Leaflet instance never lingers bound to a
+  // detached container.
+  var _lightboxMap = null;
+  var _lightboxDlg = document.getElementById(LIGHTBOX_ID);
+  // A <dialog> opened with showModal() is promoted to the browser's top layer,
+  // but per spec that promotion is void if any ancestor has display: none -
+  // the dialog still reports open === true, but renders at zero size and is
+  // never actually painted. On the pin detail page this partial is loaded
+  // (via _photo_gallery.html) inside the Media section's "Mine" view panel,
+  // which is exactly such an ancestor whenever a different view tab is
+  // active - the common case, since "All" is the default. Reparenting to
+  // <body> once, up front, makes every lightbox immune to this regardless of
+  // where its host partial happens to be nested, on this page or any other.
+  if (_lightboxDlg && _lightboxDlg.parentElement !== document.body) {
+    document.body.appendChild(_lightboxDlg);
+  }
+  if (_lightboxDlg) _lightboxDlg.addEventListener('close', function () { if (_lightboxMap) { _lightboxMap.remove(); _lightboxMap = null; } });
+
+  // Generalized opener: `list` is an array of normalized items (see the file
+  // header), `idx` the one to show first. This is the single entry point
+  // every page's photo grid funnels through - each grid keeps its own
+  // DOM-resident item collection and just builds `list` before calling in.
+  window.galleryOpenLightboxItem = function (list, idx) {
+    _lightboxList = list || [];
+    _lightboxIdx = idx || 0;
+    _showLightbox();
+    document.getElementById(LIGHTBOX_ID).showModal();
+  };
+
+  window.galleryLightboxNav = function (dir) {
+    if (!_lightboxList.length) return;
+    _lightboxIdx = (_lightboxIdx + dir + _lightboxList.length) % _lightboxList.length;
+    _showLightbox();
+  };
+
+  document.addEventListener('keydown', function (e) {
+    var dlg = document.getElementById(LIGHTBOX_ID);
+    if (!dlg || !dlg.open) return;
+    if (e.key === 'ArrowLeft') galleryLightboxNav(-1);
+    else if (e.key === 'ArrowRight') galleryLightboxNav(1);
+  });
+
+  function _showLightbox() {
+    var item = _lightboxList[_lightboxIdx];
+    if (!item) return;
+    _setLightboxImage(item);
+    var caption = item.caption;
+    if (!caption && item.imageId) {
+      var el = document.getElementById('gallery-item-' + item.imageId);
+      caption = el ? (el.querySelector('.gallery-caption') || {}).textContent || '' : '';
+    }
+    document.getElementById('lightbox-caption').textContent = caption || '';
+    _setLightboxMeta(item);
+    _setLightboxLocation(item);
+    _loadLightboxCustomFields(item.imageId);
+    _loadLightboxAttachmentPoints(item.imageId);
+
+    // Nav arrows are pointless (and misleading - they'd just reopen the same
+    // photo) when there's nothing else to scroll to.
+    var multi = _lightboxList.length > 1;
+    var prevBtn = document.getElementById('lightbox-prev-btn');
+    var nextBtn = document.getElementById('lightbox-next-btn');
+    if (prevBtn) prevBtn.hidden = !multi;
+    if (nextBtn) nextBtn.hidden = !multi;
+  }
+
+  // Prefer the full-resolution URL, but fall back to item.thumbUrl if it
+  // fails to load - most commonly a Wikimedia result whose full-size file is
+  // a .tif, which practically no browser renders in an <img> tag (Safari has
+  // some native TIF support, so this still tries the full-res version first
+  // rather than pre-emptively downgrading every item, in case it works) while
+  // the thumbnail is always a browser-safe .jpg. Always shows *something*
+  // instead of a broken-image icon, as long as either URL actually works.
+  function _setLightboxImage(item) {
+    var img = document.getElementById('lightbox-img');
+    var note = document.getElementById('lightbox-fallback-note');
+    img.classList.remove('lightbox-img--fallback');
+    if (note) note.hidden = true;
+    img.onerror = function () {
+      img.onerror = null;
+      if (item.thumbUrl && item.thumbUrl !== item.url) {
+        img.classList.add('lightbox-img--fallback');
+        img.src = item.thumbUrl;
+        if (note) note.hidden = false;
+      }
+    };
+    img.src = item.url;
+  }
+
+  // Load the viewer's custom-field strip for the current photo. The endpoint
+  // returns 204 (leaving the strip empty) for photos the viewer doesn't own
+  // or when they have no photo fields defined.
+  function _loadLightboxCustomFields(imgId) {
+    var el = document.getElementById('lightbox-custom-fields');
+    if (!el) return;
+    el.innerHTML = '';
+    if (!imgId || !window.htmx) return;
+    htmx.ajax('GET', CF_PHOTO_URL_TEMPLATE.replace('/0/', '/' + imgId + '/'), { target: '#lightbox-custom-fields', swap: 'innerHTML' });
+  }
+
+  // Load "Shared via" attachment points for the current photo (profile photo
+  // strip only, see SHOW_ATTACHMENT_POINTS). The endpoint returns 204
+  // (leaving the slot empty) for anything but the viewer's own photo, or a
+  // photo with no real attachment - same contract as the custom-fields strip.
+  function _loadLightboxAttachmentPoints(imgId) {
+    var el = document.getElementById('lightbox-attachment-points');
+    if (!el) return;
+    el.innerHTML = '';
+    if (!imgId || !window.htmx || !ATTACHMENT_POINTS_URL_TEMPLATE) return;
+    htmx.ajax('GET', ATTACHMENT_POINTS_URL_TEMPLATE.replace('/0/', '/' + imgId + '/'), { target: '#lightbox-attachment-points', swap: 'innerHTML' });
+  }
+
+  function _setLightboxMeta(item) {
+    var sourceNameEl = document.getElementById('lightbox-source-name');
+    var authorEl = document.getElementById('lightbox-author');
+    var takenEl = document.getElementById('lightbox-taken-at');
+    var copyrightEl = document.getElementById('lightbox-copyright');
+    var sourceEl = document.getElementById('lightbox-source-link');
+    var relevanceEl = document.getElementById('lightbox-relevance-actions');
+    if (sourceNameEl) { sourceNameEl.textContent = item.sourceName ? 'Source: ' + item.sourceName : ''; sourceNameEl.hidden = !item.sourceName; }
+    if (authorEl) { authorEl.textContent = item.author ? 'By ' + item.author : ''; authorEl.hidden = !item.author; }
+    if (takenEl) {
+      var takenText = '';
+      if (item.takenAt) { var d = new Date(item.takenAt); if (!isNaN(d)) takenText = d.toLocaleString(); }
+      takenEl.textContent = takenText;
+      takenEl.hidden = !takenText;
+    }
+    if (copyrightEl) { copyrightEl.textContent = item.copyright || ''; copyrightEl.hidden = !item.copyright; }
+    if (sourceEl) {
+      if (item.sourceUrl) { sourceEl.href = item.sourceUrl; sourceEl.hidden = false; }
+      else { sourceEl.removeAttribute('href'); sourceEl.hidden = true; }
+    }
+    if (relevanceEl) {
+      relevanceEl.hidden = !item.canRelevance;
+      var upBtn = document.getElementById('lightbox-relevant-btn');
+      var downBtn = document.getElementById('lightbox-not-relevant-btn');
+      if (upBtn) upBtn.classList.toggle('is-active', item.relevant === true);
+      if (downBtn) downBtn.classList.toggle('is-active', item.relevant === false);
+    }
+    var coverEl = document.getElementById('lightbox-cover-actions');
+    if (coverEl) {
+      coverEl.hidden = !(item.imageId && COVER_PHOTO_URL);
+      var coverBtn = document.getElementById('lightbox-cover-btn');
+      if (coverBtn) {
+        var isCover = !!(item.imageId && CURRENT_COVER_ID && item.imageId === CURRENT_COVER_ID);
+        coverBtn.innerHTML = isCover
+          ? '<i class="material-symbols-outlined">hide_image</i> Remove cover photo'
+          : '<i class="material-symbols-outlined">wallpaper</i> Set as cover photo';
+      }
+    }
+  }
+
+  // Small "where was this taken" map in the side panel. Torn down and
+  // recreated for every photo shown (a single Leaflet instance can't just
+  // re-center - the container may not even be visible yet, see the
+  // invalidateSize() note below) - mirrors memories/photos.html's confirm-pin
+  // map. Hidden entirely for a photo with no coordinates. The marker is only
+  // draggable when this photo is a real, owned Image AND the page has wired
+  // up a reposition endpoint (window.galleryRepositionImage - set by
+  // whichever gallery context, pin/wiki/safety, included this partial); every
+  // other case (a still-transient Media item, or a lightbox on a page with no
+  // reposition endpoint at all, e.g. the profile photo strip) shows the map
+  // read-only rather than silently failing to save a drag.
+  function _setLightboxLocation(item) {
+    var section = document.getElementById('lightbox-location');
+    var mapEl = document.getElementById('lightbox-location-map');
+    var hint = document.getElementById('lightbox-location-hint');
+    if (_lightboxMap) { _lightboxMap.remove(); _lightboxMap = null; }
+    if (!section || !mapEl) return;
+    var lat = item.latitude, lng = item.longitude;
+    if (typeof lat !== 'number' || typeof lng !== 'number' || isNaN(lat) || isNaN(lng) || typeof L === 'undefined') {
+      section.hidden = true;
+      return;
+    }
+    section.hidden = false;
+    var editable = !!(item.imageId && typeof window.galleryRepositionImage === 'function');
+    if (hint) hint.hidden = !editable;
+    _lightboxMap = L.map(mapEl, { attributionControl: false, zoomControl: false, dragging: false, scrollWheelZoom: false }).setView([lat, lng], 16);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors',
+      maxZoom: 19,
+    }).addTo(_lightboxMap);
+    var marker = L.marker([lat, lng], { draggable: editable }).addTo(_lightboxMap);
+    if (editable) {
+      marker.on('dragend', function () {
+        var pos = marker.getLatLng();
+        var prevLat = item.latitude, prevLng = item.longitude;
+        window.galleryRepositionImage(item.imageId, pos.lat, pos.lng, function () {
+          // Server rejected the move - snap the marker back.
+          marker.setLatLng([prevLat, prevLng]);
+        });
+        item.latitude = pos.lat;
+        item.longitude = pos.lng;
+      });
+    }
+    // The dialog is still display:none (showModal() hasn't run yet - see
+    // window.galleryOpenLightboxItem) the first time this map is created, so
+    // Leaflet measured a zero-size container; remeasure once it's visible.
+    setTimeout(function () { if (_lightboxMap) { _lightboxMap.invalidateSize(); } }, 60);
+  }
+
+  // Sets (imageId given) or clears (imageId null) the pin's cover photo, then
+  // live-updates everything that depends on it - no page reload needed.
+  // Exposed on window so the on-page hero banner's own remove-icon button
+  // (rendered outside this partial, see partials/pins/_photo_gallery.html's
+  // consumer templates) can call it directly without going through the
+  // lightbox.
+  window._setCoverPhoto = function (imageId) {
+    if (!COVER_PHOTO_URL) return;
+    fetch(COVER_PHOTO_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
+      body: JSON.stringify({ image_id: imageId || null }),
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (data) {
+        if (!r.ok) throw new Error(data.error || 'HTTP ' + r.status);
+        return data;
+      });
+    }).then(function (data) {
+      CURRENT_COVER_ID = imageId || null;
+      _applyCoverHeroUpdate(data.cover_photo || null);
+      var current = _lightboxList[_lightboxIdx];
+      if (current) _setLightboxMeta(current);
+      if (window.toastr) toastr.success(imageId ? 'Cover photo updated.' : 'Cover photo removed.');
+    }).catch(function (err) {
+      if (window.toastr) toastr.error(err.message || 'Failed to update cover photo.');
+    });
+  };
+
+  // Only offered for real, persisted photos (personal uploads, or Media
+  // gallery items already sent to the wiki) - a still-transient Media item
+  // has no imageId to set as a cover.
+  window._lightboxSetCover = function () {
+    var item = _lightboxList[_lightboxIdx];
+    if (!item || !item.imageId) return;
+    var isCover = !!(CURRENT_COVER_ID && item.imageId === CURRENT_COVER_ID);
+    window._setCoverPhoto(isCover ? null : item.imageId);
+  };
+
+  // Anchor element each page's cover-hero banner is inserted directly before
+  // when created for the first time (mirrors the server-side markup's fixed
+  // position - see location/index.html and location/wiki.html). Wiki's
+  // ".wiki-banner" anchor no longer exists since the wiki page hero was
+  // migrated to the shared _page_hero.html component; ".page-tabs" is the
+  // nearest element that's always present regardless of cover/notice state.
+  var COVER_HERO_INSERT_BEFORE = { pin: '#pin-detail-hero', wiki: '.page-tabs' };
+
+  // Live-updates the page's cover-hero banner - creating it if this is the
+  // first cover photo, updating its background if one already existed, or
+  // removing it entirely when the cover is cleared (or the viewer's display
+  // preference disallows it, for the wiki hero). A no-op on pages with no
+  // COVER_HERO_KEY (e.g. safety check-ins) or missing insertion anchor.
+  function _applyCoverHeroUpdate(url) {
+    if (!COVER_HERO_KEY) return;
+    if (COVER_HERO_KEY === 'pin') {
+      var pageHero = document.getElementById('pin-detail-hero');
+      if (!pageHero) return;
+      if (url && COVER_HERO_ENABLED) {
+        pageHero.classList.add('ul-page-hero--cover');
+        pageHero.style.backgroundImage = "url('" + url + "')";
+      } else {
+        pageHero.classList.remove('ul-page-hero--cover', 'is-adjusting-cover');
+        pageHero.style.backgroundImage = '';
+      }
+      return;
+    }
+    var heroId = COVER_HERO_KEY + '-cover-hero';
+    var hero = document.getElementById(heroId);
+    if (url && COVER_HERO_ENABLED) {
+      if (!hero) {
+        var anchor = document.querySelector(COVER_HERO_INSERT_BEFORE[COVER_HERO_KEY] || '');
+        if (!anchor || !anchor.parentNode) return;
+        hero = document.createElement('div');
+        hero.className = 'cover-hero';
+        hero.id = heroId;
+        hero.innerHTML =
+          '<button type="button" class="cover-hero-nav cover-hero-prev" onclick="window._coverHeroNav(\'' + COVER_HERO_KEY + '\', -1)" title="Previous photo">' +
+          '<i class="material-symbols-outlined">chevron_left</i></button>' +
+          '<button type="button" class="cover-hero-nav cover-hero-next" onclick="window._coverHeroNav(\'' + COVER_HERO_KEY + '\', 1)" title="Next photo">' +
+          '<i class="material-symbols-outlined">chevron_right</i></button>' +
+          '<button type="button" class="cover-hero-remove" onclick="window._setCoverPhoto && window._setCoverPhoto(null)" title="Remove cover photo">' +
+          '<i class="material-symbols-outlined">close</i></button>';
+        anchor.parentNode.insertBefore(hero, anchor);
+      }
+      hero.style.backgroundImage = "url('" + url + "')";
+    } else if (hero) {
+      hero.remove();
+    }
+    // Cached hover-cycle state (see cover-hero.js) would otherwise keep
+    // showing the pre-change cover as its "true" background to return to.
+    if (window._coverHeroInvalidate) window._coverHeroInvalidate(COVER_HERO_KEY);
+  }
+
+  // Called from the lightbox's Relevant/Not relevant buttons (only shown for
+  // Media-gallery items, see canRelevance). Persists the mark, updates the
+  // lightbox's own button state, and syncs the corresponding grid tile back
+  // on the pin detail page's Media section (if that tile is present).
+  // Marking relevant also materializes the item server-side (downloads and
+  // saves it as a real Image row - see PinController.media_relevance) so it
+  // survives the external provider's URL ever going dead; once that
+  // succeeds, swap this item (and the matching grid tile) over to the local
+  // copy and re-render the now-local image.
+  window._lightboxSetRelevance = function (isRelevant) {
+    var item = _lightboxList[_lightboxIdx];
+    if (!item || !item.canRelevance || !PIN_MEDIA_RELEVANCE_URL) return;
+    var wasRelevant = item.relevant === true;
+    var wasNotRelevant = item.relevant === false;
+    var next = (isRelevant && wasRelevant) || (!isRelevant && wasNotRelevant) ? null : isRelevant;
+    item.relevant = next;
+    _setLightboxMeta(item);
+    var gridItem = document.querySelector('#media-gallery-grid .media-item[data-media-source="' + item.mediaSource + '"][data-media-key="' + item.mediaKey + '"]');
+    if (gridItem && window._mediaApplyRelevanceState) window._mediaApplyRelevanceState(gridItem, next);
+    fetch(PIN_MEDIA_RELEVANCE_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
+      body: JSON.stringify({ source: item.mediaSource, item_key: item.mediaKey, url: item.url, is_relevant: next, page_url: item.sourceUrl || '', caption: item.caption || '' }),
+    }).then(function (r) { return r.json(); }).then(function (data) {
+      if (data.materialize_error && window.toastr) toastr.warning("Marked relevant, but couldn't save a local copy: " + data.materialize_error);
+      if (!data.image_url) return;
+      item.url = data.image_url;
+      item.thumbUrl = data.image_url;
+      if (data.image_id) item.imageId = data.image_id;
+      if (_lightboxList[_lightboxIdx] === item) _setLightboxImage(item);
+      if (gridItem) {
+        gridItem.dataset.mediaUrl = data.image_url;
+        gridItem.dataset.mediaThumb = data.image_url;
+        if (data.image_id) gridItem.dataset.imageId = data.image_id;
+        var thumbImg = gridItem.querySelector('.media-item-thumb');
+        if (thumbImg && thumbImg.tagName === 'IMG') thumbImg.src = data.image_url;
+      }
+    }).catch(function () { if (window.toastr) toastr.error('Failed to save.'); });
+  };
+})();
+</script>
+{% endwith %}

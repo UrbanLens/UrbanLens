@@ -12,7 +12,7 @@ from hypothesis import settings as hyp_settings
 from hypothesis import strategies as st
 from requests import HTTPError
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.apis.search.brave.search import (
     BraveSearchError,
     BraveSearchGateway,
@@ -26,7 +26,7 @@ _hyp = hyp_settings(max_examples=50, deadline=None)
 # redact_secret
 # ---------------------------------------------------------------------------
 
-class MaskSecretTests(TestCase):
+class MaskSecretTests(SimpleTestCase):
     """redact_secret fingerprints API keys without ever revealing them."""
 
     def test_none_returns_missing(self):
@@ -65,7 +65,7 @@ class MaskSecretTests(TestCase):
 # _validate
 # ---------------------------------------------------------------------------
 
-class BraveValidateTests(TestCase):
+class BraveValidateTests(SimpleTestCase):
     """_validate raises BraveSearchError when the API key is missing."""
 
     def _gw(self, key: str | None) -> BraveSearchGateway:
@@ -115,7 +115,7 @@ def _make_gw() -> BraveSearchGateway:
     return gw
 
 
-class BraveParseTests(TestCase):
+class BraveParseTests(SimpleTestCase):
     """_parse converts the Brave JSON structure to normalised dicts."""
 
     def setUp(self):
@@ -175,7 +175,7 @@ class BraveParseTests(TestCase):
 # search() - HTTP integration
 # ---------------------------------------------------------------------------
 
-class BraveSearchHTTPTests(TestCase):
+class BraveSearchHTTPTests(SimpleTestCase):
     """search() sends the correct request and handles HTTP errors."""
 
     def _gw_with_response(self, status: int = 200, body: dict | None = None) -> tuple[BraveSearchGateway, MagicMock]:

@@ -16,8 +16,8 @@ from unittest.mock import MagicMock, patch
 from django.utils import timezone
 from hypothesis import given, settings as hyp_settings, strategies as st
 
-from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.services.images import _dms_to_decimal, extract_gps_coords, extract_taken_at, image_to_gallery_json
+from urbanlens.core.tests.testcase import SimpleTestCase
+from urbanlens.dashboard.services.images import _dms_to_decimal, extract_gps_coords, extract_gps_direction, extract_taken_at, image_to_gallery_json
 
 _hyp = hyp_settings(max_examples=60, deadline=None)
 
@@ -26,7 +26,7 @@ _hyp = hyp_settings(max_examples=60, deadline=None)
 # _dms_to_decimal
 # ---------------------------------------------------------------------------
 
-class DmsToDecimalTests(TestCase):
+class DmsToDecimalTests(SimpleTestCase):
     """_dms_to_decimal converts degree/minute/second tuples to signed float."""
 
     def test_north_positive(self):
@@ -90,7 +90,7 @@ class DmsToDecimalTests(TestCase):
 # extract_gps_coords - via mocked PIL
 # ---------------------------------------------------------------------------
 
-class ExtractGpsCoordsMockTests(TestCase):
+class ExtractGpsCoordsMockTests(SimpleTestCase):
     """extract_gps_coords extracts GPS from EXIF via mocked PIL objects."""
 
     def _make_file_with_gps(self, lat_dms, lat_ref, lng_dms, lng_ref):
@@ -207,10 +207,101 @@ class ExtractGpsCoordsMockTests(TestCase):
 
 
 # ---------------------------------------------------------------------------
+# extract_gps_direction - via mocked PIL
+# ---------------------------------------------------------------------------
+
+class ExtractGpsDirectionMockTests(SimpleTestCase):
+    """extract_gps_direction extracts the camera-facing bearing via mocked PIL objects."""
+
+    def _make_file_with_gps_ifd(self, raw_ifd: dict):
+        mock_exif = MagicMock()
+        mock_exif.__bool__ = lambda *_: True
+        mock_exif.get_ifd.return_value = raw_ifd
+        mock_img = MagicMock()
+        mock_img.getexif.return_value = mock_exif
+        mock_file = io.BytesIO(b"fake_image_data")
+        return mock_file, mock_img
+
+    def _gps_ifd(self, **by_name):
+        """Build a raw (numeric-keyed) GPS IFD dict from GPSTAGS names, matching
+        how PIL's own get_ifd() returns it - see extract_gps_direction's own
+        GPSTAGS.get(k, k) decode step."""
+        from PIL.ExifTags import GPSTAGS
+
+        reverse_gpstags = {v: k for k, v in GPSTAGS.items()}
+        return {reverse_gpstags[name]: value for name, value in by_name.items()}
+
+    def test_returns_bearing_from_gps_img_direction(self):
+        mock_file, mock_img = self._make_file_with_gps_ifd(self._gps_ifd(GPSImgDirection=273.5, GPSImgDirectionRef="T"))
+        with patch("urbanlens.dashboard.services.images.PILImage.open", return_value=mock_img):
+            result = extract_gps_direction(mock_file)
+        self.assertAlmostEqual(result, 273.5, places=2)
+
+    def test_falls_back_to_gps_dest_bearing(self):
+        mock_file, mock_img = self._make_file_with_gps_ifd(self._gps_ifd(GPSDestBearing=90.0, GPSDestBearingRef="M"))
+        with patch("urbanlens.dashboard.services.images.PILImage.open", return_value=mock_img):
+            result = extract_gps_direction(mock_file)
+        self.assertAlmostEqual(result, 90.0, places=2)
+
+    def test_gps_img_direction_preferred_over_dest_bearing(self):
+        mock_file, mock_img = self._make_file_with_gps_ifd(self._gps_ifd(GPSImgDirection=10.0, GPSDestBearing=200.0))
+        with patch("urbanlens.dashboard.services.images.PILImage.open", return_value=mock_img):
+            result = extract_gps_direction(mock_file)
+        self.assertAlmostEqual(result, 10.0, places=2)
+
+    def test_normalizes_out_of_range_values_into_0_360(self):
+        mock_file, mock_img = self._make_file_with_gps_ifd(self._gps_ifd(GPSImgDirection=370.0))
+        with patch("urbanlens.dashboard.services.images.PILImage.open", return_value=mock_img):
+            result = extract_gps_direction(mock_file)
+        self.assertAlmostEqual(result, 10.0, places=2)
+
+    def test_returns_none_when_no_exif(self):
+        mock_img = MagicMock()
+        mock_img.getexif.return_value = None
+        mock_file = io.BytesIO(b"fake")
+        with patch("urbanlens.dashboard.services.images.PILImage.open", return_value=mock_img):
+            result = extract_gps_direction(mock_file)
+        self.assertIsNone(result)
+
+    def test_returns_none_when_no_gps_ifd(self):
+        mock_file, mock_img = self._make_file_with_gps_ifd({})
+        with patch("urbanlens.dashboard.services.images.PILImage.open", return_value=mock_img):
+            result = extract_gps_direction(mock_file)
+        self.assertIsNone(result)
+
+    def test_returns_none_when_neither_direction_tag_present(self):
+        mock_file, mock_img = self._make_file_with_gps_ifd(self._gps_ifd(GPSLatitude=(40, 0, 0), GPSLatitudeRef="N"))
+        with patch("urbanlens.dashboard.services.images.PILImage.open", return_value=mock_img):
+            result = extract_gps_direction(mock_file)
+        self.assertIsNone(result)
+
+    def test_returns_none_on_exception(self):
+        mock_file = io.BytesIO(b"not a real image")
+        with patch("urbanlens.dashboard.services.images.PILImage.open", side_effect=Exception("cannot identify image file")):
+            result = extract_gps_direction(mock_file)
+        self.assertIsNone(result)
+
+    def test_returns_none_for_nan_direction(self):
+        mock_file, mock_img = self._make_file_with_gps_ifd(self._gps_ifd(GPSImgDirection=float("nan")))
+        with patch("urbanlens.dashboard.services.images.PILImage.open", return_value=mock_img):
+            result = extract_gps_direction(mock_file)
+        self.assertIsNone(result)
+
+    def test_file_seeked_back_after_extraction(self):
+        mock_img = MagicMock()
+        mock_img.getexif.return_value = None
+        mock_file = MagicMock()
+        mock_file.seek.return_value = None
+        with patch("urbanlens.dashboard.services.images.PILImage.open", return_value=mock_img):
+            extract_gps_direction(mock_file)
+        mock_file.seek.assert_called_with(0)
+
+
+# ---------------------------------------------------------------------------
 # extract_taken_at - via mocked PIL
 # ---------------------------------------------------------------------------
 
-class ExtractTakenAtMockTests(TestCase):
+class ExtractTakenAtMockTests(SimpleTestCase):
     """extract_taken_at extracts EXIF DateTimeOriginal via mocked PIL objects."""
 
     def _make_file_with_exif_ifd(self, exif_ifd: dict):
@@ -284,7 +375,7 @@ class ExtractTakenAtMockTests(TestCase):
 # image_to_gallery_json
 # ---------------------------------------------------------------------------
 
-class ImageToGalleryJsonTests(TestCase):
+class ImageToGalleryJsonTests(SimpleTestCase):
     """image_to_gallery_json serialises Image model instances to map-layer dicts."""
 
     def _make_image(self, lat=None, lng=None, caption=None, profile=None):

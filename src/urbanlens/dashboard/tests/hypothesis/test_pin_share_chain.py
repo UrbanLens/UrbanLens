@@ -18,6 +18,8 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.controllers.pin_sharing import _create_pin_from_share
 from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
 from urbanlens.dashboard.models.location.model import Location
+from urbanlens.dashboard.models.markup.model import MarkupMap
+from urbanlens.dashboard.models.markup.share import MarkupMapShare
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_share import PinShare, PinShareStatus
 
@@ -141,3 +143,31 @@ class MemoriesSharingPageTests(_ShareChainTestCase):
         response = self.client.get(reverse("memories.sharing"))
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context["share_groups"], [])
+
+
+class MemoriesSharingMapsPageTests(_ShareChainTestCase):
+    """The Sharing page also lists standalone maps shared via MarkupMapShare."""
+
+    def test_page_groups_map_shares_by_map(self):
+        markup_map = MarkupMap.objects.create(profile=self.profiles["a"], title="Old Mill route")
+        MarkupMapShare.objects.create(markup_map=markup_map, from_profile=self.profiles["a"], to_profile=self.profiles["b"])
+        MarkupMapShare.objects.create(markup_map=markup_map, from_profile=self.profiles["a"], to_profile=self.profiles["c"])
+        self.client.force_login(self.users["a"])
+
+        response = self.client.get(reverse("memories.sharing"))
+
+        self.assertEqual(response.status_code, 200)
+        groups = response.context["map_share_groups"]
+        self.assertEqual(len(groups), 1)
+        self.assertEqual(groups[0]["map"], markup_map)
+        self.assertEqual({share.to_profile_id for share in groups[0]["shares"]}, {self.profiles["b"].pk, self.profiles["c"].pk})
+
+    def test_page_only_shows_own_map_shares(self):
+        markup_map = MarkupMap.objects.create(profile=self.profiles["b"], title="Not mine")
+        MarkupMapShare.objects.create(markup_map=markup_map, from_profile=self.profiles["b"], to_profile=self.profiles["c"])
+        self.client.force_login(self.users["a"])
+
+        response = self.client.get(reverse("memories.sharing"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["map_share_groups"], [])

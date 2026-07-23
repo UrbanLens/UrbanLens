@@ -1,0 +1,77 @@
+{# "Your active grants" list body - re-rendered via HTMX after grant/update/revoke. #}
+{# Context: grants #}
+<div class="subscription-list" id="subscription-grants-list">
+    <div class="subscription-list__head" aria-hidden="true">
+        <span class="subscription-list__col subscription-list__col--user">User</span>
+        <span class="subscription-list__col subscription-list__col--role">Role</span>
+        <span class="subscription-list__col subscription-list__col--expires">Expires</span>
+        <span class="subscription-list__col subscription-list__col--actions">Actions</span>
+    </div>
+    <ul class="subscription-list__items">
+        {% for grant in grants %}
+        <li class="subscription-list__item">
+            <div class="subscription-list__col subscription-list__col--user">
+                <span class="subscription-list__label">User</span>
+                <div class="subscription-list__value">
+                    <strong class="subscription-list__username">{{ grant.user.username }}</strong>
+                    <span class="subscription-list__email">{{ grant.user.email }}</span>
+                </div>
+            </div>
+            <div class="subscription-list__col subscription-list__col--role">
+                <span class="subscription-list__label">Role</span>
+                <div class="subscription-list__value">
+                    <span class="role-pill">
+                        <i class="material-symbols-outlined">auto_awesome</i>
+                        {{ grant.role.name }}
+                    </span>
+                </div>
+            </div>
+            <div class="subscription-list__col subscription-list__col--expires">
+                <span class="subscription-list__label">Expires</span>
+                <div class="subscription-list__value">
+                    {% if grant.expires_at %}
+                    {{ grant.expires_at|date:'M j, Y' }}
+                    {% else %}
+                    <span class="subscription-list__indefinite">Indefinite</span>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="subscription-list__col subscription-list__col--actions">
+                <span class="subscription-list__label">Actions</span>
+                <div class="subscription-list__value">
+                    <details class="subscription-grant-actions">
+                        <summary class="subscription-grant-actions__toggle" title="Manage this grant">
+                            <i class="material-symbols-outlined">more_horiz</i>
+                            Manage
+                        </summary>
+                        <form method="post"
+                              action="{% url 'site_admin_subscriptions' %}"
+                              class="inline-sub-form subscription-grant-actions__form"
+                              hx-post="{% url 'site_admin_subscriptions' %}"
+                              hx-target="#subscription-grants-list"
+                              hx-swap="outerHTML">
+                            {% csrf_token %}
+                            <input type="hidden" name="subscription_id" value="{{ grant.id }}">
+                            <select name="duration_months">
+                                <option value="1">1 month</option>
+                                <option value="3">3 months</option>
+                                <option value="6">6 months</option>
+                                <option value="12">12 months</option>
+                                <option value="indefinite">Indefinite</option>
+                            </select>
+                            <button class="btn btn--ghost btn--sm" name="action" value="update">Update</button>
+                            <button class="btn btn--danger btn--sm" name="action" value="revoke"
+                                    hx-confirm="Revoke {{ grant.user.username }}'s {{ grant.role.name }} access?">Revoke</button>
+                        </form>
+                    </details>
+                </div>
+            </div>
+        </li>
+        {% empty %}
+        <li class="subscription-list__empty">
+            <i class="material-symbols-outlined">inbox</i>
+            <span>No active subscription grants yet.</span>
+        </li>
+        {% endfor %}
+    </ul>
+</div>

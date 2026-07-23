@@ -17,11 +17,11 @@ export function registerBulkStateUpdater(nsPrefix: string, updater: () => void):
 export const OrganizeIconPicker = {
     ...IconPicker,
 
-    pick(id: string, icon: string, btn: HTMLElement): void {
+    pick(id: string, icon: string, btn: HTMLElement | null): void {
         IconPicker.pick(id, icon, btn);
 
         // Picking anything from the grid (a real icon or "None") replaces
-        // whatever custom icon was previously uploaded for this badge.
+        // whatever custom icon was previously uploaded for this label.
         const clearFlag = document.getElementById(`edit-clear-custom-${id}`) as HTMLInputElement | null;
         if (clearFlag) clearFlag.value = "1";
 

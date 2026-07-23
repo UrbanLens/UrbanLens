@@ -286,9 +286,9 @@ $cluster-l-start: $color-pink-600;
 $cluster-l-end:   $color-pink-700;
 
 // - Brand palette -------------------------------------------------------------
-$primary-color: $color-blue-500;
-$primary-color-dark: $color-blue-700;
-$primary-color-light: $color-blue-300;
+$primary-color: #496793; // muted $color-blue-500
+$primary-color-dark: #2f3f52; // muted color-blue-700
+$primary-color-light: #6485b5; // muted color-blue-300
 $secondary-color: $color-amber-500;
 $dark-primary: $color-blue-1700;
 $highlight-color: $color-amber-300;
@@ -482,22 +482,22 @@ $z-nav: 1100;
 
     --ul-button-bg: #{$primary-color};
     --ul-button-border: #{$primary-color-dark};
-    --ul-button-text: var(--ul-grey-9);
+    --ul-button-text: #fff;
     --ul-button-hover-bg: #{$accent-1};
     --ul-button-hover-border: #{$accent-1-dark};
-    --ul-button-hover-text: var(--ul-grey-9);
+    --ul-button-hover-text: var(--ul-button-text);
     --ul-button-yes-bg: #{$color-green-300};
     --ul-button-yes-border: #{$color-green-700};
-    --ul-button-yes-text: #{$color-green-800};
+    --ul-button-yes-text: var(--ul-button-text);
     --ul-button-yes-hover-bg: #{$color-green-200};
     --ul-button-yes-hover-border: #{$color-green-700};
-    --ul-button-yes-hover-text: #{$color-green-800};
+    --ul-button-yes-hover-text: var(--ul-button-text);
     --ul-button-no-bg: #{$color-red-300};
     --ul-button-no-border: #{$color-red-700};
-    --ul-button-no-text: #{$color-red-800};
+    --ul-button-no-text: var(--ul-button-text);
     --ul-button-no-hover-bg: #{$color-red-200};
     --ul-button-no-hover-border: #{$color-red-700};
-    --ul-button-no-hover-text: #{$color-red-800};
+    --ul-button-no-hover-text: var(--ul-button-text);
 
     // Tooltips - intentionally dark in both themes for legibility
     --ul-tooltip-bg: rgba(14, 17, 26, 0.94);
@@ -563,7 +563,14 @@ $z-nav: 1100;
     --ul-color-danger-border: rgba(239, 68, 68, .4);
     --ul-color-danger-bg: rgba(239, 68, 68, .08);
     --card-bg: #1e1e1e;
-    --border-color: var(--ul-grey-8b);
+    --ul-border-color: var(--ul-grey-8b);
+
+    // The light-mode $primary-color (a muted blue-grey, #496793) has never had
+    // a dark-mode override despite --ul-primary-color's own comment above
+    // saying it exists precisely so dark mode can do this - it reads as
+    // illegible link/icon text against dark surfaces. Brighter, more
+    // saturated blue for real contrast there.
+    --ul-primary-color: #039be5;
 
     // Tooltips in dark mode: slightly elevated dark blue-grey to stand out from page surface
     --ul-tooltip-bg: rgba(36, 42, 64, 0.97);

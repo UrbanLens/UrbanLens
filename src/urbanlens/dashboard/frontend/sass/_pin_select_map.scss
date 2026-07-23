@@ -1,0 +1,151 @@
+// Shared map + click/drag-select UX for pages that review a list of
+// geolocated items alongside a card grid (Memories > Locations,
+// Memories > Visits). Behavior lives in static/js/pin-select-map.js;
+// these are the generic classes that JS toggles/expects. Page-specific
+// card content keeps its own stylesheet (e.g. _pin_suggestions.scss,
+// _memories.scss) - only the map/marker/selection-checkbox chrome lives here.
+
+@use 'variables' as *;
+
+// -- Map ---------------------------------------------------------------------
+
+.pin-select-map-wrap {
+    position: relative;
+    margin-bottom: $space-sm;
+    border-radius: $radius-md;
+    overflow: hidden;
+    box-shadow: var(--ul-shadow-sm);
+}
+
+.pin-select-map {
+    height: 320px;
+    width: 100%;
+    background: var(--ul-surface);
+
+    @include up($breakpoint-sm) {
+        height: 420px;
+    }
+
+    &.select-mode {
+        cursor: crosshair;
+    }
+}
+
+.pin-select-toggle {
+    position: absolute;
+    top: $space-sm;
+    right: $space-sm;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    gap: $space-xs;
+    padding: .4rem .7rem;
+    border-radius: $radius-full;
+    border: 1px solid var(--ul-border);
+    background: var(--ul-grey-0a);
+    color: var(--ul-grey-8);
+    font-size: .78rem;
+    cursor: pointer;
+    box-shadow: var(--ul-shadow-sm);
+
+    .material-symbols-outlined {
+        font-size: 18px;
+    }
+
+    &.active {
+        background: var(--ul-primary-color);
+        border-color: var(--ul-primary-color);
+        color: #fff;
+    }
+}
+
+.pin-select-map-hint {
+    display: flex;
+    align-items: center;
+    gap: $space-xs;
+    font-size: .82rem;
+    color: var(--ul-grey-6);
+    margin: 0 0 $space-lg;
+
+    .material-symbols-outlined {
+        font-size: 18px;
+        flex-shrink: 0;
+    }
+}
+
+// -- Markers -------------------------------------------------------------------
+
+.pin-select-marker {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border-radius: 50% 50% 50% 0;
+    transform: rotate(-45deg);
+    background: var(--ul-primary-color);
+    border: 2px solid var(--ul-grey-0a);
+    box-shadow: var(--ul-shadow-sm);
+    transition: transform .12s ease, box-shadow .12s ease;
+
+    .material-symbols-outlined {
+        transform: rotate(45deg);
+        color: #fff;
+        font-size: 16px;
+    }
+}
+
+.pin-select-marker--alt {
+    background: #{$color-teal-500};
+}
+
+.pin-select-marker.is-selected {
+    transform: rotate(-45deg) scale(1.25);
+    box-shadow: 0 0 0 3px rgba(33, 150, 243, .35), var(--ul-shadow-md);
+    z-index: 1000 !important;
+}
+
+// Card <-> marker hover pairing - same amber highlight convention as the trip
+// detail page's map/activity-list hover-sync (.trip-map-marker--highlighted).
+.pin-select-marker.is-hovered {
+    background: #{$color-amber-500};
+    transform: rotate(-45deg) scale(1.2);
+    box-shadow: 0 3px 10px rgba($color-amber-500, .5);
+    z-index: 999 !important;
+}
+
+// -- Card selection checkbox --------------------------------------------------
+
+.pin-select {
+    flex-shrink: 0;
+    cursor: pointer;
+}
+
+.pin-select-cb {
+    position: absolute;
+    opacity: 0;
+    width: 1px;
+    height: 1px;
+}
+
+.pin-select-box {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: $radius-xs;
+    border: 2px solid var(--ul-grey-3);
+    color: transparent;
+    transition: background .12s ease, border-color .12s ease, color .12s ease;
+
+    .material-symbols-outlined {
+        font-size: 16px;
+    }
+}
+
+.pin-select-cb:checked + .pin-select-box {
+    background: var(--ul-primary-color);
+    border-color: var(--ul-primary-color);
+    color: #fff;
+}

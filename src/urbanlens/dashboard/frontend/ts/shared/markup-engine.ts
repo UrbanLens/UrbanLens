@@ -16,7 +16,7 @@ declare const L: typeof import("leaflet");
 export type LatLngTuple = [number, number];
 
 export interface ShapeSpec {
-    type: "line" | "arrow" | "circle" | "rect" | "polygon" | "text";
+    type: "line" | "arrow" | "circle" | "rect" | "polygon" | "text" | "pin";
     latlngs: LatLngTuple[];
     color?: string;
     stroke_width?: number;
@@ -29,22 +29,22 @@ export interface ShapeSpec {
 
 const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
 
-function safeColor(v: unknown, fallback = "#e74c3c"): string {
+export function safeColor(v: unknown, fallback = "#e74c3c"): string {
     return typeof v === "string" && HEX_COLOR_RE.test(v) ? v : fallback;
 }
 
-function safeOptionalColor(v: unknown, fallback = "#e74c3c"): string {
+export function safeOptionalColor(v: unknown, fallback = "#e74c3c"): string {
     if (v === "none") return "none";
     return safeColor(v, fallback);
 }
 
-function safeNumber(v: unknown, lo: number, hi: number, def: number): number {
+export function safeNumber(v: unknown, lo: number, hi: number, def: number): number {
     const n = Number.parseFloat(v as string);
     if (Number.isNaN(n)) return def;
     return Math.max(lo, Math.min(hi, n));
 }
 
-function bearing(from: LatLngTuple | { lat: number; lng: number }, to: LatLngTuple | { lat: number; lng: number }): number {
+export function bearing(from: LatLngTuple | { lat: number; lng: number }, to: LatLngTuple | { lat: number; lng: number }): number {
     const flat = Array.isArray(from) ? from[0] : from.lat;
     const flng = Array.isArray(from) ? from[1] : from.lng;
     const tlat = Array.isArray(to) ? to[0] : to.lat;
@@ -67,7 +67,7 @@ function arrowheadSvg(color: string, deg: number, sz = 28, opacity: number | nul
     );
 }
 
-function arrowheadSize(zoom?: number | null): number {
+export function arrowheadSize(zoom?: number | null): number {
     if (zoom == null || zoom >= 16) return 28;
     if (zoom >= 13) return 20;
     if (zoom >= 10) return 14;
@@ -101,7 +101,13 @@ function renderShape(s: ShapeSpec, group: L.LayerGroup, zoom?: number): void {
     const strokeC = hasBorder ? bc! : color;
 
     function shapeOpts(): L.PathOptions {
-        return { color: strokeC, weight: hasBorder ? weight : 2, fillColor: color, fillOpacity: fillOp, opacity: borderOp };
+        // Non-interactive: these shapes are purely visual (no popup/tooltip is
+        // ever bound to them), and an interactive vector layer intercepts its
+        // own click events rather than letting them bubble to the surrounding
+        // .comment-map-preview container - which otherwise breaks "click
+        // anywhere on the preview to expand" whenever the click lands on a
+        // rendered shape instead of empty map background.
+        return { color: strokeC, weight: hasBorder ? weight : 2, fillColor: color, fillOpacity: fillOp, opacity: borderOp, interactive: false };
     }
 
     switch (s.type) {
@@ -139,6 +145,15 @@ function renderShape(s: ShapeSpec, group: L.LayerGroup, zoom?: number): void {
                 interactive: false,
             }).addTo(group);
             break;
+        case "pin": {
+            const sz = 32;
+            const html = `<span class="material-symbols-outlined" style="font-size:${sz}px;color:${color};text-shadow:0 1px 3px rgba(0,0,0,.4)">location_on</span>`;
+            L.marker(L.latLng(s.latlngs[0]![0], s.latlngs[0]![1]), {
+                icon: L.divIcon({ className: "", html, iconSize: [sz, sz], iconAnchor: [sz / 2, sz] }),
+                interactive: false,
+            }).addTo(group);
+            break;
+        }
     }
 }
 

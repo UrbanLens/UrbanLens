@@ -1,0 +1,19 @@
+
+<div class="ul-dialog-body" id="google-photos-session-wait">
+    <a href="{{ picker_uri }}" target="_blank" rel="noopener noreferrer" class="btn btn--primary">
+        <i class="material-symbols-outlined">open_in_new</i>
+        Open Google Photos
+    </a>
+    <div class="immich-import-progress"
+         hx-get="{% url 'pin.google_photos.session.status' pin.slug session_id %}"
+         hx-trigger="load delay:{{ poll_interval_s }}s"
+         hx-swap="outerHTML">
+        <div class="immich-import-status-msg">
+            <span class="htmx-indicator-spinner" style="display:inline-block; width:14px; height:14px; border:2px solid var(--ul-grey-4); border-top-color: #1976D2; border-radius:50%; animation: spin .7s linear infinite; flex-shrink:0;"></span>
+            <span>Waiting for you to finish picking photos in the other tab...</span>
+        </div>
+    </div>
+</div>
+<style>
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>

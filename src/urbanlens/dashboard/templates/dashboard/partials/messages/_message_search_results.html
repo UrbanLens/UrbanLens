@@ -1,0 +1,40 @@
+{% comment %}
+Message search results, shared by "search this conversation" (thread header)
+and "search all conversations" (sidebar). Context: `hits` (dicts from
+services.direct_messages.search_direct_messages: `message`, `partner`,
+`snippet`, `url`), `query`, `scope` (`"conversation"` or `"all"`).
+{% endcomment %}
+{% if hits %}
+<ul class="dm-search-result-list" role="list">
+    {% for hit in hits %}
+    <li>
+        <a class="dm-search-result" href="{{ hit.url }}">
+            {% if scope == "all" %}
+            <span class="msg-avatar" aria-hidden="true">
+                {% if hit.partner.avatar %}
+                <img src="{{ hit.partner.avatar.url }}" alt="" class="msg-avatar-img">
+                {% else %}
+                <span class="msg-avatar-initial">{{ hit.partner.username|first|upper }}</span>
+                {% endif %}
+            </span>
+            {% else %}
+            <span class="dm-search-result__icon" aria-hidden="true"><i class="material-symbols-outlined">chat_bubble</i></span>
+            {% endif %}
+            <span class="dm-search-result__body">
+                {% if scope == "all" %}
+                <span class="dm-search-result__title">{{ hit.partner.username }}</span>
+                {% endif %}
+                <span class="dm-search-result__snippet">{% if hit.message.sender_id != hit.partner.pk %}You: {% endif %}{{ hit.snippet }}</span>
+            </span>
+            <span class="dm-search-result__date">{{ hit.message.created|date:"M j, Y" }}</span>
+        </a>
+    </li>
+    {% endfor %}
+</ul>
+{% elif query|length >= 2 %}
+<div class="dm-search-empty">
+    <i class="material-symbols-outlined" aria-hidden="true">search_off</i>
+    <p>No messages matching &ldquo;{{ query }}&rdquo;.</p>
+    <p class="dm-search-empty__hint">Try a date range like &ldquo;last week&rdquo;, or a word like &ldquo;photos&rdquo; or &ldquo;maps&rdquo;. Encrypted messages can't be searched.</p>
+</div>
+{% endif %}

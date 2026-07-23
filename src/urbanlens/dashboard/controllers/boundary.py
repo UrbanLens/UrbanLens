@@ -27,7 +27,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.contrib.gis.geos import GEOSException, GEOSGeometry, MultiPolygon, Polygon
+from django.contrib.gis.geos import GEOSException
 from django.http import HttpRequest, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.views import View
@@ -35,47 +35,20 @@ from rest_framework.viewsets import GenericViewSet
 
 from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
 from urbanlens.dashboard.models.boundary.queryset import DEFAULT_RADIUS_METERS
-from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
 from urbanlens.dashboard.services.external_data import schedule_panel_fetch
+from urbanlens.dashboard.services.geo import geometry_to_geojson as _geojson, parse_multipolygon_geojson as _parse_multipolygon
 from urbanlens.dashboard.services.locations.boundaries import boundary_generation_ran, schedule_location_boundary_generation
+from urbanlens.dashboard.services.wiki_access import resolve_visible_wiki
 
 if TYPE_CHECKING:
     from rest_framework.request import Request
 
+    from urbanlens.dashboard.models.wiki.model import Wiki
+
 logger = logging.getLogger(__name__)
-
-
-def _geojson(geom) -> dict | None:
-    """Serialize a GEOS geometry to a GeoJSON dict, or None."""
-    return json.loads(geom.geojson) if geom else None
-
-
-def _parse_multipolygon(polygon_geojson: dict) -> MultiPolygon:
-    """Parse a GeoJSON geometry into a MultiPolygon.
-
-    Args:
-        polygon_geojson: A GeoJSON Polygon or MultiPolygon geometry dict.
-
-    Returns:
-        The parsed geometry, coerced to MultiPolygon.
-
-    Raises:
-        ValueError: If the payload isn't valid polygonal GeoJSON.
-        TypeError: If the geometry is valid but not polygonal.
-    """
-    try:
-        geom = GEOSGeometry(json.dumps(polygon_geojson), srid=4326)
-    except (GEOSException, TypeError, ValueError) as exc:
-        raise ValueError("Invalid polygon geometry") from exc
-    if isinstance(geom, Polygon):
-        geom = MultiPolygon(geom, srid=geom.srid)
-    if not isinstance(geom, MultiPolygon):
-        raise TypeError("Boundary must be a Polygon or MultiPolygon")
-    return geom
 
 
 def _parse_boundary_type(value) -> str | None:
@@ -271,20 +244,13 @@ class WikiBoundaryView(LoginRequiredMixin, View):
 
     def get(self, request, location_slug):
         """Return the wiki's effective boundaries, scheduling generation when needed."""
-        location = get_object_or_404(Location, slug=location_slug)
-        wiki = get_object_or_404(Wiki, location=location)
-        try:
-            profile = request.user.profile
-        except Profile.DoesNotExist:
-            profile = None
+        location, wiki, profile = resolve_visible_wiki(request, location_slug)
         pending = schedule_location_boundary_generation(location, profile)
         return JsonResponse(_wiki_boundary_payload(wiki, pending=pending))
 
     def post(self, request, location_slug):
         """Save or clear the community-drawn boundary of one type, with audit."""
-        location = get_object_or_404(Location, slug=location_slug)
-        wiki = get_object_or_404(Wiki, location=location)
-        profile, _ = Profile.objects.get_or_create(user=request.user)
+        location, wiki, profile = resolve_visible_wiki(request, location_slug)
 
         try:
             body = json.loads(request.body)

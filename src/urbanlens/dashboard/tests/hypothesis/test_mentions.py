@@ -8,7 +8,7 @@ from __future__ import annotations
 import uuid
 from unittest.mock import MagicMock, patch
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
@@ -35,7 +35,7 @@ def _loc_mention(display: str, uid: uuid.UUID) -> str:
 
 # -- extract_location_uuids ----------------------------------------------------
 
-class ExtractLocationUuidsTests(TestCase):
+class ExtractLocationUuidsTests(SimpleTestCase):
     """extract_location_uuids parses @[...](loc:UUID) tokens."""
 
     def test_empty_string_returns_empty_list(self) -> None:
@@ -88,7 +88,7 @@ class ExtractLocationUuidsTests(TestCase):
 
 # -- is_visible_to -------------------------------------------------------------
 
-class IsVisibleToTests(TestCase):
+class IsVisibleToTests(SimpleTestCase):
     """is_visible_to hides comments when any mentioned location is not pinned."""
 
     def test_no_mentions_is_always_visible(self) -> None:
@@ -130,7 +130,7 @@ class IsVisibleToTests(TestCase):
 
 # -- render_comment_text -------------------------------------------------------
 
-class RenderCommentTextTests(TestCase):
+class RenderCommentTextTests(SimpleTestCase):
     """render_comment_text returns None for hidden comments and HTML for visible ones."""
 
     def _render(self, text: str, pinned: set | None = None, activity_index: dict | None = None):

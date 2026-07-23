@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from urbanlens.dashboard.models.trips.model import Trip, TripMembership
-from urbanlens.dashboard.services.undo.base import UndoHandler, register
+from urbanlens.dashboard.services.undo.base import UndoHandler, describe_batch, register
 
 _RESTORABLE_FIELDS = (
     "name",
@@ -52,9 +52,7 @@ class TripUndoHandler(UndoHandler):
 
     @classmethod
     def describe(cls, instances: list[Trip]) -> str:
-        if len(instances) == 1:
-            return f"Trip: {instances[0].name}"
-        return f"{len(instances)} trips"
+        return describe_batch("Trip", "trips", [t.name for t in instances])
 
     @classmethod
     def restore(cls, payload: list[dict[str, Any]]) -> list[Trip]:

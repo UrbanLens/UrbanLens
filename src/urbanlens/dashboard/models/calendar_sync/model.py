@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 
 from django.db.models import (
     CASCADE,
+    BooleanField,
     CharField,
     DateTimeField,
     ForeignKey,
@@ -28,6 +29,8 @@ from django.db.models import (
 from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.calendar_sync.queryset import GoogleCalendarAccountManager, TripCalendarLinkManager
+from urbanlens.dashboard.models.fields import EncryptedTextField
 
 
 class CalendarSyncDirection(TextChoices):
@@ -60,8 +63,8 @@ class GoogleCalendarAccount(abstract.DashboardModel):
         blank=True,
         help_text="Email of the connected Google account, for display only.",
     )
-    access_token = TextField()
-    refresh_token = TextField(null=True, blank=True)
+    access_token = EncryptedTextField()
+    refresh_token = EncryptedTextField(null=True, blank=True)
     token_expiry = DateTimeField(null=True, blank=True)
     calendar_id = CharField(
         max_length=255,
@@ -72,6 +75,8 @@ class GoogleCalendarAccount(abstract.DashboardModel):
 
     if TYPE_CHECKING:
         profile_id: int
+
+    objects = GoogleCalendarAccountManager()
 
     @property
     def is_token_expired(self) -> bool:
@@ -129,11 +134,17 @@ class TripCalendarLink(abstract.DashboardModel):
     google_event_id = CharField(max_length=1024)
     direction = CharField(max_length=10, choices=CalendarSyncDirection.choices)
     last_synced = DateTimeField(null=True, blank=True)
+    auto_sync = BooleanField(
+        default=False,
+        help_text="Push future changes to this trip and its activities to the linked calendar event automatically. One-way only - edits made on Google Calendar are never pulled back.",
+    )
 
     if TYPE_CHECKING:
         trip_id: int
         activity_id: int | None
         profile_id: int
+
+    objects = TripCalendarLinkManager()
 
     def __str__(self) -> str:
         subject = self.activity if self.activity_id else self.trip

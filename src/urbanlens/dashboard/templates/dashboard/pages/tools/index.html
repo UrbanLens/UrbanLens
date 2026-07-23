@@ -1,14 +1,41 @@
 {% extends 'dashboard/themes/base.html' %}
+{% load static %}
+
+{% block hero %}
+{% include "dashboard/partials/ui/_page_hero.html" with icon="build" title="Tools" subtitle="Manage your data." modifier="top" %}
+{% endblock %}
+
+{% block subnav %}
+<div class="ul-page-subnav">
+    <div class="ul-page-subnav__inner">
+        <nav class="ul-subnav-tabs tools-section-tabs" aria-label="Tools sections">
+            <button type="button" class="ul-subnav-tab tools-section-tab is-active"
+                    data-section="data" aria-controls="panel-data">
+                <i class="material-symbols-outlined">swap_vert</i>
+                <span>Data</span>
+            </button>
+            <button type="button" class="ul-subnav-tab tools-section-tab"
+                    data-section="find" aria-controls="panel-find">
+                <i class="material-symbols-outlined">travel_explore</i>
+                <span>Find Pins</span>
+            </button>
+            <button type="button" class="ul-subnav-tab tools-section-tab"
+                    data-section="account" aria-controls="panel-account">
+                <i class="material-symbols-outlined">person</i>
+                <span>Account</span>
+            </button>
+        </nav>
+    </div>
+</div>
+{% endblock %}
 
 {% block content %}
 <div class="tools-page page-content">
 
-    <div class="tools-header">
-        <h1 class="tools-title">Tools</h1>
-        <p class="tools-subtitle">Manage your data.</p>
-    </div>
-
-    <div class="tools-grid">
+    {# ══════════════════════════════════════════════════════════════════ #}
+    {# DATA: export/import your own data                                  #}
+    {# ══════════════════════════════════════════════════════════════════ #}
+    <div class="tools-section-panel tools-grid" id="panel-data" role="tabpanel">
 
         {# -- Export card ------------------------------------------------------- #}
         <div class="ul-card tools-card tools-card--wide" id="export-card">
@@ -65,11 +92,11 @@
                                 </label>
                                 <label class="export-checkbox-item">
                                     <span class="ul-checkbox-wrap">
-                                        <input type="checkbox" name="export_types" value="badges" class="export-type-cb" checked>
+                                        <input type="checkbox" name="export_types" value="labels" class="export-type-cb" checked>
                                         <span class="ul-checkbox"></span>
                                     </span>
                                     <i class="material-symbols-outlined">label</i>
-                                    <span>Badges</span>
+                                    <span>Labels</span>
                                 </label>
                                 <label class="export-checkbox-item">
                                     <span class="ul-checkbox-wrap">
@@ -113,11 +140,35 @@
                                 </label>
                                 <label class="export-checkbox-item">
                                     <span class="ul-checkbox-wrap">
+                                        <input type="checkbox" name="export_types" value="pin_lists" class="export-type-cb" checked>
+                                        <span class="ul-checkbox"></span>
+                                    </span>
+                                    <i class="material-symbols-outlined">bookmarks</i>
+                                    <span>Lists</span>
+                                </label>
+                                <label class="export-checkbox-item">
+                                    <span class="ul-checkbox-wrap">
+                                        <input type="checkbox" name="export_types" value="direct_messages" class="export-type-cb" checked>
+                                        <span class="ul-checkbox"></span>
+                                    </span>
+                                    <i class="material-symbols-outlined">chat</i>
+                                    <span>Direct messages</span>
+                                </label>
+                                <label class="export-checkbox-item">
+                                    <span class="ul-checkbox-wrap">
                                         <input type="checkbox" name="export_types" value="settings" class="export-type-cb" checked>
                                         <span class="ul-checkbox"></span>
                                     </span>
                                     <i class="material-symbols-outlined">settings</i>
                                     <span>Settings</span>
+                                </label>
+                                <label class="export-checkbox-item">
+                                    <span class="ul-checkbox-wrap">
+                                        <input type="checkbox" name="export_types" value="custom_fields" class="export-type-cb" checked>
+                                        <span class="ul-checkbox"></span>
+                                    </span>
+                                    <i class="material-symbols-outlined">tune</i>
+                                    <span>Custom fields</span>
                                 </label>
                             </div>
 
@@ -208,6 +259,116 @@
             </div>
         </div>
 
+    </div>{# /panel-data #}
+
+    {# ══════════════════════════════════════════════════════════════════ #}
+    {# FIND PINS: turn photos/library data you already have into pins     #}
+    {# ══════════════════════════════════════════════════════════════════ #}
+    <div class="tools-section-panel tools-grid" id="panel-find" role="tabpanel" hidden>
+
+        {# -- Photo location scan card -------------------------------------------- #}
+        <div class="ul-card tools-card tools-card--wide" id="photo-scan-card">
+            <div class="ul-card-header">
+                <i class="material-symbols-outlined">travel_explore</i>
+                <h3>Find Pins in a Photo Folder</h3>
+            </div>
+
+            <div class="ul-card-body">
+                <p class="tools-card-desc">
+                    Scan a folder of photos or videos on your device for geotagged locations.
+                    Nothing is uploaded while scanning - your files are only seen by your browser.
+                    When you're ready, upload any locations found to turn them into pins you can review.
+                    Only location and date metadata is uploaded by default - the photos themselves stay
+                    on your device unless you check one below to include it as a preview in your review queue.
+                    Your browser's folder picker may say &quot;Upload&quot; and warn about uploading files -
+                    that's standard browser wording for letting a site read local files, not something this
+                    tool controls. No files are sent anywhere until you click &quot;Upload results&quot; below.
+                </p>
+
+                <div
+                    id="photo-scan-root"
+                    data-upload-url="{% url 'tools.photo_scan.upload' %}"
+                    data-upload-photo-url="{% url 'tools.photo_scan.upload_photo' %}"
+                    data-profile-uuid="{{ profile_uuid|default:'' }}"
+                >
+                    <div class="photo-scan-controls">
+                        <button type="button" class="btn btn--primary" id="photo-scan-start-btn">
+                            <i class="material-symbols-outlined">folder_open</i>
+                            <span>Choose folder &amp; scan</span>
+                        </button>
+                        <button type="button" class="btn btn--danger" id="photo-scan-stop-btn" hidden>
+                            <i class="material-symbols-outlined">stop</i>
+                            <span>Stop</span>
+                        </button>
+                        <button type="button" class="btn btn--secondary" id="photo-scan-upload-btn" hidden disabled>
+                            <i class="material-symbols-outlined">cloud_upload</i>
+                            <span>Upload results</span>
+                        </button>
+                    </div>
+
+                    <div class="photo-scan-progress" id="photo-scan-progress" hidden>
+                        <div class="photo-scan-progress-label">
+                            <span id="photo-scan-progress-text">Scanning...</span>
+                            <span id="photo-scan-progress-count"></span>
+                        </div>
+                        <div class="photo-scan-progress-track">
+                            <div class="photo-scan-progress-bar" id="photo-scan-progress-bar" style="width: 0%;"></div>
+                        </div>
+                    </div>
+
+                    <ul class="photo-scan-results" id="photo-scan-results"></ul>
+                    <p class="photo-scan-empty" id="photo-scan-empty" hidden>No results yet.</p>
+                </div>
+            </div>
+        </div>
+
+        {# -- Immich library scan card -------------------------------------------- #}
+        <div class="ul-card tools-card tools-card--wide" id="immich-scan-card">
+            <div class="ul-card-header">
+                <i class="material-symbols-outlined">travel_explore</i>
+                <h3>Scan Immich Library</h3>
+            </div>
+
+            <div class="ul-card-body">
+                {% if immich_account %}
+                <p class="tools-card-desc">
+                    Scans your whole Immich library for photo locations and suggests visits for pins
+                    you already have, plus candidate new pins for places you don't. Nothing is created
+                    until you review and accept each suggestion in
+                    <a href="{% url 'memories.locations' %}">Memories &rsaquo; Locations</a>.
+                </p>
+                <div class="tools-card-actions">
+                    <button type="button" class="btn btn--primary"
+                            hx-post="{% url 'settings.immich.scan' %}"
+                            hx-target="#immich-scan-progress"
+                            hx-swap="outerHTML"
+                            hx-confirm="Scan your entire Immich library for places you've been? This can take a while for a large library. Nothing is created automatically - you'll review and confirm each suggestion afterward.">
+                        <i class="material-symbols-outlined">travel_explore</i>
+                        Scan library for new locations
+                    </button>
+                </div>
+                {% if immich_active_scan_task_id %}
+                {# A scan is already running (started before a navigation away from this page) - resume polling immediately instead of showing a fresh, misleading "start" button state. #}
+                {% include "dashboard/partials/settings/_immich_scan_progress.html" with task_id=immich_active_scan_task_id state="PROGRESS" %}
+                {% else %}
+                <div id="immich-scan-progress"></div>
+                {% endif %}
+                {% else %}
+                <p class="tools-card-desc">
+                    Connect a self-hosted Immich server in
+                    <a href="{% url 'settings.view' %}#immich-settings-section">Settings &rsaquo; Immich</a>
+                    to scan your library for places you've been.
+                </p>
+                {% endif %}
+            </div>
+        </div>
+
+    </div>{# /panel-find #}
+
+    {# ══════════════════════════════════════════════════════════════════ #}
+    {# ACCOUNT: connecting with other people, admin utilities             #}
+    {# ══════════════════════════════════════════════════════════════════ #}
+    <div class="tools-section-panel tools-grid" id="panel-account" role="tabpanel" hidden>
 
         {# -- Admin Tools card (admins only) ------------------------------------ #}
         {% if perms.dashboard.view_site_admin %}
@@ -250,7 +411,7 @@
             </div>
         </div>
 
-    </div>{# /tools-grid #}
+    </div>{# /panel-account #}
 
     {% include "dashboard/partials/profile/_invite_friend_dialog.html" with dialog_id="invite-friend-dialog-tools" result_id="invite-result-tools" %}
 </div>
@@ -262,27 +423,16 @@
     padding: 2rem 1.5rem;
 }
 
-.tools-header {
-    margin-bottom: 2rem;
-}
-
-.tools-title {
-    font-size: 1.75rem;
-    font-weight: 700;
-    margin: 0 0 .35rem;
-    color: var(--ul-grey-9);
-}
-
-.tools-subtitle {
-    margin: 0;
-    color: var(--ul-grey-6);
-    font-size: .95rem;
-}
-
 .tools-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr));
     gap: 1.5rem;
+}
+
+/* .tools-grid sets display:grid unconditionally, which otherwise overrides the
+   HTML [hidden] attribute the section subnav script toggles - be explicit. */
+.tools-grid[hidden] {
+    display: none;
 }
 
 .tools-card {
@@ -682,9 +832,227 @@
     color: var(--ul-grey-7);
     padding: .1rem 0;
 }
+
+/* -- Photo location scan card ----------------------------------------------- */
+
+.photo-scan-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .6rem;
+    margin-bottom: 1rem;
+}
+
+/* .btn sets display:inline-flex, which otherwise overrides the HTML [hidden] attribute - be explicit */
+.photo-scan-controls .btn[hidden] {
+    display: none;
+}
+
+.photo-scan-progress {
+    margin-bottom: 1rem;
+}
+
+.photo-scan-progress-label {
+    display: flex;
+    justify-content: space-between;
+    gap: .5rem;
+    font-size: .82rem;
+    color: var(--ul-grey-6);
+    margin-bottom: .3rem;
+}
+
+#photo-scan-progress-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+#photo-scan-progress-count {
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
+.photo-scan-progress-track {
+    height: 6px;
+    border-radius: 3px;
+    background: var(--ul-grey-3);
+    overflow: hidden;
+}
+
+.photo-scan-progress-bar {
+    height: 100%;
+    background: var(--ul-primary, #1976D2);
+    transition: width .2s ease;
+}
+
+.photo-scan-results {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    max-height: 320px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: .4rem;
+}
+
+.photo-scan-result-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .75rem;
+    padding: .5rem .65rem;
+    border: 1px solid var(--ul-grey-3);
+    border-radius: 8px;
+    font-size: .85rem;
+}
+
+.photo-scan-result-item--existing {
+    opacity: .55;
+}
+
+.photo-scan-result-main {
+    display: flex;
+    flex-direction: column;
+    gap: .1rem;
+    min-width: 0;
+}
+
+.photo-scan-result-coords {
+    font-weight: 600;
+    color: var(--ul-grey-8);
+}
+
+.photo-scan-result-meta {
+    font-size: .78rem;
+    color: var(--ul-grey-6);
+}
+
+.photo-scan-result-badge {
+    flex-shrink: 0;
+    font-size: .72rem;
+    padding: .15rem .5rem;
+    border-radius: 999px;
+    background: var(--ul-grey-2);
+    color: var(--ul-grey-7);
+    white-space: nowrap;
+}
+
+.photo-scan-empty {
+    color: var(--ul-grey-6);
+    font-size: .85rem;
+    margin: 0;
+}
+
+.photo-scan-result-item {
+    flex-wrap: wrap;
+}
+
+.photo-scan-picker {
+    flex-basis: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: .35rem;
+}
+
+.photo-scan-picker-caption {
+    font-size: .72rem;
+    color: var(--ul-grey-6);
+}
+
+.photo-scan-thumbs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .4rem;
+}
+
+.photo-scan-thumb {
+    position: relative;
+    width: 56px;
+    height: 56px;
+    border-radius: 6px;
+    overflow: hidden;
+    cursor: pointer;
+    border: 2px solid var(--ul-grey-3);
+    transition: border-color .15s ease, box-shadow .15s ease;
+}
+
+.photo-scan-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    opacity: .7;
+    transition: opacity .15s ease;
+}
+
+.photo-scan-thumb:hover img {
+    opacity: .9;
+}
+
+.photo-scan-thumb input[type="checkbox"] {
+    position: absolute;
+    inset: 0;
+    margin: 0;
+    opacity: 0;
+    cursor: pointer;
+}
+
+.photo-scan-thumb-badge {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    color: #fff;
+    background: rgba(0, 0, 0, .45);
+    border-radius: 999px;
+    font-size: 16px;
+    line-height: 1;
+    pointer-events: none;
+}
+
+.photo-scan-thumb-badge .material-symbols-outlined {
+    font-size: 16px;
+    display: block;
+}
+
+.photo-scan-thumb--selected {
+    border-color: var(--ul-primary, #1976D2);
+    box-shadow: 0 0 0 2px rgba(25, 118, 210, .25);
+}
+
+.photo-scan-thumb--selected img {
+    opacity: 1;
+}
+
+.photo-scan-thumb--selected .photo-scan-thumb-badge {
+    background: var(--ul-primary, #1976D2);
+}
+
+.photo-scan-thumb--disabled {
+    opacity: .4;
+    cursor: not-allowed;
+}
+
+.photo-scan-thumb--disabled input[type="checkbox"] {
+    cursor: not-allowed;
+}
 </style>
 
 <script>
+(function () {
+    /* -- Section subnav (Data | Find Pins | Account) -- */
+    const sectionTabs = document.querySelectorAll('.tools-section-tab');
+    const sectionPanels = document.querySelectorAll('.tools-section-panel');
+    sectionTabs.forEach(function (tab) {
+        tab.addEventListener('click', function () {
+            const section = tab.dataset.section;
+            if (!section) return;
+            sectionTabs.forEach(function (t) { t.classList.toggle('is-active', t === tab); });
+            sectionPanels.forEach(function (p) { p.hidden = p.id !== ('panel-' + section); });
+        });
+    });
+})();
+
 (function () {
     /* -- Export: select-all ↔ individual checkbox sync -- */
     const selectAll = document.getElementById('export-select-all');
@@ -867,4 +1235,8 @@
 })();
 </script>
 
+{% endblock %}
+
+{% block scripts %}
+<script type="module" src="{% static 'dashboard/js/photo-location-scan.js' %}"></script>
 {% endblock %}

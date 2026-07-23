@@ -1,0 +1,34 @@
+{% comment %}
+Pin List items panel - sortable rows, swapped in after add/remove/reorder.
+Context: pin_list, items (PinListItem queryset/list, already ordered),
+         items_map_data (list of dicts - see pin_lists.py's _pin_map_marker_data).
+{% endcomment %}
+<div class="pin-list-items" id="pin-list-items" data-save-url="{% url 'lists.items.reorder' pin_list.slug %}">
+    {{ items_map_data|json_script:"pin-list-items-map-data" }}
+    {% if items %}
+    {% for item in items %}
+    <div class="pin-list-item" data-id="{{ item.id }}">
+        <span class="pin-list-item-drag-handle" title="Drag to reorder">
+            <i class="material-symbols-outlined">drag_indicator</i>
+        </span>
+        <a class="pin-list-item-link" href="{% url 'pin.details' item.pin.slug %}">
+            <span class="pin-list-item-swatch" style="background:{{ item.pin.effective_color|default:'#5a96ff' }}"></span>
+            <span class="pin-list-item-name">{{ item.pin.effective_name }}</span>
+        </a>
+        {% if item.added_via != 'manual' %}
+        <span class="pin-list-item-provenance" title="{{ item.get_added_via_display }}">
+            <i class="material-symbols-outlined">auto_awesome</i>
+        </span>
+        {% endif %}
+        <button type="button" class="pin-list-item-remove" aria-label="Remove from list"
+                hx-post="{% url 'lists.items.remove' pin_list.slug item.id %}"
+                hx-target="#pin-list-items" hx-swap="outerHTML"
+                hx-confirm="Remove &quot;{{ item.pin.effective_name }}&quot; from this list?">
+            <i class="material-symbols-outlined">close</i>
+        </button>
+    </div>
+    {% endfor %}
+    {% else %}
+    <p class="pin-list-items-empty">No pins on this list yet. Use "Add Pins" above, or add pins from the map's pin-list panel.</p>
+    {% endif %}
+</div>

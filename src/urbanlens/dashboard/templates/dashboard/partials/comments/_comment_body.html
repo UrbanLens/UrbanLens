@@ -1,15 +1,31 @@
+{% load dashboard_tags %}
 <div class="comment-avatar {% if is_reply %}comment-avatar--sm{% endif %}">
-  {% if comment.profile.avatar %}
-  <img src="{{ comment.profile.avatar.url }}" alt="" class="comment-avatar-img">
+  {% if comment.profile.display_avatar_url %}
+  <img src="{{ comment.profile.display_avatar_url }}" alt="" class="comment-avatar-img">
   {% else %}
-  <span class="comment-avatar-initial">{{ comment.profile.username|first|upper }}</span>
+  <span class="comment-avatar-initial {{ comment.profile.avatar_color_class }}">{{ comment.profile.display_name|first|upper }}</span>
   {% endif %}
 </div>
 
 <div class="comment-body">
+  {% if parent_was_deleted %}
+  <p class="comment-parent-deleted-indicator">
+    <i class="material-symbols-outlined">forum</i> Replying to a comment that was deleted
+  </p>
+  {% endif %}
   <div class="comment-meta">
-    <a href="{% url 'profile.view_user' comment.profile.slug %}" class="comment-author comment-author--link">{{ comment.profile.username }}</a>
-    <span class="comment-date">{{ comment.created|timesince }} ago</span>
+    {% if comment.profile.is_masked %}
+    <span class="comment-author">{{ comment.profile.display_name }}</span>
+    {% else %}
+    <a href="{{ comment.profile.display_profile_url }}" class="comment-author comment-author--link">{{ comment.profile.display_name }}</a>
+    {% endif %}
+    <span class="comment-date">{{ comment.created|human_timesince }}</span>
+    {% if include_children and context_type == "pin" and comment.pin_id != pin.id %}
+    <a class="comment-child-chip" href="{% url 'pin.details' comment.pin.slug|default:comment.pin.uuid %}"
+       title="Written on the sub pin {{ comment.pin.effective_name }}">
+        <i class="material-symbols-outlined">subdirectory_arrow_right</i>{{ comment.pin.effective_name }}
+    </a>
+    {% endif %}
     {% if comment.profile == profile %}
     <button type="button" class="comment-delete-btn" title="Delete"
             {% if context_type == "pin" %}
@@ -17,7 +33,7 @@
             {% elif context_type == "wiki" %}
             hx-delete="{% url 'location.wiki.comment.delete' location.slug comment.id %}"
             {% endif %}
-            hx-target="#comment-{{ comment.id }}"
+            hx-target="#comment-panel"
             hx-swap="outerHTML"
             hx-confirm="Delete this comment?"
             hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
@@ -31,10 +47,18 @@
   {% if comment.map_data %}
   {% include "dashboard/partials/map/_map_view_preview.html" with map_id=comment.id %}
   {% include "dashboard/partials/map/_map_view_dialog.html" with map_id=comment.id map_data=comment.map_data %}
+  {% elif comment.map_removed %}
+  <p class="comment-map-removed-indicator">
+    <i class="material-symbols-outlined">map_off</i> The map attached to this comment was deleted
+  </p>
   {% endif %}
 
   {% if comment.image %}
-  {% if comment.profile.pk in blurred_profiles %}
+  {% if comment.pending_scan %}
+  <p class="comment-image-scanning" title="Only visible to you until this clears - other viewers will see it once it's confirmed clean">
+    <i class="material-symbols-outlined">shield_person</i> Scanning photo for malware&hellip;
+  </p>
+  {% elif comment.profile.pk in blurred_profiles %}
   <div class="comment-image-blurred" title="Photo hidden by your privacy settings">
     <img src="{{ comment.image.url }}" alt="Attached" class="comment-image comment-image--blurred">
     <span class="comment-image-blur-label">
@@ -56,7 +80,7 @@
             {% if context_type == "pin" or context_type == "wiki" %}
             hx-post="{% url 'comment.react' comment.id %}"
             {% else %}
-            hx-post="{% url 'trips.comment.react' trip_uuid comment.id %}"
+            hx-post="{% url 'trips.comment.react' trip.slug comment.id %}"
             {% endif %}
             hx-target="#comment-reactions-{{ comment.id }}"
             hx-swap="outerHTML"
@@ -77,7 +101,7 @@
                 {% if context_type == "pin" or context_type == "wiki" %}
                 hx-post="{% url 'comment.react' comment.id %}"
                 {% else %}
-                hx-post="{% url 'trips.comment.react' trip_uuid comment.id %}"
+                hx-post="{% url 'trips.comment.react' trip.slug comment.id %}"
                 {% endif %}
                 hx-target="#comment-reactions-{{ comment.id }}"
                 hx-swap="outerHTML"
@@ -101,7 +125,7 @@
 
   {# Reply form #}
   <div id="reply-form-{{ comment.id }}" class="comment-reply-form" hidden>
-    {% include "dashboard/partials/comments/_comment_compose.html" with context_type=context_type pin=pin location=location trip=trip trip_uuid=trip_uuid profile=profile parent_id=comment.id is_reply=True %}
+    {% include "dashboard/partials/comments/_comment_compose.html" with context_type=context_type pin=pin location=location trip=trip profile=profile parent_id=comment.id is_reply=True %}
   </div>
 
   {# Existing replies #}
@@ -110,7 +134,7 @@
     {% for reply_item in replies %}
     {% with r=reply_item.comment %}
     <li class="comment-item comment-item--reply" id="comment-{{ r.id }}">
-      {% include "dashboard/partials/comments/_comment_body.html" with comment=r rendered_text=reply_item.rendered_text reactions=reply_item.reactions replies=None context_type=context_type pin=pin location=location trip=trip trip_uuid=trip_uuid profile=profile allowed_emojis=allowed_emojis blurred_profiles=blurred_profiles is_reply=True %}
+      {% include "dashboard/partials/comments/_comment_body.html" with comment=r rendered_text=reply_item.rendered_text reactions=reply_item.reactions replies=None context_type=context_type pin=pin location=location trip=trip profile=profile allowed_emojis=allowed_emojis blurred_profiles=blurred_profiles is_reply=True %}
     </li>
     {% endwith %}
     {% endfor %}

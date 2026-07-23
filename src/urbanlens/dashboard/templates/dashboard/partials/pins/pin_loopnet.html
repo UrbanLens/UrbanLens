@@ -24,39 +24,48 @@
                 <div class="loopnet-listing-body">
                     {% if listing.title %}
                     <div class="loopnet-listing-title">
-                        {% if listing.url %}
-                        <a href="{{ listing.url }}" target="_blank" rel="noopener noreferrer">
+                        {% if listing.loopnet_url %}
+                        <a href="{{ listing.loopnet_url }}" target="_blank" rel="noopener noreferrer">
                             {{ listing.title }}
                             <i class="material-icons loopnet-ext-icon">open_in_new</i>
                         </a>
+                        {% include "dashboard/partials/pins/_ai_extract_button.html" with url=listing.loopnet_url %}
                         {% else %}
                         {{ listing.title }}
                         {% endif %}
                     </div>
                     {% endif %}
 
-                    {% if listing.price %}
-                    <div class="loopnet-listing-price">
-                        <i class="material-symbols-outlined">attach_money</i>
-                        {{ listing.price }}
+                    {% if listing.market_status and listing.market_status != "unknown" %}
+                    <div class="loopnet-listing-status loopnet-listing-status--{{ listing.market_status }}">
+                        {{ listing.market_status|yesno:"On market,Off market" }}
                     </div>
                     {% endif %}
 
-                    {% if listing.snippet %}
-                    <p class="loopnet-listing-snippet">{{ listing.snippet }}</p>
+                    {% if listing.price_text %}
+                    <div class="loopnet-listing-price">
+                        <i class="material-symbols-outlined">attach_money</i>
+                        {{ listing.price_text }}
+                        {% if listing.listing_type and listing.listing_type != "unknown" %}<span class="loopnet-listing-type">({{ listing.listing_type }})</span>{% endif %}
+                    </div>
                     {% endif %}
 
-                    {% if not listing.title and listing.url %}
-                    <a href="{{ listing.url }}" target="_blank" rel="noopener noreferrer"
+                    {% if listing.building_sqft %}
+                    <div class="loopnet-listing-sqft">{{ listing.building_sqft|floatformat:0 }} sqft</div>
+                    {% endif %}
+
+                    {% if not listing.title and listing.loopnet_url %}
+                    <a href="{{ listing.loopnet_url }}" target="_blank" rel="noopener noreferrer"
                     class="loopnet-listing-url">
                         View listing
                         <i class="material-symbols-outlined">open_in_new</i>
                     </a>
+                    {% include "dashboard/partials/pins/_ai_extract_button.html" with url=listing.loopnet_url %}
                     {% endif %}
 
-                    {% if listing.property_details %}
+                    {% if listing.attributes %}
                     <dl class="loopnet-property-details">
-                        {% for key, value in listing.property_details.items %}
+                        {% for key, value in listing.attributes.items %}
                         <div class="loopnet-property-detail">
                             <dt>{{ key }}</dt>
                             <dd>{{ value }}</dd>
@@ -64,18 +73,18 @@
                         {% endfor %}
                     </dl>
                     {% endif %}
+
+                    {% if listing.duplicate_links %}
+                    <div class="loopnet-duplicate-links">
+                        {% for link in listing.duplicate_links %}
+                        <a href="{{ link.url }}" target="_blank" rel="noopener noreferrer"
+                           class="loopnet-duplicate-link">{{ link.label }}</a>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
                 </div>
             </li>
             {% endfor %}
         </ul>
-
-        {% if result.duplicate_links %}
-        <div class="loopnet-duplicate-links">
-            {% for link in result.duplicate_links %}
-            <a href="{{ link.url }}" target="_blank" rel="noopener noreferrer"
-               class="loopnet-duplicate-link">{{ link.label }}</a>
-            {% endfor %}
-        </div>
-        {% endif %}
     </div>
 </div>

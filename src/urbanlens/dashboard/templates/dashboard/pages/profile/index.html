@@ -1,211 +1,80 @@
 {% extends 'dashboard/themes/base.html' %}
 
+{% block hero %}
+{% include "dashboard/partials/ui/_page_hero.html" with id="profile-hero" modifier="profile" body_template="dashboard/partials/profile/_profile_hero_body.html" %}
+{% endblock %}
+
+{% block subnav %}
+{% if profile.user == request.user %}
+<div class="ul-page-subnav">
+    <div class="ul-page-subnav__inner">
+        {% include "dashboard/partials/profile/_profile_tabs.html" with active="profile" %}
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
 {% block content %}
 <div class="profile-page page-content">
 
-    {# -- Hero card ----------------------------------------------------------- #}
-    <div class="profile-hero ul-section">
-        <div class="profile-avatar-col">
-            <div class="profile-avatar-wrap">
-                {% if profile.avatar %}
-                    <img class="profile-avatar-img" src="{{ profile.avatar.url }}" alt="Avatar">
-                {% else %}
-                    <div class="profile-avatar-placeholder">
-                        {% if profile.first_name %}{{ profile.first_name|first|upper }}{% elif profile.username %}{{ profile.username|first|upper }}{% else %}?{% endif %}
-                    </div>
-                {% endif %}
-                {% if profile.user == request.user %}
-                <form method="post" action="{% url 'profile.view' %}" enctype="multipart/form-data" class="avatar-upload-form">
-                    {% csrf_token %}
-                    <label class="avatar-upload-btn" title="Change photo">
-                        <i class="material-symbols-outlined">photo_camera</i>
-                        <input type="file" name="avatar" onchange="this.form.submit()" style="display:none;">
-                    </label>
-                </form>
-                {% endif %}
-            </div>
-        </div>
-
-        <div class="profile-info-col">
-            <div class="profile-name-row">
-                <div>
-                    <h1 class="profile-full-name">
-                        {% if profile.full_name %}{{ profile.full_name }}{% else %}{{ profile.username }}{% endif %}
-                    </h1>
-                    <p class="profile-username">@{{ profile.username }}</p>
-                </div>
-
-                {# -- Friendship actions (only when viewing another user) -- #}
-                {% if user.is_authenticated and profile.user != request.user %}
-                <div class="profile-friendship-actions">
-                    {% if friendship_status == 'accepted' %}
-                        <div class="friendship-chip friendship-chip--friend">
-                            <i class="material-symbols-outlined">people</i>
-                            Friends
-                            {% if friends_since %}
-                            <span class="friendship-since">since {{ friends_since|date:"M Y" }}</span>
-                            {% endif %}
-                        </div>
-                        <div class="friendship-btn-group">
-                            <form method="post" action="{% url 'friend.remove' profile.id %}">
-                                {% csrf_token %}
-                                <button type="submit" class="btn friendship-btn btn--ghost" title="Remove friend">
-                                    <i class="material-symbols-outlined">person_remove</i> Remove
-                                </button>
-                            </form>
-                            <form method="post" action="{% url 'friend.mute' profile.id %}">
-                                {% csrf_token %}
-                                <button type="submit" class="btn friendship-btn btn--ghost" title="Mute this user">
-                                    <i class="material-symbols-outlined">volume_off</i> Mute
-                                </button>
-                            </form>
-                            <form method="post" action="{% url 'friend.block' profile.id %}">
-                                {% csrf_token %}
-                                <button type="submit" class="btn friendship-btn btn--danger" title="Block this user"
-                                        onclick="return confirm('Block {{ profile.username }}? They will not be able to see your profile.')">
-                                    <i class="material-symbols-outlined">block</i> Block
-                                </button>
-                            </form>
-                        </div>
-                    {% elif friendship_status == 'requested' and friendship and friendship.from_profile.user == request.user %}
-                        <div class="friendship-chip friendship-chip--pending">
-                            <i class="material-symbols-outlined">hourglass_top</i> Request sent
-                        </div>
-                        <form method="post" action="{% url 'friend.remove' profile.id %}">
-                            {% csrf_token %}
-                            <button type="submit" class="btn friendship-btn btn--ghost">
-                                <i class="material-symbols-outlined">cancel</i> Cancel request
-                            </button>
-                        </form>
-                    {% elif friendship_status == 'requested' and friendship and friendship.to_profile.user == request.user %}
-                        <div class="friendship-chip friendship-chip--pending">
-                            <i class="material-symbols-outlined">person_add</i> Wants to connect
-                        </div>
-                        <div class="friendship-btn-group">
-                            <form method="post" action="{% url 'friend.accept' profile.id %}">
-                                {% csrf_token %}
-                                <button type="submit" class="btn friendship-btn btn--primary">
-                                    <i class="material-symbols-outlined">check</i> Accept
-                                </button>
-                            </form>
-                            <form method="post" action="{% url 'friend.reject' profile.id %}">
-                                {% csrf_token %}
-                                <button type="submit" class="btn friendship-btn btn--ghost">
-                                    <i class="material-symbols-outlined">close</i> Decline
-                                </button>
-                            </form>
-                            <form method="post" action="{% url 'friend.ignore' profile.id %}">
-                                {% csrf_token %}
-                                <button type="submit" class="btn friendship-btn btn--ghost" title="Decline and they won't be able to request again">
-                                    <i class="material-symbols-outlined">block</i> Decline and Ignore
-                                </button>
-                            </form>
-                        </div>
-                    {% elif friendship_status == 'muted' %}
-                        <div class="friendship-chip friendship-chip--muted">
-                            <i class="material-symbols-outlined">volume_off</i> Muted
-                        </div>
-                        <form method="post" action="{% url 'friend.request' profile.id %}">
-                            {% csrf_token %}
-                            <button type="submit" class="btn friendship-btn btn--ghost">
-                                <i class="material-symbols-outlined">volume_up</i> Unmute
-                            </button>
-                        </form>
-                    {% elif friendship_status == 'blocked' %}
-                        <div class="friendship-chip friendship-chip--blocked">
-                            <i class="material-symbols-outlined">block</i> Blocked
-                        </div>
-                        <form method="post" action="{% url 'friend.remove' profile.id %}">
-                            {% csrf_token %}
-                            <button type="submit" class="btn friendship-btn btn--ghost">
-                                <i class="material-symbols-outlined">lock_open</i> Unblock
-                            </button>
-                        </form>
-                    {% else %}
-                        <form method="post" action="{% url 'friend.request' profile.id %}">
-                            {% csrf_token %}
-                            <button type="submit" class="btn friendship-btn btn--primary">
-                                <i class="material-symbols-outlined">person_add</i> Add Friend
-                            </button>
-                        </form>
-                        <form method="post" action="{% url 'friend.block' profile.id %}">
-                            {% csrf_token %}
-                            <button type="submit" class="btn friendship-btn btn--ghost" title="Block this user">
-                                <i class="material-symbols-outlined">block</i> Block
-                            </button>
-                        </form>
-                    {% endif %}
-                </div>
-                {% endif %}
-
-                {% if profile.user == request.user %}
-                <div class="profile-owner-actions">
-                    {% if preview_modes %}
-                    <details class="profile-viewas">
-                        <summary class="btn btn--secondary" title="See your profile exactly as another user sees it">
-                            <i class="material-symbols-outlined">visibility</i> View as
-                        </summary>
-                        <div class="profile-viewas-menu">
-                            {% for mode, label in preview_modes %}
-                            <form method="post" action="{% url 'profile.preview' mode %}">
-                                {% csrf_token %}
-                                <button type="submit" class="profile-viewas-item">{{ label }}</button>
-                            </form>
-                            {% endfor %}
-                        </div>
-                    </details>
-                    {% endif %}
-                    <a href="{% url 'profile.edit' %}" class="edit-profile-btn btn btn--primary">
-                        <i class="material-symbols-outlined">edit</i> Edit Profile
-                    </a>
-                </div>
-                {% endif %}
-            </div>
-
-            {% if profile.bio %}
-            <p class="profile-bio">{{ profile.bio }}</p>
-            {% else %}
-            <p class="profile-bio empty" />
+    {# -- About (bio) - the hero used to show a clamped duplicate above this, removed #}
+    {% if profile.bio or profile.user == request.user %}
+    <div class="profile-section ul-section">
+        <h3 class="profile-section-title{% if profile.user == request.user %} ul-privacy-hint-row{% endif %}">
+            About
+            {% if profile.user == request.user %}
+            {% include "dashboard/partials/ui/_privacy_hint.html" with label="Name, avatar & bio" value=profile.get_profile_visibility_display field="profile_visibility" raw_value=profile.profile_visibility owner=profile %}
             {% endif %}
+        </h3>
+        {% if profile.user == request.user %}
+        <p class="profile-bio-full profile-bio-full--editable" tabindex="0" role="button"
+           data-raw-bio="{{ profile.bio|default:'' }}" title="Click to edit your bio">{{ profile.bio|default:"Add a bio..." }}</p>
+        {% else %}
+        <p class="profile-bio-full">{{ profile.bio }}</p>
+        {% endif %}
+    </div>
+    {% endif %}
 
-            <div class="profile-meta-row">
-                {% if profile.area %}
-                <span class="profile-meta-item">
-                    <i class="material-symbols-outlined">place</i>{{ profile.area }}
-                </span>
-                {% endif %}
-                {% if profile.started_exploring %}
-                <span class="profile-meta-item">
-                    <i class="material-symbols-outlined">explore</i>Exploring since {{ profile.started_exploring|date:"Y" }}
-                </span>
-                {% endif %}
-                {% if profile.email and can_view_contact %}
-                <span class="profile-meta-item">
-                    <i class="material-symbols-outlined">email</i>{{ profile.email }}
-                </span>
-                {% endif %}
-                {% if profile.user == request.user %}
-                {# Own profile - show exploring year #}
-                {% if profile.started_exploring %}
-                <div class="profile-stat ul-section">
-                    <span class="stat-value">{{ profile.started_exploring|date:"Y" }}</span>
-                    <span class="stat-label">Exploring Since</span>
-                </div>
-                {% endif %}
-                {% endif %}
-            </div>
+    {# -- Photo strip ----------------------------------------------------------- #}
+    {# Owner: photos attached to a wiki or a DM - i.e. not fully private (see  #}
+    {# services.profile_photos.strip_photos_for_owner). Other viewers: only    #}
+    {# wiki-attached photos for a location they've independently pinned       #}
+    {# themselves (strip_photos_visible_to) - never anything the viewer       #}
+    {# doesn't already have some other existing way to see.                   #}
+    {% if profile_photos %}
+    <div class="profile-section ul-section">
+        <h3 class="profile-section-title">Photos</h3>
+        <div class="profile-photo-strip">
+            {% for photo in profile_photos %}
+            <button type="button" class="profile-photo-strip-item" id="profile-photo-{{ photo.pk }}"
+                    data-photo-url="{{ photo.image.url }}"
+                    data-photo-caption="{{ photo.caption|default:'' }}"
+                    data-photo-taken-at="{{ photo.taken_at|date:'c'|default:'' }}"
+                    data-photo-id="{{ photo.pk }}"
+                    onclick="window.profilePhotoStripOpen(this)">
+                <img src="{{ photo.image.url }}" alt="{{ photo.caption|default:'' }}" loading="lazy">
+            </button>
+            {% endfor %}
         </div>
     </div>
+    {% endif %}
 
     {# -- Stats row ----------------------------------------------------------- #}
     {% if profile.user != request.user %}
     <div class="profile-stats-row">
         {# Viewing another user - show only mutual/shared stats #}
         {% if common_pin_count %}
+        {% if can_view_common_pins %}
+        <a href="{% url 'profile.common_pins' profile.slug %}" class="profile-stat profile-stat--highlight profile-stat--link ul-section" title="See which locations you've both pinned">
+            <span class="stat-value">{{ common_pin_count }}</span>
+            <span class="stat-label">Places in Common</span>
+        </a>
+        {% else %}
         <div class="profile-stat profile-stat--highlight ul-section" title="Locations you've both pinned">
             <span class="stat-value">{{ common_pin_count }}</span>
             <span class="stat-label">Places in Common</span>
         </div>
+        {% endif %}
         {% endif %}
         {% if trips_in_common %}
         <div class="profile-stat profile-stat--highlight ul-section" title="Trips you're both on">
@@ -229,9 +98,17 @@
     {% endif %}
 
     {# -- Social links -------------------------------------------------------- #}
+    {# Same chip display for owner and visitor - adding/removing links is the #}
+    {# Edit Profile page's job (profile_social_links.html), not this page's;  #}
+    {# an empty list means nothing to show, owner or not. #}
     {% if social_links %}
     <div class="profile-section ul-section">
-        <h3 class="profile-section-title">Social</h3>
+        <h3 class="profile-section-title{% if profile.user == request.user %} ul-privacy-hint-row{% endif %}">
+            Social
+            {% if profile.user == request.user %}
+            {% include "dashboard/partials/ui/_privacy_hint.html" with value=profile.get_profile_visibility_display field="profile_visibility" raw_value=profile.profile_visibility owner=profile %}
+            {% endif %}
+        </h3>
         <div class="social-links">
             {% for link in social_links %}
             {% if link.platform == "website" %}
@@ -256,12 +133,65 @@
     {% endif %}
 
     {# -- Contact Info -------------------------------------------------------- #}
+    {# Only rendered - as a whole section, and per-field within it - when a  #}
+    {# field actually has a value, owner or not; adding a first value for an #}
+    {# empty field is the Edit Profile page's job. Existing values stay      #}
+    {# click-to-edit in place for the owner. #}
     {% if contact_info %}
     {% with ci=contact_info %}
     {% if ci.phone_number or ci.signal_username or ci.discord_username or ci.whatsapp_number or ci.telegram_username or ci.matrix_handle %}
     <div class="profile-section ul-section">
-        <h3 class="profile-section-title">Contact</h3>
+        <h3 class="profile-section-title{% if profile.user == request.user %} ul-privacy-hint-row{% endif %}">
+            Contact
+            {% if profile.user == request.user %}
+            {% include "dashboard/partials/ui/_privacy_hint.html" with value=profile.get_contact_visibility_display field="contact_visibility" raw_value=profile.contact_visibility owner=profile %}
+            {% endif %}
+        </h3>
         <div class="contact-info-list">
+            {% if profile.user == request.user %}
+            {% if ci.phone_number %}
+            <span class="contact-info-item profile-phone-editable" tabindex="0" role="button"
+                  data-raw-phone="{{ ci.phone_number }}" title="Click to edit">
+                <i class="material-symbols-outlined">phone</i>
+                <span class="profile-meta-text">{{ ci.phone_number }}</span>
+            </span>
+            {% endif %}
+            {% if ci.whatsapp_number %}
+            <span class="contact-info-item profile-whatsapp-editable" tabindex="0" role="button"
+                  data-raw-whatsapp="{{ ci.whatsapp_number }}" title="Click to edit">
+                <i class="fa-brands fa-whatsapp"></i>
+                <span class="profile-meta-text">{{ ci.whatsapp_number }}</span>
+            </span>
+            {% endif %}
+            {% if ci.signal_username %}
+            <span class="contact-info-item profile-signal-editable" tabindex="0" role="button"
+                  data-raw-signal="{{ ci.signal_username }}" title="Click to edit">
+                <i class="fa-brands fa-signal-messenger" title="Signal"></i>
+                <span class="profile-meta-text">{{ ci.signal_username }}</span>
+            </span>
+            {% endif %}
+            {% if ci.telegram_username %}
+            <span class="contact-info-item profile-telegram-editable" tabindex="0" role="button"
+                  data-raw-telegram="{{ ci.telegram_username }}" title="Click to edit">
+                <i class="fa-brands fa-telegram"></i>
+                <span class="profile-meta-text">{{ ci.telegram_username }}</span>
+            </span>
+            {% endif %}
+            {% if ci.discord_username %}
+            <span class="contact-info-item profile-discord-editable" tabindex="0" role="button"
+                  data-raw-discord="{{ ci.discord_username }}" title="Click to edit">
+                <i class="fa-brands fa-discord"></i>
+                <span class="profile-meta-text">{{ ci.discord_username }}</span>
+            </span>
+            {% endif %}
+            {% if ci.matrix_handle %}
+            <span class="contact-info-item profile-matrix-editable" tabindex="0" role="button"
+                  data-raw-matrix="{{ ci.matrix_handle }}" title="Click to edit">
+                <i class="material-icons" title="Matrix">chat</i>
+                <span class="profile-meta-text">{{ ci.matrix_handle }}</span>
+            </span>
+            {% endif %}
+            {% else %}
             {% if ci.phone_number %}
             <a href="tel:{{ ci.phone_number }}" class="contact-info-item">
                 <i class="material-symbols-outlined">phone</i>
@@ -298,16 +228,50 @@
                 <span>{{ ci.matrix_handle }}</span>
             </span>
             {% endif %}
+            {% endif %}
         </div>
     </div>
     {% endif %}
     {% endwith %}
     {% endif %}
 
+    {# -- Additional account details (own profile only) - birth date, secondary #}
+    {# emails, and other stored data that has nowhere else to be shown. Hidden #}
+    {# entirely if there's neither a birthday nor a secondary email to show;   #}
+    {# an empty birthday is added via the Edit Profile page, not inline here.  #}
+    {% if profile.user == request.user and profile.birth_date or profile.user == request.user and profile.secondary_emails.all %}
+    <div class="profile-section ul-section">
+        <h3 class="profile-section-title">Additional Details</h3>
+        <div class="contact-info-list">
+            {% if profile.birth_date %}
+            <span class="contact-info-item ul-privacy-hint-row">
+                <i class="material-symbols-outlined">cake</i>
+                <span class="profile-birth-date-editable" tabindex="0" role="button"
+                      data-raw-birth-date="{{ profile.birth_date|date:'Y-m-d' }}" title="Click to edit">
+                    <span class="profile-meta-text">Birthday: {{ profile.birth_date|date:"F j, Y" }}</span>
+                </span>
+                {% include "dashboard/partials/ui/_privacy_hint.html" with text="Only visible to you" %}
+            </span>
+            {% endif %}
+            {% for secondary_email in profile.secondary_emails.all %}
+            <span class="contact-info-item ul-privacy-hint-row">
+                <i class="material-symbols-outlined">{% if secondary_email.is_verified %}mark_email_read{% else %}mark_email_unread{% endif %}</i>
+                <span>{{ secondary_email.email }}{% if not secondary_email.is_verified %} (unverified){% endif %}</span>
+                {% include "dashboard/partials/ui/_privacy_hint.html" with text="Only visible to you" %}
+            </span>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
     {# -- Private annotation panel (viewer ≠ profile owner) ------------------- #}
     {% if user.is_authenticated and profile.user != request.user %}
-    {% include "dashboard/partials/profile/profile_annotation_partial.html" with subject=profile viewer_notes=viewer_notes user_badges=user_badges assigned_badge_ids=assigned_badge_ids %}
+    {% include "dashboard/partials/profile/profile_annotation_partial.html" with subject=profile viewer_notes=viewer_notes user_labels=user_labels assigned_label_ids=assigned_label_ids %}
     {% endif %}
+
+    {# The activity dashboard moved to the logged-in homepage - see #}
+    {# pages/home/overview.html and partials/home/_widget_*.html. #}
+
 
     {# -- Friends ------------------------------------------------------------- #}
     <div id="friend_list"
@@ -323,6 +287,14 @@
 
 
 </div>
+
+{% if profile_photos %}
+{% if profile.user == request.user %}
+{% include "dashboard/partials/_photo_lightbox.html" with lightbox_id="profile-photo-lightbox" show_attachment_points=True %}
+{% else %}
+{% include "dashboard/partials/_photo_lightbox.html" with lightbox_id="profile-photo-lightbox" %}
+{% endif %}
+{% endif %}
 
 {# -- External-link warning dialog -------------------------------------------- #}
 <div id="ext-warn-overlay" class="dialog-overlay" style="display:none;" aria-hidden="true">
@@ -345,6 +317,7 @@
         </div>
     </div>
 </div>
+
 {% endblock %}
 
 {% block scripts %}
@@ -394,6 +367,7 @@
             }
         });
     }
+
 }());
 
 function panToggleEdit(noteId) {
@@ -403,7 +377,458 @@ function panToggleEdit(noteId) {
     var isEditing = !edit.hidden;
     body.hidden = !isEditing;
     edit.hidden = isEditing;
-    if (!isEditing) edit.querySelector('textarea').focus();
+    if (!isEditing) {
+        var textarea = edit.querySelector('textarea');
+        textarea.focus();
+        // scrollHeight reads 0 while the edit box was hidden, so the CSS
+        // field-sizing/JS-fallback resize on load couldn't size it correctly.
+        textarea.style.height = 'auto';
+        textarea.style.height = textarea.scrollHeight + 'px';
+    }
 }
+
+(function () {
+    // -- Click-to-edit-in-place bio (own profile only) - reuses the same
+    // autosave endpoint the full Edit Profile page's fields already use.
+    var bioEl = document.querySelector('.profile-bio-full--editable');
+    if (!bioEl) return;
+
+    var csrftoken = '{{ csrf_token }}';
+    var updateUrl = '{% url "profile.field.update" %}';
+    var placeholder = 'Add a bio...';
+
+    function startEdit() {
+        if (bioEl.querySelector('textarea')) return;
+        var rawBio = bioEl.dataset.rawBio || '';
+        var textarea = document.createElement('textarea');
+        textarea.className = 'profile-bio-input';
+        textarea.value = rawBio;
+        textarea.placeholder = placeholder;
+        textarea.maxLength = 50000;
+        textarea.rows = 3;
+
+        window.urbanlensSizeEditInPlaceInput(bioEl, textarea);
+        var displayText = bioEl.textContent;
+        bioEl.textContent = '';
+        bioEl.appendChild(textarea);
+        textarea.style.height = 'auto';
+        textarea.style.height = textarea.scrollHeight + 'px';
+        textarea.focus();
+
+        var done = false;
+        function finish(save) {
+            if (done) return;
+            done = true;
+            if (save && textarea.value.trim() !== rawBio.trim()) {
+                var newBio = textarea.value.trim();
+                var body = new URLSearchParams();
+                body.set('field', 'bio');
+                body.set('value', newBio);
+                fetch(updateUrl, {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': csrftoken },
+                    body: body,
+                })
+                    .then(function (r) { if (!r.ok) throw new Error(); })
+                    .then(function () {
+                        bioEl.dataset.rawBio = newBio;
+                        bioEl.textContent = newBio || placeholder;
+                        if (typeof toastr !== 'undefined') toastr.success('Bio updated.');
+                    })
+                    .catch(function () {
+                        bioEl.textContent = displayText;
+                        if (typeof toastr !== 'undefined') toastr.error('Failed to update bio.');
+                    });
+            } else {
+                bioEl.textContent = displayText;
+            }
+        }
+
+        textarea.addEventListener('blur', function () { finish(true); });
+        textarea.addEventListener('keydown', function (e) {
+            e.stopPropagation();
+            if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+        });
+    }
+
+    bioEl.addEventListener('click', startEdit);
+    bioEl.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); startEdit(); }
+    });
+}());
+
+(function () {
+    // -- Click-to-edit-in-place hero meta fields (own profile only) - same
+    // autosave endpoint and click/blur/Escape convention as the bio above.
+    var csrftoken = '{{ csrf_token }}';
+    var updateUrl = '{% url "profile.field.update" %}';
+
+    function wireMetaField(config) {
+        var el = document.querySelector(config.selector);
+        if (!el) return;
+
+        function startEdit() {
+            if (el.querySelector(config.inputTag)) return;
+            // Re-queried each time (not cached at wiring time): a successful
+            // save below replaces this node's outerHTML wholesale, so the
+            // node from a previous edit cycle would otherwise be stale and
+            // no longer attached to the DOM.
+            var textEl = el.querySelector('.profile-meta-text');
+            var rawValue = el.dataset[config.dataKey] || '';
+            var input = document.createElement(config.inputTag);
+            input.className = config.inputClass;
+            if (config.inputType) input.type = config.inputType;
+            input.value = rawValue;
+
+            window.urbanlensSizeEditInPlaceInput(textEl, input);
+            var displayHTML = textEl.outerHTML;
+            textEl.replaceWith(input);
+            input.focus();
+
+            var done = false;
+            function finish(save) {
+                if (done) return;
+                done = true;
+                if (save && input.value.trim() !== rawValue.trim()) {
+                    var newValue = input.value.trim();
+                    var body = new URLSearchParams();
+                    body.set('field', config.field);
+                    body.set('value', newValue);
+                    fetch(updateUrl, {
+                        method: 'POST',
+                        headers: { 'X-CSRFToken': csrftoken },
+                        body: body,
+                    })
+                        .then(function (r) { if (!r.ok) throw new Error(); })
+                        .then(function () {
+                            el.dataset[config.dataKey] = newValue;
+                            input.outerHTML = config.renderText(newValue);
+                            if (typeof toastr !== 'undefined') toastr.success(config.successMessage);
+                        })
+                        .catch(function () {
+                            input.outerHTML = displayHTML;
+                            if (typeof toastr !== 'undefined') toastr.error(config.errorMessage);
+                        });
+                } else {
+                    input.outerHTML = displayHTML;
+                }
+            }
+
+            input.addEventListener('blur', function () { finish(true); });
+            input.addEventListener('keydown', function (e) {
+                e.stopPropagation();
+                if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+                else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+            });
+        }
+
+        el.addEventListener('click', startEdit);
+        el.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); startEdit(); }
+        });
+    }
+
+    wireMetaField({
+        selector: '.profile-area--editable',
+        dataKey: 'rawArea',
+        field: 'area',
+        inputTag: 'input',
+        inputType: 'text',
+        inputClass: 'profile-meta-input',
+        successMessage: 'Area updated.',
+        errorMessage: 'Failed to update area.',
+        renderText: function (value) {
+            return '<span class="profile-meta-text">' + (value ? htmlEscape(value) : 'Add your area...') + '</span>';
+        },
+    });
+
+    wireMetaField({
+        selector: '.profile-started-exploring--editable',
+        dataKey: 'rawStartedExploring',
+        field: 'started_exploring',
+        inputTag: 'input',
+        inputType: 'date',
+        inputClass: 'profile-meta-input',
+        successMessage: 'Updated.',
+        errorMessage: 'Failed to update.',
+        renderText: function (value) {
+            if (!value) return '<span class="profile-meta-text">Add when you started exploring...</span>';
+            var year = value.slice(0, 4);
+            return '<span class="profile-meta-text">Exploring since ' + htmlEscape(year) + '</span>';
+        },
+    });
+
+    function simpleTextField(selector, dataKey, field, placeholder, label) {
+        wireMetaField({
+            selector: selector,
+            dataKey: dataKey,
+            field: field,
+            inputTag: 'input',
+            inputType: 'text',
+            inputClass: 'profile-meta-input',
+            successMessage: label + ' updated.',
+            errorMessage: 'Failed to update ' + label.toLowerCase() + '.',
+            renderText: function (value) {
+                return '<span class="profile-meta-text">' + (value ? htmlEscape(value) : placeholder) + '</span>';
+            },
+        });
+    }
+
+    simpleTextField('.profile-phone-editable', 'rawPhone', 'phone_number', 'Add phone number...', 'Phone');
+    simpleTextField('.profile-whatsapp-editable', 'rawWhatsapp', 'whatsapp_number', 'Add WhatsApp...', 'WhatsApp');
+    simpleTextField('.profile-signal-editable', 'rawSignal', 'signal_username', 'Add Signal...', 'Signal');
+    simpleTextField('.profile-telegram-editable', 'rawTelegram', 'telegram_username', 'Add Telegram...', 'Telegram');
+    simpleTextField('.profile-discord-editable', 'rawDiscord', 'discord_username', 'Add Discord...', 'Discord');
+    simpleTextField('.profile-matrix-editable', 'rawMatrix', 'matrix_handle', 'Add Matrix...', 'Matrix');
+
+    wireMetaField({
+        selector: '.profile-birth-date-editable',
+        dataKey: 'rawBirthDate',
+        field: 'birth_date',
+        inputTag: 'input',
+        inputType: 'date',
+        inputClass: 'profile-meta-input',
+        successMessage: 'Birthday updated.',
+        errorMessage: 'Failed to update birthday.',
+        renderText: function (value) {
+            if (!value) return '<span class="profile-meta-text">Add your birthday...</span>';
+            var d = new Date(value + 'T00:00:00');
+            var formatted = d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+            return '<span class="profile-meta-text">Birthday: ' + htmlEscape(formatted) + '</span>';
+        },
+    });
+
+    // -- Identity fields (email / username / name) - unlike the fields above,
+    // their endpoint branches perform real validation (email format +
+    // uniqueness, username format + availability) and return the specific
+    // failure reason as JSON, sometimes with a 200 status (the dates branch)
+    // and sometimes 4xx - so these save via a shared helper that surfaces
+    // the server's own message instead of a generic failure toast.
+    function postFieldWithErrors(field, value) {
+        var body = new URLSearchParams();
+        body.set('field', field);
+        body.set('value', value);
+        return fetch(updateUrl, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrftoken },
+            body: body,
+        }).then(function (r) {
+            return r.json().catch(function () { return {}; }).then(function (data) {
+                if (!r.ok || data.error) throw new Error(data.error || 'Something went wrong.');
+                return data;
+            });
+        });
+    }
+
+    function wireIdentityField(config) {
+        var el = document.querySelector(config.selector);
+        if (!el) return;
+
+        function startEdit() {
+            if (el.querySelector('input')) return;
+            var textEl = config.textSelector ? el.querySelector(config.textSelector) : null;
+            var target = textEl || el;
+            var rawValue = el.dataset[config.dataKey] || '';
+            var input = document.createElement('input');
+            input.type = config.inputType || 'text';
+            input.className = 'profile-meta-input';
+            input.value = rawValue;
+            if (config.maxLength) input.maxLength = config.maxLength;
+
+            window.urbanlensSizeEditInPlaceInput(target, input);
+            var displayHTML = target.outerHTML;
+            target.replaceWith(input);
+            input.focus();
+            input.select();
+
+            var done = false;
+            function finish(save) {
+                if (done) return;
+                done = true;
+                var newValue = input.value.trim();
+                if (save && newValue !== rawValue.trim() && newValue) {
+                    postFieldWithErrors(config.field, newValue)
+                        .then(function () {
+                            el.dataset[config.dataKey] = newValue;
+                            input.outerHTML = config.renderText(newValue);
+                            if (typeof toastr !== 'undefined') toastr.success(config.successMessage);
+                            if (config.afterSave) config.afterSave(newValue);
+                        })
+                        .catch(function (err) {
+                            input.outerHTML = displayHTML;
+                            if (typeof toastr !== 'undefined') toastr.error(err.message || 'Something went wrong.');
+                        });
+                } else {
+                    input.outerHTML = displayHTML;
+                }
+            }
+
+            input.addEventListener('blur', function () { finish(true); });
+            input.addEventListener('keydown', function (e) {
+                e.stopPropagation();
+                if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+                else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+            });
+        }
+
+        el.addEventListener('click', startEdit);
+        el.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); startEdit(); }
+        });
+    }
+
+    wireIdentityField({
+        selector: '.profile-email-editable',
+        textSelector: '.profile-meta-text',
+        dataKey: 'rawEmail',
+        field: 'email',
+        inputType: 'email',
+        maxLength: 254,
+        successMessage: 'Email updated.',
+        renderText: function (value) {
+            return '<span class="profile-meta-text">' + htmlEscape(value) + '</span>';
+        },
+    });
+
+    wireIdentityField({
+        selector: '.profile-username-editable',
+        dataKey: 'rawUsername',
+        field: 'username',
+        maxLength: 30,
+        successMessage: 'Username updated.',
+        renderText: function (value) {
+            return '<span class="profile-username-editable" tabindex="0" role="button" data-raw-username="' + htmlEscape(value) + '" title="Click to change your username">' + htmlEscape(value) + '</span>';
+        },
+        afterSave: function (value) {
+            // The username is also the name-editable element's fallback
+            // display (when first/last are empty) - keep its copy fresh.
+            var nameEl = document.querySelector('.profile-name-editable');
+            if (nameEl) {
+                nameEl.dataset.username = value;
+                if (!(nameEl.dataset.rawFirst || nameEl.dataset.rawLast)) nameEl.textContent = value;
+            }
+            // Re-wire: renderText replaced the element wholesale, so the
+            // original listeners are gone.
+            wireIdentityField({
+                selector: '.profile-username-editable', dataKey: 'rawUsername', field: 'username', maxLength: 30,
+                successMessage: 'Username updated.',
+                renderText: this.renderText, afterSave: this.afterSave,
+            });
+        },
+    });
+
+    // Name is two backend fields (first_name/last_name) - a single click
+    // swaps in two side-by-side inputs; focus leaving BOTH saves whichever
+    // changed (two independent single-field POSTs, matching the endpoint's
+    // per-field shape); Escape anywhere cancels both.
+    (function wireNameField() {
+        var el = document.querySelector('.profile-name-editable');
+        if (!el) return;
+
+        function startEdit() {
+            if (el.querySelector('input')) return;
+            var rawFirst = el.dataset.rawFirst || '';
+            var rawLast = el.dataset.rawLast || '';
+            var displayText = el.textContent;
+
+            var wrap = document.createElement('span');
+            wrap.className = 'profile-name-edit-wrap';
+            var firstInput = document.createElement('input');
+            firstInput.type = 'text';
+            firstInput.className = 'profile-meta-input';
+            firstInput.placeholder = 'First name';
+            firstInput.value = rawFirst;
+            firstInput.maxLength = 150;
+            var lastInput = document.createElement('input');
+            lastInput.type = 'text';
+            lastInput.className = 'profile-meta-input';
+            lastInput.placeholder = 'Last name';
+            lastInput.value = rawLast;
+            lastInput.maxLength = 150;
+            wrap.appendChild(firstInput);
+            wrap.appendChild(lastInput);
+
+            window.urbanlensSizeEditInPlaceInput(el, wrap);
+            el.textContent = '';
+            el.appendChild(wrap);
+            firstInput.focus();
+            firstInput.select();
+
+            var done = false;
+            function restore() {
+                el.textContent = displayText;
+            }
+            function finish(save) {
+                if (done) return;
+                done = true;
+                var newFirst = firstInput.value.trim();
+                var newLast = lastInput.value.trim();
+                if (!save || (newFirst === rawFirst.trim() && newLast === rawLast.trim())) {
+                    restore();
+                    return;
+                }
+                var saves = [];
+                if (newFirst !== rawFirst.trim()) saves.push(postFieldWithErrors('first_name', newFirst));
+                if (newLast !== rawLast.trim()) saves.push(postFieldWithErrors('last_name', newLast));
+                Promise.all(saves)
+                    .then(function () {
+                        el.dataset.rawFirst = newFirst;
+                        el.dataset.rawLast = newLast;
+                        var full = (newFirst + ' ' + newLast).trim();
+                        el.textContent = full || el.dataset.username || '';
+                        if (typeof toastr !== 'undefined') toastr.success('Name updated.');
+                    })
+                    .catch(function (err) {
+                        restore();
+                        if (typeof toastr !== 'undefined') toastr.error(err.message || 'Failed to update name.');
+                    });
+            }
+
+            // Save only when focus leaves BOTH inputs (tabbing between them
+            // must not trigger a save mid-edit).
+            wrap.addEventListener('focusout', function (e) {
+                if (e.relatedTarget && wrap.contains(e.relatedTarget)) return;
+                finish(true);
+            });
+            wrap.addEventListener('keydown', function (e) {
+                e.stopPropagation();
+                if (e.key === 'Enter') { e.preventDefault(); document.activeElement.blur(); }
+                else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+            });
+        }
+
+        el.addEventListener('click', startEdit);
+        el.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); startEdit(); }
+        });
+    }());
+
+    function htmlEscape(s) {
+        var div = document.createElement('div');
+        div.textContent = s;
+        return div.innerHTML;
+    }
+}());
 </script>
+
+{% if profile_photos %}
+<script>
+// -- Photo strip lightbox --------------------------------------------------
+// Reads the strip's own data-* tiles rather than a server-built JSON blob -
+// same convention as pin_media_items.html's mediaOpenLightbox.
+window.profilePhotoStripOpen = function (tileBtn) {
+    var tiles = Array.prototype.slice.call(document.querySelectorAll('.profile-photo-strip-item'));
+    var list = tiles.map(function (el) {
+        return {
+            url: el.dataset.photoUrl,
+            caption: el.dataset.photoCaption || '',
+            takenAt: el.dataset.photoTakenAt || '',
+            imageId: el.dataset.photoId ? parseInt(el.dataset.photoId, 10) : null,
+        };
+    });
+    var idx = tiles.indexOf(tileBtn);
+    if (window.galleryOpenLightboxItem) window.galleryOpenLightboxItem(list, idx < 0 ? 0 : idx);
+};
+</script>
+{% endif %}
 {% endblock %}

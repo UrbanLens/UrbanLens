@@ -1,0 +1,23 @@
+{% comment %}
+Condensed trip row for the overview page's "Recently updated"/"Recently viewed" lists.
+
+Context:
+  t              - a Trip (annotated with timeline_status, effective_start_date, etc.)
+  timestamp      - the datetime to display (t.updated or t.viewer_last_viewed_at)
+  timestamp_label - "Updated" or "Viewed"
+{% endcomment %}
+{% load dashboard_tags %}
+<li class="trip-mini-row">
+    <a href="{% url 'trips.detail' t.slug %}" class="trip-mini-row-link">
+        <span class="trip-mini-row-status trip-mini-row-status--{{ t.timeline_status }}" aria-hidden="true"></span>
+        <span class="trip-mini-row-body">
+            <span class="trip-mini-row-name">{{ t.name }}</span>
+            {% if t.effective_start_date %}
+            <span class="trip-mini-row-dates">
+                {{ t.effective_start_date|date:"M j, Y" }}{% if t.effective_end_date and t.effective_end_date != t.effective_start_date %} - {{ t.effective_end_date|date:"M j, Y" }}{% endif %}
+            </span>
+            {% endif %}
+        </span>
+        <span class="trip-mini-row-timestamp">{{ timestamp_label }} {{ timestamp|human_timesince }}</span>
+    </a>
+</li>

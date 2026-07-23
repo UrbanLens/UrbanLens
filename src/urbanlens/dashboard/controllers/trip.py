@@ -5,14 +5,15 @@ from __future__ import annotations
 import datetime
 import json
 import logging
-import re
 from typing import TYPE_CHECKING, Any, TypedDict
+import uuid
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db.models import CharField, Q
-from django.db.models.functions import Coalesce
+from django.db.models import Q
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
+from django.template.loader import render_to_string
+from django.utils import timezone
 from django.utils.html import escape
 from django.views import View
 import requests
@@ -26,6 +27,7 @@ from urbanlens.dashboard.models.trips.model import (
     TripMembership,
 )
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
+from urbanlens.dashboard.services.calendar_sync import disconnect_member_calendar_sync
 from urbanlens.dashboard.services.text_limits import (
     MAX_COMMENT_TEXT_LENGTH,
     MAX_TRIP_ACTIVITY_NOTES_LENGTH,
@@ -52,7 +54,7 @@ TRIP_LIST_SORT_CHOICES = ("start_date", "updated")
 TRIP_LIST_DIRECTION_CHOICES = ("asc", "desc")
 
 
-def _trips_for_list(profile: Profile, sort: str = "updated", direction: str = "desc") -> QuerySet[Trip]:
+def _trips_for_list(profile: Profile, sort: str = "updated", direction: str = "desc") -> QuerySet[Trip] | list[Trip]:
     """Return annotated trips for the list page.
 
     Args:
@@ -61,9 +63,38 @@ def _trips_for_list(profile: Profile, sort: str = "updated", direction: str = "d
         direction: ``"asc"`` or ``"desc"``.
 
     Returns:
-        Queryset of trips the profile belongs to, with list stats prefetched.
+        Trips the profile belongs to, with list stats prefetched. Ordered per ``sort``/
+        ``direction`` - see :meth:`TripQuerySet.for_list_page` for the "soonest first"
+        grouping applied when ``sort="start_date"`` and ``direction="asc"``.
     """
     return Trip.objects.for_list_page(profile, sort=sort, direction=direction)
+
+
+def _apply_trip_list_identity_masking(viewer: Profile, trips: Iterable[Trip]) -> None:
+    """Mask each listed trip's member/creator identities the viewer may not see.
+
+    docs/PROBLEMS.md gap: ``services/identity_visibility.py`` masked the
+    single-trip render sites (member panel, activity/comment attribution) but
+    not the trips list, which is more diffuse - every card shows its own
+    member avatars and creator badge, across however many trips are listed at
+    once. Mutates each ``TripMembership.profile``/``Trip.creator`` object in
+    place (see ``identity_visibility.mask_profile_references``) so
+    ``trip_list_partial.html`` can render ``display_name``/``display_avatar_url``
+    instead of the raw username/avatar.
+
+    Args:
+        viewer: The profile viewing the list.
+        trips: Trips about to be rendered via ``trip_list_partial.html``.
+    """
+    from urbanlens.dashboard.services.identity_visibility import mask_profile_references
+
+    all_refs: list[Profile] = []
+    for trip in trips:
+        if trip.creator is not None:
+            all_refs.append(trip.creator)
+        all_refs.extend(membership.profile for membership in trip.memberships.all())
+
+    mask_profile_references(viewer, all_refs)
 
 
 def _trip_list_sort_params(request: HttpRequest) -> tuple[str, str]:
@@ -102,10 +133,27 @@ def _trips_calendar_data(trips: Iterable[Trip]) -> list[dict[str, str | None]]:
             "start": t.effective_start_date.isoformat() if t.effective_start_date else None,
             "end": t.effective_end_date.isoformat() if t.effective_end_date else None,
             "status": t.timeline_status,
-            "url": reverse("trips.detail", args=[t.uuid]),
+            "url": reverse("trips.detail", args=[t.slug]),
         }
         for t in trips
     ]
+
+
+def _trip_overview_stats(trips: Iterable[Trip]) -> dict[str, int]:
+    """Compute trip counts by timeline status for the overview page's stat tiles.
+
+    Args:
+        trips: The viewer's trips.
+
+    Returns:
+        Dict with `total` and one key per `Trip.timeline_status` value
+        (`planning`, `upcoming`, `active`, `past`).
+    """
+    stats = {"total": 0, "planning": 0, "upcoming": 0, "active": 0, "past": 0}
+    for t in trips:
+        stats["total"] += 1
+        stats[t.timeline_status] += 1
+    return stats
 
 
 def _apply_trip_visibility_filter(
@@ -194,16 +242,16 @@ class _CommentData(TypedDict):
     replies: list[_ReplyData]
 
 
-def _trip_or_403(request: HttpRequest, trip_uuid: str, profile: Profile) -> Trip | HttpResponse:
+def _trip_or_403(request: HttpRequest, trip_slug: str, profile: Profile) -> Trip | HttpResponse:
     """Return the Trip if the profile is creator or member.
 
     Renders the same styled "not found" page for both missing trips and
-    unauthorised access so users cannot enumerate private trip UUIDs.
+    unauthorised access so users cannot enumerate private trip slugs.
     """
-    trip = Trip.objects.filter(uuid=trip_uuid).first()
+    trip = Trip.objects.filter(slug=trip_slug).first()
     if trip is None:
         return render(request, "dashboard/pages/trips/not_found.html", status=404)
-    if trip.creator == profile or TripMembership.objects.filter(trip=trip, profile=profile).exists():
+    if trip.creator == profile or TripMembership.objects.for_trip_and_profile(trip, profile).exists():
         return trip
     return render(request, "dashboard/pages/trips/not_found.html", status=403)
 
@@ -280,7 +328,7 @@ def _create_visit_entries_for_completed_activity(trip: Trip, activity: TripActiv
         add_visited_status(pin)
 
     if activity.scheduled_at is not None:
-        other_yes = list(TripMembership.objects.filter(trip=trip, rsvp=TripMembership.RSVP_YES).exclude(profile=completer).select_related("profile"))
+        other_yes = list(TripMembership.objects.rsvp_yes(trip).exclude(profile=completer).select_related("profile"))
         for membership in other_yes:
             create_visit_suggestion(
                 suggested_to=membership.profile,
@@ -325,7 +373,7 @@ def _parse_scheduled_at(date_str: str | None, time_str: str | None) -> datetime.
             t = datetime.time(0, 0)
     else:
         t = datetime.time(0, 0)
-    return datetime.datetime.combine(d, t)
+    return timezone.make_aware(datetime.datetime.combine(d, t))
 
 
 def _resolve_activity_place(body: dict[str, Any], profile: Profile) -> tuple[Location | None, Any | None]:
@@ -337,9 +385,17 @@ def _resolve_activity_place(body: dict[str, Any], profile: Profile) -> tuple[Loc
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import Pin
 
-    pin_uuid = (body.get("pin_uuid") or "").strip()
-    if pin_uuid:
-        pin = Pin.objects.filter(profile=profile, uuid=pin_uuid).select_related("location").first()
+    pin_ref = (body.get("pin_uuid") or body.get("pin_slug") or "").strip()
+    if pin_ref:
+        # The shared location-search engine identifies pins by slug (falling
+        # back to the uuid when a pin has no slug), so accept either form.
+        pin_qs = Pin.objects.filter(profile=profile).select_related("location")
+        pin = pin_qs.filter(slug=pin_ref).first()
+        if pin is None:
+            try:
+                pin = pin_qs.filter(uuid=uuid.UUID(pin_ref)).first()
+            except ValueError:
+                pin = None
         if pin is not None:
             return pin.location, pin
 
@@ -377,40 +433,159 @@ def _is_organizer(profile: Profile, trip: Trip) -> bool:
     """Return True if profile is the trip creator or a designated organizer."""
     if trip.creator_id == profile.id:
         return True
-    return TripMembership.objects.filter(trip=trip, profile=profile, is_organizer=True).exists()
+    return TripMembership.objects.for_trip_and_profile(trip, profile).filter(is_organizer=True).exists()
+
+
+def _viewer_has_joined(profile: Profile, trip: Trip) -> bool:
+    """Return True if profile can contribute to the trip - the creator, or a member who has joined.
+
+    An invited member can view the trip (see `_trip_or_403`) but can't
+    contribute (add/edit activities, comment, vote, add members) until they
+    accept the invitation via `TripMembershipJoinView`.
+    """
+    if trip.creator_id == profile.id:
+        return True
+    return TripMembership.objects.for_trip_and_profile(trip, profile).filter(status=TripMembership.STATUS_JOINED).exists()
 
 
 def _can_perform(profile: Profile, trip: Trip, level: str) -> bool:
     """Return True if profile is allowed to act at the given permission level.
 
-    Organizers and the creator are always allowed. 'everyone' allows any member.
-    'organizers' requires organizer/creator status. 'none' allows only the creator.
+    Requires the profile to have joined the trip (see `_viewer_has_joined`) -
+    an invited-but-not-yet-joined member can never act, regardless of level.
+    Otherwise: organizers and the creator are always allowed, 'everyone'
+    allows any joined member, 'organizers' requires organizer/creator status,
+    and 'none' allows only the creator.
     """
     if trip.creator_id == profile.id:
         return True
+    if not _viewer_has_joined(profile, trip):
+        return False
     if level == Trip.PERM_EVERYONE:
         return True
     if level == Trip.PERM_ORGANIZERS:
-        return TripMembership.objects.filter(trip=trip, profile=profile, is_organizer=True).exists()
+        return TripMembership.objects.for_trip_and_profile(trip, profile).filter(is_organizer=True).exists()
     return False
+
+
+def _notify_added_to_trip(inviter: Profile, invitee: Profile, trip: Trip) -> None:
+    """Send an ADDED_TO_TRIP notification, respecting the invitee's delivery preference.
+
+    Args:
+        inviter: The profile who added `invitee` (trip creator or a member
+            with add-members permission).
+        invitee: The newly invited profile.
+        trip: The trip they were invited to.
+    """
+    from django.urls import reverse
+
+    from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, Importance, NotificationType, Status
+    from urbanlens.dashboard.models.notifications.model import NotificationLog
+    from urbanlens.dashboard.services.identity_visibility import resolve_visible_identity
+
+    try:
+        pref = invitee.notification_preferences.added_to_trip
+    except AttributeError:
+        pref = DeliveryPreference.SITE
+    if pref == DeliveryPreference.NONE:
+        return
+    # Resolved (and masked if needed) toward the specific recipient before
+    # formatting - the message string is stored as plain text, so it must be
+    # masked here, not at render time (see identity_visibility.py's docstring).
+    inviter_name = resolve_visible_identity(invitee, inviter)["display_name"]
+    NotificationLog.objects.create(
+        profile=invitee,
+        source_profile=inviter,
+        status=Status.UNREAD,
+        importance=Importance.MEDIUM,
+        notification_type=NotificationType.ADDED_TO_TRIP,
+        title="Trip invitation",
+        message=f'{inviter_name} invited you to join "{trip.name}".',
+        url=reverse("trips.detail", kwargs={"trip_slug": trip.slug}),
+    )
+
+
+def _suggest_connections_for_new_member(new_member: Profile, existing_members) -> None:
+    """Soft-introduce a newly added trip member to existing members they aren't friends with.
+
+    Both sides must allow friend recommendations (see
+    ``services.connections.recommendable_strangers``) - never presumes on
+    anyone's behalf, just makes an already-opted-in connection discoverable.
+
+    Args:
+        new_member: The profile that was just added to the trip.
+        existing_members: The trip's other current members (any iterable of Profile).
+    """
+    from urbanlens.dashboard.services.connections import recommendable_strangers, suggest_mutual_connection
+
+    for other in recommendable_strangers(new_member, list(existing_members)):
+        suggest_mutual_connection(new_member, other)
+
+
+def _addable_friends(trip: Trip, profile: Profile) -> list[Profile]:
+    """The creator's friends not already on this trip, for the add-member dialog's picker.
+
+    Empty for anyone but the creator - only they can add members (see
+    trip_members_panel.html's own gate on the dialog's trigger button).
+    """
+    if profile.id != trip.creator_id:
+        return []
+    from urbanlens.dashboard.services.connections import get_connections
+
+    existing_ids = set(trip.memberships.values_list("profile_id", flat=True))
+    existing_ids.add(trip.creator_id)
+    return [friend for friend in get_connections(profile) if friend.id not in existing_ids]
 
 
 def _render_members_panel(request: HttpRequest, trip: Trip, profile: Profile) -> HttpResponse:
     """Re-render the members panel partial."""
-    members = trip.memberships.select_related("profile__user").order_by("profile__user__username")
+    from urbanlens.dashboard.services.identity_visibility import resolve_visible_identities
+
+    members = list(trip.memberships.select_related("profile__user").order_by("profile__user__username"))
+    # A trip can include people who aren't friends with everyone else on it,
+    # whose privacy settings may not permit some viewers to see their name/
+    # avatar - RSVP status and trip activity involving them still show.
+    resolve_visible_identities(profile, [m.profile for m in members])
     return render(
         request,
         "dashboard/partials/trips/trip_members_panel.html",
-        {"trip": trip, "members": members, "profile": profile},
+        {"trip": trip, "members": members, "profile": profile, "addable_friends": _addable_friends(trip, profile)},
     )
 
 
-def _render_activities_panel(request: HttpRequest, trip: Trip, profile: Profile) -> HttpResponse:
-    """Re-render the activities panel with index map, vote counts, and per-activity permissions."""
+def _activities_panel_html(request: HttpRequest, trip: Trip, profile: Profile, *, oob: bool = False) -> str:
+    """Render just the activities panel markup (index map, vote counts, per-activity permissions).
+
+    Split out from ``_render_activities_panel`` so other views whose primary
+    response is a different panel (e.g. toggling a member's organizer status)
+    can still include a fresh copy as an out-of-band swap - organizer status
+    feeds directly into each activity's ``can_manage`` flag here.
+
+    Args:
+        oob: When True, marks the rendered root element ``hx-swap-oob="true"``
+            so it can be concatenated onto another view's primary response
+            instead of wrapping it in a second element carrying the same id
+            (which would leave two ``#trip-activities-panel`` nodes in the DOM).
+    """
     from urbanlens.dashboard.models.trips.model import TripActivity, TripActivityVote
+    from urbanlens.dashboard.services.identity_visibility import resolve_visible_identities
 
     activities = list(_activity_qs(trip))
     index_map = _compute_activity_index_map(activities)
+
+    # The "Added by" attribution shows even when the adder's privacy settings
+    # don't permit this viewer to see their name/avatar (distinct from the
+    # separate trip_pin_location_visibility gate above, which hides the
+    # activity's *location* - this only masks who gets credit for adding it).
+    # select_related gives each activity its own added_by instance even for
+    # the same underlying profile, so resolve once per distinct adder and
+    # re-point every activity at that same (now-mutated) instance.
+    distinct_adders = {act.added_by_id: act.added_by for act in activities if act.added_by_id}
+    if distinct_adders:
+        resolve_visible_identities(profile, list(distinct_adders.values()))
+        for act in activities:
+            if act.added_by_id:
+                act.added_by = distinct_adders[act.added_by_id]
 
     activity_ids = [a.id for a in activities]
     raw_votes = TripActivityVote.objects.filter(activity_id__in=activity_ids).values(
@@ -438,6 +613,7 @@ def _render_activities_panel(request: HttpRequest, trip: Trip, profile: Profile)
         _apply_trip_visibility_filter(sensitive, profile, viewer_hidden)
 
     viewer_is_organizer = _is_organizer(profile, trip)
+    viewer_has_joined = _viewer_has_joined(profile, trip)
     activities_with_index = [
         {
             "activity": act,
@@ -445,28 +621,129 @@ def _render_activities_panel(request: HttpRequest, trip: Trip, profile: Profile)
             "vote_up": up_counts.get(act.id, 0),
             "vote_down": down_counts.get(act.id, 0),
             "user_vote": user_votes.get(act.id),
-            "can_manage": (act.added_by_id == profile.id or viewer_is_organizer),
+            "can_manage": viewer_has_joined and (act.added_by_id == profile.id or viewer_is_organizer),
             "effective_location_hidden": act.location_hidden or (act.id in viewer_hidden),
+            "pin_slug": act.pin.slug if (act.pin_id and act.pin.profile_id == profile.id) else None,
+            "has_coords": _activity_coords(act) is not None,
         }
         for act in activities
     ]
     all_activities_completed = bool(activities) and all(act.status == TripActivity.STATUS_COMPLETED for act in activities)
-    return render(
-        request,
-        "dashboard/partials/trips/trip_activities_panel.html",
-        {
+    # Empty-tab greying - the Upcoming tab always has something to say (even
+    # "no upcoming activities"), so only these 3 status-filtered tabs need it.
+    proposed_count = sum(1 for act in activities if act.status == TripActivity.STATUS_PROPOSED)
+    confirmed_count = sum(1 for act in activities if act.status == TripActivity.STATUS_CONFIRMED)
+    completed_count = sum(1 for act in activities if act.status == TripActivity.STATUS_COMPLETED)
+    return render_to_string(
+        request=request,
+        template_name="dashboard/partials/trips/trip_activities_panel.html",
+        context={
             "trip": trip,
             "activities_with_index": activities_with_index,
             "profile": profile,
             "all_activities_completed": all_activities_completed,
+            "proposed_count": proposed_count,
+            "confirmed_count": confirmed_count,
+            "completed_count": completed_count,
+            "viewer_has_joined": viewer_has_joined,
+            "oob": oob,
         },
     )
 
 
-class TripListView(LoginRequiredMixin, View):
-    """Trips index page and trip creation.
+def _trip_hero_oob(request: HttpRequest, trip: Trip) -> str:
+    """Render the page hero as an out-of-band HTMX swap.
 
-    GET  /trips/        → list page
+    The hero lives in base.html's ``{% block hero %}`` (outside ``#trip-header``,
+    as a sibling of ``{% block subnav %}``) so it renders in the correct spot
+    above the page container, but its name/description/date-range display
+    still needs to stay in sync after an edit or an activity date change - see
+    ``TripEditView`` and ``_render_activities_panel``.
+    """
+    from django.urls import reverse
+
+    return render_to_string(
+        request=request,
+        template_name="dashboard/partials/ui/_page_hero.html",
+        context={
+            "trip": trip,
+            "id": "trip-hero",
+            "oob": True,
+            "body_template": "dashboard/partials/trips/_trip_detail_hero_body.html",
+            "back_url": reverse("trips.overview"),
+            "back_label": "Plan",
+            "modifier": "top",
+        },
+    )
+
+
+def _render_activities_panel(request: HttpRequest, trip: Trip, profile: Profile) -> HttpResponse:
+    """Re-render the activities panel as the primary HTMX response.
+
+    Bundles out-of-band refreshes so sibling elements don't go stale after an
+    activity add/edit/delete/complete:
+
+    - ``#trip-header``/``#trip-hero``: an activity add/edit/delete/complete can
+      change the trip's persisted date range (see ``_expand_trip_dates``) - keep
+      the header and hero's date display in sync instead of leaving them stale
+      until reload.
+    - the weather panel can't be refreshed the same cheap way (it's a live
+      external API call), so it's told to re-fetch itself via HX-Trigger,
+      same as its own initial ``hx-trigger="load"``.
+    """
+    activities_html = _activities_panel_html(request, trip, profile)
+    viewer_membership = None if trip.creator_id == profile.id else TripMembership.objects.for_trip_and_profile(trip, profile).first()
+    header_html = render_to_string(
+        request=request,
+        template_name="dashboard/partials/trips/trip_header_partial.html",
+        context={
+            "trip": trip,
+            "profile": profile,
+            "viewer_is_organizer": _is_organizer(profile, trip),
+            "viewer_membership": viewer_membership,
+            "viewer_has_joined": trip.creator_id == profile.id or (viewer_membership is not None and viewer_membership.status == TripMembership.STATUS_JOINED),
+        },
+    )
+    response = HttpResponse(activities_html + f'<div id="trip-header" hx-swap-oob="true">{header_html}</div>' + _trip_hero_oob(request, trip))
+    response["HX-Trigger"] = "activityChanged"
+    return response
+
+
+class TripOverviewView(LoginRequiredMixin, View):
+    """Trips section landing page: stats, a small calendar, and recent trips.
+
+    GET /trips/  → overview page
+    """
+
+    #: Max trips shown in each of the overview's "recently updated"/"recently viewed" lists.
+    RECENT_TRIPS_LIMIT = 5
+
+    def get(self, request):
+        from urbanlens.dashboard.models.calendar_sync.model import GoogleCalendarAccount
+        from urbanlens.dashboard.services.connections import get_connections
+
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        all_trips = list(Trip.objects.filter(profiles=profile).select_related("creator__user"))
+        return render(
+            request,
+            "dashboard/pages/trips/overview.html",
+            {
+                "profile": profile,
+                "page_name": "trips",
+                "stats": _trip_overview_stats(all_trips),
+                "trips_calendar_data": _trips_calendar_data(all_trips),
+                "recently_updated_trips": Trip.objects.recently_updated(profile, limit=self.RECENT_TRIPS_LIMIT),
+                "recently_viewed_trips": Trip.objects.recently_viewed(profile, limit=self.RECENT_TRIPS_LIMIT),
+                "calendar_account": GoogleCalendarAccount.objects.get_for_profile(profile),
+                "friends": get_connections(profile),
+            },
+        )
+
+
+class TripListView(LoginRequiredMixin, View):
+    """Trips list page and trip creation.
+
+    GET  /trips/list/   → list page
     POST /trips/create/ → create a new trip, return updated list partial
     """
 
@@ -477,20 +754,40 @@ class TripListView(LoginRequiredMixin, View):
         profile, _ = Profile.objects.get_or_create(user=request.user)
         sort, direction = _trip_list_sort_params(request)
         trips = list(_trips_for_list(profile, sort=sort, direction=direction))
+        _apply_trip_list_identity_masking(profile, trips)
         friends = get_connections(profile)
-        calendar_account = GoogleCalendarAccount.objects.filter(profile=profile).first()
+        calendar_account = GoogleCalendarAccount.objects.get_for_profile(profile)
         return render(
             request,
             "dashboard/pages/trips/index.html",
             {
                 "trips": trips,
-                "trips_calendar_data": _trips_calendar_data(trips),
                 "profile": profile,
                 "page_name": "trips",
                 "friends": friends,
                 "calendar_account": calendar_account,
                 "sort": sort,
                 "dir": direction,
+            },
+        )
+
+
+class TripCalendarView(LoginRequiredMixin, View):
+    """Trips calendar page: a month view of all the viewer's trips.
+
+    GET /trips/calendar/  → calendar page
+    """
+
+    def get(self, request):
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        trips = list(Trip.objects.filter(profiles=profile).select_related("creator__user"))
+        return render(
+            request,
+            "dashboard/pages/trips/calendar.html",
+            {
+                "profile": profile,
+                "page_name": "trips",
+                "trips_calendar_data": _trips_calendar_data(trips),
             },
         )
 
@@ -502,6 +799,8 @@ class TripCreateView(LoginRequiredMixin, View):
     """
 
     def post(self, request):
+        from django.urls import reverse
+
         from urbanlens.dashboard.services.connections import get_connections
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
@@ -513,6 +812,8 @@ class TripCreateView(LoginRequiredMixin, View):
             body = request.POST.dict()
             invite_ids = request.POST.getlist("invite_profile_ids")
 
+        source = body.get("source") or "list"
+
         name = (body.get("name") or "").strip()
         if not name:
             return HttpResponse("Trip name is required.", status=400)
@@ -522,6 +823,10 @@ class TripCreateView(LoginRequiredMixin, View):
         if length_error:
             return HttpResponse(length_error, status=400)
 
+        max_upcoming = SiteSettings.get_current().max_upcoming_trips_per_user
+        if max_upcoming > 0 and Trip.objects.upcoming(profile).count() >= max_upcoming:
+            return HttpResponse(f"You already have the maximum of {max_upcoming} upcoming trips.", status=400)
+
         trip = Trip.objects.create(
             name=name,
             description=description,
@@ -529,7 +834,7 @@ class TripCreateView(LoginRequiredMixin, View):
             end_date=body.get("end_date") or None,
             creator=profile,
         )
-        TripMembership.objects.get_or_create(trip=trip, profile=profile, defaults={"rsvp": "yes"})
+        TripMembership.objects.get_or_create(trip=trip, profile=profile, defaults={"rsvp": "yes", "status": TripMembership.STATUS_JOINED})
 
         # Only invite accepted friends - never trust arbitrary submitted profile IDs.
         if invite_ids:
@@ -539,16 +844,23 @@ class TripCreateView(LoginRequiredMixin, View):
                 max_members = SiteSettings.get_current().max_trip_members
                 remaining = max_members - trip.profiles.count()
                 for friend_profile in Profile.objects.filter(id__in=selected_ids)[:remaining]:
-                    TripMembership.objects.get_or_create(trip=trip, profile=friend_profile)
+                    _membership, created = TripMembership.objects.get_or_create(trip=trip, profile=friend_profile, defaults={"status": TripMembership.STATUS_INVITED})
+                    if created:
+                        _notify_added_to_trip(profile, friend_profile, trip)
+
+        if source == "overview":
+            response = HttpResponse("", status=200)
+            response["HX-Redirect"] = reverse("trips.detail", kwargs={"trip_slug": trip.slug})
+            return response
 
         sort, direction = _trip_list_sort_params(request)
         trips = list(_trips_for_list(profile, sort=sort, direction=direction))
+        _apply_trip_list_identity_masking(profile, trips)
         return render(
             request,
             "dashboard/partials/trips/trip_list_partial.html",
             {
                 "trips": trips,
-                "trips_calendar_data": _trips_calendar_data(trips),
                 "profile": profile,
                 "sort": sort,
                 "dir": direction,
@@ -559,17 +871,19 @@ class TripCreateView(LoginRequiredMixin, View):
 class TripDetailView(LoginRequiredMixin, View):
     """Trip detail page.
 
-    GET /trips/<uuid>/
+    GET /trips/<slug>/
     """
 
-    def get(self, request, trip_uuid):
+    def get(self, request, trip_slug):
         from urbanlens.dashboard.controllers.calendar_sync import calendar_context
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(request, trip_uuid, profile)
+        result = _trip_or_403(request, trip_slug, profile)
         if isinstance(result, HttpResponse):
             return result
         trip = result
+        viewer_membership = None if trip.creator_id == profile.id else TripMembership.objects.for_trip_and_profile(trip, profile).first()
+        TripMembership.objects.for_trip_and_profile(trip, profile).update(last_viewed_at=timezone.now())
         return render(
             request,
             "dashboard/pages/trips/detail.html",
@@ -578,8 +892,13 @@ class TripDetailView(LoginRequiredMixin, View):
                 "profile": profile,
                 "page_name": "trip-detail",
                 "viewer_is_organizer": _is_organizer(profile, trip),
+                "viewer_membership": viewer_membership,
+                "viewer_has_joined": _viewer_has_joined(profile, trip),
                 **calendar_context(profile, trip),
                 **profile.get_map_center_template_context(),
+                "default_map_view": profile.default_map_view,
+                "map_dark_mode": profile.map_dark_mode,
+                "show_map_footer": True,
             },
         )
 
@@ -587,56 +906,66 @@ class TripDetailView(LoginRequiredMixin, View):
 class TripEditView(LoginRequiredMixin, View):
     """Edit trip metadata.
 
-    POST /trips/<uuid>/edit/  → returns updated trip header partial
+    POST /trips/<slug>/edit/  → returns updated trip header partial
     """
 
-    def post(self, request, trip_uuid):
+    def post(self, request, trip_slug):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(request, trip_uuid, profile)
+        result = _trip_or_403(request, trip_slug, profile)
         if isinstance(result, HttpResponse):
             return result
         trip = result
+
+        if not _viewer_has_joined(profile, trip):
+            return HttpResponse("Join this trip to edit its details.", status=403)
 
         try:
             body = json.loads(request.body) if request.body else {}
         except (json.JSONDecodeError, ValueError):
             body = request.POST.dict()
 
-        name = (body.get("name") or "").strip()
-        if name:
-            trip.name = name
-        description = body.get("description") or None
-        length_error = text_length_error(description, MAX_TRIP_DESCRIPTION_LENGTH, "Description")
-        if length_error:
-            return HttpResponse(length_error, status=400)
-        trip.description = description
-        trip.start_date = body.get("start_date") or None
-        trip.end_date = body.get("end_date") or None
+        if "name" in body:
+            name = (body.get("name") or "").strip()
+            if name:
+                trip.name = name
+        if "description" in body:
+            description = body.get("description") or None
+            length_error = text_length_error(description, MAX_TRIP_DESCRIPTION_LENGTH, "Description")
+            if length_error:
+                return HttpResponse(length_error, status=400)
+            trip.description = description
+        if "start_date" in body:
+            trip.start_date = body.get("start_date") or None
+        if "end_date" in body:
+            trip.end_date = body.get("end_date") or None
         trip.save()
 
         from urbanlens.dashboard.controllers.calendar_sync import calendar_context
 
-        return render(
-            request,
-            "dashboard/partials/trips/trip_header_partial.html",
-            {
+        header_html = render_to_string(
+            request=request,
+            template_name="dashboard/partials/trips/trip_header_partial.html",
+            context={
                 "trip": trip,
                 "profile": profile,
                 "viewer_is_organizer": _is_organizer(profile, trip),
+                "viewer_membership": None,
+                "viewer_has_joined": True,
                 **calendar_context(profile, trip),
             },
         )
+        return HttpResponse(header_html + _trip_hero_oob(request, trip))
 
 
 class TripDeleteView(LoginRequiredMixin, View):
     """Delete a trip (creator only).
 
-    DELETE /trips/<uuid>/delete/
+    DELETE /trips/<slug>/delete/
     """
 
-    def delete(self, request, trip_uuid):
+    def delete(self, request, trip_slug):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        trip = get_object_or_404(Trip, uuid=trip_uuid)
+        trip = get_object_or_404(Trip, slug=trip_slug)
         if trip.creator != profile:
             return HttpResponse("Only the trip creator can delete it.", status=403)
         stash_for_undo("trip", [trip], profile)
@@ -649,20 +978,20 @@ class TripDeleteView(LoginRequiredMixin, View):
 class TripActivitiesView(LoginRequiredMixin, View):
     """Activities panel for a trip.
 
-    GET  /trips/<uuid>/activities/  → render panel
-    POST /trips/<uuid>/activities/  → add activity, re-render panel
+    GET  /trips/<slug>/activities/  → render panel
+    POST /trips/<slug>/activities/  → add activity, re-render panel
     """
 
-    def get(self, request, trip_uuid):
+    def get(self, request, trip_slug):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(request, trip_uuid, profile)
+        result = _trip_or_403(request, trip_slug, profile)
         if isinstance(result, HttpResponse):
             return result
         return _render_activities_panel(request, result, profile)
 
-    def post(self, request, trip_uuid):
+    def post(self, request, trip_slug):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(request, trip_uuid, profile)
+        result = _trip_or_403(request, trip_slug, profile)
         if isinstance(result, HttpResponse):
             return result
         trip = result
@@ -685,7 +1014,11 @@ class TripActivitiesView(LoginRequiredMixin, View):
         location, pin = _resolve_activity_place(body, profile)
 
         child_trip_uuid = (body.get("child_trip_uuid") or "").strip()
-        child_trip = Trip.objects.filter(uuid=child_trip_uuid).first() if child_trip_uuid else None
+        # Scoped to the linking user's own trips, matching TripChildTripSearchView -
+        # without this, any authenticated user could link an arbitrary trip they
+        # have no access to and its activities (titles, coordinates, schedule)
+        # would render as "ghost markers" on this trip's map for every member.
+        child_trip = Trip.objects.filter(uuid=child_trip_uuid, profiles=profile).first() if child_trip_uuid else None
 
         status = (body.get("status") or "proposed").strip()
         if status not in {"proposed", "confirmed"}:
@@ -693,7 +1026,11 @@ class TripActivitiesView(LoginRequiredMixin, View):
 
         location_hidden = body.get("location_hidden") in {"true", "1", "on", True}
 
-        TripActivity.objects.create(
+        max_activities = SiteSettings.get_current().max_trip_activities
+        if max_activities > 0 and trip.activities.count() >= max_activities:
+            return HttpResponse(f"This trip already has the maximum of {max_activities} activities.", status=400)
+
+        activity = TripActivity.objects.create(
             trip=trip,
             location=location,
             pin=pin,
@@ -707,6 +1044,11 @@ class TripActivitiesView(LoginRequiredMixin, View):
             child_trip=child_trip,
             location_hidden=location_hidden,
         )
+        # Putting a place on the itinerary reveals it to every member - that
+        # counts in the sharer's reshare chain like any other pin share.
+        from urbanlens.dashboard.services.trip_share_tracking import record_trip_activity_shares
+
+        record_trip_activity_shares(activity)
 
         return _render_activities_panel(request, trip, profile)
 
@@ -714,12 +1056,12 @@ class TripActivitiesView(LoginRequiredMixin, View):
 class TripActivityEditView(LoginRequiredMixin, View):
     """Edit a trip activity.
 
-    POST /trips/<uuid>/activities/<int:activity_id>/edit/  → re-render panel
+    POST /trips/<slug>/activities/<int:activity_id>/edit/  → re-render panel
     """
 
-    def post(self, request, trip_uuid, activity_id):
+    def post(self, request, trip_slug, activity_id):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(request, trip_uuid, profile)
+        result = _trip_or_403(request, trip_slug, profile)
         if isinstance(result, HttpResponse):
             return result
         trip = result
@@ -749,7 +1091,8 @@ class TripActivityEditView(LoginRequiredMixin, View):
 
         child_trip_uuid = (body.get("child_trip_uuid") or "").strip()
         if child_trip_uuid:
-            activity.child_trip = Trip.objects.filter(uuid=child_trip_uuid).first()
+            # See TripActivitiesView.post: scoped to the linking user's own trips.
+            activity.child_trip = Trip.objects.filter(uuid=child_trip_uuid, profiles=profile).first()
         elif "child_trip_uuid" in body:
             activity.child_trip = None
 
@@ -768,12 +1111,12 @@ class TripActivityEditView(LoginRequiredMixin, View):
 class TripActivityDeleteView(LoginRequiredMixin, View):
     """Delete a single activity and re-render the activities panel.
 
-    DELETE /trips/<uuid>/activities/<int:activity_id>/delete/
+    DELETE /trips/<slug>/activities/<int:activity_id>/delete/
     """
 
-    def delete(self, request, trip_uuid, activity_id):
+    def delete(self, request, trip_slug, activity_id):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(request, trip_uuid, profile)
+        result = _trip_or_403(request, trip_slug, profile)
         if isinstance(result, HttpResponse):
             return result
         trip = result
@@ -789,15 +1132,18 @@ class TripActivityDeleteView(LoginRequiredMixin, View):
 class TripActivityCompleteView(LoginRequiredMixin, View):
     """Mark an activity as completed, snapping its date to today if it was in the future.
 
-    POST /trips/<uuid>/activities/<int:activity_id>/complete/
+    POST /trips/<slug>/activities/<int:activity_id>/complete/
     """
 
-    def post(self, request, trip_uuid, activity_id):
+    def post(self, request, trip_slug, activity_id):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(request, trip_uuid, profile)
+        result = _trip_or_403(request, trip_slug, profile)
         if isinstance(result, HttpResponse):
             return result
         trip = result
+
+        if not _can_perform(profile, trip, Trip.PERM_EVERYONE):
+            return HttpResponse("Join this trip to contribute.", status=403)
 
         activity = get_object_or_404(TripActivity, id=activity_id, trip=trip)
         already_completed = activity.status == TripActivity.STATUS_COMPLETED
@@ -813,12 +1159,19 @@ class TripActivityCompleteView(LoginRequiredMixin, View):
         else:
             completed_date = today
 
-        activity.scheduled_at = datetime.datetime.combine(
-            completed_date,
-            activity.scheduled_at.time() if activity.scheduled_at else datetime.time(0, 0),
+        activity.scheduled_at = timezone.make_aware(
+            datetime.datetime.combine(
+                completed_date,
+                activity.scheduled_at.time() if activity.scheduled_at else datetime.time(0, 0),
+            ),
         )
         activity.status = TripActivity.STATUS_COMPLETED
         activity.save(update_fields=["status", "scheduled_at", "updated"])
+        # Completing an activity implies it was confirmed to have happened, so
+        # it should expand the trip's date range the same way confirming it
+        # would have (see TripActivityStatusView) - even if it was only ever
+        # "proposed" beforehand.
+        _expand_trip_dates(trip, completed_date)
         if not already_completed:
             _create_visit_entries_for_completed_activity(trip, activity, profile)
 
@@ -828,16 +1181,16 @@ class TripActivityCompleteView(LoginRequiredMixin, View):
 class TripActivityVoteView(LoginRequiredMixin, View):
     """Cast, update, or clear a member's vote on a proposed activity.
 
-    POST /trips/<uuid>/activities/<int:activity_id>/vote/
+    POST /trips/<slug>/activities/<int:activity_id>/vote/
     Form body: vote=up | vote=down | vote= (empty to clear)
     """
 
-    def post(self, request, trip_uuid, activity_id):
+    def post(self, request, trip_slug, activity_id):
         """Handle a vote submission and re-render the activities panel.
 
         Args:
             request: The HTTP request.
-            trip_uuid: The trip UUID.
+            trip_slug: The trip URL slug.
             activity_id: The activity ID.
 
         Returns:
@@ -846,10 +1199,13 @@ class TripActivityVoteView(LoginRequiredMixin, View):
         from urbanlens.dashboard.models.trips.model import TripActivityVote
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(request, trip_uuid, profile)
+        result = _trip_or_403(request, trip_slug, profile)
         if isinstance(result, HttpResponse):
             return result
         trip = result
+
+        if not _can_perform(profile, trip, Trip.PERM_EVERYONE):
+            return HttpResponse("Join this trip to contribute.", status=403)
 
         activity = get_object_or_404(TripActivity, id=activity_id, trip=trip)
 
@@ -890,7 +1246,7 @@ def _render_trip_comments(request: HttpRequest, trip: Trip, profile: Profile) ->
     act_index_for_render = {idx: act_objects[act_id] for idx, act_id in act_by_index.items()}
 
     pinned = viewer_pinned_uuids(profile)
-    top_comments = (
+    top_comments = list(
         trip.comments.filter(parent__isnull=True)
         .select_related("author__user", "markup_map")
         # comment.map_data derives its snapshot from the markup map's items.
@@ -898,14 +1254,45 @@ def _render_trip_comments(request: HttpRequest, trip: Trip, profile: Profile) ->
         .order_by("created")
     )
 
+    # Comment content stays visible regardless of privacy settings (matching
+    # pin/wiki comments) - only the author's name/avatar are masked when the
+    # author's own profile_visibility doesn't permit this viewer to see them.
+    # select_related gives each comment/reply its own author instance even for
+    # the same underlying profile, so resolve once per distinct author and
+    # re-point every comment/reply at that same (now-mutated) instance.
+    from urbanlens.dashboard.services.identity_visibility import resolve_visible_identities
+
+    distinct_authors: dict[int, Profile] = {}
+    for c in top_comments:
+        if c.author is not None:
+            distinct_authors[c.author.pk] = c.author
+        for r in c.replies.all():
+            if r.author is not None:
+                distinct_authors[r.author.pk] = r.author
+    if distinct_authors:
+        resolve_visible_identities(profile, list(distinct_authors.values()))
+        for c in top_comments:
+            if c.author is not None:
+                c.author = distinct_authors[c.author.pk]
+            for r in c.replies.all():
+                if r.author is not None:
+                    r.author = distinct_authors[r.author.pk]
+
     rendered: list[_CommentData] = []
     for c in top_comments:
+        # A newly-uploaded image is scanned asynchronously - until that
+        # clears pending_scan, the comment stays visible only to its own
+        # author (see controllers.comments.start_comment_image_scan).
+        if c.pending_scan and c.author != profile:
+            continue
         html = render_comment_text(c.text, pinned, act_index_for_render)
         if html is None:
             continue
         reactions = _aggregate_reactions(c.reactions.all())
         replies_rendered: list[_ReplyData] = []
         for r in c.replies.all():
+            if r.pending_scan and r.author != profile:
+                continue
             r_html = render_comment_text(r.text, pinned, act_index_for_render)
             if r_html is None:
                 continue
@@ -935,6 +1322,7 @@ def _render_trip_comments(request: HttpRequest, trip: Trip, profile: Profile) ->
             "comment_count": comment_count,
             "profile": profile,
             "allowed_emojis": _ALLOWED_EMOJIS,
+            "viewer_has_joined": _viewer_has_joined(profile, trip),
         },
     )
 
@@ -942,22 +1330,22 @@ def _render_trip_comments(request: HttpRequest, trip: Trip, profile: Profile) ->
 class TripCommentsView(LoginRequiredMixin, View):
     """Comments panel for a trip.
 
-    GET  /trips/<uuid>/comments/  → render panel
-    POST /trips/<uuid>/comments/  → add comment, re-render panel
+    GET  /trips/<slug>/comments/  → render panel
+    POST /trips/<slug>/comments/  → add comment, re-render panel
     """
 
-    def get(self, request, trip_uuid):
+    def get(self, request, trip_slug):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(request, trip_uuid, profile)
+        result = _trip_or_403(request, trip_slug, profile)
         if isinstance(result, HttpResponse):
             return result
         return _render_trip_comments(request, result, profile)
 
-    def post(self, request, trip_uuid):
-        from urbanlens.dashboard.controllers.comments import _notify_reply
+    def post(self, request, trip_slug):
+        from urbanlens.dashboard.controllers.comments import _notify_reply, attach_existing_comment_image, comment_image_error
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(request, trip_uuid, profile)
+        result = _trip_or_403(request, trip_slug, profile)
         if isinstance(result, HttpResponse):
             return result
         trip = result
@@ -967,25 +1355,33 @@ class TripCommentsView(LoginRequiredMixin, View):
 
         text = request.POST.get("text", "").strip()
         image = request.FILES.get("image")
+        existing_image_id = request.POST.get("existing_image_id", "").strip()
         from urbanlens.dashboard.controllers.comments import _parse_map_data
         from urbanlens.dashboard.services.map_snapshot import materialize_markup_map
 
         map_data = _parse_map_data(request)
-        if not text and not image and not map_data:
+        if not text and not image and not existing_image_id and not map_data:
             return HttpResponse("Please add some text, a photo, or a map.", status=400)
         length_error = text_length_error(text, MAX_COMMENT_TEXT_LENGTH, "Comment")
         if length_error:
             return HttpResponse(length_error, status=400)
+        if image and (image_error := comment_image_error(image)):
+            return HttpResponse(image_error, status=400)
 
         parent_id = request.POST.get("parent_id")
         parent = None
         if parent_id:
             parent = get_object_or_404(TripComment, id=parent_id, trip=trip)
 
-        comment = TripComment.objects.create(trip=trip, author=profile, text=text, parent=parent, markup_map=materialize_markup_map(profile, map_data))
+        comment = TripComment.objects.create(trip=trip, author=profile, text=text, parent=parent, markup_map=materialize_markup_map(profile, map_data, context=trip))
         if image:
             comment.image = image
             comment.save(update_fields=["image"])
+            from urbanlens.dashboard.controllers.comments import start_comment_image_scan
+
+            start_comment_image_scan(comment)
+        elif existing_image_id:
+            attach_existing_comment_image(comment, existing_image_id, profile)
 
         if parent and parent.author and parent.author != profile:
             _notify_reply(profile, parent, reply=comment)
@@ -996,12 +1392,12 @@ class TripCommentsView(LoginRequiredMixin, View):
 class TripCommentDeleteView(LoginRequiredMixin, View):
     """Delete a comment (author or trip creator only).
 
-    DELETE /trips/<uuid>/comments/<int:comment_id>/delete/
+    DELETE /trips/<slug>/comments/<int:comment_id>/delete/
     """
 
-    def delete(self, request, trip_uuid, comment_id):
+    def delete(self, request, trip_slug, comment_id):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        trip = get_object_or_404(Trip, uuid=trip_uuid)
+        trip = get_object_or_404(Trip, slug=trip_slug)
         if not (trip.creator == profile or trip.profiles.filter(pk=profile.pk).exists()):
             return HttpResponse("Forbidden", status=403)
         comment = get_object_or_404(TripComment, id=comment_id, trip=trip)
@@ -1017,20 +1413,20 @@ class TripCommentDeleteView(LoginRequiredMixin, View):
 class TripMembersView(LoginRequiredMixin, View):
     """Members panel for a trip.
 
-    GET  /trips/<uuid>/members/  → render panel
-    POST /trips/<uuid>/members/  → add member by username, re-render panel
+    GET  /trips/<slug>/members/  → render panel
+    POST /trips/<slug>/members/  → add member by username, re-render panel
     """
 
-    def get(self, request, trip_uuid):
+    def get(self, request, trip_slug):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(request, trip_uuid, profile)
+        result = _trip_or_403(request, trip_slug, profile)
         if isinstance(result, HttpResponse):
             return result
         return _render_members_panel(request, result, profile)
 
-    def post(self, request, trip_uuid):
+    def post(self, request, trip_slug):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(request, trip_uuid, profile)
+        result = _trip_or_403(request, trip_slug, profile)
         if isinstance(result, HttpResponse):
             return result
         trip = result
@@ -1054,6 +1450,15 @@ class TripMembersView(LoginRequiredMixin, View):
         except User.DoesNotExist:
             return HttpResponse(f'No user found with username "{escape(username)}".', status=404)
 
+        new_profile, _ = Profile.objects.get_or_create(user=user)
+        # A block must stop this the same way it stops a direct message - it's
+        # another unsolicited-contact vector (a forced membership row plus a
+        # notification), not a passive visibility setting. Message kept
+        # direction-agnostic, matching accepts_direct_messages_from's
+        # rejection wording, so it never discloses who blocked whom.
+        if Profile.are_blocked(profile, new_profile):
+            return HttpResponse("This user isn't accepting invitations from you.", status=403)
+
         max_members = SiteSettings.get_current().max_trip_members
         current_count = trip.profiles.count()
         if current_count >= max_members:
@@ -1062,8 +1467,10 @@ class TripMembersView(LoginRequiredMixin, View):
                 status=400,
             )
 
-        new_profile, _ = Profile.objects.get_or_create(user=user)
-        TripMembership.objects.get_or_create(trip=trip, profile=new_profile)
+        _membership, created = TripMembership.objects.get_or_create(trip=trip, profile=new_profile, defaults={"status": TripMembership.STATUS_INVITED})
+        if created:
+            _notify_added_to_trip(profile, new_profile, trip)
+            _suggest_connections_for_new_member(new_profile, trip.profiles.exclude(pk=new_profile.pk))
 
         return _render_members_panel(request, trip, profile)
 
@@ -1071,13 +1478,13 @@ class TripMembersView(LoginRequiredMixin, View):
 class TripMemberRemoveView(LoginRequiredMixin, View):
     """Remove a member from a trip.
 
-    DELETE /trips/<uuid>/members/<int:profile_id>/remove/
+    DELETE /trips/<slug>/members/<int:profile_id>/remove/
     Only the trip creator may remove members (members can remove themselves).
     """
 
-    def delete(self, request, trip_uuid, profile_id):
+    def delete(self, request, trip_slug, profile_id):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        trip = get_object_or_404(Trip, uuid=trip_uuid)
+        trip = get_object_or_404(Trip, slug=trip_slug)
         if not (trip.creator == profile or trip.profiles.filter(pk=profile.pk).exists()):
             return HttpResponse("Forbidden", status=403)
         target = get_object_or_404(Profile, pk=profile_id)
@@ -1085,7 +1492,8 @@ class TripMemberRemoveView(LoginRequiredMixin, View):
             return HttpResponse("The trip creator cannot be removed.", status=400)
         if profile not in {target, trip.creator}:
             return HttpResponse("Only the trip creator can remove other members.", status=403)
-        TripMembership.objects.filter(trip=trip, profile=target).delete()
+        TripMembership.objects.for_trip_and_profile(trip, target).delete()
+        disconnect_member_calendar_sync(trip, target)
 
         return _render_members_panel(request, trip, profile)
 
@@ -1093,12 +1501,12 @@ class TripMemberRemoveView(LoginRequiredMixin, View):
 class TripMemberOrganizerView(LoginRequiredMixin, View):
     """Toggle organizer status for a trip member (creator only).
 
-    POST /trips/<uuid>/members/<int:profile_id>/organizer/
+    POST /trips/<slug>/members/<int:profile_id>/organizer/
     """
 
-    def post(self, request, trip_uuid, profile_id):
+    def post(self, request, trip_slug, profile_id):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(request, trip_uuid, profile)
+        result = _trip_or_403(request, trip_slug, profile)
         if isinstance(result, HttpResponse):
             return result
         trip = result
@@ -1114,117 +1522,34 @@ class TripMemberOrganizerView(LoginRequiredMixin, View):
         membership.is_organizer = not membership.is_organizer
         membership.save(update_fields=["is_organizer", "updated"])
 
-        return _render_members_panel(request, trip, profile)
-
-
-class TripLocationSearchView(LoginRequiredMixin, View):
-    """JSON search for locations to add as activities.
-
-    Searches existing Location records by name, then falls back to Nominatim
-    geocoding so the user can enter arbitrary addresses.
-
-    GET /trips/location-search/?q=<query>
-    """
-
-    def get(self, request):
-        q = (request.GET.get("q") or "").strip()
-        if len(q) < 2:
-            return JsonResponse({"results": []})
-
-        from urbanlens.dashboard.models.location.model import Location
-        from urbanlens.dashboard.models.pin.model import Pin
-
-        # The separator is a single merged character class rather than
-        # `\s*[, ]\s*` - adjacent `\s*` groups flanking a class that also
-        # matches whitespace let a run of spaces be split among the three
-        # groups in many equivalent ways, which is a polynomial ReDoS.
-        coordinate_match = re.match(r"^\s*(-?\d+(?:\.\d+)?)[\s,]+(-?\d+(?:\.\d+)?)\s*$", q) if len(q) <= 64 else None
-        coordinate_results: list[dict] = []
-        if coordinate_match:
-            lat = float(coordinate_match.group(1))
-            lng = float(coordinate_match.group(2))
-            if -90 <= lat <= 90 and -180 <= lng <= 180:
-                coordinate_results.append({"name": f"{lat:.6f}, {lng:.6f}", "lat": lat, "lng": lng, "type": "coordinates"})
-
-        profile, _ = Profile.objects.get_or_create(user=request.user)
-        pin_rows = list(
-            Pin.objects.filter(profile=profile).filter(Q(name__icontains=q) | Q(location__official_name__icontains=q) | Q(location__wiki__name__icontains=q) | Q(description__icontains=q)).select_related("location")[:5],
-        )
-        pin_results = [
-            {
-                "uuid": str(pin.uuid),
-                "name": pin.effective_name or "Untitled pin",
-                "locality": pin.effective_city,
-                "administrative_area_level_1": pin.effective_state,
-                "type": "pin",
-            }
-            for pin in pin_rows
-        ]
-
-        db_rows = list(
-            Location.objects.filter(Q(wiki__name__icontains=q) | Q(official_name__icontains=q))
-            .annotate(display_name=Coalesce("wiki__name", "official_name", output_field=CharField()))
-            .values(
-                "uuid",
-                "display_name",
-                "locality",
-                "administrative_area_level_1",
-            )[:5],
-        )
-        db_results = [
-            {
-                "uuid": str(row["uuid"]),
-                "name": row["display_name"] or "Unnamed location",
-                "display_name": row["display_name"] or "Unnamed location",
-                "locality": row["locality"],
-                "administrative_area_level_1": row["administrative_area_level_1"],
-                "type": "db",
-            }
-            for row in db_rows
-        ]
-
-        geocoded_results: list[dict] = []
-        profile, _ = Profile.objects.get_or_create(user=request.user)
-        if profile.external_apis_enabled:
-            try:
-                from geopy.geocoders import Nominatim
-
-                geolocator = Nominatim(user_agent="UrbanLens/1.0", timeout=3)
-                geo_hits = geolocator.geocode(q, exactly_one=False, limit=4)
-                if geo_hits:
-                    for hit in geo_hits:
-                        geocoded_results.append(
-                            {
-                                "name": hit.address,
-                                "lat": hit.latitude,
-                                "lng": hit.longitude,
-                                "type": "geocoded",
-                            },
-                        )
-            except (ImportError, OSError, ValueError) as exc:
-                logger.debug("Nominatim geocoding failed for %r: %s", q, exc)
-
-        return JsonResponse({"results": coordinate_results + pin_results + db_results + geocoded_results})
+        # Organizer status feeds directly into each activity's can_manage flag
+        # (see _activities_panel_html) - without this, the acting creator (and
+        # the newly (de)promoted organizer, on their own screen) wouldn't see
+        # activity permissions update until reloading.
+        members_response = _render_members_panel(request, trip, profile)
+        activities_html = _activities_panel_html(request, trip, profile, oob=True)
+        members_response.content += activities_html.encode()
+        return members_response
 
 
 class TripMapDataView(LoginRequiredMixin, View):
     """Return GeoJSON-style activity data for the trip map.
 
-    GET /trips/<uuid>/map-data/
+    GET /trips/<slug>/map-data/
     """
 
-    def get(self, request, trip_uuid):
+    def get(self, request, trip_slug):
         """Return activity locations with coordinates as JSON.
 
         Args:
             request: The HTTP request.
-            trip_uuid: The trip UUID.
+            trip_slug: The trip URL slug.
 
         Returns:
             JsonResponse with a list of activity points.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(request, trip_uuid, profile)
+        result = _trip_or_403(request, trip_slug, profile)
         if isinstance(result, HttpResponse):
             return result
         trip = result
@@ -1270,6 +1595,8 @@ class TripMapDataView(LoginRequiredMixin, View):
                 seen_child_acts.add(act.child_trip_id)
                 child_acts = list(_activity_qs(act.child_trip))
                 for child_act in child_acts:
+                    if child_act.location_hidden:
+                        continue
                     child_coords = _activity_coords(child_act)
                     if not child_coords:
                         continue
@@ -1294,16 +1621,20 @@ class TripMapDataView(LoginRequiredMixin, View):
 class TripActivityStatusView(LoginRequiredMixin, View):
     """Toggle or set activity status (proposed/confirmed).
 
-    POST /trips/<uuid>/activities/<int:activity_id>/status/
+    POST /trips/<slug>/activities/<int:activity_id>/status/
     Body: {status: "proposed"|"confirmed"}
     """
 
-    def post(self, request, trip_uuid, activity_id):
+    def post(self, request, trip_slug, activity_id):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(request, trip_uuid, profile)
+        result = _trip_or_403(request, trip_slug, profile)
         if isinstance(result, HttpResponse):
             return result
         trip = result
+
+        if not _can_perform(profile, trip, Trip.PERM_EVERYONE):
+            return HttpResponse("Join this trip to contribute.", status=403)
+
         activity = get_object_or_404(TripActivity, id=activity_id, trip=trip)
 
         try:
@@ -1328,16 +1659,20 @@ class TripActivityStatusView(LoginRequiredMixin, View):
 class TripActivityMoveView(LoginRequiredMixin, View):
     """Update the date of an activity (calendar drag-and-drop).
 
-    POST /trips/<uuid>/activities/<int:activity_id>/move/
+    POST /trips/<slug>/activities/<int:activity_id>/move/
     Body: {date: "YYYY-MM-DD"}
     """
 
-    def post(self, request, trip_uuid, activity_id):
+    def post(self, request, trip_slug, activity_id):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(request, trip_uuid, profile)
+        result = _trip_or_403(request, trip_slug, profile)
         if isinstance(result, HttpResponse):
             return result
         trip = result
+
+        if not _can_perform(profile, trip, Trip.PERM_EVERYONE):
+            return HttpResponse("Join this trip to contribute.", status=403)
+
         activity = get_object_or_404(TripActivity, id=activity_id, trip=trip)
 
         try:
@@ -1356,25 +1691,60 @@ class TripActivityMoveView(LoginRequiredMixin, View):
 
         if activity.scheduled_at:
             # Preserve existing time component; only update date
-            activity.scheduled_at = datetime.datetime.combine(new_date, activity.scheduled_at.time())
+            activity.scheduled_at = timezone.make_aware(datetime.datetime.combine(new_date, activity.scheduled_at.time()))
         else:
-            activity.scheduled_at = datetime.datetime.combine(new_date, datetime.time(0, 0))
+            activity.scheduled_at = timezone.make_aware(datetime.datetime.combine(new_date, datetime.time(0, 0)))
 
         activity.save(update_fields=["scheduled_at", "updated"])
 
         return _render_activities_panel(request, trip, profile)
 
 
+class TripMembershipJoinView(LoginRequiredMixin, View):
+    """Accept a trip invitation.
+
+    POST /trips/<slug>/join/
+
+    Unlocks contribution rights (add/edit activities, comment, vote, add
+    members) for an invited member - separate from RSVP, which only says
+    whether they expect to actually show up. Declining an invitation reuses
+    `TripLeaveView` instead, since a not-yet-joined member has no
+    contributions to lose by leaving.
+    """
+
+    def post(self, request, trip_slug):
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        result = _trip_or_403(request, trip_slug, profile)
+        if isinstance(result, HttpResponse):
+            return result
+        trip = result
+
+        if trip.creator_id != profile.id:
+            TripMembership.objects.for_trip_and_profile(trip, profile).update(status=TripMembership.STATUS_JOINED)
+            # Joining reveals every place already on the itinerary - each one
+            # counts in its sharer's reshare chain like any other pin share.
+            from urbanlens.dashboard.services.trip_share_tracking import record_trip_shares_for_member
+
+            record_trip_shares_for_member(trip, profile)
+
+        # Joining unlocks contribution across the whole page (activities,
+        # comments, members) - simplest to reload rather than stitch together
+        # OOB swaps for every affected panel for a rare, one-off action.
+        response = HttpResponse("", status=200)
+        response["HX-Refresh"] = "true"
+        return response
+
+
 class TripMemberRSVPView(LoginRequiredMixin, View):
     """Set RSVP status for the current user on a trip.
 
-    POST /trips/<uuid>/rsvp/
+    POST /trips/<slug>/rsvp/
     Body: {rsvp: "yes"|"no"|"maybe"|""}
     """
 
-    def post(self, request, trip_uuid):
+    def post(self, request, trip_slug):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(request, trip_uuid, profile)
+        result = _trip_or_403(request, trip_slug, profile)
         if isinstance(result, HttpResponse):
             return result
         trip = result
@@ -1398,12 +1768,16 @@ class TripMemberRSVPView(LoginRequiredMixin, View):
 class TripLeaveView(LoginRequiredMixin, View):
     """Leave a trip (non-creator members only).
 
-    DELETE /trips/<uuid>/leave/
+    DELETE /trips/<slug>/leave/
+
+    Also doubles as "decline invitation" for a member who was invited but
+    never joined (see `TripMembershipJoinView`) - either way the membership
+    row is simply removed.
     """
 
-    def delete(self, request, trip_uuid):
+    def delete(self, request, trip_slug):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(request, trip_uuid, profile)
+        result = _trip_or_403(request, trip_slug, profile)
         if isinstance(result, HttpResponse):
             return result
         trip = result
@@ -1411,7 +1785,8 @@ class TripLeaveView(LoginRequiredMixin, View):
         if trip.creator == profile:
             return HttpResponse("The trip creator cannot leave - delete the trip instead.", status=400)
 
-        TripMembership.objects.filter(trip=trip, profile=profile).delete()
+        TripMembership.objects.for_trip_and_profile(trip, profile).delete()
+        disconnect_member_calendar_sync(trip, profile)
 
         from django.urls import reverse as _reverse
 
@@ -1423,21 +1798,21 @@ class TripLeaveView(LoginRequiredMixin, View):
 class TripSettingsView(LoginRequiredMixin, View):
     """Save trip settings (creator only).
 
-    POST /trips/<uuid>/settings/
+    POST /trips/<slug>/settings/
     """
 
-    def post(self, request, trip_uuid):
+    def post(self, request, trip_slug):
         """Handle POST to update trip permission settings.
 
         Args:
             request: The HTTP request.
-            trip_uuid: The trip UUID.
+            trip_slug: The trip URL slug.
 
         Returns:
             Rendered settings partial on success, or an error HttpResponse.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(request, trip_uuid, profile)
+        result = _trip_or_403(request, trip_slug, profile)
         if isinstance(result, HttpResponse):
             return result
         trip = result
@@ -1479,25 +1854,25 @@ class TripSettingsView(LoginRequiredMixin, View):
 class TripActivityPositionView(LoginRequiredMixin, View):
     """Save a map-drag position override for a trip activity.
 
-    POST /trips/<uuid>/activities/<int:activity_id>/position/
+    POST /trips/<slug>/activities/<int:activity_id>/position/
     Body: {lat: float, lng: float}
     This updates lat_override/lng_override on the TripActivity only - the
     underlying Pin and Location coordinates are never modified.
     """
 
-    def post(self, request, trip_uuid, activity_id):
+    def post(self, request, trip_slug, activity_id):
         """Handle POST to update map position override.
 
         Args:
             request: The HTTP request.
-            trip_uuid: The trip UUID.
+            trip_slug: The trip URL slug.
             activity_id: The TripActivity primary key.
 
         Returns:
             JsonResponse confirming saved coordinates, or an error HttpResponse.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(request, trip_uuid, profile)
+        result = _trip_or_403(request, trip_slug, profile)
         if isinstance(result, HttpResponse):
             return result
         trip = result
@@ -1527,15 +1902,15 @@ class TripChildTripSearchView(LoginRequiredMixin, View):
 
     Only trips the user is a member of (excluding the current trip) are returned.
 
-    GET /trips/<uuid>/child-trip-search/?q=<query>
+    GET /trips/<slug>/child-trip-search/?q=<query>
     """
 
-    def get(self, request, trip_uuid):
+    def get(self, request, trip_slug):
         """Return JSON list of matching trips.
 
         Args:
             request: The HTTP request.
-            trip_uuid: The parent trip UUID (to exclude it from results).
+            trip_slug: The parent trip's URL slug (to exclude it from results).
 
         Returns:
             JsonResponse with a list of matching trip objects.
@@ -1545,7 +1920,7 @@ class TripChildTripSearchView(LoginRequiredMixin, View):
         if len(q) < 2:
             return JsonResponse({"results": []})
 
-        trips = Trip.objects.filter(profiles=profile, name__icontains=q).exclude(uuid=trip_uuid).order_by("name")[:8]
+        trips = Trip.objects.filter(profiles=profile, name__icontains=q).exclude(slug=trip_slug).order_by("name")[:8]
         results = [
             {
                 "uuid": str(t.uuid),
@@ -1618,15 +1993,15 @@ def _build_activity_forecasts(activities: list[TripActivity], gateway: OpenWeath
 class TripWeatherView(LoginRequiredMixin, View):
     """Render the weather forecast panel for a trip.
 
-    GET /trips/<uuid>/weather/
+    GET /trips/<slug>/weather/
     """
 
-    def get(self, request, trip_uuid):
+    def get(self, request, trip_slug):
         """Return weather HTML partial for the trip.
 
         Args:
             request: The HTTP request.
-            trip_uuid: The trip UUID.
+            trip_slug: The trip URL slug.
 
         Returns:
             Rendered weather partial or an error response.
@@ -1639,7 +2014,7 @@ class TripWeatherView(LoginRequiredMixin, View):
         from urbanlens.UrbanLens.settings.app import settings as app_settings
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(request, trip_uuid, profile)
+        result = _trip_or_403(request, trip_slug, profile)
         if isinstance(result, HttpResponse):
             return result
         trip = result
@@ -1660,6 +2035,13 @@ class TripWeatherView(LoginRequiredMixin, View):
                 try:
                     gateway = OpenWeatherMapGateway()
                     activity_forecasts = _build_activity_forecasts(activities, gateway)
+                    # Drop activities with nothing useful to show (no location data,
+                    # or too far outside the 5-day forecast window) instead of
+                    # rendering an empty "No location data"/"Outside 5-day forecast"
+                    # row for them - a day (or the whole panel) with nothing left
+                    # after this simply doesn't appear, rather than showing only
+                    # empty placeholders.
+                    activity_forecasts = [af for af in activity_forecasts if af["slot"] is not None]
 
                     day_map: dict = defaultdict(list)
                     for af in activity_forecasts:
@@ -1670,7 +2052,7 @@ class TripWeatherView(LoginRequiredMixin, View):
                     keys = dated + ([None] if None in day_map else [])
                     grouped = [(d, day_map[d]) for d in keys]
                 except (requests.RequestException, KeyError, TypeError):
-                    logger.warning("Weather fetch failed for trip %s", trip_uuid)
+                    logger.warning("Weather fetch failed for trip %s", trip_slug)
                     error = "Weather data could not be loaded."
 
         return render(

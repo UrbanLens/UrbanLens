@@ -1,29 +1,29 @@
 {% comment %}
-Shared site footer. Pages with their own embedded Leaflet map should disable
-Leaflet's on-map attribution control (attributionControl: false) and instead
-pass `map_attribution` (a plain string, e.g. "© OpenStreetMap contributors")
-into their view context - it renders here, next to the Github link, the same
-way the main map page's live tile attribution does.
+Shared site footer. Any page with its own embedded Leaflet map should disable
+Leaflet's on-map attribution control (attributionControl: false) - the
+required attribution text belongs here instead of floating over the map.
+
+Two ways to opt in:
+- Pass `map_attribution` (a plain string) for a map whose layer never
+  changes after the initial render (e.g. the safety check-in route map).
+- Pass `show_map_footer=True` (with `map_attribution` omitted/blank) for a
+  map whose attribution changes at runtime (switching base layers/overlays)
+  - JS then keeps `#page-footer-attribution-text` (a stable, page-wide id)
+  up to date via MapLayers' `onAttribution` callback, the same pattern the
+  main map page uses.
 {% endcomment %}
-<footer class="page-footer{% if map_attribution %} page-footer--map{% endif %}">
+<footer class="page-footer{% if map_attribution or show_map_footer %} page-footer--map{% endif %}">
     {% if app_version %}
     <span class="page-footer__version" aria-label="Application version">UrbanLens v{{ app_version }}</span>
     {% endif %}
-    {% if map_attribution %}
     <div class="page-footer__meta">
-        <p class="page-footer__attribution" aria-live="polite">
-            <span class="page-footer__attribution-text">{{ map_attribution }}</span>
-            <a href="{% url 'thanks' %}" class="page-footer__attribution-more">More info</a>
-        </p>
         <p class="page-footer__github">
             <i class="material-icons" aria-hidden="true">code</i>
-            <span class="page-footer__github-text">This project is open source. Check out our</span> <a href="https://github.com/UrbanLens/UrbanLens">Github page</a>
+            <span class="page-footer__github-text">This project is open source. Check out our <a href="https://github.com/UrbanLens/UrbanLens">Github page</a>.</span>
+        </p>
+        <p class="page-footer__attribution" aria-live="polite">
+            <span class="page-footer__attribution-text" id="page-footer-attribution-text">{{ map_attribution }}
+            <a href="{% url 'thanks' %}" class="page-footer__attribution-more">More info</a></span>
         </p>
     </div>
-    {% else %}
-    <p class="page-footer__github">
-        <i class="material-icons" aria-hidden="true">code</i>
-        This project is open source. Check out our <a href="https://github.com/UrbanLens/UrbanLens">Github page</a>
-    </p>
-    {% endif %}
 </footer>

@@ -203,7 +203,7 @@ div.container {
     width: 100%;
     max-width: 100%;
     min-height: calc(100vh - 4rem - 4rem);
-    /* Adjust the height of the container to be at least 100% of the viewport height minus the header and footer heights */
+    /* Adjust the height of the container to be at least 100% of the viewport height minus the header and footer heights (and page hero) */
     display: flex;
     flex-direction: column;
     position: relative;
@@ -234,7 +234,7 @@ div.section {
         width: 100%;
         height: 100%;
         max-height: 780px;
-        max-width: 780px;
+        max-width: 78rem;
     }
 }
 
@@ -267,7 +267,7 @@ div.section {
         align-items: center;
         gap: 4px;
         overflow: hidden;
-        max-width: 500px;
+        max-width: 50rem;
         transition: max-width 0.22s ease, opacity 0.2s ease, gap 0.2s ease;
         opacity: 1;
     }
@@ -317,12 +317,33 @@ div.section {
             outline: none;
         }
 
+        // Toggle-style tools (e.g. the main map's "Select pins") add this class
+        // while active - a stronger, persistent version of the hover state so
+        // the tool doesn't look identical to every other idle toolbar icon.
+        &.active {
+            opacity: 1;
+            color: $color-blue-800;
+            background-color: rgba($color-blue-500, .18);
+            border-color: rgba($color-blue-500, .55);
+        }
+
         &:active,
         &.active {
             opacity: 1;
             color: $color-blue-700;
             background-color: rgba($color-blue-500, .18);
             border-color: rgba($color-blue-500, .45);
+        }
+
+        &:disabled {
+            opacity: .35;
+            cursor: not-allowed;
+
+            &:hover, &:focus {
+                opacity: .35;
+                background-color: transparent;
+                border-color: transparent;
+            }
         }
     }
 
@@ -333,15 +354,95 @@ div.section {
     }
 }
 
+// Bottom-right saved-filters toggle toolbar. Shares .map-buttons' background/
+// border/radius/shadow/hover for visual parity with the top-right toolbar,
+// but must stay bottom-right at every breakpoint (unlike .map-buttons, which
+// flips to top-right on desktop above) - hence the position override here
+// instead of relying on the base class alone.
+.map-saved-filters-toolbar {
+    top: auto !important;
+    bottom: 28px !important;
+    right: 10px !important;
+    max-width: min(70vw, 22rem);
+    transition: right 0.22s cubic-bezier(.4, 0, .2, 1), opacity 0.2s ease;
+
+    .sf-toolbar-nav {
+        background: transparent;
+        border: none;
+        width: 1.4rem;
+        height: 2.5rem;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        color: var(--ul-grey-6);
+        flex-shrink: 0;
+        border-radius: $radius-sm;
+
+        .material-symbols-outlined {
+            font-size: 1.1rem;
+            pointer-events: none;
+        }
+
+        &:hover {
+            color: $color-blue-700;
+            background-color: rgba($color-blue-500, .09);
+        }
+    }
+
+    &.has-prev .sf-toolbar-prev,
+    &.has-next .sf-toolbar-next {
+        display: flex;
+    }
+
+    .sf-toolbar-viewport {
+        overflow: hidden;
+    }
+
+    .sf-toolbar-track {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        transition: transform .25s ease;
+    }
+
+    .sf-toolbar-btn {
+        filter: grayscale(1);
+        opacity: .5;
+
+        .sf-toolbar-emoji {
+            font-size: 1.2rem;
+            line-height: 1;
+            pointer-events: none;
+        }
+
+        .sf-toolbar-count {
+            font-size: .78rem;
+            font-weight: 700;
+            line-height: 1;
+            pointer-events: none;
+            font-variant-numeric: tabular-nums;
+        }
+
+        &:hover,
+        &:focus,
+        &.active {
+            filter: grayscale(0);
+            opacity: 1;
+        }
+    }
+}
+
 .card {
     @include surface($radius-sm);
     box-shadow: 3px 3px 10px rgba(0,0,0,.08);
 
     .card-header {
         @include panel-header-grid;
+        background: color-mix(in srgb, var(--ul-surface), #fff 20%);
         border-radius: $radius-sm $radius-sm 0 0;
 
-        > span:not(.badge):not(.visit-count) {
+        > span:not(.badge):not(.visit-count):not(.ul-explainer-anchor) {
             grid-area: header-title;
             margin: 0;
             font-size: .95rem;
@@ -445,6 +546,14 @@ div.section {
         .map-btn-icon {
             width: 2.75rem;
             height: 2.75rem;
+        }
+    }
+}
+
+[data-theme="dark"] {
+    .card {
+        .card-header {
+            background: color-mix(in srgb, var(--ul-surface), #000 20%);
         }
     }
 }

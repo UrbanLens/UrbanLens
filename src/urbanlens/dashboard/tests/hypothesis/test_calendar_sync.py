@@ -15,12 +15,15 @@ from __future__ import annotations
 import datetime
 from unittest import mock
 
+from cryptography.fernet import InvalidToken
 from django.contrib.auth.models import User
+from django.db import connection
 from django.urls import reverse
 from django.utils import timezone
 from hypothesis import given, strategies as st
+import pytest
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.calendar_sync.model import CalendarSyncDirection, GoogleCalendarAccount, TripCalendarLink
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
@@ -28,13 +31,16 @@ from urbanlens.dashboard.services.apis.calendar.google import ACTIVITY_ID_EVENT_
 from urbanlens.dashboard.services.calendar_sync import (
     DEFAULT_ACTIVITY_EVENT_DURATION,
     activity_to_event_body,
+    disconnect_member_calendar_sync,
     event_originated_from_urbanlens,
     event_to_trip_kwargs,
     export_trip_to_calendar,
     import_events_as_trips,
+    push_auto_synced_trip_changes,
     remove_trip_from_calendar,
     trip_to_event_body,
 )
+from urbanlens.dashboard.services.gateway import GatewayRequestError
 
 _DATES = st.dates(min_value=datetime.date(1990, 1, 1), max_value=datetime.date(2100, 1, 1))
 
@@ -84,8 +90,56 @@ class TripToEventBodyTests(TestCase):
         with self.assertRaises(ValueError):
             trip_to_event_body(trip)
 
+    def test_end_date_derived_from_activity_scheduled_end(self):
+        """Without explicit dates, the latest activity end (not just start) sets the event's end."""
+        trip = Trip.objects.create(name="Derived")
+        TripActivity.objects.create(
+            trip=trip,
+            title="Overnight stay",
+            scheduled_at=datetime.datetime(2026, 9, 4, 18, 0, tzinfo=datetime.UTC),
+            scheduled_end=datetime.datetime(2026, 9, 6, 11, 0, tzinfo=datetime.UTC),
+        )
+        body = trip_to_event_body(trip)
+        self.assertEqual(body["start"]["date"], "2026-09-04")
+        # Exclusive all-day end: inclusive end (Sep 6) + 1 day.
+        self.assertEqual(body["end"]["date"], "2026-09-07")
 
-class EventToTripKwargsTests(TestCase):
+    def test_trip_event_uses_first_activity_location(self):
+        """The all-day trip event carries the first shareable activity location."""
+        trip = Trip.objects.create(name="Located", start_date=datetime.date(2026, 8, 1), end_date=datetime.date(2026, 8, 2))
+        TripActivity.objects.create(
+            trip=trip,
+            title="Second stop",
+            scheduled_at=datetime.datetime(2026, 8, 1, 15, 0, tzinfo=datetime.UTC),
+            lat_override=42.1,
+            lng_override=-74.2,
+        )
+        TripActivity.objects.create(
+            trip=trip,
+            title="First stop",
+            scheduled_at=datetime.datetime(2026, 8, 1, 9, 0, tzinfo=datetime.UTC),
+            lat_override=41.5,
+            lng_override=-73.9,
+        )
+        body = trip_to_event_body(trip)
+        self.assertEqual(body["location"], "41.500000, -73.900000")
+
+    def test_trip_event_skips_hidden_locations(self):
+        """Secret activity locations never leak into the trip-level event."""
+        trip = Trip.objects.create(name="Secretive", start_date=datetime.date(2026, 8, 1), end_date=datetime.date(2026, 8, 2))
+        TripActivity.objects.create(
+            trip=trip,
+            title="Secret first stop",
+            scheduled_at=datetime.datetime(2026, 8, 1, 9, 0, tzinfo=datetime.UTC),
+            location_hidden=True,
+            lat_override=41.5,
+            lng_override=-73.9,
+        )
+        body = trip_to_event_body(trip)
+        self.assertNotIn("location", body)
+
+
+class EventToTripKwargsTests(SimpleTestCase):
     """event_to_trip_kwargs parses Google event resources defensively."""
 
     def test_timed_event_uses_date_components(self):
@@ -258,6 +312,34 @@ class ImportEventsTests(_CalendarSyncDBTestCase):
 
         self.assertEqual(created[0].activities.count(), 0)
 
+    def test_import_sets_auto_sync_when_requested(self):
+        gateway = self._patch_gateway()
+        gateway.get_event.return_value = {
+            "id": "evt-sync",
+            "summary": "Keep me synced",
+            "start": {"date": "2026-09-04"},
+            "end": {"date": "2026-09-05"},
+        }
+
+        created, _skipped, _invited = import_events_as_trips(self.account, [{"event_id": "evt-sync", "auto_sync": True}])
+
+        link = TripCalendarLink.objects.get(trip=created[0], profile=self.profile)
+        self.assertTrue(link.auto_sync)
+
+    def test_import_defaults_auto_sync_to_false(self):
+        gateway = self._patch_gateway()
+        gateway.get_event.return_value = {
+            "id": "evt-nosync",
+            "summary": "One-time import",
+            "start": {"date": "2026-09-04"},
+            "end": {"date": "2026-09-05"},
+        }
+
+        created, _skipped, _invited = import_events_as_trips(self.account, ["evt-nosync"])
+
+        link = TripCalendarLink.objects.get(trip=created[0], profile=self.profile)
+        self.assertFalse(link.auto_sync)
+
     def test_import_invites_confirmed_friends_only(self):
         from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
         from urbanlens.dashboard.models.notifications.meta import NotificationType
@@ -329,7 +411,7 @@ class CalendarImportPreviewViewTests(_CalendarSyncDBTestCase):
 
     def setUp(self):
         super().setUp()
-        self.user.set_password("pw")  # noqa: S106
+        self.user.set_password("pw")
         self.user.save()
         self.client.force_login(self.user)
 
@@ -469,7 +551,215 @@ class ExportTripTests(_CalendarSyncDBTestCase):
         gateway.delete_event.assert_not_called()
 
 
-class ActivityEventBodyTests(TestCase):
+class DisconnectMemberCalendarSyncTests(_CalendarSyncDBTestCase):
+    """disconnect_member_calendar_sync stops a departing member's auto-sync.
+
+    Regression coverage for a real gap: removing/leaving a trip only ever
+    deleted the TripMembership row, so a departed member's Google Calendar
+    kept receiving live pushes of the trip's evolving details forever via
+    push_auto_synced_trip_changes - trip access control and live calendar
+    export are two independent channels to the same data.
+    """
+
+    def _trip_with_link(self, *, auto_sync: bool = True) -> tuple[Trip, TripCalendarLink]:
+        trip = Trip.objects.create(name="Shared trip", creator=self.profile, start_date=datetime.date(2026, 11, 1), end_date=datetime.date(2026, 11, 2))
+        link = TripCalendarLink.objects.create(
+            trip=trip,
+            profile=self.profile,
+            google_event_id="evt-departing",
+            direction=CalendarSyncDirection.EXPORTED,
+            auto_sync=auto_sync,
+        )
+        return trip, link
+
+    def test_deletes_the_link_and_the_remote_event(self):
+        gateway = self._patch_gateway()
+        trip, _link = self._trip_with_link()
+
+        disconnect_member_calendar_sync(trip, self.profile)
+
+        gateway.delete_event.assert_called_once_with("evt-departing")
+        self.assertFalse(TripCalendarLink.objects.filter(trip=trip, profile=self.profile).exists())
+
+    def test_revoked_token_still_drops_the_link(self):
+        """A failed remote delete (e.g. revoked OAuth grant) must not leave
+        auto-sync active - the DB-side link is what actually re-enables
+        future pushes, so it has to go regardless of the API call's outcome."""
+        gateway = self._patch_gateway()
+        gateway.delete_event.side_effect = GatewayRequestError("token revoked")
+        trip, _link = self._trip_with_link()
+
+        disconnect_member_calendar_sync(trip, self.profile)
+
+        self.assertFalse(TripCalendarLink.objects.filter(trip=trip, profile=self.profile).exists())
+
+    def test_no_calendar_account_is_a_noop(self):
+        trip, _link = self._trip_with_link()
+        self.account.delete()
+
+        disconnect_member_calendar_sync(trip, self.profile)  # must not raise
+
+        self.assertFalse(TripCalendarLink.objects.filter(trip=trip, profile=self.profile).exists())
+
+    def test_no_link_is_a_noop(self):
+        self._patch_gateway()
+        trip = Trip.objects.create(name="Never synced", creator=self.profile)
+
+        disconnect_member_calendar_sync(trip, self.profile)  # must not raise
+
+    def test_departed_member_no_longer_receives_auto_sync_pushes(self):
+        """End-to-end: after disconnecting, push_auto_synced_trip_changes has
+        nothing left to push to for this profile."""
+        gateway = self._patch_gateway()
+        trip, _link = self._trip_with_link(auto_sync=True)
+
+        disconnect_member_calendar_sync(trip, self.profile)
+        synced_count = push_auto_synced_trip_changes(trip)
+
+        self.assertEqual(synced_count, 0)
+        gateway.update_event.assert_not_called()
+        gateway.create_event.assert_not_called()
+
+
+class TripMemberRemovalCalendarSyncTests(_CalendarSyncDBTestCase):
+    """The trip member-removal/leave controllers must disconnect calendar sync."""
+
+    def setUp(self):
+        super().setUp()
+        self.creator_user = User.objects.create_user(username="trip-creator")
+        self.creator = self.creator_user.profile
+        self.trip = Trip.objects.create(name="Group trip", creator=self.creator, start_date=datetime.date(2026, 12, 10), end_date=datetime.date(2026, 12, 12))
+        TripMembership.objects.create(trip=self.trip, profile=self.profile, status=TripMembership.STATUS_JOINED)
+        self.link = TripCalendarLink.objects.create(
+            trip=self.trip,
+            profile=self.profile,
+            google_event_id="evt-member",
+            direction=CalendarSyncDirection.EXPORTED,
+            auto_sync=True,
+        )
+
+    def test_creator_removing_member_drops_their_calendar_link(self):
+        self._patch_gateway()
+        self.creator_user.set_password("pw")
+        self.creator_user.save()
+        self.client.force_login(self.creator_user)
+
+        response = self.client.delete(reverse("trips.member.remove", kwargs={"trip_slug": self.trip.slug, "profile_id": self.profile.pk}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(TripCalendarLink.objects.filter(pk=self.link.pk).exists())
+
+    def test_member_leaving_drops_their_own_calendar_link(self):
+        self._patch_gateway()
+        self.user.set_password("pw")
+        self.user.save()
+        self.client.force_login(self.user)
+
+        response = self.client.delete(reverse("trips.leave", kwargs={"trip_slug": self.trip.slug}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(TripCalendarLink.objects.filter(pk=self.link.pk).exists())
+
+    def test_removal_does_not_touch_other_members_links(self):
+        self._patch_gateway()
+        other_user = User.objects.create_user(username="unrelated-member")
+        other_profile = other_user.profile
+        TripMembership.objects.create(trip=self.trip, profile=other_profile, status=TripMembership.STATUS_JOINED)
+        other_link = TripCalendarLink.objects.create(
+            trip=self.trip, profile=other_profile, google_event_id="evt-other", direction=CalendarSyncDirection.EXPORTED, auto_sync=True,
+        )
+        self.creator_user.set_password("pw")
+        self.creator_user.save()
+        self.client.force_login(self.creator_user)
+
+        self.client.delete(reverse("trips.member.remove", kwargs={"trip_slug": self.trip.slug, "profile_id": self.profile.pk}))
+
+        self.assertTrue(TripCalendarLink.objects.filter(pk=other_link.pk).exists())
+
+
+class TripCalendarExportViewTests(_CalendarSyncDBTestCase):
+    """POST /trips/<uuid>/calendar/export/ can turn on auto-sync at export time."""
+
+    def setUp(self):
+        super().setUp()
+        self.user.set_password("pw")
+        self.user.save()
+        self.client.force_login(self.user)
+        self.trip = Trip.objects.create(
+            name="Export via view", creator=self.profile, start_date=datetime.date(2026, 12, 1), end_date=datetime.date(2026, 12, 2),
+        )
+
+    def test_export_with_auto_sync_checked_sets_flag(self):
+        gateway = self._patch_gateway()
+        gateway.create_event.return_value = {"id": "view-evt"}
+
+        response = self.client.post(reverse("trips.calendar.export", kwargs={"trip_slug": self.trip.slug}), {"auto_sync": "1"})
+
+        self.assertEqual(response.status_code, 200)
+        link = TripCalendarLink.objects.get(trip=self.trip, profile=self.profile, activity__isnull=True)
+        self.assertTrue(link.auto_sync)
+
+    def test_export_without_auto_sync_leaves_flag_off(self):
+        gateway = self._patch_gateway()
+        gateway.create_event.return_value = {"id": "view-evt2"}
+
+        response = self.client.post(reverse("trips.calendar.export", kwargs={"trip_slug": self.trip.slug}), {})
+
+        self.assertEqual(response.status_code, 200)
+        link = TripCalendarLink.objects.get(trip=self.trip, profile=self.profile, activity__isnull=True)
+        self.assertFalse(link.auto_sync)
+
+
+class TripCalendarAutoSyncViewTests(_CalendarSyncDBTestCase):
+    """POST /trips/<slug>/calendar/auto-sync/ flips auto_sync on an existing export link."""
+
+    def setUp(self):
+        super().setUp()
+        self.user.set_password("pw")
+        self.user.save()
+        self.client.force_login(self.user)
+        self.trip = Trip.objects.create(name="Toggle me", creator=self.profile)
+
+    def test_requires_existing_export_link(self):
+        response = self.client.post(reverse("trips.calendar.autosync", kwargs={"trip_slug": self.trip.slug}), {"auto_sync": "1"})
+        self.assertEqual(response.status_code, 400)
+
+    def test_turns_auto_sync_on(self):
+        TripCalendarLink.objects.create(
+            trip=self.trip, profile=self.profile, google_event_id="evt-toggle", direction=CalendarSyncDirection.EXPORTED, auto_sync=False,
+        )
+
+        response = self.client.post(reverse("trips.calendar.autosync", kwargs={"trip_slug": self.trip.slug}), {"auto_sync": "1"})
+
+        self.assertEqual(response.status_code, 200)
+        link = TripCalendarLink.objects.get(trip=self.trip, profile=self.profile, activity__isnull=True)
+        self.assertTrue(link.auto_sync)
+
+    def test_turns_auto_sync_off(self):
+        TripCalendarLink.objects.create(
+            trip=self.trip, profile=self.profile, google_event_id="evt-toggle2", direction=CalendarSyncDirection.EXPORTED, auto_sync=True,
+        )
+
+        response = self.client.post(reverse("trips.calendar.autosync", kwargs={"trip_slug": self.trip.slug}), {})
+
+        self.assertEqual(response.status_code, 200)
+        link = TripCalendarLink.objects.get(trip=self.trip, profile=self.profile, activity__isnull=True)
+        self.assertFalse(link.auto_sync)
+
+    def test_toggle_does_not_call_the_calendar_api(self):
+        """Flipping the flag is a pure DB update - it must not spend an API call."""
+        gateway = self._patch_gateway()
+        TripCalendarLink.objects.create(
+            trip=self.trip, profile=self.profile, google_event_id="evt-toggle3", direction=CalendarSyncDirection.EXPORTED, auto_sync=False,
+        )
+
+        self.client.post(reverse("trips.calendar.autosync", kwargs={"trip_slug": self.trip.slug}), {"auto_sync": "1"})
+
+        gateway.update_event.assert_not_called()
+        gateway.create_event.assert_not_called()
+
+
+class ActivityEventBodyTests(SimpleTestCase):
     """activity_to_event_body maps scheduled activities to timed event payloads."""
 
     def _activity(self, **kwargs) -> TripActivity:
@@ -591,6 +881,128 @@ class ExportActivityEventsTests(_CalendarSyncDBTestCase):
         deleted_ids = {call.args[0] for call in gateway.delete_event.call_args_list}
         self.assertEqual(deleted_ids, {"trip-evt", "act-evt"})
         self.assertFalse(TripCalendarLink.objects.filter(trip=trip, profile=self.profile).exists())
+
+
+class PushAutoSyncedTripChangesTests(_CalendarSyncDBTestCase):
+    """push_auto_synced_trip_changes mirrors a trip to every auto-synced calendar."""
+
+    def _trip(self) -> Trip:
+        return Trip.objects.create(
+            name="Auto-synced",
+            creator=self.profile,
+            start_date=datetime.date(2026, 11, 1),
+            end_date=datetime.date(2026, 11, 2),
+        )
+
+    def test_pushes_trip_with_auto_sync_link(self):
+        gateway = self._patch_gateway()
+        gateway.update_event.side_effect = lambda event_id, _body: {"id": event_id}
+        trip = self._trip()
+        TripCalendarLink.objects.create(
+            trip=trip, profile=self.profile, google_event_id="evt-auto", direction=CalendarSyncDirection.IMPORTED, auto_sync=True,
+        )
+
+        synced = push_auto_synced_trip_changes(trip)
+
+        self.assertEqual(synced, 1)
+        gateway.update_event.assert_called_once()
+        self.assertEqual(gateway.update_event.call_args[0][0], "evt-auto")
+
+    def test_skips_link_without_auto_sync(self):
+        gateway = self._patch_gateway()
+        trip = self._trip()
+        TripCalendarLink.objects.create(
+            trip=trip, profile=self.profile, google_event_id="evt-manual", direction=CalendarSyncDirection.EXPORTED, auto_sync=False,
+        )
+
+        synced = push_auto_synced_trip_changes(trip)
+
+        self.assertEqual(synced, 0)
+        gateway.update_event.assert_not_called()
+        gateway.create_event.assert_not_called()
+
+    def test_no_links_is_a_noop(self):
+        gateway = self._patch_gateway()
+        trip = self._trip()
+
+        synced = push_auto_synced_trip_changes(trip)
+
+        self.assertEqual(synced, 0)
+        gateway.update_event.assert_not_called()
+
+    def test_gateway_failure_on_one_profile_does_not_block_others(self):
+        other_user = User.objects.create_user(username="other-calendar-tester")
+        other_profile, _ = Profile.objects.get_or_create(user=other_user)
+        other_account = GoogleCalendarAccount.objects.create(
+            profile=other_profile,
+            access_token="access2",  # noqa: S106
+            refresh_token="refresh2",  # noqa: S106
+            token_expiry=timezone.now() + datetime.timedelta(hours=1),
+        )
+        trip = self._trip()
+        TripCalendarLink.objects.create(
+            trip=trip, profile=self.profile, google_event_id="evt-fails", direction=CalendarSyncDirection.IMPORTED, auto_sync=True,
+        )
+        TripCalendarLink.objects.create(
+            trip=trip, profile=other_profile, google_event_id="evt-ok", direction=CalendarSyncDirection.IMPORTED, auto_sync=True,
+        )
+
+        gateway_cls = mock.patch("urbanlens.dashboard.services.calendar_sync.GoogleCalendarGateway").start()
+        self.addCleanup(mock.patch.stopall)
+
+        def _gateway_for(*, account):
+            instance = mock.Mock()
+            if account.pk == self.account.pk:
+                instance.update_event.side_effect = GatewayRequestError("token revoked")
+            else:
+                instance.update_event.side_effect = lambda event_id, _body: {"id": event_id}
+            return instance
+
+        gateway_cls.side_effect = _gateway_for
+
+        synced = push_auto_synced_trip_changes(trip)
+
+        self.assertEqual(synced, 1)
+        self.assertIsNotNone(other_account)
+
+
+class GetCalendarAccountTests(_CalendarSyncDBTestCase):
+    """GoogleCalendarAccountManager.get_for_profile() heals accounts left with undecryptable tokens.
+
+    Regression test for a production 500: rotating field_encryption_key
+    without migrating old rows makes EncryptedTextField.from_db_value raise
+    InvalidToken, which crashed every page that touched the calendar
+    connection (e.g. GET /dashboard/trips/).
+    """
+
+    def _corrupt_stored_access_token(self):
+        """Write a ciphertext-shaped value directly to the DB that Fernet cannot decrypt."""
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "UPDATE dashboard_google_calendar_accounts SET access_token = %s WHERE id = %s",
+                ["not-a-valid-fernet-token", self.account.id],
+            )
+
+    def test_returns_account_when_decryptable(self):
+        self.assertEqual(GoogleCalendarAccount.objects.get_for_profile(self.profile), self.account)
+
+    def test_undecryptable_account_is_healed_to_none(self):
+        self._corrupt_stored_access_token()
+        self.assertIsNone(GoogleCalendarAccount.objects.get_for_profile(self.profile))
+        self.assertFalse(GoogleCalendarAccount.objects.filter(profile=self.profile).exists())
+
+    def test_raw_query_still_raises_invalid_token(self):
+        """Sanity check that the corruption helper actually reproduces the bug."""
+        self._corrupt_stored_access_token()
+        with pytest.raises(InvalidToken):
+            GoogleCalendarAccount.objects.filter(profile=self.profile).first()
+
+    def test_trips_list_page_does_not_500_with_undecryptable_account(self):
+        self._corrupt_stored_access_token()
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("trips.list"))
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(GoogleCalendarAccount.objects.filter(profile=self.profile).exists())
 
 
 class CalendarCallbackViewTests(TestCase):

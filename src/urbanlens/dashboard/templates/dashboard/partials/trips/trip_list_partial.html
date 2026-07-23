@@ -1,9 +1,9 @@
+{% load dashboard_tags %}
 {% if trips %}
-<div class="trips-view trips-view--list" data-trips-view="list">
 <ul class="trip-card-list">
     {% for t in trips %}
     <li class="trip-card trip-card--{{ t.timeline_status }}" id="trip-card-{{ t.uuid }}">
-        <a href="{% url 'trips.detail' t.uuid %}" class="trip-card-link">
+        <a href="{% url 'trips.detail' t.slug %}" class="trip-card-link">
             <div class="trip-card-accent" aria-hidden="true"></div>
 
             <div class="trip-card-top">
@@ -14,7 +14,7 @@
                     {% else %}Planning{% endif %}
                 </span>
                 <span class="trip-card-updated" title="Last updated {{ t.updated|date:'M j, Y g:i A' }}">
-                    Updated {{ t.updated|timesince }} ago
+                    Updated {{ t.updated|human_timesince }}
                 </span>
             </div>
 
@@ -61,11 +61,11 @@
             <div class="trip-card-footer">
                 <div class="trip-card-members" aria-label="{{ t.member_count }} member{{ t.member_count|pluralize }}">
                     {% for membership in t.memberships.all|slice:":4" %}
-                    <span class="trip-card-member-avatar" title="@{{ membership.profile.user.username }}">
-                        {% if membership.profile.avatar %}
-                        <img src="{{ membership.profile.avatar.url }}" alt="" class="trip-card-member-avatar-img">
+                    <span class="trip-card-member-avatar" title="{% if membership.profile.is_masked %}{{ membership.profile.display_name }}{% else %}@{{ membership.profile.user.username }}{% endif %}">
+                        {% if membership.profile.display_avatar_url %}
+                        <img src="{{ membership.profile.display_avatar_url }}" alt="" class="trip-card-member-avatar-img">
                         {% else %}
-                        <span class="trip-card-member-avatar-initial">{{ membership.profile.user.username|first|upper }}</span>
+                        <span class="trip-card-member-avatar-initial">{{ membership.profile.display_name|first|upper }}</span>
                         {% endif %}
                     </span>
                     {% endfor %}
@@ -83,7 +83,7 @@
                     {% elif t.creator %}
                     <span class="trip-card-creator">
                         <i class="material-icons" aria-hidden="true">person</i>
-                        @{{ t.creator.user.username }}
+                        {% if t.creator.is_masked %}{{ t.creator.display_name }}{% else %}@{{ t.creator.user.username }}{% endif %}
                     </span>
                     {% endif %}
                 </div>
@@ -94,21 +94,6 @@
     </li>
     {% endfor %}
 </ul>
-</div>
-
-<div class="trips-view trips-view--calendar" data-trips-view="calendar" hidden>
-    <div class="cal-header">
-        <button type="button" class="cal-nav-btn" onclick="tripsCalNav(-1)" aria-label="Show previous month">
-            <i class="material-icons">chevron_left</i>
-        </button>
-        <span class="cal-month-label" id="trips-cal-month-label"></span>
-        <button type="button" class="cal-nav-btn" onclick="tripsCalNav(1)" aria-label="Show next month">
-            <i class="material-icons">chevron_right</i>
-        </button>
-    </div>
-    <div class="cal-grid" id="trips-cal-grid"></div>
-</div>
-{{ trips_calendar_data|json_script:"trips-cal-data" }}
 {% else %}
 <div class="trips-empty">
     <div class="trips-empty-icon-wrap">

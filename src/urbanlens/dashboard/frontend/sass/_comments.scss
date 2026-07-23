@@ -22,31 +22,81 @@
     min-height: 12rem;
 }
 
+// -- Empty state: matches the icon-in-circle/title/text pattern used by     --
+// -- other empty landing pages (e.g. .trips-empty) instead of rendering     --
+// -- nothing but the compose form, which gave no sense of what this section --
+// -- is for.
+.comment-panel-empty {
+    text-align: center;
+    padding: 3rem 1.5rem 2rem;
+    color: var(--ul-grey-6);
+    max-width: 26rem;
+    margin: 0 auto;
+
+    .comment-panel-empty-icon-wrap {
+        width: 64px;
+        height: 64px;
+        margin: 0 auto 1.1rem;
+        border-radius: 50%;
+        background: var(--ul-surface-raised);
+        border: 1px solid var(--ul-surface-raised-border);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .comment-panel-empty-icon {
+        font-size: 2rem;
+        color: $color-blue-500;
+    }
+
+    .comment-panel-empty-title {
+        margin: 0 0 .35rem;
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: var(--ul-grey-8);
+    }
+
+    .comment-panel-empty-text {
+        margin: 0;
+        font-size: .9rem;
+        line-height: 1.5;
+        color: var(--ul-grey-7);
+    }
+}
+
 .comment-item {
     display: flex;
     gap: .65rem;
     padding: .75rem 1rem;
-    border-bottom: 1px solid var(--ul-grey-1);
+    border-bottom: 1px solid var(--ul-surface-border);
 
     &:last-child {
         border-bottom: none;
     }
 
+    // Both this modifier and .comment-replies .comment-item below represent the
+    // same role (a reply row, nested one level deeper than a top-level comment)
+    // and must stay in sync - a reply row carries both classes, and the second,
+    // higher-specificity selector always wins in the cascade. Previously these
+    // had separately hand-picked colors that agreed by coincidence in light mode
+    // but not in dark mode, so the intended dark-mode elevation bump silently
+    // never applied. --ul-surface-raised keeps them identical in both themes.
     &--reply {
-        background: var(--ul-grey-0);
+        background: var(--ul-surface-raised);
         padding-left: 1.2rem;
     }
 }
 
 .comment-replies {
     margin-top: .5rem;
-    border-left: 2px solid var(--ul-grey-1a);
+    border-left: 2px solid var(--ul-surface-border);
     margin-left: .4rem;
 
     .comment-item {
         padding-left: .75rem;
         border-bottom: none;
-        background: var(--ul-grey-0);
+        background: var(--ul-surface-raised);
         border-radius: 6px;
         margin-bottom: .3rem;
     }
@@ -125,6 +175,30 @@
     color: var(--ul-grey-4);
 }
 
+// Chip linking an aggregated note back to the sub pin it was written on -
+// same shape as _pin-detail.scss's .visit-child-chip for the same reason.
+.comment-child-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: .2rem;
+    padding: .1rem .5rem;
+    border-radius: 999px;
+    background: var(--ul-color-accent-bg, rgba(30, 136, 229, .1));
+    border: 1px solid var(--ul-surface-border);
+    font-size: .72rem;
+    font-weight: 600;
+    color: var(--ul-grey-8);
+    text-decoration: none;
+
+    i {
+        font-size: .85rem;
+    }
+
+    &:hover {
+        border-color: var(--primary-color);
+    }
+}
+
 .comment-delete-btn {
     @include icon-btn-danger(20px);
     margin-left: auto;
@@ -163,7 +237,7 @@
 }
 
 .comment-image {
-    max-width: 200px;
+    max-width: 20rem;
     max-height: 160px;
     border-radius: 6px;
     margin-top: .4rem;
@@ -174,6 +248,45 @@
 .comment-image-link {
     display: inline-block;
     margin-top: .35rem;
+}
+
+.comment-map-removed-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    margin: .35rem 0 0;
+    font-size: .8rem;
+    font-style: italic;
+    color: var(--ul-grey-6);
+
+    .material-symbols-outlined { font-size: 1rem; }
+}
+
+.comment-parent-deleted-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    margin: 0 0 .5rem;
+    font-size: .8rem;
+    font-style: italic;
+    color: var(--ul-grey-6);
+
+    .material-symbols-outlined { font-size: 1rem; }
+}
+
+// Shown in place of the image while its async malware scan is still pending
+// (see tasks.scan_comment_image) - only the uploader ever sees this; other
+// viewers don't see the comment at all until the scan clears it.
+.comment-image-scanning {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    margin: .35rem 0 0;
+    font-size: .8rem;
+    font-style: italic;
+    color: var(--ul-grey-6);
+
+    .material-symbols-outlined { font-size: 1rem; }
 }
 
 // -- Reply button --------------------------------------------------------------
@@ -204,7 +317,7 @@
 
     &:hover {
         color: $color-indigo-600;
-        background: var(--ul-grey-0);
+        background: var(--ul-hover-bg);
     }
 }
 
@@ -228,14 +341,14 @@
     gap: .2rem;
     padding: .15rem .5rem;
     border-radius: 20px;
-    background: var(--ul-grey-0);
-    border: 1px solid var(--ul-grey-1a);
+    background: var(--ul-surface-raised);
+    border: 1px solid var(--ul-surface-raised-border);
     font-size: .8rem;
     cursor: pointer;
     transition: background .1s, border-color .1s;
 
     &:hover {
-        background: var(--ul-grey-0);
+        background: var(--ul-hover-bg);
     }
 
     &--mine {
@@ -262,7 +375,7 @@
 
 .reaction-add-btn {
     background: none;
-    border: 1px solid var(--ul-grey-1a);
+    border: 1px solid var(--ul-surface-raised-border);
     border-radius: 20px;
     padding: .15rem .4rem;
     cursor: pointer;
@@ -278,7 +391,7 @@
     }
 
     &:hover {
-        background: var(--ul-grey-0);
+        background: var(--ul-hover-bg);
         color: var(--ul-grey-7);
     }
 }
@@ -287,9 +400,7 @@
     position: absolute;
     bottom: calc(100% + 4px);
     left: 0;
-    background: var(--ul-grey-0);
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: 10px;
+    @include surface($radius: 10px, $rung: null);
     box-shadow: 0 4px 16px rgba(0, 0, 0, .12);
     display: flex;
     align-items: center;
@@ -329,7 +440,7 @@
 
 .reaction-picker-divider {
     align-self: stretch;
-    border-left: 1px solid var(--ul-grey-1a);
+    border-left: 1px solid var(--ul-surface-raised-border);
     margin: 0 .2rem;
 }
 
@@ -343,7 +454,7 @@
     transition: background .1s, transform .1s;
 
     &:hover {
-        background: var(--ul-grey-0);
+        background: var(--ul-hover-bg);
         transform: scale(1.2);
     }
 }
@@ -352,7 +463,7 @@
 
 .comment-compose {
     padding: .75rem 1rem;
-    border-top: 1px solid var(--ul-grey-1);
+    border-top: 1px solid var(--ul-surface-border);
     display: flex;
     gap: .6rem;
     align-items: flex-start;
@@ -378,7 +489,7 @@
 .card {
     .comment-compose-field {
         textarea {
-            background-color: var(--ul-grey-0a);
+            background-color: var(--ul-surface-raised);
         }
     }
 }
@@ -389,7 +500,7 @@
 
 .comment-input {
     width: 100%;
-    border: 1px solid var(--ul-grey-1a);
+    border: 1px solid var(--ul-surface-raised-border);
     border-radius: 8px;
     padding: .5rem .75rem;
     font-size: .85rem;
@@ -416,7 +527,7 @@
 
 .comment-map-btn {
     background: none;
-    border: 1px solid var(--ul-grey-1a);
+    border: 1px solid var(--ul-surface-raised-border);
     border-radius: 6px;
     cursor: pointer;
     padding: .25rem .45rem;
@@ -485,10 +596,18 @@
 
 .comment-map-preview {
     margin: .5rem 0;
-    border: 1px solid var(--ul-grey-1a);
+    border: 1px solid var(--ul-surface-raised-border);
     border-radius: 10px;
     overflow: hidden;
     position: relative;
+    // Leaflet's internal panes carry their own z-index (up to 700, for
+    // popups) that would otherwise escape this box - position:relative alone
+    // doesn't contain them, since it only creates a new stacking context when
+    // paired with a z-index. `isolation: isolate` forces that containment so
+    // the live thumbnail map can never paint over sibling UI floated outside
+    // it (e.g. the DM bubble's menu button/timestamp, or this card's own
+    // edit/bookmark buttons).
+    isolation: isolate;
 }
 
 .comment-map-thumb {
@@ -542,7 +661,7 @@
     align-items: center;
     gap: .35rem;
     padding: .45rem .75rem;
-    border-top: 1px solid var(--ul-grey-1);
+    border-top: 1px solid var(--ul-surface-border);
     flex-shrink: 0;
     flex-wrap: wrap;
 }
@@ -551,6 +670,17 @@
 // open the larger read-only viewer.
 .comment-map-preview--clickable {
     cursor: pointer;
+}
+
+// Replaces Leaflet's on-map attribution control (disabled via
+// attributionControl: false) - kept in the dialog's own toolbar instead of
+// floating over the map, same principle as the main map's page-footer
+// attribution. Text is filled in by MapLayers' onAttribution callback.
+.comment-map-attribution {
+    margin-left: auto;
+    font-size: .68rem;
+    color: var(--ul-grey-5);
+    white-space: nowrap;
 }
 
 // -- Comment map composer dialog -----------------------------------------------
@@ -572,15 +702,28 @@
     flex-direction: column;
     flex: 1;
     overflow: hidden;
+
+    // The class's own unconditional `display: flex` above otherwise beats the
+    // browser's default `[hidden] { display: none }` (author styles always
+    // win over the UA stylesheet, even at equal specificity), so toggling
+    // `.hidden` from JS (_switchComposerTab in base.html) had no visual
+    // effect - both this panel and #cmc-tab-panel-existing rendered stacked
+    // at once regardless of which tab was "active".
+    &[hidden] { display: none; }
 }
 
 .comment-map-composer-controls {
     padding: .5rem 1rem;
-    border-bottom: 1px solid var(--ul-grey-1);
+    border-bottom: 1px solid var(--ul-surface-border);
     display: flex;
     align-items: center;
     gap: .75rem;
     flex-shrink: 0;
+
+    // Same fix as .comment-map-composer-body above - #cmc-title-row (this
+    // class plus .cmcc-title-row) is toggled via `_titleRow.hidden` in
+    // base.html for standalone/screenshot mode and needs the same guard.
+    &[hidden] { display: none; }
 }
 
 .cmcc-label {
@@ -599,11 +742,11 @@
 
 .cmcc-title-input {
     flex: 1;
-    max-width: 460px;
+    max-width: 46rem;
     padding: .35rem .6rem;
-    border: 1px solid var(--ul-grey-1a);
+    border: 1px solid var(--ul-surface-raised-border);
     border-radius: 6px;
-    background: var(--ul-grey-0);
+    background: var(--ul-surface-raised);
     color: var(--ul-grey-8);
     font-size: .85rem;
 }
@@ -617,7 +760,7 @@
     left: auto;
     width: auto;
     flex: 1;
-    max-width: 460px;
+    max-width: 46rem;
 }
 
 .comment-map-composer-map {
@@ -632,7 +775,7 @@
     align-items: center;
     gap: .35rem;
     padding: .45rem .75rem;
-    border-top: 1px solid var(--ul-grey-1);
+    border-top: 1px solid var(--ul-surface-border);
     flex-shrink: 0;
     flex-wrap: wrap;
 }
@@ -647,8 +790,116 @@
 .cmc-toolbar-sep {
     width: 1px;
     height: 20px;
-    background: var(--ul-grey-0);
+    background: var(--ul-surface-border);
     margin: 0 .1rem;
+}
+
+// -- Tab strip (Draw New / Choose Existing) -------------------------------------
+// Hidden entirely unless the caller passes opts.existingMapPicker (see
+// window._openCommentMapComposer's docstring) - every other caller of this
+// shared dialog (comments/visits/trips/screenshot) never shows this.
+.cmc-tabs {
+    display: flex;
+    flex-shrink: 0;
+    gap: .25rem;
+    padding: 0 1rem;
+    border-bottom: 1px solid var(--ul-surface-border);
+
+    &[hidden] { display: none; }
+}
+
+.cmc-tab {
+    padding: .55rem .75rem;
+    border: none;
+    border-bottom: 2px solid transparent;
+    background: none;
+    color: var(--ul-grey-6);
+    font-size: .85rem;
+    font-weight: 600;
+    cursor: pointer;
+
+    &:hover { color: var(--ul-grey-8); }
+
+    &.is-active {
+        color: var(--primary-color);
+        border-bottom-color: var(--primary-color);
+    }
+}
+
+// -- "Choose Existing" tab panel -------------------------------------------------
+.cmc-existing-panel {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    overflow: hidden;
+    padding: .75rem 1rem;
+    gap: .6rem;
+
+    &[hidden] { display: none; }
+}
+
+// _switchComposerTab (base.html) hides #comment-map-composer-save while on
+// the "Choose Existing" tab (picking an item attaches and closes the dialog
+// immediately - there's nothing left to "Save"). Same root cause as the
+// panels above: .btn's own `display: inline-flex` (_mixins.scss's
+// btn-base mixin, shared by every button on the site) otherwise beats the
+// browser's default `[hidden] { display: none }`. Scoped to this one button
+// rather than fixing `.btn` globally, since that mixin is used everywhere
+// and a sitewide change is out of scope for this dialog's fix.
+#comment-map-composer-save[hidden] { display: none; }
+
+.cmc-existing-search {
+    max-width: none;
+    flex-shrink: 0;
+}
+
+.cmc-existing-list {
+    flex: 1;
+    overflow-y: auto;
+}
+
+// Shared by the DM composer's existing-map tab (rendered by
+// DirectMessageMapPickerView/_map_picker.html) - mirrors the safety
+// check-in map picker's item styling (.safety-map-picker-item et al).
+.dm-map-picker-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: .3rem;
+}
+
+.dm-map-picker-item {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    width: 100%;
+    padding: .5rem .65rem;
+    border: none;
+    border-radius: $radius-sm;
+    background: transparent;
+    cursor: pointer;
+    text-align: left;
+
+    &:hover { background: var(--ul-hover-bg); }
+}
+
+.dm-map-picker-item-title {
+    flex: 1;
+    min-width: 0;
+    font-size: .88rem;
+    font-weight: 600;
+    color: var(--ul-grey-8);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.dm-map-picker-item-meta {
+    flex-shrink: 0;
+    font-size: .75rem;
+    color: var(--ul-grey-6);
 }
 
 .cmc-hint-text {
@@ -660,13 +911,119 @@
     pointer-events: none;
 }
 
+// Replaces Leaflet's on-map attribution control in the composer (see
+// .comment-map-attribution for the read-only viewer's equivalent). Sits in
+// the dialog-footer, which is otherwise right-aligned - margin-right: auto
+// pins this to the opposite side from the Cancel/Attach buttons.
+.cmc-attribution {
+    margin-right: auto;
+    font-size: .68rem;
+    color: var(--ul-grey-5);
+    white-space: nowrap;
+}
+
+// -- Comment image-attach dialog (Upload New / Choose Existing) ---------------
+// Reuses .cmc-tabs/.cmc-tab (above) for the tab strip - every `display`
+// declaration below is guarded with `&[hidden] { display: none; }` from the
+// start, having just fixed the map composer for exactly this same class of
+// bug (author styles beat the browser's default [hidden] rule at equal
+// specificity, so an un-guarded `display` silently defeats `.hidden` toggles
+// from JS).
+.comment-image-composer-dialog {
+    @include dialog-base(560px);
+}
+
+.cip-tab-panel {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    overflow: hidden;
+    padding: .75rem 1rem;
+    gap: .6rem;
+
+    &[hidden] { display: none; }
+}
+
+.cip-upload-dropzone {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: .5rem;
+    padding: 2.5rem 1rem;
+    border: 2px dashed var(--ul-surface-raised-border);
+    border-radius: $radius-md;
+    color: var(--ul-grey-5);
+    cursor: pointer;
+    text-align: center;
+
+    i { font-size: 2rem; }
+
+    &:hover {
+        border-color: var(--primary-color);
+        color: var(--ul-grey-7);
+    }
+}
+
+.cip-upload-preview {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+
+    &[hidden] { display: none; }
+
+    img {
+        width: 4rem;
+        height: 4rem;
+        object-fit: cover;
+        border-radius: $radius-sm;
+    }
+}
+
+.cip-existing-list {
+    flex: 1;
+    overflow-y: auto;
+}
+
+.cip-picker-grid {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(5.5rem, 1fr));
+    gap: .5rem;
+}
+
+.cip-picker-item {
+    display: block;
+    width: 100%;
+    aspect-ratio: 1;
+    padding: 0;
+    border: 2px solid transparent;
+    border-radius: $radius-sm;
+    background: none;
+    cursor: pointer;
+    overflow: hidden;
+
+    &:hover { border-color: var(--ul-surface-raised-border); }
+
+    &.is-selected { border-color: var(--primary-color); }
+}
+
+.cip-picker-thumb {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
 .map-layers-strip-btn,
 .cmc-tool-btn,
 .cmc-undo-btn,
 .cmc-clear-btn,
 .cmc-download-btn {
     background: none;
-    border: 1px solid var(--ul-grey-1a);
+    border: 1px solid var(--ul-surface-raised-border);
     border-radius: 6px;
     padding: .2rem .45rem;
     cursor: pointer;
@@ -681,7 +1038,7 @@
     }
 
     &:hover {
-        background: var(--ul-grey-0);
+        background: var(--ul-hover-bg);
     }
 
     &.is-active,
@@ -690,6 +1047,18 @@
         border-color: $color-indigo-400;
         color: var(--ul-accent-purple-fg);
     }
+}
+
+// Layer toggles (unlike the one-shot tool/undo/download actions above) persist an
+// on/off state - dim the off ones so active layers stand out at a glance.
+.map-layers-strip-btn {
+    opacity: .6;
+    transition: background .1s, border-color .1s, color .1s, opacity .1s;
+
+    &:hover, &:focus-visible { opacity: .85; }
+
+    &.is-active,
+    &.active { opacity: 1; }
 }
 
 .cmc-color-wrap {
@@ -703,7 +1072,7 @@
     input[type="color"] {
         width: 28px;
         height: 22px;
-        border: 1px solid var(--ul-grey-1a);
+        border: 1px solid var(--ul-surface-border);
         border-radius: 4px;
         padding: 1px;
         cursor: pointer;
@@ -738,6 +1107,11 @@
 // [data-theme="dark"] comment overrides → _dark.scss
 
 .comment-image-label {
+    // Was a <label> wrapping the file input directly; now a <button> that
+    // opens the attach-photo dialog instead, so the browser's default button
+    // chrome needs resetting the same way .comment-map-btn does.
+    background: none;
+    border: none;
     cursor: pointer;
     color: var(--ul-grey-4);
     display: flex;
@@ -767,7 +1141,7 @@
 .comment-image-preview {
     font-size: .75rem;
     color: var(--ul-grey-6);
-    max-width: 140px;
+    max-width: 14rem;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -784,9 +1158,7 @@
     top: 100%;
     left: 0;
     right: 0;
-    background: var(--ul-grey-0);
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: 8px;
+    @include surface($radius: 8px, $rung: null);
     box-shadow: 0 4px 16px rgba(0, 0, 0, .1);
     max-height: 180px;
     overflow-y: auto;
@@ -802,7 +1174,7 @@
     font-size: .84rem;
     cursor: pointer;
     color: var(--ul-grey-7);
-    border-bottom: 1px solid var(--ul-grey-0);
+    border-bottom: 1px solid var(--ul-surface);
 
     &:last-child {
         border-bottom: none;
@@ -810,7 +1182,7 @@
 
     &:hover,
     &.is-selected {
-        background: var(--ul-grey-0);
+        background: var(--ul-hover-bg);
         color: $color-indigo-700;
     }
 

@@ -5,7 +5,7 @@
     <div class="settings-header">
         <h1 class="settings-title">Welcome</h1>
         <p class="settings-subtitle">
-            UrbanLens is fully private - nothing is shared with anyone until you decide to share it. So unless you live in a bunker with a fake identity, I'd strongly recommend leaving these features on. You can change them anytime.
+            One last step before you get started.
         </p>
     </div>
 
@@ -13,30 +13,53 @@
         <form method="post" class="settings-form" id="welcome-onboarding-form">
             {% csrf_token %}
 
+            <div class="onboarding-privacy-intro">
+                <h2 class="onboarding-section-title">
+                    <i class="material-symbols-outlined">shield</i>
+                    You're Set Up for Privacy
+                </h2>
+                <p class="onboarding-privacy-copy">
+                    UrbanLens is privacy-focused, and it's safe to explore the site without accidentally opting in to something you don't want. Most people can just continue as-is.
+                </p>
+                <p class="onboarding-privacy-copy">
+                    If you'd rather fine-tune things now, you can turn features off below.
+                </p>
+                <label class="onboarding-customize-toggle">
+                    <span class="ul-switch onboarding-customize-switch">
+                        {{ form.customize_features }}
+                        <span></span>
+                    </span>
+                    <span class="onboarding-customize-label">{{ form.customize_features.label }}</span>
+                </label>
+            </div>
+
+            <div class="onboarding-feature-cards-wrap" id="onboarding-feature-cards-wrap">
+            <div class="onboarding-feature-cards-inner">
+
             <h2 class="onboarding-section-title">
                 <i class="material-symbols-outlined">visibility_off</i>
-                Disable Features
+                Feature Categories
             </h2>
 
             <div class="onboarding-cards">
-                <label class="onboarding-card onboarding-card--memories">
+                <label class="onboarding-card onboarding-card--history">
                     <span class="onboarding-card-corner" aria-hidden="true"><span class="onboarding-card-ribbon">Disabled</span></span>
                     <span class="onboarding-card-top">
                         <span class="onboarding-card-icon">
                             <i class="material-symbols-outlined">history</i>
                         </span>
                         <span class="ul-switch onboarding-card-switch">
-                            {{ form.memories_enabled }}
+                            {{ form.history_enabled }}
                             <span class="ul-switch__track"></span>
                         </span>
                     </span>
                     <span class="onboarding-card-title-row">
-                        <span class="onboarding-card-title">{{ form.memories_enabled.label }}</span>
-                        {% include "dashboard/partials/ui/_tooltip_help.html" with text="Turn these features off if you're concerned about someone siezing our servers to figure out where you've been. Nothing about where you've been or when gets recorded, so there's no visit history, route, or location trail tied to your account for anyone - including you later - to reconstruct." %}
+                        <span class="onboarding-card-title">{{ form.history_enabled.label }}</span>
+                        {% include "dashboard/partials/ui/_tooltip_help.html" with text="Turn these features off if you're concerned about someone siezing our servers to figure out where you've been. Nothing about where you've been or when gets recorded, so there's no visit history, route, or location trail tied to your account for anyone - including you later - to reconstruct. GPS data is stripped from photos you upload too, so they can't reveal it either. Your Maps and Sharing pages still work as usual - this only affects tracking." %}
                     </span>
-                    <span class="onboarding-card-desc" id="{{ form.memories_enabled.id_for_label }}_helptext">{{ form.memories_enabled.help_text }}</span>
-                    {% if form.memories_enabled.errors %}
-                    <span class="settings-error">{{ form.memories_enabled.errors|join:", " }}</span>
+                    <span class="onboarding-card-desc" id="{{ form.history_enabled.id_for_label }}_helptext">{{ form.history_enabled.help_text }}</span>
+                    {% if form.history_enabled.errors %}
+                    <span class="settings-error">{{ form.history_enabled.errors|join:", " }}</span>
                     {% endif %}
                 </label>
 
@@ -81,6 +104,9 @@
                     <span class="settings-error">{{ form.external_apis_enabled.errors|join:", " }}</span>
                     {% endif %}
                 </label>
+            </div>
+
+            </div>
             </div>
 
             <h2 class="onboarding-section-title">
@@ -128,6 +154,30 @@
         };
         tosCheckbox.addEventListener("change", syncContinueBtn);
         syncContinueBtn();
+
+        var customizeCheckbox = document.getElementById("{{ form.customize_features.id_for_label }}");
+        var cardsWrap = document.getElementById("onboarding-feature-cards-wrap");
+        var categoryCheckboxes = [
+            document.getElementById("{{ form.history_enabled.id_for_label }}"),
+            document.getElementById("{{ form.community_enabled.id_for_label }}"),
+            document.getElementById("{{ form.external_apis_enabled.id_for_label }}"),
+        ];
+        if (customizeCheckbox && cardsWrap) {
+            var syncCardsWrap = function () {
+                cardsWrap.classList.toggle("is-open", customizeCheckbox.checked);
+            };
+            customizeCheckbox.addEventListener("change", syncCardsWrap);
+            // Re-render after a validation error (e.g. missing TOS agreement) with one
+            // of the category boxes unchecked - keep the cards open so that choice
+            // stays visible instead of hiding behind a re-collapsed toggle.
+            var hasCustomizedCategory = categoryCheckboxes.some(function (checkbox) {
+                return checkbox && !checkbox.checked;
+            });
+            if (hasCustomizedCategory) {
+                customizeCheckbox.checked = true;
+            }
+            syncCardsWrap();
+        }
     });
 </script>
 {% endblock %}

@@ -34,6 +34,42 @@ class PinAliasViewTestsBase(TestCase):
         )
 
 
+class PinDetailHasEverUsedAliasesContextTests(TestCase):
+    """has_ever_used_aliases (drives the aliases onboarding card) is profile-wide.
+
+    Regression coverage: it used to be scoped per-pin (checking only the
+    viewed pin's own alias list), so a user who had thoroughly used the alias
+    feature on other pins still got nagged with "Save private alternate
+    names for this pin" on every new, not-yet-named pin.
+    """
+
+    def setUp(self) -> None:
+        baker.make("auth.User")  # first user is auto-promoted to bootstrap site admin
+        self.user = baker.make("auth.User")
+        self.profile = Profile.objects.get(user=self.user)
+        self.client.force_login(self.user)
+
+    def _mock_place_name(self):
+        return patch(
+            "urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name",
+            return_value=None,
+        )
+
+    def test_false_when_profile_has_never_used_aliases(self) -> None:
+        pin = baker.make(Pin, profile=self.profile, name=None)
+        with self._mock_place_name():
+            response = self.client.get(reverse("pin.details", args=[pin.slug]))
+        self.assertFalse(response.context["has_ever_used_aliases"])
+
+    def test_true_when_a_different_pin_has_an_alias(self) -> None:
+        other_pin = baker.make(Pin, profile=self.profile, name="Named Elsewhere", name_is_user_provided=True)
+        PinAlias.objects.create(pin=other_pin, name="Extra Alias")
+        pin = baker.make(Pin, profile=self.profile, name=None)
+        with self._mock_place_name():
+            response = self.client.get(reverse("pin.details", args=[pin.slug]))
+        self.assertTrue(response.context["has_ever_used_aliases"])
+
+
 class PinAliasUseViewTests(PinAliasViewTestsBase):
     """POST pin.alias.use renames the pin and keeps both names as aliases."""
 
@@ -120,8 +156,10 @@ class LocationAliasUseViewTests(TestCase):
     def setUp(self) -> None:
         baker.make("auth.User")  # bootstrap site admin
         self.user = baker.make("auth.User")
+        self.profile = Profile.objects.get(user=self.user)
         self.location = baker.make(Location, latitude="41.400000", longitude="-73.400000")
         self.wiki = baker.make("dashboard.Wiki", location=self.location, name="Curated Mill")
+        baker.make(Pin, profile=self.profile, location=self.location)
         self.client.force_login(self.user)
 
     def test_use_alias_renames_wiki_and_records_edit(self) -> None:
@@ -140,6 +178,16 @@ class LocationAliasUseViewTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertTrue(self.wiki.aliases.filter(name="Curated Mill").exists())
 
+    def test_add_alias_form_is_collapsed_behind_a_header_button(self) -> None:
+        """The wiki aliases panel used to show its add-alias input fields
+        unconditionally - inconsistent with the pin page's own aliases panel
+        (and every other add-flow on pin/wiki pages), which reveals its input
+        only after the header "+" button is clicked. Regression guard for
+        making the wiki panel match that same consistent pattern."""
+        response = self.client.get(reverse("location.wiki.aliases", args=[self.location.slug]))
+        self.assertContains(response, 'title="Add alias"')
+        self.assertContains(response, "alias-add-form--collapsed")
+
 
 class LocationAliasNicknameTests(TestCase):
     """Creating and toggling nickname-only wiki aliases."""
@@ -147,8 +195,10 @@ class LocationAliasNicknameTests(TestCase):
     def setUp(self) -> None:
         baker.make("auth.User")  # bootstrap site admin
         self.user = baker.make("auth.User")
+        self.profile = Profile.objects.get(user=self.user)
         self.location = baker.make(Location, latitude="41.400000", longitude="-73.400000")
         self.wiki = baker.make("dashboard.Wiki", location=self.location, name="Curated Mill")
+        baker.make(Pin, profile=self.profile, location=self.location)
         self.client.force_login(self.user)
 
     def test_create_alias_with_nickname_checkbox_sets_nickname_kind(self) -> None:
@@ -178,3 +228,101 @@ class LocationAliasNicknameTests(TestCase):
         alias.refresh_from_db()
         self.assertFalse(alias.is_nickname)
         self.assertEqual(alias.kind, AliasType.ALTERNATE)
+
+
+class PersistOfficialAliasesForLocationBackfillsPinsTests(TestCase):
+    """persist_official_aliases_for_location() backfills PinAlias rows too, not just WikiAlias.
+
+    Regression coverage: it used to only call _add_wiki_aliases, so a pin
+    whose location's external data was cached by something other than that
+    pin's own panel fetch (background enrichment, another user's pin at the
+    same location triggering the fetch first, ...) could go on showing no
+    aliases indefinitely even after the wiki for the same location had them.
+    """
+
+    def setUp(self) -> None:
+        baker.make("auth.User")  # bootstrap site admin
+        self.user = baker.make("auth.User")
+        self.profile = Profile.objects.get(user=self.user)
+        self.location = baker.make(Location, latitude="41.400000", longitude="-73.400000")
+        self.wiki = baker.make("dashboard.Wiki", location=self.location, name="Curated Mill")
+        self.pin = baker.make(Pin, profile=self.profile, location=self.location, name=None)
+
+    def _candidates(self):
+        from urbanlens.dashboard.services.locations.name_resolution import NameCandidate
+
+        return [NameCandidate(name="External Name", source="nominatim")]
+
+    def test_backfills_both_wiki_and_pin_aliases(self) -> None:
+        from urbanlens.dashboard.services.locations.naming import persist_official_aliases_for_location
+
+        with patch("urbanlens.dashboard.services.locations.naming.external_name_candidates_for_location", return_value=self._candidates()):
+            changed = persist_official_aliases_for_location(self.location)
+
+        self.assertTrue(changed)
+        self.assertTrue(self.wiki.aliases.filter(name="External Name").exists())
+        self.assertTrue(self.pin.aliases.filter(name="External Name").exists())
+
+    def test_pin_alias_view_triggers_the_backfill(self) -> None:
+        self.client.force_login(self.user)
+        with patch("urbanlens.dashboard.controllers.aliases.persist_official_aliases_for_location", return_value=True) as mocked:
+            response = self.client.get(reverse("pin.aliases", args=[self.pin.slug]))
+
+        self.assertEqual(response.status_code, 200)
+        mocked.assert_called_once_with(self.location)
+
+
+class SharedAliasesExplainerDismissalTests(TestCase):
+    """The pin-details and wiki aliases panels share one explainer dismissal key.
+
+    Regression coverage: they used to render with different explainer_id
+    values ("pin-aliases-explainer" vs "location-aliases-explainer"), so
+    dismissing the "What are aliases and nicknames?" explainer on one page
+    had no effect on the other, even though it's the same explanation of the
+    same feature.
+    """
+
+    def setUp(self) -> None:
+        baker.make("auth.User")  # bootstrap site admin
+        self.user = baker.make("auth.User")
+        self.profile = Profile.objects.get(user=self.user)
+        self.location = baker.make(Location, latitude="41.400000", longitude="-73.400000")
+        self.wiki = baker.make("dashboard.Wiki", location=self.location, name="Curated Mill")
+        self.pin = baker.make(Pin, profile=self.profile, location=self.location, name="Curated Mill")
+        self.client.force_login(self.user)
+
+    def test_pin_and_wiki_panels_use_the_same_explainer_id(self) -> None:
+        pin_response = self.client.get(reverse("pin.aliases", args=[self.pin.slug]))
+        wiki_response = self.client.get(reverse("location.wiki.aliases", args=[self.location.slug]))
+
+        self.assertContains(pin_response, 'data-explainer-id="aliases-explainer"')
+        self.assertContains(wiki_response, 'data-explainer-id="aliases-explainer"')
+
+
+class AliasPanelHeaderTitleAlignmentTests(TestCase):
+    """The "Aliases" card-header title sat visibly out of place compared to
+    every other section on the wiki/pin page. Root cause: the explainer
+    anchor icon was rendered as its own sibling *before* the title <span>,
+    instead of nested inside it like every other page's title does (see
+    _page_explainer_anchor.html's own docstring example) - .card-header's CSS
+    grid explicitly excludes `.ul-explainer-anchor` from the title's grid
+    area (`> span:not(...):not(.ul-explainer-anchor)`), so the anchor got
+    auto-placed into a stray grid cell instead, throwing the header's layout
+    off. Moving the include inside the <span> fixes it without touching the
+    shared header CSS at all.
+    """
+
+    def setUp(self) -> None:
+        baker.make("auth.User")  # bootstrap site admin
+        self.user = baker.make("auth.User")
+        self.profile = Profile.objects.get(user=self.user)
+        self.pin = baker.make(Pin, profile=self.profile, name="Title Alignment Pin")
+        self.client.force_login(self.user)
+
+    def test_explainer_anchor_is_nested_inside_the_title_span(self) -> None:
+        content = self.client.get(reverse("pin.aliases", args=[self.pin.slug])).content.decode()
+        title_start = content.index("<span>Aliases")
+        title_end = content.index("</span>", title_start)
+        anchor_start = content.index('id="aliases-explainer-anchor"')
+        self.assertLess(title_start, anchor_start)
+        self.assertLess(anchor_start, title_end)

@@ -34,8 +34,42 @@
         }
     }
 
+    // New-message notifications refresh the *messages* icon instead (see
+    // below) - this refreshes its badge, and re-fetches the messages dropdown
+    // in place if the user currently has it open, so an incoming message
+    // shows up live rather than waiting for the next open or the 60s poll.
+    function refreshMsgBadge() {
+        if (window.htmx) htmx.trigger(document.body, 'msgCountRefresh');
+    }
+
+    function refreshMsgDropdownIfOpen() {
+        var wrap = document.getElementById('nav-msg');
+        if (wrap && wrap.classList.contains('is-open')) {
+            document.body.dispatchEvent(new Event('msgOpen'));
+        }
+    }
+
     function escapeHtml(s) {
         return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    // NotificationLog.url is a plain CharField (not validated at the DB
+    // level) - every current call site fills it via Django's reverse() or
+    // leaves it blank, but that's an application-level convention, not a
+    // guarantee the client can rely on. Gate the window.location sinks below
+    // on this so a stray "javascript:" (or a future call site that forgets
+    // to use reverse()) can't be navigated to. Allows same-origin relative
+    // paths ("/foo", not "//foo" which is scheme-relative to another host)
+    // and same-origin absolute http(s) URLs.
+    function isSafeUrl(url) {
+        if (typeof url !== 'string' || !url) return false;
+        if (url.charAt(0) === '/' && url.charAt(1) !== '/') return true;
+        try {
+            var parsed = new URL(url, window.location.origin);
+            return (parsed.protocol === 'http:' || parsed.protocol === 'https:') && parsed.origin === window.location.origin;
+        } catch (err) {
+            return false;
+        }
     }
 
     function showToast(n) {
@@ -43,7 +77,7 @@
         var toast = n.message
             ? toastr.info(escapeHtml(n.message), escapeHtml(n.title))
             : toastr.info(escapeHtml(n.title));
-        if (toast && n.url) {
+        if (toast && n.url && isSafeUrl(n.url)) {
             toast.css('cursor', 'pointer');
             toast.on('click', function () { window.location = n.url; });
         }
@@ -60,7 +94,7 @@
             });
             note.onclick = function () {
                 window.focus();
-                if (n.url) window.location = n.url;
+                if (n.url && isSafeUrl(n.url)) window.location = n.url;
                 note.close();
             };
         } catch (err) {
@@ -107,6 +141,14 @@
             var data;
             try { data = JSON.parse(e.data); } catch (_) { return; }
             if (!data || data.type !== 'notification' || !data.notification) return;
+            // New-message notifications only ever count toward the messages
+            // icon's own badge/dropdown (see the navbar) - the general toast/
+            // desktop notification is reserved for everything else.
+            if (data.notification.notification_type === 'message') {
+                refreshMsgBadge();
+                refreshMsgDropdownIfOpen();
+                return;
+            }
             refreshBadge();
             refreshDropdownIfLoaded();
             showToast(data.notification);

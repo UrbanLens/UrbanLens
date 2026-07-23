@@ -1,0 +1,56 @@
+{# Revision history for the History tab. Each row can expand a diff below the list header. #}
+<div id="article-history-panel" class="article-history"
+     hx-get="{{ scope.urls.history }}"
+     hx-trigger="articleSaved from:body"
+     hx-swap="outerHTML">
+
+    {% if revision_rows %}
+    <div id="article-revision-detail" class="article-revision-detail"></div>
+    <ol class="article-history-list">
+        {% for row in revision_rows %}
+        <li class="article-history-row{% if forloop.first %} article-history-row--current{% endif %}">
+            <div class="article-history-main">
+                <span class="article-history-number" title="Revision {{ row.number }}">#{{ row.number }}</span>
+                <div class="article-history-summary">
+                    <span class="article-history-meta">
+                        <strong>{{ row.revision.editor_display_name }}</strong>
+                        &middot; {{ row.revision.created|date:"M d, Y H:i" }}
+                        {% if forloop.first %}<span class="article-history-chip article-history-chip--current">current</span>{% endif %}
+                        {% if row.revision.restored_from %}<span class="article-history-chip" title="Restored an earlier version"><i class="material-symbols-outlined">history</i> restore</span>{% endif %}
+                    </span>
+                    {% if row.revision.edit_summary %}
+                    <span class="article-history-edit-summary">{{ row.revision.edit_summary }}</span>
+                    {% endif %}
+                </div>
+                <span class="article-history-delta {% if row.delta >= 0 %}article-history-delta--add{% else %}article-history-delta--del{% endif %}">
+                    {% if row.delta >= 0 %}+{% endif %}{{ row.delta }}
+                </span>
+                <div class="article-history-actions">
+                    <button type="button" class="btn btn--icon-sm" title="View this revision's changes"
+                            hx-get="{{ scope.urls.history }}{{ row.revision.id }}/"
+                            hx-target="#article-revision-detail"
+                            hx-swap="innerHTML show:#article-revision-detail:top">
+                        <i class="material-symbols-outlined">difference</i>
+                    </button>
+                    {% if not forloop.first %}
+                    <button type="button" class="btn btn--icon-sm" title="Restore this version"
+                            hx-post="{{ scope.urls.history }}{{ row.revision.id }}/restore/"
+                            hx-target="#article-history-panel"
+                            hx-swap="outerHTML"
+                            hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+                            hx-confirm="Restore the article to revision #{{ row.number }}? The current version stays in history.">
+                        <i class="material-symbols-outlined">settings_backup_restore</i>
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+        </li>
+        {% endfor %}
+    </ol>
+    {% else %}
+    <div class="article-history-empty">
+        <i class="material-symbols-outlined">history</i>
+        <p>No article revisions yet. {% if scope.is_private %}Write your article{% else %}Start the article{% endif %} from the Article tab and every saved version will appear here.</p>
+    </div>
+    {% endif %}
+</div>

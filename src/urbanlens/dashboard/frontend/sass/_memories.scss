@@ -22,34 +22,13 @@ $memories-type-colors: (
     margin-top: 1rem;
 }
 
-.memories-header {
+.memories-toolbar {
     display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 1rem;
-    margin-bottom: 1.5rem;
     flex-wrap: wrap;
-}
-
-.memories-title {
-    font-size: 1.6rem;
-    font-weight: 700;
-    margin: 0 0 .25rem;
-    display: flex;
     align-items: center;
-    gap: .4rem;
-    color: var(--ul-grey-8);
-
-    .material-symbols-outlined {
-        font-size: 1.7rem;
-        color: $color-deep-purple-500;
-    }
-}
-
-.memories-subtitle {
-    margin: 0;
-    color: var(--ul-grey-7);
-    font-size: .9rem;
+    justify-content: flex-end;
+    gap: .5rem;
+    margin-bottom: 1.5rem;
 }
 
 // -- Hero stats -------------------------------------------------------------
@@ -62,9 +41,7 @@ $memories-type-colors: (
 }
 
 .memories-stat-tile {
-    background: var(--ul-grey-0);
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: .75rem;
+    @include surface($radius: .75rem);
     padding: 1rem 1.1rem;
     display: flex;
     align-items: center;
@@ -78,11 +55,11 @@ $memories-type-colors: (
         align-items: center;
         justify-content: center;
         flex-shrink: 0;
-        background: rgba(156, 39, 176, .12);
+        background: rgba(156, 39, 176, .22);
 
         .material-symbols-outlined {
             font-size: 1.4rem;
-            color: $color-deep-purple-500;
+            color: $color-deep-purple-100;
         }
     }
 
@@ -138,8 +115,8 @@ $memories-type-colors: (
     display: inline-flex;
     align-items: center;
     gap: .3rem;
-    background: var(--ul-grey-0);
-    border: 1px solid var(--ul-grey-1a);
+    background: var(--ul-surface-raised);
+    border: 1px solid var(--ul-surface-raised-border);
     border-radius: 999px;
     padding: .3rem .7rem;
     font-size: .8rem;
@@ -169,8 +146,8 @@ $memories-type-colors: (
     input[type="date"] {
         padding: .35rem .5rem;
         border-radius: .4rem;
-        border: 1px solid var(--ul-grey-1a);
-        background: var(--ul-grey-0);
+        border: 1px solid var(--ul-surface-raised-border);
+        background: var(--ul-surface-raised);
         color: var(--ul-grey-8);
     }
 }
@@ -226,7 +203,7 @@ $memories-type-colors: (
     width: 100%;
     border-radius: .75rem;
     overflow: hidden;
-    border: 1px solid var(--ul-grey-1a);
+    border: 1px solid var(--ul-surface-border);
 }
 
 .memories-marker-icon {
@@ -294,9 +271,7 @@ $memories-type-colors: (
 .memories-card {
     display: flex;
     gap: .75rem;
-    background: var(--ul-grey-0);
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: .65rem;
+    @include surface($radius: .65rem);
     padding: .75rem;
     text-decoration: none;
     color: inherit;
@@ -369,13 +344,11 @@ $memories-type-colors: (
 }
 
 .memories-empty-state {
-    max-width: 560px;
+    max-width: 56rem;
     margin: 5rem auto;
     padding: 3rem 2rem;
     text-align: center;
-    background: var(--ul-grey-0);
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: 1rem;
+    @include surface($radius: 1rem);
 
     h2 {
         margin: 0 0 .75rem;
@@ -386,7 +359,7 @@ $memories-type-colors: (
     p {
         margin: 0 auto 1.5rem;
         color: var(--ul-grey-6);
-        max-width: 420px;
+        max-width: 42rem;
     }
 }
 
@@ -407,59 +380,8 @@ $memories-type-colors: (
 }
 
 // -- Memories sub-nav tabs (Timeline | Photos) ------------------------------
-
-// Materialize paints every bare <nav> as a 56px salmon (#ee6e73) bar and forces
-// `nav i` icons to display:block/56px. This is a plain sub-nav, so reset all of
-// that back to a normal underline tab strip.
-.memories-tabs {
-    display: flex;
-    gap: .25rem;
-    width: auto;
-    height: auto;
-    line-height: normal;
-    background-color: var(--ul-grey-0);
-    color: inherit;
-    margin-bottom: 1.25rem;
-    border-bottom: 1px solid var(--ul-grey-1a);
-}
-
-.memories-tab {
-    display: inline-flex;
-    align-items: center;
-    gap: .4rem;
-    padding: .6rem .9rem;
-    font-size: .9rem;
-    font-weight: 600;
-    color: var(--ul-grey-7);
-    text-decoration: none;
-    border-bottom: 2px solid transparent;
-    margin-bottom: -1px;
-    transition: color .15s ease, border-color .15s ease;
-
-    // Undo the Materialize `nav i` block-icon rule so the glyph sits inline.
-    .material-symbols-outlined {
-        display: inline-flex;
-        align-items: center;
-        height: auto;
-        line-height: 1;
-        font-size: 1.2rem;
-    }
-
-    &:focus,
-    &:active,
-    &:hover {
-        color: var(--ul-grey-8);
-        border-bottom-color: var(--ul-grey-4);
-    }
-
-    &.is-active {
-        color: var(--ul-grey-9);
-        border-bottom-color: $color-deep-purple-500;
-        background-color: var(--ul-grey-0b);
-
-        .material-symbols-outlined { color: $color-deep-purple-500; }
-    }
-}
+// Styled by the shared `.ul-subnav-tabs`/`.ul-subnav-tab` classes (see
+// _page_hero.scss) - every subnav tab strip site-wide uses those now.
 
 // -- Photos page ------------------------------------------------------------
 
@@ -472,9 +394,9 @@ $memories-type-colors: (
     text-align: center;
     padding: 1.5rem 1rem;
     margin-bottom: 1.5rem;
-    border: 2px dashed var(--ul-grey-2);
+    border: 2px dashed var(--ul-surface-raised-border);
     border-radius: .9rem;
-    background: var(--ul-grey-0);
+    background: var(--ul-surface-1);
     color: var(--ul-grey-7);
     cursor: pointer;
     transition: border-color .15s ease, background .15s ease;
@@ -491,10 +413,10 @@ $memories-type-colors: (
 
 .photos-upload-progress {
     width: 100%;
-    max-width: 320px;
+    max-width: 32rem;
     height: 5px;
     margin-top: .6rem;
-    background: var(--ul-grey-1a);
+    background: var(--ul-surface-raised-border);
     border-radius: 3px;
     overflow: hidden;
 }
@@ -544,9 +466,7 @@ $memories-type-colors: (
     align-items: center;
     gap: .5rem;
     padding: .9rem 1rem;
-    border-radius: .75rem;
-    background: var(--ul-grey-0);
-    border: 1px solid var(--ul-grey-1a);
+    @include surface($radius: .75rem);
     color: var(--ul-grey-7);
     font-size: .9rem;
     margin: 0;
@@ -558,20 +478,18 @@ $memories-type-colors: (
 
 .photo-card {
     flex: 0 0 82%;
-    max-width: 340px;
+    max-width: 34rem;
     scroll-snap-align: start;
     display: flex;
     flex-direction: column;
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: .85rem;
+    @include surface($radius: .85rem);
     overflow: hidden;
-    background: var(--ul-grey-0);
 }
 
 .photo-card-thumb {
     display: block;
     aspect-ratio: 16 / 10;
-    background: var(--ul-grey-1a);
+    background: var(--ul-surface-raised);
 
     img { width: 100%; height: 100%; object-fit: cover; display: block; }
 }
@@ -631,10 +549,10 @@ $memories-type-colors: (
 .photo-pin-search-input {
     width: 100%;
     padding: .45rem .6rem;
-    border: 1px solid var(--ul-grey-2);
+    border: 1px solid var(--ul-surface-raised-border);
     border-radius: .5rem;
     font-size: .85rem;
-    background: var(--ul-grey-0);
+    background: var(--ul-surface-raised);
     color: var(--ul-grey-8);
 }
 
@@ -654,7 +572,7 @@ $memories-type-colors: (
     width: 100%;
     text-align: left;
     padding: .45rem .55rem;
-    border: 1px solid var(--ul-grey-1a);
+    border: 1px solid var(--ul-surface-raised-border);
     border-radius: .5rem;
     background: transparent;
     cursor: pointer;
@@ -701,7 +619,7 @@ $memories-type-colors: (
     width: 100%;
     border-radius: .6rem;
     overflow: hidden;
-    border: 1px solid var(--ul-grey-1a);
+    border: 1px solid var(--ul-surface-raised-border);
 }
 
 // Leaflet popup shown when the user clicks one of their own pins plotted on
@@ -722,10 +640,10 @@ $memories-type-colors: (
 
     input[type="text"] {
         padding: .5rem .6rem;
-        border: 1px solid var(--ul-grey-2);
+        border: 1px solid var(--ul-surface-raised-border);
         border-radius: .5rem;
         font-size: .9rem;
-        background: var(--ul-grey-0);
+        background: var(--ul-surface-raised);
         color: var(--ul-grey-8);
     }
 
@@ -750,7 +668,7 @@ $memories-type-colors: (
     aspect-ratio: 1 / 1;
     border-radius: .5rem;
     overflow: hidden;
-    background: var(--ul-grey-1a);
+    background: var(--ul-surface-raised);
 
     &:hover .photo-tile-del { opacity: 1; }
 }
@@ -819,9 +737,9 @@ $memories-type-colors: (
     text-align: center;
     padding: 2.5rem 1rem;
     color: var(--ul-grey-6);
-    border: 1px dashed var(--ul-grey-2);
+    border: 1px dashed var(--ul-surface-raised-border);
     border-radius: .9rem;
-    background: var(--ul-grey-1b);
+    background: var(--ul-surface-1);
 
     .material-symbols-outlined { font-size: 2.4rem; opacity: .6; }
     p { margin: .5rem 0 0; }
@@ -838,9 +756,7 @@ $memories-type-colors: (
     align-items: center;
     gap: .5rem;
     padding: .9rem 1rem;
-    border-radius: .75rem;
-    background: var(--ul-grey-0);
-    border: 1px solid var(--ul-grey-1a);
+    @include surface($radius: .75rem);
     color: var(--ul-grey-7);
     font-size: .9rem;
 
@@ -867,9 +783,16 @@ $memories-type-colors: (
     display: flex;
     gap: .65rem;
     padding: .85rem;
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: .85rem;
-    background: var(--ul-grey-0);
+    @include surface($radius: .85rem);
+    transition: background .15s ease, box-shadow .15s ease;
+
+    // Paired with the map marker via .is-hovered (see pin-select-map.js) -
+    // same amber highlight convention as the trip detail page's
+    // map/activity-list hover-sync.
+    &.is-hovered {
+        background: rgba($color-amber-500, .08);
+        box-shadow: 0 0 0 2px $color-amber-500;
+    }
 }
 
 .unlogged-card-dismiss {
@@ -890,7 +813,7 @@ $memories-type-colors: (
 
     .material-symbols-outlined { font-size: 1.1rem; }
 
-    &:hover { background: var(--ul-grey-1a); color: var(--ul-grey-8); }
+    &:hover { background: var(--ul-hover-bg); color: var(--ul-grey-8); }
 }
 
 .unlogged-card-icon {
@@ -955,10 +878,10 @@ $memories-type-colors: (
         flex: 1 1 8rem;
         min-width: 0;
         padding: .35rem .5rem;
-        border: 1px solid var(--ul-grey-2);
+        border: 1px solid var(--ul-surface-raised-border);
         border-radius: .5rem;
         font-size: .82rem;
-        background: var(--ul-grey-0);
+        background: var(--ul-surface-raised);
         color: var(--ul-grey-8);
     }
 }
@@ -981,9 +904,7 @@ $memories-type-colors: (
     gap: .75rem;
     margin-bottom: 1.5rem;
     padding: .8rem 1rem;
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: .75rem;
-    background: var(--ul-grey-0);
+    @include surface($radius: .75rem);
     text-decoration: none;
     transition: box-shadow .15s ease, border-color .15s ease;
 
@@ -1077,7 +998,7 @@ $memories-type-colors: (
 .visits-empty-state {
     position: relative;
     overflow: hidden;
-    max-width: 720px;
+    max-width: 72rem;
     margin: 2rem auto 0;
     padding: 3rem 2rem;
     text-align: center;
@@ -1097,7 +1018,7 @@ $memories-type-colors: (
     }
 
     p {
-        max-width: 520px;
+        max-width: 52rem;
         margin: 0 auto;
         color: var(--ul-grey-6);
         font-size: .98rem;
@@ -1167,9 +1088,7 @@ $memories-type-colors: (
 }
 
 .memories-map-card {
-    background: var(--ul-grey-0);
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: 12px;
+    @include surface;
     overflow: hidden;
     display: flex;
     flex-direction: column;
@@ -1194,6 +1113,33 @@ $memories-type-colors: (
     font-size: .95rem;
     font-weight: 700;
     color: var(--ul-grey-8);
+
+    &--editable {
+        cursor: pointer;
+        border-radius: 4px;
+        padding: .1rem .3rem;
+        margin: 0 0 0 -.3rem;
+        transition: background .15s;
+
+        &:hover,
+        &:focus-visible {
+            background: var(--ul-grey-0a);
+            outline: none;
+        }
+    }
+}
+
+.memories-map-card-title-input {
+    width: 100%;
+    font: inherit;
+    font-weight: 700;
+    color: var(--ul-grey-8);
+    background: var(--ul-control-bg);
+    border: 1px solid var(--ul-color-accent);
+    border-radius: 4px;
+    padding: .1rem .3rem;
+    margin: 0 0 0 -.3rem;
+    outline: none;
 }
 
 .memories-map-card-meta {
@@ -1224,14 +1170,28 @@ $memories-type-colors: (
     &:hover { text-decoration: underline; }
 }
 
+.memories-map-card-attachments {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: .2rem;
+}
+
 .memories-map-card-actions {
     margin-top: auto;
     padding-top: .5rem;
     display: flex;
     justify-content: flex-end;
+    gap: 0.5rem;
 }
 
 // -- Memories > Sharing: pins shared with friends + reshare chain counts -----
+
+.memories-sharing-toggle {
+    margin-top: 1rem;
+}
 
 .memories-sharing-list {
     display: flex;
@@ -1318,5 +1278,120 @@ $memories-type-colors: (
     &--rejected { color: var(--ul-grey-5); }
     &--pending { color: $color-amber-600; }
     &--already_pinned { color: $color-indigo-500; }
+}
+
+.memories-sharing-section-title {
+    margin: 1.75rem 0 0;
+    font-size: 1rem;
+    font-weight: 600;
+
+    &:first-of-type { margin-top: .75rem; }
+}
+
+.memories-sharing-section-empty {
+    margin: .5rem 0 0;
+    font-size: .85rem;
+    color: var(--ul-grey-6);
+}
+
+// -- Memories > Journal: visit notes, ratings, and comments by date ---------
+
+.memories-journal-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    margin-top: 1rem;
+}
+
+.memories-journal-entries {
+    display: flex;
+    flex-direction: column;
+    gap: .6rem;
+}
+
+.memories-journal-card {
+    display: flex;
+    gap: .85rem;
+    padding: .85rem 1rem;
+    text-decoration: none;
+    color: inherit;
+    transition: box-shadow .15s ease, transform .15s ease;
+
+    &:hover {
+        box-shadow: 0 2px 10px rgba(0, 0, 0, .12);
+        transform: translateY(-1px);
+    }
+}
+
+.memories-journal-icon {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--ul-grey-4);
+
+    .material-symbols-outlined {
+        color: #fff;
+        font-size: 1.1rem;
+    }
+
+    &--visit { background: $color-green-500; }
+    &--review { background: $color-amber-600; }
+    &--comment { background: $color-indigo-500; }
+    &--article { background: $color-blue-500; }
+}
+
+.memories-journal-body {
+    min-width: 0;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: .3rem;
+}
+
+.memories-journal-meta {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: .4rem;
+}
+
+.memories-journal-title {
+    font-weight: 700;
+    font-size: .92rem;
+    color: var(--ul-grey-8);
+}
+
+.memories-journal-subtitle {
+    font-size: .78rem;
+    font-weight: 600;
+    color: var(--ul-grey-6);
+}
+
+.memories-journal-time {
+    margin-left: auto;
+    font-size: .76rem;
+    color: var(--ul-grey-5);
+    white-space: nowrap;
+}
+
+.memories-journal-snippet {
+    margin: 0;
+    font-size: .85rem;
+    color: var(--ul-grey-7);
+    line-height: 1.4;
+}
+
+.memories-journal-stars {
+    display: flex;
+    gap: .1rem;
+
+    .material-symbols-outlined {
+        font-size: 1.05rem;
+        color: $color-amber-600;
+    }
 }
 

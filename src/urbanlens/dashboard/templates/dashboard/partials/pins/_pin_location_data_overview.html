@@ -1,0 +1,63 @@
+{% comment %}
+Location Data card's "Overview" tab (always the first tab - see
+_pin_location_data_tabs.html and PinController.location_data_overview):
+one merged summary of whichever of Nominatim/Photon/Building
+Characteristics/Elevation already has fresh data - combined into a single
+list of field:value facts about the place, with no mention of which
+provider each fact came from.
+
+Context:
+    heading_name - the place's name (from whichever ready source has one),
+                  or None.
+    chips       - deduplicated kind/type chips from every ready source.
+    fields      - deduplicated list of {label, value, href} facts merged
+                  from every ready source, in source-priority order.
+    footer_links - deduplicated list of {url, label} "view the raw record"
+                  links from every ready source.
+    poll_url, next_attempt, poll_interval - present only when at least one
+                  source is still pending: the whole body keeps
+                  self-polling (outerHTML swap) to pick up later arrivals
+                  without leaving the tab stuck on a partial view.
+{% endcomment %}
+<div id="location-data-overview-body" class="card__body pin-plugin-tab-body location-data-overview"
+     {% if poll_url %}
+     hx-get="{{ poll_url }}?attempt={{ next_attempt }}"
+     hx-trigger="load delay:{{ poll_interval }}s"
+     hx-swap="outerHTML"
+     hx-timeout="25000"
+     {% endif %}>
+    {% if heading_name or chips %}
+    <div class="location-data-overview-heading">
+        {% if heading_name %}<p class="location-data-overview-place-name">{{ heading_name }}</p>{% endif %}
+        {% for chip in chips %}
+        <span class="location-data-overview-chip">{{ chip }}</span>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if fields %}
+    <dl class="location-data-overview-fields">
+        {% for field in fields %}
+        <div class="location-data-overview-field">
+            <dt>{{ field.label }}</dt>
+            {% if field.href %}
+            <dd><a href="{{ field.href }}" target="_blank" rel="noopener noreferrer">{{ field.value }}</a></dd>
+            {% else %}
+            <dd>{{ field.value }}</dd>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </dl>
+    {% endif %}
+
+    {% if footer_links %}
+    <div class="location-data-overview-links">
+        {% for link in footer_links %}
+        <a href="{{ link.url }}" target="_blank" rel="noopener noreferrer" class="location-data-overview-link">
+            {{ link.label }}
+            <i class="material-symbols-outlined">arrow_forward</i>
+        </a>
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>

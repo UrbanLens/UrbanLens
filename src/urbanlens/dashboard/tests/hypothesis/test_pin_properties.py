@@ -14,7 +14,7 @@ from unittest.mock import MagicMock, PropertyMock, patch
 
 from hypothesis import given, settings, strategies as st
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.tests.hypothesis.strategies import (
     latitude,
@@ -68,7 +68,7 @@ def _make_location(name: str, lat: Decimal | None = None, lon: Decimal | None = 
 
 # -- effective_name -------------------------------------------------------------
 
-class PinEffectiveNameTests(TestCase):
+class PinEffectiveNameTests(SimpleTestCase):
 
     @given(nonempty_name)
     @settings(max_examples=300)
@@ -105,7 +105,7 @@ class PinEffectiveNameTests(TestCase):
 
 # -- effective_latitude / effective_longitude -----------------------------------
 
-class PinEffectiveCoordinateTests(TestCase):
+class PinEffectiveCoordinateTests(SimpleTestCase):
     """effective_latitude/effective_longitude always proxy the linked Location.
 
     A Pin has no coordinate fields of its own (see AddressableModel) - there is
@@ -150,7 +150,7 @@ class PinEffectiveCoordinateTests(TestCase):
 
 # -- effective_date_last_active -------------------------------------------------
 
-class PinEffectiveDateLastActiveTests(TestCase):
+class PinEffectiveDateLastActiveTests(SimpleTestCase):
 
     @given(reasonable_date)
     @settings(max_examples=300)
@@ -202,7 +202,7 @@ class PinEffectiveDateLastActiveTests(TestCase):
 
 # -- effective_icon -------------------------------------------------------------
 
-class PinEffectiveIconTests(TestCase):
+class PinEffectiveIconTests(SimpleTestCase):
     """effective_icon follows a defined priority chain.
 
     The DB-backed tag-lookup branch is not tested here (it requires a live ORM
@@ -228,9 +228,9 @@ class PinEffectiveIconTests(TestCase):
 
     def test_none_icon_returns_none_when_no_tags(self) -> None:
         pin = self._make_pin_with_icon(icon=None, custom_icon=None)
-        mock_badges = MagicMock()
-        mock_badges.exclude.return_value.order_by.return_value = []
-        with patch.object(type(pin), "badges", new_callable=PropertyMock, return_value=mock_badges):
+        mock_labels = MagicMock()
+        mock_labels.exclude.return_value.order_by.return_value = []
+        with patch.object(type(pin), "labels", new_callable=PropertyMock, return_value=mock_labels):
             self.assertIsNone(pin.effective_icon)
 
     @given(st.text(min_size=1, max_size=50, alphabet=st.characters(min_codepoint=ord("a"), max_codepoint=ord("z"))))
@@ -245,3 +245,92 @@ class PinEffectiveIconTests(TestCase):
         mock_cf.url = url
         object.__setattr__(pin, "custom_icon", mock_cf)
         self.assertEqual(pin.effective_icon, url)
+
+
+# -- deduplicated_identity_fields ------------------------------------------------
+
+class PinDeduplicatedIdentityFieldsTests(SimpleTestCase):
+    """Place Name/Official Name/Address collapse near-duplicate text instead of
+    only catching an exact string match."""
+
+    def _make_pin_with_location(self, *, place_name: str | None, has_place_name: bool, official_name: str | None, address_basic: str | None, city: str | None = None, state: str | None = None) -> Pin:
+        loc = MagicMock()
+        loc.place_name = place_name
+        loc.has_place_name.return_value = has_place_name
+        loc.official_name = official_name
+        loc.address_basic = address_basic
+        loc.city = city
+        loc.state = state
+        return _make_pin(location=loc)
+
+    def test_full_address_supersedes_shorter_prefix_variants(self) -> None:
+        """The exact scenario reported: a geocoder-derived place_name that's just a
+        fuller-formatted version of the official_name/address street text."""
+        pin = self._make_pin_with_location(
+            place_name="1265 Section Rd, Cincinnati, OH 45237, USA",
+            has_place_name=True,
+            official_name="1265 Section Rd",
+            address_basic="1265 Section Rd",
+            city="Cincinnati",
+            state="OH",
+        )
+        labels = [label for label, _value in pin.deduplicated_identity_fields]
+        self.assertEqual(labels, ["Place Name"])
+
+    def test_genuinely_distinct_place_name_is_kept_alongside_address(self) -> None:
+        """A real landmark name (not just a reformatted address) has no
+        overlapping text with the address, so both are kept."""
+        pin = self._make_pin_with_location(
+            place_name="Riverside Mill",
+            has_place_name=True,
+            official_name="Riverside Mill",
+            address_basic="42 Mill St",
+            city="Springfield",
+            state="IL",
+        )
+        labels = [label for label, _value in pin.deduplicated_identity_fields]
+        self.assertIn("Place Name", labels)
+        self.assertIn("Address", labels)
+
+    def test_no_place_name_falls_back_to_official_name_and_address(self) -> None:
+        pin = self._make_pin_with_location(
+            place_name=None,
+            has_place_name=False,
+            official_name="Old Mill",
+            address_basic="42 Mill St",
+            city="Springfield",
+            state="IL",
+        )
+        labels = [label for label, _value in pin.deduplicated_identity_fields]
+        self.assertEqual(labels, ["Official Name", "Address"])
+
+    def test_three_genuinely_distinct_fields_keep_place_official_address_order(self) -> None:
+        """Official Name resolution order in the source dict is Address, then
+        Official Name, then Place Name (by length) - verifies the result is
+        re-sorted back to display order rather than left in dedup-pass order."""
+        pin = self._make_pin_with_location(
+            place_name="The Old Mill",
+            has_place_name=True,
+            official_name="Old Mill Historic Landmark",
+            address_basic="42 Mill St",
+            city="Springfield",
+            state="IL",
+        )
+        labels = [label for label, _value in pin.deduplicated_identity_fields]
+        self.assertEqual(labels, ["Place Name", "Official Name", "Address"])
+
+    def test_case_and_punctuation_differences_still_dedupe(self) -> None:
+        pin = self._make_pin_with_location(
+            place_name="1265 SECTION RD., Cincinnati, OH",
+            has_place_name=True,
+            official_name="1265 Section Rd",
+            address_basic="1265 Section Rd",
+            city="Cincinnati",
+            state="OH",
+        )
+        labels = [label for label, _value in pin.deduplicated_identity_fields]
+        self.assertEqual(labels, ["Place Name"])
+
+    def test_completely_empty_pin_returns_no_fields(self) -> None:
+        pin = self._make_pin_with_location(place_name=None, has_place_name=False, official_name=None, address_basic=None)
+        self.assertEqual(pin.deduplicated_identity_fields, [])

@@ -16,7 +16,7 @@ from __future__ import annotations
 from django.urls import reverse
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.controllers.trip import _apply_trip_visibility_filter
 from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
 from urbanlens.dashboard.models.images.model import Image
@@ -65,7 +65,7 @@ def _share_friend(a: Profile, b: Profile) -> Profile:
     return mutual
 
 
-class VisibilityChoiceEnumTests(TestCase):
+class VisibilityChoiceEnumTests(SimpleTestCase):
     """The enum contains the new option and lists choices least → most restrictive."""
 
     def test_anything_in_common_exists(self) -> None:
@@ -285,14 +285,15 @@ class FriendRequestVisibilityTests(TestCase):
         self.assertEqual(self._request_friend().status_code, 403)
 
     def test_anything_in_common_allows_shared_pin(self) -> None:
+        # Non-HTMX success redirects back to the profile page (302).
         self._set_visibility(VisibilityChoice.ANYTHING_IN_COMMON)
         _share_pin(self.requester, self.target)
-        self.assertEqual(self._request_friend().status_code, 200)
+        self.assertEqual(self._request_friend().status_code, 302)
 
     def test_anything_in_common_allows_shared_trip(self) -> None:
         self._set_visibility(VisibilityChoice.ANYTHING_IN_COMMON)
         _share_trip(self.requester, self.target)
-        self.assertEqual(self._request_friend().status_code, 200)
+        self.assertEqual(self._request_friend().status_code, 302)
 
     def test_common_trip_gate_admits_existing_friend(self) -> None:
         # A friend passes the COMMON_TRIP visibility gate (no 403); the request
@@ -305,3 +306,51 @@ class FriendRequestVisibilityTests(TestCase):
     def test_common_pin_still_blocks_stranger(self) -> None:
         self._set_visibility(VisibilityChoice.COMMON_PIN)
         self.assertEqual(self._request_friend().status_code, 403)
+
+
+class PendingRequestVisibilityTests(TestCase):
+    """An unanswered friend request opens the sender's privacy gates to the recipient - one way only."""
+
+    _RELATIONSHIP_CHOICES = (
+        VisibilityChoice.FRIENDS,
+        VisibilityChoice.COMMON_PIN,
+        VisibilityChoice.COMMON_FRIEND,
+        VisibilityChoice.COMMON_TRIP,
+        VisibilityChoice.ANYTHING_IN_COMMON,
+    )
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.sender = _make_profile()
+        self.recipient = _make_profile()
+        self.request_row = Friendship.objects.create(from_profile=self.sender, to_profile=self.recipient, status=FriendshipStatus.REQUESTED)
+
+    def test_recipient_passes_every_relationship_gate_on_sender(self) -> None:
+        for choice in self._RELATIONSHIP_CHOICES:
+            with self.subTest(choice=choice):
+                self.assertTrue(Profile.visibility_permits(choice, self.sender, self.recipient))
+
+    def test_sender_gains_nothing_on_recipient(self) -> None:
+        for choice in self._RELATIONSHIP_CHOICES:
+            with self.subTest(choice=choice):
+                self.assertFalse(Profile.visibility_permits(choice, self.recipient, self.sender))
+
+    def test_recipient_can_view_sender_profile_page(self) -> None:
+        self.sender.profile_visibility = VisibilityChoice.FRIENDS
+        self.sender.save(update_fields=["profile_visibility"])
+        self.assertTrue(self.sender.can_view_profile(self.recipient))
+        self.assertFalse(self.recipient.can_view_profile(self.sender))
+
+    def test_no_one_still_blocks_recipient(self) -> None:
+        self.assertFalse(Profile.visibility_permits(VisibilityChoice.NO_ONE, self.sender, self.recipient))
+
+    def test_declined_request_grants_nothing(self) -> None:
+        self.request_row.status = FriendshipStatus.DECLINED
+        self.request_row.save(update_fields=["status"])
+        self.assertFalse(Profile.visibility_permits(VisibilityChoice.FRIENDS, self.sender, self.recipient))
+
+    def test_accepted_request_grants_both_ways(self) -> None:
+        self.request_row.status = FriendshipStatus.ACCEPTED
+        self.request_row.save(update_fields=["status"])
+        self.assertTrue(Profile.visibility_permits(VisibilityChoice.FRIENDS, self.sender, self.recipient))
+        self.assertTrue(Profile.visibility_permits(VisibilityChoice.FRIENDS, self.recipient, self.sender))

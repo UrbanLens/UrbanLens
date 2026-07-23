@@ -1,4 +1,4 @@
-"""Multi-select bulk actions for root pins on the main map: merge, delete+undo, bulk edit."""
+"""Multi-select bulk actions for pins (root or child) on the main map: merge, delete+undo, bulk edit."""
 
 from __future__ import annotations
 
@@ -9,13 +9,15 @@ from typing import TYPE_CHECKING
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User as AuthUser
 from django.core.exceptions import ValidationError
+from django.db.models import Q
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.views import View
 
-from urbanlens.dashboard.models.badges.meta import KIND_CATEGORY, KIND_STATUS, KIND_TAG
-from urbanlens.dashboard.models.badges.model import Badge
+from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_STATUS, KIND_TAG
+from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.model import Pin
+from urbanlens.dashboard.models.reviews.model import Review
 from urbanlens.dashboard.models.undo import UndoAction
 from urbanlens.dashboard.services.text_limits import MAX_PIN_DESCRIPTION_LENGTH, text_length_error
 from urbanlens.dashboard.services.undo.service import UndoExpiredError, restore_undo_action, stash_for_undo
@@ -49,13 +51,13 @@ def _parse_uuids_json(request: HttpRequest, key: str = "uuids") -> tuple[list[st
     return uuids, None
 
 
-def _owned_root_pins(profile: Profile, uuids: list[str]) -> QuerySet[Pin]:
-    """Root pins owned by ``profile`` among the given uuids.
+def _owned_pins(profile: Profile, uuids: list[str]) -> QuerySet[Pin]:
+    """Pins (root or child) owned by ``profile`` among the given uuids.
 
-    Scoped to root pins because the main map's select tool only ever shows
-    root pins as markers - detail pins are never a valid bulk-action target.
+    The main map's select tool can select both root and child (sub) pin
+    markers, so bulk actions must be able to resolve either kind.
     """
-    return Pin.objects.filter(profile=profile, uuid__in=uuids).root_pins()
+    return Pin.objects.filter(profile=profile, uuid__in=uuids)
 
 
 class PinBulkDeleteView(LoginRequiredMixin, View):
@@ -65,10 +67,13 @@ class PinBulkDeleteView(LoginRequiredMixin, View):
         uuids, err = _parse_uuids_json(request)
         if err:
             return err
-        assert uuids is not None  # noqa: S101 - guaranteed by _parse_uuids_json when err is None
+
+        # Future proofing:guaranteed by _parse_uuids_json when err is None
+        if uuids is None:
+            return HttpResponse("No pins specified.", status=400)
 
         profile = _request_profile(request)
-        pins = list(_owned_root_pins(profile, uuids))
+        pins = list(_owned_pins(profile, uuids))
         if not pins:
             return HttpResponse("No matching pins.", status=404)
 
@@ -77,7 +82,8 @@ class PinBulkDeleteView(LoginRequiredMixin, View):
         for pin in subtree:
             pin.delete()
 
-        return JsonResponse({"ok": True, "undo_token": str(undo_action.uuid), "count": len(pins)})
+        descendant_count = len(subtree) - len(pins)
+        return JsonResponse({"ok": True, "undo_token": str(undo_action.uuid), "count": len(pins), "descendant_count": descendant_count, "total_count": len(subtree)})
 
 
 class PinBulkUndoView(LoginRequiredMixin, View):
@@ -107,7 +113,11 @@ class PinBulkUndoView(LoginRequiredMixin, View):
 
 
 class PinBulkMergeView(LoginRequiredMixin, View):
-    """Merge selected root pins: all but the target become the target's detail pins."""
+    """Merge selected pins: all but the target become the target's detail pins.
+
+    The target becomes (or stays) the top-level pin; a target that's currently
+    a sub pin is promoted first (see the conflict check below).
+    """
 
     def post(self, request: HttpRequest, *args, **kwargs) -> HttpResponse:
         try:
@@ -123,16 +133,25 @@ class PinBulkMergeView(LoginRequiredMixin, View):
             return HttpResponse("At least one source_uuid is required.", status=400)
 
         profile = _request_profile(request)
-        target = get_object_or_404(Pin.objects.root_pins(), uuid=target_uuid, profile=profile)
-        sources = list(_owned_root_pins(profile, source_uuids).exclude(pk=target.pk))
+        target = get_object_or_404(Pin.objects.filter(profile=profile), uuid=target_uuid)
+        if target.parent_pin_id is not None:
+            # The target is itself a sub pin - promote it to top-level first, since
+            # merging always makes the chosen target the new top-level pin.
+            conflict = Pin.objects.filter(profile=profile, location_id=target.location_id, parent_pin__isnull=True).exclude(pk=target.pk).exists()
+            if conflict:
+                return HttpResponse("You already have a top-level pin at this exact location. Choose a different pin as the merge target.", status=400)
+            target.parent_pin = None
+            target.save(update_fields=["parent_pin"])
+        sources = list(_owned_pins(profile, source_uuids).exclude(pk=target.pk))
         if not sources:
             return HttpResponse("No valid source pins.", status=400)
 
         merged = 0
         for source in sources:
-            # Structurally unreachable given the root-pins-only scoping above (a
-            # root pin can never already be an ancestor of another root pin), but
-            # kept as real defense-in-depth per the model's own guard contract.
+            # Structurally unreachable: by this point target is always root (either
+            # already was, or was just promoted above), so it has no ancestors for
+            # would_create_cycle to find a source in - kept as defense-in-depth per
+            # the model's own guard contract, same as the original root-only version.
             if source.would_create_cycle(target):
                 continue
             source.parent_pin = target
@@ -146,7 +165,7 @@ class PinBulkMergeView(LoginRequiredMixin, View):
 
 
 class PinBulkEditView(LoginRequiredMixin, View):
-    """Bulk-edit description and badges across selected root pins (JSON POST)."""
+    """Bulk-edit description, rating, labels, and parent pin across selected pins (JSON POST)."""
 
     def post(self, request: HttpRequest, *args, **kwargs) -> HttpResponse:
         try:
@@ -159,7 +178,7 @@ class PinBulkEditView(LoginRequiredMixin, View):
             return HttpResponse("No pins specified.", status=400)
 
         profile = _request_profile(request)
-        pins = list(_owned_root_pins(profile, uuids))
+        pins = list(_owned_pins(profile, uuids))
         if not pins:
             return HttpResponse("No matching pins.", status=404)
 
@@ -172,36 +191,122 @@ class PinBulkEditView(LoginRequiredMixin, View):
                 pin.description = description
                 pin.save(update_fields=["description"])
 
-        if add_ids := [int(x) for x in data.get("add_badge_ids", [])]:
-            valid = list(Badge.objects.filter(id__in=add_ids, kind__in=_ORGANIZE_KINDS))
-            for pin in pins:
-                pin.badges.add(*valid)
+        # rating lives on Review (one per profile/pin pair, see PinEditView.post
+        # for the single-pin equivalent) - 0 explicitly clears every selected
+        # pin's review; absent/invalid leaves ratings untouched.
+        rating_raw = data.get("rating")
+        if rating_raw is not None and str(rating_raw).strip():
+            try:
+                rating = int(rating_raw)
+            except (TypeError, ValueError):
+                rating = None
+            if rating is not None and 1 <= rating <= 5:
+                for pin in pins:
+                    Review.objects.update_or_create(profile=profile, pin=pin, defaults={"rating": rating})
+            elif rating == 0:
+                Review.objects.filter(profile=profile, pin__in=pins).delete()
 
-        if remove_ids := [int(x) for x in data.get("remove_badge_ids", [])]:
-            # Never trust the client's option list - only remove badges that are
+        if add_ids := [int(x) for x in data.get("add_label_ids", [])]:
+            valid = list(Label.objects.visible_to(profile).filter(id__in=add_ids, kind__in=_ORGANIZE_KINDS))
+            for pin in pins:
+                pin.labels.add(*valid)
+
+        if remove_ids := [int(x) for x in data.get("remove_label_ids", [])]:
+            # Never trust the client's option list - only remove labels that are
             # actually present on at least one of the selected pins.
             removable = list(
-                Badge.objects.filter(id__in=remove_ids, kind__in=_ORGANIZE_KINDS, pins__in=pins).distinct(),
+                Label.objects.filter(id__in=remove_ids, kind__in=_ORGANIZE_KINDS, pins__in=pins).distinct(),
             )
             for pin in pins:
-                pin.badges.remove(*removable)
+                pin.labels.remove(*removable)
 
-        return JsonResponse({"ok": True, "count": len(pins)})
+        reparented = 0
+        parent_uuid = str(data.get("parent_uuid") or "").strip()
+        if parent_uuid:
+            parent = get_object_or_404(Pin.objects.filter(profile=profile), uuid=parent_uuid)
+            for pin in pins:
+                if pin.pk == parent.pk or pin.would_create_cycle(parent):
+                    continue
+                pin.parent_pin = parent
+                pin.save(update_fields=["parent_pin"])
+                reparented += 1
+
+        return JsonResponse({"ok": True, "count": len(pins), "reparented": reparented})
 
 
-class PinBulkEditBadgeOptionsView(LoginRequiredMixin, View):
-    """Return the union of organize badges present on at least one of the given pins."""
+class PinBulkEditLabelOptionsView(LoginRequiredMixin, View):
+    """Return the union of organize labels present on at least one of the given pins."""
 
     def get(self, request: HttpRequest, *args, **kwargs) -> HttpResponse:
         uuids = request.GET.getlist("uuids")
         if not uuids:
-            return JsonResponse({"badges": []})
+            return JsonResponse({"labels": []})
 
         profile = _request_profile(request)
-        pins = _owned_root_pins(profile, uuids)
-        badges = Badge.objects.filter(kind__in=_ORGANIZE_KINDS, pins__in=pins).distinct().order_by("name")
+        pins = _owned_pins(profile, uuids)
+        labels = Label.objects.filter(kind__in=_ORGANIZE_KINDS, pins__in=pins).distinct().order_by("name")
         return JsonResponse(
             {
-                "badges": [{"id": b.id, "name": b.name, "icon": b.effective_icon, "color": b.effective_color, "kind": b.kind} for b in badges],
+                "labels": [{"id": b.id, "name": b.name, "icon": b.effective_icon, "color": b.effective_color, "kind": b.kind} for b in labels],
             },
         )
+
+
+class PinParentSearchView(LoginRequiredMixin, View):
+    """Search the requester's own pins by name or alias, to pick a bulk-edit parent target.
+
+    GET /map/pins/parent-search/?q=...&exclude=<uuid>&exclude=<uuid>...
+    """
+
+    def get(self, request: HttpRequest, *args, **kwargs) -> HttpResponse:
+        query = (request.GET.get("q") or "").strip()
+        if len(query) < 2:
+            return JsonResponse({"results": []})
+
+        profile = _request_profile(request)
+        exclude_uuids = set(request.GET.getlist("exclude"))
+        pins = Pin.objects.filter(profile=profile).select_related("location").filter(Q(name__icontains=query) | Q(aliases__name__icontains=query)).exclude(uuid__in=exclude_uuids).distinct().order_by("name")[:10]
+        return JsonResponse(
+            {
+                "results": [
+                    {
+                        "uuid": str(pin.uuid),
+                        "name": pin.effective_name,
+                        "subtitle": pin.location.display_name if pin.location else "",
+                    }
+                    for pin in pins
+                ],
+            },
+        )
+
+
+class PinBulkExportView(LoginRequiredMixin, View):
+    """Download selected pins as GeoJSON/KML/GPX/CSV (UL-377/UL-382, plain form POST).
+
+    A plain (non-JSON) form POST, not fetch/JSON like the other bulk views -
+    submitted via a throwaway <form target="_blank"> so the browser handles
+    the file download itself from the Content-Disposition header, with no
+    URL-length limit on the pin count and no client-side blob handling.
+    """
+
+    def post(self, request: HttpRequest, *args, **kwargs) -> HttpResponse:
+        from urbanlens.dashboard.services.export_formats import EXPORT_FORMATS
+
+        fmt = request.POST.get("format", "")
+        if fmt not in EXPORT_FORMATS:
+            return HttpResponse("Unknown export format.", status=400)
+
+        uuids = [str(x) for x in request.POST.getlist("uuids")]
+        if not uuids:
+            return HttpResponse("No pins specified.", status=400)
+
+        profile = _request_profile(request)
+        pins = _owned_pins(profile, uuids).select_related("location")
+        if not pins.exists():
+            return HttpResponse("No matching pins.", status=404)
+
+        writer, extension, content_type = EXPORT_FORMATS[fmt]
+        content = writer(pins)
+        response = HttpResponse(content, content_type=content_type)
+        response["Content-Disposition"] = f'attachment; filename="pins.{extension}"'
+        return response

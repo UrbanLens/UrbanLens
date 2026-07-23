@@ -3,7 +3,7 @@
 
 // -- FAQ page ----------------------------------------------------------------
 
-.page-faq {
+body.page-faq {
 
     > div.container {
         max-width: 100%;
@@ -11,9 +11,8 @@
 
     // Shared inner width
     .faq-section-inner,
-    .faq-cta-inner,
-    .faq-jump-inner {
-        max-width: 900px;
+    .faq-cta-inner {
+        max-width: 90rem;
         margin: 0 auto;
         padding: 0 1.5rem;
     }
@@ -25,7 +24,7 @@
         justify-content: center;
         text-align: center;
         padding: 4rem 1.5rem 3rem;
-        background: linear-gradient(145deg, $color-indigo-900 0%, $color-indigo-900 30%, $color-indigo-700 60%, $color-blue-500 100%);
+        background: linear-gradient(135deg, rgba(31, 111, 235, 0.2), rgba(23, 185, 120, 0.15));
         color: var(--ul-grey-4);
 
         @include up($breakpoint-sm) {
@@ -34,7 +33,7 @@
     }
 
     .faq-hero-inner {
-        max-width: 700px;
+        max-width: 70rem;
         margin: 0 auto;
     }
 
@@ -65,76 +64,23 @@
         font-size: 1.05rem;
         color: $color-indigo-200;
         line-height: 1.7;
-        max-width: 560px;
+        max-width: 56rem;
         margin: 0 auto;
-
-        a {
-            color: var(--ul-grey-0);
-            font-weight: 600;
-            text-decoration: underline;
-            text-underline-offset: 2px;
-        }
     }
 
-    // -- Quick jump nav ----------------------------------------------------------
-    .faq-jump {
-        background: var(--ul-grey-0);
-        border-bottom: 1px solid var(--ul-grey-1b);
-        position: sticky;
-        top: 0;
-        z-index: 5;
-        box-shadow: 0 4px 16px -12px rgba(0, 0, 0, .25);
-    }
-
-    .faq-jump-inner {
-        display: flex;
-        align-items: center;
-        justify-content: flex-start;
-        gap: .4rem;
-        padding: .7rem 1.5rem;
-        overflow-x: auto;
+    // Quick jump nav now uses the shared .ul-page-subnav/.ul-subnav-tabs/
+    // .ul-subnav-tab component (see _page_hero.scss) instead of bespoke pill
+    // styling, so its look matches every other page's subnav (Safety, Trips,
+    // Profile, Memories, Settings, ...). Smooth-scroll the same way every
+    // other in-page anchor on this page already does.
+    .ul-page-subnav .ul-subnav-tabs {
         scroll-behavior: smooth;
-        scrollbar-width: none;
-
-        &::-webkit-scrollbar {
-            display: none;
-        }
-
-        @include up($breakpoint-sm) {
-            justify-content: center;
-            flex-wrap: wrap;
-        }
-    }
-
-    .faq-jump-link {
-        font-size: .82rem;
-        font-weight: 600;
-        color: var(--ul-grey-6);
-        padding: .45rem .95rem;
-        border-radius: 999px;
-        border: 1px solid transparent;
-        text-decoration: none;
-        white-space: nowrap;
-        flex-shrink: 0;
-        transition: background .15s ease, color .15s ease, border-color .15s ease;
-
-        &:hover {
-            background: rgba($primary-color, .08);
-            border-color: rgba($primary-color, .2);
-            color: var(--primary-color);
-        }
-
-        &:focus-visible {
-            outline: 2px solid var(--primary-color);
-            outline-offset: 2px;
-        }
     }
 
     // -- Shared section chrome -------------------------------------------------
     .faq-section {
         padding: 4.5rem 0;
         background: var(--ul-grey-0);
-        scroll-margin-top: 3.5rem;
 
         &--alt {
             background: var(--ul-grey-0b);
@@ -167,8 +113,8 @@
     }
 
     .faq-item {
-        background: var(--ul-grey-0);
-        border: 1px solid var(--ul-grey-1b);
+        background: var(--ul-surface-raised);
+        border: 1px solid var(--ul-surface-raised-border);
         border-left: 3px solid transparent;
         border-radius: 12px;
         padding: 0;
@@ -310,7 +256,7 @@
 
     // -- CTA -------------------------------------------------------------------
     .faq-cta-section {
-        background: linear-gradient(135deg, $color-indigo-900 0%, $color-indigo-700 100%);
+        background: linear-gradient(135deg, rgba(31, 111, 235, 0.2), rgba(23, 185, 120, 0.15));
         padding: 5rem 1.5rem;
         text-align: center;
         color: var(--ul-grey-4);

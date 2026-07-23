@@ -1,0 +1,70 @@
+{% comment %}
+Links list for a pin or wiki - chips with a remove button, styled like the
+other detail-item rows. On the pin details page this lives in its own
+standalone card (see pin_overview_partial.html's Links card, which is
+always visible with its own "Add a link" header button) rather than nested
+inside the Details card. The Location wiki page still nests it inline among
+its own detail rows.
+
+Usage: rendered via PinLinksView/LocationLinksView, which supply `links`,
+`add_url`, `delete_url_name`, `row_id`, `owner_slug` (the url's first
+argument), and either `pin` or `wiki` for display purposes.
+
+use_dialog: when true, no inline add-toggle/form is rendered here at all -
+the caller provides its own "Add a link" button elsewhere (a card header on
+the pin page) that opens the shared #pin-link-add-dialog. Unset/false (the
+wiki page's usage) keeps the original inline add-toggle/form. use_dialog
+also suppresses the "Links" field-label below, since the pin page's usage
+already lives in its own standalone card with a "Links" card-header title -
+the wiki's inline usage still needs the label, since there it's one row
+among several detail-item fields with no title of its own.
+{% endcomment %}
+{% if use_dialog %}
+{# Keeps the standalone Links card's header count in sync with this row - #}
+{# see pin_overview_partial.html's badge, and label_membership_panel.html's #}
+{# organization-count-badge for the same OOB-swap-a-header-badge pattern.  #}
+<span class="badge" id="pin-links-count-badge" hx-swap-oob="true"{% if not links %} hidden{% endif %}>{{ links|length }}</span>
+{% endif %}
+<div class="detail-item detail-item--links full-width" id="{{ row_id }}">
+    {% if not use_dialog %}<span class="field-label">Links</span>{% endif %}
+    <span class="field-value pin-links-value">
+        {% for link in links %}
+        <span class="pin-link-item">
+            <span class="pin-link-chip">
+                <a href="{{ link.url }}" target="_blank" rel="noopener noreferrer" title="{{ link.url }}"
+                   {% if wiki %}onclick="return window.urbanlensConfirmExternalLink(event, this.href)"{% endif %}>{{ link.display_name }}</a>
+                {% if link.wayback_url %}
+                <a href="{{ link.wayback_url }}" target="_blank" rel="noopener noreferrer" class="pin-link-chip-wayback" title="View archived snapshot (Wayback Machine)">
+                    <i class="material-symbols-outlined">history</i>
+                </a>
+                {% endif %}
+            </span>
+            {% include "dashboard/partials/pins/_ai_extract_button.html" with url=link.url %}
+            <button type="button" class="pin-link-chip-remove"
+                    hx-delete="{% url delete_url_name owner_slug link.id %}"
+                    hx-target="#{{ row_id }}" hx-swap="outerHTML"
+                    hx-confirm="Remove this link?"
+                    title="Remove link">
+                <i class="material-symbols-outlined">close</i>
+            </button>
+        </span>
+        {% empty %}
+        <span class="pin-links-empty">No links yet.</span>
+        {% endfor %}
+        {% if not use_dialog %}
+        <button type="button" class="pin-link-add-toggle" title="Add a link"
+                onclick="this.hidden=true; this.nextElementSibling.hidden=false; this.nextElementSibling.querySelector('input').focus();">
+            <i class="material-symbols-outlined">add_link</i>
+        </button>
+        <form class="pin-link-add-form" hidden
+              hx-post="{% url add_url owner_slug %}"
+              hx-target="#{{ row_id }}" hx-swap="outerHTML">
+            {% csrf_token %}
+            <input type="text" name="name" placeholder="Site name (optional)" maxlength="255" autocomplete="off">
+            <input type="url" name="url" placeholder="https://..." required autocomplete="off">
+            <button type="submit" class="btn btn--primary btn--sm">Add</button>
+            <button type="button" class="btn btn--ghost btn--sm" onclick="this.closest('form').hidden=true; this.closest('form').previousElementSibling.hidden=false;">Cancel</button>
+        </form>
+        {% endif %}
+    </span>
+</div>

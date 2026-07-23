@@ -153,7 +153,7 @@ class UsernameGenerator:
     )
 
     ANIMALS: tuple[str, ...] = (
-        "badger",
+        "labelr",
         "bear",
         "beetle",
         "bison",

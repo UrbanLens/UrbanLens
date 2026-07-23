@@ -1,0 +1,55 @@
+{% comment %}
+Generic plugin-panel tab strip: condenses several InfoPanelSource panels into
+one card's tabs instead of N standalone auto-loading cards. Each tab's content
+is fetched only once the user actually clicks it - see PinController.panel_info,
+which every tab shares (already fully generic per-key dispatch, no new backend
+needed). The "Regional Data" card is the only user of this template - its tabs
+combine the always-available panels (US Census, iNaturalist, Seismic) with the
+subscription-gated "Nearby Research" ones (EPA nearby-facility search) into a
+single ordered list (see PinController.view's panel_tabs) rather than two
+separate cards, which is what this template originally supported and still
+could again if a second use ever needs it (hence still taking ids/heading as
+params rather than hardcoding them).
+
+Context (all required except default_tab_key, pass explicitly via {% include ... with %}):
+  pin              - the Pin being viewed
+  tabs             - list of {key, label, icon} dicts, in tab order
+  default_tab_key  - key of the tab to show pre-loaded on page load, i.e. the
+                     first tab (in display order) that already has fresh
+                     cached data - or None if no tab does, in which case the
+                     original click-to-load placeholder is shown as before.
+  section_id       - unique DOM id for this tab strip's outer card
+  body_id          - unique DOM id for the tab content region (hx-target)
+  heading          - card header text
+  heading_icon     - card header Material symbol name
+  collapse_section - data-collapse-section value (unique per tab strip)
+  collapse_label   - data-collapse-label value
+{% endcomment %}
+<div id="{{ section_id }}" class="card card--secondary"
+     data-collapse-scope="pin" data-collapse-section="{{ collapse_section }}" data-collapse-label="{{ collapse_label }}">
+    <div class="card-header">
+        <i class="material-symbols-outlined">{{ heading_icon }}</i>
+        <h3>{{ heading }}</h3>
+    </div>
+    <div class="card-tabs" role="tablist">
+        {% for tab in tabs %}
+        <button type="button" class="pin-plugin-tab-btn card-tab{% if tab.key == default_tab_key %} active{% endif %}" role="tab"
+                aria-selected="{% if tab.key == default_tab_key %}true{% else %}false{% endif %}"
+                hx-get="{% url 'pin.panel' pin.slug tab.key %}"
+                hx-target="#{{ body_id }}" hx-swap="innerHTML"
+                {% if tab.key == default_tab_key %}hx-trigger="load[!window.ulSectionCollapsed('pin','{{ collapse_section }}')], click"{% endif %}
+                onclick="document.querySelectorAll('#{{ section_id }} .pin-plugin-tab-btn').forEach(function (b) { b.classList.remove('active'); b.setAttribute('aria-selected', 'false'); }); this.classList.add('active'); this.setAttribute('aria-selected', 'true');">
+            <i class="material-symbols-outlined">{{ tab.icon }}</i>
+            <span>{{ tab.label }}</span>
+        </button>
+        {% endfor %}
+    </div>
+    {# pin-plugin-tab-body is a real class (not just this div's id) so the     #}
+    {# nested-card-chrome-stripping rule in _pin-detail.scss actually matches -#}
+    {# it used to only be a coincidentally-matching id string, which a class   #}
+    {# selector never matches, so every panel rendered into a tab kept its own #}
+    {# nested .card-header regardless of which tab strip it was in.           #}
+    <div id="{{ body_id }}" class="card__body pin-plugin-tab-body">
+        <p class="pin-plugin-tab-placeholder">Select a category above to load its data.</p>
+    </div>
+</div>

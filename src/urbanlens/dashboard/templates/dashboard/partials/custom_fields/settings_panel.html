@@ -1,0 +1,82 @@
+{# Settings > Customize panel: manage custom field definitions per entity type. #}
+{# Swapped whole via HTMX (innerHTML of #custom-fields-settings). #}
+<div id="custom-fields-settings-panel" class="cf-settings-panel">
+    {% for group in groups %}
+    <div class="cf-group" id="cf-group-{{ group.entity_type }}">
+        <div class="cf-group-header">
+            <i class="material-symbols-outlined">{{ group.icon }}</i>
+            <span class="cf-group-title">{{ group.label }}</span>
+            <span class="cf-group-count">{{ group.fields|length }}</span>
+        </div>
+
+        {% if group.fields %}
+        <ul class="cf-field-list">
+            {% for field in group.fields %}
+            <li class="cf-field-row" id="cf-field-row-{{ field.id }}">
+                <div class="cf-field-display" id="cf-field-display-{{ field.id }}">
+                    <i class="material-symbols-outlined cf-type-icon" title="{{ field.get_field_type_display }}">{{ field.type_icon }}</i>
+                    <span class="cf-field-name">{{ field.name }}</span>
+                    <span class="cf-type-chip">{{ field.get_field_type_display }}{% if field.style %} · {{ field.get_style_display }}{% endif %}{% if field.reference_kind %} · {{ field.reference_kind_label }}{% endif %}{% if field.display != "default" %} · {{ field.get_display_display }}{% endif %}</span>
+                    <span class="cf-field-actions">
+                        <button type="button" class="btn btn--icon-sm" title="Edit field"
+                                onclick="document.getElementById('cf-field-display-{{ field.id }}').hidden = true; document.getElementById('cf-field-edit-{{ field.id }}').hidden = false;">
+                            <i class="material-symbols-outlined">edit</i>
+                        </button>
+                        <button type="button" class="btn btn--icon-sm cf-delete-btn" title="Delete field"
+                                hx-delete="{% url 'custom_fields.delete' field.id %}"
+                                hx-target="#custom-fields-settings"
+                                hx-swap="innerHTML"
+                                hx-confirm="Delete “{{ field.name }}” and every value stored in it? This cannot be undone.">
+                            <i class="material-symbols-outlined">delete</i>
+                        </button>
+                    </span>
+                </div>
+                <form class="cf-field-edit cf-def-form" id="cf-field-edit-{{ field.id }}" hidden
+                      hx-post="{% url 'custom_fields.update' field.id %}"
+                      hx-target="#custom-fields-settings"
+                      hx-swap="innerHTML">
+                    {% csrf_token %}
+                    <input type="text" name="name" class="cf-input cf-name-input" value="{{ field.name }}" maxlength="100" required>
+                    {% include "dashboard/partials/custom_fields/_definition_fields.html" with field=field show_display=group.supports_display %}
+                    <button type="submit" class="btn btn--icon-sm" title="Save">
+                        <i class="material-symbols-outlined">check</i>
+                    </button>
+                    <button type="button" class="btn btn--icon-sm" title="Cancel"
+                            onclick="document.getElementById('cf-field-edit-{{ field.id }}').hidden = true; document.getElementById('cf-field-display-{{ field.id }}').hidden = false;">
+                        <i class="material-symbols-outlined">close</i>
+                    </button>
+                </form>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="cf-group-empty">No custom fields for {{ group.label|lower }} yet.</p>
+        {% endif %}
+
+        <button type="button" class="btn btn--secondary cf-add-trigger" id="cf-add-trigger-{{ group.entity_type }}"
+                onclick="document.getElementById('cf-add-trigger-{{ group.entity_type }}').hidden = true; document.getElementById('cf-add-form-{{ group.entity_type }}').hidden = false; document.getElementById('cf-add-form-{{ group.entity_type }}').querySelector('.cf-name-input').focus();">
+            <i class="material-symbols-outlined">add</i>
+            <span>Add field</span>
+        </button>
+
+        <form class="cf-add-form cf-def-form" id="cf-add-form-{{ group.entity_type }}" hidden
+              hx-post="{% url 'custom_fields.settings' %}"
+              hx-target="#custom-fields-settings"
+              hx-swap="innerHTML">
+            {% csrf_token %}
+            <input type="hidden" name="entity_type" value="{{ group.entity_type }}">
+            <input type="text" name="name" class="cf-input cf-name-input" placeholder="New field name..." maxlength="100" required>
+            {% include "dashboard/partials/custom_fields/_definition_fields.html" with require_type=True show_display=group.supports_display %}
+            <button type="submit" class="btn btn--icon-sm cf-add-btn" title="Add field">
+                <i class="material-symbols-outlined">check</i>
+            </button>
+            <button type="button" class="btn btn--icon-sm" title="Cancel"
+                    onclick="document.getElementById('cf-add-form-{{ group.entity_type }}').hidden = true; document.getElementById('cf-add-form-{{ group.entity_type }}').reset(); document.getElementById('cf-add-trigger-{{ group.entity_type }}').hidden = false;">
+                <i class="material-symbols-outlined">close</i>
+            </button>
+        </form>
+    </div>
+    {% endfor %}
+
+    {% include "dashboard/partials/custom_fields/_definition_form_script.html" %}
+</div>

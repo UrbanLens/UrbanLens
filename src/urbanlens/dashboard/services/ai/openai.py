@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from decimal import Decimal
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 import openai
 from openai import OpenAI
@@ -26,6 +27,13 @@ DEFAULT_MODEL = "gpt-5-nano"
 
 class OpenAIGateway(LLMGateway[ChatCompletion]):
     _api_key: str | None
+
+    #: Cost per thousand (sent, received) tokens, in USD.
+    MODEL_COSTS: ClassVar[dict[str, tuple[Decimal, Decimal]]] = {
+        "gpt-5.2": (Decimal("0.00175"), Decimal("0.014")),
+        "gpt-5-mini": (Decimal("0.00025"), Decimal("0.002")),
+        "gpt-5-nano": (Decimal("0.00005"), Decimal("0.0004")),
+    }
 
     @property
     def api_key(self) -> str | None:

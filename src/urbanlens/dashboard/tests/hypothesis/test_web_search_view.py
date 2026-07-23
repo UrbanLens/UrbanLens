@@ -6,6 +6,7 @@ The domain extraction helper is tested directly with Hypothesis.
 """
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 from urllib.parse import urlparse
 
@@ -13,10 +14,13 @@ from hypothesis import given, settings as hyp_settings, strategies as st
 from model_bakery import baker
 import pytest
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.subscriptions import SiteFeature, SubscriptionRole, grant_subscription
 from urbanlens.dashboard.services.locations.naming import is_meaningful_name
+
+if TYPE_CHECKING:
+    from django.contrib.auth.models import User
 
 _hyp = hyp_settings(max_examples=60, deadline=None)
 
@@ -33,7 +37,7 @@ def _extract_domain(url: str) -> str:
         return ""
 
 
-class DomainExtractionTests(TestCase):
+class DomainExtractionTests(SimpleTestCase):
     """Domain is correctly stripped from full URLs."""
 
     def test_simple_url_returns_domain(self):
@@ -103,8 +107,9 @@ class LocationHasPlaceNameTests(TestCase):
         from urbanlens.dashboard.models.location.model import Location
 
         loc = baker.prepare(Location, latitude="40.0", longitude="-74.0", google_place=None)
-        with patch.object(Location, "get_place_name", return_value=None):
+        with patch.object(Location, "get_place_name") as mock_get:
             self.assertFalse(loc.has_place_name())
+        mock_get.assert_not_called()
 
     def test_sentinel_string_is_not_meaningful(self):
         loc = self._location_with_cached_name("No Information Available")
@@ -136,6 +141,67 @@ class LocationHasPlaceNameTests(TestCase):
     def test_any_real_name_is_meaningful(self, name: str):
         loc = self._location_with_cached_name(name)
         self.assertTrue(loc.has_place_name())
+
+
+class UniqueSearchNameQuoteLocalityTests(TestCase):
+    """Pin.get_unique_search_name's quote_locality option: wraps "city state" as
+    one exact-phrase term instead of two loose keywords, so a generic street
+    address doesn't match the same address in an unrelated city - see the
+    web_search view, which is the one caller that opts into this."""
+
+    def _make_pin(self, *, city: str | None = "Cincinnati", state: str | None = "Ohio", county: str | None = None) -> Pin:
+        from urbanlens.dashboard.models.location.model import Location
+        from urbanlens.dashboard.models.profile.model import Profile
+
+        loc = baker.make(Location, official_name="118 W 9th St", latitude=39.1, longitude=-84.5, city=city, state=state, county=county)
+        user: User = baker.make("auth.User")
+        profile = Profile.objects.get(user=user)
+        return baker.make(Pin, location=loc, profile=profile)
+
+    def test_city_and_state_are_quoted_together(self) -> None:
+        pin = self._make_pin(city="Cincinnati", state="Ohio")
+        result = pin.get_unique_search_name(quote_name=True, quote_locality=True)
+        assert result is not None
+        self.assertIn('"Cincinnati Ohio"', result)
+
+    def test_without_quote_locality_city_and_state_are_loose_keywords(self) -> None:
+        pin = self._make_pin(city="Cincinnati", state="Ohio")
+        result = pin.get_unique_search_name(quote_name=True, quote_locality=False)
+        assert result is not None
+        self.assertNotIn('"Cincinnati Ohio"', result)
+        self.assertIn("Cincinnati", result)
+        self.assertIn("Ohio", result)
+
+    def test_county_used_when_no_city(self) -> None:
+        pin = self._make_pin(city=None, state="Ohio", county="Hamilton County")
+        result = pin.get_unique_search_name(quote_name=True, quote_locality=True)
+        assert result is not None
+        self.assertIn('"Hamilton County Ohio"', result)
+
+    def test_state_only_is_still_quoted(self) -> None:
+        pin = self._make_pin(city=None, state="Ohio", county=None)
+        result = pin.get_unique_search_name(quote_name=True, quote_locality=True)
+        assert result is not None
+        self.assertIn('"Ohio"', result)
+
+    def test_no_locality_data_omits_the_locality_term_entirely(self) -> None:
+        pin = self._make_pin(city=None, state=None, county=None)
+        result = pin.get_unique_search_name(quote_name=True, quote_locality=True)
+        assert result is not None
+        self.assertNotIn('""', result)
+
+    def test_address_is_quoted_as_an_exact_phrase_when_quote_name_is_set(self) -> None:
+        from urbanlens.dashboard.models.location.model import Location
+        from urbanlens.dashboard.models.profile.model import Profile
+
+        loc = baker.make(Location, official_name="Old Mill Factory", latitude=39.1, longitude=-84.5, city="Cincinnati", state="Ohio", street_number="118", route="W 9th St")
+        user: User = baker.make("auth.User")
+        profile = Profile.objects.get(user=user)
+        pin = baker.make(Pin, location=loc, profile=profile)
+
+        result = pin.get_unique_search_name(quote_name=True)
+        assert result is not None
+        self.assertIn('"118 W 9th St"', result)
 
 
 class SearchSubscriptionFeatureTests(TestCase):
@@ -199,7 +265,7 @@ class WebSearchViewTests(TestCase):
         request.user = pin.profile.user
 
         with (
-            patch("urbanlens.dashboard.controllers.pin.get_search_gateway") as mock_factory,
+            patch("urbanlens.dashboard.controllers.pin.search_web") as mock_search_web,
             patch.object(Pin.objects, "select_related") as mock_select_related,
         ):
             mock_select_related.return_value.get.return_value = pin
@@ -207,7 +273,7 @@ class WebSearchViewTests(TestCase):
             response = view.web_search(request, pin_slug=pin.slug)
 
         self.assertEqual(response.status_code, 403)
-        mock_factory.assert_not_called()
+        mock_search_web.assert_not_called()
 
     def test_successful_search_returns_200(self):
         from django.test import RequestFactory
@@ -223,21 +289,100 @@ class WebSearchViewTests(TestCase):
         mock_results = [{"title": "Result", "link": "http://example.com/page", "snippet": "A snippet"}]
 
         with (
-            patch("urbanlens.dashboard.controllers.pin.get_search_gateway") as mock_factory,
+            patch("urbanlens.dashboard.controllers.pin.search_web") as mock_search_web,
             patch.object(Pin.objects, "select_related") as mock_select_related,
         ):
-            mock_gw = MagicMock()
-            mock_gw.search.return_value = mock_results
-            mock_factory.return_value = mock_gw
+            mock_search_web.return_value = mock_results
             mock_select_related.return_value.get.return_value = pin
 
             view = PinController()
             response = view.web_search(request, pin_slug=pin.slug)
 
         self.assertEqual(response.status_code, 200)
-        mock_gw.search.assert_called_once()
-        self.assertIn("Official Test Location", mock_gw.search.call_args.args[0])
-        self.assertNotIn("User Edited Location", mock_gw.search.call_args.args[0])
+        mock_search_web.assert_called_once()
+        self.assertIn("Official Test Location", mock_search_web.call_args.args[0])
+        self.assertNotIn("User Edited Location", mock_search_web.call_args.args[0])
+
+    def test_result_carries_a_bookmark_button_posting_to_pin_links(self) -> None:
+        """Bookmarking a web search result reuses the same pin.links endpoint (and
+        therefore the same Wayback-archiving-on-create signal) as the Links card's
+        own add-link dialog - see _pin_link_add_dialog.html."""
+        from django.test import RequestFactory
+        from django.urls import reverse
+
+        from urbanlens.dashboard.controllers.pin import PinController
+
+        pin = self._make_pin()
+        rf = RequestFactory()
+        request = rf.get("/")
+        request.user = pin.profile.user
+
+        mock_results = [{"title": "Old Mill Historical Society", "link": "http://example.com/page", "snippet": "A snippet"}]
+
+        with (
+            patch("urbanlens.dashboard.controllers.pin.search_web") as mock_search_web,
+            patch.object(Pin.objects, "select_related") as mock_select_related,
+        ):
+            mock_search_web.return_value = mock_results
+            mock_select_related.return_value.get.return_value = pin
+
+            view = PinController()
+            response = view.web_search(request, pin_slug=pin.slug)
+
+        content = response.content.decode()
+        self.assertIn(f'hx-post="{reverse("pin.links", args=[pin.slug])}"', content)
+        self.assertIn('hx-target="#pin-links-row"', content)
+        self.assertIn("Old Mill Historical Society", content)
+        self.assertIn("http://example.com/page", content)
+
+    def test_empty_fresh_results_return_204_not_a_no_results_card(self) -> None:
+        """Regression guard: an empty search must hide the panel (204, the
+        site-wide data-ext-panel-204 convention) rather than rendering a
+        visible "No results found." card."""
+        from django.test import RequestFactory
+
+        from urbanlens.dashboard.controllers.pin import PinController
+
+        pin = self._make_pin()
+        rf = RequestFactory()
+        request = rf.get("/")
+        request.user = pin.profile.user
+
+        with (
+            patch("urbanlens.dashboard.controllers.pin.search_web") as mock_search_web,
+            patch.object(Pin.objects, "select_related") as mock_select_related,
+        ):
+            mock_search_web.return_value = []
+            mock_select_related.return_value.get.return_value = pin
+            view = PinController()
+            response = view.web_search(request, pin_slug=pin.slug)
+
+        self.assertEqual(response.status_code, 204)
+
+    def test_empty_cached_results_return_204(self) -> None:
+        from django.test import RequestFactory
+
+        from urbanlens.dashboard.controllers.pin import PinController
+        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+
+        pin = self._make_pin()
+        search_name = pin.get_unique_search_name(quote_name=True, quote_locality=True)
+        assert search_name is not None
+        LocationCache.set(pin.location, "web_search", {"results": []}, query_key=search_name)
+        rf = RequestFactory()
+        request = rf.get("/")
+        request.user = pin.profile.user
+
+        with (
+            patch("urbanlens.dashboard.controllers.pin.search_web") as mock_search_web,
+            patch.object(Pin.objects, "select_related") as mock_select_related,
+        ):
+            mock_select_related.return_value.get.return_value = pin
+            view = PinController()
+            response = view.web_search(request, pin_slug=pin.slug)
+
+        self.assertEqual(response.status_code, 204)
+        mock_search_web.assert_not_called()
 
     def test_search_skips_pins_without_official_name(self):
         from django.test import RequestFactory
@@ -252,7 +397,7 @@ class WebSearchViewTests(TestCase):
         request.user = pin.profile.user
 
         with (
-            patch("urbanlens.dashboard.controllers.pin.get_search_gateway") as mock_factory,
+            patch("urbanlens.dashboard.controllers.pin.search_web") as mock_search_web,
             patch.object(Pin.objects, "select_related") as mock_select_related,
         ):
             mock_select_related.return_value.get.return_value = pin
@@ -260,7 +405,7 @@ class WebSearchViewTests(TestCase):
             response = view.web_search(request, pin_slug=pin.slug)
 
         self.assertEqual(response.status_code, 204)
-        mock_factory.assert_not_called()
+        mock_search_web.assert_not_called()
 
     def test_domain_key_added_to_each_result(self):
         from django.test import RequestFactory
@@ -285,13 +430,11 @@ class WebSearchViewTests(TestCase):
         ]
 
         with (
-            patch("urbanlens.dashboard.controllers.pin.get_search_gateway") as mock_factory,
+            patch("urbanlens.dashboard.controllers.pin.search_web") as mock_search_web,
             patch.object(Pin.objects, "select_related") as mock_select_related,
             patch("urbanlens.dashboard.controllers.pin.render", side_effect=fake_render),
         ):
-            mock_gw = MagicMock()
-            mock_gw.search.return_value = mock_results
-            mock_factory.return_value = mock_gw
+            mock_search_web.return_value = mock_results
             mock_select_related.return_value.get.return_value = pin
 
             view = PinController()
@@ -320,12 +463,10 @@ class WebSearchViewTests(TestCase):
         mock_results = [{"title": "Result", "link": "http://example.com/page", "snippet": "s"}]
 
         with (
-            patch("urbanlens.dashboard.controllers.pin.get_search_gateway") as mock_factory,
+            patch("urbanlens.dashboard.controllers.pin.search_web") as mock_search_web,
             patch.object(Pin.objects, "select_related") as mock_select_related,
         ):
-            mock_gw = MagicMock()
-            mock_gw.search.return_value = mock_results
-            mock_factory.return_value = mock_gw
+            mock_search_web.return_value = mock_results
             mock_select_related.return_value.get.side_effect = [pin_a, pin_b]
 
             view = PinController()
@@ -339,7 +480,7 @@ class WebSearchViewTests(TestCase):
 
         self.assertEqual(response_a.status_code, 200)
         self.assertEqual(response_b.status_code, 200)
-        mock_gw.search.assert_called_once()
+        mock_search_web.assert_called_once()
 
     def test_refresh_rejected_when_cache_is_too_recent(self):
         from django.test import RequestFactory
@@ -348,7 +489,7 @@ class WebSearchViewTests(TestCase):
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
 
         pin = self._make_pin()
-        LocationCache.set(pin.location, "web_search", {"results": []}, query_key=pin.get_unique_search_name(quote_name=True))
+        LocationCache.set(pin.location, "web_search", {"results": []}, query_key=pin.get_unique_search_name(quote_name=True, quote_locality=True))
 
         rf = RequestFactory()
         request = rf.post("/")
@@ -371,7 +512,7 @@ class WebSearchViewTests(TestCase):
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
 
         pin = self._make_pin()
-        entry = LocationCache.set(pin.location, "web_search", {"results": []}, query_key=pin.get_unique_search_name(quote_name=True))
+        entry = LocationCache.set(pin.location, "web_search", {"results": []}, query_key=pin.get_unique_search_name(quote_name=True, quote_locality=True))
         LocationCache.objects.filter(pk=entry.pk).update(updated=timezone.now() - timedelta(days=1, minutes=1))
 
         rf = RequestFactory()
@@ -381,19 +522,17 @@ class WebSearchViewTests(TestCase):
         mock_results = [{"title": "Fresh Result", "link": "http://example.com/new", "snippet": "s"}]
 
         with (
-            patch("urbanlens.dashboard.controllers.pin.get_search_gateway") as mock_factory,
+            patch("urbanlens.dashboard.controllers.pin.search_web") as mock_search_web,
             patch.object(Pin.objects, "select_related") as mock_select_related,
         ):
-            mock_gw = MagicMock()
-            mock_gw.search.return_value = mock_results
-            mock_factory.return_value = mock_gw
+            mock_search_web.return_value = mock_results
             mock_select_related.return_value.get.return_value = pin
 
             view = PinController()
             response = view.web_search_refresh(request, pin_slug=pin.slug)
 
         self.assertEqual(response.status_code, 200)
-        mock_gw.search.assert_called_once()
+        mock_search_web.assert_called_once()
 
     def test_gateway_exception_returns_error_template(self):
         from django.test import RequestFactory
@@ -413,13 +552,11 @@ class WebSearchViewTests(TestCase):
             return HttpResponse("")
 
         with (
-            patch("urbanlens.dashboard.controllers.pin.get_search_gateway") as mock_factory,
+            patch("urbanlens.dashboard.controllers.pin.search_web") as mock_search_web,
             patch.object(Pin.objects, "select_related") as mock_select_related,
             patch("urbanlens.dashboard.controllers.pin.render", side_effect=fake_render),
         ):
-            mock_gw = MagicMock()
-            mock_gw.search.side_effect = RuntimeError("API down")
-            mock_factory.return_value = mock_gw
+            mock_search_web.side_effect = RuntimeError("API down")
             mock_select_related.return_value.get.return_value = pin
 
             view = PinController()

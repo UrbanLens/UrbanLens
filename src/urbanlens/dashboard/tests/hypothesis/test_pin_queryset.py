@@ -59,6 +59,40 @@ class PinQuerySetStructureTests(TestCase):
         self.assertNotIn(self.root, self._qs().detail_pins())
 
 
+class PinQuerySetWithinBoundsTests(TestCase):
+    """within_bounds() scopes pins to a lat/lng bounding box (used by the map's pin-list sidebar)."""
+
+    def setUp(self):
+        self.profile = baker.make("auth.User").profile
+        self.inside = baker.make(Pin, profile=self.profile, location=baker.make("dashboard.Location", latitude="40.0", longitude="-74.0"))
+        self.outside = baker.make(Pin, profile=self.profile, location=baker.make("dashboard.Location", latitude="45.0", longitude="-80.0"))
+
+    def _qs(self):
+        return Pin.objects.filter(profile=self.profile)
+
+    def test_includes_pin_inside_the_box(self) -> None:
+        result = self._qs().within_bounds(south=39.0, west=-75.0, north=41.0, east=-73.0)
+        self.assertIn(self.inside, result)
+
+    def test_excludes_pin_outside_the_box(self) -> None:
+        result = self._qs().within_bounds(south=39.0, west=-75.0, north=41.0, east=-73.0)
+        self.assertNotIn(self.outside, result)
+
+    def test_point_just_inside_the_edge_is_included(self) -> None:
+        # PostGIS __within uses strict OGC "within" semantics - a point exactly ON the
+        # boundary is not guaranteed to count (it's boundary, not interior), so this
+        # checks a point just inside the edge rather than asserting exact-edge inclusion.
+        near_edge_location = baker.make("dashboard.Location", latitude="40.999", longitude="-73.001")
+        near_edge_pin = baker.make(Pin, profile=self.profile, location=near_edge_location)
+        result = self._qs().within_bounds(south=39.0, west=-75.0, north=41.0, east=-73.0)
+        self.assertIn(near_edge_pin, result)
+
+    def test_empty_box_excludes_everything(self) -> None:
+        result = self._qs().within_bounds(south=10.0, west=10.0, north=11.0, east=11.0)
+        self.assertNotIn(self.inside, result)
+        self.assertNotIn(self.outside, result)
+
+
 class WikiQuerySetStructureTests(TestCase):
     """root_wikis / child_wikis partition wikis by the parent_wiki FK."""
 
@@ -153,25 +187,25 @@ class PinQuerySetRatingTests(TestCase):
 # -- by_tag --------------------------------------------------------------------
 
 class PinQuerySetByTagTests(TestCase):
-    """by_tag() traverses the Badge parents M2M to include descendant tags."""
+    """by_tag() traverses the Label parents M2M to include descendant tags."""
 
     def setUp(self):
         self.profile = baker.make("auth.User").profile
-        self.parent_tag = baker.make("dashboard.Badge", kind="tag", profile=None)
-        self.child_tag = baker.make("dashboard.Badge", kind="tag", profile=None)
+        self.parent_tag = baker.make("dashboard.Label", kind="tag", profile=None)
+        self.child_tag = baker.make("dashboard.Label", kind="tag", profile=None)
         self.child_tag.parents.add(self.parent_tag)
-        self.other_tag = baker.make("dashboard.Badge", kind="tag", profile=None)
+        self.other_tag = baker.make("dashboard.Label", kind="tag", profile=None)
 
         # A profile may hold only one root pin per Location, so each pin here
         # gets its own.
         self.pin_parent = baker.make(Pin, profile=self.profile)
-        self.pin_parent.badges.add(self.parent_tag)
+        self.pin_parent.labels.add(self.parent_tag)
 
         self.pin_child = baker.make(Pin, profile=self.profile)
-        self.pin_child.badges.add(self.child_tag)
+        self.pin_child.labels.add(self.child_tag)
 
         self.pin_other = baker.make(Pin, profile=self.profile)
-        self.pin_other.badges.add(self.other_tag)
+        self.pin_other.labels.add(self.other_tag)
 
         self.pin_none = baker.make(Pin, profile=self.profile)
 
@@ -264,3 +298,32 @@ class PinManagerGetNearbyOrCreateProximityTests(TestCase):
         pin, created = Pin.objects.get_nearby_or_create(40.0, -74.0, other_profile)
         self.assertTrue(created)
         self.assertNotEqual(pin.pk, self.existing.pk)
+
+
+class PinManagerGetNearbyOrCreateChildPinTests(TestCase):
+    """get_nearby_or_create() must also dedupe against an existing *child* pin.
+
+    Import previously only looked for a root pin (parent_pin__isnull=True) at the
+    Location, so importing a placemark that matched an existing child/sub pin's
+    coordinates silently created a brand-new, disconnected root pin instead of
+    merging into it.
+    """
+
+    def setUp(self):
+        self.profile = baker.make("auth.User").profile
+        self.loc = baker.make("dashboard.Location", latitude="40.0", longitude="-74.0")
+
+    def test_finds_existing_child_pin_when_no_root_pin_exists(self) -> None:
+        parent = baker.make(Pin, profile=self.profile)
+        child = baker.make(Pin, profile=self.profile, location=self.loc, parent_pin=parent)
+        pin, created = Pin.objects.get_nearby_or_create(40.0, -74.0, self.profile, threshold_meters=100)
+        self.assertFalse(created)
+        self.assertEqual(pin.pk, child.pk)
+
+    def test_prefers_root_pin_over_child_pin_when_both_exist_at_same_location(self) -> None:
+        root = baker.make(Pin, profile=self.profile, location=self.loc)
+        other_parent = baker.make(Pin, profile=self.profile)
+        baker.make(Pin, profile=self.profile, location=self.loc, parent_pin=other_parent)
+        pin, created = Pin.objects.get_nearby_or_create(40.0, -74.0, self.profile, threshold_meters=100)
+        self.assertFalse(created)
+        self.assertEqual(pin.pk, root.pk)

@@ -12,16 +12,16 @@ body.page-auth {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(145deg, $color-indigo-900 0%, $color-indigo-900 40%, $color-indigo-700 70%, $color-indigo-500 100%);
+    background: linear-gradient(135deg, rgba(31, 111, 235, 0.2), rgba(23, 185, 120, 0.15));
     padding: 2rem 1rem;
 }
 
 .auth-card {
-    background: var(--ul-grey-0);
+    background: var(--ul-surface-raised);
     border-radius: 20px;
     box-shadow: 0 24px 64px rgba(0, 0, 0, .35);
     width: 100%;
-    max-width: 440px;
+    max-width: 44rem;
     overflow: hidden;
 }
 
@@ -29,8 +29,8 @@ body.page-auth {
 .auth-card-header {
     text-align: center;
     padding: 2.25rem 2rem 1rem;
-    background: linear-gradient(160deg, $color-indigo-50 0%, var(--ul-grey-0), 100%);
-    border-bottom: 1px solid var(--ul-grey-1a);
+    background: linear-gradient(135deg, rgba(31, 111, 235, 0.2), rgba(23, 185, 120, 0.15));
+    border-bottom: 1px solid var(--ul-surface-raised-border);
 }
 
 .auth-logo {
@@ -100,11 +100,11 @@ body.page-auth {
     input[type="password"] {
         width: 100%;
         padding: .7rem .9rem;
-        border: 1.5px solid var(--ul-grey-1a);
+        border: 1.5px solid var(--ul-surface-raised-border);
         border-radius: 9px;
         font-size: .95rem;
         color: var(--ul-grey-8);
-        background: var(--ul-grey-0);
+        background: var(--ul-surface-raised);
         transition: border-color .15s, box-shadow .15s, background .15s;
         box-sizing: border-box;
         font-family: inherit;
@@ -112,7 +112,7 @@ body.page-auth {
         &:focus {
             outline: none;
             border-color: $color-indigo-500;
-            background: var(--ul-grey-0);
+            background: var(--ul-surface-raised);
             box-shadow: 0 0 0 3px rgba(99, 102, 241, .15);
         }
 
@@ -146,7 +146,7 @@ body.page-auth {
 
 // -- Non-field errors ------------------------------------------------------
 .auth-errors {
-    background: var(--ul-grey-0);
+    background: var(--ul-surface-raised);
     border: 1px solid $color-red-200;
     border-radius: 9px;
     padding: .75rem 1rem;
@@ -199,7 +199,7 @@ body.page-auth {
         content: '';
         flex: 1;
         height: 1px;
-        background: var(--ul-grey-0);
+        background: var(--ul-surface-raised-border);
     }
 
     span {
@@ -210,6 +210,32 @@ body.page-auth {
     }
 }
 
+
+// -- 2FA code fallback (login_2fa.html) -------------------------------------
+.auth-code-fallback {
+    margin-top: 1rem;
+
+    summary {
+        cursor: pointer;
+        font-size: .875rem;
+        font-weight: 600;
+        color: $color-indigo-600;
+        text-align: center;
+        list-style: none;
+
+        &::-webkit-details-marker {
+            display: none;
+        }
+
+        &:hover {
+            text-decoration: underline;
+        }
+    }
+
+    .auth-form {
+        margin-top: .85rem;
+    }
+}
 
 // -- Footer links (sign up / log in) --------------------------------------
 .auth-footer {
@@ -273,7 +299,7 @@ body.page-auth {
 
 // Debug-only verification link block
 .auth-debug-block {
-    background: var(--ul-grey-0);
+    background: var(--ul-surface-raised);
     border: 1px solid $color-green-200;
     border-radius: 9px;
     padding: .85rem 1rem;
@@ -290,5 +316,76 @@ body.page-auth {
     a {
         color: $color-green-800;
         font-weight: 700;
+    }
+}
+
+// -- Passphrase suggestions ------------------------------------------------
+.auth-password-help {
+    margin: .15rem 0 .35rem;
+}
+
+.auth-passphrase {
+    display: flex;
+    flex-direction: column;
+    gap: .45rem;
+    margin-top: .15rem;
+}
+
+.auth-passphrase-btn {
+    align-self: flex-start;
+    background: transparent;
+    border: 1.5px solid var(--ul-surface-raised-border);
+    color: $color-indigo-700;
+    font-size: .8rem;
+    font-weight: 600;
+    padding: .4rem .7rem;
+    border-radius: 8px;
+    cursor: pointer;
+    font-family: inherit;
+
+    &:hover:not(:disabled) {
+        border-color: $color-indigo-400;
+        background: $color-indigo-50;
+    }
+
+    &:disabled {
+        opacity: .6;
+        cursor: wait;
+    }
+}
+
+.auth-passphrase-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: .35rem;
+}
+
+.auth-passphrase-option {
+    width: 100%;
+    text-align: left;
+    background: var(--ul-surface-raised);
+    border: 1px solid var(--ul-surface-raised-border);
+    border-radius: 8px;
+    padding: .55rem .75rem;
+    font-size: .85rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    color: var(--ul-grey-8);
+    cursor: pointer;
+    word-break: break-word;
+
+    &:hover {
+        border-color: $color-indigo-400;
+        background: $color-indigo-50;
+    }
+}
+
+.auth-passphrase-status {
+    margin: 0;
+
+    &--error {
+        color: $color-red-600;
     }
 }

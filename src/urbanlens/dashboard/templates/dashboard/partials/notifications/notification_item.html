@@ -35,6 +35,10 @@
     <p class="notif-item__time">{{ n.created|naturaltime }}</p>
     {% if n.is_friend_request_pending %}
     {% include "dashboard/partials/notifications/_accept_decline_buttons.html" with respond_url_name="friend.respond" respond_arg=n.source_profile_id reject_action="decline" reject_label="Decline" %}
+    {% elif n.friend_request_resolution == "accepted" %}
+    <p class="notif-item__resolution notif-item__resolution--accepted"><i class="material-symbols-outlined">check_circle</i> You accepted this request.</p>
+    {% elif n.friend_request_resolution == "declined" %}
+    <p class="notif-item__resolution notif-item__resolution--declined"><i class="material-symbols-outlined">cancel</i> You declined this request.</p>
     {% endif %}
   </div>
   {% if n.is_unread %}<div class="notif-item__dot" aria-hidden="true"></div>{% endif %}
@@ -118,6 +122,7 @@
       {% elif n.notification_type == 'visit_suggested' %}event_available
       {% elif n.notification_type == 'error' %}error
       {% elif n.notification_type == 'warning' %}warning
+      {% elif n.notification_type == 'comment_upload_failed' %}image_not_supported
       {% else %}notifications{% endif %}
     </i>
   </div>

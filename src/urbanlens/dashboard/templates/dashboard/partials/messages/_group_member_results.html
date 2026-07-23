@@ -1,0 +1,28 @@
+{% comment %}
+Search results for the group member pickers (new-group dialog and the
+members dialog's add form). Each row is a toggle button the page JS turns
+into a picked-member chip + hidden `member_slugs` input. Context: `results`,
+`query`.
+{% endcomment %}
+{% if results %}
+<ul class="dm-recipient-list" role="list">
+  {% for candidate in results %}
+  <li>
+    <button type="button" class="dm-recipient-item dm-group-member-pick"
+            data-slug="{{ candidate.slug }}" data-name="{{ candidate.username }}">
+      <span class="msg-avatar" aria-hidden="true">
+        {% if candidate.avatar %}
+        <img src="{{ candidate.avatar.url }}" alt="" class="msg-avatar-img">
+        {% else %}
+        <span class="msg-avatar-initial {{ candidate.avatar_color_class }}">{{ candidate.username|first|upper }}</span>
+        {% endif %}
+      </span>
+      <span>{{ candidate.username }}</span>
+      <i class="material-symbols-outlined dm-group-member-pick__add" aria-hidden="true">add</i>
+    </button>
+  </li>
+  {% endfor %}
+</ul>
+{% elif query|length >= 2 %}
+<p class="dm-recipient-empty">No one matching “{{ query }}” accepts your messages.</p>
+{% endif %}

@@ -1,0 +1,61 @@
+{# One custom-field filter control, branched by field type. Shared by the map filter #}
+{# panel (no prefill; the saved-filter restore JS fills values) and the saved-filter #}
+{# dialog (cfval prefills from the deserialized criteria). #}
+{# Context: field (CustomField), optional cfval (deserialized criterion bounds dict). #}
+<div class="fp-custom-field" title="{{ field.get_field_type_display }} field">
+    <span class="fp-custom-field-label">
+        <i class="material-symbols-outlined">{{ field.type_icon }}</i>
+        {{ field.name }}
+    </span>
+    {% if field.field_type == 'number' %}
+    <div class="fp-custom-field-range">
+        <input type="number" step="any" name="cf_{{ field.id }}_min" class="fp-cf-input" placeholder="Min" aria-label="{{ field.name }} minimum" value="{{ cfval.min|default:'' }}">
+        <span class="fp-cf-range-sep">–</span>
+        <input type="number" step="any" name="cf_{{ field.id }}_max" class="fp-cf-input" placeholder="Max" aria-label="{{ field.name }} maximum" value="{{ cfval.max|default:'' }}">
+    </div>
+    {% elif field.field_type == 'date' %}
+    <div class="fp-date-block">
+        <div class="fp-date-row">
+            <span class="fp-date-label">After</span>
+            <input type="date" name="cf_{{ field.id }}_after" class="fp-date-input" aria-label="{{ field.name }} after" value="{{ cfval.after|date:'Y-m-d'|default:'' }}">
+        </div>
+        <div class="fp-date-row">
+            <span class="fp-date-label">Before</span>
+            <input type="date" name="cf_{{ field.id }}_before" class="fp-date-input" aria-label="{{ field.name }} before" value="{{ cfval.before|date:'Y-m-d'|default:'' }}">
+        </div>
+    </div>
+    {% elif field.field_type == 'time' %}
+    <div class="fp-date-block">
+        <div class="fp-date-row">
+            <span class="fp-date-label">After</span>
+            <input type="time" name="cf_{{ field.id }}_after" class="fp-date-input" aria-label="{{ field.name }} after" value="{{ cfval.after_time|time:'H:i'|default:'' }}">
+        </div>
+        <div class="fp-date-row">
+            <span class="fp-date-label">Before</span>
+            <input type="time" name="cf_{{ field.id }}_before" class="fp-date-input" aria-label="{{ field.name }} before" value="{{ cfval.before_time|time:'H:i'|default:'' }}">
+        </div>
+    </div>
+    {% elif field.field_type == 'select' %}
+    <select name="cf_{{ field.id }}" class="fp-cf-input fp-cf-input--select" aria-label="{{ field.name }}">
+        <option value="">Any</option>
+        {% for choice in field.select_choices %}
+        <option value="{{ choice }}" {% if cfval.equals == choice %}selected{% endif %}>{{ choice }}</option>
+        {% endfor %}
+    </select>
+    {% elif field.field_type == 'checkbox' %}
+    <select name="cf_{{ field.id }}" class="fp-cf-input fp-cf-input--select" aria-label="{{ field.name }}">
+        <option value="">Any</option>
+        <option value="checked" {% if cfval.checked %}selected{% endif %}>Checked</option>
+        <option value="unchecked" {% if cfval.checked == False %}selected{% endif %}>Unchecked</option>
+    </select>
+    {% elif field.field_type == 'reference' %}
+    <select name="cf_{{ field.id }}" class="fp-cf-input fp-cf-input--select" aria-label="{{ field.name }}">
+        <option value="">Any</option>
+        {% for pk, label in field.reference_choices %}
+        <option value="{{ pk }}" {% if cfval.ref_id == pk %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+    </select>
+    {% else %}
+    <input type="text" name="cf_{{ field.id }}" class="fp-cf-input fp-cf-input--text" placeholder="Contains..." autocomplete="off" aria-label="{{ field.name }}" value="{{ cfval.contains|default:'' }}">
+    {% endif %}
+</div>

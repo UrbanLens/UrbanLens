@@ -1,0 +1,148 @@
+<div class="settings-section-body" id="security-settings-section-body">
+    <p class="settings-e2ee-status">
+        {% if passkeys or has_totp %}
+        Two-factor sign-in is <strong>on</strong>{% if passkeys %} ({{ passkeys|length }} passkey{{ passkeys|length|pluralize }}){% endif %}{% if has_totp %} + authenticator app{% endif %}.
+        {% else %}
+        Two-factor sign-in is <strong>off</strong>. Add a passkey or authenticator app below to turn it on.
+        {% endif %}
+    </p>
+
+    <p class="settings-help">
+        Passkeys work with Face ID, Windows Hello, security keys, and password managers
+        like Bitwarden. Once you've added one, signing in requires your password
+        <em>and</em> a passkey. Remove your last passkey to turn this off.
+    </p>
+
+    {% if passkeys %}
+    <ul class="passkey-list" id="passkey-list">
+        {% for cred in passkeys %}
+        <li class="passkey-list-item">
+            <div class="passkey-list-item-info">
+                <i class="material-symbols-outlined">passkey</i>
+                <div>
+                    <form method="post" action="{% url 'settings.security.passkeys.rename' cred.pk %}" class="passkey-rename-form" onsubmit="return false;">
+                        {% csrf_token %}
+                        <input type="text" name="name" value="{{ cred.name }}" maxlength="100" class="passkey-name-input" aria-label="Passkey nickname">
+                    </form>
+                    <span class="settings-help">
+                        Added {{ cred.created|date:"M j, Y" }}{% if cred.last_used_at %} - last used {{ cred.last_used_at|date:"M j, Y" }}{% endif %}
+                    </span>
+                </div>
+            </div>
+            <form method="post" action="{% url 'settings.security.passkeys.delete' cred.pk %}"
+                  onsubmit="return confirm('Remove this passkey? Make sure you have another way to sign in first.');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn--danger btn--sm" title="Remove this passkey" aria-label="Remove this passkey">
+                    <i class="material-symbols-outlined">delete</i>
+                </button>
+            </form>
+        </li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+
+    <div class="settings-actions">
+        <button type="button" class="settings-save-btn" id="add-passkey-btn">
+            <i class="material-symbols-outlined">add</i>
+            Add a passkey
+        </button>
+    </div>
+
+    {# -- Authenticator app (TOTP) subsection ------------------------------ #}
+    <div class="settings-subsection" id="totp-settings-section">
+        <h3 class="settings-subsection-title">
+            <i class="material-symbols-outlined">qr_code_2</i>
+            Authenticator app
+        </h3>
+        <p class="settings-section-desc">Use an app like Google Authenticator, Authy, or Bitwarden's TOTP field for two-factor sign-in.</p>
+
+        {% if has_totp %}
+        <p class="settings-help">An authenticator app is <strong>enabled</strong> on this account.</p>
+        <form method="post" action="{% url 'settings.security.totp.disable' %}"
+              hx-post="{% url 'settings.security.totp.disable' %}" hx-target="#security-settings-section-body" hx-swap="outerHTML"
+              onsubmit="return confirm('Remove your authenticator app? Make sure you have another way to sign in first.');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn--danger btn--sm">
+                <i class="material-symbols-outlined">delete</i>
+                Remove authenticator app
+            </button>
+        </form>
+        {% elif pending_totp_secret %}
+        <div class="totp-setup">
+            <img src="{% url 'settings.security.totp.qrcode' %}" alt="QR code for authenticator app setup" class="totp-qrcode">
+            <p class="settings-help">
+                Scan this with your authenticator app, or enter this key manually:
+                <code class="totp-manual-key">{{ pending_totp_secret }}</code>
+            </p>
+            <form method="post" action="{% url 'settings.security.totp.confirm' %}"
+                  hx-post="{% url 'settings.security.totp.confirm' %}" hx-target="#security-settings-section-body" hx-swap="outerHTML">
+                {% csrf_token %}
+                <div class="settings-field">
+                    <label class="settings-label" for="totp-confirm-code">Enter the 6-digit code from your app</label>
+                    <input type="text" name="code" id="totp-confirm-code" inputmode="numeric" autocomplete="one-time-code" maxlength="16" pattern="[0-9 ]*" required autofocus>
+                    {% if code_error %}
+                    <p class="settings-error">{{ code_error }}</p>
+                    {% endif %}
+                </div>
+                <div class="settings-actions">
+                    <button type="submit" class="settings-save-btn">Verify &amp; enable</button>
+                </div>
+            </form>
+            <form method="post" action="{% url 'settings.security.totp.cancel' %}"
+                  hx-post="{% url 'settings.security.totp.cancel' %}" hx-target="#security-settings-section-body" hx-swap="outerHTML">
+                {% csrf_token %}
+                <button type="submit" class="btn btn--ghost btn--sm">Cancel setup</button>
+            </form>
+        </div>
+        {% else %}
+        <form method="post" action="{% url 'settings.security.totp.start' %}"
+              hx-post="{% url 'settings.security.totp.start' %}" hx-target="#security-settings-section-body" hx-swap="outerHTML">
+            {% csrf_token %}
+            <button type="submit" class="settings-save-btn">
+                <i class="material-symbols-outlined">add</i>
+                Set up an authenticator app
+            </button>
+        </form>
+        {% endif %}
+    </div>
+
+    {# -- Backup codes subsection ------------------------------------------- #}
+    <div class="settings-subsection" id="backup-codes-settings-section">
+        <h3 class="settings-subsection-title">
+            <i class="material-symbols-outlined">key</i>
+            Backup codes
+        </h3>
+        <p class="settings-section-desc">One-time codes to sign in if you lose access to your passkey and authenticator app.</p>
+
+        {% if backup_codes_error %}
+        <p class="settings-error">{{ backup_codes_error }}</p>
+        {% endif %}
+
+        {% if new_backup_codes %}
+        <div class="backup-codes-reveal">
+            <p class="settings-help">
+                <strong>Save these codes somewhere safe.</strong> Each one works once, and you won't be able to see them again.
+            </p>
+            <ul class="backup-codes-list">
+                {% for code in new_backup_codes %}
+                <li><code>{{ code }}</code></li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        {% if passkeys or has_totp %}
+        <p class="settings-help">{{ backup_code_count }} unused backup code{{ backup_code_count|pluralize }} remaining.</p>
+        <form method="post" action="{% url 'settings.security.backup_codes.generate' %}"
+              hx-post="{% url 'settings.security.backup_codes.generate' %}" hx-target="#security-settings-section-body" hx-swap="outerHTML"
+              {% if backup_code_count %}onsubmit="return confirm('Generate new backup codes? Your existing codes will stop working.');"{% endif %}>
+            {% csrf_token %}
+            <button type="submit" class="btn btn--secondary btn--sm">
+                {% if backup_code_count %}Regenerate backup codes{% else %}Generate backup codes{% endif %}
+            </button>
+        </form>
+        {% else %}
+        <p class="settings-help">Set up a passkey or authenticator app first to enable backup codes.</p>
+        {% endif %}
+    </div>
+</div>

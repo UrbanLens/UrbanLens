@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING
 
 from django.conf import settings
 from django.core.mail import EmailMultiAlternatives
-from django.db.models import Q
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
@@ -28,6 +27,7 @@ from urbanlens.dashboard.models.safety.model import (
     SafetyPreference,
 )
 from urbanlens.dashboard.services.email_normalization import normalize_email
+from urbanlens.dashboard.services.notification_delivery import send_sms, send_whatsapp
 from urbanlens.dashboard.services.visits import create_visit_suggestion
 
 if TYPE_CHECKING:
@@ -159,7 +159,7 @@ def save_contact_defaults(profile: Profile, contacts: Iterable[ContactInput]) ->
         profile: Profile whose defaults are being replaced.
         contacts: Iterable of (contact_profile, email, label) tuples.
     """
-    EmergencyContactDefault.objects.filter(owner=profile).delete()
+    EmergencyContactDefault.objects.for_owner(profile).delete()
     for order, (contact_profile, email, label) in enumerate(contacts):
         resolved_profile, resolved_email = _resolve_contact(contact_profile, email)
         EmergencyContactDefault.objects.create(
@@ -180,7 +180,7 @@ def default_contacts_as_input(profile: Profile) -> list[ContactInput]:
     Returns:
         List of (contact_profile, email, label) tuples.
     """
-    return [(default.contact_profile, default.email, default.label) for default in EmergencyContactDefault.objects.filter(owner=profile)]
+    return [(default.contact_profile, default.email, default.label) for default in EmergencyContactDefault.objects.for_owner(profile)]
 
 
 def get_active_checkin(profile: Profile) -> SafetyCheckin | None:
@@ -256,11 +256,7 @@ def is_contact_opted_out(
     Returns:
         True if a matching ``SafetyContactOptOut`` row blocks notifying this identity.
     """
-    identity = Q(contact_profile=contact_profile) if contact_profile else Q(email__iexact=email)
-    scope = Q(scope=SafetyContactOptOutScope.GLOBAL) | Q(scope=SafetyContactOptOutScope.OWNER, owner=owner)
-    if checkin is not None:
-        scope |= Q(scope=SafetyContactOptOutScope.CHECKIN, checkin=checkin)
-    return SafetyContactOptOut.objects.filter(identity & scope).exists()
+    return SafetyContactOptOut.objects.blocks_notification(contact_profile, email, owner=owner, checkin=checkin)
 
 
 def validate_notifiable_contacts(
@@ -278,7 +274,8 @@ def validate_notifiable_contacts(
         (e.g. a friend picked by avatar *and* separately typed in by their own email -
         two different-looking chips that ``_resolve_contact`` resolves to the same account);
       - a contact who has opted out and would never actually be notified (see
-        ``is_contact_opted_out``).
+        ``is_contact_opted_out``);
+      - a contact submitted past the site's ``max_safety_checkin_contacts`` limit.
 
     Args:
         owner: The profile these contacts are being added for.
@@ -288,6 +285,10 @@ def validate_notifiable_contacts(
     Returns:
         (allowed, rejected_messages).
     """
+    from urbanlens.dashboard.models.site_settings.model import SiteSettings
+
+    max_contacts = SiteSettings.get_current().max_safety_checkin_contacts
+
     allowed: list[ContactInput] = []
     rejected: list[str] = []
     seen: set[tuple[int | None, str | None]] = set()
@@ -303,6 +304,8 @@ def validate_notifiable_contacts(
             rejected.append(f"{label} was already added.")
         elif is_contact_opted_out(resolved_profile, resolved_email, owner=owner, checkin=checkin):
             rejected.append(f"{label} has opted out of notifications and wasn't added.")
+        elif max_contacts > 0 and len(allowed) >= max_contacts:
+            rejected.append(f"{label} wasn't added - a check-in can have at most {max_contacts} contacts.")
         else:
             seen.add(key)
             allowed.append((contact_profile, email, name))
@@ -507,6 +510,16 @@ def post_checkin_to_community_wiki(checkin: SafetyCheckin) -> None:
                 },
             )
 
+        message_text = f"Safety check-in posted to {wiki.name}: {checkin.profile.username} hasn't checked in from a trip there. {checkin_url}"
+        try:
+            prefs = recipient.notification_preferences
+        except AttributeError:
+            prefs = None
+        if prefs and prefs.wiki_safety_checkin_whatsapp:
+            send_whatsapp(recipient, message_text)
+        if prefs and prefs.wiki_safety_checkin_sms:
+            send_sms(recipient, message_text)
+
 
 def create_checkin(
     *,
@@ -574,6 +587,7 @@ def cancel_checkin(checkin: SafetyCheckin) -> None:
     checkin.status = SafetyCheckinStatus.CANCELLED
     checkin.resolved_at = timezone.now()
     checkin.save(update_fields=["status", "resolved_at", "updated"])
+    _broadcast_status_update(checkin)
 
 
 def send_checkin_reminder(checkin: SafetyCheckin) -> None:
@@ -642,6 +656,7 @@ def check_in(checkin: SafetyCheckin, profile: Profile) -> None:
     checkin.status = SafetyCheckinStatus.CHECKED_IN
     checkin.resolved_at = timezone.now()
     checkin.save(update_fields=["status", "resolved_at", "updated"])
+    _broadcast_status_update(checkin)
     _conclude_checkin(checkin)
 
 
@@ -686,6 +701,7 @@ def escalate_checkin(checkin: SafetyCheckin) -> None:
     checkin.status = SafetyCheckinStatus.OVERDUE
     checkin.escalated_at = timezone.now()
     checkin.save(update_fields=["status", "escalated_at", "updated"])
+    _broadcast_status_update(checkin)
 
 
 def mark_found_safe(contact: SafetyCheckinContact) -> None:
@@ -711,6 +727,7 @@ def mark_found_safe(contact: SafetyCheckinContact) -> None:
     checkin.status = SafetyCheckinStatus.FOUND_SAFE
     checkin.resolved_at = timezone.now()
     checkin.save(update_fields=["status", "resolved_at", "updated"])
+    _broadcast_status_update(checkin)
 
     checkin_path = reverse("safety.checkin.detail", kwargs={"checkin_slug": _checkin_url_slug(checkin)})
     NotificationLog.objects.create(
@@ -885,3 +902,40 @@ def _broadcast_chat_message(checkin: SafetyCheckin, message: SafetyCheckinMessag
         )
     except Exception:
         logger.exception("Failed to broadcast chat message for checkin %s", checkin.pk)
+
+
+def _broadcast_status_update(checkin: SafetyCheckin) -> None:
+    """Push a check-in status change to any live-connected chat clients for this check-in.
+
+    The status label, the "I'm safe"/"I found them" action buttons, and the leave-page
+    warning all depend on ``checkin.status``/``is_resolved`` - without this, anyone with
+    the detail page or contact portal already open only saw the change via the system
+    chat message, not in the label/button state, until they reloaded.
+
+    Best-effort, same as ``_broadcast_chat_message`` - the status is already durably
+    saved regardless of whether anyone is connected right now.
+
+    Args:
+        checkin: The check-in whose chat group should receive the update.
+    """
+    try:
+        from asgiref.sync import async_to_sync
+        from channels.layers import get_channel_layer
+
+        channel_layer = get_channel_layer()
+        if channel_layer is None:
+            return
+        async_to_sync(channel_layer.group_send)(
+            f"safety_checkin_{checkin.pk}",
+            {
+                "type": "status.update",
+                "payload": {
+                    "type": "status_update",
+                    "status": checkin.status,
+                    "status_display": checkin.get_status_display(),
+                    "is_resolved": checkin.is_resolved,
+                },
+            },
+        )
+    except Exception:
+        logger.exception("Failed to broadcast status update for checkin %s", checkin.pk)

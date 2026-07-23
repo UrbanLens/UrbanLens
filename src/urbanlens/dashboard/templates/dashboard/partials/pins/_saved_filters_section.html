@@ -1,0 +1,35 @@
+{% load dashboard_tags %}
+<div id="fp-saved-filters-mount">
+    {% if saved_filters %}
+    <details class="fp-accordion-item" id="fp-acc-saved-filters" data-importance="medium">
+        <summary class="fp-accordion-summary">
+            <span class="fp-accordion-label">Saved Filters</span>
+            <i class="material-icons fp-acc-arrow">expand_more</i>
+        </summary>
+        <div class="fp-accordion-body">
+            <div class="fp-saved-filter-list">
+                {% for filter in saved_filters %}
+                <div class="fp-saved-filter-chip">
+                    <button type="button" class="fp-saved-filter-apply" data-criteria="{{ filter.criteria_json }}" onclick="applySavedFilter(this)">
+                        {% if filter.icon|is_material_icon %}
+                        <i class="material-symbols-outlined">{{ filter.icon }}</i>
+                        {% elif filter.icon %}
+                        <span>{{ filter.icon }}</span>
+                        {% else %}
+                        <i class="material-symbols-outlined">bookmark</i>
+                        {% endif %}
+                        <span>{{ filter.name }}</span>
+                    </button>
+                    <button type="button" class="fp-saved-filter-delete" aria-label="Delete saved filter"
+                            hx-post="{% url 'saved_filters.delete' filter.uuid %}"
+                            hx-target="#fp-saved-filters-mount" hx-swap="outerHTML"
+                            hx-confirm="Delete the saved filter &quot;{{ filter.name }}&quot;?">
+                        <i class="material-symbols-outlined">close</i>
+                    </button>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </details>
+    {% endif %}
+</div>

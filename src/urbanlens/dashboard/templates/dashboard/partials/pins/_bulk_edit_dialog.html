@@ -1,7 +1,7 @@
-{# Bulk edit selected pins: replace description, add badges, remove badges present on the selection. #}
+{# Bulk edit selected pins: replace description, add labels, remove labels present on the selection. #}
 <dialog id="bulk-edit-dialog" class="ul-dialog tag-edit-dialog bulk-edit-dialog">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Edit pins" title_id="bulk-edit-dialog-title" %}
-    <div class="tag-edit-dialog-body organize-badge-edit-form">
+    <div class="tag-edit-dialog-body organize-label-edit-form">
         <div class="form-field">
             <label class="form-label" for="bulk-edit-description-value">Description</label>
             <textarea id="bulk-edit-description-value" class="form-input" rows="3" placeholder="Replaces the description on every selected pin"></textarea>
@@ -12,29 +12,56 @@
         </div>
 
         <div class="form-field">
-            <label class="form-label">Add badges</label>
-            <div class="apdlg-badge-field" id="bulk-edit-add-badge-field">
-                <div class="apdlg-badge-chips" id="bulk-edit-add-badge-chips"></div>
-                <div class="apdlg-badge-input-wrap form-input-wrap">
-                    <input type="text" id="bulk-edit-add-badge-search" class="form-input apdlg-badge-input"
-                           placeholder="Search badges to add..." autocomplete="off" autocorrect="off">
-                    <div id="bulk-edit-add-badge-suggestions" class="apdlg-badge-suggestions" hidden></div>
+            <label class="form-label" for="bulk-edit-rating-value">Rating</label>
+            <select id="bulk-edit-rating-value" class="form-input">
+                <option value="">No change</option>
+                <option value="0">Clear rating</option>
+                <option value="1">&#9733;&#9734;&#9734;&#9734;&#9734; (1)</option>
+                <option value="2">&#9733;&#9733;&#9734;&#9734;&#9734; (2)</option>
+                <option value="3">&#9733;&#9733;&#9733;&#9734;&#9734; (3)</option>
+                <option value="4">&#9733;&#9733;&#9733;&#9733;&#9734; (4)</option>
+                <option value="5">&#9733;&#9733;&#9733;&#9733;&#9733; (5)</option>
+            </select>
+            <p class="form-hint">Sets the same rating on every selected pin.</p>
+        </div>
+
+        <div class="form-field">
+            <label class="form-label">Add labels</label>
+            <div class="apdlg-label-field" id="bulk-edit-add-label-field">
+                <div class="apdlg-label-chips" id="bulk-edit-add-label-chips"></div>
+                <div class="apdlg-label-input-wrap form-input-wrap">
+                    <input type="text" id="bulk-edit-add-label-search" class="form-input apdlg-label-input"
+                           placeholder="Search labels to add..." autocomplete="off" autocorrect="off">
+                    <div id="bulk-edit-add-label-suggestions" class="apdlg-label-suggestions" hidden></div>
                 </div>
             </div>
             <p class="form-hint">Added to every selected pin.</p>
         </div>
 
         <div class="form-field">
-            <label class="form-label">Remove badges</label>
-            <div class="apdlg-badge-field" id="bulk-edit-remove-badge-field">
-                <div class="apdlg-badge-chips" id="bulk-edit-remove-badge-chips"></div>
-                <div class="apdlg-badge-input-wrap form-input-wrap">
-                    <input type="text" id="bulk-edit-remove-badge-search" class="form-input apdlg-badge-input"
-                           placeholder="Search badges to remove..." autocomplete="off" autocorrect="off">
-                    <div id="bulk-edit-remove-badge-suggestions" class="apdlg-badge-suggestions" hidden></div>
+            <label class="form-label" for="bulk-edit-parent-search">Set parent pin</label>
+            <div class="apdlg-label-field" id="bulk-edit-parent-field">
+                <div class="apdlg-label-chips" id="bulk-edit-parent-chip"></div>
+                <div class="apdlg-label-input-wrap form-input-wrap" id="bulk-edit-parent-input-wrap">
+                    <input type="text" id="bulk-edit-parent-search" class="form-input apdlg-label-input"
+                           placeholder="Search your pins by name or alias..." autocomplete="off" autocorrect="off">
+                    <div id="bulk-edit-parent-suggestions" class="apdlg-label-suggestions" hidden></div>
                 </div>
             </div>
-            <p class="form-hint" id="bulk-edit-remove-badge-hint">Only badges present on at least one selected pin are offered here.</p>
+            <p class="form-hint">Makes every selected pin a sub pin of the one you pick here.</p>
+        </div>
+
+        <div class="form-field">
+            <label class="form-label">Remove labels</label>
+            <div class="apdlg-label-field" id="bulk-edit-remove-label-field">
+                <div class="apdlg-label-chips" id="bulk-edit-remove-label-chips"></div>
+                <div class="apdlg-label-input-wrap form-input-wrap">
+                    <input type="text" id="bulk-edit-remove-label-search" class="form-input apdlg-label-input"
+                           placeholder="Search labels to remove..." autocomplete="off" autocorrect="off">
+                    <div id="bulk-edit-remove-label-suggestions" class="apdlg-label-suggestions" hidden></div>
+                </div>
+            </div>
+            <p class="form-hint" id="bulk-edit-remove-label-hint">Only labels present on at least one selected pin are offered here.</p>
         </div>
 
         <div class="tag-form-actions">

@@ -10,6 +10,7 @@ from django.db.models import SET_NULL, CheckConstraint, FloatField, ForeignKey, 
 from django.db.models.fields import BooleanField, CharField
 
 from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.fields import EncryptedTextField
 from urbanlens.dashboard.models.site_settings.meta import (
     DEFAULT_CLOUDFLARE_MODEL,
     DEFAULT_OPENAI_MODEL,
@@ -20,6 +21,9 @@ from urbanlens.dashboard.models.site_settings.meta import (
 from urbanlens.dashboard.models.site_settings.queryset import SiteSettingsManager
 from urbanlens.UrbanLens.environments.factory import select_environment
 from urbanlens.UrbanLens.environments.meta import EnvironmentTypes
+
+if TYPE_CHECKING:
+    from urbanlens.dashboard.models.subscriptions.model import SiteFeature
 
 
 class SiteSettings(abstract.FrontendDashboardModel):
@@ -34,6 +38,54 @@ class SiteSettings(abstract.FrontendDashboardModel):
         default=10,
         help_text="Maximum number of members allowed per trip.",
         validators=[MinValueValidator(0.0), MaxValueValidator(100.0)],
+    )
+    max_trip_activities = IntegerField(
+        default=100,
+        help_text="Maximum number of activities allowed per trip. Set to 0 for unlimited.",
+        verbose_name="Max activities per trip",
+        validators=[MinValueValidator(0), MaxValueValidator(10_000)],
+    )
+    max_upcoming_trips_per_user = IntegerField(
+        default=100,
+        help_text="Maximum number of upcoming (or undated, still-planning) trips a user may belong to at once. Set to 0 for unlimited.",
+        verbose_name="Max upcoming trips per user",
+        validators=[MinValueValidator(0), MaxValueValidator(10_000)],
+    )
+
+    # --- Pin lists ---
+
+    max_pins_per_list = IntegerField(
+        default=0,
+        help_text="Maximum number of pins allowed in a single list. Set to 0 for unlimited.",
+        verbose_name="Max pins per list",
+        validators=[MinValueValidator(0), MaxValueValidator(1_000_000)],
+    )
+
+    # --- Friendships ---
+
+    max_friends_per_user = IntegerField(
+        default=0,
+        help_text="Maximum number of friends a user may have. Set to 0 for unlimited.",
+        verbose_name="Max friends per user",
+        validators=[MinValueValidator(0), MaxValueValidator(1_000_000)],
+    )
+
+    # --- Direct message group chats ---
+
+    max_group_chat_members = IntegerField(
+        default=20,
+        help_text="Maximum number of members allowed in a direct message group chat. Set to 0 for unlimited.",
+        verbose_name="Max group chat members",
+        validators=[MinValueValidator(0), MaxValueValidator(10_000)],
+    )
+
+    # --- Safety check-ins ---
+
+    max_safety_checkin_contacts = IntegerField(
+        default=5,
+        help_text="Maximum number of contacts a user may notify per safety check-in. Set to 0 for unlimited.",
+        verbose_name="Max contacts per safety check-in",
+        validators=[MinValueValidator(0), MaxValueValidator(1_000)],
     )
 
     # Chernobyl Exclusion Zone ≈ 2,600 km².  Used as a sanity cap on how large
@@ -94,6 +146,17 @@ class SiteSettings(abstract.FrontendDashboardModel):
         verbose_name="Document import max length (characters)",
         validators=[MinValueValidator(500), MaxValueValidator(200_000)],
     )
+    ai_link_extraction_enabled = BooleanField(
+        default=True,
+        help_text="Allow users with the AI feature to have external links on their pins read by AI to fill in supported pin fields.",
+        verbose_name="Link extraction",
+    )
+    ai_link_extraction_daily_limit = IntegerField(
+        default=20,
+        help_text="Maximum AI link-extraction runs each user may start per day, bounding per-user token spend.",
+        verbose_name="Link extraction daily limit (per user)",
+        validators=[MinValueValidator(0), MaxValueValidator(1000)],
+    )
 
     # --- Storage quotas & upload processing ---
 
@@ -124,6 +187,32 @@ class SiteSettings(abstract.FrontendDashboardModel):
         help_text="Also downscale/convert uploads from users with an active subscription. When off, subscribers keep their original files (unless they opt into downscaling themselves).",
         verbose_name="Downscale subscriber uploads",
     )
+    max_upload_file_size_mb = IntegerField(
+        default=250,
+        help_text="Maximum size (MB) for a single photo, video, or document upload. Enforced on both the frontend and backend.",
+        verbose_name="Max upload file size (MB)",
+        # Capped comfortably under clamd's StreamMaxLength (docker-compose.yml's
+        # clamav service, currently 1000M) - a value above that lets an upload
+        # pass this check and then fail the malware scan with a confusing
+        # "too large to scan" error instead of a clean upfront rejection.
+        validators=[MinValueValidator(1), MaxValueValidator(900)],
+    )
+    video_downscale_enabled = BooleanField(
+        default=True,
+        help_text="Downscale uploaded videos that exceed the maximum height below, to save storage space.",
+        verbose_name="Downscale uploaded videos",
+    )
+    video_downscale_max_height = IntegerField(
+        default=1080,
+        help_text="Vertical resolution (px) uploaded videos are downscaled to when downscaling is enabled.",
+        verbose_name="Max video height (px)",
+        validators=[MinValueValidator(240), MaxValueValidator(8_000)],
+    )
+    video_downscale_vip = BooleanField(
+        default=False,
+        help_text="Also downscale video uploads from users with an active subscription. When off, subscribers keep their original video resolution (unless they opt into downscaling themselves).",
+        verbose_name="Downscale subscriber videos",
+    )
 
     # --- Search provider ---
 
@@ -131,7 +220,7 @@ class SiteSettings(abstract.FrontendDashboardModel):
         max_length=20,
         choices=SearchProviderChoice.choices,
         default=SearchProviderChoice.BRAVE,
-        help_text="Which web search provider to use for pin news/search results.",
+        help_text="Preferred web search provider for pin news/search results, tried first. If it's unconfigured, rate-limited, or fails, the remaining providers (SearXNG, Google, Brave, DuckDuckGo, Mojeek, Marginalia) are tried automatically in that order.",
         verbose_name="Search provider",
     )
 
@@ -151,9 +240,45 @@ class SiteSettings(abstract.FrontendDashboardModel):
     default_name_source_priority = CharField(
         max_length=500,
         blank=True,
-        default="google_places,wikipedia,nps",
+        default="nominatim,wikipedia,nps,google_places",
         help_text=("Comma-separated name-provider slugs, highest priority first, used to pick a location's official name from external candidates. Sources not listed rank last, in plugin order. Blank = plugin order only."),
         verbose_name="Name source priority",
+    )
+
+    # --- Background enrichment ---
+    # Hourly Celery task (tasks.run_scheduled_enrichment) that proactively
+    # backfills high-value external data (official names, aliases, addresses,
+    # boundaries) for every pinned/wiki'd Location, spending only the API
+    # budget left over after organic traffic. See services.enrichment.
+
+    enrichment_enabled = BooleanField(
+        default=True,
+        help_text="Proactively backfill official names, aliases, addresses, and boundaries for all pins and wikis in the background, within each API's configured rate limits.",
+        verbose_name="Background enrichment",
+    )
+    enrichment_start_hour = IntegerField(
+        default=0,
+        help_text="UTC hour (0-23) the daily enrichment window opens. Set start and end to the same value to allow enrichment at any hour.",
+        verbose_name="Enrichment window start (UTC hour)",
+        validators=[MinValueValidator(0), MaxValueValidator(23)],
+    )
+    enrichment_end_hour = IntegerField(
+        default=0,
+        help_text="UTC hour (0-23) the daily enrichment window closes. May be earlier than the start hour to wrap past midnight (e.g. 22 to 4).",
+        verbose_name="Enrichment window end (UTC hour)",
+        validators=[MinValueValidator(0), MaxValueValidator(23)],
+    )
+    enrichment_buffer_percent = IntegerField(
+        default=10,
+        help_text="Percentage of every API limit kept in reserve for organic traffic spikes. Background enrichment never spends into this buffer.",
+        verbose_name="Enrichment rate-limit buffer (%)",
+        validators=[MinValueValidator(0), MaxValueValidator(90)],
+    )
+    enrichment_max_per_service_per_run = IntegerField(
+        default=10,
+        help_text="Maximum locations enriched per API service in one hourly run, even when the service's rate limit would allow more - keeps bursts against generous APIs polite.",
+        verbose_name="Enrichment max items per service per run",
+        validators=[MinValueValidator(1), MaxValueValidator(500)],
     )
 
     # --- Environment ---
@@ -207,8 +332,7 @@ class SiteSettings(abstract.FrontendDashboardModel):
         help_text="Base URL of a Gotify server (e.g. https://gotify.example.com) used to push critical site notifications. Defaults to the UL_GOTIFY_URL environment variable.",
         verbose_name="Gotify server URL",
     )
-    notify_gotify_token = CharField(
-        max_length=200,
+    notify_gotify_token = EncryptedTextField(
         blank=True,
         default=os.getenv("UL_GOTIFY_TOKEN", ""),
         help_text="Gotify application token used to authenticate pushes to the server above. Defaults to the UL_GOTIFY_TOKEN environment variable.",
@@ -284,6 +408,18 @@ class SiteSettings(abstract.FrontendDashboardModel):
         validators=[MinValueValidator(0), MaxValueValidator(100_000)],
     )
 
+    # --- Subscription features (site-wide default) ---
+    # Features granted to every user, including those with no active subscription
+    # role. Subscription roles can only add features on top of this baseline, never
+    # take one away - see SubscriptionRole.features and user_has_feature().
+
+    default_features = CharField(
+        max_length=500,
+        blank=True,
+        help_text="Comma-separated SiteFeature values granted to every user, including those with no active subscription.",
+        verbose_name="Default features (everyone)",
+    )
+
     # --- Registration ---
 
     signup_restricted = BooleanField(
@@ -318,6 +454,23 @@ class SiteSettings(abstract.FrontendDashboardModel):
     def get_current(cls) -> SiteSettings:
         """Return (and create if missing) the singleton settings record."""
         return cls.objects.get_current()
+
+    @property
+    def feature_set(self) -> set[str]:
+        """The default ``SiteFeature`` values granted to every user."""
+        return {feature.strip() for feature in (self.default_features or "").split(",") if feature.strip()}
+
+    @property
+    def feature_labels(self) -> list[str]:
+        """Human-readable labels for the default features, in declaration order."""
+        from urbanlens.dashboard.models.subscriptions.model import SiteFeature
+
+        feature_set = self.feature_set
+        return [label for value, label in SiteFeature.choices if value in feature_set]
+
+    def grants(self, feature: SiteFeature | str) -> bool:
+        """Return whether the site-wide default grants ``feature`` to every user."""
+        return str(feature) in self.feature_set
 
     @property
     def name_source_priority_list(self) -> list[str]:
@@ -369,9 +522,9 @@ class SiteSettings(abstract.FrontendDashboardModel):
 
         Site admins see it whenever the effective environment is development or local.
         Non-admin users can also see it, but only when the ``UL_ALLOW_DEV_TOOLBAR_FOR_NON_ADMINS``
-        env var is enabled AND the effective environment is development, local, or testing -
-        this lets QA/test accounts exercise dev tooling without granting them site-admin permission,
-        while staying off by default and never active in staging/production.
+        env var is enabled AND the effective environment is development, local, testing, or
+        staging - this lets QA/test accounts exercise dev tooling without granting them
+        site-admin permission, while staying off by default and never active in production.
 
         Args:
             user: The current request user.
@@ -391,6 +544,7 @@ class SiteSettings(abstract.FrontendDashboardModel):
             return False
 
         return self.get_effective_environment_type() in {
+            EnvironmentTypes.STAGING,
             EnvironmentTypes.DEVELOPMENT,
             EnvironmentTypes.LOCAL,
             EnvironmentTypes.TESTING,
@@ -416,4 +570,12 @@ class SiteSettings(abstract.FrontendDashboardModel):
             CheckConstraint(condition=Q(email_limit_per_day__gte=0), name="email_limit_per_day_gte_0"),
             CheckConstraint(condition=Q(email_limit_per_month__gte=0), name="email_limit_per_month_gte_0"),
             CheckConstraint(condition=Q(image_downscale_max_dimension__gte=256), name="image_downscale_max_dim_gte_256"),
+            CheckConstraint(condition=Q(max_upload_file_size_mb__gte=1), name="max_upload_file_size_mb_gte_1"),
+            CheckConstraint(condition=Q(video_downscale_max_height__gte=240), name="video_downscale_max_height_gte_240"),
+            CheckConstraint(condition=Q(max_trip_activities__gte=0), name="max_trip_activities_gte_0"),
+            CheckConstraint(condition=Q(max_upcoming_trips_per_user__gte=0), name="max_upcoming_trips_per_user_gte_0"),
+            CheckConstraint(condition=Q(max_pins_per_list__gte=0), name="max_pins_per_list_gte_0"),
+            CheckConstraint(condition=Q(max_friends_per_user__gte=0), name="max_friends_per_user_gte_0"),
+            CheckConstraint(condition=Q(max_group_chat_members__gte=0), name="max_group_chat_members_gte_0"),
+            CheckConstraint(condition=Q(max_safety_checkin_contacts__gte=0), name="max_safety_checkin_contacts_gte_0"),
         ]

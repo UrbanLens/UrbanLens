@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 import logging
 from typing import TYPE_CHECKING
 
+from celery.exceptions import SoftTimeLimitExceeded
 from django.contrib.gis.geos import MultiPolygon, Polygon
 from django.utils import timezone
 
@@ -23,6 +24,7 @@ from urbanlens.dashboard.services.apis.locations.boundaries.google_open_building
 from urbanlens.dashboard.services.apis.locations.boundaries.microsoft_buildings import MicrosoftBuildingFootprintsGateway
 from urbanlens.dashboard.services.apis.locations.boundaries.overpass import OverpassGateway
 from urbanlens.dashboard.services.apis.locations.boundaries.overture_maps import OvertureMapsGateway
+from urbanlens.dashboard.services.apis.locations.boundaries.redata import RedataBoundaryProvider
 from urbanlens.dashboard.services.redact import redact_coordinate
 
 if TYPE_CHECKING:
@@ -66,13 +68,21 @@ class BoundaryProviderChain:
     Each provider contributes to whichever boundary-type slots it can fill
     (declared via ``BoundaryProvider.boundary_kind`` or a per-feature
     ``get_typed_boundaries`` override); the chain stops once both slots are
-    filled or providers are exhausted. Regrid (parcel/property data) is
-    implemented but deliberately excluded - it is a paid service (see
-    regrid.py); add ``RegridGateway()`` here to enable parcel boundaries.
+    filled or providers are exhausted. ``RedataBoundaryProvider`` runs first:
+    when it has data at all, it's authoritative survey-grade county GIS
+    geometry, not community-tagged or ML-derived - but its coverage is
+    narrower (US-only, and only jurisdictions REData has researched), so
+    every other provider still matters as a fallback. It's also a no-op, not
+    an error, for installs that haven't configured REData at all (see its own
+    docstring). A Regrid-backed provider (parcel/property data) was
+    investigated but never added - it's a paid service, and
+    ``RedataBoundaryProvider`` already fills the property-boundary slot
+    Regrid would have (see ``docs/redata.md``).
     """
 
     providers: tuple[BoundaryProvider, ...] = field(
         default_factory=lambda: (
+            RedataBoundaryProvider(),
             OverpassGateway(),
             OvertureMapsGateway(),
             MicrosoftBuildingFootprintsGateway(),
@@ -103,6 +113,13 @@ class BoundaryProviderChain:
                 continue
             try:
                 typed = provider.get_typed_boundaries(latitude, longitude, name=name)
+            except SoftTimeLimitExceeded:
+                # The task is being asked to wind down (Celery soft time limit) -
+                # this is not a per-provider failure, so it must not be swallowed
+                # like one: continuing to the next provider would just burn the
+                # remaining time budget and risk the hard time limit SIGKILLing
+                # the worker mid-write. Let it propagate so the task exits cleanly.
+                raise
             except Exception:
                 # TODO: Catch specific exception
                 logger.exception("Boundary provider %s failed for %s,%s", provider.service_key, redact_coordinate(latitude), redact_coordinate(longitude))
@@ -208,4 +225,16 @@ def generate_location_boundaries(location: Location, *, name: str | None = None)
         if polygon is not None and row.generated_polygon is None:
             updates["generated_polygon"] = polygon
         Boundary.objects.filter(pk=row.pk).update(**updates)
+
+    # A wiki's property polygon can only newly exist or change right here -
+    # this is the single choke point every boundary-generation call site
+    # (wiki creation, the pin detail page's boundary panel, the wiki page's
+    # own scheduler) funnels through, so it is also the right place to check
+    # whether this location's wiki (if any) now nests under - or now contains
+    # - another one. A no-op for the overwhelming majority of locations, which
+    # have no wiki at all.
+    from urbanlens.dashboard.services.wiki_merge import reconcile_wiki_nesting_for_location
+
+    reconcile_wiki_nesting_for_location(location)
+
     return resolved

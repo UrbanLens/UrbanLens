@@ -1,0 +1,165 @@
+{# Pin/wiki article: an always-editable canvas, Notion-style - there is no #}
+{# separate read-only mode to click an "Edit" button out of. The Markdown #}
+{# textarea below is the real form field (article-wysiwyg.ts mirrors into #}
+{# it); the WYSIWYG canvas mounts over it and is what the user actually sees #}
+{# and types into. Swapped into the Article tab; also the target of #}
+{# Save/Cancel and of "articleChanged" (fired by History > Restore). #}
+<div id="article-panel" class="article-panel" data-article-editor
+     hx-trigger="articleChanged from:body"
+     hx-get="{{ scope.urls.view }}"
+     hx-target="#article-panel"
+     hx-swap="outerHTML"
+     data-preview-url="{{ scope.urls.preview }}"
+     data-image-upload-url="{{ scope.urls.image }}">
+
+    <form class="article-editor-form"
+          hx-post="{{ scope.urls.save }}"
+          hx-target="#article-panel"
+          hx-swap="outerHTML"
+          hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+        {% csrf_token %}
+        <input type="hidden" name="base_revision_id" value="{{ base_revision_id }}">
+
+        {% if not article or not article.content %}
+        <div class="article-empty-hint-block">
+            <i class="material-symbols-outlined article-empty-icon">article</i>
+            <h3>
+                {% if scope.is_private %}You haven't written an article for this pin yet{% else %}This place doesn't have an article yet{% endif %}
+            </h3>
+            <p class="article-empty-hint">
+                {% if scope.is_private %}
+                Keep long-form research, history, and trip write-ups here - formatted like a Wikipedia article, with sections,
+                links, and references. It stays completely private to you.
+                {% else %}
+                Be the first to document this place for the community: its history, condition, access notes, and sources.
+                Everyone who has this location pinned can read and improve the article.
+                {% endif %}
+            </p>
+        </div>
+        {% endif %}
+
+        <div class="article-editor-toolbar" role="toolbar" aria-label="Formatting">
+            {# This whole toolbar is only visible in Source mode - the WYSIWYG #}
+            {# canvas gets its formatting from the selection bubble menu and "/" #}
+            {# block menu instead (see article-wysiwyg.ts), so it doesn't read as #}
+            {# a markdown editor with a toolbar bolted on. See #}
+            {# [data-editor-mode="wysiwyg"] in _article.scss for the hide rule - #}
+            {# the Source/Visual switch itself lives outside this toolbar (see #}
+            {# above) so it stays visible in both modes. #}
+            <div class="article-toolbar-format-group">
+                <button type="button" class="article-tool" data-md-action="bold" title="Bold (Ctrl+B)"><i class="material-symbols-outlined">format_bold</i></button>
+                <button type="button" class="article-tool" data-md-action="italic" title="Italic (Ctrl+I)"><i class="material-symbols-outlined">format_italic</i></button>
+                <button type="button" class="article-tool" data-md-action="strike" title="Strikethrough"><i class="material-symbols-outlined">strikethrough_s</i></button>
+                <span class="article-tool-sep"></span>
+                <button type="button" class="article-tool" data-md-action="h2" title="Section heading"><i class="material-symbols-outlined">format_h2</i></button>
+                <button type="button" class="article-tool" data-md-action="h3" title="Sub-section heading"><i class="material-symbols-outlined">format_h3</i></button>
+                <span class="article-tool-sep"></span>
+                <button type="button" class="article-tool" data-md-action="link" title="Link (Ctrl+K)"><i class="material-symbols-outlined">link</i></button>
+                <button type="button" class="article-tool" data-md-action="reference" title="Add a numbered reference (footnote)"><i class="material-symbols-outlined">superscript</i></button>
+                <button type="button" class="article-tool" data-md-action="image" title="Image"><i class="material-symbols-outlined">image</i></button>
+                <span class="article-tool-sep"></span>
+                <button type="button" class="article-tool" data-md-action="ul" title="Bulleted list"><i class="material-symbols-outlined">format_list_bulleted</i></button>
+                <button type="button" class="article-tool" data-md-action="ol" title="Numbered list"><i class="material-symbols-outlined">format_list_numbered</i></button>
+                <button type="button" class="article-tool" data-md-action="quote" title="Quote"><i class="material-symbols-outlined">format_quote</i></button>
+                <button type="button" class="article-tool" data-md-action="code" title="Code"><i class="material-symbols-outlined">code</i></button>
+                <button type="button" class="article-tool" data-md-action="table" title="Table"><i class="material-symbols-outlined">table</i></button>
+                <button type="button" class="article-tool" data-md-action="hr" title="Horizontal rule"><i class="material-symbols-outlined">horizontal_rule</i></button>
+            </div>
+            <span class="article-toolbar-spacer"></span>
+            <button type="button" class="article-tool article-preview-toggle" data-article-preview-toggle title="Toggle live preview">
+                <i class="material-symbols-outlined">visibility</i><span>Preview</span>
+            </button>
+        </div>
+
+        <div class="article-layout{% if toc|length >= 3 %} article-layout--with-toc{% endif %}">
+            {% if toc|length >= 3 %}
+            <nav class="article-toc" aria-label="Article contents">
+                <div class="article-toc-title"><i class="material-symbols-outlined">toc</i> Contents</div>
+                <ol class="article-toc-list">
+                    {% for entry in toc %}
+                    <li class="article-toc-item article-toc-item--l{{ entry.level }}">
+                        <a href="#{{ entry.anchor }}">{{ entry.title }}</a>
+                    </li>
+                    {% endfor %}
+                </ol>
+            </nav>
+            {% endif %}
+
+            <div class="article-editor-split">
+                {# WYSIWYG canvas (frontend/ts/entries/article-wysiwyg.ts) - mounts here and #}
+                {# takes over as the primary editing surface once it loads; the textarea below #}
+                {# stays the actual form field and source of truth either way. #}
+                <div class="article-editor-canvas" data-article-canvas hidden></div>
+                <textarea name="content" class="article-editor-textarea" data-article-textarea
+                          rows="22" maxlength="{{ max_length }}"
+                          placeholder="Write in Markdown - use ## for section headings, [text](url) for links, and [^1] for numbered references...">{{ article.content|default:"" }}</textarea>
+                <div class="article-editor-preview" data-article-preview hidden>
+                    <div class="article-editor-preview-inner">
+                        <div class="view-loading"><i class="material-icons spin">autorenew</i> Rendering preview...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <details class="article-editor-help">
+            <summary><i class="material-symbols-outlined">help</i> Markdown cheat sheet (for Source mode)</summary>
+            <div class="article-editor-help-grid">
+                <div><code>## Heading</code> section heading</div>
+                <div><code>**bold**</code> <strong>bold</strong></div>
+                <div><code>*italic*</code> <em>italic</em></div>
+                <div><code>[text](https://url)</code> external link</div>
+                <div><code>![alt](https://image-url)</code> image</div>
+                <div><code>- item</code> bulleted list</div>
+                <div><code>1. item</code> numbered list</div>
+                <div><code>&gt; quote</code> block quote</div>
+                <div><code>| a | b |</code> table row</div>
+                <div><code>Fact.[^1]</code> then <code>[^1]: Source</code> at the bottom &mdash; numbered reference</div>
+            </div>
+        </details>
+
+        <details class="article-editor-wysiwyg-hint" data-article-wysiwyg-hint open>
+            <summary>
+                <i class="material-symbols-outlined">tips_and_updates</i>
+                <span>Formatting tips</span>
+            </summary>
+            <p>Select text to format it, or type <code>/</code> on a new line to insert a heading, list, table, image, and more.</p>
+        </details>
+
+        {# Hidden until the user actually edits something (root's data-dirty, #}
+        {# set by article-editor.js's input listener - see the #}
+        {# [data-dirty="1"] rule in _article.scss), then appears as a fixed #}
+        {# bar at the bottom of the viewport rather than taking up in-page #}
+        {# space the rest of the time. #}
+        <div class="article-editor-footer">
+            <input type="text" name="edit_summary" class="article-summary-input" maxlength="255"
+                   placeholder="Briefly describe your changes (optional){% if not scope.is_private %} - shown in the edit history{% endif %}">
+            <span class="article-char-count" data-article-char-count></span>
+            <div class="article-editor-actions">
+                <button type="submit" class="btn btn--primary">
+                    <i class="material-symbols-outlined">save</i> Save
+                </button>
+                <button type="button" class="btn btn--ghost"
+                        hx-get="{{ scope.urls.view }}"
+                        hx-target="#article-panel"
+                        hx-swap="outerHTML"
+                        hx-confirm="Discard your unsaved changes?">
+                    Cancel
+                </button>
+            </div>
+        </div>
+
+        {# Floating bottom-right toolbar - replaces the old top-right Source #}
+        {# toggle (moved here) and adds a Clear button. Always visible in both #}
+        {# modes, same as the toggle it replaces; sits below the save/cancel #}
+        {# footer's own fixed position (see .article-editor-footer's #}
+        {# bottom: 4rem in _article.scss) so the two never overlap. #}
+        <div class="article-floating-toolbar">
+            <button type="button" class="article-tool article-mode-toggle" data-article-mode-toggle title="View/edit Markdown source">
+                <i class="material-symbols-outlined">code_blocks</i><span>Source</span>
+            </button>
+            <button type="button" class="article-tool" data-article-clear title="Clear all content and start over">
+                <i class="material-symbols-outlined">delete_sweep</i><span>Clear</span>
+            </button>
+        </div>
+    </form>
+</div>

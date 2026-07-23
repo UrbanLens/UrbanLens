@@ -1,18 +1,9 @@
 {% extends 'dashboard/themes/base.html' %}
 
 {% block content %}
+{% url 'tools.index' as tools_index_url %}
+{% include "dashboard/partials/ui/_page_hero.html" with icon="build" title="Admin Tools" subtitle="Site administration utilities." back_url=tools_index_url back_label="Tools" %}
 <div class="tools-page page-content">
-
-    <div class="tools-header">
-        <div class="tools-header-top">
-            <a href="{% url 'tools.index' %}" class="tools-back-link">
-                <i class="material-symbols-outlined">arrow_back</i>
-                <span>Tools</span>
-            </a>
-        </div>
-        <h1 class="tools-title">Admin Tools</h1>
-        <p class="tools-subtitle">Site administration utilities.</p>
-    </div>
 
     <div class="tools-grid">
 
@@ -47,45 +38,6 @@
     max-width: 1000px;
     margin: 0 auto;
     padding: 2rem 1.5rem;
-}
-
-.tools-header {
-    margin-bottom: 2rem;
-}
-
-.tools-header-top {
-    margin-bottom: .5rem;
-}
-
-.tools-back-link {
-    display: inline-flex;
-    align-items: center;
-    gap: .25rem;
-    font-size: .85rem;
-    color: var(--ul-grey-6);
-    text-decoration: none;
-    transition: color .15s;
-}
-
-.tools-back-link:hover {
-    color: var(--ul-primary, #1976D2);
-}
-
-.tools-back-link .material-icons {
-    font-size: 1rem;
-}
-
-.tools-title {
-    font-size: 1.75rem;
-    font-weight: 700;
-    margin: 0 0 .35rem;
-    color: var(--ul-grey-9);
-}
-
-.tools-subtitle {
-    margin: 0;
-    color: var(--ul-grey-6);
-    font-size: .95rem;
 }
 
 .tools-grid {

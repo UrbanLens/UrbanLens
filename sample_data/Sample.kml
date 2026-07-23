@@ -1,0 +1,173 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="https://www.opengis.net/kml/2.2">
+<Document>
+<Placemark>
+  <Style>
+    <IconStyle>
+      <Icon>
+        <href>https://www.multiplottr.com/images/REDMarker.png</href>
+      </Icon>
+    </IconStyle>
+  </Style>
+  <name>&gt;Broadview Hotel&lt;/</name>
+  <description>&lt;h1h1&gt; &lt;p&gt;429 E Broadway, East St. Louis&lt;/p&gt;</description>
+  <Point>
+    <coordinates> -90.1610675,38.6244206</coordinates>
+  </Point>
+</Placemark>
+<Placemark>
+  <Style>
+    <IconStyle>
+      <Icon>
+        <href>https://www.multiplottr.com/images/REDMarker.png</href>
+      </Icon>
+    </IconStyle>
+  </Style>
+  <name>&gt;The Candy Factory&lt;/</name>
+  <description>&lt;h1h1&gt; &lt;p&gt;4200 Gravois Ave, 63116&lt;/p&gt;</description>
+  <Point>
+    <coordinates> -90.25818199999998,38.58803100000001</coordinates>
+  </Point>
+</Placemark>
+<Placemark>
+  <Style>
+    <IconStyle>
+      <Icon>
+        <href>https://www.multiplottr.com/images/REDMarker.png</href>
+      </Icon>
+    </IconStyle>
+  </Style>
+  <name>&gt;Cementland&lt;/</name>
+  <description>&lt;h1h1&gt; &lt;p&gt;575 Scranton Avenue, Riverview, MO&lt;/p&gt;</description>
+  <Point>
+    <coordinates> -90.219333,38.737194</coordinates>
+  </Point>
+</Placemark>
+<Placemark>
+  <Style>
+    <IconStyle>
+      <Icon>
+        <href>https://www.multiplottr.com/images/REDMarker.png</href>
+      </Icon>
+    </IconStyle>
+  </Style>
+  <name>&gt;Central High School&lt;/</name>
+  <description>&lt;h1h1&gt; &lt;p&gt;3616 N Garrison Ave, 63107&lt;/p&gt;</description>
+  <Point>
+    <coordinates> -90.21535319999998,38.6594714</coordinates>
+  </Point>
+</Placemark>
+<Placemark>
+  <Style>
+    <IconStyle>
+      <Icon>
+        <href>https://www.multiplottr.com/images/REDMarker.png</href>
+      </Icon>
+    </IconStyle>
+  </Style>
+  <name>&gt;Cleveland High School&lt;/</name>
+  <description>&lt;h1h1&gt; &lt;p&gt;4352 Louisiana Ave, St. Louis, MO&lt;/p&gt;</description>
+  <Point>
+    <coordinates> -90.24274400000002,38.577642</coordinates>
+  </Point>
+</Placemark>
+<Placemark>
+  <Style>
+    <IconStyle>
+      <Icon>
+        <href>https://www.multiplottr.com/images/REDMarker.png</href>
+      </Icon>
+    </IconStyle>
+  </Style>
+  <name>&gt;Falstaff Brewery&lt;/</name>
+  <description>&lt;h1h1&gt; &lt;p&gt;1920 Shenandoah Ave, 63104&lt;/p&gt;</description>
+  <Point>
+    <coordinates> -90.21549519999996,38.6066677</coordinates>
+  </Point>
+</Placemark>
+<Placemark>
+  <Style>
+    <IconStyle>
+      <Icon>
+        <href>https://www.multiplottr.com/images/REDMarker.png</href>
+      </Icon>
+    </IconStyle>
+  </Style>
+  <name>&gt;Hempstead School&lt;/</name>
+  <description>&lt;h1h1&gt; &lt;p&gt;5872 Minerva Ave, 63112&lt;/p&gt;</description>
+  <Point>
+    <coordinates> -90.2846859,38.669015</coordinates>
+  </Point>
+</Placemark>
+<Placemark>
+  <Style>
+    <IconStyle>
+      <Icon>
+        <href>https://www.multiplottr.com/images/REDMarker.png</href>
+      </Icon>
+    </IconStyle>
+  </Style>
+  <name>&gt;Lemp Brewery&lt;/</name>
+  <description>&lt;h1h1&gt; &lt;p&gt;3500 Lemp Ave, St. Louis, MO&lt;/p&gt;</description>
+  <Point>
+    <coordinates> -90.21907390000001,38.59034219999999</coordinates>
+  </Point>
+</Placemark>
+<Placemark>
+  <Style>
+    <IconStyle>
+      <Icon>
+        <href>https://www.multiplottr.com/images/REDMarker.png</href>
+      </Icon>
+    </IconStyle>
+  </Style>
+  <name>&gt;Lewis &amp; Clark Tower&lt;/</name>
+  <description>&lt;h1h1&gt; &lt;p&gt;9953 Lewis &amp;amp; Clark Blvd, 63136&lt;/p&gt;</description>
+  <Point>
+    <coordinates> -90.24046299999998,38.7488839</coordinates>
+  </Point>
+</Placemark>
+<Placemark>
+  <Style>
+    <IconStyle>
+      <Icon>
+        <href>https://www.multiplottr.com/images/REDMarker.png</href>
+      </Icon>
+    </IconStyle>
+  </Style>
+  <name>&gt;St. Augustine Church&lt;/</name>
+  <description>&lt;h1h1&gt; &lt;p&gt;3114 Lismore Street, St. Louis, MO&lt;/p&gt;</description>
+  <Point>
+    <coordinates> -90.21133499999996,38.656514</coordinates>
+  </Point>
+</Placemark>
+<Placemark>
+  <Style>
+    <IconStyle>
+      <Icon>
+        <href>https://www.multiplottr.com/images/REDMarker.png</href>
+      </Icon>
+    </IconStyle>
+  </Style>
+  <name>&gt;St. Luke's Hospital&lt;/</name>
+  <description>&lt;h1h1&gt; &lt;p&gt;5500 Delmar Boulevard, St. Louis, MO&lt;/p&gt;</description>
+  <Point>
+    <coordinates> -90.27924999999999,38.653179</coordinates>
+  </Point>
+</Placemark>
+<Placemark>
+  <Style>
+    <IconStyle>
+      <Icon>
+        <href>https://www.multiplottr.com/images/REDMarker.png</href>
+      </Icon>
+    </IconStyle>
+  </Style>
+  <name>&gt;Southside YMCA&lt;/</name>
+  <description>&lt;h1h1&gt; &lt;p&gt;2238 Grand Blvd, St. Louis, MO&lt;/p&gt;</description>
+  <Point>
+    <coordinates> -90.24064379999999,38.6103549</coordinates>
+  </Point>
+</Placemark>
+</Document>
+</kml>

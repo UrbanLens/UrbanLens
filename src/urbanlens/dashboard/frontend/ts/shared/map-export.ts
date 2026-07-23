@@ -240,6 +240,25 @@ function drawShape(ctx: CanvasRenderingContext2D, map: L.Map, s: ShapeSpec, zoom
             ctx.fillText(label, p.x + paddingX, p.y + boxH / 2);
             break;
         }
+        case "pin": {
+            const p = toContainerPoint(map, s.latlngs[0]!);
+            const r = 9;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y - r, r, 0, Math.PI * 2);
+            ctx.fillStyle = color;
+            ctx.globalAlpha = 1;
+            ctx.fill();
+            ctx.strokeStyle = "rgba(0,0,0,.35)";
+            ctx.lineWidth = 1;
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(p.x - r * 0.5, p.y - r * 0.3);
+            ctx.lineTo(p.x + r * 0.5, p.y - r * 0.3);
+            ctx.lineTo(p.x, p.y);
+            ctx.closePath();
+            ctx.fill();
+            break;
+        }
     }
 }
 

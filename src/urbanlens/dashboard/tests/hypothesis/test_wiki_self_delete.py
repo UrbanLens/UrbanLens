@@ -11,6 +11,7 @@ from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.wiki.model import Wiki
 
 
@@ -54,6 +55,7 @@ class ViewTrackingTests(TestCase):
         creator_user = baker.make("auth.User")
         creator = creator_user.profile
         location, wiki = _location_with_wiki(creator)
+        baker.make(Pin, profile=creator, location=location)
 
         self.client.force_login(creator_user)
         response = self.client.get(reverse("location.wiki", args=[location.slug]))
@@ -66,6 +68,7 @@ class ViewTrackingTests(TestCase):
         creator = baker.make("auth.User").profile
         viewer_user = baker.make("auth.User")
         location, wiki = _location_with_wiki(creator)
+        baker.make(Pin, profile=viewer_user.profile, location=location)
 
         self.client.force_login(viewer_user)
         response = self.client.get(reverse("location.wiki", args=[location.slug]))
@@ -78,6 +81,7 @@ class ViewTrackingTests(TestCase):
         creator_user = baker.make("auth.User")
         creator = creator_user.profile
         location, _wiki = _location_with_wiki(creator)
+        baker.make(Pin, profile=creator, location=location)
 
         self.client.force_login(creator_user)
         response = self.client.get(reverse("location.wiki", args=[location.slug]))
@@ -96,6 +100,7 @@ class LocationWikiDeleteViewTests(TestCase):
 
     def test_creator_deletes_unviewed_wiki(self) -> None:
         location, wiki = _location_with_wiki(self.creator)
+        baker.make(Pin, profile=self.creator, location=location)
         self.client.force_login(self.creator_user)
 
         response = self._delete(location.slug)
@@ -107,6 +112,7 @@ class LocationWikiDeleteViewTests(TestCase):
     def test_non_creator_cannot_delete(self) -> None:
         location, wiki = _location_with_wiki(self.creator)
         other_user = baker.make("auth.User")
+        baker.make(Pin, profile=other_user.profile, location=location)
         self.client.force_login(other_user)
 
         response = self._delete(location.slug)
@@ -117,6 +123,8 @@ class LocationWikiDeleteViewTests(TestCase):
     def test_creator_cannot_delete_after_someone_else_viewed(self) -> None:
         location, wiki = _location_with_wiki(self.creator)
         other_user = baker.make("auth.User")
+        baker.make(Pin, profile=other_user.profile, location=location)
+        baker.make(Pin, profile=self.creator, location=location)
         self.client.force_login(other_user)
         self.client.get(reverse("location.wiki", args=[location.slug]))
 
@@ -128,6 +136,7 @@ class LocationWikiDeleteViewTests(TestCase):
 
     def test_delete_cascades_to_child_wikis(self) -> None:
         location, wiki = _location_with_wiki(self.creator)
+        baker.make(Pin, profile=self.creator, location=location)
         child_location = baker.make("dashboard.Location")
         child = baker.make("dashboard.Wiki", location=child_location, name="Basement", parent_wiki=wiki)
         self.client.force_login(self.creator_user)

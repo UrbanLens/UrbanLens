@@ -176,6 +176,40 @@ def add_pending_account_deletion(request: HttpRequest) -> dict[str, object]:
     return {"pending_account_deletion": False, "account_deletion_date": None, "account_deletion_days_left": None}
 
 
+def add_direct_messages(request: HttpRequest) -> dict[str, bool]:
+    """Expose whether the navbar messages icon should render for this user.
+
+    The icon appears once the user has ever sent or received a direct
+    message, OR has ever had an accepted friend (even if that friend was
+    later removed) - users with no way to reach the feature don't get an
+    extra navbar icon competing for attention, but the icon stays visible
+    once it's been relevant at all rather than flickering away.
+
+    Args:
+        request: The current HttpRequest.
+
+    Returns:
+        dict with ``show_messages_icon`` (bool) and ``e2ee_needs_oauth_enroll``
+        (bool - True for passwordless accounts with no key bundle yet, which
+        base.html enrolls transparently in the background).
+    """
+    if isinstance(request.user, User):
+        try:
+            from urbanlens.dashboard.models.e2ee import MessagingKeyBundle
+            from urbanlens.dashboard.models.friendship import Friendship
+            from urbanlens.dashboard.services.direct_messages import has_used_direct_messages
+
+            needs_oauth_enroll = not request.user.has_usable_password() and not MessagingKeyBundle.objects.filter(profile__user=request.user).exists()
+            show_messages_icon = has_used_direct_messages(request.user.profile) or Friendship.objects.profile(request.user.profile).ever_friends().exists()
+            return {
+                "show_messages_icon": show_messages_icon,
+                "e2ee_needs_oauth_enroll": needs_oauth_enroll,
+            }
+        except (ImportError, AttributeError, DatabaseError):
+            pass
+    return {"show_messages_icon": False, "e2ee_needs_oauth_enroll": False}
+
+
 def add_feature_access(request: HttpRequest) -> dict[str, bool]:
     """Expose subscription-gated feature visibility to templates."""
     try:
@@ -185,6 +219,7 @@ def add_feature_access(request: HttpRequest) -> dict[str, bool]:
             "can_use_ai_features": user_has_feature(request.user, SiteFeature.AI),
             "show_places_layer": user_has_feature(request.user, SiteFeature.PLACES),
             "can_use_web_search": user_has_feature(request.user, SiteFeature.SEARCH),
+            "can_upload_videos": user_has_feature(request.user, SiteFeature.VIDEO_UPLOADS),
         }
     except (ImportError, DatabaseError):
-        return {"can_use_ai_features": False, "show_places_layer": False, "can_use_web_search": False}
+        return {"can_use_ai_features": False, "show_places_layer": False, "can_use_web_search": False, "can_upload_videos": False}

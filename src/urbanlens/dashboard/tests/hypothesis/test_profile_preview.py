@@ -16,7 +16,7 @@ from django.db import transaction
 from django.urls import reverse
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.services.profile_preview import SESSION_KEY, create_ghost_viewer, preview_modes
 
@@ -28,7 +28,7 @@ def _owner() -> Profile:
 # -- preview_modes ---------------------------------------------------------------
 
 
-class PreviewModesTests(TestCase):
+class PreviewModesTests(SimpleTestCase):
     """The preview menu must mirror the privacy controls on the settings page."""
 
     def test_modes_match_visibility_choices(self) -> None:
@@ -144,15 +144,21 @@ class ProfilePreviewFlowTests(TestCase):
         self.assertNotIn(SESSION_KEY, self.client.session)
 
     def test_previewed_page_renders_as_other_user_with_banner(self) -> None:
+        import re
+
         self._start_preview(VisibilityChoice.ANYONE)
         response = self.client.get(self.profile_path)
         self.assertEqual(response.status_code, 200)
-        # The exact page another user gets: no owner-only controls...
-        self.assertNotContains(response, "Edit Profile")
-        self.assertContains(response, "Add Friend")
+        # The exact page another user gets: no owner-only controls. Checked
+        # against script-stripped content - the bio editor's wiring script
+        # contains "Edit Profile" as an inert JS comment on every render,
+        # which is not the owner-only BUTTON this assertion is about.
+        content = re.sub(r"<script\b[^>]*>.*?</script>", "", response.content.decode(), flags=re.DOTALL)
+        self.assertNotIn("Edit Profile", content)
+        self.assertIn("Add Friend", content)
         # ...plus the injected preview banner.
-        self.assertContains(response, "profile-preview-banner")
-        self.assertContains(response, reverse("profile.preview.exit"))
+        self.assertIn("profile-preview-banner", content)
+        self.assertIn(reverse("profile.preview.exit"), content)
 
     def test_ghost_rows_are_rolled_back(self) -> None:
         self._start_preview(VisibilityChoice.COMMON_TRIP)

@@ -4,14 +4,14 @@ from __future__ import annotations
 from hypothesis import given
 from hypothesis import strategies as st
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.models.profile.meta import DistanceUnit
 from urbanlens.dashboard.models.profile.model import _units_for_point
 from urbanlens.dashboard.services.units import _MILES_PER_KM, format_distance, km_to_display, unit_label
 from urbanlens.dashboard.templatetags.dashboard_tags import distance as distance_filter
 
 
-class KmToDisplayTests(TestCase):
+class KmToDisplayTests(SimpleTestCase):
     """km_to_display converts kilometres to the requested unit."""
 
     def test_kilometers_passthrough(self) -> None:
@@ -26,7 +26,7 @@ class KmToDisplayTests(TestCase):
         self.assertLessEqual(miles, distance_km + 1e-9)
 
 
-class UnitLabelTests(TestCase):
+class UnitLabelTests(SimpleTestCase):
     """unit_label returns the short display label."""
 
     def test_labels(self) -> None:
@@ -34,7 +34,7 @@ class UnitLabelTests(TestCase):
         self.assertEqual(unit_label(DistanceUnit.MILES), "mi")
 
 
-class FormatDistanceTests(TestCase):
+class FormatDistanceTests(SimpleTestCase):
     """format_distance renders value + unit label."""
 
     def test_km(self) -> None:
@@ -49,7 +49,7 @@ class FormatDistanceTests(TestCase):
         self.assertEqual(format_distance(12.345, DistanceUnit.KILOMETERS, decimals=2), "12.35 km")
 
 
-class UnitsForPointTests(TestCase):
+class UnitsForPointTests(SimpleTestCase):
     """_units_for_point picks miles inside miles-using regions, km otherwise."""
 
     def test_continental_us_is_miles(self) -> None:
@@ -68,7 +68,7 @@ class UnitsForPointTests(TestCase):
         self.assertEqual(_units_for_point(0.0, -30.0), DistanceUnit.KILOMETERS)
 
 
-class DistanceFilterTests(TestCase):
+class DistanceFilterTests(SimpleTestCase):
     """The `distance` template filter formats km values in the given unit."""
 
     def test_km(self) -> None:

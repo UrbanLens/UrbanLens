@@ -11,6 +11,7 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.controllers.detail_pins import LocationDetailPinJsonView
 from urbanlens.dashboard.models.location.model import Location
+from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.wiki.model import Wiki
 
 
@@ -40,6 +41,7 @@ class LocationDetailPinJsonChildWikiTests(TestCase):
         self.location = _make_location()
         self.wiki = _wiki_for(self.location)
         self.viewer = baker.make(User)
+        baker.make(Pin, profile=self.viewer.profile, location=self.location)
         self.child_a = _make_child_wiki(self.wiki, name="North Entrance")
         self.child_b = _make_child_wiki(self.wiki, name="South Entrance")
 
@@ -73,5 +75,6 @@ class LocationDetailPinJsonChildWikiTests(TestCase):
 
     def test_empty_location_returns_empty_list(self) -> None:
         empty_location = _make_location()
+        baker.make(Pin, profile=self.viewer.profile, location=empty_location)
         data = self._get(empty_location)
         self.assertEqual(data["detail_pins"], [])

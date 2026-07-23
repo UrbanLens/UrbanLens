@@ -159,7 +159,7 @@ def _trips_for_range(profile: Profile, start: date, end: date, bbox: BBox | None
             subtitle="Trip",
             latitude=point[0] if point else None,
             longitude=point[1] if point else None,
-            url=reverse("trips.detail", kwargs={"trip_uuid": trip.uuid}),
+            url=reverse("trips.detail", kwargs={"trip_slug": trip.slug}),
             thumbnail_url=None,
             icon="luggage",
             color="#FF9800",

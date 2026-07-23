@@ -23,7 +23,8 @@ Context:
      data-places-url="{% url 'map.autocomplete.places' %}"
      data-resolve-url="{% url 'map.resolve_place' %}"
      data-pins-url="{% url 'map.pins' %}"
-     data-log-visit-url="{% url 'memories.photos.action' image.pk 'log-visit' %}">
+     data-log-visit-url="{% url 'memories.photos.action' image.pk 'log-visit' %}"
+     data-profile-uuid="{{ request.user.profile.uuid|default:'' }}">
 
     <p class="photo-pin-confirm-intro">
         We'll drop a pin where this photo was taken. Drag the marker, search for a place or one of your pins, or click one of your pins on the map, then give it a name.
@@ -36,6 +37,8 @@ Context:
             {% map_layers_panel "street,satellite" panel_id="photo-pin-confirm-layers" extra_class="map-layers-panel--inline" %}
         </div>
     </div>
+    {# Replaces Leaflet's on-map attribution control (attributionControl: false in photos.html). #}
+    <p class="form-hint" id="photo-pin-confirm-attribution" aria-live="polite"></p>
 
     <form class="photo-pin-confirm-form"
           hx-post="{% url 'memories.photos.action' image.pk 'create-pin' %}"
@@ -46,8 +49,7 @@ Context:
         <input type="hidden" name="longitude" id="photo-pin-confirm-lng" value="{{ image.effective_longitude|stringformat:'f' }}">
         <div class="form-row">
             <label for="photo-pin-confirm-name">Pin name <small>(optional)</small></label>
-            <input type="text" name="name" id="photo-pin-confirm-name"
-                   placeholder="Leave blank to use the place's name">
+            <input type="text" name="name" id="photo-pin-confirm-name">
         </div>
         <div class="form-actions">
             <button type="submit" class="btn btn--primary btn--submit">

@@ -1,5 +1,17 @@
 {% extends 'dashboard/themes/base.html' %}
 
+{% block hero %}
+{% include "dashboard/partials/ui/_page_hero.html" with id="profile-hero" modifier="profile" body_template="dashboard/partials/profile/_profile_hero_body.html" edit_mode=True %}
+{% endblock %}
+
+{% block subnav %}
+<div class="ul-page-subnav">
+    <div class="ul-page-subnav__inner">
+        {% include "dashboard/partials/profile/_profile_tabs.html" with active="edit" %}
+    </div>
+</div>
+{% endblock %}
+
 {% block content %}
 {% with date_errors=form.birth_date.errors|add:form.started_exploring.errors %}
 {% if date_errors %}
@@ -34,13 +46,6 @@
         </button>
     </div>
     {% endif %}
-
-    <div class="edit-profile-header">
-        <a href="{% url 'profile.view' %}" class="edit-back-link">
-            <i class="material-symbols-outlined">arrow_back</i> Back to Profile
-        </a>
-        <h1 class="edit-profile-title">Edit Profile</h1>
-    </div>
 
     {# -- Profile info -------------------------------------------------------- #}
     <section class="edit-card ul-section">
@@ -344,17 +349,7 @@ function closeDateErrorDialog() {
                     if (guard) guard.markClean();
                     setStatus(field, 'saved', '✓ Saved');
                     if (data.avatar_url) {
-                        var el = document.getElementById('avatar-preview');
-                        if (el.tagName === 'IMG') {
-                            el.src = data.avatar_url;
-                        } else {
-                            var img = document.createElement('img');
-                            img.src = data.avatar_url;
-                            img.className = 'edit-avatar-preview';
-                            img.id = 'avatar-preview';
-                            img.alt = 'Avatar';
-                            el.parentNode.replaceChild(img, el);
-                        }
+                        updateAvatarPreview(data.avatar_url);
                     }
                 } else {
                     var msg = data.error || 'Save failed.';
@@ -489,17 +484,36 @@ function closeDateErrorDialog() {
 
     function updateAvatarPreview(url) {
         if (!url) return;
+        var cacheBusted = url + '?' + Date.now();
         var el = document.getElementById('avatar-preview');
-        if (!el) return;
-        if (el.tagName === 'IMG') {
-            el.src = url + '?' + Date.now();
-        } else {
-            var img = document.createElement('img');
-            img.src = url + '?' + Date.now();
-            img.className = 'edit-avatar-preview';
-            img.id = 'avatar-preview';
-            img.alt = 'Avatar';
-            el.parentNode.replaceChild(img, el);
+        if (el) {
+            if (el.tagName === 'IMG') {
+                el.src = cacheBusted;
+            } else {
+                var img = document.createElement('img');
+                img.src = cacheBusted;
+                img.className = 'edit-avatar-preview';
+                img.id = 'avatar-preview';
+                img.alt = 'Avatar';
+                el.parentNode.replaceChild(img, el);
+            }
+        }
+        // The page hero (_profile_hero_body.html) renders a separate <img>/
+        // placeholder for the same avatar - without this it stayed stale
+        // until a full page reload, since this whole flow is a plain fetch()
+        // JSON response, not an HTMX swap the hero could OOB-update itself.
+        var hero = document.getElementById('profile-hero-avatar');
+        if (hero) {
+            if (hero.tagName === 'IMG') {
+                hero.src = cacheBusted;
+            } else {
+                var heroImg = document.createElement('img');
+                heroImg.src = cacheBusted;
+                heroImg.className = 'profile-avatar-img';
+                heroImg.id = 'profile-hero-avatar';
+                heroImg.alt = 'Avatar';
+                hero.parentNode.replaceChild(heroImg, hero);
+            }
         }
     }
 

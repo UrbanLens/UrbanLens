@@ -1,24 +1,19 @@
 {% extends 'dashboard/themes/base.html' %}
 
+{% block hero %}
+{% include "dashboard/partials/ui/_page_hero.html" with body_template="dashboard/partials/admin/_plugins_hero_body.html" modifier="top" %}
+{% endblock %}
+
+{% block subnav %}
+<div class="ul-page-subnav">
+    <div class="ul-page-subnav__inner">
+        {% include "dashboard/partials/admin/_site_admin_tabs.html" with active="plugins" %}
+    </div>
+</div>
+{% endblock %}
+
 {% block content %}
 <div class="site-admin-page page-content plugins-page">
-    <div class="site-admin-header">
-        <div class="site-admin-breadcrumb">
-            <a href="{% url 'site_admin_home' %}" class="site-admin-breadcrumb__link">
-                <i class="material-symbols-outlined">arrow_back</i>
-                Admin Home
-            </a>
-        </div>
-        <h1 class="site-admin-title">
-            <i class="material-symbols-outlined">extension</i>
-            Plugins
-        </h1>
-        <p class="site-admin-subtitle">
-            External integrations discovered for this install. Runtime per-service toggles live on
-            <a href="{% url 'site_admin_api_limits' %}">API Limits</a>; to disable a plugin entirely,
-            list its name in the <code>UL_DISABLED_PLUGINS</code> environment setting and restart.
-        </p>
-    </div>
 
     <div class="api-limits-toolbar">
         <span class="admin-home-meta-pill">

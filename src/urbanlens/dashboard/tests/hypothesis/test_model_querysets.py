@@ -1,28 +1,32 @@
 """DB-backed tests for small queryset methods across multiple models.
 
 Covers: CommentQuerySet, PinMarkupQuerySet, VisitQuerySet, SocialLinkQuerySet,
-NotificationQuerySet, and SiteSettings.get_current().
+NotificationQuerySet, SiteSettings.get_current(), and
+ProfileNote/ProfileNickname/ProfileTrust's for_pair().
 
 Each test creates minimal fixture data via baker and exercises the queryset
 filter methods, verifying inclusion/exclusion semantics.
 """
 from __future__ import annotations
 
+from datetime import UTC, datetime, timezone
+from typing import TYPE_CHECKING
 import unittest
-from datetime import datetime, timezone
 
 from django.contrib.auth.models import User
-from urbanlens.core.tests.testcase import TestCase
 from model_bakery import baker
 
+if TYPE_CHECKING:
+    from urbanlens.dashboard.models.profile.model import Profile
+
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.comments.queryset import CommentQuerySet
 from urbanlens.dashboard.models.markup.queryset import PinMarkupQuerySet
 from urbanlens.dashboard.models.notifications.meta.status import Status
-from urbanlens.dashboard.models.social_link.queryset import SocialLinkQuerySet as SocialLinkQuerySet
 from urbanlens.dashboard.models.site_settings import SiteSettings
+from urbanlens.dashboard.models.social_link.queryset import SocialLinkQuerySet as SocialLinkQuerySet
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
 from urbanlens.dashboard.models.visits.queryset import VisitQuerySet
-
 
 # -- CommentQuerySet ------------------------------------------------------------
 
@@ -158,6 +162,46 @@ class TripCommentDeleteTests(TestCase):
         self.assertIn(reply, self.trip.comments.filter(parent__isnull=True))
 
 
+class TripCommentQuerySetByAuthorTests(TestCase):
+    """by_author() returns a profile's comments across trips, most recent first."""
+
+    def setUp(self):
+        self.user = baker.make("auth.User")
+        self.other_user = baker.make("auth.User")
+        self.trip = baker.make("dashboard.Trip", creator=self.user.profile)
+        self.other_trip = baker.make("dashboard.Trip", creator=self.other_user.profile)
+
+    def test_by_author_includes_own_comments_only(self) -> None:
+        from urbanlens.dashboard.models.trips.model import TripComment
+
+        mine: TripComment = baker.make("dashboard.TripComment", trip=self.trip, author=self.user.profile)
+        baker.make("dashboard.TripComment", trip=self.other_trip, author=self.other_user.profile)
+
+        qs = TripComment.objects.by_author(self.user.profile)
+        self.assertIn(mine, qs)
+        self.assertEqual(qs.count(), 1)
+
+    def test_by_author_orders_most_recent_first(self) -> None:
+        from urbanlens.dashboard.models.trips.model import TripComment
+
+        older: TripComment = baker.make("dashboard.TripComment", trip=self.trip, author=self.user.profile)
+        newer: TripComment = baker.make("dashboard.TripComment", trip=self.trip, author=self.user.profile)
+        TripComment.objects.filter(pk=older.pk).update(created=datetime(2020, 1, 1, tzinfo=UTC))
+        TripComment.objects.filter(pk=newer.pk).update(created=datetime(2020, 1, 2, tzinfo=UTC))
+
+        qs = list(TripComment.objects.by_author(self.user.profile))
+        self.assertEqual(qs, [newer, older])
+
+    def test_by_author_preloads_trip_without_extra_query(self) -> None:
+        from urbanlens.dashboard.models.trips.model import TripComment
+
+        baker.make("dashboard.TripComment", trip=self.trip, author=self.user.profile)
+
+        comment = TripComment.objects.by_author(self.user.profile).first()
+        with self.assertNumQueries(0):
+            _ = comment.trip.name
+
+
 # -- PinMarkupQuerySet ---------------------------------------------------------
 
 class PinMarkupQuerySetTests(TestCase):
@@ -208,7 +252,7 @@ class VisitQuerySetTests(TestCase):
         self.location = baker.make("dashboard.Location", latitude=45.0, longitude=-69.0)
         self.pin = baker.make("dashboard.Pin", profile=self.user.profile, location=self.location)
         self.other_pin = baker.make("dashboard.Pin", profile=self.user.profile)
-        ts = datetime(2024, 6, 1, 12, 0, tzinfo=timezone.utc)
+        ts = datetime(2024, 6, 1, 12, 0, tzinfo=UTC)
         self.manual_visit = baker.make(
             "dashboard.PinVisit",
             pin=self.pin,
@@ -379,7 +423,7 @@ class SiteSettingsSingletonTests(TestCase):
 
 # -- TDD: Status enum values are swapped (bug demonstration) -------------------
 
-class NotificationStatusBugTests(TestCase):
+class NotificationStatusBugTests(SimpleTestCase):
     """Status enum member names must match their stored database values."""
 
     def test_unread_value_should_be_unread(self) -> None:
@@ -389,3 +433,304 @@ class NotificationStatusBugTests(TestCase):
     def test_read_value_should_be_read(self) -> None:
         """Status.READ.value should be 'read', not 'unread'."""
         self.assertEqual(Status.READ.value, "read")
+
+
+# -- SavedFilterQuerySet ---------------------------------------------------------
+
+class SavedFilterQuerySetNameTakenForTests(TestCase):
+    """name_taken_for() detects a name collision, scoped to one profile and excludable by pk."""
+
+    def setUp(self):
+        self.user = baker.make("auth.User")
+        self.other_user = baker.make("auth.User")
+        self.existing = baker.make("dashboard.SavedFilter", profile=self.user.profile, name="My Filter")
+
+    def test_taken_when_another_of_the_same_profiles_filters_has_that_name(self) -> None:
+        from urbanlens.dashboard.models.saved_filter.model import SavedFilter
+
+        self.assertTrue(SavedFilter.objects.name_taken_for(self.user.profile, "My Filter"))
+
+    def test_not_taken_for_a_different_profile_with_the_same_name(self) -> None:
+        from urbanlens.dashboard.models.saved_filter.model import SavedFilter
+
+        self.assertFalse(SavedFilter.objects.name_taken_for(self.other_user.profile, "My Filter"))
+
+    def test_not_taken_for_an_unused_name(self) -> None:
+        from urbanlens.dashboard.models.saved_filter.model import SavedFilter
+
+        self.assertFalse(SavedFilter.objects.name_taken_for(self.user.profile, "Unused Name"))
+
+    def test_excluding_its_own_pk_lets_a_rename_keep_its_current_name(self) -> None:
+        from urbanlens.dashboard.models.saved_filter.model import SavedFilter
+
+        self.assertFalse(SavedFilter.objects.name_taken_for(self.user.profile, "My Filter", exclude_pk=self.existing.pk))
+
+    def test_exclude_pk_does_not_hide_a_collision_with_a_different_filter(self) -> None:
+        from urbanlens.dashboard.models.saved_filter.model import SavedFilter
+
+        other: SavedFilter = baker.make("dashboard.SavedFilter", profile=self.user.profile, name="Other Filter")
+        self.assertTrue(SavedFilter.objects.name_taken_for(self.user.profile, "My Filter", exclude_pk=other.pk))
+
+
+# -- ProfileNote/ProfileNickname/ProfileTrust for_pair() ------------------------
+
+class ProfileAnnotationForPairTests(TestCase):
+    """for_pair() scopes each of the three private-annotation models to one author+subject pair."""
+
+    def setUp(self):
+        self.author = baker.make("auth.User").profile
+        self.subject = baker.make("auth.User").profile
+        self.other_subject = baker.make("auth.User").profile
+        self.other_author = baker.make("auth.User").profile
+
+    def test_note_for_pair_includes_matching_notes_only(self) -> None:
+        from urbanlens.dashboard.models.profile.note import ProfileNote
+
+        mine: ProfileNote = baker.make("dashboard.ProfileNote", author=self.author, subject=self.subject)
+        baker.make("dashboard.ProfileNote", author=self.author, subject=self.other_subject)
+        baker.make("dashboard.ProfileNote", author=self.other_author, subject=self.subject)
+
+        qs = ProfileNote.objects.for_pair(self.author, self.subject)
+        self.assertIn(mine, qs)
+        self.assertEqual(qs.count(), 1)
+
+    def test_note_for_pair_returns_every_note_for_that_pair(self) -> None:
+        from urbanlens.dashboard.models.profile.note import ProfileNote
+
+        baker.make("dashboard.ProfileNote", author=self.author, subject=self.subject, _quantity=3)
+
+        self.assertEqual(ProfileNote.objects.for_pair(self.author, self.subject).count(), 3)
+
+    def test_nickname_for_pair_finds_the_row(self) -> None:
+        from urbanlens.dashboard.models.profile.nickname import ProfileNickname
+
+        nickname: ProfileNickname = baker.make("dashboard.ProfileNickname", author=self.author, subject=self.subject)
+        baker.make("dashboard.ProfileNickname", author=self.author, subject=self.other_subject)
+
+        self.assertEqual(ProfileNickname.objects.for_pair(self.author, self.subject).first(), nickname)
+
+    def test_nickname_for_pair_empty_for_a_different_pair(self) -> None:
+        from urbanlens.dashboard.models.profile.nickname import ProfileNickname
+
+        baker.make("dashboard.ProfileNickname", author=self.other_author, subject=self.subject)
+
+        self.assertIsNone(ProfileNickname.objects.for_pair(self.author, self.subject).first())
+
+    def test_trust_for_pair_finds_the_row(self) -> None:
+        from urbanlens.dashboard.models.profile.trust import ProfileTrust
+
+        trust: ProfileTrust = baker.make("dashboard.ProfileTrust", author=self.author, subject=self.subject, rating=4)
+        baker.make("dashboard.ProfileTrust", author=self.other_author, subject=self.subject, rating=2)
+
+        self.assertEqual(ProfileTrust.objects.for_pair(self.author, self.subject).first(), trust)
+
+    def test_trust_for_pair_empty_for_a_different_pair(self) -> None:
+        from urbanlens.dashboard.models.profile.trust import ProfileTrust
+
+        baker.make("dashboard.ProfileTrust", author=self.author, subject=self.other_subject, rating=3)
+
+        self.assertIsNone(ProfileTrust.objects.for_pair(self.author, self.subject).first())
+
+
+# -- e2ee querysets ---------------------------------------------------------------
+
+class MessagingKeyBundleQuerySetTests(TestCase):
+    """for_profile()/for_profiles() scope MessagingKeyBundle lookups."""
+
+    def setUp(self):
+        self.profile = baker.make("auth.User").profile
+        self.other_profile = baker.make("auth.User").profile
+
+    def test_for_profile_finds_the_bundle(self) -> None:
+        from urbanlens.dashboard.models.e2ee import MessagingKeyBundle
+
+        bundle: MessagingKeyBundle = baker.make("dashboard.MessagingKeyBundle", profile=self.profile)
+        self.assertEqual(MessagingKeyBundle.objects.for_profile(self.profile).first(), bundle)
+
+    def test_for_profile_empty_when_not_enrolled(self) -> None:
+        from urbanlens.dashboard.models.e2ee import MessagingKeyBundle
+
+        baker.make("dashboard.MessagingKeyBundle", profile=self.other_profile)
+        self.assertIsNone(MessagingKeyBundle.objects.for_profile(self.profile).first())
+
+    def test_for_profiles_accepts_profile_instances(self) -> None:
+        from urbanlens.dashboard.models.e2ee import MessagingKeyBundle
+
+        baker.make("dashboard.MessagingKeyBundle", profile=self.profile)
+        baker.make("dashboard.MessagingKeyBundle", profile=self.other_profile)
+        unrelated: Profile = baker.make("auth.User").profile
+
+        qs = MessagingKeyBundle.objects.for_profiles([self.profile, self.other_profile])
+        self.assertEqual(qs.count(), 2)
+        self.assertFalse(qs.filter(profile=unrelated).exists())
+
+    def test_for_profiles_accepts_raw_ids(self) -> None:
+        from urbanlens.dashboard.models.e2ee import MessagingKeyBundle
+
+        baker.make("dashboard.MessagingKeyBundle", profile=self.profile)
+
+        self.assertEqual(MessagingKeyBundle.objects.for_profiles([self.profile.pk]).count(), 1)
+
+
+class ConversationKeyQuerySetTests(TestCase):
+    """between() finds a conversation's keys regardless of argument order."""
+
+    def setUp(self):
+        self.profile_a = baker.make("auth.User").profile
+        self.profile_b = baker.make("auth.User").profile
+        self.other_profile = baker.make("auth.User").profile
+
+    def test_between_finds_keys_for_the_pair(self) -> None:
+        from urbanlens.dashboard.models.e2ee import ConversationKey
+
+        low, high = ConversationKey.canonical_pair(self.profile_a, self.profile_b)
+        key: ConversationKey = baker.make("dashboard.ConversationKey", profile_low=low, profile_high=high, version=1)
+
+        self.assertIn(key, ConversationKey.objects.between(self.profile_a, self.profile_b))
+
+    def test_between_is_order_independent(self) -> None:
+        from urbanlens.dashboard.models.e2ee import ConversationKey
+
+        low, high = ConversationKey.canonical_pair(self.profile_a, self.profile_b)
+        baker.make("dashboard.ConversationKey", profile_low=low, profile_high=high, version=1)
+
+        # Same pair, arguments reversed - canonicalization inside between()
+        # must find the same row either way.
+        self.assertEqual(ConversationKey.objects.between(self.profile_b, self.profile_a).count(), 1)
+
+    def test_between_excludes_a_different_pair(self) -> None:
+        from urbanlens.dashboard.models.e2ee import ConversationKey
+
+        low, high = ConversationKey.canonical_pair(self.profile_a, self.other_profile)
+        baker.make("dashboard.ConversationKey", profile_low=low, profile_high=high, version=1)
+
+        self.assertEqual(ConversationKey.objects.between(self.profile_a, self.profile_b).count(), 0)
+
+    def test_between_orders_oldest_first(self) -> None:
+        from urbanlens.dashboard.models.e2ee import ConversationKey
+
+        low, high = ConversationKey.canonical_pair(self.profile_a, self.profile_b)
+        v2: ConversationKey = baker.make("dashboard.ConversationKey", profile_low=low, profile_high=high, version=2)
+        v1: ConversationKey = baker.make("dashboard.ConversationKey", profile_low=low, profile_high=high, version=1)
+
+        self.assertEqual(list(ConversationKey.objects.between(self.profile_a, self.profile_b)), [v1, v2])
+
+
+class GroupKeyQuerySetTests(TestCase):
+    """for_group() scopes GroupKey lookups to one group chat."""
+
+    def setUp(self):
+        self.group = baker.make("dashboard.GroupChat")
+        self.other_group = baker.make("dashboard.GroupChat")
+
+    def test_for_group_finds_its_keys(self) -> None:
+        from urbanlens.dashboard.models.e2ee import GroupKey
+
+        key: GroupKey = baker.make("dashboard.GroupKey", group=self.group, version=1)
+        baker.make("dashboard.GroupKey", group=self.other_group, version=1)
+
+        qs = GroupKey.objects.for_group(self.group)
+        self.assertIn(key, qs)
+        self.assertEqual(qs.count(), 1)
+
+
+# -- Direct-message pair models ---------------------------------------------------
+
+class DirectMessagePairQuerySetTests(TestCase):
+    """for_pair() scopes mutes and image permissions to one viewer+sender pair."""
+
+    def setUp(self):
+        self.viewer = baker.make("auth.User").profile
+        self.sender = baker.make("auth.User").profile
+        self.other = baker.make("auth.User").profile
+
+    def test_mute_for_pair_is_directional(self) -> None:
+        from urbanlens.dashboard.models.direct_messages.mute import DirectMessageMute
+
+        baker.make("dashboard.DirectMessageMute", viewer=self.viewer, sender=self.sender)
+
+        self.assertTrue(DirectMessageMute.objects.for_pair(self.viewer, self.sender).exists())
+        # The reverse direction is a different row entirely.
+        self.assertFalse(DirectMessageMute.objects.for_pair(self.sender, self.viewer).exists())
+
+    def test_mute_for_pair_excludes_other_senders(self) -> None:
+        from urbanlens.dashboard.models.direct_messages.mute import DirectMessageMute
+
+        baker.make("dashboard.DirectMessageMute", viewer=self.viewer, sender=self.other)
+
+        self.assertFalse(DirectMessageMute.objects.for_pair(self.viewer, self.sender).exists())
+
+    def test_image_permission_for_pair_finds_the_row(self) -> None:
+        from urbanlens.dashboard.models.direct_messages.image_permission import DirectMessageImagePermission
+
+        row: DirectMessageImagePermission = baker.make("dashboard.DirectMessageImagePermission", viewer=self.viewer, sender=self.sender)
+        baker.make("dashboard.DirectMessageImagePermission", viewer=self.viewer, sender=self.other)
+
+        self.assertEqual(DirectMessageImagePermission.objects.for_pair(self.viewer, self.sender).first(), row)
+
+
+# -- MediaRelevance ---------------------------------------------------------------
+
+class MediaRelevanceQuerySetTests(TestCase):
+    """for_gallery() scopes relevance marks to one profile+location+provider."""
+
+    def setUp(self):
+        self.profile = baker.make("auth.User").profile
+        self.location = baker.make("dashboard.Location", latitude=41.0, longitude=-73.5)
+        self.other_location = baker.make("dashboard.Location", latitude=41.1, longitude=-73.6)
+
+    def test_for_gallery_scopes_to_profile_location_and_source(self) -> None:
+        from urbanlens.dashboard.models.images.relevance import MediaRelevance
+
+        mine: MediaRelevance = baker.make("dashboard.MediaRelevance", profile=self.profile, location=self.location, source="wikimedia", item_key="a" * 40, is_relevant=True)
+        baker.make("dashboard.MediaRelevance", profile=self.profile, location=self.location, source="smithsonian", item_key="b" * 40, is_relevant=True)
+        baker.make("dashboard.MediaRelevance", profile=self.profile, location=self.other_location, source="wikimedia", item_key="c" * 40, is_relevant=False)
+
+        qs = MediaRelevance.objects.for_gallery(self.profile, self.location, "wikimedia")
+        self.assertIn(mine, qs)
+        self.assertEqual(qs.count(), 1)
+
+
+# -- ProfileEmail -----------------------------------------------------------------
+
+class ProfileEmailQuerySetTests(TestCase):
+    """verified_for() matches only verified claims on one normalized address."""
+
+    def setUp(self):
+        self.profile = baker.make("auth.User").profile
+
+    def test_verified_for_finds_a_verified_claim(self) -> None:
+        from urbanlens.dashboard.models.profile.email import ProfileEmail
+
+        row = ProfileEmail.objects.create(profile=self.profile, email="alt@example.com", is_verified=True)
+        self.assertEqual(ProfileEmail.objects.verified_for(row.normalized_email).first(), row)
+
+    def test_verified_for_ignores_unverified_claims(self) -> None:
+        from urbanlens.dashboard.models.profile.email import ProfileEmail
+
+        row = ProfileEmail.objects.create(profile=self.profile, email="pending@example.com", is_verified=False)
+        self.assertIsNone(ProfileEmail.objects.verified_for(row.normalized_email).first())
+
+
+# -- Review -----------------------------------------------------------------------
+
+class ReviewForPairQuerySetTests(TestCase):
+    """for_pair() scopes reviews to one profile+pin pair."""
+
+    def setUp(self):
+        self.profile = baker.make("auth.User").profile
+        self.other_profile = baker.make("auth.User").profile
+        self.pin = baker.make("dashboard.Pin", profile=self.profile)
+
+    def test_for_pair_finds_the_row(self) -> None:
+        from urbanlens.dashboard.models.reviews.model import Review
+
+        review: Review = baker.make("dashboard.Review", profile=self.profile, pin=self.pin, rating=4)
+        baker.make("dashboard.Review", profile=self.other_profile, pin=self.pin, rating=2)
+
+        self.assertEqual(Review.objects.for_pair(self.profile, self.pin).first(), review)
+
+    def test_for_pair_empty_for_an_unreviewed_pin(self) -> None:
+        from urbanlens.dashboard.models.reviews.model import Review
+
+        self.assertIsNone(Review.objects.for_pair(self.profile, self.pin).first())

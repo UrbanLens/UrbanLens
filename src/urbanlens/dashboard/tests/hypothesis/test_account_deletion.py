@@ -13,22 +13,31 @@ import datetime
 
 from django.contrib.auth.models import User
 from django.core import mail
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 from django.utils import timezone
 from hypothesis import given, settings as hyp_settings, strategies as st
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.models.comments.model import Comment
+from urbanlens.dashboard.models.labels.meta import KIND_TAG
+from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.notifications.meta import NotificationType
 from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import ACCOUNT_DELETION_GRACE_PERIOD, Profile
+from urbanlens.dashboard.models.trips.model import Trip, TripComment
 from urbanlens.dashboard.services.account_deletion import (
     cancel_deletion,
     hard_delete_profile,
     request_deletion,
     send_deletion_reminder,
 )
+
+
+def _fake_image(name: str) -> SimpleUploadedFile:
+    return SimpleUploadedFile(name, b"fake-image-bytes", content_type="image/png")
 
 
 def _backdate_request(profile: Profile, ago: datetime.timedelta) -> Profile:
@@ -200,6 +209,70 @@ class HardDeleteProfileTests(TestCase):
         pin_pk = self.pin.pk
         hard_delete_profile(self.profile)
         self.assertFalse(Pin.objects.filter(pk=pin_pk).exists())
+
+
+class HardDeleteProfileFileCleanupTests(TestCase):
+    """hard_delete_profile() must not orphan storage files for rows whose DB
+    row is about to cascade-delete - Django never deletes a FileField's file
+    on row deletion, so account_deletion.py has to do it explicitly."""
+
+    def setUp(self):
+        self.user = baker.make(User, email="owner@example.com", username="doomed")
+        self.profile = _backdate_request(self.user.profile, ACCOUNT_DELETION_GRACE_PERIOD)
+
+    def test_avatar_file_is_deleted(self):
+        self.profile.avatar = _fake_image("avatar.png")
+        self.profile.save(update_fields=["avatar"])
+        storage, name = self.profile.avatar.storage, self.profile.avatar.name
+        hard_delete_profile(self.profile)
+        self.assertFalse(storage.exists(name))
+
+    def test_uploaded_image_file_is_deleted(self):
+        from urbanlens.dashboard.models.images.model import Image
+
+        image = Image.objects.create(image=_fake_image("photo.jpg"), profile=self.profile)
+        storage, name = image.image.storage, image.image.name
+        hard_delete_profile(self.profile)
+        self.assertFalse(storage.exists(name))
+
+    def test_pin_custom_icon_file_is_deleted(self):
+        pin = baker.make(Pin, profile=self.profile, custom_icon=_fake_image("icon.png"))
+        storage, name = pin.custom_icon.storage, pin.custom_icon.name
+        hard_delete_profile(self.profile)
+        self.assertFalse(storage.exists(name))
+
+    def test_comment_image_file_is_deleted(self):
+        pin = baker.make(Pin)  # comment on someone else's pin - only the author's file must be cleaned up
+        comment = baker.make(Comment, pin=pin, wiki=None, profile=self.profile, image=_fake_image("comment.png"))
+        storage, name = comment.image.storage, comment.image.name
+        hard_delete_profile(self.profile)
+        self.assertFalse(storage.exists(name))
+
+    def test_label_custom_icon_file_is_deleted(self):
+        label = baker.make(Label, kind=KIND_TAG, profile=self.profile, custom_icon=_fake_image("label.png"))
+        storage, name = label.custom_icon.storage, label.custom_icon.name
+        hard_delete_profile(self.profile)
+        self.assertFalse(storage.exists(name))
+
+    def test_trip_comment_survives_with_its_image_intact(self):
+        """TripComment.author is SET_NULL by design - the row and its image
+        outlive account deletion so other trip members keep the thread; only
+        the author reference is cleared."""
+        other = baker.make(User)
+        trip = baker.make(Trip, creator=other.profile)
+        comment = baker.make(TripComment, trip=trip, author=self.profile, image=_fake_image("trip.png"))
+        storage, name = comment.image.storage, comment.image.name
+        hard_delete_profile(self.profile)
+        comment.refresh_from_db()
+        self.assertIsNone(comment.author_id)
+        self.assertTrue(storage.exists(name))
+
+    def test_missing_file_on_disk_does_not_block_deletion(self):
+        """A DB row pointing at an already-missing file must not crash the sweep."""
+        pin = baker.make(Pin, profile=self.profile, custom_icon=_fake_image("icon.png"))
+        pin.custom_icon.storage.delete(pin.custom_icon.name)
+        hard_delete_profile(self.profile)  # must not raise
+        self.assertFalse(User.objects.filter(pk=self.user.pk).exists())
 
 
 class RequestAccountDeletionViewTests(TestCase):

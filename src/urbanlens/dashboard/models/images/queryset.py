@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Self
 
-from django.db.models import Q
+from django.db.models import Case, IntegerField, Q, Sum, Value, When
 
 from urbanlens.dashboard.models import abstract
 
 if TYPE_CHECKING:
+    from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 
 
@@ -97,7 +98,7 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet):
     def _get_trip_ids(self, profile: Profile) -> set[int]:
         from urbanlens.dashboard.models.trips.model import TripMembership
 
-        return set(TripMembership.objects.filter(profile=profile).values_list("trip_id", flat=True))
+        return set(TripMembership.objects.trip_ids_for(profile))
 
     def _relationship_allows(
         self,
@@ -166,7 +167,7 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet):
     def _get_trip_ids_by_id(self, profile_id: int) -> set[int]:
         from urbanlens.dashboard.models.trips.model import TripMembership
 
-        return set(TripMembership.objects.filter(profile_id=profile_id).values_list("trip_id", flat=True))
+        return set(TripMembership.objects.trip_ids_for(profile_id))
 
     def with_coords(self) -> Self:
         """Filter to images that have GPS coordinates (suitable for the map layer)."""
@@ -190,7 +191,10 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet):
         have not been dismissed - the pool the Memories "needs attention" queue
         surfaces so they can be confirmed, pinned, or manually logged. Photos
         uploaded directly to a pin/wiki gallery are excluded; only bare
-        Memories-page uploads (no pin, no wiki) qualify.
+        Memories-page uploads (no pin, no wiki) qualify. Photos staged as scan
+        candidates (``pin_suggestion`` set) are also excluded - those belong to
+        the Locations review queue, not this one, until their suggestion is
+        accepted or rejected.
 
         Args:
             profile: The uploader whose unfiled photos to return.
@@ -204,8 +208,52 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet):
             organize_dismissed=False,
             pin__isnull=True,
             wiki__isnull=True,
+            pin_suggestion__isnull=True,
         ).order_by("-created")
 
 
 class ImageManager(abstract.FrontendDashboardManager.from_queryset(ImageQuerySet)):
     pass
+
+
+class MediaRelevanceQuerySet(abstract.DashboardQuerySet):
+    """Custom queryset for MediaRelevance models."""
+
+    def for_gallery(self, profile: Profile, location: Location, source: str) -> MediaRelevanceQuerySet:
+        """Every relevance mark one profile holds for one provider's gallery at a location.
+
+        Args:
+            profile: The marking profile.
+            location: The location whose Media gallery is being viewed.
+            source: The provider key (e.g. ``"wikimedia"``).
+
+        Returns:
+            Matching marks; chain ``.filter(item_key=...)`` for a single item.
+        """
+        return self.filter(profile=profile, location=location, source=source)
+
+    def vote_scores(self, location: Location, source: str) -> dict[str, int]:
+        """Net community vote score per item for one provider's gallery at a location.
+
+        On the community wiki, a relevance mark is read as a vote: every
+        ``is_relevant=True`` row counts ``+1`` and every ``is_relevant=False``
+        row counts ``-1``, summed across all contributing profiles. Because
+        :class:`MediaRelevance` is keyed by Location (not Pin), a relevance
+        mark made on any user's pin detail page for this place is already part
+        of this aggregate - that's how a pin-detail thumbs-up "carries over" to
+        the wiki with no extra bookkeeping.
+
+        Args:
+            location: The location whose Media gallery is being scored.
+            source: The provider key (e.g. ``"wikimedia"``, ``"photos"``).
+
+        Returns:
+            Mapping of ``item_key`` to its net score. Items with no marks at
+            all are simply absent (treat a missing key as ``0``).
+        """
+        rows = self.filter(location=location, source=source).values("item_key").annotate(score=Sum(Case(When(is_relevant=True, then=Value(1)), default=Value(-1), output_field=IntegerField())))
+        return {row["item_key"]: row["score"] or 0 for row in rows}
+
+
+class MediaRelevanceManager(abstract.DashboardManager.from_queryset(MediaRelevanceQuerySet)):
+    """Custom query manager for MediaRelevance models."""

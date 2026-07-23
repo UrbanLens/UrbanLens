@@ -35,12 +35,21 @@
             </label>
             <input type="file"
                    id="icon-upload-input-{{ picker_id }}"
-                   name="custom_icon"
+                   name="custom_icon-{{ picker_id }}"
                    accept="image/*"
                    style="display:none"
                    onchange="IconPicker._handleUpload('{{ picker_id }}', this)">
             {% endif %}
         </div>
+        {% if show_upload %}
+        <div class="icon-picker-clear-row">
+            <button type="button" class="icon-picker-clear-btn" title="Clear the selected icon"
+                    onclick="IconPicker.pick('{{ picker_id }}', '', null)">
+                <i class="material-symbols-outlined">block</i>
+                Clear icon
+            </button>
+        </div>
+        {% endif %}
 
         <div class="icon-picker-tabs">
             <button type="button" class="icon-tab active" data-cat=""

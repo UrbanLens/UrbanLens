@@ -6,7 +6,7 @@ UrbanLens onboarding should appear as contextual, dismissible guidance while peo
 
 1. **Import pins for smaller collections**: when the map loads and the user has fewer than 100 pins, invite them to import Google Takeout pins and pulse the import toolbar button.
 2. **Add a first pin**: for empty maps, explain the Add Pin button and right-click map shortcut.
-3. **Search and filter**: once the user has a small collection, point out filters for ratings, visits, badges, and names.
+3. **Search and filter**: once the user has a small collection, point out filters for ratings, visits, tags/labels, and names.
 4. **Map layers**: introduce satellite, topographic, and weather overlays as situational tools for exploration planning.
 
 ## Implemented pin-detail nudges

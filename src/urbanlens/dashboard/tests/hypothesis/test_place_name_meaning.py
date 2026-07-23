@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from hypothesis import given, settings as hyp_settings, strategies as st
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.locations.naming import is_meaningful_name
 
 _hyp = hyp_settings(max_examples=80, deadline=None)
@@ -53,7 +53,7 @@ _MEANINGFUL_EXAMPLES = (
 )
 
 
-class IsMeaningfulNameTests(TestCase):
+class IsMeaningfulNameTests(SimpleTestCase):
     """is_meaningful_name rejects placeholders and accepts real place names."""
 
     def test_meaningless_examples(self) -> None:

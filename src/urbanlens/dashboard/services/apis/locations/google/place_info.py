@@ -13,6 +13,7 @@ from urbanlens.dashboard.models.google_place.model import GooglePlace
 from urbanlens.dashboard.services.apis.locations.google.geocoding import GoogleGeocodingGateway
 from urbanlens.dashboard.services.locations.google import PlaceNameResolverChain
 from urbanlens.dashboard.services.locations.naming import is_meaningful_name
+from urbanlens.dashboard.services.rate_limiter import RequestCancelledError
 from urbanlens.dashboard.services.redact import redact_coordinate
 from urbanlens.UrbanLens.settings.app import settings
 
@@ -108,11 +109,15 @@ class GooglePlaceService:
                 raise
             return self._merge_into_existing(existing, place_name=place_name, cid=cid, fetch_if_missing=fetch_if_missing)
 
-    def ensure_linked(self, location: Location) -> GooglePlace:
+    def ensure_linked(self, location: Location, *, fetch_if_missing: bool = True) -> GooglePlace:
         """Attach entity.google_place to the shared row for its coordinates.
 
         Args:
             entity: A Location or Pin with latitude and longitude set.
+            fetch_if_missing: When True, call Google if no cached name is
+                available for these coordinates. Pass False for bulk paths
+                (e.g. import) that must not block on a live API call per row -
+                the name resolves lazily the next time the location is viewed.
 
         Returns:
             Linked GooglePlace, or None when coordinates are invalid.
@@ -120,24 +125,27 @@ class GooglePlaceService:
         if location.google_place is not None:
             return location.google_place
 
-        google_place = self.get_or_create_for_coordinates(location.latitude, location.longitude)
+        google_place = self.get_or_create_for_coordinates(location.latitude, location.longitude, fetch_if_missing=fetch_if_missing)
         if location.google_place_id != google_place.pk:
             location.google_place = google_place
             location.save(update_fields=["google_place"])
 
         return google_place
 
-    def set_cid_for_entity(self, location: Location, cid: int | Decimal) -> GooglePlace:
+    def set_cid_for_entity(self, location: Location, cid: int | Decimal, *, fetch_if_missing: bool = True) -> GooglePlace:
         """Store a Google Maps CID on the shared row for an entity's coordinates.
 
         Args:
             entity: Location or Pin whose coordinates identify the cache row.
             cid: Google Maps CID extracted from an import URL.
+            fetch_if_missing: When True, call Google if no cached name is
+                available for these coordinates. Pass False for bulk paths
+                (e.g. import) that must not block on a live API call per row.
 
         Returns:
             The GooglePlace row that now holds the CID.
         """
-        google_place = self.ensure_linked(location)
+        google_place = self.ensure_linked(location, fetch_if_missing=fetch_if_missing)
         if google_place.cid is None:
             google_place.cid = cid
             google_place.save(update_fields=["cid"])
@@ -213,6 +221,6 @@ class GooglePlaceService:
             return name
         try:
             return GoogleGeocodingGateway(api_key=settings.google_unrestricted_api_key).get_place_name(latitude, longitude)
-        except (OSError, ValueError) as exc:
+        except (OSError, ValueError, RequestCancelledError) as exc:
             logger.debug("Google place-name lookup failed for %s,%s: %s", redact_coordinate(latitude), redact_coordinate(longitude), exc)
             return None

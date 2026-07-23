@@ -44,7 +44,7 @@ def _linkify(segment: str) -> SafeString:
         into a link, so marking the result safe mirrors Django's own ``urlize``
         template filter and keeps ``format_html_join`` from double-escaping it.
     """
-    return mark_safe(urlize(segment, nofollow=True, autoescape=True))  # noqa: S308 - input is fully escaped by urlize
+    return mark_safe(urlize(segment, nofollow=True, autoescape=True))  # noqa: S308 # nosec B703 B308 - input is fully escaped by urlize
 
 
 def extract_location_uuids(text: str) -> list[uuid.UUID]:

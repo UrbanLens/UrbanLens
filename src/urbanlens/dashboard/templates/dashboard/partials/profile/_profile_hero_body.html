@@ -1,0 +1,231 @@
+{% comment %}
+Hero body for profile/index.html and profile/edit.html - rendered inside
+.ul-page-hero--profile (see _page_hero.scss), so both pages share one fixed
+hero height and the Profile | Edit subnav never jumps when switching tabs.
+
+Expects:
+  profile           - the Profile being shown (required)
+  edit_mode         - when True, swaps the "Edit Profile" CTA for "View
+                       Profile" (used by profile/edit.html; omit/False on
+                       profile/index.html)
+  friendship_status, friendship, friends_since - only used when viewing
+                       another user's profile (see userprofile.py)
+  preview_modes     - "View as" options; only rendered when present
+  can_view_contact  - gates the email meta item
+{% endcomment %}
+<div class="profile-avatar-col">
+    <div class="profile-avatar-wrap">
+        {% if profile.avatar %}
+        <img class="profile-avatar-img" id="profile-hero-avatar" src="{{ profile.avatar.url }}" alt="Avatar">
+        {% else %}
+        <div class="profile-avatar-placeholder" id="profile-hero-avatar">
+            {% if profile.first_name %}{{ profile.first_name|first|upper }}{% elif profile.username %}{{ profile.username|first|upper }}{% else %}?{% endif %}
+        </div>
+        {% endif %}
+        {% if profile.user == request.user %}
+        <form method="post" action="{% url 'profile.view' %}" enctype="multipart/form-data" class="avatar-upload-form">
+            {% csrf_token %}
+            <label class="avatar-upload-btn" title="Change photo">
+                <i class="material-symbols-outlined">photo_camera</i>
+                <input type="file" name="avatar" onchange="this.form.submit()" style="display:none;">
+            </label>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<div class="profile-info-col">
+    <div class="profile-name-row">
+        <div{% if profile.user == request.user %} class="ul-privacy-hint-row"{% endif %}>
+            <h1 class="profile-full-name">
+                {% if profile.user == request.user and not edit_mode %}
+                <span class="profile-name-editable" tabindex="0" role="button"
+                      data-raw-first="{{ profile.first_name|default:'' }}" data-raw-last="{{ profile.last_name|default:'' }}"
+                      data-username="{{ profile.username }}" title="Click to edit your name">{% if profile.full_name %}{{ profile.full_name }}{% else %}{{ profile.username }}{% endif %}</span>
+                {% else %}
+                {% if profile.full_name %}{{ profile.full_name }}{% else %}{{ profile.username }}{% endif %}
+                {% endif %}
+                {% if profile.user == request.user %}
+                {% include "dashboard/partials/ui/_privacy_hint.html" with label="Name, avatar & bio" value=profile.get_profile_visibility_display field="profile_visibility" raw_value=profile.profile_visibility owner=profile %}
+                {% endif %}
+            </h1>
+            {% if profile.user == request.user and not edit_mode %}
+            <p class="profile-username">@<span class="profile-username-editable" tabindex="0" role="button"
+                  data-raw-username="{{ profile.username }}" title="Click to change your username">{{ profile.username }}</span></p>
+            {% else %}
+            <p class="profile-username">@{{ profile.username }}</p>
+            {% endif %}
+        </div>
+
+        {# -- Friendship actions (only when viewing another user) -- #}
+        {% if user.is_authenticated and profile.user != request.user %}
+        <div class="profile-friendship-actions">
+            {% if friendship_status == 'accepted' %}
+                <div class="friendship-chip friendship-chip--friend">
+                    <i class="material-symbols-outlined">people</i>
+                    Friends
+                    {% if friends_since %}
+                    <span class="friendship-since">since {{ friends_since|date:"M Y" }}</span>
+                    {% endif %}
+                </div>
+                <div class="friendship-btn-group">
+                    <form method="post" action="{% url 'friend.remove' profile.id %}">
+                        {% csrf_token %}
+                        <button type="submit" class="btn friendship-btn btn--secondary" title="Remove friend">
+                            <i class="material-symbols-outlined">person_remove</i> Remove
+                        </button>
+                    </form>
+                    <form method="post" action="{% url 'friend.mute' profile.id %}">
+                        {% csrf_token %}
+                        <button type="submit" class="btn friendship-btn btn--secondary" title="Mute this user">
+                            <i class="material-symbols-outlined">volume_off</i> Mute
+                        </button>
+                    </form>
+                    <form method="post" action="{% url 'friend.block' profile.id %}">
+                        {% csrf_token %}
+                        <button type="submit" class="btn friendship-btn btn--danger" title="Block this user"
+                                onclick="return confirm('Block {{ profile.username }}? They will not be able to see your profile.')">
+                            <i class="material-symbols-outlined">block</i> Block
+                        </button>
+                    </form>
+                </div>
+            {% elif friendship_status == 'requested' and friendship and friendship.from_profile.user == request.user %}
+                <div class="friendship-chip friendship-chip--pending">
+                    <i class="material-symbols-outlined">hourglass_top</i> Request sent
+                </div>
+                <form method="post" action="{% url 'friend.remove' profile.id %}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn friendship-btn btn--ghost">
+                        <i class="material-symbols-outlined">cancel</i> Cancel request
+                    </button>
+                </form>
+            {% elif friendship_status == 'requested' and friendship and friendship.to_profile.user == request.user %}
+                <div class="friendship-chip friendship-chip--pending">
+                    <i class="material-symbols-outlined">person_add</i> Wants to connect
+                </div>
+                <div class="friendship-btn-group">
+                    <form method="post" action="{% url 'friend.accept' profile.id %}">
+                        {% csrf_token %}
+                        <button type="submit" class="btn friendship-btn btn--primary">
+                            <i class="material-symbols-outlined">check</i> Accept
+                        </button>
+                    </form>
+                    <form method="post" action="{% url 'friend.reject' profile.id %}">
+                        {% csrf_token %}
+                        <button type="submit" class="btn friendship-btn btn--ghost">
+                            <i class="material-symbols-outlined">close</i> Decline
+                        </button>
+                    </form>
+                    <form method="post" action="{% url 'friend.ignore' profile.id %}">
+                        {% csrf_token %}
+                        <button type="submit" class="btn friendship-btn btn--ghost" title="Decline and they won't be able to request again">
+                            <i class="material-symbols-outlined">block</i> Decline and Ignore
+                        </button>
+                    </form>
+                </div>
+            {% elif friendship_status == 'muted' %}
+                <div class="friendship-chip friendship-chip--muted">
+                    <i class="material-symbols-outlined">volume_off</i> Muted
+                </div>
+                <form method="post" action="{% url 'friend.request' profile.id %}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn friendship-btn btn--ghost">
+                        <i class="material-symbols-outlined">volume_up</i> Unmute
+                    </button>
+                </form>
+            {% elif friendship_status == 'blocked' %}
+                <div class="friendship-chip friendship-chip--blocked">
+                    <i class="material-symbols-outlined">block</i> Blocked
+                </div>
+                <form method="post" action="{% url 'friend.remove' profile.id %}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn friendship-btn btn--ghost">
+                        <i class="material-symbols-outlined">lock_open</i> Unblock
+                    </button>
+                </form>
+            {% else %}
+                {% include "dashboard/partials/profile/_add_friend_button.html" with button_class="btn friendship-btn btn--primary" dialog_id="add-friend-dialog-hero" %}
+                {% include "dashboard/partials/profile/_add_friend_dialog.html" with target_profile_id=profile.id dialog_id="add-friend-dialog-hero" %}
+                <form method="post" action="{% url 'friend.block' profile.id %}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn friendship-btn btn--ghost" title="Block this user">
+                        <i class="material-symbols-outlined">block</i> Block
+                    </button>
+                </form>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        {% if profile.user == request.user %}
+        <div class="profile-owner-actions">
+            {% if preview_modes %}
+            <details class="profile-viewas">
+                <summary class="btn btn--secondary" title="See your profile exactly as another user sees it">
+                    <i class="material-symbols-outlined">visibility</i> View as
+                </summary>
+                <div class="profile-viewas-menu">
+                    {% for mode, label in preview_modes %}
+                    <form method="post" action="{% url 'profile.preview' mode %}">
+                        {% csrf_token %}
+                        <button type="submit" class="profile-viewas-item">{{ label }}</button>
+                    </form>
+                    {% endfor %}
+                </div>
+            </details>
+            {% endif %}
+            {% if edit_mode %}
+            <a href="{% url 'profile.view' %}" class="edit-profile-btn btn btn--secondary">
+                <i class="material-symbols-outlined">visibility</i> View Profile
+            </a>
+            {% else %}
+            <a href="{% url 'profile.edit' %}" class="edit-profile-btn btn btn--primary">
+                <i class="material-symbols-outlined">edit</i> Edit Profile
+            </a>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="profile-meta-row">
+        {% if profile.area %}
+        {% if profile.user == request.user and not edit_mode %}
+        <span class="profile-meta-item profile-area--editable" tabindex="0" role="button"
+              data-raw-area="{{ profile.area }}" title="Click to edit">
+            <i class="material-symbols-outlined">place</i><span class="profile-meta-text">{{ profile.area }}</span>
+        </span>
+        {% else %}
+        <span class="profile-meta-item">
+            <i class="material-symbols-outlined">place</i>{{ profile.area }}
+        </span>
+        {% endif %}
+        {% endif %}
+        {% if profile.started_exploring %}
+        {% if profile.user == request.user and not edit_mode %}
+        <span class="profile-meta-item profile-started-exploring--editable" tabindex="0" role="button"
+              data-raw-started-exploring="{{ profile.started_exploring|date:'Y-m-d' }}" title="Click to edit">
+            <i class="material-symbols-outlined">explore</i><span class="profile-meta-text">Exploring since {{ profile.started_exploring|date:"Y" }}</span>
+        </span>
+        {% else %}
+        <span class="profile-meta-item">
+            <i class="material-symbols-outlined">explore</i>Exploring since {{ profile.started_exploring|date:"Y" }}
+        </span>
+        {% endif %}
+        {% endif %}
+        {% if profile.user == request.user and not edit_mode %}
+        <span class="profile-meta-item ul-privacy-hint-row">
+            <span class="profile-email-editable" tabindex="0" role="button"
+                  data-raw-email="{{ profile.email|default:'' }}" title="Click to change your email">
+                <i class="material-symbols-outlined">email</i><span class="profile-meta-text">{{ profile.email|default:"Add email..." }}</span>
+            </span>
+            {% include "dashboard/partials/ui/_privacy_hint.html" with value=profile.get_contact_visibility_display field="contact_visibility" raw_value=profile.contact_visibility owner=profile %}
+        </span>
+        {% elif profile.email and can_view_contact %}
+        <span class="profile-meta-item{% if profile.user == request.user %} ul-privacy-hint-row{% endif %}">
+            <i class="material-symbols-outlined">email</i>{{ profile.email }}
+            {% if profile.user == request.user %}
+            {% include "dashboard/partials/ui/_privacy_hint.html" with value=profile.get_contact_visibility_display field="contact_visibility" raw_value=profile.contact_visibility owner=profile %}
+            {% endif %}
+        </span>
+        {% endif %}
+    </div>
+</div>

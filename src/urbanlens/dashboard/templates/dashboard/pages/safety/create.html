@@ -7,12 +7,20 @@
     integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
 {% endblock %}
 
+{% block hero %}
+{% include "dashboard/partials/ui/_page_hero.html" with icon="emergency" title="New Safety Check-in" subtitle="Pick a check-in time and destination - we'll alert your contacts if you miss it." modifier="top" %}
+{% endblock %}
+
+{% block subnav %}
+<div class="ul-page-subnav">
+    <div class="ul-page-subnav__inner">
+        {% include "dashboard/partials/safety/_safety_subnav.html" with active="overview" %}
+    </div>
+</div>
+{% endblock %}
+
 {% block content %}
 <div class="safety-page page-content">
-    <h1 class="safety-title">
-        <i class="material-symbols-outlined">emergency</i>
-        New Safety Check-in
-    </h1>
 
     {% if error %}<p class="form-error">{{ error }}</p>{% endif %}
 

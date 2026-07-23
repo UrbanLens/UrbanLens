@@ -1,27 +1,97 @@
 # UrbanLens Features
 
 A feature inventory of what UrbanLens currently supports, generated from a codebase audit
-(2026-07-11). This is a snapshot, not a promise — see `TODO.md` for what's planned or partially
+(2026-07-11, last verified/expanded 2026-07-18). This is a snapshot, not a promise — see `TODO.md` for what's planned or partially
 built, and `docs/NOTES.md` for non-obvious behavior behind these features.
 
 ## Mapping & Pins
 
-- Interactive Leaflet map with satellite, street, and topographic layers, HTMX-driven panels,
-  and a filter sidebar (badges, rating, visited status, etc.)
+- Interactive Leaflet map with 9 configurable layers (Street, Terrain, Satellite, Weather, Dark,
+  Borders, Places, Pins, Child pins), HTMX-driven panels, and a filter sidebar (labels, rating,
+  visited status, date pinned, scores, saved filter configurations)
 - **Pin** — a user's personal record for a place (custom name, private notes, icon, priority,
   status, last-visited date, marker coordinates), separate from the shared **Location** record
   it points to (canonical name, address, coordinates, Google CID). See `docs/NOTES.md` for why
   this split exists.
-- Pin types: location, building, entrance, POI, danger, other
+- Pin types: location, parcel, building, entrance, POI, danger, other
+- **Parcel vs. building scope** — a pin (or wiki) with two or more child markers typed as
+  buildings describes the *grounds* those buildings sit on, not a structure, so its
+  building-level cards (CRIS Building USN Point, Building Attributes, Building Characteristics)
+  suppress themselves and a "Buildings on this Property" list stands in for them. Child markers
+  are typed automatically - the detail-pin dialog's Type select defaults to "Auto", and a marker
+  landing on a known building footprint becomes a building, while entrances and landmarks don't.
+  An explicitly chosen type always wins. See `docs/NOTES.md`.
+- **"Organize this property?"** — one suggestion, shown once the first time you open a pin's detail
+  page, covering both halves of the same question: create a sub pin per building here (named and
+  numbered from REData's county GIS + NY SHPO CRIS, or OpenStreetMap, and mirrored as child wikis
+  when the place already has a community wiki), and nest any of your existing *top-level* pins that
+  stand inside the property boundary — useful for maps built before child pins existed. Nesting only
+  re-parents; nothing is merged, renamed, or deleted. Three answers: yes, no (permanent for that
+  pin, even if new buildings turn up later), or don't show again (Settings → Map → Pin Organization
+  Suggestions). Buildings you've already pinned are detected by their real footprint polygon, not a
+  fixed radius, so a pin at the far end of a long hall still counts as covering it
+- **Notes (pin comments) are never hidden by nesting** — the pin detail page's "show sub pin
+  details" toggle (`?children=1`) aggregates a child pin's private notes into its parent's Notes
+  tab too, each labelled with a link back to the sub pin it was written on, alongside the map,
+  photo gallery, and visit history the toggle already covered
+- **Manual pin ↔ wiki sync** — from the detail-pins multi-select toolbar, "Send to wiki" creates a
+  matching child wiki for the selected sub pins, skipping ones the wiki already has; "Share with a
+  friend" shares just the selected sub pins, not the pin's whole hierarchy. A "pull from wiki"
+  button creates a personal sub pin for anything the community wiki already documents that you
+  haven't pinned yourself. Neither direction ever creates the wiki itself - only its child wikis.
+  Two building-typed markers are matched by REData's real building footprint when the parcel's
+  buildings are known, not just proximity - a building pin shared from one end of a long hall and
+  the receiving side's own pin at the other end still dedupe correctly, since both fall inside the
+  same footprint even though they're farther apart than the fallback proximity radius covers.
+  Non-building markers (entrances, hazards, POIs) are always proximity-matched
+- **Community wikis nest themselves automatically** — when two independently-created wikis'
+- **Community wikis nest themselves automatically** — when two independently-created wikis'
+  boundaries turn out to nest (a building's wiki inside a campus's, once both have a real property
+  boundary), the smaller becomes a child of the bigger with no confirmation needed - re-parenting
+  only, nothing else moves, since a wiki's Location never changes. See `docs/NOTES.md`.
 - Add pins by map click, coordinate entry, or place search/autocomplete; drag to reposition
-- Pin list view alongside the map (particularly useful while searching/filtering)
-- Bulk pin operations: multi-select, bulk edit, bulk merge, bulk delete (with undo)
-- Per-pin alternate names (**aliases**) — private aliases on a Pin vs. shared aliases on a Wiki
+- Pin list view alongside the map (particularly useful while searching/filtering); "Add these pins to a list" bulk action from the pin list panel adds all currently-visible/filtered pins to a trip or saved collection at once
+- Bulk pin operations: multi-select, bulk edit (description, rating, labels, parent pin), bulk merge, bulk delete (with undo)
+- Per-pin alternate names (**aliases**) — private aliases on a Pin vs. shared aliases on a Wiki;
+  names are unique per pin/wiki case-insensitively. Deleting an auto-added alias, link, label, or
+  property owner is permanent - automatic sources (external name lookups, AI extraction,
+  keyword/AI auto-tagging) won't silently recreate something you removed
 - Private per-pin notes (`PinNote`), independent of public comments
-- Pin sharing — share a single pin with one friend, including re-share chains
-- Import/export: Google Takeout (Saved Places, Location History, My Activity), GPX, GPX tracks,
-  OSM XML, Shapefile, WKT/WKB, KML/KMZ; AI-assisted import from freeform documents/notes
+- **Articles** — Wikipedia-style long-form write-ups (sections, links, references) with full
+  **revision history** (every saved version stored, restorable from the Edit History tab); private
+  per-pin, or shared/community-editable per-wiki. Edited via a WYSIWYG canvas (click-to-format,
+  no Markdown syntax required) with a Markdown "Source" mode for power users/footnotes - saved as
+  plain Markdown either way
+- Pin sharing — share a single pin with one friend, including re-share chains; every share
+  records a provenance chain (`LocationExposure`) of how a location reached each user
+- Import: Google Takeout (Saved Places, Location History, My Activity), GPX, GPX tracks, OSM XML,
+  Shapefile, WKT/WKB, KML/KMZ; AI-assisted import from freeform documents/notes
+- Targeted export of a pin selection (main map's multi-select toolbar) or a whole saved list
+  (a list's "more actions" menu) as GeoJSON, KML, GPX, or CSV
 - Data export/import of a user's full dataset, plus scheduled/on-demand backups
+
+## Search & Navigation
+
+- Logged-in home page (`/dashboard/home/`) — a customizable widget dashboard (stats, recent
+  pins/photos/comments/maps/trips, upcoming trips, active safety check-ins, ...); users pick
+  which widgets show and reorder them, saved per-profile
+- **Global search** (navbar, Ctrl+K) across result types (pins, wikis, photos, trips,
+  messages, …) with lightweight natural-language parsing ("photos from last summer",
+  "pins in Cincinnati", "pins near me", "messages from Alice"), pg_trgm typo tolerance,
+  and a plain-text fallback when no structured interpretation matches
+
+## Lists & Saved Filters
+
+- **Pin lists** — ordered, slug-addressed collections of pins with their own detail page
+  (list-scoped map using the shared toolbar/layers, drag-to-reorder, bulk add from the current
+  map filter); create a trip from a list, add a list's pins to an existing trip, or generate a
+  markup map from one
+- **Smart lists** — lists auto-populated from saved-filter criteria and resynced automatically
+  as pins and labels change
+- **Saved filters** — reusable filter configurations with full CRUD (managed alongside lists at
+  `/lists/`), name suggestion, live match counts, and geographic include/exclude polygon
+  regions selected via boundary search; usable from the map's filter sidebar and as smart-list
+  criteria
 
 ## Locations & Community Wiki
 
@@ -30,12 +100,27 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
 - **Wiki** — opt-in, community-editable page for a Location: description, aliases, community
   danger/vulnerability/rating stat voting (`WikiStatVote`, fuzzed community counts for privacy),
   edit history with revert (`WikiEdit`)
-- Place-name resolution across multiple sources (Google Places, OSM/Nominatim, NPS, etc.) with
-  agreement-based and admin-configurable priority ordering
-- Boundary drawing — property/building polygons per pin, generated automatically from external
-  building-footprint data where available, editable by the user
-- Standalone reusable **MarkupMaps** with freehand drawing/annotation tools, attachable to pins,
-  wikis, safety check-ins, or kept independent
+- **Wiki Media gallery** — the pin detail page's combined Media section, mirrored on the wiki
+  (`controllers/wiki_media.py`): the same external providers (Wikimedia, Smithsonian, Library of
+  Congress, Internet Archive, Web Images (SearXNG), Yelp, Google Images/Maps, LoopNet, CRIS, …)
+  appear automatically
+  from the shared per-Location cache, alongside a "Photos" tab of images intentionally shared to
+  the wiki (`Image.wiki`) and a "Manage" tab for uploads. Thumbs-up/down are **community votes**
+  (net score up − down, highest ranked first); because relevance is stored per-Location
+  (`MediaRelevance`), a relevance mark made on any user's pin detail page already counts here
+- **Wiki article auto-seeding** — a wiki with no article yet is automatically started from a
+  confidently-matched Wikipedia article the first time one is cached for its location (converted
+  to Markdown, with a required CC BY-SA attribution footer linking back to the source) - never
+  overwrites an existing article, seeded or human-written (`services.wiki_seed`,
+  `models.cache.signals`)
+- Place-name resolution across multiple sources (Google Places, OSM/Nominatim, NPS, Photon, EPA ECHO, **Azure Maps**, Wikipedia, OpenStreetMap) with agreement-based priority ordering, an admin-only drag-to-reorder priority list (Site Admin), and Google Places demoted to fallback-only (only considered when no other source has a candidate) - individual users cannot override the ordering
+- Boundary drawing — property/building polygons per pin, generated automatically from a typed
+  provider chain (`services.locations.boundaries.BoundaryProviderChain`) trying, in order:
+  REData's authoritative county GIS parcel/building geometry (`RedataBoundaryProvider` - see
+  `docs/redata.md`, US-only, coverage limited to jurisdictions REData has researched), then
+  OSM/Overpass, Overture Maps, Microsoft Building Footprints, and Google Open Buildings; editable
+  by the user
+- Standalone reusable **MarkupMaps** with freehand drawing/annotation tools (point, line, arrow, text, box, circle, polygon), attachable to pins, wikis, safety check-ins, or kept independent; also embedded in the **safety check-in creation form** for drawing routes and destinations
 - Detail pins — sub-markers placed inside a pin/wiki's bounding box for finer-grained mapping
   (rooms, entrances, hazards, etc.)
 
@@ -45,11 +130,34 @@ On-demand, cached lookups shown as panels on the pin detail page:
 
 - **Wikipedia** — best-matching article
 - **Wikimedia Commons**, **Smithsonian Open Access**, **Library of Congress** — archival photos/media
+- **Web Images (SearXNG)** — broad web-image search across many engines (Flickr, imgur, Pinterest,
+  DeviantArt, Openverse, Unsplash, …) via a self-hosted SearXNG instance, using an aggressive
+  three-clause relevance query (all non-nickname aliases · state/country + municipality · the site's
+  urbex/abandoned subject vocabulary) so a same-named place or operating business elsewhere is
+  excluded; requires `UL_SEARXNG_BASE_URL` (`plugins.builtin.searxng_images`)
 - **National Park Service** (USA) — nearby park info
 - **LoopNet** (USA) — commercial real-estate listings
+- **Property Records** (USA) — county parcel ownership/tax/sale-history lookup, retrieved from
+  REData (`../REData`, a standalone service - see `docs/redata.md`) via `RedataGateway`
+  (`services.apis.property_records.redata_gateway`); populates the wiki's Ownership and Sale
+  History cards with `OFFICIAL`-sourced records in addition to a details card. REData owns the
+  4-tier fallback pipeline (free ArcGIS REST/Socrata county GIS, vendor-platform scraping,
+  bespoke per-county recipes, explicit manual-only), jurisdiction resolution, and per-field
+  merging; coverage depends on REData's own jurisdiction registry. Requires
+  `UL_REDATA_API_URL`/`UL_REDATA_API_KEY` to be configured - see `docs/property-records-plan.md`
+  for the original tiered design this feature was built from
 - **USGS Historical Topo Maps** (USA) — historical topographic maps
-- **Nominatim/OpenStreetMap** — reverse geocoding and place metadata
-- **OpenWeatherMap** — weather forecast for the pin's location
+- **Nominatim/OpenStreetMap** — reverse geocoding and place metadata (two panels: Nominatim structured data and Photon nearest-feature lookup)
+- **Regional Data** — US Census, Wildlife, Seismic, and EPA data loaded on demand per sub-tab
+- **Building Characteristics** — structured property/building data (appears for commercial and historic properties)
+- **Buildings on this Property** — every structure standing on the parcel, with names and building
+  numbers from REData (county GIS building-footprint layers plus NY SHPO CRIS), falling back to
+  OpenStreetMap footprints inside the property boundary. Each row links to the sub pin covering
+  that building, or offers to create the ones that have none (`plugins.builtin.parcel_buildings`).
+  Also shown on the wiki page
+- **News** — web news results scoped to the location (appears for notable locations)
+- **OpenWeatherMap** — weather forecast; appears on Trip detail pages (keyed to activity location) and on the pin detail page when weather data is available. Falls back to the free, keyless Open-Meteo API when OpenWeatherMap isn't configured or fails
+- **Sunrise/sunset & golden hour** — always via Open-Meteo (its 5-day/3-hour OpenWeatherMap counterpart has no sunrise/sunset field), shown alongside the pin detail page's weather panel; golden hour is approximated as the hour after sunrise / before sunset
 - Satellite imagery carousel: Google Maps, Esri (incl. Wayback historical imagery), NASA GIBS,
   Mapbox, Bing Maps, OpenAerialMap
 - Street-view carousel: Google Street View, Mapillary, KartaView
@@ -57,7 +165,17 @@ On-demand, cached lookups shown as panels on the pin detail page:
 - Debug overlay (admin-only) to inspect raw external-API responses per panel
 
 All external integrations are cached (DB-backed, per-Location) and rate-limited per service, with
-usage tracked in `ApiCallLog`/`ApiRateLimit` and toggled at `/site-admin/api-limits/`.
+usage tracked in `ApiCallLog`/`ApiRateLimit` and toggled at `/site-admin/api-limits/`. A per-call
+cost estimate (`ApiCallLog.cost_estimate`, from `ServiceDefaults.cost_per_call`) is logged for
+services with a known published rate - `null` means "not priced," not "confirmed free," since
+most services don't have a rate configured yet. Aggregated into a 30-day cost breakdown on the
+site-admin API usage report and the public `/costs/` transparency page.
+
+Beyond on-demand fetches, an hourly **background enrichment** task drips high-value lookups
+(official names, aliases, street addresses, building boundaries) into whatever rate-limit budget
+is left over after real traffic, spread evenly so multi-day quotas can't be burned in one day.
+Sources are plugin-contributable (`EnrichmentSource`) and admin-tunable (run window, reserve
+buffer, per-run caps).
 
 ## Extensibility: Plugin System
 
@@ -74,7 +192,14 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
 - Site-wide photo library (Memories → Photos) that matches unfiled photos (by GPS + timestamp) to
   existing pins and proposes **visit suggestions** for confirmation
 - **Memories** page — aggregated timeline/map view of routes, trips, visits, and photos, including
-  an "on this day" retrospective and a prompt to log visits for pins already marked visited
+  an "on this day" retrospective and a prompt to log visits for pins already marked visited; tabs
+  for Timeline, Photos, Maps, Sharing, Journal, and Visits; date range filter with presets
+  (Last 90 days / Last year / All time); "Import routes & history" for importing GPS tracks and
+  location history (separate from the map's pin import flow)
+- **Pin suggestions** — batch photo-location ingestion (a client-side local-folder scanner on
+  the Tools page, or a full Immich library sweep) matches photo GPS against existing pins and
+  clusters the rest into suggested new pins, reviewed on a multi-select map with bulk accept,
+  pagination, and opt-in photo import
 - Storage quota accounting per user (role-based), automatic downscaling/WebP conversion on upload
 
 ## Trips
@@ -102,17 +227,24 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
 
 - Friendships: request/accept/reject/ignore/remove/block/mute, invite by email
 - Configurable friend-request visibility ("anyone", "friends of friends", "anything in common", etc.)
-- Public/friends-scoped profile pages with visibility controls per field, "view my profile as..."
-  preview mode
+- Public/friends-scoped profile pages with visibility controls per field (9 controls, each with 7 granularity levels from "Anyone" to "No one"), "view my profile as..." preview mode
+- **Identity masking in shared spaces** — a trip or group chat member whose `profile_visibility`
+  doesn't permit another member to see them shows as an anonymous "Member" (name/avatar hidden,
+  distinct color/number per hidden person so several aren't indistinguishable) in the member
+  list, activity attribution, comments, and group messages; their content still shows. Adding
+  someone unconnected to a trip/group chat sends both sides a soft "you might know each other"
+  notification (gated on each person's "allow friend recommendations" setting) — never an
+  automatic friend request or profile-view bypass
+- **"Show Photos From" visibility** — photos from users outside your chosen tier are blurred rather than hidden
 - Reviews (0–5 star rating, no text) and comments (with @mentions, emoji reactions, image
   attachments) on pins, wikis, and trips
 - Private per-profile notes and trust ratings you keep about other users (not visible to them)
 - Multiple verified email addresses per account, for easier friend discovery
 - Social/community links on profile (site, Discord/Signal/etc.)
 
-## Badges (Tags, Categories, Statuses, People)
+## Labels (Tags, Categories, Statuses, People)
 
-A single unified `Badge` model (with a `kind`) backs four distinct UI concepts:
+A single unified `Label` model (with a `kind`) backs four distinct UI concepts:
 
 - **Tags** — freeform labels on pins/wikis
 - **Categories** — hierarchical classification of pins/wikis
@@ -121,7 +253,7 @@ A single unified `Badge` model (with a `kind`) backs four distinct UI concepts:
 
 Shared features across all four: create/edit/delete, merge, hierarchical parent/child
 relationships, bulk edit and bulk convert between kinds, per-user color/icon customization
-(`BadgeCustomization`) on top of shared global badges, drag-to-reorder priority, and a unified
+(`LabelCustomization`) on top of shared global labels, drag-to-reorder priority, and a unified
 "Organize" management page.
 
 ## Notifications
@@ -130,15 +262,37 @@ relationships, bulk edit and bulk convert between kinds, per-user color/icon cus
 - Real-time push over WebSockets (`ws/notifications/`) with desktop `Notification` API support and
   a 60s polling fallback
 - Outbound email notifications with per-role rate caps (hourly/daily/monthly) and safety controls
+- **11-event × 4-channel notification matrix** (Settings → Account): each event type (new message, friend request, check-in alert, AI task completion, etc.) can be independently configured for in-app, email, WhatsApp, and SMS delivery. WhatsApp/SMS require a phone number on the profile. **Delivery caveat:** WhatsApp/SMS dispatch is currently implemented only for safety check-in alerts and new direct messages — the other event types' WhatsApp toggles are stored but not yet wired to a sender (see `docs/PROBLEMS.md`).
 - Admin-only critical alerting via email + Gotify push (distinct from user-facing notifications)
+
+## Custom Fields
+
+User-defined private fields for **pins**, **photos**, **people**, and **maps**. Power-user feature for tracking non-standard attributes (e.g. access status, personal reference IDs, condition notes). Managed in Settings → Advanced.
+
+## External Photo Integrations
+
+- **Immich** — connect a self-hosted Immich instance (server URL + API key) to browse and import nearby photos linked to pins
+- **Google Photos** — OAuth import from a connected Google Photos library
+- **Flickr (personal library)** — connect your own Flickr account (OAuth1) in Settings, then search/import your own photos on a pin's Media tab (near this pin, on recorded visit dates, or all)
+- **Flickr (public album import)** — pin and wiki Media: paste the public URL of *any* Flickr user's album/photoset (no OAuth needed) to preview and import up to 100 of its photos, with the same confirm-grid + progress-bar workflow as the other importers
 
 ## Account & Auth
 
 - Email/password signup with verification, plus Google and Discord OAuth (social-auth pipeline)
 - Password reset (themed to match the app, not bare Django pages)
+- **Passkeys** (Face ID, Windows Hello, security keys, Bitwarden-compatible) and **TOTP 2FA** (Google Authenticator, Authy, Bitwarden TOTP); backup codes available once passkey or TOTP is configured
+- OAuth accounts can set a password separately to enable new-device encryption unlock without the recovery key
 - Self-service account deletion (request with grace period, cancel)
-- First-run setup wizard and a first-login onboarding tour with feature opt-outs
+- First-run setup wizard and a first-login onboarding tour with feature opt-outs; contextual
+  in-product help tooltips on first visit to key sections (e.g. trip permissions, itinerary),
+  with "Don't show again" opt-out per tooltip
 - Login lockout after repeated failed attempts
+- **External API keys** (Settings → Security → API keys): create/revoke/view API keys that let a
+  third-party application act on the user's behalf with an extremely limited, scoped grant -
+  currently reading only the owner's uuid and creating pins through the exact same
+  `services.pin_creation.create_pin_for_profile` path the map UI uses. Keys are hashed
+  (never stored in plaintext, like backup codes) and revocation takes effect immediately.
+  See `dashboard/external_api/` and the REST API section above.
 
 ## Undo / Data Safety
 
@@ -159,20 +313,62 @@ relationships, bulk edit and bulk convert between kinds, per-user color/icon cus
 
 - Pluggable AI provider gateway (OpenAI, Cloudflare, Hugging Face)
 - AI-assisted import: extract pins from freeform documents/notes
-- AI-assisted badge styling: suggest colors/icons for auto-created badges
+- AI-assisted label styling: suggest colors/icons for auto-created labels
 - Keyword-based and AI-assisted auto-tagging of pins/wikis
+- **AI link extraction** — a per-link sparkle button (on the pin's Links card and inside
+  external-data panels such as web search, Wikipedia, LoopNet, and news results) has AI read the
+  linked page and extract allowlisted structured fields (date built, date abandoned, owner
+  name/company, sale date/price, aliases) into the pin; admin-settable per-user daily limit, a
+  review page (`/ai/extractions/`) for results that couldn't be applied automatically, and a
+  completion notification
+- **Local keyword tagging** — entirely local (no AI or network call), keyword-match auto-categorize / auto-tag / auto-status on pin save; master toggle + per-type sub-toggles in Settings → Connections
 
 ## REST API
 
-DRF `ModelViewSet`s under `/dashboard/rest/`, session-authenticated:
+Two separate DRF surfaces - see `dashboard/urls.py` and `dashboard/external_api/__init__.py`
+for the boundary rationale:
 
-- `pins` — full CRUD on the requesting user's pins
-- `reviews` — full CRUD plus a `create_or_update` action for star ratings
-- `profiles` — profile data (read-only)
-- Notification access via a matching viewset
+- **Internal, session-authenticated**, under `/dashboard/rest/`. Deliberately minimal - only what
+  the app's own frontend uses: `pins` (PATCH/DELETE only - pin creation goes through
+  `MapController.post_add_pin` instead, not this router) and a `reviews`
+  `create_or_update` action for the star-rating widget.
+- **External, API-key-authenticated**, under `/dashboard/api/external/v1/`. Lets a third-party
+  application act on a user's behalf with an extremely limited, scoped grant - see "External API
+  keys" under Account & Auth below. Independently versioned and never shares serializers/viewsets
+  with the internal surface.
+
+## Direct Messaging
+
+- End-to-end encrypted 1:1 direct messages and named group chats
+- **Group-chat scope (deliberate, as of 2026-07-18):** group chats support text (plaintext or
+  E2EE), pin sharing (one provenance-tracked PinShare per member), rename, creator-managed
+  membership, per-member mute, and unread tracking. They intentionally do *not* yet have 1:1
+  parity for: reactions, image attachments, replies/quotes, map attachments, coordinate/address
+  detection, disappearing messages, typing indicators, read receipts, or delete-for-self (only
+  the sender's delete-for-everyone exists). A group whose creator leaves becomes permanently
+  unmanaged (no ownership transfer). Extending any of these is a product decision, not a bug fix.
+- Rich compose toolbar: image attachment, share location/map, share pin, @mention, emoji. The
+  map composer dialog has two tabs - draw a new map, or choose one of your existing maps (search
+  by title) - both attach the same way
+- Fallback (initial-letter) avatars use a deterministic per-person color that's guaranteed
+  distinct from everyone else shown in the same list (e.g. a group chat's member dialog), so two
+  people without photos never look identical there
+- Read receipts, online status indicator, typing indicator (visibility of each configurable per user)
+- Per-message emoji reactions
+- Message search — within a single conversation or across all of them, with jump-to-message
+  scroll and highlight
+- Coordinates and street addresses pasted in chat are auto-detected and offered a one-click
+  "Add to my map"
+- Pin sharing into group chats, with per-member accept/reject
+- **Disappearing messages** — configurable per-account expiry (never / on read / 1 day / 30 days / 90 days / 1 year)
+- E2E encryption key management in Settings → Messages: view or reset recovery key; old messages
+  encrypted under a rotated key are shown inline as "Unable to decrypt on this device" with a lock icon
+- **Friend recommendations** opt-in toggle (Settings → Messages)
 
 ## Real-time (WebSockets)
 
 - `ws/notifications/` — live notification push per logged-in user
+- `ws/messages/` — direct-message delivery, typing indicators, read/open tracking, and
+  reaction updates for DMs and group chats (with an HTTP fallback for sending)
 - `ws/safety/checkin/<uuid>/chat/` and `ws/safety/contact/<token>/chat/` — safety check-in chat,
   shared between the check-in owner and emergency contacts

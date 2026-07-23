@@ -1,0 +1,28 @@
+{# Reorderable priority list: drag or use the arrow buttons to reorder ranked items; #}
+{# untick an item to drop it to "unranked" (still contributes, just last). Serializes #}
+{# to a single comma-separated hidden input on every change - see _priority_list_script.html. #}
+<ul class="priority-list" id="{{ list_id }}" data-hidden-id="{{ hidden_id }}">
+    {% for slug, label, ranked in items %}
+    <li class="priority-list__item{% if not ranked %} priority-list__item--unranked{% endif %}"
+        draggable="{% if ranked %}true{% else %}false{% endif %}" data-slug="{{ slug }}">
+        <i class="material-symbols-outlined priority-list__handle" aria-hidden="true">drag_indicator</i>
+        <span class="priority-list__rank"></span>
+        <span class="priority-list__label">{{ label }}</span>
+        <div class="priority-list__move">
+            <button type="button" class="priority-list__btn" data-action="up" aria-label="Move {{ label }} up">
+                <i class="material-symbols-outlined">arrow_upward</i>
+            </button>
+            <button type="button" class="priority-list__btn" data-action="down" aria-label="Move {{ label }} down">
+                <i class="material-symbols-outlined">arrow_downward</i>
+            </button>
+        </div>
+        <label class="priority-list__toggle">
+            <input type="checkbox" data-role="rank-toggle"{% if ranked %} checked{% endif %}>
+            Ranked
+        </label>
+    </li>
+    {% empty %}
+    <li class="priority-list__item priority-list__item--empty">{{ empty_text|default:"Nothing to rank yet." }}</li>
+    {% endfor %}
+</ul>
+<input type="hidden" name="{{ field_name }}" id="{{ hidden_id }}" value="{{ current_value }}">

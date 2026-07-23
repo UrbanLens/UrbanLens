@@ -1,0 +1,160 @@
+{% comment %}
+Message bubbles, day separators, and key-change notices for one page of a
+conversation's timeline. Included by both `_thread.html` (the initial, most
+recent page) and `_thread_messages_page.html` (older-history pages fetched
+via infinite scroll) so the two render identically and never drift. Context:
+`timeline`, `partner`, `viewer_id`, `my_slug`, `reaction_picker_emojis`,
+`image_permission_status`, `display_name` (partner's masked-if-needed
+display name, from `display_identity_for` - used by the quoted-reply header).
+{% endcomment %}
+{% load dashboard_tags %}
+{% for item in timeline %}
+{% ifchanged item.created|date:"Y-m-d" %}
+<li class="dm-day-sep" aria-hidden="true"><span>{{ item.created|date:"M j, Y" }} &middot; {{ item.created|date:"g:i A" }}</span></li>
+{% endifchanged %}
+{% if item.kind == "key_change" %}
+<li class="dm-key-change-notice" aria-hidden="true">
+  <i class="material-symbols-outlined">lock_reset</i>
+  <span>Encryption keys changed. New messages are secured with a new key.</span>
+</li>
+{% else %}
+{% with message=item.message %}
+{% with tombstone=message|tombstone_text:viewer_id %}
+<li class="dm-bubble {% if message.sender_id == partner.pk %}dm-bubble--them{% else %}dm-bubble--own{% endif %}{% if tombstone %} dm-bubble--tombstone{% endif %}{% if message.is_grouped %} dm-bubble--grouped{% endif %}"
+    id="dm-msg-{{ message.id }}" data-message-id="{{ message.id }}" data-created-at="{{ message.created|date:'c' }}">
+  <button type="button" class="dm-bubble__menu-btn" data-message-id="{{ message.id }}" aria-label="Message actions">
+    <i class="material-symbols-outlined">more_vert</i>
+  </button>
+  {% if tombstone %}
+  <span class="dm-bubble__tombstone"><i class="material-symbols-outlined">block</i> {{ tombstone }}</span>
+  {% else %}
+  {% if message.reply_to_id %}
+  <div class="dm-quote-box">
+    {# A 1:1 thread only ever has two participants - the quoted sender is #}
+    {# either the partner (masked the same as everywhere else in this      #}
+    {# thread, via the display_name context var) or the viewer's own past  #}
+    {# message. #}
+    <span class="dm-quote-box__author">{% if message.reply_to.sender_id == partner.pk %}{{ display_name }}{% else %}You{% endif %}</span>
+    <span class="dm-quote-box__snippet"{% if message.reply_to.is_encrypted %} data-e2ee-ct="{{ message.reply_to.ciphertext }}" data-e2ee-nonce="{{ message.reply_to.nonce }}" data-e2ee-kv="{{ message.reply_to.key_version }}" data-e2ee-truncate="80"{% endif %}>{{ message.reply_to|message_preview:viewer_id }}</span>
+  </div>
+  {% endif %}
+  {% if message.is_encrypted %}<span class="dm-bubble__body e2ee-pending" data-e2ee-ct="{{ message.ciphertext }}" data-e2ee-nonce="{{ message.nonce }}" data-e2ee-kv="{{ message.key_version }}">Decrypting…</span><i class="material-symbols-outlined dm-lock-icon" title="End-to-end encrypted">lock</i>{% elif message.body %}<span class="dm-bubble__body">{{ message.body }}</span>{% endif %}
+  {% with images=message.images.all %}
+  {% if images %}
+    {% if message.sender_id == viewer_id or message.images_revealed or image_permission_status == "allowed" %}
+    <div class="dm-bubble__images">
+      {% for image in images %}
+      <button type="button" class="dm-bubble__image-link" onclick="window.dmOpenLightbox(this)">
+        <img src="{{ image.image.url }}" alt="" class="dm-bubble__image">
+      </button>
+      {% endfor %}
+    </div>
+    {% elif image_permission_status == "rejected" %}
+    <div class="dm-image-consent dm-image-consent--rejected">
+      <i class="material-symbols-outlined">hide_image</i> Images from {{ display_name }} are blocked.
+    </div>
+    {% else %}
+    <div class="dm-image-consent">
+      <div class="dm-image-consent__blur">
+        {% for image in images %}<img src="{{ image.image.url }}" alt="" class="dm-bubble__image dm-bubble__image--blurred">{% endfor %}
+      </div>
+      <p class="dm-image-consent__prompt">{{ display_name }} wants to send you an image.</p>
+      <div class="dm-image-consent__actions">
+        <button type="button" class="btn btn--primary btn--sm"
+                hx-post="{% url 'messages.image_permission' partner.slug %}" hx-vals='{"decision": "allow"}'
+                hx-target="#dm-thread-pane" hx-swap="innerHTML">Allow</button>
+        <button type="button" class="btn btn--ghost btn--sm"
+                hx-post="{% url 'messages.image_permission' partner.slug %}" hx-vals='{"decision": "allow_once", "message_id": {{ message.id }}}'
+                hx-target="#dm-thread-pane" hx-swap="innerHTML">Allow Once</button>
+        <button type="button" class="btn btn--ghost btn--sm"
+                hx-post="{% url 'messages.image_permission' partner.slug %}" hx-vals='{"decision": "reject"}'
+                hx-target="#dm-thread-pane" hx-swap="innerHTML">Reject</button>
+      </div>
+    </div>
+    {% endif %}
+  {% endif %}
+  {% endwith %}
+  {% if message.markup_map_id %}
+  {# stringformat first: `add` on a str + raw int returns '' (its int-coercion #}
+  {# and concat attempts both fail), which collapsed every map message onto one #}
+  {# duplicate DOM id and made each thumbnail/dialog show the thread's first map. #}
+  {% with message_id_str=message.id|stringformat:"s" %}
+  {% with map_id="dm-"|add:message_id_str %}
+  {% if message.markup_map.title %}
+  {# A second, explicit way to open the map besides clicking the thumbnail - #}
+  {# mirrors how @pin/@trip shares above link straight to the shared thing. #}
+  <button type="button" class="dm-map-card__title-link" onclick="_expandCommentMap('{{ map_id }}')">
+    <i class="material-symbols-outlined">map</i> {{ message.markup_map.title }}
+  </button>
+  {% endif %}
+  <div class="dm-map-card">
+    {% include "dashboard/partials/map/_map_view_preview.html" with map_id=map_id %}
+    {% if message.sender_id != viewer_id %}
+    <div class="dm-map-card__actions">
+      <button type="button" class="dm-map-icon-btn dm-map-edit-btn" title="Edit and send back" aria-label="Edit and send back"
+              data-map-uuid="{{ message.markup_map.uuid }}">
+        <i class="material-symbols-outlined">edit</i>
+      </button>
+      <form method="post" action="{% url 'markup_map.clone' message.markup_map.uuid %}" class="dm-map-add-to-mine">
+        {% csrf_token %}
+        <button type="submit" class="dm-map-icon-btn" title="Add to my maps" aria-label="Add to my maps">
+          <i class="material-symbols-outlined">bookmark_add</i>
+        </button>
+      </form>
+    </div>
+    {% endif %}
+  </div>
+  {% include "dashboard/partials/map/_map_view_dialog.html" with map_id=map_id map_data=message.markup_map.to_snapshot title="Shared map" map_obj=message.markup_map %}
+  {% endwith %}
+  {% endwith %}
+  {% elif message.map_removed %}
+  <div class="dm-map-removed-indicator">
+    <i class="material-symbols-outlined">map_off</i> The attached map was deleted
+  </div>
+  {% endif %}
+  {% if message.share %}
+  {% include "dashboard/partials/messages/_message_share_card.html" with share=message.share viewer_id=viewer_id partner=partner %}
+  {% endif %}
+  {% include "dashboard/partials/messages/_message_location_mentions.html" with message=message viewer_id=viewer_id partner=partner %}
+  {% endif %}
+  <span class="dm-bubble__time">
+    {{ message.created|date:"g:i A" }}
+    {% if message.sender_id == viewer_id and not tombstone %}
+    {% if message|read_receipt_visible_to:viewer_id %}
+    <i class="material-symbols-outlined dm-bubble__receipt dm-bubble__receipt--read" title="Read">done_all</i>
+    {% else %}
+    <i class="material-symbols-outlined dm-bubble__receipt" title="Sent">done</i>
+    {% endif %}
+    {% endif %}
+  </span>
+  {% if not tombstone %}
+  {% include "dashboard/partials/messages/_message_reactions.html" with message=message reactions=message|reaction_summary my_slug=my_slug partner=partner reaction_picker_emojis=reaction_picker_emojis %}
+  {% endif %}
+  <div class="dm-bubble-menu" id="dm-bubble-menu-{{ message.id }}" hidden>
+    {% if not tombstone %}
+    <button type="button" class="dm-bubble-menu__item"
+            onclick="window.dmReplyTo({{ message.id }}, '{% if message.sender_id == partner.pk %}{{ display_name|escapejs }}{% else %}You{% endif %}', '{{ message|message_preview:viewer_id|escapejs }}')">
+      <i class="material-symbols-outlined">reply</i> Reply
+    </button>
+    {% endif %}
+    {% if message.sender_id == partner.pk %}
+    <button type="button" class="dm-bubble-menu__item dm-bubble-menu__item--danger"
+            hx-post="{% url 'messages.delete' partner.slug message.id %}" hx-vals='{"scope": "self"}'
+            hx-target="#dm-thread-pane" hx-swap="innerHTML"
+            hx-confirm="Remove this message from your view? {{ display_name }} will still see it.">
+      <i class="material-symbols-outlined">visibility_off</i> Remove for me
+    </button>
+    {% else %}
+    <button type="button" class="dm-bubble-menu__item dm-bubble-menu__item--danger"
+            hx-post="{% url 'messages.delete' partner.slug message.id %}" hx-vals='{"scope": "everyone"}'
+            hx-target="#dm-thread-pane" hx-swap="innerHTML"
+            hx-confirm="Delete this message? {{ display_name }} will see that it was deleted.">
+      <i class="material-symbols-outlined">delete</i> Delete
+    </button>
+    {% endif %}
+  </div>
+</li>
+{% endwith %}
+{% endwith %}
+{% endif %}
+{% endfor %}

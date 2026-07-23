@@ -1,41 +1,45 @@
-<div class="trip-detail-header">
-    <div class="trip-detail-header-left">
-        <a href="{% url 'trips.list' %}" class="trip-back-link">
-            <i class="material-symbols-outlined">arrow_back</i> Plan
-        </a>
-        <h1 class="trip-detail-title">{{ trip.name }}</h1>
-        {% if trip.description %}
-        <p class="trip-detail-description">{{ trip.description }}</p>
-        {% endif %}
-        {% if trip.effective_start_date %}
-        <div class="trip-detail-dates">
-            <i class="material-symbols-outlined">event</i>
-            {{ trip.effective_start_date|date:"M j, Y" }}{% if trip.effective_end_date %} - {{ trip.effective_end_date|date:"M j, Y" }}{% endif %}
-        </div>
-        {% endif %}
+{% if viewer_membership and viewer_membership.status == 'invited' %}
+<div class="trip-invite-banner">
+    <div class="trip-invite-banner-text">
+        <i class="material-symbols-outlined">mail</i>
+        <span>You're invited to this trip. Join to add activities, comment, and vote - or decline if it's not for you.</span>
     </div>
-    <div class="trip-detail-header-right">
-        {% include "dashboard/partials/trips/_trip_calendar_button.html" %}
-        {% if viewer_is_organizer %}
-        <button type="button" class="btn-icon"
-                title="Trip settings"
-                onclick="document.getElementById('trip-settings-dialog').showModal()">
-            <i class="material-symbols-outlined">settings</i>
+    <div class="trip-invite-banner-actions">
+        <button type="button" class="btn btn--primary btn--sm"
+                hx-post="{% url 'trips.join' trip.slug %}">
+            <i class="material-symbols-outlined">check</i> Join trip
         </button>
-        {% endif %}
-        <button type="button" class="btn-icon"
-                title="Edit trip"
-                onclick="document.getElementById('edit-trip-dialog').showModal()">
-            <i class="material-symbols-outlined">edit</i>
+        <button type="button" class="btn btn--ghost btn--sm"
+                hx-delete="{% url 'trips.leave' trip.slug %}"
+                hx-confirm="Decline this trip invitation?">
+            Decline
         </button>
-        {% if trip.creator == profile %}
-        <button type="button" class="btn-icon"
-                title="Delete trip"
-                hx-delete="{% url 'trips.delete' trip.uuid %}"
-                hx-confirm="Permanently delete this trip and all its activities?"
-                hx-on::after-request="if(event.detail.successful){window.location='{% url 'trips.list' %}'}">
-            <i class="material-symbols-outlined">delete_outline</i>
-        </button>
-        {% endif %}
     </div>
+</div>
+{% endif %}
+<div class="trip-detail-header-right">
+    {% include "dashboard/partials/trips/_trip_calendar_button.html" %}
+    {% if viewer_is_organizer %}
+    <button type="button" class="btn-icon"
+            title="Trip settings"
+            onclick="document.getElementById('trip-settings-dialog').showModal()">
+        <i class="material-symbols-outlined">settings</i>
+    </button>
+    {% endif %}
+    {% if viewer_has_joined %}
+    <button type="button" class="btn-icon"
+            title="Edit trip"
+            onclick="document.getElementById('edit-trip-dialog').showModal()">
+        <i class="material-symbols-outlined">edit</i>
+    </button>
+    {% endif %}
+    {% if trip.creator == profile %}
+    <button type="button" class="btn-icon"
+            title="Delete trip"
+            hx-delete="{% url 'trips.delete' trip.slug %}"
+            hx-confirm="Permanently delete this trip and all its activities?"
+            hx-on::after-request="if(event.detail.successful){window.location='{% url 'trips.list' %}'}">
+        <i class="material-symbols-outlined">delete_outline</i>
+    </button>
+    {% endif %}
 </div>

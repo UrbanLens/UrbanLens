@@ -1,0 +1,20 @@
+{% comment %}
+Recently-created-pins widget. Context: home_recent_pins (Pin queryset, up to 6).
+{% endcomment %}
+{% if home_recent_pins %}
+<section class="home-widget ul-section" data-widget-key="recent_pins">
+    <div class="home-widget-heading">
+        <span class="home-widget-icon"><i class="material-symbols-outlined">add_location_alt</i></span>
+        <div><h3>Recently created pins</h3><p>Your newest saved places.</p></div>
+    </div>
+    <div class="home-card-strip">
+        {% for pin in home_recent_pins %}
+        <a class="home-mini-card" href="{% url 'pin.details' pin.slug %}">
+            <i class="material-symbols-outlined">push_pin</i>
+            <strong>{{ pin.display_label|default:pin.name|default:"Unnamed pin" }}</strong>
+            <span>{{ pin.created|date:"M j" }}{% if pin.location.address %} · {{ pin.location.address|truncatechars:48 }}{% endif %}</span>
+        </a>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}

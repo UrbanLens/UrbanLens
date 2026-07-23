@@ -16,6 +16,7 @@ from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
+from urbanlens.dashboard.services.avatar_colors import assign_avatar_colors
 from urbanlens.dashboard.services.connections import get_connections
 from urbanlens.dashboard.services.map_snapshot import materialize_markup_map, parse_map_data
 from urbanlens.dashboard.services.pagination import get_page
@@ -29,7 +30,17 @@ from urbanlens.dashboard.services.visits import (
 
 logger = logging.getLogger(__name__)
 
-_VISITS_PAGE_SIZE = 6
+# The server still paginates in fixed-size batches, but the client slices each
+# batch further by actual rendered height (see the adaptive-pagination system
+# in pages/location/index.html, also used by the Web Search panel) - a batch
+# needs to be comfortably bigger than a typical visible page so the
+# height-measurer has real rows to count against, not just whatever the
+# server happened to hand back. Visit rows vary a lot in height (photos, a
+# map snapshot, a long note), more so than a search result, hence the wider
+# multiplier than Web Search's.
+_VISITS_CLIENT_PAGE_SIZE = 6
+_VISITS_BATCH_MULTIPLIER = 3
+_VISITS_PAGE_SIZE = _VISITS_CLIENT_PAGE_SIZE * _VISITS_BATCH_MULTIPLIER
 
 
 def _visit_dialog_context(pin: Pin, visit: PinVisit | None = None) -> dict[str, object]:
@@ -49,25 +60,41 @@ def _visit_dialog_context(pin: Pin, visit: PinVisit | None = None) -> dict[str, 
     # already documenting a different visit are not offered.
     pin_images = Image.objects.filter(pin=pin, profile=pin.profile)
     pin_images = pin_images.filter(Q(visit__isnull=True) | Q(visit=visit)) if visit else pin_images.filter(visit__isnull=True)
+    connections = get_connections(pin.profile)
+    # The participant picker shows each friend's avatar - a distinct fallback
+    # color per person (see assign_avatar_colors) keeps them visually
+    # distinguishable when several in a row have no uploaded photo.
+    assign_avatar_colors(connections, identity=lambda p: p.slug or str(p.pk))
     return {
         "pin": pin,
         "pin_images": list(pin_images.order_by("-created")[:60]),
-        "connections": get_connections(pin.profile),
+        "connections": connections,
     }
 
 
 def _render_visit_history(request: HttpRequest, pin: Pin) -> HttpResponse:
     """Render the visit history panel for a pin, paginated newest-first.
 
+    With ``?children=1`` (the pin page's "show sub pin details" toggle) the
+    panel also lists visits logged on the pin's child pins (any depth), each
+    labelled with the child pin it belongs to.
+
     Args:
-        request: Incoming HTTP request (read for an optional ``page`` param).
+        request: Incoming HTTP request (read for optional ``page`` and
+            ``children`` params).
         pin: Pin whose visit history should be rendered.
 
     Returns:
         Rendered HTML partial.
     """
+    include_children = request.GET.get("children") == "1"
+    if include_children:
+        subtree = Pin.objects.filter(pk=pin.pk).with_descendants()
+        visits_qs = PinVisit.objects.filter(pin__in=subtree).select_related("pin", "pin__location", "pin__location__wiki").order_by("-visited_at")
+    else:
+        visits_qs = pin.visit_history.all()
     # markup_map__items backs visit.map_data (the embedded map snapshot).
-    page_obj = get_page(request, pin.visit_history.all().select_related("markup_map").prefetch_related("participants", "external_participants__matched_profile", "images", "markup_map__items"), _VISITS_PAGE_SIZE)
+    page_obj = get_page(request, visits_qs.select_related("markup_map").prefetch_related("participants", "external_participants__matched_profile", "images", "markup_map__items"), _VISITS_PAGE_SIZE)
     pending_suggestions = (
         VisitSuggestion.objects.for_profile(pin.profile)
         .pending()
@@ -84,6 +111,9 @@ def _render_visit_history(request: HttpRequest, pin: Pin) -> HttpResponse:
             "page_obj": page_obj,
             "visits": page_obj.object_list,
             "pending_suggestions": pending_suggestions,
+            "include_children": include_children,
+            "adaptive_pagination": True,
+            "extra_query": "children=1" if include_children else "",
             # The embedded "Log a Visit" dialog's add form prefills its date field
             # with this - see _visit_form.html.
             "default_date": timezone.now().date().isoformat(),
@@ -118,8 +148,9 @@ def _sync_visit_photos(request: HttpRequest, pin: Pin, visit: PinVisit) -> bool:
     """
     from django.contrib import messages
 
+    from urbanlens.dashboard.models.images.model import MediaKind
     from urbanlens.dashboard.services.celery import safely_enqueue_task
-    from urbanlens.dashboard.services.images import compute_checksum
+    from urbanlens.dashboard.services.images import compute_checksum, image_upload_error
     from urbanlens.dashboard.services.storage import quota_error_for_upload
     from urbanlens.dashboard.tasks import process_image_upload
 
@@ -128,6 +159,14 @@ def _sync_visit_photos(request: HttpRequest, pin: Pin, visit: PinVisit) -> bool:
     uploaded_pks: list[int] = []
     reattached_pks: list[int] = []
     for image_file in request.FILES.getlist("photos"):
+        upload_error = image_upload_error(image_file, MediaKind.PHOTO)
+        if upload_error:
+            # Same "skip this file, keep processing the rest" treatment as the
+            # quota-exceeded case below - one bad file in a multi-file visit
+            # upload shouldn't block the others.
+            message, _status = upload_error
+            messages.warning(request, message)
+            continue
         checksum = compute_checksum(image_file)
         existing = owner_gallery.filter(checksum=checksum).first()
         if existing is not None:
@@ -251,7 +290,7 @@ class VisitHistoryView(LoginRequiredMixin, View):
             visited_at=visited_at,
             notes=notes,
             source=VisitSource.MANUAL,
-            markup_map=materialize_markup_map(pin.profile, map_data),
+            markup_map=materialize_markup_map(pin.profile, map_data, context=pin),
         )
         sync_last_visited(pin)
         add_visited_status(pin)
@@ -353,7 +392,7 @@ class VisitEditView(LoginRequiredMixin, View):
 
         visit.visited_at = visited_at
         visit.notes = request.POST.get("notes", "").strip() or None
-        visit.markup_map = materialize_markup_map(pin.profile, parse_map_data(request), existing_map=visit.markup_map)
+        visit.markup_map = materialize_markup_map(pin.profile, parse_map_data(request), existing_map=visit.markup_map, context=pin)
         visit.save()
         sync_last_visited(pin)
 

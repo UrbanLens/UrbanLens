@@ -1,0 +1,10 @@
+{% comment %}
+Shared "From X" provenance badge for a cloned MarkupMap (one added via "Add to
+my maps"). Expects: map (a MarkupMap instance; only renders when
+map.shared_by_id is set - callers should select_related("shared_by__user")).
+{% endcomment %}
+{% if map.shared_by_id %}
+<span class="markup-map-from-badge" title="Added to your maps from a map {{ map.shared_by.username }} shared with you">
+    <i class="material-symbols-outlined">forward</i> From {{ map.shared_by.username }}
+</span>
+{% endif %}

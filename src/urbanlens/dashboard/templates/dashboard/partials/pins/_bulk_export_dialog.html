@@ -1,0 +1,30 @@
+{# Download selected pins in a chosen format (UL-377/UL-382). #}
+<dialog id="bulk-export-dialog" class="ul-dialog tag-edit-dialog bulk-export-dialog">
+    {% include "dashboard/partials/ui/_dialog_header.html" with title="Export pins" title_id="bulk-export-dialog-title" %}
+    <div class="tag-edit-dialog-body">
+        <p class="form-hint">Choose a format to download the selected pins.</p>
+        <div class="bulk-export-format-list">
+            <button type="button" class="btn btn--secondary" onclick="_exportSelection('geojson')">
+                <i class="material-symbols-outlined">data_object</i> GeoJSON
+            </button>
+            <button type="button" class="btn btn--secondary" onclick="_exportSelection('kml')">
+                <i class="material-symbols-outlined">map</i> KML
+            </button>
+            <button type="button" class="btn btn--secondary" onclick="_exportSelection('gpx')">
+                <i class="material-symbols-outlined">route</i> GPX
+            </button>
+            <button type="button" class="btn btn--secondary" onclick="_exportSelection('csv')">
+                <i class="material-symbols-outlined">table_chart</i> CSV
+            </button>
+        </div>
+        <div class="tag-form-actions">
+            <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
+        </div>
+    </div>
+</dialog>
+
+<form id="bulk-export-form" method="post" action="{% url 'pin.bulk_export' %}" target="_blank" hidden>
+    {% csrf_token %}
+    <input type="hidden" name="format" id="bulk-export-format-field">
+    <div id="bulk-export-uuid-fields"></div>
+</form>

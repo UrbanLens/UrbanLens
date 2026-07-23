@@ -21,6 +21,10 @@ Context:
             hx-target="#unlogged-card-{{ pin.slug }}" hx-swap="outerHTML swap:0.2s">
         <i class="material-symbols-outlined">close</i>
     </button>
+    <label class="pin-select" title="Select for bulk actions">
+        <input type="checkbox" class="pin-select-cb" data-pin-slug="{{ pin.slug }}">
+        <span class="pin-select-box"><i class="material-symbols-outlined">check</i></span>
+    </label>
     <div class="unlogged-card-icon"><i class="material-symbols-outlined">location_on</i></div>
     <div class="unlogged-card-body">
         <div class="unlogged-card-title" title="{{ pin.effective_name }}">{{ pin.effective_name }}</div>
@@ -45,12 +49,12 @@ Context:
                 </button>
             </form>
 
-            <button type="button" class="btn btn--sm btn--ghost unlogged-card-details"
+            <button type="button" class="btn btn--sm btn--secondary unlogged-card-details"
                     onclick="memoriesOpenVisitDialog('{% url 'memories.visit' pin.slug %}')">
                 <i class="material-symbols-outlined">add_photo_alternate</i> Add details
             </button>
 
-            <button type="button" class="btn btn--sm btn--ghost unlogged-card-unmark"
+            <button type="button" class="btn btn--sm btn--secondary unlogged-card-unmark"
                     title="This pin wasn't actually visited"
                     hx-post="{% url 'memories.unlogged.action' pin.slug 'unmark' %}"
                     hx-target="#unlogged-card-{{ pin.slug }}" hx-swap="outerHTML swap:0.2s">

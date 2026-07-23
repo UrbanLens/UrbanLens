@@ -1,11 +1,11 @@
 {% extends 'dashboard/themes/base.html' %}
 
+{% block hero %}
+{% include "dashboard/partials/ui/_page_hero.html" with icon="notifications_off" title="Opt out of notifications?" modifier="top" %}
+{% endblock %}
+
 {% block content %}
 <div class="safety-page page-content safety-checkin-confirm">
-    <h1 class="safety-title">
-        <i class="material-symbols-outlined">notifications_off</i>
-        Opt out of notifications?
-    </h1>
     {% if scope == 'checkin' %}
     <p>You won't get any more updates about "{{ checkin.title }}".</p>
     {% elif scope == 'owner' %}

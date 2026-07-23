@@ -1,0 +1,96 @@
+{# One custom-field value control, branched by field type and style. Saves on change via HTMX. #}
+{# Context: field (CustomField), value (CustomFieldValue|None), post_url, hx_target, #}
+{# optional hx_swap (defaults to outerHTML of the target) and include_field_id (adds #}
+{# a field_id hx-val for endpoints that resolve the field from the POST body). #}
+{% if field.field_type == 'select' %}
+<select class="cf-input cf-value-input cf-value-input--select" name="value" aria-label="{{ field.name }}"
+        hx-post="{{ post_url }}" hx-trigger="change" hx-target="{{ hx_target }}" hx-swap="{{ hx_swap|default:'outerHTML' }}"
+        {% if include_field_id %}hx-vals='{"field_id": "{{ field.id }}"}'{% endif %}>
+    <option value=""></option>
+    {% for choice in field.select_choices %}
+    <option value="{{ choice }}" {% if value.value_text == choice %}selected{% endif %}>{{ choice }}</option>
+    {% endfor %}
+</select>
+{% elif field.field_type == 'checkbox' %}
+<input class="cf-value-checkbox" type="checkbox" name="value" value="true" aria-label="{{ field.name }}"
+       {% if value.value %}checked{% endif %}
+       hx-post="{{ post_url }}" hx-trigger="change" hx-target="{{ hx_target }}" hx-swap="{{ hx_swap|default:'outerHTML' }}"
+       {% if include_field_id %}hx-vals='{"field_id": "{{ field.id }}"}'{% endif %}>
+{% elif field.effective_style == 'long' %}
+<textarea class="cf-input cf-value-input cf-value-input--long" name="value" rows="3" aria-label="{{ field.name }}"
+          hx-post="{{ post_url }}" hx-trigger="change" hx-target="{{ hx_target }}" hx-swap="{{ hx_swap|default:'outerHTML' }}"
+          {% if include_field_id %}hx-vals='{"field_id": "{{ field.id }}"}'{% endif %}>{{ value.input_value|default:'' }}</textarea>
+{% elif field.effective_style == 'stars' %}
+<span class="star-rating-interactive cf-value-stars" role="group" aria-label="{{ field.name }}">
+    {% for i in "12345"|make_list %}
+    <button type="button"
+            class="sr-star-btn{% if value.value_number and forloop.counter <= value.value_number %} sr-star-btn--on{% endif %}"
+            hx-post="{{ post_url }}" hx-target="{{ hx_target }}" hx-swap="{{ hx_swap|default:'outerHTML' }}"
+            hx-vals='{"value": "{{ forloop.counter }}"{% if include_field_id %}, "field_id": "{{ field.id }}"{% endif %}}'
+            title="{{ field.name }} {{ forloop.counter }}">★</button>
+    {% endfor %}
+    {% if value.value_number %}
+    <button type="button" class="sr-star-clear"
+            hx-post="{{ post_url }}" hx-target="{{ hx_target }}" hx-swap="{{ hx_swap|default:'outerHTML' }}"
+            hx-vals='{"value": ""{% if include_field_id %}, "field_id": "{{ field.id }}"{% endif %}}'
+            title="Clear {{ field.name|lower }}">x</button>
+    {% endif %}
+</span>
+{% elif field.effective_style == 'slider' %}
+<span class="cf-value-slider">
+    <input type="range" class="cf-slider-input" name="value"
+           min="{{ field.slider_min }}" max="{{ field.slider_max }}"
+           value="{{ value.input_value|default:field.slider_min }}"
+           aria-label="{{ field.name }}"
+           oninput="this.parentElement.querySelector('.cf-slider-output').textContent = this.value"
+           hx-post="{{ post_url }}" hx-trigger="change" hx-target="{{ hx_target }}" hx-swap="{{ hx_swap|default:'outerHTML' }}"
+           {% if include_field_id %}hx-vals='{"field_id": "{{ field.id }}"}'{% endif %}>
+    <output class="cf-slider-output">{% if value %}{{ value.display_value }}{% else %}–{% endif %}</output>
+    {% if value %}
+    <button type="button" class="sr-star-clear cf-slider-clear" title="Clear {{ field.name|lower }}"
+            hx-post="{{ post_url }}" hx-target="{{ hx_target }}" hx-swap="{{ hx_swap|default:'outerHTML' }}"
+            hx-vals='{"value": ""{% if include_field_id %}, "field_id": "{{ field.id }}"{% endif %}}'>x</button>
+    {% endif %}
+</span>
+{% elif field.field_type == 'reference' %}
+<span class="cf-value-ref">
+    <select class="cf-input cf-value-input cf-value-input--reference" name="value" aria-label="{{ field.name }}"
+            hx-post="{{ post_url }}" hx-trigger="change" hx-target="{{ hx_target }}" hx-swap="{{ hx_swap|default:'outerHTML' }}"
+            {% if include_field_id %}hx-vals='{"field_id": "{{ field.id }}"}'{% endif %}>
+        <option value=""></option>
+        {% for pk, label in ref_choices|default:field.reference_choices %}
+        <option value="{{ pk }}" {% if value.reference_pk == pk %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+    </select>
+    {% if value.reference_url %}
+    <a class="cf-url-open" href="{{ value.reference_url }}" title="Open {{ value.display_value }}">
+        <i class="material-symbols-outlined">open_in_new</i>
+    </a>
+    {% endif %}
+</span>
+{% elif field.field_type == 'url' %}
+<span class="cf-value-url">
+    <input class="cf-input cf-value-input cf-value-input--url" type="url" name="value"
+           value="{{ value.input_value|default:'' }}" placeholder="https://..."
+           aria-label="{{ field.name }}"
+           hx-post="{{ post_url }}" hx-trigger="change" hx-target="{{ hx_target }}" hx-swap="{{ hx_swap|default:'outerHTML' }}"
+           {% if include_field_id %}hx-vals='{"field_id": "{{ field.id }}"}'{% endif %}>
+    {% if value.value_text %}
+    <a class="cf-url-open" href="{{ value.value_text }}" target="_blank" rel="noopener noreferrer" title="Open link">
+        <i class="material-symbols-outlined">open_in_new</i>
+    </a>
+    {% endif %}
+</span>
+{% else %}
+<input class="cf-input cf-value-input cf-value-input--{{ field.field_type }}"
+       type="{{ field.input_type }}"
+       {% if field.field_type == 'number' %}step="any"{% endif %}
+       name="value"
+       value="{{ value.input_value|default:'' }}"
+       aria-label="{{ field.name }}"
+       hx-post="{{ post_url }}"
+       hx-trigger="change"
+       hx-target="{{ hx_target }}"
+       hx-swap="{{ hx_swap|default:'outerHTML' }}"
+       {% if include_field_id %}hx-vals='{"field_id": "{{ field.id }}"}'{% endif %}>
+{% endif %}

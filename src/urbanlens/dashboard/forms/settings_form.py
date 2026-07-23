@@ -2,12 +2,14 @@
 
 from django import forms
 
+from urbanlens.dashboard.models.direct_messages.meta import MessageRetentionChoice
 from urbanlens.dashboard.models.profile.model import (
     DistanceUnit,
     GuidanceLevel,
     MapCenterMode,
     MapViewChoice,
     Profile,
+    SyncAliasesDirection,
     ThemeChoice,
     VisibilityChoice,
 )
@@ -97,6 +99,18 @@ class PrivacySettingsForm(forms.ModelForm):
         label="Contact Visibility",
         help_text="Who can see your contact methods on your profile.",
     )
+    direct_message_visibility = forms.ChoiceField(
+        choices=VisibilityChoice.choices,
+        widget=forms.Select(attrs={"class": "settings-select browser-default"}),
+        label="Direct Messages",
+        help_text="Who can send you direct messages. Anyone you message first can always reply.",
+    )
+    common_pins_visibility = forms.ChoiceField(
+        choices=VisibilityChoice.choices,
+        widget=forms.Select(attrs={"class": "settings-select browser-default"}),
+        label="Pins in Common",
+        help_text="Who can see the specific pins you have in common with them. Requires both of you to allow it.",
+    )
 
     class Meta:
         model = Profile
@@ -108,6 +122,8 @@ class PrivacySettingsForm(forms.ModelForm):
             "viewer_photo_filter",
             "trip_pin_location_visibility",
             "contact_visibility",
+            "direct_message_visibility",
+            "common_pins_visibility",
         ]
 
     def __init__(self, *args, **kwargs):
@@ -121,6 +137,58 @@ class PrivacySettingsForm(forms.ModelForm):
         if self.instance is not None and not self.instance.community_enabled:
             for field in self.fields.values():
                 field.disabled = True
+
+
+class DirectMessageSettingsForm(forms.ModelForm):
+    """Controls direct-message presence privacy, disappearing messages, and friend recommendations."""
+
+    online_status_visibility = forms.ChoiceField(
+        choices=VisibilityChoice.choices,
+        widget=forms.Select(attrs={"class": "settings-select browser-default"}),
+        label="Show Online Status",
+        help_text="Who can see when you're online in direct messages.",
+    )
+    read_receipt_visibility = forms.ChoiceField(
+        choices=VisibilityChoice.choices,
+        widget=forms.Select(attrs={"class": "settings-select browser-default"}),
+        label="Show Read Receipts",
+        help_text="Who can see that you've read their direct messages.",
+    )
+    typing_indicator_visibility = forms.ChoiceField(
+        choices=VisibilityChoice.choices,
+        widget=forms.Select(attrs={"class": "settings-select browser-default"}),
+        label="Show Typing Indicator",
+        help_text="Who can see when you're typing a reply.",
+    )
+    direct_message_delete_after = forms.ChoiceField(
+        choices=MessageRetentionChoice.choices,
+        widget=forms.Select(attrs={"class": "settings-select browser-default"}),
+        label="Delete My Messages After",
+        help_text="Messages you send disappear from the recipient's view this long after they've read them. You can always see your own messages.",
+    )
+    allow_friend_recommendations = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
+        label="Allow Friend Recommendations",
+        help_text="Let other users recommend you as a friend to people they're messaging.",
+    )
+
+    class Meta:
+        model = Profile
+        fields = [
+            "online_status_visibility",
+            "read_receipt_visibility",
+            "typing_indicator_visibility",
+            "direct_message_delete_after",
+            "allow_friend_recommendations",
+        ]
+
+    def __init__(self, *args, **kwargs):
+        """Disable the visibility fields while Community is off, mirroring PrivacySettingsForm."""
+        super().__init__(*args, **kwargs)
+        if self.instance is not None and not self.instance.community_enabled:
+            for name in ("online_status_visibility", "read_receipt_visibility", "typing_indicator_visibility"):
+                self.fields[name].disabled = True
 
 
 class ContactSettingsForm(forms.Form):
@@ -172,7 +240,7 @@ class StyleSettingsForm(forms.ModelForm):
     guidance_level = forms.ChoiceField(
         choices=GuidanceLevel.choices,
         widget=forms.RadioSelect(attrs={"class": "settings-radio"}),
-        label="In-app Help",
+        label="Guidance",
         help_text="Choose how UrbanLens introduces features as you explore.",
     )
     distance_units = forms.ChoiceField(
@@ -268,10 +336,16 @@ class MapDisplayForm(forms.ModelForm):
         label="Local Storage",
         help_text=("Cache pins in your browser for instant map loads. Disabling this will make the map feel sluggish."),
     )
+    suggest_pin_restructure = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "settings-checkbox"}),
+        label="Pin Organization Suggestions",
+        help_text="When you open a property with several buildings, offer to add a sub pin for each one and to nest any of your existing pins that stand inside it.",
+    )
 
     class Meta:
         model = Profile
-        fields = ["default_map_view", "cluster_radius", "use_pin_cache"]
+        fields = ["default_map_view", "cluster_radius", "use_pin_cache", "suggest_pin_restructure"]
 
 
 class MapCenterForm(forms.ModelForm):
@@ -386,7 +460,7 @@ class DeleteAccountForm(forms.Form):
 
 
 class AISettingsForm(forms.ModelForm):
-    """AI feature preferences - which badge kinds can be auto-assigned on pin creation."""
+    """AI feature preferences - which label kinds can be auto-assigned on pin creation."""
 
     ai_enabled = forms.BooleanField(
         required=False,
@@ -394,38 +468,75 @@ class AISettingsForm(forms.ModelForm):
         label="Enable AI Features",
         help_text="Turn all AI-assisted features on or off.",
     )
-    ai_badge_categories = forms.BooleanField(
+    ai_label_categories = forms.BooleanField(
         required=False,
         widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
         label="Auto-categorize pins",
-        help_text="AI automatically suggests and adds a category badge when you create a pin.",
+        help_text="AI automatically suggests and adds a category label when you create a pin.",
     )
-    ai_badge_tags = forms.BooleanField(
+    ai_label_tags = forms.BooleanField(
         required=False,
         widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
         label="Auto-tag pins",
         help_text="AI automatically suggests and adds tags when you create a pin.",
     )
-    ai_badge_statuses = forms.BooleanField(
+    ai_label_statuses = forms.BooleanField(
         required=False,
         widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
         label="Auto-status pins",
-        help_text="AI automatically suggests and adds a status badge when you create a pin.",
+        help_text="AI automatically suggests and adds a status label when you create a pin.",
     )
 
     class Meta:
         model = Profile
-        fields = ["ai_enabled", "ai_badge_categories", "ai_badge_tags", "ai_badge_statuses"]
+        fields = ["ai_enabled", "ai_label_categories", "ai_label_tags", "ai_label_statuses"]
 
 
-class MemoriesSettingsForm(forms.ModelForm):
+class KeywordTaggingSettingsForm(forms.ModelForm):
+    """Keyword-based auto-tagging preferences - independent of the AI settings above.
+
+    Keyword matching is local pattern/substring matching with no external API
+    call, so it's available to every user regardless of AI subscription.
+    """
+
+    keyword_tagging_enabled = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
+        label="Enable Keyword Tagging",
+        help_text="Turn all keyword-based auto-tagging on or off.",
+    )
+    keyword_label_categories = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
+        label="Auto-categorize pins",
+        help_text="Matching keywords automatically add a category label when you create a pin.",
+    )
+    keyword_label_tags = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
+        label="Auto-tag pins",
+        help_text="Matching keywords automatically add tags when you create a pin.",
+    )
+    keyword_label_statuses = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
+        label="Auto-status pins",
+        help_text="Matching keywords automatically add a status label when you create a pin.",
+    )
+
+    class Meta:
+        model = Profile
+        fields = ["keyword_tagging_enabled", "keyword_label_categories", "keyword_label_tags", "keyword_label_statuses"]
+
+
+class HistorySettingsForm(forms.ModelForm):
     """Which visit/location-history categories get saved. Independently adjustable at any time."""
 
     track_pin_visits = forms.BooleanField(
         required=False,
         widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
         label="Visit History",
-        help_text="Log visits to your pins from manual entries, imports, and photo tagging.",
+        help_text="Log visits to your pins from manual entries, imports, and photo tagging. Also strips GPS data from photos you upload, and stops photo/library scans from suggesting pins based on where you've been.",
     )
     track_routes = forms.BooleanField(
         required=False,
@@ -439,10 +550,16 @@ class MemoriesSettingsForm(forms.ModelForm):
         label="Live Location",
         help_text="Record visits from your live device location.",
     )
+    generate_photo_keywords = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
+        label="Photo Keywords",
+        help_text="Automatically generate searchable keywords for photos you upload, so they show up in search. Runs in the background after each upload.",
+    )
 
     class Meta:
         model = Profile
-        fields = ["track_pin_visits", "track_routes", "track_geolocation"]
+        fields = ["track_pin_visits", "track_routes", "track_geolocation", "generate_photo_keywords"]
 
 
 class CommunitySettingsForm(forms.ModelForm):
@@ -454,10 +571,68 @@ class CommunitySettingsForm(forms.ModelForm):
         label="Community Features",
         help_text="Enable features that allow you to interact with other users. Community wikis, Trips, and Friend Requests are included in this.",
     )
+    show_wiki_cover_photos = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
+        label="Show Wiki Cover Photos",
+        help_text="Show the community-selected cover photo banner on wiki pages. Turn off if you'd rather not see photos the community has chosen there.",
+    )
+    auto_create_pin_article_from_wikipedia = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
+        label="Auto-Start Pin Articles from Wikipedia",
+        help_text="When a Wikipedia article is matched to one of your pins, automatically start that pin's article from it (only if it doesn't already have one).",
+    )
 
     class Meta:
         model = Profile
-        fields = ["community_enabled"]
+        fields = ["community_enabled", "show_wiki_cover_photos", "auto_create_pin_article_from_wikipedia"]
+
+
+class WikiSyncSettingsForm(forms.ModelForm):
+    """Automatic syncing between a pin's private details and its community wiki."""
+
+    sync_rating_to_wiki = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
+        label="Rating",
+        help_text="When you rate a pin, also vote on the wiki.",
+    )
+    sync_vulnerability_to_wiki = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
+        label="Vulnerability",
+        help_text="When you set a pin's vulnerability, also vote on the wiki.",
+    )
+    sync_priority_to_wiki = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
+        label="Priority",
+        help_text="When you set a pin's priority, also vote on the wiki.",
+    )
+    sync_danger_to_wiki = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
+        label="Danger",
+        help_text="When you set a pin's danger, also vote on the wiki.",
+    )
+    sync_aliases = forms.ChoiceField(
+        choices=SyncAliasesDirection.choices,
+        widget=forms.Select(attrs={"class": "settings-select browser-default"}),
+        label="Aliases",
+        help_text="Automatically copy newly-added alternate names between a pin and its community wiki. Never deletes an alias on either side, and never changes an existing alias - only adds new ones.",
+    )
+
+    class Meta:
+        model = Profile
+        fields = ["sync_rating_to_wiki", "sync_vulnerability_to_wiki", "sync_priority_to_wiki", "sync_danger_to_wiki", "sync_aliases"]
+
+    def __init__(self, *args, **kwargs):
+        """Disable every field while Community is off, mirroring PrivacySettingsForm."""
+        super().__init__(*args, **kwargs)
+        if self.instance is not None and not self.instance.community_enabled:
+            for field in self.fields.values():
+                field.disabled = True
 
 
 class ExternalApiSettingsForm(forms.ModelForm):

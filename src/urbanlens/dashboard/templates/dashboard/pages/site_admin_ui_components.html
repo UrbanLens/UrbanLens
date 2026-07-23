@@ -2,10 +2,21 @@
 
 {% block page_title %}UI Components - {{ site_title }}{% endblock %}
 
+{% block hero %}
+{% include "dashboard/partials/ui/_page_hero.html" with icon="palette" title="UI Components" subtitle="Visual reference for reusable classes throughout the application." modifier="top" %}
+{% endblock %}
+
+{% block subnav %}
+<div class="ul-page-subnav">
+    <div class="ul-page-subnav__inner">
+        {% include "dashboard/partials/admin/_site_admin_tabs.html" with active="ui_components" %}
+    </div>
+</div>
+{% endblock %}
+
 {% block content %}
 <style>
-.ui-kit-page { max-width: 960px; margin: 0 auto; padding: 0 1rem 3rem; margin-top: 2rem; }
-.ui-kit-header { margin-bottom: 1.75rem; }
+.ui-kit-page { max-width: 960px; margin: 0 auto; padding: 0 1rem 3rem; }
 .ui-kit-grid { display: flex; flex-direction: column; gap: 1.5rem; }
 .ui-kit-section { background: var(--ul-grey-1b); border: 1px solid var(--ul-grey-1a); border-radius: 8px; overflow: visible; }
 .ui-kit-section__header { display: flex; flex-direction: column; align-items: flex-start; gap: .2rem; padding: .75rem 1rem; border-bottom: 1px solid var(--ul-grey-1a); background: var(--ul-grey-1a); font-weight: 600; }
@@ -26,22 +37,6 @@
 .site-admin-nav-links { display: flex; flex-wrap: wrap; gap: .5rem; }
 </style>
 <div class="ui-kit-page page-content">
-    <div class="ui-kit-header site-admin-header">
-        <h1 class="site-admin-title">
-            <i class="material-symbols-outlined">palette</i>
-            UI Components
-        </h1>
-        <p class="site-admin-subtitle">
-            Visual reference for reusable classes throughout the application.
-        </p>
-        <div class="site-admin-breadcrumb" style="margin-top:.5rem">
-            <a href="{% url 'site_admin_home' %}" class="site-admin-breadcrumb__link">
-                <i class="material-symbols-outlined">arrow_back</i>
-                Admin Home
-            </a>
-        </div>
-    </div>
-
     <div class="ui-kit-grid">
 
         {# -- Buttons ------------------------------------------------------- #}

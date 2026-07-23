@@ -1,22 +1,57 @@
 from __future__ import annotations
 
+import json
 import logging
+from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import redirect, render
+from django.template.loader import render_to_string
 from django.urls import reverse
 from rest_framework.viewsets import GenericViewSet
 
-from urbanlens.dashboard.controllers.notifications import _trigger_badge_refresh
+from urbanlens.dashboard.controllers.notifications import _trigger_label_refresh
 from urbanlens.dashboard.models.friendship import Friendship, FriendshipStatus
 from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, Importance, NotificationType, Status
 from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.services.connections import get_connections
+from urbanlens.dashboard.services.text_limits import MAX_FRIEND_REQUEST_MESSAGE_LENGTH, text_length_error
+
+if TYPE_CHECKING:
+    from datetime import datetime
 
 logger = logging.getLogger(__name__)
+
+
+def _pending_cancel_token(profile_id: int, kind: str, pk: int) -> str:
+    """Opaque per-item token for cancelling a pending outgoing request.
+
+    A pending outgoing Friendship (email matched a registered account, or a
+    direct profile-click request) and a pending FriendInvitation (unmatched
+    email) must be completely indistinguishable to the sender until accepted
+    - see ``_friend_list_ctx``. That rules out exposing either row's real
+    id or a type-specific cancel URL in the widget markup: differing URL
+    shapes (or a numeric target-profile id) would tell the sender whether
+    their invited email belongs to an account. This HMAC is what the cancel
+    button carries instead: fixed-length hex, identical shape for both kinds,
+    and not reversible or forgeable without ``SECRET_KEY``. The server
+    resolves it by recomputing tokens over the sender's own (small) pending
+    set - see ``FriendController.cancel_pending``.
+
+    Args:
+        profile_id: The SENDER's profile pk - scopes tokens per user.
+        kind: ``"friendship"`` or ``"invitation"``.
+        pk: The pending row's pk within that kind's table.
+
+    Returns:
+        Hex HMAC token, safe to embed in a URL.
+    """
+    from django.utils.crypto import salted_hmac
+
+    return salted_hmac("dashboard.friendship.pending_cancel", f"{profile_id}:{kind}:{pk}").hexdigest()
 
 
 def _friend_list_ctx(viewer: Profile | None, profile: Profile) -> dict:
@@ -25,13 +60,32 @@ def _friend_list_ctx(viewer: Profile | None, profile: Profile) -> dict:
     Determines:
     - friends: accepted friendship records for this profile
     - incoming_requests: pending requests TO this profile (only if viewer == profile)
+    - outgoing_pending: this profile's own pending sent requests (only if
+      viewer == profile) - Friendship and FriendInvitation rows merged into
+      one list of ``{"cancel_token", "created"}`` dicts, sorted by created.
+      Templates must render these WITHOUT the target's identity (name/avatar/
+      username/profile link). Until a request is accepted, the sender must not
+      be able to learn who they reached, nor even whether an invited email
+      belongs to a registered account at all - showing full identity only for
+      Friendship rows (which always resolve to a real account) while
+      FriendInvitation rows (unmatched emails) were invisible turned "does a
+      pending card exist" into an account-enumeration side channel. The merge
+      goes further than rendering both identically: per-kind loops (or
+      kind-specific cancel URLs/ids) would leak the same bit through markup
+      ordering or the DOM, so both kinds share one loop, one opaque
+      cancel-token URL shape, and one chronological ordering.
     - viewer_friendship_status: status of the friendship between viewer and this profile
     - viewer_can_request: whether the viewer can send a friend request to this profile
     """
+    from django.utils import timezone
+
+    from urbanlens.dashboard.models.friendship.invitation import FriendInvitation
+
     friend_profiles = get_connections(profile)
 
     incoming_requests: list[Friendship] = []
     outgoing_requests: list[Friendship] = []
+    outgoing_email_invitations: list[FriendInvitation] = []
     viewer_friendship: Friendship | None = None
     viewer_can_request = False
     mutual_friends: list[Profile] = []
@@ -45,11 +99,21 @@ def _friend_list_ctx(viewer: Profile | None, profile: Profile) -> dict:
                     status=FriendshipStatus.REQUESTED,
                 ).select_related("from_profile__user"),
             )
+            # No select_related here on purpose: the target's identity must
+            # never be rendered for a pending outgoing request (see docstring),
+            # so nothing ever touches to_profile.
             outgoing_requests = list(
                 Friendship.objects.filter(
                     from_profile=profile,
                     status=FriendshipStatus.REQUESTED,
-                ).select_related("to_profile__user"),
+                ),
+            )
+            outgoing_email_invitations = list(
+                FriendInvitation.objects.filter(
+                    inviter=profile,
+                    accepted_at__isnull=True,
+                    expires_at__gt=timezone.now(),
+                ),
             )
 
         # Determine viewer's relationship with this profile
@@ -71,11 +135,17 @@ def _friend_list_ctx(viewer: Profile | None, profile: Profile) -> dict:
             mutual_ids = profile_friend_ids & viewer_friend_ids
             mutual_friends = [fp for fp in friend_profiles if fp.pk in mutual_ids]
 
+    pending_entries: list[tuple[datetime, str]] = [(req.created, _pending_cancel_token(profile.pk, "friendship", req.pk)) for req in outgoing_requests] + [
+        (inv.created, _pending_cancel_token(profile.pk, "invitation", inv.pk)) for inv in outgoing_email_invitations
+    ]
+    outgoing_pending = [{"cancel_token": token, "created": created} for created, token in sorted(pending_entries)]
+
     return {
         "friends": friend_profiles,
         "mutual_friends": mutual_friends,
         "incoming_requests": incoming_requests,
-        "outgoing_requests": outgoing_requests,
+        "outgoing_pending": outgoing_pending,
+        "outgoing_pending_count": len(outgoing_pending),
         "viewer_friendship": viewer_friendship,
         "viewer_can_request": viewer_can_request,
         "is_own_profile": viewer is not None and viewer.pk == profile.pk,
@@ -84,12 +154,13 @@ def _friend_list_ctx(viewer: Profile | None, profile: Profile) -> dict:
     }
 
 
-def notify_friend_request(from_profile: Profile, to_profile: Profile) -> None:
+def notify_friend_request(from_profile: Profile, to_profile: Profile, message: str | None = None) -> None:
     """Create an in-app notification when a friend request is sent.
 
     Args:
         from_profile: Profile sending the request.
         to_profile: Profile receiving the request.
+        message: Optional note the requester attached, appended to the notification.
     """
     try:
         pref = to_profile.notification_preferences.friend_request
@@ -99,19 +170,23 @@ def notify_friend_request(from_profile: Profile, to_profile: Profile) -> None:
     if pref == DeliveryPreference.NONE:
         return
 
+    body = f"{from_profile.username} wants to be your friend."
+    if message:
+        body += f' "{message}"'
+
     NotificationLog.objects.create(
         profile=to_profile,
         status=Status.UNREAD,
         importance=Importance.MEDIUM,
         notification_type=NotificationType.FRIEND_REQUEST,
         title="New friend request",
-        message=f"{from_profile.username} wants to be your friend.",
+        message=body,
         url=reverse("profile.view_user", kwargs={"profile_slug": from_profile.slug or str(from_profile.uuid)}),
         source_profile=from_profile,
     )
 
 
-def request_or_accept_friendship(from_profile: Profile, to_profile: Profile) -> Friendship | None:
+def request_or_accept_friendship(from_profile: Profile, to_profile: Profile, message: str | None = None) -> Friendship | None:
     """Send a friend request, auto-accepting instead if one is already pending in reverse.
 
     If `to_profile` already sent `from_profile` a pending request, the two profiles
@@ -121,6 +196,9 @@ def request_or_accept_friendship(from_profile: Profile, to_profile: Profile) -> 
     Args:
         from_profile: Profile initiating this request.
         to_profile: Profile being requested.
+        message: Optional note from the requester. Ignored when this call
+            resolves to an auto-accept (both profiles already wanted to be
+            friends, so there's no pending request left to attach a note to).
 
     Returns:
         The resulting Friendship (pending or newly accepted), or None if the request
@@ -148,10 +226,49 @@ def request_or_accept_friendship(from_profile: Profile, to_profile: Profile) -> 
         ).update(status=Status.READ)
         return existing
 
-    friendship = Friendship.request(from_profile=from_profile, to_profile=to_profile.pk)
+    friendship = Friendship.request(from_profile=from_profile, to_profile=to_profile.pk, message=message)
     if friendship:
-        notify_friend_request(from_profile, to_profile)
+        notify_friend_request(from_profile, to_profile, message)
     return friendship
+
+
+def _mark_friend_request_notifications_read(viewer_profile: Profile, source_profile_id: int) -> None:
+    """Mark the viewer's pending "new friend request" notification(s) from a source as read.
+
+    Accepting/declining/ignoring a request on the profile page (rather than via the
+    notification dropdown's own accept/decline buttons) previously left the originating
+    notification unread indefinitely, inflating the bell label count forever.
+
+    Args:
+        viewer_profile: Profile who just acted on the request.
+        source_profile_id: pk of the profile that sent the request.
+    """
+    NotificationLog.objects.filter(
+        profile=viewer_profile,
+        notification_type=NotificationType.FRIEND_REQUEST,
+        source_profile_id=source_profile_id,
+    ).update(status=Status.READ)
+
+
+def _mark_incoming_request_notifications_read(viewer_profile: Profile, incoming_requests: list[Friendship]) -> None:
+    """Mark "new friend request" notifications read once the owner views the pending requests.
+
+    UL-240: previously only accepting/declining/ignoring a request marked its notification
+    read - simply seeing the pending request listed on your own profile page left the
+    notification (and bell label count) unread indefinitely.
+
+    Args:
+        viewer_profile: Profile who is viewing their own pending requests.
+        incoming_requests: Pending Friendship rows currently shown to the viewer.
+    """
+    source_ids = [req.from_profile_id for req in incoming_requests]
+    if not source_ids:
+        return
+    NotificationLog.objects.filter(
+        profile=viewer_profile,
+        notification_type=NotificationType.FRIEND_REQUEST,
+        source_profile_id__in=source_ids,
+    ).update(status=Status.READ)
 
 
 def _own_friend_widget_response(request: HttpRequest) -> HttpResponse:
@@ -166,8 +283,10 @@ def _own_friend_widget_response(request: HttpRequest) -> HttpResponse:
     viewer_profile, _ = Profile.objects.get_or_create(user=request.user)
     ctx = _friend_list_ctx(viewer_profile, viewer_profile)
     if request.headers.get("HX-Target") == "friends_page_list":
-        return render(request, "dashboard/partials/profile/friends_page_content.html", ctx)
-    return render(request, "dashboard/partials/profile/friend_list_partial.html", ctx)
+        response = render(request, "dashboard/partials/profile/friends_page_content.html", ctx)
+    else:
+        response = render(request, "dashboard/partials/profile/friend_list_partial.html", ctx)
+    return _trigger_label_refresh(response)
 
 
 def _redirect_to_profile(profile_id: int, fallback_view_name: str = "profile.view") -> HttpResponse:
@@ -205,15 +324,22 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
             }
             return HttpResponse(rejection_messages.get(visibility, "This user is not accepting friend requests."), status=403)
 
-        friendship = request_or_accept_friendship(requesting, to_profile)
+        message = request.POST.get("message", "").strip()
+        length_error = text_length_error(message, MAX_FRIEND_REQUEST_MESSAGE_LENGTH, "Message")
+        if length_error:
+            return HttpResponse(length_error, status=400)
+
+        friendship = request_or_accept_friendship(requesting, to_profile, message or None)
         if not friendship:
             return HttpResponse("Could not request friend.", status=400)
 
-        return render(
-            request,
-            "dashboard/partials/profile/friend_list_partial.html",
-            _friend_list_ctx(requesting, to_profile),
-        )
+        if request.headers.get("HX-Request"):
+            return render(
+                request,
+                "dashboard/partials/profile/friend_list_partial.html",
+                _friend_list_ctx(requesting, to_profile),
+            )
+        return _redirect_to_profile(profile_id)
 
     def accept_friend(self, request: HttpRequest, profile_id: int):
         if not isinstance(request.user, User):
@@ -226,6 +352,8 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
             return HttpResponse("Friend request not found.", status=404)
 
         if not friendship.accept():
+            if Friendship.profile_at_max_friends(request.user.profile) or Friendship.profile_at_max_friends(friendship.from_profile):
+                return HttpResponse("This would exceed the maximum number of friends allowed.", status=403)
             return HttpResponse("Enable Community in Settings to accept friend requests.", status=403)
 
         # Notify the original requester that their request was accepted.
@@ -239,6 +367,7 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
             message=f"{request.user.profile.username} accepted your friend request.",
             url=reverse("profile.view_user", kwargs={"profile_slug": request.user.profile.slug or str(request.user.profile.uuid)}),
         )
+        _mark_friend_request_notifications_read(request.user.profile, profile_id)
 
         if request.headers.get("HX-Request"):
             return _own_friend_widget_response(request)
@@ -255,6 +384,7 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
             return HttpResponse("Friend request not found.", status=404)
 
         friendship.decline()
+        _mark_friend_request_notifications_read(request.user.profile, profile_id)
         if request.headers.get("HX-Request"):
             return _own_friend_widget_response(request)
         return _redirect_to_profile(profile_id)
@@ -271,6 +401,7 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
             return HttpResponse("Friend request not found.", status=404)
 
         friendship.ignore()
+        _mark_friend_request_notifications_read(request.user.profile, profile_id)
         if request.headers.get("HX-Request"):
             return _own_friend_widget_response(request)
         return _redirect_to_profile(profile_id)
@@ -330,17 +461,59 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
             return _own_friend_widget_response(request)
         return _redirect_to_profile(profile_id)
 
+    def cancel_pending(self, request: HttpRequest, token: str):
+        """Cancel one of the current user's own pending outgoing requests, by opaque token.
+
+        One endpoint for BOTH pending kinds - an outgoing Friendship request
+        (email matched a registered account, or a direct profile-click
+        request) and an outgoing FriendInvitation (unmatched email). The
+        token (see ``_pending_cancel_token``) is resolved by recomputing the
+        HMAC over the caller's own pending rows, so the URL shape, the
+        response, and the 404 behavior are byte-identical regardless of which
+        kind (or neither) matched - a sender can't use this endpoint, or the
+        markup pointing at it, to learn whether an invited email belongs to a
+        registered account.
+        """
+        if not isinstance(request.user, User):
+            return HttpResponse("Authentication required.", status=401)
+
+        from django.utils import timezone
+        from django.utils.crypto import constant_time_compare
+
+        from urbanlens.dashboard.models.friendship.invitation import FriendInvitation
+
+        profile = request.user.profile
+        cancelled = False
+        for friendship in Friendship.objects.filter(from_profile=profile, status=FriendshipStatus.REQUESTED):
+            if constant_time_compare(token, _pending_cancel_token(profile.pk, "friendship", friendship.pk)):
+                friendship.remove()
+                cancelled = True
+                break
+        if not cancelled:
+            for invitation in FriendInvitation.objects.filter(inviter=profile, accepted_at__isnull=True, expires_at__gt=timezone.now()):
+                if constant_time_compare(token, _pending_cancel_token(profile.pk, "invitation", invitation.pk)):
+                    invitation.delete()
+                    cancelled = True
+                    break
+        if not cancelled:
+            return HttpResponse("Pending request not found.", status=404)
+
+        if request.headers.get("HX-Request"):
+            return _own_friend_widget_response(request)
+        return redirect("profile.view_user", profile_slug=request.user.profile.slug or str(request.user.profile.uuid))
+
     def friend_list(self, request: HttpRequest, profile_id: int):
         """HTMX partial: friend list shown on the profile page."""
         profile = Profile.objects.filter(pk=profile_id).first()
         if not profile:
             return HttpResponse("")
         viewer = request.user.profile if request.user.is_authenticated else None
-        return render(
-            request,
-            "dashboard/partials/profile/friend_list_partial.html",
-            _friend_list_ctx(viewer, profile),
-        )
+        ctx = _friend_list_ctx(viewer, profile)
+        response = render(request, "dashboard/partials/profile/friend_list_partial.html", ctx)
+        if viewer and viewer.pk == profile.pk and ctx["incoming_requests"]:
+            _mark_incoming_request_notifications_read(viewer, ctx["incoming_requests"])
+            response = _trigger_label_refresh(response)
+        return response
 
     def friends_page(self, request: HttpRequest, profile_id: int):
         """Full friends list page - only accessible to the profile owner."""
@@ -352,11 +525,23 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
         viewer = request.user.profile if request.user.is_authenticated else None
         if viewer is None or viewer.pk != profile.pk:
             return redirect("profile.view_user", profile_slug=profile.slug or str(profile.uuid))
-        return render(
-            request,
-            "dashboard/pages/profile/friends.html",
-            {**_friend_list_ctx(viewer, profile), "profile": profile},
-        )
+        ctx = _friend_list_ctx(viewer, profile)
+        if ctx["incoming_requests"]:
+            _mark_incoming_request_notifications_read(viewer, ctx["incoming_requests"])
+        return render(request, "dashboard/pages/profile/friends.html", {**ctx, "profile": profile})
+
+    def friends_page_widget(self, request: HttpRequest, profile_id: int):
+        """HTMX partial: just the /friends/ page's list content, for live refresh."""
+        from django.http import Http404
+
+        profile = Profile.objects.filter(pk=profile_id).first()
+        if not profile:
+            raise Http404
+        viewer = request.user.profile if request.user.is_authenticated else None
+        if viewer is None or viewer.pk != profile.pk:
+            raise Http404
+        ctx = _friend_list_ctx(viewer, profile)
+        return render(request, "dashboard/partials/profile/friends_page_content.html", ctx)
 
     def friend_request_respond(self, request: HttpRequest, from_profile_id: int):
         """Accept or decline a friend request from the notification dropdown.
@@ -413,7 +598,7 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
                 "unread_count": unread_count,
             },
         )
-        return _trigger_badge_refresh(response)
+        return _trigger_label_refresh(response)
 
     def invite_by_email(self, request: HttpRequest):
         """Invite a friend by email address.
@@ -434,7 +619,6 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
         from django.core.exceptions import ValidationError
         from django.core.mail import EmailMultiAlternatives
         from django.core.validators import validate_email
-        from django.template.loader import render_to_string
 
         from urbanlens.dashboard.models.email_log import EmailType
         from urbanlens.dashboard.models.friendship.invitation import FriendInvitation
@@ -454,6 +638,11 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
         if normalize_email(email) == normalize_email(inviter.email):
             return HttpResponse("That's your own email address.", status=400)
 
+        message = request.POST.get("message", "").strip()
+        length_error = text_length_error(message, MAX_FRIEND_REQUEST_MESSAGE_LENGTH, "Message")
+        if length_error:
+            return HttpResponse(length_error, status=400)
+
         # Rate limiting must be checked before we know whether the address is
         # registered - erroring only on the actually-sends-an-email path would
         # let a capped caller distinguish member from non-member addresses.
@@ -468,14 +657,14 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
             from urbanlens.dashboard.models.subscriptions import SubscriptionRole
 
             SubscriptionRole.ensure_defaults()
-            subscription_role = SubscriptionRole.objects.filter(slug=subscription_role_slug).first()
+            subscription_role = SubscriptionRole.objects.get_by_slug(subscription_role_slug)
 
         existing_user = find_user_by_email(email)
         if existing_user:
             to_profile = existing_user.profile
             # Respect visibility settings silently - no error, no distinguishable response.
             if to_profile != inviter and to_profile.friend_request_visibility != VisibilityChoice.NO_ONE:
-                friendship = request_or_accept_friendship(inviter, to_profile)
+                friendship = request_or_accept_friendship(inviter, to_profile, message or None)
                 if friendship and subscription_role is not None:
                     from urbanlens.dashboard.controllers.site_admin import _parse_duration_months
                     from urbanlens.dashboard.models.subscriptions import grant_subscription
@@ -490,7 +679,7 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
                 accepted_at__isnull=True,
             ).delete()
 
-            invitation = FriendInvitation(inviter=inviter, email=email)
+            invitation = FriendInvitation(inviter=inviter, email=email, message=message or None)
             invitation.save()
             if subscription_role is not None:
                 from urbanlens.dashboard.models.subscriptions import PendingSubscriptionGrant
@@ -512,9 +701,13 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
                 context = {
                     "inviter": inviter,
                     "signup_url": signup_url,
+                    "message": message or None,
                 }
                 subject = f"{inviter.username} invited you to join UrbanLens"
-                text_body = f"Hi,\n\n{inviter.username} invited you to join UrbanLens - a private mapping platform for urban explorers and photographers.\n\nAccept the invitation:\n{signup_url}\n\n- UrbanLens"
+                text_body = f"Hi,\n\n{inviter.username} invited you to join UrbanLens - a private mapping platform for urban explorers and photographers."
+                if message:
+                    text_body += f'\n\n"{message}"'
+                text_body += f"\n\nAccept the invitation:\n{signup_url}\n\n- UrbanLens"
                 html_body = render_to_string("dashboard/email/friend_invite.html", context)
 
                 try:
@@ -526,4 +719,12 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
                 else:
                     record_email_sent(inviter, email, EmailType.JOIN_INVITE)
 
-        return render(request, "dashboard/partials/profile/invite_result.html", {"result": "sent"})
+        # The response body must be byte-identical no matter what happened above -
+        # embedding a friend-list refresh directly here would let a caller tell a
+        # registered target from an unregistered one (or a closed-visibility target
+        # from an open one) just by diffing response content. Any live refresh of
+        # the friend-list widgets instead happens via a separate, decoupled request
+        # triggered by the header below.
+        response = render(request, "dashboard/partials/profile/invite_result.html", {"result": "sent"})
+        response["HX-Trigger"] = json.dumps({"friendListChanged": True})
+        return response

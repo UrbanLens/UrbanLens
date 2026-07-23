@@ -97,6 +97,26 @@ class PinVisit(abstract.FrontendDashboardModel):
         """
         return self.markup_map.to_snapshot() if self.markup_map else None
 
+    @property
+    def notes_html(self) -> str:
+        """Sanitized HTML rendering of ``notes``, authored as Markdown.
+
+        The visit-log dialog's notes field uses the same TipTap/Markdown
+        WYSIWYG editor as the pin/wiki article (see
+        ``_visit_form.html``/``frontend/ts/entries/article-wysiwyg.ts``), so
+        rendering it for display reuses the article renderer rather than a
+        second sanitization pipeline. Notes are short, so this isn't cached
+        the way ``Article.content_html`` is.
+
+        Returns:
+            Sanitized HTML, or "" when there are no notes.
+        """
+        if not self.notes:
+            return ""
+        from urbanlens.dashboard.services.articles import render_article
+
+        return render_article(self.notes).html
+
     def __str__(self) -> str:
         """Return a human-readable description of this visit.
 

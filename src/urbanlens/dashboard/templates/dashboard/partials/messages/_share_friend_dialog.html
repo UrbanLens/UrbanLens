@@ -1,0 +1,31 @@
+{% comment %}
+`@friend` recommendation dialog: pick one of the sender's own friends to
+recommend to the conversation partner. Picking one stages it as a composer
+attachment - see `_share_pin_dialog.html`. Context: `partner`, `friends`.
+{% endcomment %}
+<dialog id="dm-share-dialog" class="dm-share-dialog ul-dialog" data-kind="friend" data-field-name="recommended_slug">
+  <div class="dialog-header">
+    <span>Recommend a friend to {{ partner.username }}</span>
+    <button type="button" class="dialog-close" onclick="this.closest('dialog').close()">
+      <i class="material-symbols-outlined">close</i>
+    </button>
+  </div>
+
+  <div class="dm-share-step">
+    <p class="dm-share-confirm-summary">Their profile will show under your message, and {{ partner.username }} will be able to view it for a day to decide whether to connect.</p>
+    <input type="search" class="dm-share-filter" placeholder="Search your friends..." oninput="window.dmFilterShareList(this)">
+    <ul class="dm-share-list">
+      {% for friend in friends %}
+      <li class="dm-share-list-item" data-search="{{ friend.username|lower }}">
+        <button type="button" class="dm-share-pick-btn" data-value="{{ friend.slug }}" data-label="{{ friend.username }}" onclick="window.dmSharePick(this)">
+          <span class="msg-avatar" aria-hidden="true">
+            {% if friend.avatar %}<img src="{{ friend.avatar.url }}" alt="" class="msg-avatar-img">{% else %}<span class="msg-avatar-initial">{{ friend.username|first|upper }}</span>{% endif %}
+          </span>
+          {{ friend.username }}
+        </button>
+      </li>
+      {% endfor %}
+    </ul>
+    {% if not friends %}<p class="dm-share-empty">You don't have any friends to recommend yet.</p>{% endif %}
+  </div>
+</dialog>

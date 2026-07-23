@@ -4,6 +4,12 @@
 
 $nav-dropdown-shadow: 0 8px 32px rgba($color-grey-9, 0.18), 0 2px 8px rgba($color-grey-9, 0.1);
 
+// The subnav tab strip (_page_hero.scss's .ul-subnav-tabs) is a bare <nav>; this
+// keeps it transparent instead of the _reset.scss nav baseline's salmon fill.
+nav {
+    background-color: transparent;
+}
+
 .app-nav {
     background: var(--nav-bg);
     height: 4rem;
@@ -193,7 +199,7 @@ $nav-dropdown-shadow: 0 8px 32px rgba($color-grey-9, 0.18), 0 2px 8px rgba($colo
 .nav-user-name {
     font-size: 0.875rem;
     font-weight: 500;
-    max-width: 120px;
+    max-width: 12rem;
     @include truncate;
 }
 
@@ -266,7 +272,7 @@ $nav-dropdown-shadow: 0 8px 32px rgba($color-grey-9, 0.18), 0 2px 8px rgba($colo
 // Separator
 .nav-dropdown-sep {
     height: 1px;
-    background: var(--ul-grey-1a);
+    background: var(--ul-surface-border);
     margin: 4px 0;
 }
 
@@ -293,7 +299,7 @@ $nav-dropdown-shadow: 0 8px 32px rgba($color-grey-9, 0.18), 0 2px 8px rgba($colo
         }
 
         &:hover {
-            background: var(--ul-grey-0);
+            background: var(--ul-hover-bg);
 
             .material-icons,
             .material-symbols-outlined {
@@ -395,13 +401,18 @@ nav {
         font-size: 0.72rem;
         font-weight: 600;
         letter-spacing: 0.02em;
-        color: var(--ul-grey-4);
+        color: rgba(255,255,255,0.7);
         opacity: 0.55;
         user-select: none;
     }
 
     &__github {
         gap: 0.4rem;
+
+        i.material-icons {
+            font-size: 1rem;
+            color: rgba(255,255,255,0.6);
+        }
     }
 
     // -- Map page modifier: adds a live tile-attribution slot between the
@@ -424,7 +435,7 @@ nav {
     &__attribution {
         margin: 0;
         line-height: 1.4;
-        color: var(--ul-grey-4);
+        color: rgba(255,255,255,0.7);
         white-space: nowrap;
         text-overflow: ellipsis;
         text-align: right;
@@ -438,13 +449,6 @@ nav {
             margin-left: 0.35rem;
             font-weight: 600;
             white-space: nowrap;
-
-            &::before {
-                content: '·';
-                margin-right: 0.35rem;
-                font-weight: 400;
-                opacity: 0.65;
-            }
         }
     }
 
@@ -462,13 +466,6 @@ nav {
             justify-content: center;
         }
     }
-}
-
-// Legacy brand-logo selector kept for any Materialize overrides
-nav .brand-logo img {
-    max-width: 50px;
-    max-height: 50px;
-    border-radius: 50%;
 }
 
 // -- Notification bell ------------------------------------------------------
@@ -544,7 +541,6 @@ nav .brand-logo img {
     &__header {
         @include panel-header($spread: true);
         padding: .85rem 1rem .65rem;
-        border-bottom: 1px solid var(--ul-grey-1a);
         position: sticky;
         top: 0;
         z-index: 1;
@@ -589,7 +585,7 @@ nav .brand-logo img {
     cursor: default;
     transition: background .15s ease, border-color .15s ease, opacity .15s ease;
     border-left: 3px solid transparent;
-    border-bottom: 1px solid var(--ul-grey-1a);
+    border-bottom: 1px solid var(--ul-surface-border);
     position: relative;
 
     &:last-child {
@@ -601,7 +597,7 @@ nav .brand-logo img {
     }
 
     &--link:not(.notif-item--unread):hover {
-        background: var(--ul-grey-1);
+        background: var(--ul-hover-bg);
     }
 
     // -- Read state: quiet, receded ---------------------------------------
@@ -613,7 +609,7 @@ nav .brand-logo img {
         display: flex;
         align-items: center;
         justify-content: center;
-        background: var(--ul-grey-1);
+        background: var(--ul-surface-border);
         margin-top: .05rem;
         transition: background .15s ease, color .15s ease;
 
@@ -655,6 +651,27 @@ nav .brand-logo img {
         color: var(--ul-grey-5);
         margin: 0;
         letter-spacing: .01em;
+    }
+
+    &__resolution {
+        display: flex;
+        align-items: center;
+        gap: .3rem;
+        font-size: .74rem;
+        font-weight: 500;
+        margin: .3rem 0 0;
+
+        .material-symbols-outlined {
+            font-size: .95rem;
+        }
+
+        &--accepted {
+            color: $color-green-600;
+        }
+
+        &--declined {
+            color: var(--ul-grey-6);
+        }
     }
 
     &__dot {
@@ -733,7 +750,7 @@ nav .brand-logo img {
     }
 
     &--unread &__icon-wrap--error {
-        background: var(--ul-grey-0a);
+        background: $color-red-100;
 
         .material-symbols-outlined,
         .material-icons {
@@ -793,12 +810,12 @@ nav .brand-logo img {
 
 // -- Notification preferences (settings page section) -----------------------
 
-$notif-prefs-cols: minmax(10rem, 1fr) repeat(3, 4.5rem);
+$notif-prefs-cols: minmax(10rem, 1fr) repeat(5, 4.5rem);
 
 .notif-prefs {
     margin-top: 2rem;
     padding-top: 1.5rem;
-    border-top: 1px solid var(--ul-grey-1a);
+    border-top: 1px solid var(--ul-surface-border);
 
     &__saved {
         display: flex;
@@ -825,11 +842,11 @@ $notif-prefs-cols: minmax(10rem, 1fr) repeat(3, 4.5rem);
     }
 
     &__grid {
-        border: 1px solid var(--ul-grey-1a);
+        border: 1px solid var(--ul-surface-border);
         border-radius: $radius-md;
         overflow: hidden;
         font-size: .84rem;
-        max-width: 40rem;
+        max-width: 49rem;
         box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
     }
 
@@ -841,23 +858,23 @@ $notif-prefs-cols: minmax(10rem, 1fr) repeat(3, 4.5rem);
     }
 
     &__row {
-        background: var(--ul-grey-1);
+        background: var(--ul-surface-raised);
 
         &:nth-child(even) {
-            background: var(--ul-grey-1b);
+            background: var(--ul-surface-raised-border);
         }
 
         &:nth-child(2),
         &:nth-child(5),
         &:nth-child(7),
         &:nth-child(10) {
-            border-top: 6px solid var(--ul-grey-0);
+            border-top: 6px solid var(--ul-surface);
         }
     }
 
     &__header {
-        background: var(--ul-grey-0);
-        border-bottom: 1px solid var(--ul-grey-1a);
+        background: var(--ul-surface);
+        border-bottom: 1px solid var(--ul-surface-border);
     }
 
     &__hdr {
@@ -873,14 +890,14 @@ $notif-prefs-cols: minmax(10rem, 1fr) repeat(3, 4.5rem);
     }
 
     &__row {
-        border-bottom: 1px solid var(--ul-grey-1);
+        border-bottom: 1px solid var(--ul-surface-border);
 
         &:last-child {
             border-bottom: none;
         }
 
         &:hover {
-            background: var(--ul-grey-0);
+            background: var(--ul-hover-bg);
         }
     }
 
@@ -898,7 +915,7 @@ $notif-prefs-cols: minmax(10rem, 1fr) repeat(3, 4.5rem);
         margin: 0;
         cursor: pointer;
 
-        // Materialize globally hides all [type=checkbox]. Override for the grid.
+        // _reset.scss hides bare checkboxes globally; opt this one back in for the grid.
         input[type="checkbox"] {
             position: static !important;
             opacity: 1 !important;
@@ -909,6 +926,20 @@ $notif-prefs-cols: minmax(10rem, 1fr) repeat(3, 4.5rem);
             cursor: pointer;
             display: inline-block;
             border-radius: 4px;
+        }
+
+        // WhatsApp/SMS columns before a number is connected on the profile.
+        // Not the disabled attribute - that would drop the field from the
+        // form entirely, silently clearing any stored preference the next
+        // time an unrelated checkbox in this same auto-saving form changes.
+        &--unavailable {
+            cursor: not-allowed;
+
+            input[type="checkbox"] {
+                pointer-events: none !important;
+                opacity: .35 !important;
+                cursor: not-allowed;
+            }
         }
     }
 
@@ -1081,13 +1112,24 @@ $notif-prefs-cols: minmax(10rem, 1fr) repeat(3, 4.5rem);
 }
 
 [data-theme="dark"] {
+
+    .app-nav-link {
+        color: var(--ul-grey-5);
+
+        &--active {
+            a {
+                color: var(--ul-grey-7);
+            }
+        }
+    }
    
     .app-nav-brand-name {
         color: var(--ul-grey-9);
     }
 
     .page-footer {
-        color: var(--ul-grey-6);
+        color: var(--ul-grey-6);    
+        background-color: rgb(5, 12, 22); // slightly muted nav-bg
 
         &__meta {
             a {

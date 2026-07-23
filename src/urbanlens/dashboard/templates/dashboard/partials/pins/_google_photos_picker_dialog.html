@@ -1,0 +1,30 @@
+{# Google Photos tab initial state (swapped into #pin-import-photos-body). Context: pin, account, error #}
+{% if not account %}
+<div class="immich-picker-error ul-dialog-body">
+    <p>Connect Google Photos to pick photos to import onto this pin.</p>
+    <a href="{% url 'settings.view' %}#google-photos-settings-section" class="btn btn--primary">
+        <i class="material-symbols-outlined">link</i>
+        Connect Google Photos in Settings
+    </a>
+</div>
+{% elif error %}
+<div class="immich-picker-error ul-dialog-body">
+    <p>{{ error }}</p>
+</div>
+{% else %}
+<div class="ul-dialog-body">
+    <p class="settings-help">
+        Google Photos doesn't let apps filter by location, so you'll pick photos yourself in
+        Google's own picker - every photo you select there becomes a candidate to import here.
+    </p>
+    <form hx-post="{% url 'pin.google_photos.session.create' pin.slug %}"
+          hx-target="#pin-import-photos-body"
+          hx-swap="innerHTML">
+        {% csrf_token %}
+        <button type="submit" class="btn btn--primary">
+            <i class="material-symbols-outlined">add_photo_alternate</i>
+            Open Google Photos to pick photos
+        </button>
+    </form>
+</div>
+{% endif %}

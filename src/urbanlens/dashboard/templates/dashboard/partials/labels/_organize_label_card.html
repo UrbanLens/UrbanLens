@@ -1,0 +1,59 @@
+{% load dashboard_tags %}
+{# Shared organize label row/card template for tags, categories, statuses, and people labels. #}
+<div class="tag-card" id="{{ kind }}-card-{{ label.id }}" data-id="{{ label.id }}" data-kind="{{ kind }}"
+     {% if kind == 'tag' %}data-tag-id="{{ label.id }}" data-tag-name="{{ label.effective_name }}" data-tag-color="{{ label.effective_color|default:'' }}" data-tag-icon="{{ label.effective_icon|default:'' }}" data-tag-custom-icon="{% if label.custom_icon %}{{ label.custom_icon.url }}{% endif %}" data-tag-desc="{{ label.description|default:'' }}" data-tag-pin-count="{{ label.pin_count }}" data-tag-parents="{% for p in label.parents.all %}{{ p.id }}{% if not forloop.last %},{% endif %}{% endfor %}"{% endif %}
+     {% if kind == 'category' %}data-category-id="{{ label.id }}" data-category-name="{{ label.name }}" data-category-color="{{ label.color|default:'' }}" data-category-icon="{{ label.icon|default:'' }}" data-category-custom-icon="{% if label.custom_icon %}{{ label.custom_icon.url }}{% endif %}" data-category-desc="{{ label.description|default:'' }}" data-category-pin-count="{{ label.pin_count }}" data-category-location-count="{{ label.location_count }}" data-category-parents="{% for p in label.parents.all %}{{ p.id }}{% if not forloop.last %},{% endif %}{% endfor %}"{% endif %}
+     {% if kind == 'status' %}data-status-id="{{ label.id }}" data-status-name="{{ label.name }}" data-status-color="{{ label.color|default:'' }}" data-status-icon="{{ label.icon|default:'' }}" data-status-custom-icon="{% if label.custom_icon %}{{ label.custom_icon.url }}{% endif %}" data-status-pin-count="{{ label.pin_count }}" data-status-protected="{{ label.is_protected|yesno:'true,false' }}" data-status-parents="{% for p in label.parents.all %}{{ p.id }}{% if not forloop.last %},{% endif %}{% endfor %}"{% endif %}
+     {% if kind == 'people' %}data-people-id="{{ label.id }}" data-people-name="{{ label.name }}" data-people-color="{{ label.color|default:'' }}" data-people-icon="{{ label.icon|default:'' }}" data-people-pin-count="0" data-people-parents="{% for p in label.parents.all %}{{ p.id }}{% if not forloop.last %},{% endif %}{% endfor %}"{% endif %}
+     {% if kind == 'media' %}data-media-id="{{ label.id }}" data-media-name="{{ label.name }}" data-media-color="{{ label.color|default:'' }}" data-media-icon="{{ label.icon|default:'' }}" data-media-pin-count="0" data-media-parents="{% for p in label.parents.all %}{{ p.id }}{% if not forloop.last %},{% endif %}{% endfor %}"{% endif %}>
+    <div class="tag-card-view ul-section" id="{{ kind }}-view-{{ label.id }}">
+        {% if selectable %}
+        <label class="ul-checkbox-wrap" title="Select">
+            <input type="checkbox" class="{{ select_class }}" data-{{ select_data_name }}-id="{{ label.id }}" data-id="{{ label.id }}" data-name="{{ label.name }}">
+            <span class="ul-checkbox"></span>
+        </label>
+        {% endif %}
+
+        <div class="tag-card-icon" {% if display_color %}style="background:{{ display_color }}22; border-color:{{ display_color }}44;"{% endif %}>
+            {% if label.custom_icon and not label.icon_is_overridden %}
+                <img src="{{ label.custom_icon.url }}" alt="" class="tag-icon-img">
+            {% elif display_icon %}
+                {% if display_icon|is_material_icon %}<i class="material-icons tag-icon-std" {% if display_color %}style="color:{{ display_color }}"{% endif %}>{{ display_icon }}</i>{% else %}<span class="tag-icon-emoji">{{ display_icon }}</span>{% endif %}
+            {% else %}
+                <i class="material-icons tag-icon-std tag-icon-empty">{{ empty_icon }}</i>
+            {% endif %}
+        </div>
+
+        <div class="tag-card-body">
+            <div class="tag-card-name">
+                {{ display_name }}
+                {% if kind != 'people' and not label.profile %}<span class="tag-global-label" data-tooltip="Shared label managed site-wide. You can customize how it looks on your pins without changing it for others." data-tooltip-pos="below">global</span>{% endif %}
+                {% if kind != 'people' and label.is_customized %}<span class="tag-customized-label" data-tooltip="You changed this label's icon, color, or name for your own pins only." data-tooltip-pos="below">custom</span>{% endif %}
+                {% if kind == 'status' and label.is_protected %}<span class="tag-global-label tag-global-label--protected" title="This status cannot be deleted or renamed" aria-label="Protected - cannot be deleted or renamed"><i class="material-icons" aria-hidden="true">lock</i></span>{% endif %}
+                {% if kind == 'people' and label.is_protected %}<span class="tag-global-label tag-global-label--protected"><i class="material-icons" aria-hidden="true">lock</i></span>{% endif %}
+                {% if kind == 'people' and not label.profile %}<span class="tag-global-label">global</span>{% endif %}
+            </div>
+            {% if label.description %}<div class="tag-card-desc">{{ label.description }}</div>{% endif %}
+            <div class="tag-card-meta">
+                {% if kind != 'people' and kind != 'media' %}<span class="tag-stat" title="Pins"><i class="material-symbols-outlined">push_pin</i>{{ label.pin_count }}</span>{% endif %}
+                {% with child_count=label.children.all|length %}{% if child_count %}<span class="tag-stat tag-stat--children" title="{{ child_count }} child labels"><i class="material-symbols-outlined">account_tree</i>{{ child_count }}</span>{% if kind == 'tag' %}<span class="tag-stat tag-stat--total" title="Total pins including sub-tags"><i class="material-symbols-outlined">functions</i>{{ label|tag_total_pins }}</span>{% endif %}{% endif %}{% endwith %}
+                {% if display_color %}<span class="tag-color-dot" style="background:{{ display_color }};" title="{{ display_color }}"></span>{% endif %}
+                {% with parents=label.parents.all %}{% if parents %}<span class="tag-parents-summary"><i class="material-icons" style="font-size:.9rem;">subdirectory_arrow_right</i>{% for parent in parents %}{{ parent.name }}{% if not forloop.last %}, {% endif %}{% endfor %}</span>{% endif %}{% endwith %}
+            </div>
+        </div>
+
+        <div class="tag-card-actions">
+            {% if kind == 'tag' or kind == 'category' or kind == 'status' %}
+            <a class="btn btn--icon" title="View on map" href="{{ label.id|label_map_url }}"><i class="material-symbols-outlined">travel_explore</i></a>
+            {% endif %}
+            {% if kind != 'people' and not label.profile %}
+                <button type="button" class="btn btn--icon{% if label.is_customized %} btn-icon--active{% endif %}" title="Customize your display of this global label" hx-get="{% url 'label.customize' label_kind=kind label_id=label.id %}" hx-target="#label-edit-dialog-body" hx-swap="innerHTML"><i class="material-symbols-outlined">tune</i></button>
+                {% if can_edit_global %}<button type="button" class="btn btn--icon btn-icon--global-edit" title="Edit global label" hx-get="{% url 'label.edit' label_kind=kind label_id=label.id %}" hx-target="#label-edit-dialog-body" hx-swap="innerHTML"><i class="material-symbols-outlined">edit</i></button><form hx-post="{{ delete_url }}" hx-target="{{ rows_target }}" hx-swap="innerHTML" hx-confirm="Delete '{{ label.name }}'? Pins will NOT be deleted." style="display:inline;">{% csrf_token %}<button type="submit" class="btn-icon btn-icon--danger" title="Delete"><i class="material-symbols-outlined">delete</i></button></form>{% endif %}
+            {% elif editable %}
+                <button type="button" class="btn btn--icon" title="Edit" hx-get="{{ edit_url }}" hx-target="{{ edit_target }}" hx-swap="innerHTML"><i class="material-symbols-outlined">edit</i></button>
+                {% if merge_url %}<button type="button" class="btn btn--icon" title="Merge" hx-get="{{ merge_url }}" hx-target="{{ edit_target }}" hx-swap="innerHTML"><i class="material-symbols-outlined">merge</i></button>{% elif kind == 'people' %}<button type="button" class="btn btn--icon" title="Merge" onclick="peopleMergeSingle({{ label.id }}, '{{ label.name|escapejs }}')"><i class="material-symbols-outlined">merge</i></button>{% endif %}
+            {% endif %}
+            {% if deletable %}<form hx-post="{{ delete_url }}" hx-target="{{ rows_target }}" hx-swap="innerHTML" hx-confirm="Delete '{{ label.name }}'? Pins will NOT be deleted." style="display:inline;">{% csrf_token %}<button type="submit" class="btn-icon btn-icon--danger" title="Delete"><i class="material-symbols-outlined">delete</i></button></form>{% endif %}
+        </div>
+    </div>
+</div>

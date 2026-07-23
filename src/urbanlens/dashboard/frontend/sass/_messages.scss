@@ -1,0 +1,2232 @@
+@use 'variables' as *;
+
+// -- Direct messages ------------------------------------------------------------
+// Navbar dropdown (.msg-*) reuses the notification bell shell (.nav-notif /
+// .nav-notif-panel / .notif-badge in _nav.scss); the messages page (.dm-*) is a
+// two-pane inbox with chat bubbles, collapsing to a single pane on mobile.
+
+// -- Shared avatars ---------------------------------------------------------
+
+.msg-avatar {
+    flex-shrink: 0;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: $color-purple-500;
+
+    &--lg {
+        width: 42px;
+        height: 42px;
+    }
+
+    &--sm {
+        width: 24px;
+        height: 24px;
+
+        .msg-avatar-initial {
+            font-size: .68rem;
+        }
+    }
+}
+
+.msg-avatar-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.msg-avatar-initial {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    color: #fff;
+    font-weight: 700;
+    font-size: .95rem;
+    // Fallback so every avatar site that doesn't opt into the distinct-color
+    // palette below (assign_avatar_colors) keeps its previous flat color.
+    background: $color-purple-500;
+}
+
+// Distinct-per-list fallback-avatar palette (see services/avatar_colors.py).
+// Used wherever several default avatars can appear together in one list (a
+// group chat's member dialog/search results) - assign_avatar_colors() picks
+// one of these per person so nobody in that same list looks identical to
+// anyone else in it. PALETTE_SIZE in that module must match this count.
+.avatar-color-0 { background: $color-red-500; }
+.avatar-color-1 { background: $color-pink-500; }
+.avatar-color-2 { background: $color-purple-500; }
+.avatar-color-3 { background: $color-deep-purple-500; }
+.avatar-color-4 { background: $color-indigo-500; }
+.avatar-color-5 { background: $color-blue-500; }
+.avatar-color-6 { background: $color-teal-500; }
+.avatar-color-7 { background: $color-green-500; }
+.avatar-color-8 { background: $color-orange-500; }
+.avatar-color-9 { background: $color-brown-500; }
+
+.msg-unread-pill {
+    flex-shrink: 0;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 9px;
+    background: var(--primary-color);
+    color: #fff;
+    font-size: .7rem;
+    font-weight: 700;
+    line-height: 18px;
+    text-align: center;
+}
+
+// -- Navbar dropdown ----------------------------------------------------------
+// Unread conversations only - reading a thread removes its row on the next
+// open, so every row here is actionable rather than restyled history.
+
+.msg-dropdown {
+    &__header {
+        @include panel-header($spread: true);
+        justify-content: space-between;
+        padding: .85rem 1rem .65rem;
+        position: sticky;
+        top: 0;
+        z-index: 1;
+    }
+
+    &__title {
+        display: inline-flex;
+        align-items: center;
+        gap: .45rem;
+        font-size: .92rem;
+        font-weight: 650;
+        letter-spacing: -.01em;
+        color: var(--ul-grey-8);
+    }
+
+    &__all-link {
+        font-size: .76rem;
+        font-weight: 600;
+        color: var(--primary-color);
+        padding: .25rem .55rem;
+        border-radius: $radius-sm;
+
+        &:hover {
+            background: var(--ul-hover-bg-primary);
+        }
+    }
+}
+
+.msg-dropdown-list {
+    list-style: none;
+    margin: 0;
+    padding: .4rem;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.msg-dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: .7rem;
+    padding: .6rem .65rem;
+    border-radius: $radius-sm;
+    transition: background .15s ease;
+
+    &:hover {
+        background: var(--ul-hover-bg-primary);
+    }
+
+    &__avatar {
+        width: 40px;
+        height: 40px;
+    }
+
+    &__text {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: .18rem;
+    }
+
+    // Two aligned rows: name + time, then preview + unread pill. Keeps the
+    // meta column from wrapping independently of the text it belongs to.
+    &__row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: .6rem;
+        min-width: 0;
+    }
+
+    &__name {
+        min-width: 0;
+        font-size: .86rem;
+        font-weight: 650;
+        color: var(--ul-grey-9);
+        @include truncate;
+    }
+
+    &__name-group {
+        display: flex;
+        align-items: center;
+        gap: .3rem;
+        min-width: 0;
+    }
+
+    &__muted-icon {
+        flex-shrink: 0;
+        font-size: .9rem;
+        color: var(--ul-grey-5);
+    }
+
+    &__preview {
+        min-width: 0;
+        flex: 1;
+        font-size: .78rem;
+        font-weight: 500;
+        color: var(--ul-grey-7);
+        @include truncate;
+    }
+
+    &__time {
+        flex-shrink: 0;
+        font-size: .68rem;
+        font-weight: 600;
+        color: var(--primary-color);
+        white-space: nowrap;
+    }
+}
+
+.msg-empty {
+    padding: 2.1rem 1.25rem 2.4rem;
+    text-align: center;
+    color: var(--ul-grey-6);
+
+    &__icon-wrap {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 52px;
+        height: 52px;
+        border-radius: 50%;
+        background: var(--ul-surface-raised);
+    }
+
+    &__icon {
+        font-size: 1.5rem;
+        color: var(--ul-grey-5);
+    }
+
+    &__text {
+        margin: .7rem 0 .2rem;
+        font-weight: 650;
+        color: var(--ul-grey-8);
+    }
+
+    &__hint {
+        margin: 0;
+        font-size: .8rem;
+    }
+
+    // Translucent green so the accent reads correctly on both themes.
+    &--caught-up {
+        .msg-empty__icon-wrap {
+            background: rgba($color-green-500, .14);
+        }
+
+        .msg-empty__icon {
+            color: $color-green-500;
+        }
+    }
+}
+
+// -- Messages page --------------------------------------------------------------
+
+.dm-page {
+    max-width: 100%;
+    width: 100%;
+    padding: 1.25rem 0;
+    margin: 0;
+
+    @include up($breakpoint-sm) {
+        margin: 0 auto;
+        padding: 1.25rem 1rem 2rem;
+        max-width: 90vw;
+        width: 95rem;
+    }
+}
+
+.dm-layout {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(29rem, 33rem) minmax(0, 1fr);
+    gap: 0;
+    height: calc(100vh - 12rem);
+    min-height: 420px;
+    @include surface-elevated;
+    border-radius: $radius-md;
+    transition: grid-template-columns .15s ease;
+}
+
+// Collapsing gives the thread pane the full width - the sidebar's own
+// contents are clipped via its `overflow: hidden` rather than unmounted, so
+// re-expanding needs no re-fetch. Desktop only (matches the mobile
+// single-pane breakpoint below): on mobile the sidebar already has its own
+// show/hide behavior via .dm-page--thread-open.
+@media (min-width: 721px) {
+    .dm-layout--sidebar-collapsed {
+        grid-template-columns: 0 1fr;
+
+        // .dm-sidebar-expand-btn floats at top:.9rem/left:.6rem relative to
+        // .dm-layout, which lands right on top of the thread header's own
+        // back button/avatar once the sidebar's 0-width column puts the
+        // thread pane flush against that same corner - push the header's
+        // content clear of it instead of overlapping.
+        .dm-thread__header {
+            padding-left: 3rem;
+        }
+    }
+}
+
+// -- Sidebar ------------------------------------------------------------------
+
+.dm-sidebar {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    min-width: 0;
+    overflow: hidden;
+    border-right: 1px solid var(--ul-surface-border);
+
+    &__header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: .5rem;
+        padding: 1rem 1rem .75rem;
+        border-bottom: 1px solid var(--ul-surface-border);
+    }
+
+    &__header-actions {
+        display: flex;
+        align-items: center;
+        gap: .3rem;
+        flex-shrink: 0;
+    }
+
+    &__list {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+    }
+}
+
+.dm-sidebar-collapse-btn,
+.dm-sidebar-expand-btn,
+.dm-sidebar-search-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.9rem;
+    height: 1.9rem;
+    flex-shrink: 0;
+    border: 1px solid var(--ul-surface-border);
+    border-radius: 50%;
+    background: var(--ul-surface-raised);
+    color: var(--ul-grey-7);
+    cursor: pointer;
+    padding: 0;
+
+    i {
+        font-size: 1.1rem;
+    }
+
+    &:hover {
+        background: var(--ul-hover-bg);
+    }
+}
+
+.dm-sidebar-search-btn[aria-expanded="true"] {
+    background: var(--ul-hover-bg-primary);
+    color: var(--primary-color);
+}
+
+// Sits just inside the thread pane's left edge, only shown while collapsed.
+.dm-sidebar-expand-btn {
+    position: absolute;
+    top: .9rem;
+    left: .6rem;
+    z-index: 5;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, .18);
+
+    &[hidden] {
+        display: none;
+    }
+}
+
+.dm-title {
+    display: flex;
+    align-items: center;
+    gap: .45rem;
+    margin: 0;
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--ul-grey-8);
+
+    i {
+        color: var(--primary-color);
+    }
+}
+
+.dm-compose-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    white-space: nowrap;
+
+    i {
+        font-size: 1rem;
+    }
+}
+
+.dm-compose {
+    padding: .75rem 1rem;
+    background: var(--ul-surface-border);
+
+    &__label {
+        display: block;
+        font-size: .72rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+        color: var(--ul-grey-6);
+        margin-bottom: .3rem;
+    }
+
+    &__input {
+        width: 100%;
+        max-width: 100%;
+        box-sizing: border-box;
+    }
+}
+
+// _reset.scss's global `input[type=search]:not(.browser-default)` rule
+// outranks a lone `.dm-compose__input` class on specificity, so the ID is
+// needed here too to reliably win and keep the field inset from the sidebar
+// edge instead of visually touching it.
+#dm-recipient-input.dm-compose__input {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+.dm-recipient-list {
+    list-style: none;
+    margin: .5rem 0 0;
+    padding: 0;
+}
+
+.dm-recipient-item {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    padding: .45rem .5rem;
+    border-radius: $radius-sm;
+    transition: background .12s ease;
+
+    &:hover {
+        background: var(--ul-hover-bg-primary);
+    }
+
+    &__name {
+        flex: 1;
+        font-size: .88rem;
+        font-weight: 600;
+        color: var(--ul-grey-8);
+    }
+
+    &__go {
+        font-size: 1.05rem;
+        color: var(--primary-color);
+    }
+}
+
+// -- Search all conversations (sidebar) ----------------------------------------
+
+.dm-messages-search {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .5rem;
+    padding: .6rem 1rem;
+    background: var(--ul-surface-border);
+
+    &[hidden] {
+        display: none;
+    }
+
+    &__icon {
+        flex-shrink: 0;
+        font-size: 1.05rem;
+        color: var(--ul-grey-4a);
+    }
+}
+
+// _reset.scss's global input styling needs the ID to reliably lose, same as
+// #dm-recipient-input above.
+#dm-messages-search-input.dm-messages-search__input {
+    flex: 1;
+    min-width: 0;
+    width: auto;
+    margin: 0;
+    border: none;
+    box-shadow: none;
+    height: auto;
+    font-size: .85rem;
+    background: transparent;
+    color: var(--ul-grey-9);
+
+    &:focus {
+        border: none;
+        box-shadow: none;
+    }
+
+    &::placeholder {
+        color: var(--ul-grey-4a);
+    }
+}
+
+.dm-messages-search-results {
+    flex-basis: 100%;
+
+    &:empty {
+        display: none;
+    }
+}
+
+.dm-recipient-none {
+    margin: .6rem 0 0;
+    font-size: .8rem;
+    color: var(--ul-grey-6);
+}
+
+// -- Conversation list ----------------------------------------------------------
+
+.dm-conv-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.dm-conv-item {
+    display: flex;
+    align-items: center;
+    gap: .7rem;
+    padding: .8rem 1rem;
+    border-left: 3px solid transparent;
+    border-bottom: 1px solid var(--ul-surface-border);
+    cursor: pointer;
+    transition: background .15s ease, border-color .15s ease;
+
+    &:hover {
+        background: var(--ul-hover-bg);
+    }
+
+    &--active {
+        background: var(--ul-hover-bg-primary);
+        border-left-color: var(--primary-color);
+    }
+
+    &--unread {
+        .dm-conv-item__name,
+        .dm-conv-item__preview {
+            font-weight: 700;
+            color: var(--ul-grey-8);
+        }
+    }
+
+    &__text {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: .15rem;
+    }
+
+    &__top,
+    &__bottom {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: .5rem;
+    }
+
+    &__name {
+        font-size: .92rem;
+        font-weight: 600;
+        color: var(--ul-grey-8);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    &__time {
+        flex-shrink: 0;
+        font-size: .7rem;
+        color: var(--ul-grey-6);
+        white-space: nowrap;
+    }
+
+    &__preview {
+        font-size: .8rem;
+        color: var(--ul-grey-6);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+}
+
+.dm-conv-empty {
+    padding: 2.5rem 1.25rem;
+    text-align: center;
+    color: var(--ul-grey-6);
+
+    i {
+        font-size: 2.2rem;
+        opacity: .4;
+    }
+
+    p {
+        margin: .4rem 0 0;
+    }
+
+    &__hint {
+        font-size: .8rem;
+    }
+}
+
+// -- Thread pane ------------------------------------------------------------------
+
+.dm-thread-pane {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    min-width: 0;
+}
+
+.dm-thread-placeholder {
+    margin: auto;
+    text-align: center;
+    color: var(--ul-grey-6);
+    padding: 2rem;
+
+    i {
+        font-size: 3rem;
+        opacity: .35;
+    }
+
+    p {
+        margin: .5rem 0 0;
+        font-weight: 600;
+        color: var(--ul-grey-7);
+    }
+
+    &__hint {
+        font-size: .82rem;
+        font-weight: 400 !important;
+        color: var(--ul-grey-6) !important;
+    }
+}
+
+.dm-thread {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+
+    &__header {
+        display: flex;
+        align-items: center;
+        gap: .7rem;
+        padding: .7rem 1rem;
+        border-bottom: 1px solid var(--ul-surface-border);
+        flex-shrink: 0;
+    }
+
+    &__back {
+        display: none;
+        align-items: center;
+        color: var(--ul-grey-7);
+        border-radius: $radius-sm;
+        padding: .2rem;
+
+        &:hover {
+            background: var(--ul-hover-bg);
+        }
+    }
+
+    &__who {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+    }
+
+    &__name {
+        font-weight: 700;
+        font-size: .95rem;
+        color: var(--ul-grey-8);
+        border: none;
+        background: none;
+        padding: 0;
+        text-align: left;
+        cursor: pointer;
+        font-family: inherit;
+
+        &:hover {
+            color: var(--primary-color);
+        }
+    }
+
+    &__status {
+        font-size: .72rem;
+        color: $color-orange-600;
+
+        &--online {
+            color: $color-green-600;
+        }
+
+        &--typing {
+            color: var(--ul-grey-6);
+            font-style: italic;
+        }
+    }
+}
+
+// Sits at the far right of the header (the header has no filler element to
+// push against, hence the explicit auto margin here rather than relying on
+// `justify-content: space-between`).
+.dm-thread__search-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.9rem;
+    height: 1.9rem;
+    margin-left: auto;
+    flex-shrink: 0;
+    border: 1px solid var(--ul-surface-border);
+    border-radius: 50%;
+    background: var(--ul-surface-raised);
+    color: var(--ul-grey-7);
+    cursor: pointer;
+    padding: 0;
+
+    i {
+        font-size: 1.1rem;
+    }
+
+    &:hover {
+        background: var(--ul-hover-bg);
+    }
+
+    &[aria-expanded="true"] {
+        background: var(--ul-hover-bg-primary);
+        color: var(--primary-color);
+    }
+}
+
+.dm-thread-search {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .5rem;
+    padding: .5rem 1rem;
+    background: var(--ul-surface-border);
+    flex-shrink: 0;
+
+    &[hidden] {
+        display: none;
+    }
+
+    &__icon {
+        flex-shrink: 0;
+        font-size: 1.05rem;
+        color: var(--ul-grey-4a);
+    }
+
+    &__close {
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px;
+        height: 24px;
+        border: none;
+        border-radius: 50%;
+        background: none;
+        color: var(--ul-grey-4a);
+        cursor: pointer;
+
+        &:hover {
+            background: var(--ul-hover-bg);
+        }
+
+        i {
+            font-size: 1.1rem;
+        }
+    }
+}
+
+// _reset.scss's global input styling needs the ID to reliably lose, same as
+// #dm-recipient-input above.
+#dm-thread-search-input.dm-thread-search__input {
+    flex: 1;
+    min-width: 0;
+    width: auto;
+    margin: 0;
+    border: none;
+    box-shadow: none;
+    height: auto;
+    font-size: .85rem;
+    background: transparent;
+    color: var(--ul-grey-9);
+
+    &:focus {
+        border: none;
+        box-shadow: none;
+    }
+
+    &::placeholder {
+        color: var(--ul-grey-4a);
+    }
+}
+
+.dm-thread-search-results {
+    flex-basis: 100%;
+    max-height: 40vh;
+    overflow-y: auto;
+
+    &:empty {
+        display: none;
+    }
+}
+
+// -- Shared results list (search this conversation / search all conversations) --
+
+.dm-search-result-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.dm-search-result {
+    display: flex;
+    align-items: center;
+    gap: .65rem;
+    padding: .4rem .5rem;
+    border-radius: $radius-sm;
+    color: inherit;
+    text-decoration: none;
+
+    &:hover,
+    &:focus-visible {
+        background: var(--ul-hover-bg-primary);
+        outline: none;
+    }
+}
+
+.dm-search-result__icon {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--ul-surface-raised);
+    color: var(--ul-grey-5);
+
+    .material-symbols-outlined {
+        font-size: 17px;
+    }
+}
+
+.dm-search-result__body {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: .05rem;
+}
+
+.dm-search-result__title {
+    font-weight: 600;
+    font-size: .85rem;
+    color: var(--ul-grey-9);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.dm-search-result__snippet {
+    font-size: .78rem;
+    color: var(--ul-grey-5a);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.dm-search-result__date {
+    flex-shrink: 0;
+    font-size: .7rem;
+    color: var(--ul-grey-4a);
+    font-variant-numeric: tabular-nums;
+}
+
+.dm-search-empty {
+    padding: .75rem .6rem;
+    text-align: center;
+    color: var(--ul-grey-5a);
+    font-size: .8rem;
+
+    i {
+        font-size: 1.4rem;
+        color: var(--ul-grey-4a);
+    }
+
+    &__hint {
+        font-size: .72rem;
+        color: var(--ul-grey-4a);
+        margin-top: .2rem;
+    }
+}
+
+#dm-messages {
+    list-style: none;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    margin: 0;
+    padding: 1rem 1.1rem;
+    display: flex;
+    flex-direction: column;
+    gap: .55rem;
+}
+
+.dm-load-older {
+    align-self: center;
+    padding: .3rem 0 .5rem;
+}
+
+.dm-load-older__spinner {
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+    font-size: .75rem;
+    color: var(--ul-grey-6);
+
+    .material-symbols-outlined {
+        font-size: 1rem;
+        animation: dm-load-older-spin 1s linear infinite;
+    }
+}
+
+@keyframes dm-load-older-spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.dm-day-sep {
+    align-self: center;
+    margin: .6rem 0 .35rem;
+    font-size: .7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: var(--ul-grey-6);
+
+    span {
+        padding: .15rem .6rem;
+        border-radius: $radius-full;
+        background: var(--ul-surface-raised);
+    }
+}
+
+.dm-key-change-notice {
+    align-self: center;
+    display: flex;
+    align-items: center;
+    gap: .3rem;
+    margin: .3rem 0;
+    padding: .75rem 1rem;
+    border-radius: $radius-full;
+    background: rgba(0, 0, 0, 0.3);
+    color: var(--ul-grey-6);
+    font-size: .72rem;
+    font-weight: 600;
+    text-align: center;
+    max-width: 90%;
+
+    i {
+        font-size: .95rem;
+    }
+}
+
+// A box-shadow ring (not background-color) so this never fights the bubble's
+// own background - a solid color for `--them`, a gradient for `--own`.
+@keyframes dm-message-highlight {
+    from { box-shadow: 0 0 0 3px var(--ul-hover-bg-primary); }
+    to { box-shadow: 0 0 0 3px transparent; }
+}
+
+.dm-bubble {
+    --lock-margin: 1rem;
+    position: relative;
+    max-width: min(75%, 34rem);
+    // Symmetric, roomier padding gives the relaxed "text message" feel; the
+    // action button and timestamp now live *outside* the bubble (revealed on
+    // hover/tap), so no extra right inset is reserved for them.
+    padding: 0.75rem 1.2rem;
+    border-radius: 18px;
+    font-size: .92rem;
+    line-height: 1.45;
+    display: flex;
+    flex-direction: column;
+    word-break: break-word;
+    transition: margin-bottom .12s ease;        
+
+
+    // A message that directly continues the previous bubble (same sender,
+    // same day, sent within MESSAGE_GROUP_GAP_SECONDS) sits closer to it and
+    // loses the rounded corner on the side that touches it - the "message
+    // burst" look other chat apps use instead of a string of identical,
+    // evenly-spaced bubbles.
+    &--grouped {
+        margin-top: -.35rem;
+    }
+
+    &--tombstone {
+        opacity: .65;
+        font-style: italic;
+    }
+
+    // Briefly drawn attention to after jumping here from a search result.
+    &--highlight {
+        animation: dm-message-highlight 2s ease-out;
+    }
+
+    // Floating "more actions" affordance, tucked just outside the bubble on its
+    // outer edge. Hidden until the bubble is hovered, focused, or tapped
+    // (.dm-bubble--peek) so a resting conversation stays clean.
+    &__menu-btn {
+        position: absolute;
+        top: 50%;
+        transform: translateY(-50%);
+        // Above the map preview's isolated stacking context (see
+        // .comment-map-preview) and above neighboring grouped bubbles so it's
+        // never painted over when it floats past this bubble's own edge.
+        z-index: 2;
+        width: 1.5rem;
+        height: 1.5rem;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid var(--ul-surface-border);
+        border-radius: 50%;
+        background: var(--ul-surface-raised);
+        color: var(--ul-grey-7);
+        cursor: pointer;
+        padding: 0;
+        line-height: 0;
+        opacity: 0;
+        pointer-events: none;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, .12);
+        transition: opacity .12s ease;
+
+        &:hover {
+            background: var(--ul-hover-bg);
+        }
+
+        i {
+            font-size: 1rem;
+        }
+    }
+
+    &__tombstone {
+        display: inline-flex;
+        align-items: center;
+        gap: .3rem;
+        font-size: .85rem;
+
+        i {
+            font-size: 1rem;
+        }
+    }
+
+    // Timestamp sits below the bubble in the inter-message gap and only fades in
+    // on hover/tap, matching the chat apps users are used to.
+    &__time {
+        position: absolute;
+        bottom: -.9rem;
+        z-index: 2;
+        font-size: .64rem;
+        color: var(--ul-grey-6);
+        white-space: nowrap;
+        margin: 0;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity .12s ease;
+        display: inline-flex;
+        align-items: center;
+        gap: .15rem;
+    }
+
+    &__receipt {
+        font-size: .8rem;
+        opacity: .8;
+
+        &--read {
+            color: $color-green-600;
+            opacity: 1;
+        }
+    }
+
+    // Reveal the action button + timestamp on hover, keyboard focus, or tap.
+    // Grouped bubbles sit almost flush against each other (margin-top: -.35rem
+    // above), leaving no room for the floating time/menu-btn/reaction-add
+    // affordances (which sit up to 1rem below the bubble's own box) without
+    // overlapping the next bubble - so pushing the following sibling down via
+    // margin-bottom (added on top of #dm-messages' flex `gap`) makes room for
+    // them only while they're actually visible.
+    &:hover,
+    &:focus-within,
+    &--peek {
+        margin-bottom: 1.1rem;
+
+        .dm-bubble__menu-btn {
+            opacity: .9;
+            pointer-events: auto;
+        }
+
+        .dm-bubble__time {
+            opacity: .85;
+        }
+    }
+
+    // Invisible hover-bridge spanning the gap between the bubble's own edge
+    // and the menu button floating just outside it (see __menu-btn above) -
+    // without this, moving the cursor from the bubble's text toward the
+    // button crosses a dead zone with no hover target, losing :hover on the
+    // bubble (and so the button's opacity/pointer-events) before the cursor
+    // ever arrives - the button could be seen but never actually clicked.
+    &::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 1.85rem;
+    }
+
+    &--them {
+        align-self: flex-start;
+        background: rgba(0, 0, 0, 0.4);
+        color: var(--ul-grey-8);
+        border-bottom-left-radius: 5px;
+        left: var(--lock-margin);
+
+        &.dm-bubble--grouped {
+            border-top-left-radius: 6px;
+        }
+
+        &::before {
+            left: auto;
+            right: -1.85rem;
+        }
+
+        .dm-bubble__menu-btn {
+            left: auto;
+            right: -1.85rem;
+        }
+
+        .dm-bubble__time {
+            right: auto;
+            left: .35rem;
+        }
+
+        i {
+            left: -1.25rem;
+        }
+    }
+
+    &--own {
+        align-self: flex-end;
+        color: #fff;
+        border-bottom-right-radius: 5px;
+        right: var(--lock-margin);
+        background: rgba(6, 32, 73, 0.8);
+
+        &.dm-bubble--grouped {
+            border-top-right-radius: 6px;
+        }
+
+        &::before {
+            right: auto;
+            left: -1.85rem;
+        }
+
+        .dm-bubble__menu-btn {
+            right: auto;
+            left: -1.85rem;
+        }
+
+        .dm-bubble__time {
+            left: auto;
+            right: .35rem;
+        }
+        
+        i {
+            right: -1.25rem;
+        }
+    }
+
+    // Preserves line breaks (Shift+Enter in the composer) - without this the
+    // browser's default whitespace collapsing renders every message as one
+    // run-on line despite the newline characters surviving all the way
+    // through storage and back.
+    &__body {
+        white-space: pre-wrap;
+    }
+
+    &__images {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .3rem;
+        margin: .2rem 0;
+    }
+
+    &__image {
+        width: 120px;
+        height: 120px;
+        object-fit: cover;
+        border-radius: 10px;
+        display: block;
+    }
+}
+
+.dm-image-consent {
+    display: flex;
+    flex-direction: column;
+    gap: .4rem;
+    margin: .2rem 0;
+    padding: .5rem;
+    border-radius: 10px;
+    background: rgba(0, 0, 0, .08);
+    font-size: .82rem;
+
+    &--rejected {
+        flex-direction: row;
+        align-items: center;
+        gap: .4rem;
+        opacity: .8;
+    }
+
+    &__blur {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .3rem;
+    }
+
+    &__prompt {
+        margin: 0;
+    }
+
+    &__actions {
+        display: flex;
+        gap: .4rem;
+
+        form {
+            margin: 0;
+        }
+    }
+}
+
+// Was an <a target="_blank">; now a <button> that opens the in-page
+// lightbox instead, so the native button chrome needs resetting away.
+.dm-bubble__image-link {
+    display: block;
+    padding: 0;
+    border: none;
+    background: none;
+    cursor: pointer;
+}
+
+.dm-bubble__image--blurred {
+    filter: blur(20px) brightness(0.8);
+    pointer-events: none;
+}
+
+// The DM lightbox skips the shared gallery's side panel (see index.html's
+// comment on #dm-lightbox), so its column needs its own flex direction
+// instead of .lightbox-inner's default row layout.
+.dm-lightbox-inner {
+    flex-direction: column;
+}
+
+.dm-lightbox-thumbs {
+    display: flex;
+    gap: .5rem;
+    padding: .6rem .8rem;
+    overflow-x: auto;
+    background: rgba(255, 255, 255, .03);
+    border-top: 1px solid rgba(255, 255, 255, .08);
+
+    &[hidden] { display: none; }
+}
+
+.dm-lightbox-thumb {
+    flex: 0 0 auto;
+    width: 52px;
+    height: 52px;
+    padding: 0;
+    border: 2px solid transparent;
+    border-radius: 6px;
+    overflow: hidden;
+    cursor: pointer;
+    opacity: .55;
+    transition: opacity .15s, border-color .15s;
+
+    img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+    }
+
+    &:hover { opacity: .8; }
+
+    &.dm-lightbox-thumb--active {
+        opacity: 1;
+        border-color: var(--primary-color);
+    }
+}
+
+// .dm-bubble sizes itself to its content (the align-self: flex-start/flex-end
+// above overrides #dm-messages' default flex stretch), so the shared
+// .comment-map-preview/.comment-map-thumb pair - which size themselves via
+// percentage widths - has no definite container width to resolve against and
+// collapses toward zero. Give it an explicit width here instead.
+.dm-map-card {
+    position: relative;
+    width: min(280px, 60vw);
+
+    .comment-map-preview {
+        width: 100%;
+    }
+
+    // The shared "Expand map" button already claims the bottom-right corner
+    // of the thumbnail; move it aside so the DM-only save/edit actions can
+    // take that corner instead, matching where chat apps put a save affordance.
+    .comment-map-expand-btn {
+        right: auto;
+        left: .5rem;
+    }
+}
+
+.dm-map-card__title-link {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    margin: .1rem 0 .35rem;
+    padding: 0;
+    border: none;
+    background: none;
+    color: inherit;
+    font-weight: 700;
+    font-size: .85rem;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    cursor: pointer;
+
+    i {
+        font-size: 1rem;
+        text-decoration: none;
+    }
+
+    &:hover {
+        opacity: .85;
+    }
+}
+
+.dm-map-card__actions {
+    position: absolute;
+    bottom: .5rem;
+    right: .5rem;
+    z-index: 1;
+    display: flex;
+    gap: .35rem;
+}
+
+.dm-map-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.9rem;
+    height: 1.9rem;
+    padding: 0;
+    border: 1px solid var(--ul-grey-1a);
+    border-radius: 50%;
+    background: rgba(255, 255, 255, .9);
+    color: var(--ul-grey-7);
+    cursor: pointer;
+    backdrop-filter: blur(4px);
+    transition: background .1s;
+
+    .material-symbols-outlined {
+        font-size: 1.05rem;
+    }
+
+    &:hover {
+        background: #fff;
+    }
+}
+
+.dm-map-removed-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    margin: .2rem 0;
+    font-size: .8rem;
+    font-style: italic;
+    color: var(--ul-grey-6);
+
+    .material-symbols-outlined { font-size: 1rem; }
+}
+
+.dm-composer-attachments {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .4rem;
+    align-items: center;
+    padding: 0 1rem;
+
+    &:empty {
+        display: none;
+    }
+}
+
+.dm-composer-attachment-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .4rem;
+
+    &:empty {
+        display: none;
+    }
+}
+
+.dm-composer-attachment-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    padding: .2rem .5rem;
+    border-radius: $radius-full;
+    background: var(--ul-surface-raised);
+    font-size: .78rem;
+
+    // A plain-class `display` rule otherwise beats the browser's default
+    // `[hidden] { display: none }` (equal specificity, author sheet wins) -
+    // this element is toggled via the `hidden` attribute from JS, so it needs
+    // its own higher-specificity override to actually disappear.
+    &[hidden] {
+        display: none;
+    }
+
+    img {
+        width: 28px;
+        height: 28px;
+        object-fit: cover;
+        border-radius: 6px;
+    }
+
+    .dm-map-chip-thumb {
+        display: inline-block;
+        width: 28px;
+        height: 28px;
+        border-radius: 6px;
+        overflow: hidden;
+        pointer-events: none; // preview only, matches .comment-map-thumb
+        background: var(--ul-surface-raised);
+    }
+
+    button {
+        border: none;
+        background: none;
+        cursor: pointer;
+        font-size: 1rem;
+        line-height: 1;
+        color: var(--ul-grey-6);
+        padding: 0 .15rem;
+    }
+
+    i {
+        font-size: 1rem;
+    }
+}
+
+.dm-reactions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .25rem;
+    margin-top: .3rem;
+    position: relative;
+
+    &:empty {
+        margin-top: 0;
+    }
+}
+
+.dm-reaction-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: .2rem;
+    padding: .1rem .4rem;
+    border-radius: $radius-full;
+    border: 1px solid var(--ul-surface-raised-border);
+    background: var(--ul-surface-raised);
+    font-size: .78rem;
+    cursor: pointer;
+    color: inherit;
+
+    &--mine {
+        border-color: $primary-color;
+        background: rgba($primary-color, .15);
+    }
+}
+
+// Floating outside the bubble (overlapping its bottom edge, like the menu
+// button and timestamp) rather than sitting inline in the flow keeps a
+// resting message compact - it only takes up space once revealed on hover,
+// same as most chat apps' reaction trigger.
+.dm-reaction-add-wrap {
+    position: absolute;
+    bottom: -1rem;
+    z-index: 2;
+    display: inline-flex;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .12s ease;
+}
+
+// Anchored to the OPPOSITE horizontal corner from .dm-bubble__time (which
+// floats at left/right: .35rem on this same side, see &__time above) rather
+// than the same corner - both elements are only ever revealed together (see
+// the :hover rule below and __time's own :hover rule), and previously both
+// floated at left/right: 0 on the *same* side, guaranteeing an overlap
+// between the timestamp text and this button on every hover. Opposite
+// corners of the bubble's own width give real, guaranteed clearance without
+// depending on either element's exact rendered width (narrow enough bubbles -
+// a one-character message - could still bring them close; not otherwise
+// addressed here).
+.dm-bubble--them .dm-reaction-add-wrap {
+    right: 0;
+}
+
+.dm-bubble--own .dm-reaction-add-wrap {
+    left: 0;
+}
+
+.dm-bubble:hover .dm-reaction-add-wrap,
+.dm-bubble:focus-within .dm-reaction-add-wrap,
+.dm-bubble--peek .dm-reaction-add-wrap {
+    opacity: .9;
+    pointer-events: auto;
+}
+
+.dm-reaction-add-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.5rem;
+    height: 1.5rem;
+    border: 1px solid var(--ul-surface-border);
+    border-radius: 50%;
+    background: var(--ul-surface-raised);
+    cursor: pointer;
+    padding: 0;
+    color: var(--ul-grey-7);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, .12);
+    transition: background .12s ease;
+
+    &:hover {
+        background: var(--ul-hover-bg);
+    }
+
+    i {
+        font-size: .95rem;
+    }
+}
+
+.dm-emoji-popover {
+    position: absolute;
+    z-index: 20;
+    bottom: 100%;
+    left: 0;
+    margin-bottom: .3rem;
+    display: grid;
+
+    &[hidden] {
+        display: none;
+    }
+
+    grid-template-columns: repeat(6, 1fr);
+    gap: .2rem;
+    padding: .4rem;
+    border-radius: 10px;
+    border: 1px solid var(--ul-surface-raised-border);
+    background: var(--ul-surface-raised);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, .15);
+    width: max-content;
+    max-width: 22rem;
+
+    button {
+        border: none;
+        background: none;
+        cursor: pointer;
+        font-size: 1.1rem;
+        padding: .2rem;
+        border-radius: 6px;
+
+        &:hover {
+            background: var(--ul-hover-bg);
+        }
+    }
+
+    &--composer {
+        bottom: auto;
+        top: 100%;
+        margin-bottom: 0;
+        margin-top: .3rem;
+    }
+}
+
+.dm-bubble-menu {
+    position: absolute;
+    top: 1.6rem;
+    right: .1rem;
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    min-width: 150px;
+    padding: .25rem;
+    @include surface($radius: 10px, $rung: null);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, .18);
+
+    &[hidden] {
+        display: none;
+    }
+
+    form {
+        display: contents;
+    }
+
+    &__item {
+        display: flex;
+        align-items: center;
+        gap: .4rem;
+        padding: .4rem .6rem;
+        border: none;
+        background: none;
+        text-align: left;
+        cursor: pointer;
+        border-radius: 6px;
+        font-size: .85rem;
+        color: inherit;
+
+        &:hover {
+            background: var(--ul-hover-bg);
+        }
+
+        &--danger {
+            color: $danger-color;
+        }
+
+        i {
+            font-size: 1rem;
+        }
+    }
+}
+
+.dm-quote-box {
+    display: flex;
+    flex-direction: column;
+    gap: .1rem;
+    padding: .3rem .5rem;
+    margin-bottom: .3rem;
+    border-left: 3px solid currentColor;
+    border-radius: 4px;
+    background: rgba(0, 0, 0, .08);
+    font-size: .78rem;
+    opacity: .9;
+
+    &__author {
+        font-weight: 700;
+    }
+
+    &__snippet {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+}
+
+.dm-reply-preview {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .5rem;
+    padding: .4rem 1rem;
+    background: var(--ul-surface-border);
+    font-size: .8rem;
+
+    &[hidden] {
+        display: none;
+    }
+
+    &__body {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+    }
+
+    &__label {
+        color: var(--ul-grey-6);
+    }
+
+    &__snippet {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    button {
+        flex-shrink: 0;
+        border: none;
+        background: none;
+        cursor: pointer;
+        font-size: 1.1rem;
+        color: var(--ul-grey-6);
+    }
+}
+
+// Positioned dynamically by JS (top/left set to land just under the "@" the
+// user typed, mirroring the textarea's own text metrics) rather than docked
+// to a fixed corner - .dm-composer is its positioned ancestor.
+.dm-mention-menu {
+    position: absolute;
+    z-index: 20;
+    min-width: 200px;
+    max-width: min(280px, 90%);
+    display: flex;
+    flex-direction: column;
+    padding: .3rem;
+    @include surface($radius: 10px, $rung: null);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, .18);
+
+    &__item {
+        display: flex;
+        align-items: center;
+        gap: .5rem;
+        padding: .5rem .6rem;
+        border: none;
+        background: none;
+        text-align: left;
+        cursor: pointer;
+        border-radius: 6px;
+        font-size: .85rem;
+        color: inherit;
+
+        &:hover,
+        &.is-active {
+            background: var(--ul-hover-bg);
+        }
+
+        i {
+            font-size: 1.05rem;
+            color: var(--ul-grey-6);
+        }
+    }
+
+    &__empty {
+        padding: .5rem .6rem;
+        font-size: .8rem;
+        color: var(--ul-grey-6);
+    }
+}
+
+.dm-share-dialog {
+    width: min(420px, 90vw);
+    max-height: 80vh;
+    padding: 0;
+    @include surface($radius: 12px);
+    border: none;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, .25);
+
+    .dialog-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: .8rem 1rem;
+        border-bottom: 1px solid var(--ul-surface-border);
+        font-weight: 700;
+    }
+
+    .dialog-close {
+        border: none;
+        background: none;
+        cursor: pointer;
+        color: inherit;
+    }
+}
+
+.dm-share-step {
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: .6rem;
+
+    &[hidden] {
+        display: none;
+    }
+}
+
+.dm-share-filter {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.dm-share-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    max-height: 320px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: .2rem;
+}
+
+.dm-share-pick-btn {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    width: 100%;
+    padding: .5rem .6rem;
+    border: none;
+    background: none;
+    text-align: left;
+    cursor: pointer;
+    border-radius: 8px;
+    font-size: .88rem;
+    color: inherit;
+    text-decoration: none;
+
+    &:hover {
+        background: var(--ul-hover-bg);
+    }
+}
+
+.dm-share-empty {
+    color: var(--ul-grey-6);
+    font-size: .85rem;
+    text-align: center;
+    padding: 1rem 0;
+}
+
+.dm-share-confirm-summary {
+    margin: 0;
+    font-size: .9rem;
+    opacity: .85;
+}
+
+.dm-share-card {
+    margin-top: .3rem;
+    padding: .5rem .6rem;
+    border-radius: 10px;
+    background: rgba(0, 0, 0, .08);
+    font-size: .82rem;
+    display: flex;
+    flex-direction: column;
+    gap: .35rem;
+
+    &__row {
+        display: flex;
+        align-items: center;
+        gap: .4rem;
+    }
+
+    &__profile {
+        gap: .5rem;
+    }
+
+    &__label {
+        font-weight: 700;
+        color: inherit;
+    }
+
+    &__status {
+        margin: 0;
+        opacity: .85;
+        display: flex;
+        align-items: center;
+        gap: .3rem;
+    }
+
+    &__status--link {
+        color: inherit;
+        text-decoration: none;
+        cursor: pointer;
+
+        &:hover {
+            opacity: 1;
+            text-decoration: underline;
+        }
+    }
+
+    &__actions {
+        display: flex;
+        gap: .4rem;
+    }
+}
+
+// Detected coordinates/address footer under a bubble (recipient-only):
+// either an "Add to map" action or the recipient's own pin-name reference.
+.dm-location-mention {
+    margin-top: .3rem;
+    padding: .4rem .6rem;
+    border-radius: 10px;
+    background: rgba(0, 0, 0, .08);
+    font-size: .8rem;
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    flex-wrap: wrap;
+
+    .material-symbols-outlined {
+        font-size: 1rem;
+    }
+
+    &__place {
+        display: flex;
+        align-items: center;
+        gap: .3rem;
+        opacity: .85;
+        word-break: break-all;
+    }
+
+    &__pin-link {
+        display: flex;
+        align-items: center;
+        gap: .3rem;
+        color: inherit;
+        text-decoration: none;
+
+        &:hover {
+            text-decoration: underline;
+        }
+    }
+
+    &__add-btn {
+        margin-left: auto;
+    }
+}
+
+.dm-thread-empty {
+    padding: 0 1.1rem 1rem;
+    margin: 0;
+    font-size: .82rem;
+    color: var(--ul-grey-6);
+    text-align: center;
+}
+
+div.container .dm-composer {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: .35rem;
+    padding: .6rem 1rem .7rem;
+    flex-shrink: 0;
+
+    &__input-row {
+        display: flex;
+        align-items: flex-end;
+        gap: .5rem;
+    }
+
+    // Full-width, auto-expanding text box - the attach/mention/emoji icons
+    // live in their own row below (see &__toolbar) so this never has to
+    // share horizontal space with them.
+    textarea {
+        flex: 1;
+        min-width: 0;
+        resize: none;
+        max-height: 160px;
+        overflow-y: auto;
+        box-sizing: border-box;
+        padding: .5rem .8rem;
+        border: 1px solid var(--ul-surface-raised-border);
+        border-radius: 18px;
+        background: rgba(0, 0, 0, 0.3);
+        color: inherit;
+        font-family: inherit;
+        font-size: .92rem;
+        line-height: 1.35;
+
+        &:focus {
+            outline: none;
+            border-color: var(--primary-color);
+        }
+    }
+
+    &__send {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+
+        i {
+            font-size: 1.15rem;
+        }
+    }
+
+    &__toolbar {
+        display: flex;
+        align-items: center;
+        gap: .1rem;
+        margin-top: 0.1rem;
+    }
+
+    &__attach {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        padding: .4rem;
+
+        i {
+            font-size: 1.2rem;
+        }
+    }
+}
+
+.dm-composer-locked {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: .4rem;
+    margin: 0;
+    padding: .85rem 1rem;
+    border-top: 1px solid var(--ul-surface-border);
+    font-size: .84rem;
+    color: var(--ul-grey-6);
+
+    i {
+        font-size: 1rem;
+    }
+}
+
+// -- Mobile: single pane, toggled by .dm-page--thread-open -------------------------
+
+@media (max-width: 720px) {
+    .dm-layout {
+        grid-template-columns: 1fr;
+        height: calc(100vh - 9rem);
+    }
+
+    // The collapse toggle only makes sense in the two-pane desktop layout -
+    // mobile already shows one pane at a time via .dm-page--thread-open.
+    .dm-sidebar-collapse-btn,
+    .dm-sidebar-expand-btn {
+        display: none;
+    }
+
+    .dm-sidebar {
+        border-right: none;
+    }
+
+    .dm-thread-pane {
+        display: none;
+    }
+
+    .dm-thread__back {
+        display: inline-flex;
+    }
+
+    .dm-page--thread-open {
+        .dm-sidebar {
+            display: none;
+        }
+
+        .dm-thread-pane {
+            display: flex;
+        }
+    }
+}
+
+// -- Group chats --------------------------------------------------------------
+
+.msg-avatar--group {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--ul-surface-alt, #eef2ff);
+    color: var(--ul-primary-color);
+
+    .material-symbols-outlined {
+        font-size: 1.35rem;
+    }
+}
+
+.dm-bubble__sender {
+    display: block;
+    font-size: .72rem;
+    font-weight: 700;
+    color: var(--ul-primary-color);
+    margin-bottom: .15rem;
+}
+
+.dm-thread__status-lock {
+    font-size: .8rem;
+    vertical-align: text-bottom;
+}
+
+.dm-group-rename {
+    display: flex;
+    gap: .5rem;
+    align-items: center;
+    padding: .5rem .9rem;
+    border-bottom: 1px solid var(--ul-border, #e5e7eb);
+
+    &[hidden] {
+        display: none;
+    }
+}
+
+.dm-group-rename__input {
+    flex: 1;
+    padding: .45rem .65rem;
+    border: 1px solid var(--ul-border, #d1d5db);
+    border-radius: 8px;
+    background: var(--ul-surface, #fff);
+    color: var(--text, #1f2937);
+    font-size: .9rem;
+}
+
+.dm-group-member-list {
+    list-style: none;
+    margin: 0 0 1rem;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: .4rem;
+    max-height: 16rem;
+    overflow-y: auto;
+}
+
+.dm-group-member-row {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+
+    .dm-group-member-row__name {
+        flex: 1;
+        font-size: .9rem;
+        font-weight: 600;
+    }
+
+    .dm-group-member-row__badge {
+        margin-left: .4rem;
+        padding: .05rem .45rem;
+        border-radius: 999px;
+        background: var(--ul-surface-alt, #eef2ff);
+        color: var(--ul-primary-color);
+        font-size: .65rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .05em;
+    }
+}
+
+.dm-group-add-members {
+    border-top: 1px solid var(--ul-border, #e5e7eb);
+    padding-top: .85rem;
+
+    .dm-group-add-members__title {
+        margin: 0 0 .2rem;
+        font-size: .9rem;
+    }
+
+    .dm-group-add-members__hint {
+        margin: 0 0 .6rem;
+        font-size: .75rem;
+        color: var(--text-muted, #6b7280);
+    }
+}
+
+.dm-group-picked-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .35rem;
+    margin: .5rem 0;
+
+    &:empty {
+        margin: 0;
+    }
+}
+
+.dm-group-picked-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    padding: .25rem .35rem .25rem .6rem;
+    border-radius: 999px;
+    background: var(--ul-surface-alt, #eef2ff);
+    color: var(--ul-primary-color);
+    font-size: .8rem;
+    font-weight: 600;
+
+    button {
+        border: none;
+        background: transparent;
+        color: inherit;
+        font-size: 1rem;
+        line-height: 1;
+        cursor: pointer;
+        padding: 0 .25rem;
+    }
+}
+
+.dm-group-member-pick {
+    position: relative;
+
+    .dm-group-member-pick__add {
+        margin-left: auto;
+        font-size: 1.05rem;
+        opacity: .55;
+    }
+}
+
+.dm-group-create .dm-compose__label {
+    margin-top: .5rem;
+}
+
+.dm-group-create__submit {
+    margin-top: .6rem;
+    width: 100%;
+}

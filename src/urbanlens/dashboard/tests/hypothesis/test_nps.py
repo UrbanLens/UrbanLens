@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.apis.parks.nps.map import NPSMapGateway
 from urbanlens.dashboard.services.apis.parks.nps.parks import NPSGateway
 
@@ -38,7 +38,7 @@ def _parks_gateway() -> NPSGateway:
     return NPSGateway(api_key="test-key", session=MagicMock())
 
 
-class CheckCoordinatesWithinParkTests(TestCase):
+class CheckCoordinatesWithinParkTests(SimpleTestCase):
     """check_coordinates_within_park returns the containing unit's lower-cased code."""
 
     def test_returns_lowercased_unit_code_for_containing_park(self):
@@ -73,7 +73,7 @@ class CheckCoordinatesWithinParkTests(TestCase):
         self.assertEqual(params["geometry"], "-110.5,44.6")
 
 
-class FindParkContainingLocationTests(TestCase):
+class FindParkContainingLocationTests(SimpleTestCase):
     """find_park_containing_location returns details only for a park the point is inside."""
 
     def test_returns_none_and_skips_lookup_outside_usa(self):
@@ -114,8 +114,26 @@ class FindParkContainingLocationTests(TestCase):
 
         self.assertIsNone(result)
 
+    def test_returns_none_without_a_traceback_when_rate_limited(self):
+        """A live pin-detail view's unpaced lookup can legitimately exceed NPS's
+        tight (10/min) budget - this must degrade the same way any other
+        boundary-lookup failure does (empty panel, no propagated exception),
+        just logged at a level that doesn't read as a crash (see the comment
+        at the call site)."""
+        from urbanlens.dashboard.services.rate_limiter import RateLimitExceededError
 
-class GetParkTests(TestCase):
+        gw = _parks_gateway()
+        with (
+            patch.object(NPSMapGateway, "check_coordinates_within_park", side_effect=RateLimitExceededError("nps")),
+            self.assertLogs("urbanlens.dashboard.services.apis.parks.nps.parks", level="WARNING") as logs,
+        ):
+            result = gw.find_park_containing_location(*_YELLOWSTONE)
+
+        self.assertIsNone(result)
+        self.assertTrue(any("rate limit" in message.lower() for message in logs.output))
+
+
+class GetParkTests(SimpleTestCase):
     """get_park fetches a single park's detail by park code."""
 
     def test_returns_first_park_on_success(self):

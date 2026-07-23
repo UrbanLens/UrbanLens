@@ -1,0 +1,86 @@
+<script>
+(function () {
+    // Register HTMX listeners once; re-open the dialog after a label add/remove swap.
+    if (window._labelDialogJsLoaded) return;
+    window._labelDialogJsLoaded = true;
+
+    var _pendingDlgId = null;
+    document.body.addEventListener('htmx:beforeRequest', function (e) {
+        var el = e.target;
+        if (!el || !el.closest) return;
+        var dlg = el.closest('dialog.tag-add-dialog');
+        if (dlg && dlg.open) _pendingDlgId = dlg.id;
+    });
+    document.body.addEventListener('htmx:afterSwap', function () {
+        if (!_pendingDlgId) return;
+        var dlg = document.getElementById(_pendingDlgId);
+        if (dlg) { dlg.showModal(); window._initLabelDialog(dlg); }
+        _pendingDlgId = null;
+    });
+}());
+
+if (!window._initLabelDialog) {
+    window._initLabelDialog = function _initLabelDialog(dlg) {
+        if (!dlg) return;
+        var tabs   = dlg.querySelectorAll('.tad-tab');
+        var search = dlg.querySelector('.dialog-search');
+        var items  = function () { return dlg.querySelectorAll('.tag-dialog-item'); };
+        var pills  = function () { return dlg.querySelectorAll('.tad-kind-pill'); };
+        var active = 'all';
+
+        function applyFilter() {
+            var q = search ? search.value.toLowerCase().trim() : '';
+            items().forEach(function (el) {
+                var nameOk = !q || el.dataset.name.includes(q);
+                var kindOk = active === 'all' || el.dataset.kind === active;
+                el.hidden = !(nameOk && kindOk);
+            });
+            pills().forEach(function (p) { p.hidden = (active !== 'all'); });
+        }
+
+        tabs.forEach(function (tab) {
+            var fresh = tab.cloneNode(true);
+            tab.parentNode.replaceChild(fresh, tab);
+            fresh.addEventListener('click', function () {
+                dlg.querySelectorAll('.tad-tab').forEach(function (t) { t.classList.remove('tad-tab--active'); });
+                this.classList.add('tad-tab--active');
+                active = this.dataset.tab;
+                applyFilter();
+            });
+        });
+
+        if (search) {
+            var freshSearch = search.cloneNode(true);
+            search.parentNode.replaceChild(freshSearch, search);
+            // Update the closure reference so applyFilter reads from the live element.
+            search = freshSearch;
+            search.addEventListener('input', applyFilter);
+        }
+        applyFilter();
+
+        // -- Top-level Labels/Lists tabs (pin context only) --------------------
+        dlg.querySelectorAll('.tad-top-tab').forEach(function (tab) {
+            var fresh = tab.cloneNode(true);
+            tab.parentNode.replaceChild(fresh, tab);
+            fresh.addEventListener('click', function () {
+                dlg.querySelectorAll('.tad-top-tab').forEach(function (t) { t.classList.remove('tad-top-tab--active'); });
+                this.classList.add('tad-top-tab--active');
+                var target = this.dataset.topTab;
+                dlg.querySelectorAll('.tad-top-panel').forEach(function (p) { p.hidden = p.dataset.topPanel !== target; });
+            });
+        });
+
+        // -- Reset the inline "create a new list" mini-form once the dialog closes --
+        dlg.addEventListener('close', function () {
+            var toggleRow = dlg.querySelector('#add-to-list-new-toggle-row');
+            var formRow = dlg.querySelector('#add-to-list-new-form-row');
+            var nameInput = dlg.querySelector('#add-to-list-new-name');
+            if (toggleRow) toggleRow.hidden = false;
+            if (formRow) formRow.hidden = true;
+            if (nameInput) nameInput.value = '';
+        });
+    };
+}
+
+document.querySelectorAll('.tag-add-dialog').forEach(window._initLabelDialog);
+</script>

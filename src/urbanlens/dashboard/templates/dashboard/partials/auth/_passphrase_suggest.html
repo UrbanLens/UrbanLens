@@ -1,0 +1,100 @@
+
+<p class="field-help auth-password-help">
+    Use at least 12 characters with uppercase, lowercase, and a digit or symbol.
+    Passwords found in known data breaches are not allowed.
+</p>
+<div class="auth-passphrase" data-suggest-url="{% url 'suggest_passphrases' %}"
+     data-password-id="{{ password_input_id }}"
+     data-confirm-id="{{ confirm_input_id }}">
+    <button type="button" class="btn auth-passphrase-btn" data-passphrase-suggest>
+        Suggest 5 strong passphrases
+    </button>
+    <ul class="auth-passphrase-list" data-passphrase-list hidden></ul>
+    <p class="field-help auth-passphrase-status" data-passphrase-status hidden></p>
+</div>
+<script>
+(function () {
+    var script = document.currentScript;
+    var root = script ? script.previousElementSibling : null;
+    if (!root || !root.classList || !root.classList.contains('auth-passphrase')) {
+        return;
+    }
+
+    var btn = root.querySelector('[data-passphrase-suggest]');
+    var list = root.querySelector('[data-passphrase-list]');
+    var status = root.querySelector('[data-passphrase-status]');
+    var passwordId = root.getAttribute('data-password-id');
+    var confirmId = root.getAttribute('data-confirm-id');
+    var url = root.getAttribute('data-suggest-url');
+    if (!btn || !list || !url || !passwordId) return;
+
+    function setStatus(message, isError) {
+        if (!status) return;
+        if (!message) {
+            status.hidden = true;
+            status.textContent = '';
+            return;
+        }
+        status.hidden = false;
+        status.textContent = message;
+        status.classList.toggle('auth-passphrase-status--error', !!isError);
+    }
+
+    function applyPassphrase(phrase) {
+        var password = document.getElementById(passwordId);
+        var confirm = confirmId ? document.getElementById(confirmId) : null;
+        if (password) {
+            password.value = phrase;
+            password.dispatchEvent(new Event('input', { bubbles: true }));
+            password.type = 'text';
+        }
+        if (confirm) {
+            confirm.value = phrase;
+            confirm.dispatchEvent(new Event('input', { bubbles: true }));
+            confirm.type = 'text';
+        }
+        setStatus('Passphrase filled in both fields. Copy it somewhere safe before continuing.');
+    }
+
+    function render(passphrases) {
+        list.innerHTML = '';
+        passphrases.forEach(function (phrase) {
+            var li = document.createElement('li');
+            var pick = document.createElement('button');
+            pick.type = 'button';
+            pick.className = 'auth-passphrase-option';
+            pick.textContent = phrase;
+            pick.addEventListener('click', function () { applyPassphrase(phrase); });
+            li.appendChild(pick);
+            list.appendChild(li);
+        });
+        list.hidden = passphrases.length === 0;
+    }
+
+    btn.addEventListener('click', function () {
+        btn.disabled = true;
+        setStatus('Generating…');
+        fetch(url, { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
+            .then(function (response) {
+                if (response.status === 429) {
+                    throw new Error('Too many requests. Try again in a few minutes.');
+                }
+                if (!response.ok) {
+                    throw new Error('Could not load suggestions.');
+                }
+                return response.json();
+            })
+            .then(function (data) {
+                render(data.passphrases || []);
+                setStatus('Click a passphrase to use it.');
+            })
+            .catch(function (err) {
+                list.hidden = true;
+                setStatus(err.message || 'Could not load suggestions.', true);
+            })
+            .finally(function () {
+                btn.disabled = false;
+            });
+    });
+})();
+</script>

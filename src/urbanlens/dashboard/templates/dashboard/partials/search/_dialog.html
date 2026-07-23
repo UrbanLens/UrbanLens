@@ -1,0 +1,153 @@
+{# Global search dialog. Included once from the header for authenticated users. #}
+<div class="gs-overlay" id="global-search-overlay" aria-hidden="true">
+    <div class="gs-dialog" role="dialog" aria-modal="true" aria-label="Search UrbanLens">
+        <form class="gs-input-row" id="gs-form" autocomplete="off" onsubmit="return false;">
+            {% csrf_token %}
+            <i class="material-symbols-outlined gs-input-icon">search</i>
+            <input type="text" id="gs-input" name="q" class="gs-input"
+                   placeholder="Search pins, photos, trips, messages..."
+                   aria-label="Search"
+                   hx-get="{% url 'search.panel' %}"
+                   hx-trigger="input[target.value.length >= 2 || target.value.length === 0] changed delay:250ms"
+                   hx-target="#gs-panel"
+                   hx-swap="innerHTML"
+                   hx-indicator="#gs-spinner">
+            <span class="gs-spinner htmx-indicator" id="gs-spinner" aria-hidden="true"></span>
+            <kbd class="gs-kbd gs-kbd--esc" title="Close">esc</kbd>
+            <button type="button" class="gs-close-btn" id="gs-close-btn" aria-label="Close search">
+                <i class="material-symbols-outlined">close</i>
+            </button>
+        </form>
+        <div class="gs-panel" id="gs-panel"
+             hx-get="{% url 'search.panel' %}"
+             hx-trigger="gsOpen from:body"
+             hx-include="#gs-input"
+             hx-swap="innerHTML">
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    var overlay  = document.getElementById('global-search-overlay');
+    var input    = document.getElementById('gs-input');
+    var panel    = document.getElementById('gs-panel');
+    var openBtn  = document.getElementById('nav-search-btn');
+    var closeBtn = document.getElementById('gs-close-btn');
+    if (!overlay || !input || !panel) return;
+
+    var commitUrl = "{% url 'search.commit' %}";
+
+    function csrfToken() {
+        var el = overlay.querySelector('input[name=csrfmiddlewaretoken]');
+        return el ? el.value : '';
+    }
+
+    function isOpen() { return overlay.classList.contains('is-open'); }
+
+    function openSearch() {
+        overlay.classList.add('is-open');
+        overlay.setAttribute('aria-hidden', 'false');
+        document.body.classList.add('gs-no-scroll');
+        // Load recent searches / results for whatever is already typed.
+        document.body.dispatchEvent(new Event('gsOpen'));
+        setTimeout(function () { input.focus(); input.select(); }, 30);
+    }
+
+    function closeSearch() {
+        overlay.classList.remove('is-open');
+        overlay.setAttribute('aria-hidden', 'true');
+        document.body.classList.remove('gs-no-scroll');
+    }
+
+    window.openGlobalSearch = openSearch;
+
+    // Remember the query as an intentional search (Enter or result click).
+    function commitQuery() {
+        var q = input.value.trim();
+        if (!q) return;
+        var data = new FormData();
+        data.append('q', q);
+        data.append('csrfmiddlewaretoken', csrfToken());
+        if (navigator.sendBeacon) {
+            navigator.sendBeacon(commitUrl, data);
+        } else {
+            fetch(commitUrl, { method: 'POST', body: data, keepalive: true });
+        }
+    }
+
+    if (openBtn) openBtn.addEventListener('click', function (e) { e.stopPropagation(); openSearch(); });
+    if (closeBtn) closeBtn.addEventListener('click', closeSearch);
+
+    // Backdrop click closes; clicks inside the dialog do not.
+    overlay.addEventListener('mousedown', function (e) {
+        if (e.target === overlay) closeSearch();
+    });
+
+    // Global shortcuts: Ctrl/Cmd+K or "/" (outside inputs) opens, Escape closes.
+    document.addEventListener('keydown', function (e) {
+        var inField = /^(INPUT|TEXTAREA|SELECT)$/.test((e.target.tagName || '')) || e.target.isContentEditable;
+        if ((e.key === 'k' || e.key === 'K') && (e.ctrlKey || e.metaKey)) {
+            e.preventDefault();
+            isOpen() ? closeSearch() : openSearch();
+        } else if (e.key === '/' && !inField && !isOpen()) {
+            e.preventDefault();
+            openSearch();
+        } else if (e.key === 'Escape' && isOpen()) {
+            e.preventDefault();
+            closeSearch();
+        }
+    });
+
+    // Keyboard navigation through results / suggestions.
+    function focusables() {
+        return Array.prototype.slice.call(panel.querySelectorAll('.gs-result, .gs-recent-run, .gs-hint'));
+    }
+    input.addEventListener('keydown', function (e) {
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            var items = focusables();
+            if (items.length) items[0].focus();
+        } else if (e.key === 'Enter') {
+            var q = input.value.trim();
+            if (!q) return;
+            commitQuery();
+            var first = panel.querySelector('.gs-result');
+            if (first && first.href) window.location = first.href;
+        }
+    });
+    panel.addEventListener('keydown', function (e) {
+        var items = focusables();
+        var index = items.indexOf(document.activeElement);
+        if (e.key === 'ArrowDown' && index >= 0) {
+            e.preventDefault();
+            (items[index + 1] || items[0]).focus();
+        } else if (e.key === 'ArrowUp' && index >= 0) {
+            e.preventDefault();
+            if (index === 0) { input.focus(); } else { items[index - 1].focus(); }
+        }
+    });
+
+    // Result clicks: save the query to history, then let navigation proceed.
+    panel.addEventListener('click', function (e) {
+        var result = e.target.closest('.gs-result');
+        if (result) { commitQuery(); return; }
+        var recent = e.target.closest('.gs-recent-run, .gs-hint');
+        if (recent && recent.dataset.query) {
+            input.value = recent.dataset.query;
+            input.focus();
+            htmx.trigger(input, 'input');
+        }
+    });
+
+    // Surface request failures inside the panel instead of failing silently.
+    panel.addEventListener('htmx:responseError', function () {
+        panel.innerHTML = '<div class="gs-error"><i class="material-symbols-outlined">error</i>' +
+            'Search is having trouble right now. Please try again in a moment.</div>';
+    });
+    input.addEventListener('htmx:sendError', function () {
+        panel.innerHTML = '<div class="gs-error"><i class="material-symbols-outlined">wifi_off</i>' +
+            'Could not reach the server. Check your connection and try again.</div>';
+    });
+}());
+</script>

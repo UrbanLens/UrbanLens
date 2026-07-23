@@ -1,0 +1,47 @@
+// -- Elevation ladder -----------------------------------------------------------
+// Semantic, purpose-named surface tokens built on top of --ul-grey-N (which
+// already flips per [data-theme]). Nothing outside this file / _mixins.scss
+// should reference --ul-grey-N directly for a background or border color that
+// represents a role like "this is a card" / "this is an input" / "this is a
+// dropdown" -- use the surface-family mixins in _mixins.scss instead.
+//
+// Two ambient custom properties carry nesting context down the cascade:
+//   --ul-surface / --ul-surface-border          "my own" background/border,
+//                                                read by header/footer strips
+//                                                that are DOM children of a
+//                                                surface (not nested surfaces
+//                                                themselves).
+//   --ul-surface-raised / --ul-surface-raised-border
+//                                                what a nested raised child
+//                                                (input, dropdown, nested
+//                                                card) sitting inside the
+//                                                current surface should use.
+//
+// They're backed by a fixed, capped 3-rung table rather than an unbounded
+// counter: CSS custom properties can't do var(var(--x)) indirection, so a
+// container can't discover "one past whatever rung I'm at" purely at runtime.
+// Rung 0 is the implicit page canvas. Rung 1 is the first thing raised off
+// the page (card/panel/dialog/floating menu). Rung 2 is nested inside a
+// rung-1 surface (input-in-card, dropdown-off-a-card, mini-card-in-card).
+// Rung 3 is nested inside a rung-2 surface (deepest realistic case in this
+// app, e.g. a menu popping off an input inside a dialog). Anything deeper
+// reuses rung 3 -- three levels covers every real nesting depth in the site.
+@use "tokens" as *;
+
+:root {
+    --ul-surface-1: var(--ul-grey-1b);
+    --ul-surface-1-border: var(--ul-grey-1a);
+    --ul-surface-2: var(--ul-grey-2b);
+    --ul-surface-2-border: var(--ul-grey-2a);
+    --ul-surface-3: var(--ul-grey-3b);
+    --ul-surface-3-border: var(--ul-grey-3a);
+
+    // Page canvas, rung 0. Established once here; no mixin reassigns these.
+    --ul-surface: var(--ul-grey-1);
+    --ul-surface-border: var(--ul-grey-1a);
+
+    // Ambient pointer: what a raised child placed at the current nesting
+    // point should use. Starts at rung 1 for anything sitting on the page.
+    --ul-surface-raised: var(--ul-surface-1);
+    --ul-surface-raised-border: var(--ul-surface-1-border);
+}

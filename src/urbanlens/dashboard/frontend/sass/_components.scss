@@ -21,7 +21,7 @@
 
 .ul-card-header {
 	@include panel-header;
-	background-color: var(--ul-grey-1a);
+	background-color: var(--ul-surface-border);
 	color: var(--ul-grey-8);
 
 	.material-symbols-outlined,
@@ -44,8 +44,7 @@
 
 .ul-card-footer {
 	padding: $bar-padding-y $bar-padding-x;
-	border-top: 1px solid var(--ul-grey-1a);
-	background: var(--ul-grey-1a);
+	background: var(--ul-surface-border);
 }
 
 // -- Global dialog utility classes ---------------------------------------------
@@ -61,7 +60,7 @@
 	font-weight: 600;
 	font-size: .95rem;
 	flex-shrink: 0;
-	border-bottom: 1px solid var(--ul-grey-2b);
+	border-bottom: 1px solid var(--ul-surface-border);
 }
 
 .dialog-footer {
@@ -107,6 +106,11 @@
 
 	label {
 		color: var(--ul-grey-8);
+
+		.required {
+			color: $danger-color;
+			font-weight: 700;
+		}
 	}
 
 	input {
@@ -119,7 +123,7 @@
 
 	// Tinted header background is specific to the .ul-dialog shell.
 	.dialog-header {
-		background-color: var(--ul-grey-1a);
+		background-color: var(--ul-surface-border);
 	}
 
 	.settings-toggle-label
@@ -195,8 +199,7 @@
 	align-items: center;
 	gap: $space-sm;
 	padding: .6rem $space-md;
-	border-top: 1px solid var(--ul-grey-1a);
-	background: var(--ul-grey-1a);
+	background: var(--ul-surface-border);
 	font-size: .82rem;
 	color: var(--ul-grey-7);
 	text-decoration: none;
@@ -316,7 +319,7 @@
 
 .ul-dropdown-sep {
 	height: 1px;
-	background: var(--ul-grey-1a);
+	background: var(--ul-surface-border);
 	margin: 4px 0;
 }
 
@@ -324,7 +327,7 @@
 
 .ul-tab-bar {
 	display: flex;
-	border-bottom: 2px solid var(--ul-grey-1a);
+	border-bottom: 2px solid var(--ul-surface-border);
 	gap: 0;
 }
 
@@ -337,7 +340,6 @@
 	background: none;
 	cursor: pointer;
 	border-bottom: 2px solid transparent;
-	margin-bottom: -2px;
 	display: inline-flex;
 	align-items: center;
 	gap: .4rem;
@@ -515,7 +517,7 @@
     cursor: pointer;
     font-size: .85rem;
     color: var(--ul-grey-7);
-	background-color: var(--ul-grey-0);
+	background-color: var(--ul-surface);
     border: 2px solid var(--ul-grey-2b);
     transition: border-color .15s, background .15s;
     min-width: 80px;
@@ -535,7 +537,7 @@
     &.active,
     &:has(input:checked) {
         color: #{$color-indigo-500};
-		background-color: var(--ul-grey-1a);
+		background-color: var(--ul-surface-2);
 		border-color: #{$color-indigo-500};
 		opacity: 1;
 
@@ -547,7 +549,7 @@
 
     &:hover:not(.active) {
 		opacity: 1;
-        background-color: var(--ul-grey-0b);
+        background-color: var(--ul-surface-border);
 		border-color: var(--ul-grey-4);
     }
 }
@@ -583,7 +585,7 @@
 	}
 
 	&__input {
-		position: absolute !important;  // override materialize input[type=range]{position:relative}
+		position: absolute !important;  // pins the native input over the custom track/fill
 		width: 100%;
 		height: 100%;
 		top: 0;
@@ -593,7 +595,7 @@
 		appearance: none;
 		pointer-events: none;
 		outline: none;
-		margin: 0 !important;  // override materialize input[type=range]{margin:15px 0}
+		margin: 0 !important;  // override _reset.scss's input[type=range]{margin:15px 0}
 		border: none !important;
 
 		&:focus { outline: none; }
@@ -668,7 +670,7 @@
 	justify-content: center;
 	gap: .6rem;
 	padding: .5rem;
-	border-top: 1px solid var(--ul-grey-1a);
+	border-top: 1px solid var(--ul-surface-border);
 }
 
 .pagination-btn {

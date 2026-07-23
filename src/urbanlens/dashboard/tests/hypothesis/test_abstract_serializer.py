@@ -11,7 +11,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 from rest_framework import serializers as drf_serializers
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.models.abstract.serializer import Serializer
 
 
@@ -48,7 +48,7 @@ class _GeneratedSerializer(Serializer):
 
 # -- No-context: all fields present --------------------------------------------
 
-class SerializerNoContextTests(TestCase):
+class SerializerNoContextTests(SimpleTestCase):
     """Without context, all declared fields are included."""
 
     def test_all_fields_present_with_no_context(self) -> None:
@@ -62,7 +62,7 @@ class SerializerNoContextTests(TestCase):
 
 # -- exclude_fields -------------------------------------------------------------
 
-class SerializerExcludeFieldsTests(TestCase):
+class SerializerExcludeFieldsTests(SimpleTestCase):
     """context['exclude_fields'] removes the named fields from the serializer."""
 
     def test_single_field_excluded(self) -> None:
@@ -109,7 +109,7 @@ class SerializerExcludeFieldsTests(TestCase):
 
 # -- include_fields -------------------------------------------------------------
 
-class SerializerIncludeFieldsTests(TestCase):
+class SerializerIncludeFieldsTests(SimpleTestCase):
     """context['include_fields'] restricts the serializer to only those fields."""
 
     def test_single_field_included(self) -> None:
@@ -147,7 +147,7 @@ class SerializerIncludeFieldsTests(TestCase):
 
 # -- get_fieldnames and get_native_fields ---------------------------------------
 
-class SerializerClassMethodTests(TestCase):
+class SerializerClassMethodTests(SimpleTestCase):
     """get_fieldnames() and get_native_fields() return the expected field lists."""
 
     def test_get_fieldnames_returns_meta_fields(self) -> None:
@@ -173,7 +173,7 @@ class SerializerClassMethodTests(TestCase):
 
 # -- TDD: get_native_fields has a mutation bug ---------------------------------
 
-class SerializerGetNativeFieldsMutationBugTests(TestCase):
+class SerializerGetNativeFieldsMutationBugTests(SimpleTestCase):
     """TDD: get_native_fields() must be idempotent - repeated calls should return the same result.
 
     Currently it calls get_fieldnames() which returns the actual Meta.fields list by

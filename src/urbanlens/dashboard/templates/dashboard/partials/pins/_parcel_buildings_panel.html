@@ -1,0 +1,73 @@
+{% comment %}
+Every building standing on this property, from REData (county GIS + NY SHPO
+CRIS) or OpenStreetMap - see plugins.builtin.parcel_buildings.
+
+Shared by the pin detail page (PinController.parcel_buildings) and the wiki
+page (WikiParcelBuildingsPanelView); the wiki has no import action and its
+rows never link anywhere, since child wikis are markers on their parent's map
+rather than pages of their own.
+
+Context:
+    section_id, icon, title: panel identity (matches the placeholder's).
+    rows: list of {name, building_number, year_built, source_label,
+        child_name, child_url} - see parcel_buildings.building_rows.
+    unpinned_count: how many rows have no marker yet.
+    pin: the pin being viewed; omitted on the wiki page, which disables the
+        "add pins" action.
+    debug: optional DebugEntry for the admin overlay.
+{% endcomment %}
+<div id="{{ section_id }}" class="parcel-buildings card card--secondary"
+     data-collapse-scope="pin" data-collapse-section="parcel_buildings">
+    {% if debug %}
+    <span class="debug-marker" hidden
+          data-debug-source="{{ debug.source }}"
+          data-debug-query="{{ debug.query }}"
+          data-debug-cache="{{ debug.from_cache|yesno:'hit,miss' }}"
+          data-debug-count="{{ debug.count }}"></span>
+    {% endif %}
+    <div class="card-header">
+        <i class="material-symbols-outlined">{{ icon }}</i>
+        <h3>{{ title }}</h3>
+        <span class="badge">{{ rows|length }}</span>
+    </div>
+
+    <div class="card__body">
+        <ul class="parcel-building-list">
+            {% for row in rows %}
+            <li class="parcel-building{% if not row.child_name %} parcel-building--unpinned{% endif %}">
+                <span class="parcel-building-number">{{ row.building_number|default:"&mdash;" }}</span>
+                <div class="parcel-building-info">
+                    <span class="parcel-building-name">
+                        {% if row.child_url %}
+                        <a href="{{ row.child_url }}">{{ row.name|default:row.child_name|default:"Unnamed building" }}</a>
+                        {% else %}
+                        {{ row.name|default:"Unnamed building" }}
+                        {% endif %}
+                    </span>
+                    <span class="parcel-building-meta">
+                        {% if row.year_built %}<span>Built {{ row.year_built }}</span>{% endif %}
+                        {% if row.source_label %}<span class="parcel-building-source">{{ row.source_label }}</span>{% endif %}
+                    </span>
+                </div>
+                {% if row.child_name %}
+                <i class="material-symbols-outlined parcel-building-status" title="Pinned as {{ row.child_name }}">push_pin</i>
+                {% endif %}
+            </li>
+            {% endfor %}
+        </ul>
+
+        {% if pin and unpinned_count %}
+        <button type="button" class="btn btn--sm btn--primary parcel-buildings-import"
+                hx-post="{% url 'pin.buildings.import' pin.slug %}"
+                hx-swap="none"
+                hx-indicator="#parcel-buildings-import-spinner"
+                hx-confirm="Add {{ unpinned_count }} sub pin{{ unpinned_count|pluralize }} to this property, one per building?">
+            <i class="material-symbols-outlined">add_location_alt</i>
+            Add pins for {{ unpinned_count }} unpinned building{{ unpinned_count|pluralize }}
+        </button>
+        <span id="parcel-buildings-import-spinner" class="htmx-indicator">
+            <i class="material-icons spin">autorenew</i> Adding pins...
+        </span>
+        {% endif %}
+    </div>
+</div>

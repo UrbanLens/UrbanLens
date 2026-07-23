@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import date
+import datetime
+import json
 import logging
 import os
+from typing import Any
 import uuid
 
 from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
@@ -13,6 +15,10 @@ from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.views import View
 
+from urbanlens.dashboard.models.images.model import Image
+from urbanlens.dashboard.models.immich.model import ImmichAccount
+from urbanlens.dashboard.models.pin_suggestions.model import MAX_STORED_VISIT_DATES, MAX_SUGGESTION_PHOTOS, PinSuggestion, PinSuggestionOrigin, PinSuggestionStatus
+from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.export import (
     EXPORT_TTL_SECONDS as _EXPORT_TTL_SECONDS,
     VALID_EXPORT_TYPES,
@@ -21,6 +27,7 @@ from urbanlens.dashboard.services.export import (
     export_dir as _export_dir_fn,
     schedule_export_cleanup,
 )
+from urbanlens.dashboard.services.images import compute_checksum
 from urbanlens.dashboard.services.import_data import (
     IMPORT_TTL_SECONDS as _IMPORT_TTL_SECONDS,
     ImportJobStatus,
@@ -28,10 +35,14 @@ from urbanlens.dashboard.services.import_data import (
     import_dir as _import_dir_fn,
     schedule_import_cleanup,
 )
+from urbanlens.dashboard.services.pin_suggestions import LocationHit, ingest_location_hits
+from urbanlens.dashboard.services.visits import visit_logging_allowed
 
 logger = logging.getLogger(__name__)
 
 _MAX_IMPORT_SIZE_BYTES = 500 * 1024 * 1024  # 500 MB
+_MAX_CLUSTERS_PER_REQUEST = 500
+_MAX_COUNT_PER_CLUSTER = 2000
 
 
 def _export_dir(job_id: str) -> str:
@@ -93,11 +104,17 @@ class ToolsIndexView(LoginRequiredMixin, View):
         Returns:
             Rendered tools page.
         """
+        from urbanlens.dashboard.controllers.immich import get_active_scan_task_id
+
+        profile, _ = Profile.objects.get_or_create(user=request.user)
         return render(
             request,
             "dashboard/pages/tools/index.html",
             {
                 "show_backup_tools": request.user.has_perm("dashboard.view_site_admin"),
+                "profile_uuid": profile.uuid,
+                "immich_account": ImmichAccount.objects.get_for_profile(profile),
+                "immich_active_scan_task_id": get_active_scan_task_id(profile.pk),
             },
         )
 
@@ -232,7 +249,7 @@ class ExportDownloadView(LoginRequiredMixin, View):
 
         logger.info("Export complete, serving file: job %s, user %s", job_id, request.user.pk)
 
-        today = date.today().isoformat()
+        today = datetime.date.today().isoformat()
         fh = open(zip_path, "rb")  # noqa: SIM115 - FileResponse takes ownership and closes the handle
         response = FileResponse(fh, content_type="application/zip")
         response["Content-Disposition"] = f'attachment; filename="urbanlens_export_{today}.zip"'
@@ -392,3 +409,203 @@ class BackupStartView(LoginRequiredMixin, PermissionRequiredMixin, View):
             },
             status=202,
         )
+
+
+def _parse_cluster(cluster: Any) -> list[LocationHit]:
+    """Parse and validate one cluster row from the local-scan upload payload.
+
+    Each cluster becomes exactly *one* synthetic hit, carrying the cluster's
+    full ``count`` as its ``weight`` and every one of its ``dates`` (see
+    ``LocationHit.weight``/``extra_dates``) - matching/clustering only ever
+    need one representative point per distinct location, since every hit a
+    single cluster used to expand into shared the exact same coordinates.
+    This used to create ``count`` separate synthetic hits (one per date,
+    cycling through ``dates``) so the shape matched individually-scanned
+    hits exactly; with up to 500 clusters allowed per request and up to 2000
+    photos per cluster, that could balloon into hundreds of thousands of
+    hits, each checked against every one of the profile's pin boundaries in
+    ``_match_hits_to_pins`` - easily enough synchronous work to trip a
+    reverse proxy's read timeout (504) on submit for a large scan.
+
+    Args:
+        cluster: One raw JSON object from the ``clusters`` array.
+
+    Returns:
+        A single-item list with the synthetic LocationHit for this cluster,
+        or an empty list if the row is malformed (missing/invalid
+        coordinates or no valid dates).
+    """
+    if not isinstance(cluster, dict):
+        return []
+    try:
+        latitude = float(cluster["latitude"])
+        longitude = float(cluster["longitude"])
+    except (KeyError, TypeError, ValueError):
+        return []
+    if not (-90 <= latitude <= 90 and -180 <= longitude <= 180):
+        return []
+
+    dates_raw = cluster.get("dates")
+    valid_dates: list[str] = []
+    if isinstance(dates_raw, list):
+        for raw_date in dates_raw[:MAX_STORED_VISIT_DATES]:
+            if not isinstance(raw_date, str):
+                continue
+            try:
+                datetime.date.fromisoformat(raw_date)
+            except ValueError:
+                continue
+            valid_dates.append(raw_date)
+    if not valid_dates:
+        return []
+
+    try:
+        count = int(cluster.get("count", len(valid_dates)))
+    except (TypeError, ValueError):
+        count = len(valid_dates)
+    count = max(1, min(count, _MAX_COUNT_PER_CLUSTER))
+
+    label = cluster.get("label")
+    label = label.strip()[:255] if isinstance(label, str) and label.strip() else None
+
+    cluster_id = cluster.get("id")
+    source_key = cluster_id if isinstance(cluster_id, str) and cluster_id else None
+
+    first_day = datetime.date.fromisoformat(valid_dates[0])
+    taken_at = datetime.datetime.combine(first_day, datetime.time(12, 0), tzinfo=datetime.UTC)
+    return [
+        LocationHit(
+            latitude=latitude,
+            longitude=longitude,
+            taken_at=taken_at,
+            label=label,
+            source_key=source_key,
+            weight=count,
+            extra_dates=tuple(valid_dates),
+        )
+    ]
+
+
+class PhotoLocationScanUploadView(LoginRequiredMixin, View):
+    """POST /tools/photo-scan/upload/ - ingest results from the local folder scanner.
+
+    The scanner (``frontend/ts/entries/photo-location-scan.ts``) clusters and
+    de-dupes matches entirely client-side before uploading, so this payload is
+    small - one row per cluster, not per photo - and the photo/video files
+    themselves never reach the server, only the extracted lat/lng/date/label
+    metadata. Feeds the same ``ingest_location_hits`` pipeline the Immich
+    sweep uses, so results merge/dedupe against any existing suggestions.
+    """
+
+    def post(self, request: HttpRequest) -> JsonResponse:
+        """Ingest a batch of pre-clustered location results.
+
+        Args:
+            request: POST with a JSON body ``{"clusters": [{"latitude", "longitude", "dates", "count", "label"}, ...]}``.
+
+        Returns:
+            JSON summary of suggestions created/updated, or a 400 error.
+        """
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        if not visit_logging_allowed(profile):
+            return JsonResponse({"error": "Visit-history tracking is turned off."}, status=403)
+        try:
+            body = json.loads(request.body)
+        except (json.JSONDecodeError, TypeError, UnicodeDecodeError):
+            return JsonResponse({"error": "Invalid request body."}, status=400)
+
+        clusters = body.get("clusters") if isinstance(body, dict) else None
+        if not isinstance(clusters, list) or not clusters:
+            return JsonResponse({"error": "No location clusters provided."}, status=400)
+        if len(clusters) > _MAX_CLUSTERS_PER_REQUEST:
+            return JsonResponse({"error": f"Too many results at once (max {_MAX_CLUSTERS_PER_REQUEST})."}, status=400)
+
+        hits: list[LocationHit] = []
+        for cluster in clusters:
+            hits.extend(_parse_cluster(cluster))
+        if not hits:
+            return JsonResponse({"error": "No valid location data found in upload."}, status=400)
+
+        summary = ingest_location_hits(profile, hits, origin=PinSuggestionOrigin.LOCAL_SCAN)
+        return JsonResponse(
+            {
+                "ok": True,
+                "matched_suggestions": summary.matched_suggestions,
+                "new_pin_suggestions": summary.new_pin_suggestions,
+                "hits_processed": summary.hits_processed,
+                "suggestion_ids": summary.suggestion_ids_by_key,
+                "review_url": reverse("memories.locations"),
+            },
+        )
+
+
+class PhotoLocationScanPhotoUploadView(LoginRequiredMixin, View):
+    """POST /tools/photo-scan/upload-photo/ - upload one opt-in candidate photo.
+
+    The local-folder scanner never uploads photo files by default (see
+    ``PhotoLocationScanUploadView``) - this endpoint exists only for photos the
+    user explicitly checked in the scanner's opt-in picker, immediately after
+    the cluster metadata upload has told the client which ``PinSuggestion``
+    each cluster became. The image is staged unattached (candidate only) until
+    the suggestion is accepted or rejected - see ``services.pin_suggestions.accept_pin_suggestion``
+    and ``reject_pin_suggestion``.
+    """
+
+    def post(self, request: HttpRequest) -> JsonResponse:
+        """Create a candidate Image staged against a pending local-scan suggestion.
+
+        Args:
+            request: POST with multipart fields ``suggestion_id`` and ``image``.
+
+        Returns:
+            ``{"ok": True, "image_id": ...}`` on success, or an error JSON.
+        """
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        suggestion_id = request.POST.get("suggestion_id")
+        if not suggestion_id or not suggestion_id.isdigit():
+            return JsonResponse({"error": "Missing or invalid suggestion_id."}, status=400)
+
+        suggestion = PinSuggestion.objects.filter(
+            pk=int(suggestion_id),
+            profile=profile,
+            origin=PinSuggestionOrigin.LOCAL_SCAN,
+            status=PinSuggestionStatus.PENDING,
+        ).first()
+        if suggestion is None:
+            return JsonResponse({"error": "That suggestion is no longer available."}, status=404)
+
+        image_file = request.FILES.get("image")
+        if not image_file:
+            return JsonResponse({"error": "No image provided."}, status=400)
+        content_type = image_file.content_type or ""
+        if not content_type.startswith("image/"):
+            return JsonResponse({"error": "That file is not an image."}, status=400)
+
+        if Image.objects.filter(pin_suggestion=suggestion).count() >= MAX_SUGGESTION_PHOTOS:
+            return JsonResponse({"error": f"You can attach up to {MAX_SUGGESTION_PHOTOS} photos per location."}, status=400)
+
+        from urbanlens.dashboard.models.images.model import MediaKind
+        from urbanlens.dashboard.services.images import image_upload_error
+
+        upload_error = image_upload_error(image_file, MediaKind.PHOTO)
+        if upload_error:
+            message, status = upload_error
+            return JsonResponse({"error": message}, status=status)
+
+        checksum = compute_checksum(image_file)
+        if Image.objects.filter(profile=profile, checksum=checksum).exists():
+            return JsonResponse({"error": "You already uploaded this photo."}, status=409)
+
+        from urbanlens.dashboard.services.storage import quota_error_for_upload
+
+        quota_error = quota_error_for_upload(profile, image_file.size)
+        if quota_error:
+            return JsonResponse({"error": quota_error}, status=413)
+
+        img = Image.objects.create(image=image_file, profile=profile, checksum=checksum, file_size=image_file.size, pin_suggestion=suggestion)
+
+        from urbanlens.dashboard.services.celery import safely_enqueue_task
+        from urbanlens.dashboard.tasks import process_image_upload
+
+        safely_enqueue_task(process_image_upload, img.pk)
+        return JsonResponse({"ok": True, "image_id": img.pk}, status=201)

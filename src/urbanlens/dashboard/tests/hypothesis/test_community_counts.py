@@ -12,14 +12,14 @@ from django.core.cache import cache
 from django.test import override_settings
 from hypothesis import given, strategies as st
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.community_counts import MIN_VISIBLE_PIN_COUNT, approximate_pin_count
 
 _LOCMEM_CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
 
 
 @override_settings(CACHES=_LOCMEM_CACHES)
-class ApproximatePinCountTests(TestCase):
+class ApproximatePinCountTests(SimpleTestCase):
     """approximate_pin_count hides low counts and fuzzes the rest."""
 
     def setUp(self) -> None:

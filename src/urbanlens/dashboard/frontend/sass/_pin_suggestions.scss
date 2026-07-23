@@ -1,0 +1,193 @@
+// Memories > Locations - the batch-scan pin suggestion review queue.
+// Map + multi-select behavior/chrome is shared with Memories > Visits -
+// see static/js/pin-select-map.js and _pin_select_map.scss. Only
+// suggestion-card-specific styling (photo picker, prompts, etc.) lives here.
+
+@use 'variables' as *;
+
+// -- Grid & cards ------------------------------------------------------------
+
+.pin-suggestions-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: $space-md;
+    margin-bottom: $space-lg;
+}
+
+.pin-suggestion-card {
+    position: relative;
+    display: flex;
+    gap: $space-sm;
+    @include surface;
+    padding: $space-md;
+    box-shadow: var(--ul-shadow-sm);
+    transition: border-color .15s ease, box-shadow .15s ease;
+}
+
+.pin-suggestion-card.is-selected {
+    border-color: var(--ul-primary-color);
+    box-shadow: 0 0 0 2px rgba(33, 150, 243, .2);
+}
+
+.pin-suggestion-card-body {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: $space-xs;
+}
+
+.pin-suggestion-card-meta {
+    display: flex;
+    align-items: center;
+    gap: $space-sm;
+    font-size: .78rem;
+}
+
+.pin-suggestion-card-count {
+    color: var(--ul-grey-6);
+}
+
+.pin-suggestion-card-prompt {
+    margin: 0;
+    font-size: .95rem;
+    line-height: 1.35;
+}
+
+.pin-suggestion-card-dates {
+    margin: 0;
+    font-size: .78rem;
+    color: var(--ul-grey-6);
+}
+
+.pin-suggestion-card-actions {
+    display: flex;
+    gap: $space-sm;
+    margin-top: $space-xs;
+}
+
+// -- Photo picker (shared visual language with the Tools-page opt-in picker) --
+
+.pin-suggestion-photos {
+    display: flex;
+    gap: $space-xs;
+}
+
+.pin-suggestion-photos--empty {
+    align-items: center;
+    gap: $space-xs;
+    padding: $space-sm;
+    border: 1px dashed var(--ul-surface-raised-border);
+    border-radius: $radius-sm;
+    color: var(--ul-grey-5);
+    font-size: .78rem;
+
+    .material-symbols-outlined {
+        font-size: 18px;
+    }
+}
+
+.photo-pick {
+    position: relative;
+    width: 64px;
+    height: 64px;
+    border-radius: $radius-sm;
+    overflow: hidden;
+    cursor: pointer;
+    border: 2px solid var(--ul-surface-raised-border);
+    flex-shrink: 0;
+
+    img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+        opacity: .7;
+        transition: opacity .15s ease;
+    }
+
+    input[type="checkbox"] {
+        position: absolute;
+        inset: 0;
+        margin: 0;
+        opacity: 0;
+        cursor: pointer;
+    }
+}
+
+.photo-pick-badge {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    display: flex;
+    color: #fff;
+    background: rgba(0, 0, 0, .45);
+    border-radius: $radius-full;
+    pointer-events: none;
+
+    .material-symbols-outlined {
+        font-size: 16px;
+        display: block;
+    }
+}
+
+.photo-pick--selected {
+    border-color: var(--ul-primary-color);
+    box-shadow: 0 0 0 2px rgba(33, 150, 243, .25);
+
+    img {
+        opacity: 1;
+    }
+
+    .photo-pick-badge {
+        background: var(--ul-primary-color);
+    }
+}
+
+.pin-suggestion-photos-caption {
+    margin: 0;
+    font-size: .72rem;
+    color: var(--ul-grey-6);
+}
+
+// -- Pagination --------------------------------------------------------------
+
+.pin-suggestions-pagination {
+    justify-content: center;
+}
+
+// -- Create-pin dialog ---------------------------------------------------------
+
+.pin-suggestion-create-dialog {
+    @include dialog-base(420px);
+}
+
+.pin-suggestion-label-picker {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .4rem;
+}
+
+.pin-suggestion-label-option {
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+    padding: .3rem .65rem;
+    border-radius: $radius-full;
+    border: 1px solid var(--ul-surface-raised-border);
+    cursor: pointer;
+    font-size: .8rem;
+    font-weight: normal;
+    text-transform: none;
+    letter-spacing: normal;
+    color: var(--ul-grey-8);
+
+    &:hover {
+        background: var(--ul-hover-bg);
+    }
+
+    &:has(input[type="checkbox"]:checked) {
+        background: rgba(59, 130, 246, .12);
+        border-color: $color-blue-500;
+    }
+}

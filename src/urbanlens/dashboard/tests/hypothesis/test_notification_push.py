@@ -15,12 +15,12 @@ from hypothesis import given
 from hypothesis import strategies as st
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.notifications import signals as push_signals
 from urbanlens.dashboard.models.notifications.model import NotificationLog
 
 
-class NotificationGroupNameTests(TestCase):
+class NotificationGroupNameTests(SimpleTestCase):
     """notification_group_name() produces stable, channel-layer-safe names."""
 
     @given(st.integers(min_value=1, max_value=10**12))
@@ -39,7 +39,7 @@ class NotificationGroupNameTests(TestCase):
             self.assertNotEqual(push_signals.notification_group_name(a), push_signals.notification_group_name(b))
 
 
-class AsPushPayloadTests(TestCase):
+class AsPushPayloadTests(SimpleTestCase):
     """as_push_payload() forwards the toast fields and truncates long messages."""
 
     @given(st.text(max_size=2000))

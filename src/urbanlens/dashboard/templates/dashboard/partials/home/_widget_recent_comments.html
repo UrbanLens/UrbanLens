@@ -1,0 +1,23 @@
+{% comment %}
+Recent comments widget. Context: home_recent_comments (merged pin/wiki/trip comments, up to 5).
+{% endcomment %}
+{% if home_recent_comments %}
+<section class="home-widget ul-section" data-widget-key="recent_comments">
+    <div class="home-widget-heading">
+        <span class="home-widget-icon"><i class="material-symbols-outlined">forum</i></span>
+        <div><h3>Recent comments</h3><p>Conversations you've joined lately.</p></div>
+    </div>
+    <div class="home-card-strip">
+        {% for comment in home_recent_comments %}
+        {% if comment.pin %}<a class="home-mini-card" href="{% url 'pin.details' comment.pin.slug %}#comments">
+        {% elif comment.wiki %}<a class="home-mini-card" href="{% url 'location.wiki' comment.wiki.location.slug %}#comments">
+        {% elif comment.trip %}<a class="home-mini-card" href="{% url 'trips.detail' comment.trip.slug %}#trip-comments">
+        {% else %}<article class="home-mini-card">{% endif %}
+            <i class="material-symbols-outlined">chat_bubble</i>
+            <strong>{% if comment.pin %}{{ comment.pin.display_label|default:comment.pin.name }}{% elif comment.wiki %}{{ comment.wiki.name }}{% elif comment.trip %}{{ comment.trip.name }}{% else %}Comment{% endif %}</strong>
+            <span>{{ comment.text|striptags|truncatechars:88 }}</span>
+        {% if comment.pin or comment.wiki or comment.trip %}</a>{% else %}</article>{% endif %}
+        {% endfor %}
+    </div>
+</section>
+{% endif %}

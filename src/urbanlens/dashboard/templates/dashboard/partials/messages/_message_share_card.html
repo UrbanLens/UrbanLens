@@ -1,0 +1,78 @@
+{% comment %}
+Inline card for an `@pin`/`@trip`/`@friend` share attached to a message.
+Context: `share` (DirectMessageShare), `viewer_id`, `partner`.
+
+Pin/friend accept-reject actions are HTMX-driven (outerHTML swap of this same
+card, keyed by `dm-share-card-<message id>`) so responding never navigates the
+recipient out of the thread - see MessageShareRespondPinView/
+MessageShareRespondFriendView. Trip RSVP still hands off to the trip detail
+page since RSVP needs more UI than fits in a chat card.
+{% endcomment %}
+<div class="dm-share-card" id="dm-share-card-{{ share.message_id }}">
+  {% if share.kind == "pin" and share.pin_share %}
+  <div class="dm-share-card__row">
+    <i class="material-symbols-outlined">location_on</i>
+    <span class="dm-share-card__label">{{ share.pin_share.pin.display_label }}</span>
+  </div>
+  {% if share.message.recipient_id == viewer_id %}
+    {% if share.pin_share.status == "pending" %}
+    <div class="dm-share-card__actions">
+      <button type="button" class="btn btn--primary btn--sm"
+              hx-post="{% url 'messages.share.pin.respond' partner.slug share.message_id %}" hx-vals='{"action": "accept"}'
+              hx-target="#dm-share-card-{{ share.message_id }}" hx-swap="outerHTML">Accept</button>
+      <button type="button" class="btn btn--ghost btn--sm"
+              hx-post="{% url 'messages.share.pin.respond' partner.slug share.message_id %}" hx-vals='{"action": "reject"}'
+              hx-target="#dm-share-card-{{ share.message_id }}" hx-swap="outerHTML">Reject</button>
+    </div>
+    {% elif share.pin_share.status == "already_pinned" %}
+    <p class="dm-share-card__status">You already have this pinned.</p>
+    {% elif share.pin_share.status == "accepted" %}
+    {% with resulting_pin=share.pin_share.resulting_pin %}
+    {% if resulting_pin %}
+    <a href="{% url 'pin.details' resulting_pin.slug %}" class="dm-share-card__status dm-share-card__status--link">
+      <i class="material-symbols-outlined">check_circle</i> Added to your map.
+    </a>
+    {% else %}
+    <p class="dm-share-card__status"><i class="material-symbols-outlined">check_circle</i> Added to your map.</p>
+    {% endif %}
+    {% endwith %}
+    {% elif share.pin_share.status == "rejected" %}
+    <p class="dm-share-card__status">Declined.</p>
+    {% endif %}
+  {% else %}
+    <p class="dm-share-card__status">Pin shared.</p>
+  {% endif %}
+
+  {% elif share.kind == "trip" and share.trip %}
+  <div class="dm-share-card__row">
+    <i class="material-symbols-outlined">luggage</i>
+    <a class="dm-share-card__label" href="{% url 'trips.detail' share.trip.slug %}">{{ share.trip.name }}</a>
+  </div>
+  {% if share.trip_membership and share.trip_membership.rsvp is None %}
+  <p class="dm-share-card__status">
+    <a href="{% url 'trips.detail' share.trip.slug %}" class="btn btn--primary btn--sm">View invite &amp; RSVP</a>
+  </p>
+  {% elif share.trip_membership %}
+  <p class="dm-share-card__status">RSVP: {{ share.trip_membership.get_rsvp_display|default:"No response" }}</p>
+  {% endif %}
+
+  {% elif share.kind == "friend" and share.recommended_profile %}
+  <div class="dm-share-card__row dm-share-card__profile">
+    <span class="msg-avatar" aria-hidden="true">
+      {% if share.recommended_profile.avatar %}<img src="{{ share.recommended_profile.avatar.url }}" alt="" class="msg-avatar-img">{% else %}<span class="msg-avatar-initial">{{ share.recommended_profile.username|first|upper }}</span>{% endif %}
+    </span>
+    <a class="dm-share-card__label" href="{% url 'profile.view_user' share.recommended_profile.slug %}">{{ share.recommended_profile.username }}</a>
+  </div>
+  {% if share.message.recipient_id == viewer_id %}
+    {% if share.is_actionable %}
+    <div class="dm-share-card__actions">
+      <button type="button" class="btn btn--primary btn--sm"
+              hx-post="{% url 'messages.share.friend.respond' partner.slug share.message_id %}"
+              hx-target="#dm-share-card-{{ share.message_id }}" hx-swap="outerHTML">Add Friend</button>
+    </div>
+    {% else %}
+    <p class="dm-share-card__status"><i class="material-symbols-outlined">check_circle</i> Friend request sent.</p>
+    {% endif %}
+  {% endif %}
+  {% endif %}
+</div>

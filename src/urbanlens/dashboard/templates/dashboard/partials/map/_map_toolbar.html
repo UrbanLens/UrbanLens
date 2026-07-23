@@ -1,0 +1,24 @@
+{% comment %}
+Shared top-right map toolbar (tools only). Identical markup on every map on
+the site - see map_components.py's map_toolbar()/MAP_TOOL_REGISTRY. The
+collapse toggle and the screenshot tool are both wired by delegated global
+handlers in themes/base.html, so this partial needs no page-specific script.
+{% endcomment %}
+<div class="map-buttons" id="{{ panel_id }}">
+    <button type="button" class="map-toolbar-collapse" aria-label="Toggle map controls"
+            data-tooltip="Collapse toolbar" data-tooltip-float="true" data-tooltip-pos="below">
+        <i class="material-symbols-outlined">chevron_right</i>
+    </button>
+    <div class="map-buttons-content">
+        {% for button in buttons %}
+        <button type="button" id="{{ button.spec.button_id }}" class="map-btn-icon"
+                data-tooltip="{{ button.spec.tooltip }}" data-tooltip-float="true"
+                {% if button.spec.tooltip_pos %}data-tooltip-pos="{{ button.spec.tooltip_pos }}"{% endif %}
+                aria-label="{{ button.spec.aria_label }}"
+                {% if button.hx_get %}hx-get="{{ button.hx_get }}" hx-target="{{ button.spec.hx_target }}" hx-swap="{{ button.spec.hx_swap }}"{% endif %}
+                {% if button.onclick %}onclick="{{ button.onclick }}"{% endif %}>
+            <i class="material-symbols-outlined">{{ button.spec.icon }}</i>{% if button.spec.extra_html %}{{ button.spec.extra_html|safe }}{% endif %}
+        </button>
+        {% endfor %}
+    </div>
+</div>

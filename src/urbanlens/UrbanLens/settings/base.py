@@ -74,13 +74,16 @@ ASGI_APPLICATION = "urbanlens.UrbanLens.asgi.application"
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    # CorsMiddleware must sit above CommonMiddleware (and anything else that
+    # can short-circuit a response) so CORS headers are applied to redirects
+    # and preflight responses - see django-cors-headers docs.
+    "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    "corsheaders.middleware.CorsMiddleware",
     # Innermost: swaps in the simulated viewer for "view profile as" previews.
     "urbanlens.dashboard.middleware.ProfilePreviewMiddleware",
 ]
@@ -96,7 +99,13 @@ ROOT_URLCONF = "urbanlens.UrbanLens.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        # Explicit DIRS is searched before the APP_DIRS loader, so this app's
+        # own registration/*.html and password_reset_*.txt templates always
+        # win over django.contrib.admin/auth's bundled templates of the same
+        # name (both apps are registered ahead of "dashboard" in
+        # INSTALLED_APPS, so without this the app_directories loader picks
+        # theirs first and ours is silently never rendered - UL-257).
+        "DIRS": [os.path.join(PROJECT_ROOT, "dashboard", "templates")],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -111,6 +120,7 @@ TEMPLATES = [
                 "urbanlens.dashboard.context_processors.add_pending_account_deletion",
                 "urbanlens.dashboard.context_processors.add_environment_indicator",
                 "urbanlens.dashboard.context_processors.add_distance_units",
+                "urbanlens.dashboard.context_processors.add_direct_messages",
             ],
         },
     },
@@ -130,6 +140,10 @@ DATABASES = {
         "PASSWORD": os.getenv("UL_DB_PASS"),
         "HOST": os.getenv("UL_DB_HOST", "localhost"),
         "PORT": os.getenv("UL_DB_PORT", "5432"),
+        # UL_TEST_DB_NAME lets concurrent test runs (e.g. two working copies
+        # or agent sessions on one machine) use separate test databases
+        # instead of fighting over the default "test_<NAME>".
+        "TEST": {"NAME": os.getenv("UL_TEST_DB_NAME") or None},
     },
 }
 # Valkey/Redis cache. Used for per-profile map pin payloads and Django's
@@ -191,6 +205,16 @@ DATABASE_ROUTERS = ["urbanlens.dashboard.dbrouters.DBRouter"]
 # endpoint when available, otherwise local Redis for development.
 CELERY_BROKER_URL = os.getenv("UL_CELERY_BROKER_URL") or VALKEY_URL or "redis://localhost:6379/0"
 CELERY_RESULT_BACKEND = os.getenv("UL_CELERY_RESULT_BACKEND") or CELERY_BROKER_URL
+# Bounds the result backend's connection-recovery retry loop
+# (RedisBackend.ensure(), used by its pub/sub result-tracking reconnect) to a
+# few seconds instead of Celery's default near-unbounded exponential backoff
+# (interval_start=2s, interval_max=30s, no timeout/max_retries set) - without
+# this, any request-path call to safely_enqueue_task() blocks for several
+# minutes before failing whenever the broker is unreachable (it does catch
+# the eventual RuntimeError, but only after the retry storm completes).
+# Matches the fail-fast philosophy already applied to the plain Django
+# cache's own Redis connection above (socket_connect_timeout/socket_timeout).
+CELERY_RESULT_BACKEND_TRANSPORT_OPTIONS = {"retry_policy": {"timeout": 5.0}}
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
@@ -208,6 +232,14 @@ UL_BACKUP_ENABLED = os.getenv("UL_BACKUP_ENABLED", "True").lower() in {"true", "
 UL_BACKUP_FREQUENCY_HOURS = int(os.getenv("UL_BACKUP_FREQUENCY_HOURS", "24"))
 UL_BACKUP_RETENTION = int(os.getenv("UL_BACKUP_RETENTION", "30"))
 
+# Leaflet zoom level at/above which a saved MarkupMap viewport is considered
+# "zoomed in" for pin-share detection purposes (see
+# services.map_pin_share_detection.is_zoomed_in): every one of the sender's
+# pins visible in frame counts as shared, regardless of markup content. Below
+# this, only pins specifically called out by markup (in-boundary marker,
+# arrow pointing toward, or shape overlap) count.
+UL_MAP_SHARE_ZOOM_THRESHOLD = float(os.getenv("UL_MAP_SHARE_ZOOM_THRESHOLD", "14"))
+
 CELERY_BEAT_SCHEDULE = {
     "scheduled-database-backup-check": {
         "task": "urbanlens.dashboard.tasks.run_scheduled_database_backup",
@@ -215,6 +247,10 @@ CELERY_BEAT_SCHEDULE = {
     },
     "scheduled-vestigial-asset-cleanup": {
         "task": "urbanlens.dashboard.tasks.cleanup_vestigial_assets_task",
+        "schedule": 60 * 60,
+    },
+    "scheduled-location-enrichment": {
+        "task": "urbanlens.dashboard.tasks.run_scheduled_enrichment",
         "schedule": 60 * 60,
     },
     "safety-checkin-due-reminders": {
@@ -245,6 +281,14 @@ CELERY_BEAT_SCHEDULE = {
         "task": "urbanlens.dashboard.tasks.prune_expired_undo_actions",
         "schedule": 60 * 60,
     },
+    "direct-message-hard-delete": {
+        "task": "urbanlens.dashboard.tasks.hard_delete_expired_direct_messages",
+        "schedule": 60 * 60,
+    },
+    "upgrade-placeholder-pin-names": {
+        "task": "urbanlens.dashboard.tasks.upgrade_placeholder_pin_names",
+        "schedule": 60 * 60,
+    },
 }
 
 
@@ -254,15 +298,26 @@ CELERY_BEAT_SCHEDULE = {
 AUTH_PASSWORD_VALIDATORS = [
     {
         "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
+        "OPTIONS": {
+            "user_attributes": ("username", "email", "first_name", "last_name"),
+            "max_similarity": 0.5,  # stricter than default 0.7
+        },
     },
     {
         "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
+        "OPTIONS": {"min_length": 12},
     },
     {
         "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
     },
     {
         "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
+    },
+    {
+        "NAME": "urbanlens.dashboard.validators.password.ComplexityValidator",
+    },
+    {
+        "NAME": "urbanlens.dashboard.validators.password.HaveIBeenPwnedValidator",
     },
 ]
 
@@ -384,6 +439,10 @@ SOCIAL_AUTH_PIPELINE = (
     "urbanlens.dashboard.services.social_auth.pipeline.mark_new_user_onboarding",
     # Save Discord username as a social link for Discord SSO users.
     "urbanlens.dashboard.services.social_auth.pipeline.save_discord_social_link",
+    # Must be last: detours through the 2FA challenge (instead of the implicit
+    # login social-auth performs once the pipeline finishes) for any account
+    # that already has a passkey or authenticator app enrolled.
+    "urbanlens.dashboard.services.social_auth.pipeline.enforce_two_factor_for_sso",
 )
 
 # After login/signup, send users through post-login routing (map or site admin setup).
@@ -430,6 +489,11 @@ TEST_RUNNER = "urbanlens.core.tests.runner.TestRunner"
 # anonymous requests (e.g. public API endpoints) are tightly constrained.
 # Requires Valkey cache to be configured - no-ops gracefully when cache is absent.
 REST_FRAMEWORK = {
+    # Every registered API endpoint is user-scoped; opt out per-view if a
+    # genuinely public endpoint is ever added.
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",
+    ],
     "DEFAULT_THROTTLE_CLASSES": [
         "rest_framework.throttling.AnonRateThrottle",
         "rest_framework.throttling.UserRateThrottle",
@@ -437,6 +501,10 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_RATES": {
         "anon": "60/minute",
         "user": "600/minute",
+        # external_api.throttling.ApiKeyRateThrottle - per API key, not per user,
+        # so one connected app's misbehavior can't burn through a budget shared
+        # with a user's other keys.
+        "external_api_key": "120/hour",
     },
 }
 

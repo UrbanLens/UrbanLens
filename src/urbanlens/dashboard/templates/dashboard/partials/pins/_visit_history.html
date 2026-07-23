@@ -1,10 +1,9 @@
 {% load dashboard_tags %}
-<div class="visit-history card" id="visit-history-panel"
-     data-collapse-scope="pin" data-collapse-section="visits">
+<div class="visit-history card" id="visit-history-panel">
     <div class="card-header">
         <i class="material-symbols-outlined">history</i>
         <h3>Visit History</h3>
-        {% if visits %}<span class="visit-count badge">{{ visits|length }}</span>{% endif %}
+        {% if page_obj.paginator.count %}<span class="visit-count badge">{{ page_obj.paginator.count }}</span>{% endif %}
         <button type="button" class="btn btn--icon-sm"
                 onclick="document.getElementById('visit-add-dialog-{{ pin.slug }}').showModal()"
                 title="Log a visit">
@@ -54,9 +53,9 @@
     {% endif %}
 
     {% if visits %}
-    <ul class="visit-list">
+    <ul class="visit-list" data-adaptive-pagination-list data-adaptive-pagination-min-page-size="3">
         {% for visit in visits %}
-        <li class="visit-item">
+        <li class="visit-item" data-adaptive-pagination-item>
             {# -- Leading source icon, doubles as a timeline marker -------------- #}
             <span class="visit-item-icon visit-source--{{ visit.source }}" title="{{ visit.get_source_display }}">
                 {% if visit.source == "history" %}<i class="material-symbols-outlined">cloud_download</i>
@@ -75,9 +74,15 @@
                     <span class="visit-time">{{ visit.visited_at|time:"g:i A" }}</span>
                     {% endif %}
                     <span class="visit-source-label">{{ visit.get_source_display }}</span>
+                    {% if include_children and visit.pin_id != pin.id %}
+                    <a class="visit-child-chip" href="{% url 'pin.details' visit.pin.slug|default:visit.pin.uuid %}"
+                       title="Logged on the sub pin {{ visit.pin.effective_name }}">
+                        <i class="material-symbols-outlined">subdirectory_arrow_right</i>{{ visit.pin.effective_name }}
+                    </a>
+                    {% endif %}
                 </div>
-                {% if visit.notes %}
-                <div class="visit-notes">{{ visit.notes }}</div>
+                {% if visit.notes_html %}
+                <div class="visit-notes article-body">{{ visit.notes_html|safe }}</div>
                 {% endif %}
                 {% with visit_participants=visit.participants.all %}
                 {% if visit_participants %}
@@ -149,6 +154,13 @@
             </div>
 
             <div class="visit-item-actions">
+                {% if include_children and visit.pin_id != pin.id %}
+                {# Child-pin visits are edited from their own pin's page - deep-link there. #}
+                <a href="{% url 'pin.details' visit.pin.slug|default:visit.pin.uuid %}" class="icon-btn visit-open-child-btn"
+                   title="Open {{ visit.pin.effective_name }} to edit this visit">
+                    <i class="material-symbols-outlined">open_in_new</i>
+                </a>
+                {% else %}
                 <button type="button"
                         hx-get="{% url 'pin.visit.edit' pin.slug visit.id %}"
                         hx-target="#visit-edit-body-{{ pin.slug }}"
@@ -167,6 +179,7 @@
                         title="Delete visit">
                     <i class="material-symbols-outlined">delete_outline</i>
                 </button>
+                {% endif %}
             </div>
         </li>
         {% endfor %}

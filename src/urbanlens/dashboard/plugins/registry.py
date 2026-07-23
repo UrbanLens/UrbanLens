@@ -38,8 +38,10 @@ from urbanlens.dashboard.plugins.hooks import ACTION_PLUGINS_LOADED, hooks
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.services.apis.locations.base import SatelliteViewProvider, StreetViewProvider
+    from urbanlens.dashboard.services.enrichment import EnrichmentSource
     from urbanlens.dashboard.services.external_data import PanelSource
     from urbanlens.dashboard.services.locations.name_resolution import NameProvider
+    from urbanlens.dashboard.services.photo_keywords import PhotoKeywordProvider
     from urbanlens.dashboard.services.rate_limiter import ServiceDefaults
 
 logger = logging.getLogger(__name__)
@@ -223,6 +225,24 @@ class PluginRegistry:
             Freshly built provider gateway instances.
         """
         return self._collect("get_satellite_providers")
+
+    def enrichment_sources(self) -> list[EnrichmentSource]:
+        """Background-enrichment sources contributed by enabled plugins.
+
+        Returns:
+            EnrichmentSource instances in plugin order; the scheduled
+            enrichment task runs them in this order each cycle.
+        """
+        return self._collect("get_enrichment_sources")
+
+    def photo_keyword_providers(self) -> list[PhotoKeywordProvider]:
+        """Photo keywording strategies contributed by enabled plugins.
+
+        Returns:
+            PhotoKeywordProvider instances in plugin order; each stores its
+            own keywords per image, so ordering only affects run order.
+        """
+        return self._collect("get_photo_keyword_providers")
 
     def street_view_providers(self) -> list[StreetViewProvider]:
         """The street-level imagery provider chain, in plugin order.

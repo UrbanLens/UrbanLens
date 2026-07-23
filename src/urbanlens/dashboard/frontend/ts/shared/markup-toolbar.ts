@@ -14,13 +14,13 @@ declare const L: typeof import("leaflet");
  * Ported from the old `_markup_toolbar_script.html` text fragment (which
  * relied on being spliced into the including page's own script scope to read
  * bare `map`/`_markupLayer` identifiers) into an explicit factory - the host
- * page now passes `map`/`markupLayer` and a config object instead. The host
- * must still expose the functions referenced by `_markup_toolbar_panel.html`
- * / `_markup_panel_dialog.html`'s inline `onclick=` attributes
- * (startMarkupDraw, startShapeDraw, startTextPlacement, toggleAddDetailMenu,
- * closeOrFinishDraw, deleteMarkupEdit) as `window` globals - see
- * ts/entries/map-annotations.ts and _safety_map_script.html for the two ways
- * that's done.
+ * page now passes `map`/`markupLayer` and a config object instead. The draw
+ * tools themselves are plain top-right toolbar icons (see map_toolbar() /
+ * `markup_pin`+`markup_line`+... in dashboard/templatetags/map_components.py)
+ * whose onclick attributes call the functions this module exposes
+ * (startMarkupDraw, startShapeDraw, startTextPlacement, closeOrFinishDraw,
+ * deleteMarkupEdit) as `window` globals - see ts/entries/map-annotations.ts
+ * and _safety_map_script.html for the two ways that's done.
  */
 
 export interface MarkupItem {
@@ -33,6 +33,9 @@ export interface MarkupItem {
         box_corner?: [number, number];
     };
     label?: string;
+    /** Name of the child pin this markup belongs to, when it was loaded via
+     * the pin page's "show sub pin details" toggle. Display-only here. */
+    owner_name?: string;
     color: string;
     border_color?: string | null;
     stroke_width?: number;
@@ -145,7 +148,6 @@ export interface MarkupToolbar {
     startMarkupDraw: (type: string) => void;
     startShapeDraw: (type: string) => void;
     startTextPlacement: () => void;
-    toggleAddDetailMenu: () => void;
     closeMarkupPanel: () => void;
     /** The panel's single "Close" action: finishes a valid in-progress shape, or just closes. */
     closeOrFinishDraw: () => void;
@@ -375,13 +377,16 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
         item._layers = layers;
 
         // Clicking any interactive layer opens the edit dialog; also bind a
-        // tooltip showing the label (if any) on hover.
+        // tooltip showing the label (if any) on hover. Markup belonging to a
+        // child pin (owner_name) is display-only here - no edit on click, and
+        // the tooltip says which sub pin it comes from.
         layers.forEach((l) => {
             const interactive = l as L.Layer & { on?: L.Evented["on"]; bindTooltip?: L.Layer["bindTooltip"] };
             if (!interactive.on) return;
-            interactive.on!("click", () => openMarkupEditDialog(item));
-            if (item.label && interactive.bindTooltip) {
-                interactive.bindTooltip!(escapeMarkupLabel(item.label), { permanent: false, direction: "top", className: "detail-pin-tooltip" });
+            if (!item.owner_name) interactive.on!("click", () => openMarkupEditDialog(item));
+            const tooltip = item.owner_name ? `${item.label ? `${item.label} — ` : ""}inside ${item.owner_name}` : item.label || "";
+            if (tooltip && interactive.bindTooltip) {
+                interactive.bindTooltip!(escapeMarkupLabel(tooltip), { permanent: false, direction: "top", className: "detail-pin-tooltip" });
             }
         });
     }
@@ -461,25 +466,6 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
                 (document.getElementById("markup-panel") as HTMLElement).style.display = "none";
             }
         },
-    });
-
-    // -- "Add Detail" dropdown -------------------------------------------------
-    let addDetailOpen = false;
-
-    function toggleAddDetailMenu(): void {
-        addDetailOpen = !addDetailOpen;
-        (document.getElementById("add-detail-menu") as HTMLElement).style.display = addDetailOpen ? "" : "none";
-        document.querySelector(".add-detail-chevron")?.classList.toggle("open", addDetailOpen);
-    }
-    function closeAddDetailMenu(): void {
-        addDetailOpen = false;
-        (document.getElementById("add-detail-menu") as HTMLElement).style.display = "none";
-        document.querySelector(".add-detail-chevron")?.classList.remove("open");
-    }
-    document.addEventListener("click", (e) => {
-        if (addDetailOpen && !document.getElementById("add-detail-wrap")?.contains(e.target as Node)) {
-            closeAddDetailMenu();
-        }
     });
 
     // -- Markup drawing - engine-backed -----------------------------------------
@@ -601,7 +587,6 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
     }
 
     function startMarkupDraw(type: string): void {
-        closeAddDetailMenu();
         configureMarkupPanelForTool(type);
         drawSession.startTool(type);
     }
@@ -624,7 +609,6 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
 
     // -- Shape drawing (square, circle, polygon) --------------------------------
     function startShapeDraw(type: string): void {
-        closeAddDetailMenu();
         // Engine uses 'rect' for both 'square' and 'rect'.
         const tool = type === "square" ? "rect" : type;
         configureMarkupPanelForTool(tool);
@@ -817,7 +801,6 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
 
     // -- Text placement ----------------------------------------------------------
     function startTextPlacement(): void {
-        closeAddDetailMenu();
         configureMarkupPanelForTool("text");
         drawSession.startTool("text");
     }
@@ -834,7 +817,6 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
         startMarkupDraw,
         startShapeDraw,
         startTextPlacement,
-        toggleAddDetailMenu,
         closeMarkupPanel,
         closeOrFinishDraw,
         deleteMarkupEdit,

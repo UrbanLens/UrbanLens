@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+import itertools
 import json
 from typing import TYPE_CHECKING, ClassVar
 
-from django.contrib.gis.geos import GEOSGeometry, MultiPolygon, Point, Polygon
+from django.contrib.gis.geos import GEOSException, GEOSGeometry, MultiPolygon, Point, Polygon
 from django.core.cache import cache
 
 from urbanlens.core.cache_keys import make_cache_key
@@ -155,7 +156,7 @@ class StaticBoundaryProvider(BoundaryProvider):
     around the location's coordinates instead of a static bbox.
     """
 
-    service_key: ClassVar[str | None] = "static_default_boundary"
+    service_key: ClassVar[str | None] = "static_default_boundary"  # pyright: ignore[reportIncompatibleVariableOverride]
 
     def get_boundary(self, latitude: float, longitude: float, *, name: str | None = None) -> Polygon:
         return default_bbox(latitude, longitude)
@@ -291,8 +292,163 @@ def best_polygon_from_geometry(geom: GEOSGeometry) -> Polygon | None:
     if isinstance(geom, Polygon):
         return geom if geom.valid and not geom.empty else None
     if isinstance(geom, MultiPolygon):
-        polygons = [polygon for polygon in geom if polygon.valid and not polygon.empty]
-        geos_geometry = max(polygons, key=lambda polygon: polygon.area) if polygons else None
-        if geos_geometry is not None:
-            return Polygon(geos_geometry)
+        # Return the element itself, never re-wrapped in Polygon(...) - unlike
+        # LineString/Point, Django's Polygon constructor has no "copy an
+        # existing Polygon" overload, and passing one in raises (confirmed,
+        # not hypothetical - see esri_rings_to_polygon's own docstring).
+        polygons = [polygon for polygon in geom if isinstance(polygon, Polygon) and polygon.valid and not polygon.empty]
+        return max(polygons, key=lambda polygon: polygon.area) if polygons else None
     return None
+
+
+def _shoelace_signed_area(coords: list[tuple[float, float]]) -> float:
+    """Standard shoelace signed area (x=lon, y=lat) - negative means clockwise winding."""
+    return sum(x1 * y2 - x2 * y1 for (x1, y1), (x2, y2) in itertools.pairwise(coords)) / 2.0
+
+
+def _close_ring(points: list) -> list[tuple[float, float]] | None:
+    """Coerce a raw Esri ring (list of [lon, lat] pairs) into a closed coordinate list."""
+    coords: list[tuple[float, float]] = []
+    for point in points:
+        if not isinstance(point, list) or len(point) < 2:
+            continue
+        try:
+            coords.append((float(point[0]), float(point[1])))
+        except (TypeError, ValueError):
+            continue
+    if len(coords) < 3:
+        return None
+    if coords[0] != coords[-1]:
+        coords.append(coords[0])
+    return coords if len(coords) >= 4 else None
+
+
+def esri_rings_to_polygon(geometry: dict | None) -> Polygon | MultiPolygon | None:
+    """Convert an Esri ring-list polygon geometry into a GEOS polygon.
+
+    Only still needed for sources that hand back Esri's native ring-list shape
+    directly - Census TIGERweb (``geo_boundary.py``) being the one remaining
+    caller. REData used to require this too, but its API now converts
+    ``parcel_geometry``/``building_geometry`` to standard GeoJSON server-side
+    (``core.services.geojson.esri_rings_to_geojson``, mirroring this exact
+    function) - see ``geojson_polygon_to_geos`` below for that shape instead,
+    used by ``RedataBoundaryProvider``.
+
+    Esri's ring-winding convention is the opposite of GeoJSON's: a clockwise
+    ring is an exterior shell, a counter-clockwise ring is a hole - and
+    unlike GeoJSON, Esri doesn't guarantee a hole immediately follows its
+    shell in the array, so each hole is assigned to whichever shell actually
+    contains it (a point-in-polygon test), not just "the most recent shell".
+    Multiple disjoint shells (a parcel/building made of separate pieces)
+    become a MultiPolygon.
+
+    Args:
+        geometry: A dict of the shape ``{"format": "esri_rings", "rings": [...]}``,
+            or None.
+
+    Returns:
+        A single ``Polygon``, a ``MultiPolygon`` when more than one exterior
+        shell was found, or None when the geometry is missing, malformed, or
+        has no usable exterior ring.
+    """
+    if not isinstance(geometry, dict) or geometry.get("format") != "esri_rings":
+        return None
+    rings = geometry.get("rings")
+    if not isinstance(rings, list) or not rings:
+        return None
+
+    shell_coords: list[list[tuple[float, float]]] = []
+    hole_coords: list[list[tuple[float, float]]] = []
+    for ring in rings:
+        if not isinstance(ring, list):
+            continue
+        coords = _close_ring(ring)
+        if coords is None:
+            continue
+        (hole_coords if _shoelace_signed_area(coords) > 0 else shell_coords).append(coords)
+
+    if not shell_coords:
+        return None
+
+    shell_polygons: list[Polygon] = []
+    valid_shell_coords: list[list[tuple[float, float]]] = []
+    for coords in shell_coords:
+        try:
+            polygon = Polygon(coords, srid=4326)
+        except (ValueError, GEOSException):
+            continue
+        if polygon.valid and not polygon.empty:
+            shell_polygons.append(polygon)
+            valid_shell_coords.append(coords)
+
+    if not shell_polygons:
+        return None
+
+    # Bucket each hole under whichever shell actually contains it.
+    holes_by_shell: dict[int, list[list[tuple[float, float]]]] = {}
+    for hole in hole_coords:
+        point = Point(hole[0][0], hole[0][1], srid=4326)
+        for idx, shell_polygon in enumerate(shell_polygons):
+            if shell_polygon.contains(point):
+                holes_by_shell.setdefault(idx, []).append(hole)
+                break
+
+    final_polygons: list[Polygon] = []
+    for idx, coords in enumerate(valid_shell_coords):
+        assigned_holes = holes_by_shell.get(idx)
+        polygon = shell_polygons[idx]
+        if assigned_holes:
+            try:
+                with_holes = Polygon(coords, *assigned_holes, srid=4326)
+            except (ValueError, GEOSException):
+                with_holes = None
+            if with_holes is not None and with_holes.valid and not with_holes.empty:
+                polygon = with_holes
+        final_polygons.append(polygon)
+
+    if len(final_polygons) == 1:
+        return final_polygons[0]
+    return MultiPolygon(final_polygons, srid=4326)
+
+
+def geojson_polygon_to_geos(geometry: dict | None) -> Polygon | MultiPolygon | None:
+    """Convert a standard GeoJSON ``Polygon``/``MultiPolygon`` dict into a GEOS geometry.
+
+    Unlike :func:`esri_rings_to_polygon`, the input here is already correct,
+    standard GeoJSON (RFC 7946 winding order, holes already nested under their
+    shell) - REData's API converts its internally-stored Esri ring-list shape
+    to this on the way out (``core.services.geojson.esri_rings_to_geojson``,
+    a pure-Python port of ``esri_rings_to_polygon``'s own algorithm), so this
+    is a direct structural translation rather than a geometry-fixing one:
+    GeoJSON's ``coordinates`` array for a ``Polygon`` (``[exterior_ring,
+    hole_ring, ...]``, each ring a list of ``[lon, lat]`` pairs) is exactly
+    the ring-list shape Django's own ``Polygon(*rings)`` constructor expects.
+
+    Args:
+        geometry: A dict of the shape ``{"type": "Polygon"|"MultiPolygon",
+            "coordinates": [...]}``, or None.
+
+    Returns:
+        A single ``Polygon``, a ``MultiPolygon`` when more than one shell was
+        present, or None when the geometry is missing, malformed, an
+        unsupported type (e.g. a bare ``Point``), or resolves to nothing valid.
+    """
+    if not isinstance(geometry, dict):
+        return None
+    geo_type = geometry.get("type")
+    coordinates = geometry.get("coordinates")
+    if geo_type not in ("Polygon", "MultiPolygon") or not isinstance(coordinates, list) or not coordinates:
+        return None
+
+    try:
+        if geo_type == "Polygon":
+            polygon = Polygon(*coordinates, srid=4326)
+            return polygon if polygon.valid and not polygon.empty else None
+
+        polygons = [polygon for poly_coords in coordinates if (polygon := Polygon(*poly_coords, srid=4326)).valid and not polygon.empty]
+    except (ValueError, GEOSException, TypeError):
+        return None
+
+    if not polygons:
+        return None
+    return polygons[0] if len(polygons) == 1 else MultiPolygon(polygons, srid=4326)

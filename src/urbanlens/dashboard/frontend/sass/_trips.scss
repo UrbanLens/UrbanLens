@@ -4,67 +4,29 @@
 // -- Trip planning ---------------------------------------------------------
 
 
-.trips-header {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 1rem;
-    margin-bottom: 2rem;
-    flex-wrap: wrap;
-}
-
-.trips-title {
-    font-size: 1.6rem;
-    font-weight: 700;
-    margin: 0 0 .25rem;
-    display: flex;
-    align-items: center;
-    gap: .4rem;
-    color: var(--ul-grey-8);
-
-    .material-symbols-outlined,
-    .material-icons {
-        font-size: 1.7rem;
-        color: $color-blue-500;
-    }
-}
-
-.trips-subtitle {
-    margin: 0;
-    color: var(--ul-grey-7);
-    font-size: .9rem;
-}
-
 .trips-header-right {
     display: flex;
     align-items: center;
     gap: 0.5rem;
+
+    &.trips-actions-row {
+        justify-content: flex-end;
+        margin-bottom: 1.25rem;
+    }
 }
 
 .trips-toolbar {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-end;
     flex-wrap: wrap;
     gap: .75rem;
     margin-bottom: 1.25rem;
 }
 
-.trips-view-toggle .view-toggle-btn {
-    width: auto;
-    height: 34px;
-    padding: 0 .8rem;
-    gap: .35rem;
-    font-size: .85rem;
-    font-weight: 600;
-
-    .material-symbols-outlined { font-size: 1.15rem; }
-}
-
 .trips-view {
     &--calendar {
-        background-color: var(--ul-grey-1b);
-        border: 1px solid var(--ul-grey-1a);
+        @include surface;
         padding: 1.5rem 0.5rem 0;
     }
 }
@@ -88,15 +50,15 @@
 }
 
 .trip-sort-select {
-    border: 1px solid var(--ul-grey-1a);
-    background: var(--ul-grey-0);
+    border: 1px solid var(--ul-surface-raised-border);
+    background: var(--ul-surface-raised);
     color: var(--ul-grey-8);
     border-radius: 7px;
     padding: .4rem .6rem;
     font-size: .85rem;
     cursor: pointer;
 
-    &:hover { border-color: var(--ul-grey-2); }
+    &:hover { border-color: var(--ul-surface-2-border); }
     &:focus-visible { outline: 2px solid $color-blue-500; outline-offset: 1px; }
 }
 
@@ -112,8 +74,8 @@
         height: 72px;
         margin: 0 auto 1.25rem;
         border-radius: 50%;
-        background: linear-gradient(135deg, var(--ul-grey-0a));
-        border: 1px solid var(--ul-grey-1a);
+        background: var(--ul-surface-raised);
+        border: 1px solid var(--ul-surface-raised-border);
         display: flex;
         align-items: center;
         justify-content: center;
@@ -162,15 +124,13 @@
 
 .trip-card {
     position: relative;
-    border: 1px solid var(--ul-grey-1a);
-    background-color: var(--ul-grey-0);
-    border-radius: 14px;
+    @include surface($radius: 14px);
+    box-shadow: 3px 3px 10px rgba(0, 0, 0, .08);
     overflow: hidden;
     transition: box-shadow .2s, border-color .2s, transform .2s;
 
     &:hover {
         box-shadow: 0 10px 28px rgba(0, 0, 0, .08);
-        background-color: var(--ul-grey-0a);
         transform: translateY(-2px);
 
         .trip-card-arrow {
@@ -303,8 +263,8 @@
     align-items: center;
     padding: .12rem .45rem;
     border-radius: 999px;
-    background: var(--ul-grey-1);
-    border: 1px solid var(--ul-grey-1a);
+    background: var(--ul-surface-raised);
+    border: 1px solid var(--ul-surface-raised-border);
     font-size: .72rem;
     font-weight: 600;
     color: var(--ul-grey-7);
@@ -334,8 +294,8 @@
     gap: .25rem;
     padding: .28rem .55rem;
     border-radius: 999px;
-    background: var(--ul-grey-1);
-    border: 1px solid var(--ul-grey-1a);
+    background: var(--ul-surface-raised);
+    border: 1px solid var(--ul-surface-raised-border);
     font-size: .74rem;
     font-weight: 600;
     color: var(--ul-grey-7);
@@ -353,7 +313,7 @@
     gap: .75rem;
     margin-top: auto;
     padding-top: .55rem;
-    border-top: 1px solid var(--ul-grey-4);
+    border-top: 1px solid var(--ul-surface-border);
 }
 
 .trip-card-members {
@@ -367,7 +327,7 @@
     height: 28px;
     border-radius: 50%;
     overflow: hidden;
-    border: 2px solid var(--ul-grey-0);
+    border: 2px solid var(--ul-surface-raised);
     background: $color-light-blue-100;
     display: flex;
     align-items: center;
@@ -429,52 +389,198 @@
     transition: color .15s, transform .15s;
 }
 
+// -- Trips overview page -----------------------------------------------------
+
+.trips-stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.trips-stat-tile {
+    @include surface($radius: .75rem);
+    padding: 1rem 1.1rem;
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+
+    .trips-stat-icon {
+        width: 42px;
+        height: 42px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        background: rgba($color-blue-500, .12);
+
+        .material-symbols-outlined {
+            font-size: 1.4rem;
+            color: $color-blue-500;
+        }
+    }
+
+    .trips-stat-value {
+        font-size: 1.35rem;
+        font-weight: 700;
+        line-height: 1.1;
+        color: var(--ul-grey-8);
+    }
+
+    .trips-stat-label {
+        font-size: .78rem;
+        color: var(--ul-grey-6);
+    }
+}
+
+.trips-overview-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+
+    @media (min-width: 900px) {
+        grid-template-columns: 1.1fr 1fr;
+        align-items: start;
+    }
+}
+
+.trips-overview-lists {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.trip-mini-row-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.trip-mini-row {
+    border-bottom: 1px solid var(--ul-surface-border);
+
+    &:last-child {
+        border-bottom: none;
+    }
+}
+
+.trip-mini-row-link {
+    display: flex;
+    align-items: center;
+    gap: .65rem;
+    padding: .65rem 1rem;
+    text-decoration: none;
+    color: inherit;
+    transition: background .12s;
+
+    &:hover {
+        background: var(--ul-hover-bg);
+
+        .trip-mini-row-name {
+            color: $color-blue-600;
+        }
+    }
+}
+
+.trip-mini-row-status {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: var(--ul-grey-5);
+
+    &--upcoming { background: $color-blue-500; }
+    &--active { background: $color-green-500; }
+    &--past { background: var(--ul-grey-5); }
+    &--planning { background: $color-amber-500; }
+}
+
+.trip-mini-row-body {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: .1rem;
+}
+
+.trip-mini-row-name {
+    font-weight: 600;
+    font-size: .88rem;
+    color: var(--ul-grey-8);
+    @include truncate;
+}
+
+.trip-mini-row-dates {
+    font-size: .76rem;
+    color: var(--ul-grey-6);
+}
+
+.trip-mini-row-timestamp {
+    font-size: .72rem;
+    color: var(--ul-grey-6);
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.trips-overview-cal {
+    .cal-header,
+    .cal-grid {
+        padding-left: 1rem;
+        padding-right: 1rem;
+    }
+
+    .cal-header {
+        padding-top: .9rem;
+    }
+
+    .cal-grid {
+        padding-bottom: 1rem;
+    }
+}
+
 // -- Trip detail page ------------------------------------------------------
 
 .trip-detail-page {
     //padding: 1.5rem 1rem 3rem;
 }
 
-.trip-detail-header {
+// Invitation banner - shown only to a member who was invited but hasn't
+// joined yet (see TripMembershipJoinView / TripLeaveView). Consenting to
+// join is separate from RSVP (are you actually coming?): until they join,
+// they can view the trip but can't add/edit activities, comment, or vote
+// (see viewer_has_joined gates throughout the trip panels).
+.trip-invite-banner {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: space-between;
     gap: 1rem;
-    padding-bottom: 1.5rem;
-    border-bottom: 1px solid var(--ul-grey-1a);
-    margin-bottom: 1.5rem;
     flex-wrap: wrap;
+    padding: .85rem 1.1rem;
+    margin-bottom: 1.25rem;
+    border-radius: $radius-md;
+    background: rgba($color-blue-500, .08);
+    border: 1px solid rgba($color-blue-500, .25);
 }
 
-.trip-back-link {
-    display: inline-flex;
+.trip-invite-banner-text {
+    display: flex;
     align-items: center;
-    gap: .25rem;
-    font-size: .85rem;
-    color: var(--ul-grey-7);
-    text-decoration: none;
-    margin-bottom: .5rem;
-
-    &:hover {
-        color: $color-blue-500;
-    }
-
-    .material-symbols-outlined,
-    .material-icons {
-        font-size: 1rem;
-    }
-}
-
-.trip-detail-title {
-    font-size: 1.8rem;
-    font-weight: 700;
-    margin: 0 0 .35rem;
+    gap: .5rem;
+    font-size: .88rem;
     color: var(--ul-grey-8);
+
+    .material-symbols-outlined {
+        color: $color-blue-500;
+        flex-shrink: 0;
+    }
 }
 
-.trip-detail-description {
-    margin: 0 0 .5rem;
-    color: var(--ul-grey-7);
+.trip-invite-banner-actions {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    flex-shrink: 0;
 }
 
 .trip-detail-dates {
@@ -490,15 +596,69 @@
     }
 }
 
+.trip-title-editable,
+.trip-description-editable {
+    display: inline-block;
+    cursor: pointer;
+    border-radius: 6px;
+    padding: .1rem .4rem;
+    margin: 0 0 0 -.4rem;
+    transition: background .15s;
+
+    &:hover,
+    &:focus-visible {
+        background: var(--ul-grey-0a);
+        outline: none;
+    }
+}
+
+.trip-title-input,
+.trip-description-input {
+    font: inherit;
+    font-weight: inherit;
+    color: inherit;
+    background: var(--ul-control-bg);
+    border: 1px solid var(--ul-color-accent);
+    border-radius: 6px;
+    padding: .1rem .4rem;
+    margin: 0 0 0 -.4rem;
+    outline: none;
+    min-width: 8rem;
+}
+
+.trip-description-input {
+    display: block;
+    width: 100%;
+    resize: vertical;
+}
+
 .trip-detail-header-right {
     display: flex;
     align-items: center;
+    justify-content: flex-end;
     gap: .5rem;
     flex-shrink: 0;
+    padding-bottom: 1.5rem;
+    border-bottom: 1px solid var(--ul-surface-border);
+    margin-bottom: 1.5rem;
     opacity: 0.75;
 
     &:hover {
         opacity: 1;
+    }
+}
+
+.calendar-export-autosync {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    font-size: .8rem;
+    color: var(--ul-grey-6);
+    white-space: nowrap;
+    cursor: pointer;
+
+    input[type="checkbox"] {
+        margin: 0;
     }
 }
 
@@ -530,7 +690,6 @@
     display: grid;
     gap: 1.5rem;
     grid-template-columns: 1fr;
-    align-items: start;
 
     @include up($breakpoint-md) {
         grid-template-columns: repeat(2, 1fr);
@@ -539,6 +698,23 @@
 
 .trip-section {
     position: relative;
+    // Stretch (the grid's default row alignment) only affects this wrapper -
+    // flex it down to the actual panel card so two sections sharing a row
+    // (e.g. Members + Comments) render as equal-height cards instead of the
+    // shorter one leaving blank space below a mismatched card boundary.
+    display: flex;
+    flex-direction: column;
+
+    &[hidden] {
+        display: none;
+    }
+
+    > .trip-detail-section,
+    > [id$="-panel"] {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+    }
 
     &:hover .trip-section-grip {
         opacity: 1;
@@ -555,6 +731,14 @@
             opacity: 1;
             color: var(--ul-grey-7);
         }
+    }
+}
+
+.trip-detail-section {
+    > [id$="-panel"] {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
     }
 }
 
@@ -592,12 +776,12 @@
 
     .card-header {
         padding: .75rem 1rem;
-        border-bottom: 1px solid var(--ul-grey-4);
+        border-bottom: 1px solid var(--ul-surface-border);
         font-weight: 600;
         font-size: .9rem;
 
         .badge {
-            background: var(--ul-grey-1a);
+            background: var(--ul-surface-raised);
             color: var(--ul-grey-7);
             border-radius: 99px;
             font-size: .72rem;
@@ -607,12 +791,29 @@
     }
 }
 
+// The shared panel-header-grid mixin gives the title column all the leftover
+// flexible space, which pushes the count badge (grid-area: header-meta) all
+// the way over next to the action buttons instead of hugging the title next
+// to it. Scoped to the trip detail page rather than the shared mixin, since
+// other pages using the same card-header component haven't been audited.
+.trip-detail-page .card-header {
+    grid-template-columns: auto auto auto minmax(0, 1fr);
+
+    .card-header-actions {
+        justify-content: flex-end;
+    }
+
+    .badge {
+        justify-self: start;
+    }
+}
+
 // -- Activities view toggle -------------------------------------------------
 
 .view-toggle-group {
     display: flex;
     gap: 1px;
-    background: var(--ul-grey-1);
+    background: var(--ul-surface-raised);
     border-radius: 7px;
     padding: 2px;
 }
@@ -621,8 +822,6 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 28px;
-    height: 28px;
     border-radius: 0;
     cursor: pointer;
     transition: background .15s, color .15s;
@@ -633,97 +832,138 @@
     }
 
     &:hover {
-        background: var(--ul-grey-1a);
+        background: var(--ul-hover-bg);
         color: var(--ul-grey-7);
     }
 
-    &.view-toggle-btn--active {
+    &--active {
         box-shadow: 0 1px 3px rgba(0, 0, 0, .1);
+    }
+
+    &--icon {
+        width: 28px;
+        height: 28px;
     }
 }
 
 // -- Calendar view ---------------------------------------------------------
+// Shared by two features: the trips-list page's full-page month calendar
+// (.trips-view--calendar) and the trip-detail page's per-trip activity
+// calendar (.activity-view--calendar) - both render the same .cal-* markup
+// (see trips/index.html's tripsCalRender() and trips/detail.html's activity
+// calendar renderer), so base sizing here stays compact enough for the
+// narrower activity-panel context; .trips-view--calendar below opts into
+// larger cells for its own full-width page layout.
 
 .activity-view--calendar {
     padding: .75rem 1rem 1rem;
+}
+
+.trips-view--calendar {
+    @include surface;
+    padding: 1.1rem 1.25rem 1.35rem;
+    box-shadow: 0 2px 14px rgba(0, 0, 0, .05);
 }
 
 .cal-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: .65rem;
+    gap: .5rem;
+    margin-bottom: .9rem;
+    padding-bottom: .8rem;
+    border-bottom: 1px solid var(--ul-surface-border);
+    background: rgba(0,0,150,0.01);
 }
 
 .cal-month-label {
-    font-weight: 600;
-    font-size: .95rem;
-    color: var(--ul-grey-8);
+    font-weight: 700;
+    font-size: 1rem;
+    letter-spacing: -.01em;
+    color: var(--ul-grey-9);
 }
 
 .cal-nav-btn {
-    background: none;
-    border: none;
+    background: var(--ul-surface-raised);
+    border: 1px solid var(--ul-surface-raised-border);
     cursor: pointer;
-    width: 30px;
-    height: 30px;
-    border-radius: 6px;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
     color: var(--ul-grey-7);
-    transition: background .15s, color .15s;
+    transition: background .15s ease, color .15s ease, border-color .15s ease, box-shadow .15s ease, transform .15s ease;
 
     .material-symbols-outlined,
     .material-icons {
-        font-size: 1.2rem;
+        font-size: 1.15rem;
     }
 
     &:hover {
-        background: var(--ul-grey-4);
-        color: var(--ul-grey-8);
+        background: $color-blue-500;
+        border-color: $color-blue-500;
+        color: #fff;
+        box-shadow: 0 3px 10px rgba($color-blue-500, .3);
+        transform: translateY(-1px);
+    }
+
+    &:active {
+        transform: translateY(0);
+        box-shadow: none;
     }
 }
 
 .cal-grid {
     display: grid;
     grid-template-columns: repeat(7, minmax(0, 1fr)); // minmax(0,1fr) prevents any column widening to fit content
-    gap: 2px;
+    gap: 5px;
 }
 
 .cal-cell {
     min-height: 54px;
     min-width: 0; // prevent grid cells from growing beyond 1fr share
     overflow: hidden;
-    border-radius: 5px;
-    padding: .25rem .3rem;
+    border-radius: $radius-sm;
+    padding: .3rem .35rem;
+    border: 1px solid transparent;
+    transition: border-color .15s ease, box-shadow .15s ease;
 
     &--header {
         min-height: 0;
-        font-size: .7rem;
+        font-size: .68rem;
         font-weight: 700;
         text-transform: uppercase;
-        letter-spacing: .05em;
+        letter-spacing: .06em;
         color: var(--ul-grey-6);
         text-align: center;
-        padding: .2rem 0 .35rem;
+        padding: 0 0 .5rem;
+        border: none;
     }
 
     &--empty {
-        background: var(--ul-grey-1);
-        opacity: .4;
+        background: transparent;
     }
 
     &--has-events {
-        background: var(--ul-grey-0);
+        background: linear-gradient(135deg, rgba(31, 111, 235, 0.2), rgba(23, 185, 120, 0.15));
+        border-color: var(--ul-surface-raised-border);
+
+        &:hover {
+            border-color: var(--ul-surface-2-border);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, .07);
+        }
     }
 
     &--today {
-        background: var(--ul-grey-0a);
+        background: rgba($color-blue-500, .04);
+        border-color: rgba($color-blue-500, .10);
 
         .cal-day-num {
-            background: $color-blue-500;
-            color: var(--ul-black);
+            background: rgba($color-blue-500, 0.3);
+            color: #fff;
+            box-shadow: 0 1px 4px rgba($color-blue-500, .45);
         }
     }
 }
@@ -732,19 +972,20 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 20px;
-    height: 20px;
+    width: 21px;
+    height: 21px;
     border-radius: 50%;
-    font-size: .75rem;
-    font-weight: 500;
+    font-size: .74rem;
+    font-weight: 600;
     color: var(--ul-grey-8);
-    margin-bottom: .15rem;
+    margin-bottom: .2rem;
+    transition: background .15s ease, color .15s ease;
 }
 
 .cal-events {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 3px;
 }
 
 .cal-event {
@@ -752,43 +993,86 @@
     align-items: center;
     gap: 3px;
     font-size: .66rem;
-    background: $color-blue-500;
-    color: var(--ul-grey-5);
-    border-radius: 3px;
-    padding: 1px 4px;
+    font-weight: 500;
+    background: rgba(0,0,0,0.3);
+    color: #fff;
+    border-radius: 4px;
+    padding: 2px 5px;
     cursor: pointer;
     overflow: hidden;
     text-decoration: none;
-    transition: background .1s;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, .1);
+    transition: background .15s ease, box-shadow .15s ease, transform .1s ease;
 
     &:hover {
-        background: $color-blue-600;
+        background: rgba(0,0,0,0.5);
+        box-shadow: 0 2px 6px rgba(0, 0, 0, .18);
+        transform: translateY(-1px);
     }
 
     &--upcoming { background: $color-blue-500; &:hover { background: $color-blue-600; } }
     &--active { background: #2e9e5b; &:hover { background: #268049; } }
-    &--past { background: var(--ul-grey-6); &:hover { background: var(--ul-grey-7); } }
     &--planning { background: #a06ad1; &:hover { background: #8f52c7; } }
 }
 
 .cal-event-more {
-    font-size: .65rem;
+    font-size: .64rem;
+    font-weight: 600;
     color: var(--ul-grey-6);
-    padding: 0 2px;
+    padding: 1px 4px;
 }
 
 .cal-event-num {
-    background: rgba(255, 255, 255, .25);
-    border-radius: 2px;
-    padding: 0 2px;
+    background: rgba(255, 255, 255, .3);
+    border-radius: 3px;
+    padding: 0 3px;
     font-weight: 700;
     flex-shrink: 0;
-    font-size: .65rem;
+    font-size: .64rem;
 }
 
 .cal-event-title {
     @include truncate;
     min-width: 0;
+}
+
+// Bigger, airier cells for the trips-list page's full month calendar - the
+// trip-detail activity calendar keeps the compact default sizing above
+// since it lives in a narrower panel.
+.trips-view--calendar {
+    .cal-cell {
+        min-height: 92px;
+        padding: .45rem .5rem;
+
+        &--header {
+            min-height: 0;
+            padding: 0 0 .5rem;
+        }
+    }
+
+    .cal-day-num {
+        width: 24px;
+        height: 24px;
+        font-size: .8rem;
+    }
+
+    .cal-event {
+        font-size: .7rem;
+        padding: 3px 6px;
+    }
+
+    @include down($breakpoint-sm) {
+        .cal-cell {
+            min-height: 60px;
+            padding: .3rem .35rem;
+        }
+
+        .cal-day-num {
+            width: 20px;
+            height: 20px;
+            font-size: .72rem;
+        }
+    }
 }
 
 .trip-panel-empty {
@@ -825,7 +1109,7 @@
     align-items: flex-start;
     gap: .75rem;
     padding: .85rem 1rem;
-    border-bottom: 1px solid var(--ul-grey-4);
+    border-bottom: 1px solid var(--ul-surface-border);
     transition: opacity .2s, background .15s;
 
     &:last-child {
@@ -838,8 +1122,8 @@
     }
 
     &.trip-activity--highlighted {
-        background: var(--ul-grey-0a);
-        border-left: 3px solid $color-blue-500;
+        background: rgba($color-amber-500, .08);
+        border-left: 3px solid $color-amber-500;
         padding-left: calc(1rem - 3px);
     }
 
@@ -853,7 +1137,7 @@
     width: 32px;
     height: 32px;
     border-radius: 50%;
-    background: var(--ul-grey-0);
+    background: var(--ul-surface-raised);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -871,14 +1155,14 @@
     height: 28px;
     border-radius: 50%;
     background: $color-blue-500;
-    color: var(--ul-grey-5);
+    color: #fff;
     font-size: .78rem;
     font-weight: 700;
     display: flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    border: 2px solid var(--ul-grey-1a);
+    border: 2px solid var(--ul-surface-raised);
     box-shadow: 0 1px 4px rgba($color-blue-500, .4);
 }
 
@@ -903,6 +1187,15 @@
     font-weight: 600;
     font-size: .9rem;
     color: var(--ul-grey-8);
+}
+
+a.trip-activity-name {
+    text-decoration: none;
+
+    &:hover {
+        color: $color-blue-500;
+        text-decoration: underline;
+    }
 }
 
 .trip-activity-time {
@@ -951,7 +1244,7 @@
     align-items: center;
     gap: .65rem;
     padding: .6rem 1rem;
-    border-bottom: 1px solid var(--ul-grey-4);
+    border-bottom: 1px solid var(--ul-surface-border);
     transition: opacity .2s;
 
     &:last-child {
@@ -1064,7 +1357,7 @@
     align-items: flex-start;
     gap: .75rem;
     padding: .875rem 1rem;
-    border-bottom: 1px solid var(--ul-grey-4);
+    border-bottom: 1px solid var(--ul-surface-border);
     transition: opacity .2s, background .15s;
 
     &:last-child {
@@ -1072,7 +1365,7 @@
     }
 
     &:hover {
-        background: var(--ul-grey-0);
+        background: var(--ul-hover-bg);
 
         .detail-pin-action-btn {
             opacity: 1;
@@ -1138,8 +1431,7 @@
 
 .trip-comment-form {
     padding: .875rem 1rem;
-    border-top: 1px solid var(--ul-grey-1a);
-    background: var(--ul-grey-1);
+    background: var(--ul-surface-border);
     border-radius: 0 0 $radius-md $radius-md;
 }
 
@@ -1161,15 +1453,14 @@
 
 .trip-comment-input {
     width: 100%;
-    border: 1px solid var(--ul-grey-1a);
-    ;
+    border: 1px solid var(--ul-surface-raised-border);
     border-radius: 8px;
     padding: .55rem .75rem;
     font-size: .875rem;
     resize: vertical;
     font-family: inherit;
     box-sizing: border-box;
-    background: var(--ul-grey-0);
+    background: var(--ul-surface-raised);
     color: var(--ul-grey-8);
     transition: border-color .15s, box-shadow .15s;
 
@@ -1208,12 +1499,97 @@
         box-sizing: border-box;
 
         input, textarea, select {
-            background-color: var(--ul-grey-0a);
+            background-color: var(--ul-surface-raised);
         }
 
         @include up($breakpoint-sm) {
             padding: 1.25rem 1.5rem 1.5rem;
         }
+    }
+}
+
+// -- Add-member dialog's friend picker --------------------------------------
+
+.trip-add-friend-section {
+    padding: 1rem 1rem 0;
+
+    @include up($breakpoint-sm) {
+        padding: 1.25rem 1.5rem 0;
+    }
+}
+
+.trip-add-friend-heading {
+    margin: 0 0 .5rem;
+    font-size: .75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--ul-grey-6);
+}
+
+.trip-add-friend-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    max-height: 14rem;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: .15rem;
+}
+
+.trip-add-friend-btn {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    width: 100%;
+    padding: .4rem .5rem;
+    border: none;
+    background: none;
+    border-radius: $radius-sm;
+    cursor: pointer;
+    text-align: left;
+    font: inherit;
+    color: var(--ul-grey-8);
+
+    &:hover {
+        background: var(--ul-hover-bg);
+
+        .trip-add-friend-icon {
+            opacity: 1;
+        }
+    }
+}
+
+.trip-add-friend-name {
+    flex: 1;
+    font-size: .88rem;
+}
+
+.trip-add-friend-icon {
+    font-size: 1.1rem;
+    color: var(--ul-primary-color);
+    opacity: .6;
+}
+
+.trip-add-friend-divider {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    margin: 1rem 1rem 0;
+    color: var(--ul-grey-5);
+    font-size: .75rem;
+
+    @include up($breakpoint-sm) {
+        margin: 1.25rem 1.5rem 0;
+    }
+
+    &::before,
+    &::after {
+        content: '';
+        flex: 1;
+        height: 1px;
+        background: var(--ul-surface-raised-border);
     }
 }
 
@@ -1252,12 +1628,12 @@
     padding: 0;
     max-height: 12rem;
     overflow-y: auto;
-    border: 1px solid var(--ul-grey-1a);
+    border: 1px solid var(--ul-surface-raised-border);
     border-radius: 8px;
 }
 
 .trip-invite-friend-item {
-    border-bottom: 1px solid var(--ul-grey-1a);
+    border-bottom: 1px solid var(--ul-surface-raised-border);
 
     &:last-child {
         border-bottom: none;
@@ -1273,11 +1649,18 @@
     font-weight: normal;
 
     &:hover {
-        background: var(--ul-grey-0);
+        background: var(--ul-hover-bg);
     }
 
-    input[type="checkbox"] {
-        flex-shrink: 0;
+    // Selection toggles by clicking anywhere on the row (it's a <label>); the
+    // checkbox stays in the DOM for form submission but isn't shown - the
+    // background highlight below is the only selected-state indicator.
+    .ul-checkbox-wrap {
+        display: none;
+    }
+
+    &:has(input[type="checkbox"]:checked) {
+        background: rgba(59, 130, 246, .08);
     }
 }
 
@@ -1318,9 +1701,7 @@
     top: 100%;
     left: 0;
     right: 0;
-    background: var(--ul-grey-0);
-    border: 1px solid var(--ul-grey-1a);
-    ;
+    @include surface($rung: null);
     border-top: none;
     border-radius: 0 0 6px 6px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, .1);
@@ -1343,7 +1724,7 @@
     color: var(--ul-grey-8);
 
     &:hover {
-        background: var(--ul-grey-0);
+        background: var(--ul-hover-bg);
     }
 }
 
@@ -1355,12 +1736,86 @@
     font-style: italic;
 }
 
+// -- Add-activity: location/trip picker chip (progressive disclosure) -----
+
+.activity-location-chip {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    padding: .5rem .7rem;
+    border: 1px solid var(--ul-surface-raised-border);
+    border-radius: 8px;
+    background: var(--ul-surface-raised);
+    font-size: .88rem;
+    color: var(--ul-grey-8);
+}
+
+.activity-location-chip-icon {
+    font-size: 1.15rem;
+    color: $color-blue-500;
+    flex-shrink: 0;
+}
+
+.activity-location-chip-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.activity-location-chip-clear {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    flex-shrink: 0;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--ul-grey-6);
+    cursor: pointer;
+
+    &:hover {
+        background: var(--ul-hover-bg);
+        color: var(--ul-grey-8);
+    }
+
+    .material-symbols-outlined {
+        font-size: 1rem;
+    }
+}
+
+#add-activity-more-fields {
+    display: flex;
+    flex-direction: column;
+    gap: .9rem;
+    animation: activity-fields-in .18s ease-out;
+}
+
+@keyframes activity-fields-in {
+    from {
+        opacity: 0;
+        transform: translateY(-4px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.addr-suggestion--trip .addr-suggestion-icon {
+    color: $color-blue-500;
+}
+
 // -- Trip activity map -----------------------------------------------------
 
 .trip-map-wrap {
     margin: 0 0 1.5rem;
     border-radius: 10px;
-    border: 1px solid var(--ul-grey-1a);
+    border: 1px solid var(--ul-surface-border);
     position: relative;
     // Mirrors #trip-map's own height below so this wrapper has a definite
     // size for @include map-query-container to safely contain against
@@ -1386,51 +1841,52 @@
         font-size: .88rem;
         margin: 0;
         pointer-events: none;
-        background: color-mix(in srgb, var(--ul-grey-0) 88%, transparent);
+        background: color-mix(in srgb, var(--ul-surface) 88%, transparent);
         border-radius: 8px;
         box-shadow: 0 1px 6px rgba(0, 0, 0, .12);
     }
 }
 
-.trip-map-overlay {
-    position: absolute;
-    top: 0.5em;
-    right: 0.5em;
-    z-index: 1000;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    pointer-events: none;
-    justify-self: right;
-
-    >* {
-        pointer-events: auto;
-    }
-}
-
-.trip-map-past-btn {
-    opacity: 0.8;
-
-    &:hover {
-        opacity: 1;
-    }
-
-    &--active {
-        background: $color-blue-500;
-        border-color: $color-blue-600;
-        color: var(--ul-grey-5);
-
-        &:hover {
-            background: $color-blue-800;
-        }
-    }
-}
-
-// -- Activity status (proposed = grey, confirmed = blue) -------------------
+// -- Activity status (proposed = grey, confirmed = blue, completed = green) -
 
 .trip-activity-num--proposed {
     background: var(--ul-grey-6) !important;
     box-shadow: 0 1px 4px rgba(var(--ul-grey-4), .4) !important;
+}
+
+.trip-activity-title-row {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    flex-wrap: wrap;
+}
+
+.trip-activity-status-chip {
+    display: inline-block;
+    padding: .1rem .5rem;
+    border-radius: 999px;
+    font-size: .64rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+    background: var(--ul-grey-1a);
+    color: var(--ul-grey-7);
+    flex-shrink: 0;
+
+    &--proposed {
+        background: var(--ul-grey-1a);
+        color: var(--ul-grey-7);
+    }
+
+    &--confirmed {
+        background: rgba($color-blue-500, .16);
+        color: $color-blue-700;
+    }
+
+    &--completed {
+        background: rgba($color-green-500, .16);
+        color: $color-green-700;
+    }
 }
 
 .trip-map-marker--proposed:not(.trip-map-marker--highlighted) {
@@ -1498,7 +1954,7 @@
 
 .activity-tabs {
     display: flex;
-    border-bottom: 1px solid var(--ul-grey-1a);
+    border-bottom: 1px solid var(--ul-surface-border);
     padding: 0 .5rem;
     gap: .15rem;
 }
@@ -1522,6 +1978,15 @@
     &--active {
         color: $color-blue-500;
         border-bottom-color: $color-blue-500;
+    }
+
+    &:disabled {
+        opacity: .4;
+        cursor: not-allowed;
+
+        &:hover {
+            color: var(--ul-grey-6);
+        }
     }
 }
 
@@ -1562,7 +2027,7 @@
     }
 
     &--no {
-        background: var(--ul-grey-0a);
+        background: $color-red-100;
         color: $color-red-600;
         border: 1px solid $color-red-200;
     }
@@ -1577,7 +2042,12 @@
         background: var(--ul-grey-4);
         color: var(--ul-grey-6);
         border: 1px solid var(--ul-grey-1a);
-        ;
+    }
+
+    &--invited {
+        background: rgba($color-blue-500, .12);
+        color: $color-blue-700;
+        border: 1px solid rgba($color-blue-500, .3);
     }
 
     &--mine {
@@ -1599,6 +2069,15 @@
     }
 }
 
+// Prefixes the bare Yes/No/Maybe value with "RSVP:" so it doesn't read as an
+// unexplained status word on its own - most noticeable on the trip owner's
+// own row, whose value ("Yes") otherwise looks like an unlabeled badge.
+.trip-member-rsvp-label {
+    font-weight: 500;
+    opacity: .7;
+    margin-right: 2px;
+}
+
 // -- RSVP inline popup (replaces the top banner) ---------------------------
 
 .trip-member-rsvp-wrap {
@@ -1610,9 +2089,7 @@
     position: absolute;
     right: 0;
     top: calc(100% + 4px);
-    background: var(--ul-grey-0);
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: $radius-sm;
+    @include surface($radius: $radius-sm, $rung: null);
     box-shadow: $shadow-md;
     padding: 4px;
     display: flex;
@@ -1640,7 +2117,7 @@
     color: $text-primary;
 
     &:hover {
-        background: var(--ul-grey-0);
+        background: var(--ul-hover-bg);
     }
 
     &--yes {
@@ -1655,7 +2132,7 @@
         color: $color-red-600;
 
         &:hover {
-            background: var(--ul-grey-0a);
+            background: $color-red-100;
         }
     }
 
@@ -1690,10 +2167,9 @@
 .rsvp-select {
     font-size: .78rem;
     padding: .2rem .5rem;
-    border: 1.5px solid var(--ul-grey-1a);
-    ;
+    border: 1.5px solid var(--ul-surface-raised-border);
     border-radius: 6px;
-    background: var(--ul-grey-0);
+    background: var(--ul-surface-raised);
     color: var(--ul-grey-8);
     cursor: pointer;
     outline: none;
@@ -1710,59 +2186,10 @@
 
     &:hover {
         color: $color-red-600;
-        background: var(--ul-grey-0a);
+        background: $color-red-100;
     }
 }
 
-// -- Status pill toggle (replaces radio group) -----------------------------
-
-.status-pill-toggle {
-    display: inline-flex;
-    border: 1.5px solid var(--ul-grey-1a);
-    ;
-    border-radius: 8px;
-    overflow: hidden;
-    background: var(--ul-grey-1);
-}
-
-.status-pill-btn {
-    padding: .38rem .8rem;
-    font-size: .8rem;
-    font-weight: 600;
-    background: transparent;
-    border: none;
-    cursor: pointer;
-    color: var(--ul-grey-6);
-    transition: background .15s, color .15s;
-    display: flex;
-    align-items: center;
-    gap: .3rem;
-    white-space: nowrap;
-
-    .material-symbols-outlined,
-    .material-icons {
-        font-size: .95rem;
-    }
-
-    &+& {
-        border-left: 1.5px solid var(--ul-grey-1a);
-    }
-
-    &:hover {
-        color: var(--ul-grey-7);
-        background: var(--ul-grey-4);
-    }
-
-    &.is-active[data-value="proposed"] {
-        background: var(--ul-grey-7);
-        color: var(--ul-grey-5);
-    }
-
-    &.is-active[data-value="confirmed"] {
-        background: $color-blue-500;
-        color: var(--ul-grey-5);
-    }
-}
 
 // -- Your RSVP banner ------------------------------------------------------
 
@@ -1771,8 +2198,7 @@
     align-items: center;
     gap: .75rem;
     padding: .55rem 1rem;
-    background: var(--ul-grey-1);
-    border-bottom: 1px solid var(--ul-grey-1a);
+    background: var(--ul-surface-border);
     flex-wrap: wrap;
 }
 
@@ -1800,7 +2226,7 @@
         justify-content: center;
         font-size: 11px;
         font-weight: 700;
-        color: var(--ul-grey-5);
+        color: #fff;
         line-height: 1;
     }
 
@@ -1820,13 +2246,12 @@
     text-transform: uppercase;
     letter-spacing: .06em;
     color: var(--ul-grey-6);
-    background: var(--ul-grey-1);
-    border-bottom: 1px solid var(--ul-grey-4);
+    background: var(--ul-surface-border);
     cursor: default;
 }
 
 .location-suggestion-geocoded {
-    background-color: var(--ul-grey-1);
+    background-color: var(--ul-surface-border);
 
     &::before {
         content: '📍 ';
@@ -1857,16 +2282,15 @@
     border-radius: 999px;
     font-size: .8rem;
     font-weight: 600;
-    border: 1.5px solid var(--ul-grey-1a);
-    ;
+    border: 1.5px solid var(--ul-surface-raised-border);
     background: transparent;
     color: var(--ul-grey-7);
     cursor: pointer;
     transition: background .12s, border-color .12s, color .12s;
 
     &:hover {
-        border-color: var(--ul-grey-6);
-        background: var(--ul-grey-1);
+        border-color: var(--ul-surface-2-border);
+        background: var(--ul-surface-raised);
     }
 
     &.is-active {
@@ -1936,8 +2360,8 @@
     gap: .3rem;
     padding: .3rem .7rem;
     border-radius: 20px;
-    border: 1px solid var(--ul-grey-1a);
-    background-color: var(--ul-grey-1a);
+    border: 1px solid var(--ul-surface-raised-border);
+    background-color: var(--ul-surface-raised);
     font-size: .78rem;
     font-weight: 500;
     color: var(--ul-grey-7);
@@ -1950,12 +2374,12 @@
     }
 
     &:hover:not(.trip-setting-pill--disabled):not(.trip-setting-pill--active) {
-        background: var(--ul-grey-4);
-        border-color: var(--ul-grey-1a);
+        background: var(--ul-hover-bg);
+        border-color: var(--ul-surface-raised-border);
     }
 
     &--active {
-        background: var(--ul-grey-0a);
+        background: rgba($color-blue-500, .12);
         border-color: $color-blue-500;
         color: $color-blue-700;
     }
@@ -1980,7 +2404,7 @@
 
 .cal-month-section-sep {
     height: 1px;
-    background: var(--ul-grey-1a);
+    background: var(--ul-surface-border);
     margin: .75rem 0 .25rem;
 }
 
@@ -2015,7 +2439,7 @@
 }
 
 .trip-weather-day {
-    border: 1px solid var(--ul-grey-4);
+    border: 1px solid var(--ul-surface-raised-border);
     border-radius: $radius-sm;
     overflow: hidden;
 }
@@ -2025,8 +2449,8 @@
     align-items: baseline;
     gap: .5rem;
     padding: .5rem .75rem .45rem;
-    background: var(--ul-grey-1);
-    border-bottom: 1px solid var(--ul-grey-4);
+    background: var(--ul-surface-raised);
+    border-bottom: 1px solid var(--ul-surface-raised-border);
 
     .trip-weather-day-dow {
         font-weight: 600;
@@ -2054,7 +2478,7 @@
     padding: .65rem .75rem;
 
     &+& {
-        border-top: 1px solid var(--ul-grey-1a);
+        border-top: 1px solid var(--ul-surface-border);
     }
 
     .trip-weather-activity-info {
@@ -2255,7 +2679,7 @@
     align-items: center;
     gap: .2rem;
     padding: .2rem .4rem;
-    border: 1px solid var(--ul-grey-1a);
+    border: 1px solid var(--ul-surface-raised-border);
     border-radius: $radius-sm;
     background: transparent;
     color: $text-muted;
@@ -2282,7 +2706,7 @@
         }
 
         &.activity-vote-btn--down {
-            background: var(--ul-grey-0a);
+            background: $color-red-100;
             color: $color-red-600;
         }
     }
@@ -2293,7 +2717,7 @@
         padding: .2rem .3rem;
 
         &:hover {
-            background: var(--ul-grey-0);
+            background: var(--ul-hover-bg);
             color: var(--ul-grey-6);
         }
     }
@@ -2319,6 +2743,7 @@
     font-size: .84rem;
     color: var(--ul-grey-6);
     user-select: none;
+    transition: color .15s;
 
     input[type="checkbox"] {
         accent-color: var(--primary-color);
@@ -2332,6 +2757,19 @@
     .material-icons {
         font-size: 1rem;
         color: $text-muted;
+        transition: color .15s;
+    }
+
+    // Toggled on/off in JS as the checkbox changes, so clicking the toggle
+    // gives clear visual feedback beyond the easy-to-miss 15px checkbox itself.
+    &.is-active {
+        color: var(--ul-grey-8);
+        font-weight: 600;
+
+        .material-symbols-outlined,
+        .material-icons {
+            color: var(--primary-color);
+        }
     }
 }
 
@@ -2345,9 +2783,7 @@
 .trip-map-ctx-menu {
     position: absolute;
     z-index: 1200;
-    background: var(--ul-grey-0);
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: $radius-sm;
+    @include surface($radius: $radius-sm, $rung: null);
     box-shadow: 0 4px 16px rgba(0, 0, 0, .12);
     padding: .25rem 0;
     min-width: 180px;
@@ -2406,13 +2842,13 @@
     align-items: center;
     gap: .6rem;
     padding: .55rem .85rem;
-    border: 1.5px solid var(--ul-grey-1a);
+    border: 1.5px solid var(--ul-surface-raised-border);
     border-radius: $radius-sm;
     cursor: pointer;
     font-size: .88rem;
-    color: $text-primary;
+    color: var(--ul-grey-8);
     transition: border-color .15s, background .15s;
-    background: var(--card-bg, #fff);
+    background: var(--ul-surface-raised);
 
     input[type="radio"] {
         accent-color: var(--primary-color);
@@ -2424,28 +2860,14 @@
     &:has(input:checked),
     &.active {
         border-color: var(--primary-color);
-        background: var(--ul-grey-0);
+        background: var(--ul-hover-bg-primary);
         color: var(--primary-color);
         font-weight: 500;
     }
 
     &:hover:not(:has(input:checked)) {
         border-color: color.adjust($primary-color, $lightness: 20%);
-        background: var(--ul-grey-0);
-    }
-
-    // Dark mode
-    [data-theme="dark"] & {
-        background: var(--ul-grey-9);
-        border-color: var(--ul-grey-1a);
-        color: var(--ul-grey-1a);
-
-        &:has(input:checked),
-        &.active {
-            background: rgba(33, 150, 243, .15);
-            border-color: var(--primary-color);
-            color: $color-blue-300;
-        }
+        background: var(--ul-hover-bg-primary);
     }
 }
 // ---------------------------------------------------------------------------
@@ -2465,12 +2887,12 @@
     padding: 0;
     max-height: 20rem;
     overflow-y: auto;
-    border: 1px solid var(--ul-grey-1a);
+    border: 1px solid var(--ul-surface-raised-border);
     border-radius: 8px;
 }
 
 .calendar-import-item {
-    border-bottom: 1px solid var(--ul-grey-1a);
+    border-bottom: 1px solid var(--ul-surface-border);
 
     &:last-child {
         border-bottom: none;
@@ -2486,7 +2908,7 @@
     font-weight: normal;
 
     input[type="checkbox"] {
-        // Undo Materialize's global checkbox reset (position:absolute;
+        // Undo _reset.scss's global checkbox reset (position:absolute;
         // opacity:0) so the box is actually visible.
         position: static;
         opacity: 1;
@@ -2499,6 +2921,23 @@
 
         &:disabled {
             cursor: default;
+        }
+    }
+
+    // _reset.scss also draws its own fake checkbox box on any span that
+    // follows input[type=checkbox] and forces a fixed single-line height on
+    // it - that doubles up with the native checkbox above and clips text
+    // that wraps to a second line. Strip it since this dialog uses the
+    // native (accent-color) checkbox instead.
+    span:not(.lever) {
+        display: block !important;
+        height: auto !important;
+        line-height: 1.4 !important;
+        padding-left: 0 !important;
+
+        &:before,
+        &:after {
+            content: none !important;
         }
     }
 
@@ -2532,7 +2971,7 @@
 .calendar-import-footer {
     margin-top: 1rem;
     padding-top: .75rem;
-    border-top: 1px solid var(--ul-grey-1a);
+    border-top: 1px solid var(--ul-surface-border);
     display: flex;
     justify-content: flex-end;
 }
@@ -2551,7 +2990,7 @@
 }
 
 .calendar-import-preview {
-    border: 1px solid var(--ul-grey-1a);
+    border: 1px solid var(--ul-surface-raised-border);
     border-radius: $radius-md;
     padding: .6rem .75rem;
 
@@ -2602,10 +3041,27 @@
         margin-top: .15rem;
         cursor: pointer;
         flex-shrink: 0;
-        // Undo Materialize's global checkbox reset inside the dialog.
+        // Undo _reset.scss's global checkbox reset inside the dialog.
         opacity: 1;
         position: static;
         pointer-events: auto;
+    }
+
+    // _reset.scss also draws its own fake checkbox box on any span that
+    // follows input[type=checkbox] and forces a fixed single-line height on
+    // it - that doubles up with the native checkbox above and clips text
+    // that wraps to a second line. Strip it since this dialog uses the
+    // native (accent-color) checkbox instead.
+    span:not(.lever) {
+        display: block !important;
+        height: auto !important;
+        line-height: 1.4 !important;
+        padding-left: 0 !important;
+
+        &:before,
+        &:after {
+            content: none !important;
+        }
     }
 }
 
@@ -2616,7 +3072,7 @@
 .calendar-import-preview-participants {
     margin-top: .6rem;
     padding-top: .5rem;
-    border-top: 1px dashed var(--ul-grey-1a);
+    border-top: 1px dashed var(--ul-surface-raised-border);
 }
 
 .calendar-import-preview-subhead {

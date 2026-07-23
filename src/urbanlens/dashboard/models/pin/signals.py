@@ -4,6 +4,8 @@ from django.db import transaction
 from django.db.models.signals import m2m_changed, post_delete, post_save
 from django.dispatch import receiver
 
+from urbanlens.dashboard.models.labels.customization.model import LabelCustomization
+from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin import Pin
 from urbanlens.dashboard.models.reviews.model import Review
 
@@ -72,10 +74,55 @@ def delete_map_pin_cache(sender: type[Pin], instance: Pin, **kwargs) -> None:
         _delete_cached_pin(instance.pk, instance.profile_id)
 
 
-@receiver(m2m_changed, sender=Pin.badges.through, dispatch_uid="pin_badges_refresh_map_pin_cache")
-def refresh_map_pin_cache_for_badges(sender, instance: Pin, action: str, **kwargs) -> None:
+@receiver(m2m_changed, sender=Pin.labels.through, dispatch_uid="pin_labels_refresh_map_pin_cache")
+def refresh_map_pin_cache_for_labels(sender, instance: Pin, action: str, **kwargs) -> None:
     if action in {"post_add", "post_remove", "post_clear"} and instance.profile_id:
         _refresh_cached_pin(instance.pk, instance.profile_id)
+
+
+@receiver(post_save, sender=Label, dispatch_uid="label_refresh_map_pin_cache")
+def refresh_map_pin_cache_for_label(sender: type[Label], instance: Label, created: bool, **kwargs) -> None:
+    """A label's icon/color can appear on any pin carrying it (Pin.effective_icon).
+
+    Unlike the m2m-add/remove case above, editing the label itself never
+    touches Pin.labels.through, so nothing else here would invalidate the
+    server-side Redis pin cache for pins that already carry this label - they'd
+    keep serving the old baked-in icon/color until something else happened to
+    touch that specific pin, or the cache TTL lapsed.
+    """
+    if created:
+        return  # not attached to any pin yet
+    for pin_id, profile_id in Pin.objects.filter(labels=instance).values_list("pk", "profile_id"):
+        _refresh_cached_pin(pin_id, profile_id)
+
+
+@receiver(post_save, sender=LabelCustomization, dispatch_uid="label_customization_refresh_map_pin_cache")
+def refresh_map_pin_cache_for_label_customization(sender: type[LabelCustomization], instance: LabelCustomization, **kwargs) -> None:
+    """Per-profile icon/color overrides need the same cache refresh as editing the label itself."""
+    for pin_id in Pin.objects.filter(profile_id=instance.profile_id, labels=instance.label_id).values_list("pk", flat=True):
+        _refresh_cached_pin(pin_id, instance.profile_id)
+
+
+@receiver(m2m_changed, sender=Pin.labels.through, dispatch_uid="pin_labels_propagate_visited")
+def propagate_visited_label_to_ancestors(sender, instance: Pin, action: str, pk_set=None, reverse: bool = False, **kwargs) -> None:
+    """Mark a child pin's ancestors Visited when the child gains the Visited label.
+
+    Visiting a sub pin (an entrance, a building on a campus) means the parent
+    place was visited too, so the profile's "Visited" status label cascades up
+    the ``parent_pin`` chain. The whole chain is stamped in one pass with a
+    cycle-safe walk (see ``Pin.ancestor_chain``); the m2m adds this performs
+    re-fire this handler for each ancestor, but their ``pk_set`` only contains
+    newly-added rows, so the cascade terminates once the chain is stamped.
+    """
+    if action != "post_add" or reverse or not pk_set or instance.parent_pin_id is None:
+        return
+    from urbanlens.dashboard.models.labels.model import Label
+
+    visited_label = Label.objects.filter(pk__in=pk_set, kind="status", name="Visited").first()
+    if visited_label is None:
+        return
+    for ancestor in instance.ancestor_chain():
+        ancestor.labels.add(visited_label)
 
 
 @receiver(post_save, sender=Review, dispatch_uid="review_refresh_map_pin_cache")
@@ -88,6 +135,88 @@ def refresh_map_pin_cache_for_review(sender, instance: Review, **kwargs) -> None
 def refresh_map_pin_cache_for_deleted_review(sender, instance: Review, **kwargs) -> None:
     if instance.pin_id:
         _refresh_cached_pin(instance.pin_id, instance.pin.profile_id)
+
+
+# -- Wiki-sync: mirror rating/vulnerability/priority/danger onto WikiStatVote ---
+# One-way only (pin -> wiki): the wiki has no single owner, so there's no
+# equivalent "wiki value" to pull back the other way - see
+# Profile.sync_rating_to_wiki etc. and models.wiki_stat_vote.model.WikiStatVote's
+# own docstring on why a composite average, not a single stored field, is
+# the wiki-side representation of these dimensions.
+
+
+def _sync_pin_stat_to_wiki(wiki_id: int, profile_id: int, field: str, value: int | None) -> None:
+    """Upsert (1-5) or clear (anything else) one profile's WikiStatVote for a field.
+
+    Mirrors WikiStatVoteView's own upsert-or-delete behavior exactly, so a
+    pin's star rating going back to "unset" clears the vote the same way
+    manually clearing it on the wiki page would - never leaves a stale 0/None
+    row skewing the wiki's composite average.
+    """
+
+    def _run() -> None:
+        from urbanlens.dashboard.models.wiki_stat_vote.model import WikiStatVote
+
+        if value is not None and 1 <= value <= 5:
+            WikiStatVote.objects.update_or_create(wiki_id=wiki_id, profile_id=profile_id, field=field, defaults={"value": value})
+        else:
+            WikiStatVote.objects.filter(wiki_id=wiki_id, profile_id=profile_id, field=field).delete()
+
+    transaction.on_commit(_run)
+
+
+@receiver(post_save, sender=Review, dispatch_uid="review_sync_rating_to_wiki")
+def sync_rating_to_wiki(sender, instance: Review, **kwargs) -> None:
+    if not instance.pin_id:
+        return
+    pin = instance.pin
+    if pin.wiki_id is None or not pin.profile.sync_rating_to_wiki:
+        return
+    from urbanlens.dashboard.models.wiki_stat_vote.model import WikiStatField
+
+    _sync_pin_stat_to_wiki(pin.wiki_id, pin.profile_id, WikiStatField.RATING, instance.rating)
+
+
+@receiver(post_delete, sender=Review, dispatch_uid="review_sync_rating_deletion_to_wiki")
+def sync_rating_deletion_to_wiki(sender, instance: Review, **kwargs) -> None:
+    if not instance.pin_id:
+        return
+    pin = instance.pin
+    if pin.wiki_id is None or not pin.profile.sync_rating_to_wiki:
+        return
+    from urbanlens.dashboard.models.wiki_stat_vote.model import WikiStatField
+
+    _sync_pin_stat_to_wiki(pin.wiki_id, pin.profile_id, WikiStatField.RATING, None)
+
+
+#: pin field name -> (Profile setting name, WikiStatField value)
+_PIN_TO_WIKI_STAT_FIELDS = (
+    ("vulnerability", "sync_vulnerability_to_wiki", "vulnerability"),
+    ("priority", "sync_priority_to_wiki", "priority"),
+    ("danger", "sync_danger_to_wiki", "danger"),
+)
+
+
+@receiver(post_save, sender=Pin, dispatch_uid="pin_sync_stats_to_wiki")
+def sync_pin_stats_to_wiki(sender: type[Pin], instance: Pin, **kwargs) -> None:
+    """Mirror vulnerability/priority/danger onto the pin's wiki, per-field opt-in.
+
+    Guarded on ``update_fields`` when present (a full save touches every
+    field, so nothing to filter there) to skip the profile lookup entirely on
+    saves that never touched any of these three fields.
+    """
+    if instance.wiki_id is None:
+        return
+    update_fields = kwargs.get("update_fields")
+    if update_fields is not None and not any(pin_field in update_fields for pin_field, _, _ in _PIN_TO_WIKI_STAT_FIELDS):
+        return
+    profile = instance.profile
+    for pin_field, setting_name, wiki_field in _PIN_TO_WIKI_STAT_FIELDS:
+        if update_fields is not None and pin_field not in update_fields:
+            continue
+        if not getattr(profile, setting_name):
+            continue
+        _sync_pin_stat_to_wiki(instance.wiki_id, instance.profile_id, wiki_field, getattr(instance, pin_field))
 
 
 # NOTE: Pins no longer trigger any community wiki or boundary creation on save.

@@ -18,13 +18,13 @@ from urbanlens.UrbanLens.environments.meta import DebugTypes, EnvironmentTypes
 from urbanlens.UrbanLens.environments.prod import Production
 from urbanlens.UrbanLens.environments.staging import Staging
 from urbanlens.UrbanLens.environments.test import Testing
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase
 
 
 _hyp = settings(max_examples=50, deadline=None)
 
 
-class DebugResolutionTests(TestCase):
+class DebugResolutionTests(SimpleTestCase):
     """BaseEnvironment.debug resolves correctly from override and default."""
 
     def test_override_on_forces_debug_true_despite_true_default(self) -> None:
@@ -67,7 +67,7 @@ class DebugResolutionTests(TestCase):
         self.assertFalse(env.debug)
 
 
-class BaseEnvironmentEqualityTests(TestCase):
+class BaseEnvironmentEqualityTests(SimpleTestCase):
     """BaseEnvironment.__eq__ compares against EnvironmentTypes, str, and other BaseEnvironment."""
 
     def test_eq_with_matching_env_type_enum(self) -> None:
@@ -113,7 +113,7 @@ class BaseEnvironmentEqualityTests(TestCase):
         self.assertEqual(env, env_type.value)
 
 
-class BaseEnvironmentValidatorTests(TestCase):
+class BaseEnvironmentValidatorTests(SimpleTestCase):
     """Field validators coerce string values into proper enum types."""
 
     def test_env_type_is_always_an_enum_instance(self) -> None:
@@ -144,7 +144,7 @@ class BaseEnvironmentValidatorTests(TestCase):
         self.assertEqual(env.debug_override, debug_type)
 
 
-class BaseEnvironmentReprTests(TestCase):
+class BaseEnvironmentReprTests(SimpleTestCase):
     """__str__ and __repr__ include usable information."""
 
     def test_str_contains_environment_name(self) -> None:
@@ -166,7 +166,7 @@ class BaseEnvironmentReprTests(TestCase):
         self.assertTrue(str(env))
 
 
-class ProductionEnvironmentTests(TestCase):
+class ProductionEnvironmentTests(SimpleTestCase):
     """Production always has debug=False and the correct metadata."""
 
     def test_debug_is_false(self) -> None:
@@ -188,7 +188,7 @@ class ProductionEnvironmentTests(TestCase):
         self.assertIn("Production", Production().name)
 
 
-class SelectEnvironmentTests(TestCase):
+class SelectEnvironmentTests(SimpleTestCase):
     """select_environment returns the correct subclass for each EnvironmentTypes."""
 
     def test_local_returns_local(self) -> None:

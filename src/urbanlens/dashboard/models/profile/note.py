@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from django.db.models import CASCADE, ForeignKey, TextField
 
 from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.profile.queryset import ProfileNoteManager
 
 
 class ProfileNote(abstract.FrontendDashboardModel):
@@ -28,6 +29,8 @@ class ProfileNote(abstract.FrontendDashboardModel):
         on_delete=CASCADE,
         related_name="received_profile_notes",
     )
+
+    objects = ProfileNoteManager()
 
     if TYPE_CHECKING:
         author_id: int

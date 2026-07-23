@@ -1,0 +1,119 @@
+<div id="{{ panel_id }}" class="ownership-panel card"
+     data-collapse-scope="{{ collapse_scope }}" data-collapse-section="ownership"
+     {# Auto-collapsed (session-only, never persisted - see base.html's #}
+     {# _applyState) whenever there's no owner on record yet, so an empty #}
+     {# card doesn't take up space by default; the user can still expand it #}
+     {# manually to add one. #}
+     data-collapse-if-empty="{% if not owners %}true{% endif %}">
+    <div class="card-header">
+        <i class="material-symbols-outlined">real_estate_agent</i>
+        <span>Ownership</span>
+        {% if owners %}<span class="badge">{{ owners|length }}</span>{% endif %}
+        <button type="button" class="btn btn--icon-sm" title="Add"
+                onclick="var body=this.closest('.ownership-panel').querySelector('.po-tab-body:not([hidden])'); var f=body && body.querySelector('.po-add-form'); if (!f) return; f.hidden = !f.hidden; if (!f.hidden) f.querySelector('.po-input').focus();">
+            <i class="material-symbols-outlined">add</i>
+        </button>
+    </div>
+
+    <div class="card-tabs" role="tablist">
+        <button type="button" class="card-tab active" role="tab" aria-selected="true" data-po-tab="owners"
+                onclick="var p=this.closest('.ownership-panel'); p.querySelectorAll('.card-tab').forEach(function(b){b.classList.remove('active');b.setAttribute('aria-selected','false');}); this.classList.add('active'); this.setAttribute('aria-selected','true'); p.querySelectorAll('.po-tab-body').forEach(function(b){b.hidden=true;}); p.querySelector('[data-po-body=owners]').hidden=false;">
+            Owners
+        </button>
+        <button type="button" class="card-tab" role="tab" aria-selected="false" data-po-tab="sales"
+                hx-get="{% url url_sales obj_slug %}"
+                hx-target="#po-sales-body-{{ panel_id }}"
+                hx-trigger="click once"
+                onclick="var p=this.closest('.ownership-panel'); p.querySelectorAll('.card-tab').forEach(function(b){b.classList.remove('active');b.setAttribute('aria-selected','false');}); this.classList.add('active'); this.setAttribute('aria-selected','true'); p.querySelectorAll('.po-tab-body').forEach(function(b){b.hidden=true;}); p.querySelector('[data-po-body=sales]').hidden=false;">
+            Sale History
+        </button>
+    </div>
+
+    <div class="po-tab-body" data-po-body="owners">
+        {% if owners %}
+        <div class="po-owner-list">
+            {% for owner in owners %}
+            <div class="po-owner-row" id="po-owner-{{ owner.id }}">
+                <div class="po-owner-display">
+                    <div class="po-owner-main">
+                        <span class="po-owner-name">{{ owner.name }}</span>
+                        {% if owner.company_name %}<span class="po-owner-company">{{ owner.company_name }}</span>{% endif %}
+                        {% if show_official_badge and owner.source == "official" %}
+                        <span class="po-badge po-badge--official" title="Official data - not directly editable">
+                            <i class="material-symbols-outlined">verified</i>Official
+                        </span>
+                        {% endif %}
+                        <div class="po-owner-actions">
+                            {% if not show_official_badge or owner.source != "official" %}
+                            <button type="button" class="btn btn--icon-sm" title="Edit owner"
+                                    onclick="var row=this.closest('.po-owner-row'); row.querySelector('.po-owner-display').hidden = true; row.querySelector('.po-owner-edit-form').hidden = false;">
+                                <i class="material-symbols-outlined">edit</i>
+                            </button>
+                            <button type="button" class="btn btn--icon-sm" title="Remove"
+                                    hx-delete="{% url url_remove obj_slug owner.id %}"
+                                    hx-target="#{{ panel_id }}"
+                                    hx-swap="outerHTML"
+                                    hx-confirm="Remove &ldquo;{{ owner.name }}&rdquo;?">
+                                <i class="material-symbols-outlined">close</i>
+                            </button>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="po-owner-contact">
+                        {% if owner.address %}<span class="po-owner-detail"><i class="material-symbols-outlined">place</i>{{ owner.address }}</span>{% endif %}
+                        {% if owner.phone %}<span class="po-owner-detail"><i class="material-symbols-outlined">call</i>{{ owner.phone }}</span>{% endif %}
+                        {% if owner.email %}<span class="po-owner-detail"><i class="material-symbols-outlined">mail</i>{{ owner.email }}</span>{% endif %}
+                    </div>
+                    {% if owner.notes %}<p class="po-owner-notes">{{ owner.notes|linebreaksbr }}</p>{% endif %}
+                </div>
+                {% if not show_official_badge or owner.source != "official" %}
+                <form class="po-owner-edit-form" hidden
+                      hx-post="{% url url_edit obj_slug owner.id %}"
+                      hx-target="#{{ panel_id }}"
+                      hx-swap="outerHTML">
+                    {% csrf_token %}
+                    <input type="text" name="name" class="po-input" placeholder="Name" maxlength="200" value="{{ owner.name }}" required>
+                    <input type="text" name="company_name" class="po-input" placeholder="Company (optional)" maxlength="200" value="{{ owner.company_name }}">
+                    <input type="text" name="address" class="po-input" placeholder="Address" value="{{ owner.address }}">
+                    <input type="text" name="phone" class="po-input" placeholder="Phone" maxlength="50" value="{{ owner.phone }}">
+                    <input type="email" name="email" class="po-input" placeholder="Email" value="{{ owner.email }}">
+                    <textarea name="notes" class="po-input po-notes-input" placeholder="Notes">{{ owner.notes }}</textarea>
+                    <div class="po-owner-edit-actions">
+                        <button type="submit" class="btn btn--icon-sm" title="Save">
+                            <i class="material-symbols-outlined">check</i>
+                        </button>
+                        <button type="button" class="btn btn--icon-sm" title="Cancel"
+                                onclick="var row=this.closest('.po-owner-row'); row.querySelector('.po-owner-edit-form').hidden = true; row.querySelector('.po-owner-display').hidden = false;">
+                            <i class="material-symbols-outlined">close</i>
+                        </button>
+                    </div>
+                </form>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="po-panel-empty">No owner information yet.</p>
+        {% endif %}
+
+        <form class="po-add-form" hidden
+              hx-post="{% url url_add obj_slug %}"
+              hx-target="#{{ panel_id }}"
+              hx-swap="outerHTML">
+            {% csrf_token %}
+            <input type="text" name="name" class="po-input" placeholder="Owner name" maxlength="200" required>
+            <input type="text" name="company_name" class="po-input" placeholder="Company (optional)" maxlength="200">
+            <input type="text" name="address" class="po-input" placeholder="Address">
+            <input type="text" name="phone" class="po-input" placeholder="Phone" maxlength="50">
+            <input type="email" name="email" class="po-input" placeholder="Email">
+            <textarea name="notes" class="po-input po-notes-input" placeholder="Notes"></textarea>
+            <button type="submit" class="btn btn--icon-sm po-add-btn" title="Add owner">
+                <i class="material-symbols-outlined">add</i>
+            </button>
+        </form>
+    </div>
+
+    <div class="po-tab-body" data-po-body="sales" id="po-sales-body-{{ panel_id }}" hidden>
+        <p class="po-panel-empty">Loading...</p>
+    </div>
+</div>

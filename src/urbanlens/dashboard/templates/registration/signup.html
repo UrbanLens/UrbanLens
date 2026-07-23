@@ -49,7 +49,7 @@
 </div>
 {% endif %}
 
-<form method="post" class="auth-form" novalidate>
+<form method="post" class="auth-form" id="signup-form" novalidate>
     {% csrf_token %}
 
     <div class="auth-field">
@@ -82,6 +82,7 @@
         {% if form.password1.errors %}
         <ul class="errorlist">{% for e in form.password1.errors %}<li>{{ e }}</li>{% endfor %}</ul>
         {% endif %}
+        {% include "dashboard/partials/auth/_passphrase_suggest.html" with password_input_id="id_password1" confirm_input_id="id_password2" %}
     </div>
 
     <div class="auth-field">
@@ -101,4 +102,28 @@
     <span>Already have an account? <a href="{% url 'login' %}">Sign in</a></span>
 </div>
 
+{% endblock %}
+
+{% block auth_scripts %}
+<script src="{% static 'dashboard/js/e2ee.js' %}"></script>
+<script>
+    // Derive the login credential from the password before submit so the raw
+    // password never reaches the server, even at account creation. The salt
+    // travels as e2ee_auth_salt and becomes the account's AccountKdf row.
+    UrbanLensE2EE.init({
+        selfSlug: null,
+        urls: {
+            loginParams: "{% url 'e2ee.login_params' %}",
+            enroll: "{% url 'e2ee.enroll' %}",
+            keys: "{% url 'e2ee.keys' %}",
+            rewrap: "{% url 'e2ee.rewrap' %}",
+            reset: "{% url 'e2ee.reset' %}",
+            partnerKeyBase: "{% url 'e2ee.keys' %}",
+            conversationKeyBase: "{% url 'e2ee.conversation_key' 'e2ee-slug-token' %}".replace("e2ee-slug-token/", ""),
+            login: "{% url 'login' %}",
+            faqUrl: "{% url 'faq' %}#faq-e2ee",
+        },
+    });
+    UrbanLensE2EE.wireSignupForm(document.getElementById("signup-form"));
+</script>
 {% endblock %}

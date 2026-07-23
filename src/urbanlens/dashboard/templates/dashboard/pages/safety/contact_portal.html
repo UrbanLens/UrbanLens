@@ -7,26 +7,19 @@
     integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
 {% endblock %}
 
+{% block hero %}
+{% include "dashboard/partials/ui/_page_hero.html" with body_template="dashboard/partials/safety/_contact_portal_hero_body.html" modifier="top" %}
+{% endblock %}
+
 {% block content %}
 <div class="safety-page page-content">
 
-    <div class="safety-header">
-        <div class="safety-header-left">
-            <h1 class="safety-title">
-                <span class="safety-checkin-status-badge safety-checkin-status-badge--{{ checkin.status }}">{{ checkin.get_status_display }}</span>
-                {{ checkin.profile.username }} - {{ checkin.title }}
-            </h1>
-            <p class="safety-subtitle">Expected check-in by {{ checkin.checkin_by|date:"N j, Y g:i A" }}</p>
-        </div>
-        {% if not checkin.is_resolved %}
-        <div class="safety-header-right">
-            <form method="post" action="{% url 'safety.contact.mark_safe' contact.token %}"
-                  onsubmit="return confirm('Mark {{ checkin.profile.username }} as found/safe? Other emergency contacts will be notified.')">
-                {% csrf_token %}
-                <button type="submit" class="btn btn--primary">I found them - mark safe</button>
-            </form>
-        </div>
-        {% endif %}
+    <div class="safety-toolbar" id="safety-resolve-actions" {% if checkin.is_resolved %}hidden{% endif %}>
+        <form method="post" action="{% url 'safety.contact.mark_safe' contact.token %}"
+              onsubmit="return confirm('Mark {{ checkin.profile.username }} as found/safe? Other emergency contacts will be notified.')">
+            {% csrf_token %}
+            <button type="submit" class="btn btn--primary">I found them - mark safe</button>
+        </form>
     </div>
 
     {% if checkin.contact_message %}
@@ -108,4 +101,22 @@
     </div>
 
 </div>
+<script>
+(function () {
+    // -- Live status updates (escalation, mark-safe, self check-in, cancel) ----
+    // Broadcast over the chat panel's existing websocket (see _chat_panel.html
+    // and services.safety._broadcast_status_update), so this portal reflects a
+    // status change made elsewhere (e.g. the owner checking in themselves, or
+    // another contact marking them safe first) without a manual reload.
+    document.body.addEventListener('safetyStatusUpdate', function (e) {
+        var badge = document.getElementById('safety-status-badge');
+        if (badge) {
+            badge.className = 'safety-checkin-status-badge safety-checkin-status-badge--' + e.detail.status;
+            badge.textContent = e.detail.status_display;
+        }
+        var actions = document.getElementById('safety-resolve-actions');
+        if (actions) actions.hidden = !!e.detail.is_resolved;
+    });
+}());
+</script>
 {% endblock %}

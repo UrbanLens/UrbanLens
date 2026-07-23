@@ -1,9 +1,10 @@
 @use "sass:color";
 @use 'variables' as *;
 
-.page-map-view {
+body.page-map-view {
     > div.container {
         max-width: 100%;
+        min-height: calc(100vh - 4rem - 4rem);
     }
 }
 
@@ -38,28 +39,89 @@
 }
 
 // -- Temporary place marker (search jump + right-click context menu) --------
+// The wrap class is shared with the Places-layer markers (which size and
+// colour their own icons), so everything temp-marker-specific lives under the
+// --temp modifier: a big glyph with a white keyline plus a pulsing halo at the
+// anchor point, keeping the marker obvious at every zoom level and on any tile
+// style (the fixed white outline guarantees contrast on dark and light tiles).
 .search-result-marker-wrap {
     background: none !important;
     border: none !important;
+    position: relative;
 
     .search-result-marker-icon {
-        font-size: 36px;
-        filter: drop-shadow(0 2px 4px rgba(0, 0, 0, .45));
         display: block;
         cursor: pointer;
+        filter: drop-shadow(0 2px 4px rgba(0, 0, 0, .45));
         transition: filter .15s;
 
         &:hover {
             filter: drop-shadow(0 3px 6px rgba(0, 0, 0, .6)) brightness(1.1);
         }
+    }
+}
+
+.search-result-marker-wrap--temp {
+    .search-result-marker-icon {
+        font-size: 44px;
+        line-height: 1;
+        color: $color-blue-500;
+        filter: drop-shadow(0 0 2px #fff) drop-shadow(0 0 2px #fff) drop-shadow(0 2px 5px rgba(0, 0, 0, .5));
+        animation: ul-temp-marker-drop .3s ease-out;
+
+        &:hover {
+            filter: drop-shadow(0 0 2px #fff) drop-shadow(0 0 2px #fff) drop-shadow(0 3px 7px rgba(0, 0, 0, .65)) brightness(1.1);
+        }
 
         // Search-result markers use amber to distinguish from permanent pins
+        // and from the blue context-menu marker.
         &--search {
             color: #f59e0b;
-            filter: drop-shadow(0 2px 5px rgba(245, 158, 11, .5));
-            &:hover { filter: drop-shadow(0 3px 7px rgba(245, 158, 11, .7)) brightness(1.1); }
         }
     }
+
+    // Pulsing ring centred on the marker's anchor (the glyph tip).
+    .search-result-marker-halo {
+        position: absolute;
+        left: 22px;
+        top: 48px;
+        width: 10px;
+        height: 10px;
+        margin: -5px 0 0 -5px;
+        border-radius: 50%;
+        background: rgba($color-blue-500, .85);
+        animation: ul-temp-marker-pulse 1.8s ease-out infinite;
+        pointer-events: none;
+
+        &--search {
+            background: rgba(#f59e0b, .85);
+            animation-name: ul-temp-marker-pulse-amber;
+        }
+    }
+}
+
+@keyframes ul-temp-marker-drop {
+    from {
+        transform: translateY(-14px);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+@keyframes ul-temp-marker-pulse {
+    0% { box-shadow: 0 0 0 0 rgba(30, 136, 229, .55); }
+    70% { box-shadow: 0 0 0 20px rgba(30, 136, 229, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(30, 136, 229, 0); }
+}
+
+@keyframes ul-temp-marker-pulse-amber {
+    0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, .6); }
+    70% { box-shadow: 0 0 0 20px rgba(245, 158, 11, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
 }
 
 // Map pin icon (Material Icons rendered via Leaflet divIcon)
@@ -80,18 +142,85 @@
     }
 }
 
-// Multi-select tool: selected-marker ring + select-mode cursor.
+// Multi-select tool: selected-marker ring + select-mode cursor + a persistent
+// inset outline around the whole map, so the mode reads as active even before
+// the user hovers or selects anything (the crosshair cursor and the bottom
+// bulk-select-toolbar are both easy to miss on first glance).
 #map.select-mode {
     cursor: crosshair;
+    box-shadow: inset 0 0 0 3px rgba($color-blue-500, .55);
 }
 
-.map-pin-icon-wrap.is-selected {
-    .map-pin-icon,
-    .map-pin-custom-img,
-    .map-pin-emoji,
-    .map-pin-with-circle {
-        filter: drop-shadow(0 0 0 3px $color-blue-500) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.6));
+// Selected markers get an unmissable halo ring + check badge, on both custom
+// divIcon markers (.map-pin-icon-wrap) and default Leaflet image markers.
+.map-pin-icon-wrap.is-selected,
+.leaflet-marker-icon.is-selected {
+    border-radius: 50% !important;
+    background: rgba(30, 136, 229, .22) !important;
+    box-shadow:
+        0 0 0 3px $color-blue-500,
+        0 0 0 7px rgba(30, 136, 229, .35),
+        0 2px 10px rgba(0, 0, 0, .45) !important;
+
+    &::after {
+        content: "✓";
+        position: absolute;
+        top: -9px;
+        right: -9px;
+        width: 17px;
+        height: 17px;
+        border-radius: 50%;
+        background: $color-blue-500;
+        color: #fff;
+        font-size: 11px;
+        font-weight: 700;
+        line-height: 17px;
+        text-align: center;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, .45);
+        pointer-events: none;
+        z-index: 2;
     }
+}
+
+// Default Leaflet markers are <img> elements which can't host ::after - wrap
+// the halo on the img itself; the badge is dropped there (halo alone is clear).
+img.leaflet-marker-icon.is-selected {
+    border-radius: 40% !important;
+}
+
+// Merge dialog map<->list sync (see map/index.html's "Merge" section) - same
+// UX as the trip page's map<->list hover-sync (.trip-map-marker--highlighted
+// in _trips.scss): the pin everything merges into is enlarged with a green
+// halo (matches .cat-merge-mini-card--target's green in the dialog list, see
+// _tags.scss) so it's unmistakable on the map; hovering either the marker or
+// its mini-card in the dialog highlights the other in amber. Both classes
+// coexist with .is-selected (every merge participant is also selected) -
+// declared after it so they win the cascade on the same element.
+.map-pin-icon-wrap.is-merge-target,
+.leaflet-marker-icon.is-merge-target {
+    transform: scale(1.35);
+    border-radius: 50% !important;
+    background: rgba($color-green-700, .25) !important;
+    box-shadow:
+        0 0 0 3px $color-green-700,
+        0 0 0 7px rgba($color-green-700, .35),
+        0 2px 10px rgba(0, 0, 0, .45) !important;
+    z-index: 1000 !important;
+}
+
+.map-pin-icon-wrap.is-merge-hover,
+.leaflet-marker-icon.is-merge-hover {
+    transform: scale(1.2);
+    box-shadow:
+        0 0 0 3px #f57c00,
+        0 0 0 6px rgba(245, 124, 0, .35),
+        0 2px 10px rgba(0, 0, 0, .45) !important;
+    z-index: 999 !important;
+}
+
+.cat-merge-mini-card--hover {
+    border-color: #f57c00;
+    box-shadow: 0 0 0 2px rgba(245, 124, 0, .35);
 }
 
 .map-pin-custom-img {
@@ -168,20 +297,6 @@
         color: $color-red-600;
     }
 
-    &--add-pin {
-        color: $color-blue-600;
-    }
-
-    // Boundary-type edit buttons match their layer colors: property boundaries
-    // draw red, building footprints draw blue.
-    &--boundary {
-        color: $color-red-600;
-    }
-
-    &--building {
-        color: $color-blue-600;
-    }
-
     &-group {
         display: flex;
         gap: .3rem;
@@ -191,14 +306,13 @@
 
 // - Map Dialogs
 .map-dialog {
-    background: var(--ul-grey-0);
-    border-radius: 8px;
+    @include surface($radius: 8px, $rung: null);
     box-shadow: 0 2px 8px rgba(0, 0, 0, .2);
     backdrop-filter: blur(4px);
     z-index: 1000;
     opacity: 0.95;
     min-width: 175px;
-    max-width: 240px;
+    max-width: 24rem;
     position: absolute;
     top: 0;
     right: 0;
@@ -208,10 +322,6 @@
         bottom: 50px;
         width: 220px;
         overflow: hidden;
-    }
-    &--details {
-        top: 1.5rem;
-        left: 4rem;
     }
 
     // One consistent create/edit panel (markup annotations, detail pins): docked
@@ -239,52 +349,105 @@
     }
 }
 
-// -- Detail pin list panel (top-left map overlay) ---------------------------
-.detail-pin-list-toggle {
+// -- Detail pin list panel (left-docked sidebar) -----------------------------
+// Same collapsible-sidebar UX as the main map's #pin-list-panel/.pin-list-handle
+// above, scoped to this page's smaller embedded map instead of the full
+// viewport: collapses to an edge handle button, expands into a full-height
+// dark sidebar that always sits above the map regardless of site theme.
+.detail-pin-list-panel {
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 300px;
+    max-width: calc(100% - 20px);
+    background: rgba(14, 16, 22, 0.93);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    z-index: 1001;
     display: flex;
-    align-items: center;
-    gap: .4rem;
-    padding: .4rem .65rem;
-    width: 100%;
-    background: none;
-    border: none;
-    cursor: pointer;
-    font-size: .8rem;
-    font-weight: 500;
-    color: var(--ul-grey-7);
-    border-radius: 8px;
+    flex-direction: column;
+    transform: translateX(-100%);
+    transition: transform 0.22s cubic-bezier(.4, 0, .2, 1);
+    font-size: 0.82rem;
+    color: rgba(255, 255, 255, 0.7);
 
-    .material-symbols-outlined,
-    .material-icons {
-        font-size: 1rem;
-        color: var(--ul-grey-6);
-    }
-
-    .detail-pin-list-chevron {
-        margin-left: auto;
-        transition: transform .2s;
-        font-size: .85rem;
-
-        &.open {
-            transform: rotate(180deg);
-        }
-    }
-
-    &:hover {
-        background: rgba(0, 0, 0, .04);
+    &.open {
+        transform: translateX(0);
     }
 }
 
-.detail-pin-list-drawer {
-    border-top: 1px solid var(--ul-grey-1a);
-    max-height: 320px; // JS overrides this on open with the room actually available
-    overflow-y: auto;
+.detail-pin-list-header {
     display: flex;
-    flex-direction: column;
+    align-items: center;
+    gap: .4rem;
+    padding: .65rem .8rem;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.45);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    flex-shrink: 0;
 
-    // Fallback cap for very short viewports if JS hasn't run yet (e.g. no-JS render).
-    @media (max-height: 500px) {
-        max-height: 160px;
+    .material-symbols-outlined {
+        font-size: 1rem;
+        color: rgba(255, 255, 255, 0.45);
+    }
+}
+
+// Always-visible edge handle - identical mechanic and look to the main map's
+// .pin-list-handle, just docked to this page's own (smaller) map wrapper.
+.detail-pin-list-handle {
+    position: absolute;
+    top: 50%;
+    left: 0;
+    transform: translateY(-50%);
+    z-index: 1002;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 56px;
+    background: var(--ul-surface-1);
+    border: 1px solid var(--ul-surface-1-border);
+    border-left: none;
+    border-radius: 0 10px 10px 0;
+    box-shadow: 2px 0 8px rgba(0, 0, 0, .12);
+    color: var(--ul-grey-6);
+    cursor: pointer;
+    transition: left 0.22s cubic-bezier(.4, 0, .2, 1), background .12s, color .12s;
+    padding: 0;
+
+    .material-symbols-outlined,
+    .material-icons {
+        font-size: 1.1rem;
+    }
+
+    &:hover {
+        background: var(--ul-hover-bg);
+        color: var(--ul-grey-9);
+    }
+
+    &.open {
+        left: 300px;
+    }
+}
+
+// Shifts the bottom-left layers panel + boundary controls, and the Leaflet
+// zoom control, out of the way while the sidebar is open - mirroring
+// #map.pin-list-open on the main map so the drawer never sits on top of them.
+.map-wrapper:has(> .detail-pin-list-panel.open) {
+    .map-bottom-controls {
+        left: calc(300px + 20px);
+        transition: left 0.22s cubic-bezier(.4, 0, .2, 1);
+    }
+
+    // Transition comes from the unconditional `#map .leaflet-top.leaflet-left`
+    // rule further down this file, which also matches this page's #map.
+    .leaflet-top.leaflet-left {
+        left: 300px;
     }
 }
 
@@ -297,28 +460,28 @@
 .detail-pin-list-item {
     display: flex;
     align-items: center;
-    gap: .4rem;
-    padding: .3rem .5rem;
+    gap: .5rem;
+    padding: .5rem .8rem;
     cursor: pointer;
-    font-size: .78rem;
-    color: var(--ul-grey-7);
-    transition: background .1s;
+    font-size: .82rem;
+    color: rgba(255, 255, 255, 0.75);
+    transition: background .12s;
 
     &:hover {
-        background: var(--ul-grey-0);
+        background: rgba(255, 255, 255, 0.06);
     }
 
     &.is-highlighted {
-        background: var(--ul-grey-0a);
+        background: rgba(37, 99, 235, 0.22);
 
         .detail-pin-list-item-name {
-            color: $color-blue-700;
+            color: #fff;
             font-weight: 600;
         }
     }
 
     .detail-pin-list-item-icon {
-        font-size: 1rem;
+        font-size: 1.05rem;
         flex-shrink: 0;
     }
 
@@ -327,11 +490,17 @@
         @include truncate;
     }
 
+    .detail-pin-list-item-meta {
+        flex-shrink: 0;
+        font-size: .68rem;
+        color: rgba(255, 255, 255, 0.4);
+    }
+
     .detail-pin-list-item-delete {
         border: none;
         background: none;
         cursor: pointer;
-        color: var(--ul-grey-4);
+        color: rgba(255, 255, 255, 0.35);
         padding: .1rem;
         border-radius: 3px;
         display: flex;
@@ -341,13 +510,13 @@
 
         .material-symbols-outlined,
         .material-icons {
-            font-size: .85rem;
+            font-size: .9rem;
         }
 
         &:hover,
         &:focus {
-            color: $color-red-600;
-            background: var(--ul-grey-0a);
+            color: $color-red-500;
+            background: rgba(255, 255, 255, 0.08);
             outline: none;
         }
     }
@@ -356,7 +525,7 @@
 // -- Map sidebar panel tabs (Details / Photos) -----------------------------
 .map-panel-tabs {
     display: flex;
-    border-bottom: 1px solid var(--ul-grey-1a);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     flex-shrink: 0;
 }
 
@@ -366,10 +535,10 @@
     align-items: center;
     justify-content: center;
     gap: .3rem;
-    padding: .35rem .4rem;
-    font-size: .72rem;
-    font-weight: 500;
-    color: var(--ul-grey-6);
+    padding: .5rem .4rem;
+    font-size: .74rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.45);
     background: none;
     border: none;
     border-bottom: 2px solid transparent;
@@ -379,18 +548,18 @@
 
     .material-symbols-outlined,
     .material-icons {
-        font-size: .9rem;
+        font-size: .95rem;
     }
 
     &:hover {
-        color: var(--ul-grey-7);
-        background: var(--ul-grey-0);
+        color: rgba(255, 255, 255, 0.8);
+        background: rgba(255, 255, 255, 0.04);
     }
 
     &.is-active {
-        color: $color-blue-600;
-        border-bottom-color: $color-blue-600;
-        background: var(--ul-grey-0);
+        color: #fff;
+        border-bottom-color: $color-blue-500;
+        background: rgba(255, 255, 255, 0.04);
     }
 }
 
@@ -399,7 +568,7 @@
     top: 2px;
     right: 4px;
     background: $color-blue-600;
-    color: var(--ul-grey-4);
+    color: #fff;
     border-radius: 8px;
     font-size: .6rem;
     font-weight: 700;
@@ -413,6 +582,8 @@
     overflow-y: auto;
     flex: 1;
     padding: .25rem 0;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
 }
 
 // -- Photo panel items -----------------------------------------------------
@@ -431,7 +602,7 @@
     border-radius: 6px;
     overflow: hidden;
     cursor: pointer;
-    background: var(--ul-grey-0);
+    background: rgba(255, 255, 255, 0.06);
     border: 2px solid transparent;
     transition: border-color .12s, box-shadow .12s, transform .12s;
 
@@ -496,7 +667,7 @@
     justify-content: center;
     gap: .3rem;
     padding: 1.2rem .5rem;
-    color: var(--ul-grey-4);
+    color: rgba(255, 255, 255, 0.4);
     font-size: .75rem;
 
     .material-symbols-outlined,
@@ -524,67 +695,6 @@
     pointer-events: none;
 }
 
-// -- "Add Detail" dropdown button ------------------------------------------
-
-.map-add-detail-wrap {
-    position: relative;
-}
-
-.add-detail-menu {
-    position: absolute;
-    bottom: calc(100% + 6px);
-    left: 0;
-    background: rgba(255, 255, 255, 0.97);
-    border-radius: 8px;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, .22);
-    backdrop-filter: blur(4px);
-    min-width: 130px;
-    overflow: hidden;
-    z-index: 1100;
-}
-
-.add-detail-item {
-    display: flex;
-    align-items: center;
-    gap: .45rem;
-    padding: .4rem .7rem;
-    width: 100%;
-    background: none;
-    border: none;
-    cursor: pointer;
-    font-size: .8rem;
-    color: var(--ul-grey-0);
-    text-align: left;
-
-    .material-symbols-outlined,
-    .material-icons {
-        font-size: .95rem;
-        color: var(--ul-grey-3);
-    }
-
-    &:hover {
-        background: var(--ul-grey-0);
-        color: var(--ul-grey-9);
-        .material-symbols-outlined,
-        .material-icons {
-            color: var(--ul-grey-6);
-        }
-    }
-
-    &+& {
-        border-top: 1px solid var(--ul-grey-1);
-    }
-}
-
-.add-detail-chevron {
-    font-size: .75rem !important;
-    transition: transform .2s;
-
-    &.open {
-        transform: rotate(180deg);
-    }
-}
-
 // -- Markup mini-form panel (line/arrow/text placement) ---------------------
 
 
@@ -596,7 +706,7 @@
     font-size: .82rem;
     font-weight: 600;
     color: var(--ul-grey-7);
-    border-bottom: 1px solid var(--ul-grey-1a);
+    border-bottom: 1px solid var(--ul-surface-border);
 }
 
 .markup-form-body {
@@ -624,12 +734,12 @@
 .markup-form-input,
 .markup-form-select {
     padding: .3rem .5rem;
-    border: 1px solid var(--ul-grey-1a);
+    border: 1px solid var(--ul-surface-raised-border);
     border-radius: 5px;
     font-size: .8rem;
     color: var(--ul-grey-7);
     width: 100%;
-    background: var(--ul-grey-0);
+    background: var(--ul-surface-raised);
 
     &:focus {
         border-color: $color-blue-300;
@@ -801,15 +911,6 @@
     overflow: visible;
 }
 
-// -- Settings map view chooser ---------------------------------------------
-
-.settings-map-view-row {
-    display: flex;
-    gap: .75rem;
-    flex-wrap: wrap;
-    margin-top: .5rem;
-}
-
 // -- Add-Pin dialog ---------------------------------------------------------
 
 .add-pin-dialog {
@@ -828,9 +929,8 @@
     align-items: center;
     justify-content: space-between;
     padding: .85rem 1.25rem;
-    border-bottom: 1px solid var(--ul-grey-1a);
     flex-shrink: 0;
-    background-color: var(--ul-grey-1);
+    background-color: var(--ul-surface-border);
 
     h2 {
         margin: 0;
@@ -850,7 +950,6 @@
     display: flex;
     flex-direction: column;
     gap: .85rem;
-    background-color: var(--ul-grey-0b);
 }
 
 .apdlg-addr-wrap {
@@ -862,8 +961,7 @@
     top: 100%;
     left: 0;
     right: 0;
-    background: var(--ul-grey-0);
-    border: 1.5px solid var(--ul-grey-1a);
+    @include surface($rung: null);
     border-top: none;
     border-radius: 0 0 $radius-sm $radius-sm;
     box-shadow: 0 6px 18px rgba(0, 0, 0, .1);
@@ -879,7 +977,7 @@
     text-align: left;
     background: none;
     border: none;
-    border-bottom: 1px solid var(--ul-grey-1);
+    border-bottom: 1px solid var(--ul-surface-border);
     font-size: .83rem;
     color: $text-primary;
     cursor: pointer;
@@ -890,7 +988,7 @@
     }
 
     &:hover {
-        background: var(--ul-grey-0a);
+        background: var(--ul-hover-bg);
         color: var(--primary-color);
     }
 }
@@ -923,9 +1021,9 @@
     align-items: center;
     gap: .5rem;
     padding: .55rem .65rem;
-    border: 1.5px solid var(--ul-grey-1a);
+    border: 1.5px solid var(--ul-surface-raised-border);
     border-radius: $radius-sm;
-    background: var(--ul-grey-0);
+    background: var(--ul-surface-raised);
     font-size: .88rem;
     color: var(--ul-grey-9);
 
@@ -989,16 +1087,16 @@
     }
 }
 
-// -- Unified badge selector --------------------------------------------------
+// -- Unified label selector --------------------------------------------------
 
-.apdlg-badge-field {
+.apdlg-label-field {
     display: flex;
     flex-direction: column;
     gap: .4rem;
-    border: 1px solid var(--ul-grey-1a);
+    border: 1px solid var(--ul-surface-raised-border);
     border-radius: $radius-sm;
     padding: .5rem .65rem .5rem;
-    background: var(--ul-grey-0);
+    background: var(--ul-surface-raised);
     transition: border-color .15s;
 
     &:focus-within {
@@ -1008,13 +1106,13 @@
     &:hover,
     &:active,
     &:focus {
-        border-color: var(--ul-grey-2);
+        border-color: var(--ul-surface-2-border);
         color: var(--ul-grey-8);
-        background-color: var(--ul-grey-0b);
+        background-color: var(--ul-hover-bg);
     }
 }
 
-.apdlg-badge-chips {
+.apdlg-label-chips {
     display: flex;
     flex-wrap: wrap;
     gap: .3rem;
@@ -1024,7 +1122,7 @@
     }
 }
 
-.apdlg-badge-chip-item {
+.apdlg-label-chip-item {
     display: inline-flex;
     align-items: center;
     gap: .25rem;
@@ -1055,11 +1153,11 @@
     }
 }
 
-.apdlg-badge-input-wrap {
+.apdlg-label-input-wrap {
     position: relative;
 }
 
-.apdlg-badge-input {
+.apdlg-label-input {
     border: none !important;
     padding: 0 !important;
     font-size: .88rem;
@@ -1069,15 +1167,13 @@
     &:focus { outline: none; }
 }
 
-.apdlg-badge-suggestions {
+.apdlg-label-suggestions {
     position: absolute;
     top: calc(100% + 4px);
     left: -0.65rem;
     right: -0.65rem;
     z-index: 600;
-    background: var(--ul-grey-0);
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: $radius-md;
+    @include surface($radius: $radius-md, $rung: null);
     box-shadow: $shadow-dialog;
     max-height: 260px;
     overflow-y: auto;
@@ -1090,7 +1186,7 @@
     }
 }
 
-.apdlg-badge-sugg-item {
+.apdlg-label-sugg-item {
     display: flex;
     align-items: center;
     gap: .5rem;
@@ -1106,7 +1202,7 @@
 
     &:hover,
     &:focus {
-        background: var(--ul-grey-0a);
+        background: var(--ul-hover-bg);
         outline: none;
     }
 
@@ -1135,8 +1231,8 @@
         &--status   { background: color-mix(in srgb, $color-amber-500 12%, white); color: $color-amber-700; }
     }
 
-    &.apdlg-badge-sugg-create {
-        border-top: 1px solid var(--ul-grey-1a);
+    &.apdlg-label-sugg-create {
+        border-top: 1px solid var(--ul-surface-border);
         color: var(--ul-grey-6);
         font-style: italic;
         font-size: .82rem;
@@ -1153,9 +1249,9 @@
 // -- Privacy row -------------------------------------------------------------
 
 .apdlg-customize {
-    border: 1px solid var(--ul-grey-1a);
+    border: 1px solid var(--ul-surface-raised-border);
     border-radius: $radius-sm;
-    background: var(--ul-grey-0);
+    background: var(--ul-surface-raised);
 
     &[open] .apdlg-customize-arrow {
         transform: rotate(180deg);
@@ -1201,7 +1297,7 @@
     flex-direction: column;
     gap: .85rem;
     padding: 0 .65rem .75rem;
-    border-top: 1px solid var(--ul-grey-1a);
+    border-top: 1px solid var(--ul-surface-raised-border);
 }
 
 .apdlg-customize-hint {
@@ -1209,6 +1305,21 @@
     font-size: .8rem;
     color: $text-muted;
     line-height: 1.45;
+}
+
+.apdlg-customize-clear-btn {
+    align-self: flex-start;
+    padding: .3rem .6rem;
+    font-size: .78rem;
+
+    .material-symbols-outlined {
+        font-size: .95rem !important;
+    }
+
+    &:hover {
+        border-color: $color-red-300;
+        color: $color-red-600;
+    }
 }
 
 .apdlg-privacy-row {
@@ -1239,7 +1350,7 @@
     align-items: center;
     gap: .6rem;
     padding: .85rem 1.25rem;
-    border-top: 1px solid var(--ul-grey-1a);
+    border-top: 1px solid var(--ul-surface-border);
     flex-shrink: 0;
 }
 
@@ -1248,9 +1359,7 @@
 .map-context-menu {
     position: fixed;
     z-index: 10000;
-    background: var(--ul-grey-0);
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: 8px;
+    @include surface($radius: 8px, $rung: null);
     box-shadow: 0 4px 20px rgba(0, 0, 0, .18), 0 1px 4px rgba(0, 0, 0, .12);
     min-width: 150px;
     overflow: hidden;
@@ -1277,7 +1386,7 @@
         }
 
         &:hover {
-            background: var(--ul-grey-0);
+            background: var(--ul-hover-bg);
             color: $color-indigo-700;
 
             .material-symbols-outlined,
@@ -1314,7 +1423,7 @@
         padding: 0.5rem 1rem;
         color: var(--ul-grey-9);
         border-bottom: 1px solid var(--ul-grey-3);
-        background: var(--ul-grey-1);
+        background: var(--ul-surface-border);
         margin-bottom: 0.5rem;
     }
 }
@@ -1332,7 +1441,7 @@
 }
 
 .places-popup-details {
-    max-width: 280px;
+    max-width: 28rem;
 }
 
 .places-popup-detail {
@@ -1447,6 +1556,29 @@
     strong {
         color: rgba(255, 255, 255, 0.85);
     }
+}
+
+.pin-list-add-to-list-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: .4rem;
+    margin: 0 15px 10px;
+    padding: .5rem .7rem;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.11);
+    border-radius: 8px;
+    color: rgba(255, 255, 255, 0.75);
+    font-size: .8rem;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+
+    .material-symbols-outlined { font-size: 1.05rem; }
+}
+
+.pin-list-add-to-list-btn:hover {
+    border-color: rgba(90, 150, 255, 0.5);
+    background: rgba(255, 255, 255, 0.1);
 }
 
 .pin-list {
@@ -1596,8 +1728,8 @@
     justify-content: center;
     width: 22px;
     height: 56px;
-    background: var(--ul-grey-0);
-    border: 1px solid var(--ul-grey-1a);
+    background: var(--ul-surface-1);
+    border: 1px solid var(--ul-surface-1-border);
     border-left: none;
     border-radius: 0 10px 10px 0;
     box-shadow: 2px 0 8px rgba(0, 0, 0, .12);
@@ -1612,12 +1744,54 @@
     }
 
     &:hover {
-        background: var(--ul-grey-1);
+        background: var(--ul-hover-bg);
         color: var(--ul-grey-9);
     }
 
     &.open {
         left: 300px;
+    }
+
+    @include up($breakpoint-sm) {
+        display: flex;
+    }
+}
+
+/* Always-visible shortcut handle for #filter-panel - right-docked mirror of .pin-list-handle,
+   same mechanic/look (desktop only - the layers-menu entry covers mobile). */
+.filter-panel-handle {
+    position: absolute;
+    top: 50%;
+    right: 0;
+    transform: translateY(-50%);
+    z-index: 1002;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 56px;
+    background: var(--ul-surface-1);
+    border: 1px solid var(--ul-surface-1-border);
+    border-right: none;
+    border-radius: 10px 0 0 10px;
+    box-shadow: -2px 0 8px rgba(0, 0, 0, .12);
+    color: var(--ul-grey-6);
+    cursor: pointer;
+    transition: right 0.22s cubic-bezier(.4, 0, .2, 1), background .12s, color .12s;
+    padding: 0;
+
+    .material-symbols-outlined,
+    .material-icons {
+        font-size: 1.1rem;
+    }
+
+    &:hover {
+        background: var(--ul-surface-2);
+        color: var(--ul-grey-9);
+    }
+
+    &.open {
+        right: 272px;
     }
 
     @include up($breakpoint-sm) {
@@ -1707,6 +1881,34 @@
     color: rgba(255, 255, 255, 0.25);
 }
 
+.fp-toggle-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.fp-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    cursor: pointer;
+    user-select: none;
+    color: rgba(255, 255, 255, 0.65);
+    font-size: 0.8rem;
+
+    input[type="checkbox"] {
+        accent-color: $color-blue-500;
+        width: 15px;
+        height: 15px;
+        margin: 0;
+        cursor: pointer;
+    }
+
+    &:hover {
+        color: var(--ul-grey-4);
+    }
+}
+
 .fp-chips {
     display: flex;
     flex-wrap: wrap;
@@ -1744,7 +1946,7 @@
     color: $ui-fp-chip-txt;
 }
 
-.fp-badge-avail {
+.fp-label-avail {
     cursor: grab;
 
     &.fp-drag-active {
@@ -1867,6 +2069,100 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     padding-bottom: 12px;
 }
 
+/* -- Save Filter button + Saved Filters section -------------------------- */
+.fp-save-filter {
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.4);
+    cursor: pointer;
+    padding: 3px 6px;
+    border-radius: 4px;
+    font-size: 1rem;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    transition: color 0.15s, background 0.15s;
+}
+
+.fp-save-filter:hover {
+    color: var(--ul-grey-4);
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.fp-saved-filter-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.fp-saved-filter-chip {
+    display: flex;
+    align-items: stretch;
+    gap: 4px;
+}
+
+.fp-saved-filter-apply {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.11);
+    border-radius: 8px;
+    color: var(--ul-grey-4);
+    padding: 6px 10px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    text-align: left;
+    transition: border-color 0.15s, background 0.15s;
+
+    i {
+        font-size: 1rem;
+        color: rgba(255, 255, 255, 0.45);
+    }
+}
+
+.fp-saved-filter-apply:hover {
+    border-color: rgba(90, 150, 255, 0.5);
+    background: rgba(255, 255, 255, 0.09);
+}
+
+// Set by applySavedFilter() once a chip's criteria has been merged into the
+// filter form - the merge itself can't be cleanly un-applied (values just
+// get written into shared form fields), so this stays on until resetFilters()
+// clears the whole panel, rather than trying to toggle per-chip.
+.fp-saved-filter-apply--active {
+    border-color: rgba(90, 150, 255, 0.7);
+    background: rgba(90, 150, 255, 0.16);
+    color: #fff;
+
+    i {
+        color: rgba(90, 150, 255, 0.9);
+    }
+}
+
+.fp-saved-filter-delete {
+    background: none;
+    border: 1px solid rgba(255, 255, 255, 0.11);
+    border-radius: 8px;
+    color: rgba(255, 255, 255, 0.35);
+    cursor: pointer;
+    padding: 0 8px;
+    display: flex;
+    align-items: center;
+    transition: color 0.15s, background 0.15s, border-color 0.15s;
+
+    i {
+        font-size: 0.95rem;
+    }
+}
+
+.fp-saved-filter-delete:hover {
+    color: #fca5a5;
+    border-color: rgba(239, 68, 68, 0.4);
+    background: rgba(239, 68, 68, 0.12);
+}
+
 /* -- Combined Scores section (rating, danger, priority, vulnerability) -- */
 .fp-scores-body {
     padding-bottom: 4px;
@@ -1983,6 +2279,54 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     background: rgba(255, 255, 255, 0.09);
 }
 
+/* -- Date sub-groups (the combined "Dates" accordion: Pinned/Built/Abandoned/Last Viewed) -- */
+.fp-date-group {
+    margin-bottom: 10px;
+
+    &:last-child { margin-bottom: 0; }
+}
+
+.fp-date-group-label {
+    font-size: .68rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.45);
+    text-transform: uppercase;
+    letter-spacing: .05em;
+}
+
+/* -- Plain <select> filters (Has Links, Security Indicators) -------- */
+.fp-select {
+    width: 100%;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.11);
+    border-radius: 7px;
+    color: var(--ul-grey-4);
+    padding: 5px 7px;
+    font-size: .78rem;
+    outline: none;
+    color-scheme: dark;
+    box-sizing: border-box;
+    cursor: pointer;
+}
+
+.fp-select:focus {
+    border-color: rgba(90, 150, 255, 0.5);
+    background: rgba(255, 255, 255, 0.09);
+}
+
+#fp-acc-security .security-edit-grid {
+    grid-template-columns: 1fr;
+    padding: 0;
+}
+
+#fp-acc-security .security-edit-row label {
+    font-size: .68rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: rgba(255, 255, 255, 0.45);
+}
+
 /* -- Tag filter list ------------------------------------------------ */
 .fp-tag-search {
     width: 100%;
@@ -2021,8 +2365,8 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     top: 10px;
     left: 10px;
     width: calc(100% - 20px);
-    background: var(--ul-grey-0);
-    border: 1px solid var(--ul-grey-3);
+    background: var(--ul-surface-raised);
+    border: 1px solid var(--ul-surface-raised-border);
     border-radius: 18px;
     display: flex;
     align-items: center;
@@ -2044,9 +2388,24 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     }
 }
 
+/* Inline (in-flow) variant for forms and dialogs - cancels the floating
+   positioning at every breakpoint. */
+.addr-search-bar--inline {
+    position: relative;
+    top: auto;
+    left: auto;
+    width: 100%;
+
+    @include up($breakpoint-sm) {
+        top: auto;
+        left: auto;
+        width: 100%;
+    }
+}
+
 .addr-search-bar:focus-within {
     box-shadow: 0 2px 12px rgba(0, 0, 0, .24), 0 0 0 2px rgba(var(--ul-primary-rgb, 79, 70, 229), .18);
-    border-color: var(--ul-grey-3b);
+    border-color: var(--ul-surface-2-border);
 }
 
 .addr-search-icon {
@@ -2083,7 +2442,8 @@ div.container .addr-search-bar {
 }
 
 .addr-search-history,
-.addr-search-clear {
+.addr-search-clear,
+.addr-search-geolocate {
     background: none;
     border: none;
     color: var(--ul-grey-6);
@@ -2135,8 +2495,8 @@ div.container .addr-search-bar {
     top: calc(100% + 4px);
     left: -1px;
     right: -1px;
-    background: var(--ul-grey-0);
-    border: 1px solid var(--ul-grey-1a);
+    background: var(--ul-surface-raised);
+    border: 1px solid var(--ul-surface-raised-border);
     border-radius: 10px;
     box-shadow: 0 6px 20px rgba(0, 0, 0, .16);
     z-index: 1100;
@@ -2154,21 +2514,21 @@ div.container .addr-search-bar {
     letter-spacing: .07em;
     text-transform: uppercase;
     color: var(--ul-grey-5);
-    background: var(--ul-grey-0);
-    border-bottom: 1px solid var(--ul-grey-1a);
+    background: var(--ul-surface-raised);
+    border-bottom: 1px solid var(--ul-surface-raised-border);
     display: flex;
     align-items: center;
     gap: 4px;
 
     // Subtle per-section tints that adapt automatically to light/dark mode
-    &[data-section="pins"]        { background: color-mix(in srgb, var(--ul-primary-color) 5%, var(--ul-grey-0)); }
-    &[data-section="places"]      { background: color-mix(in srgb, #22c55e 4%, var(--ul-grey-0)); }
-    &[data-section="coordinates"] { background: color-mix(in srgb, #a855f7 4%, var(--ul-grey-0)); }
-    &[data-section="suggestions"] { background: color-mix(in srgb, var(--ul-grey-6) 5%, var(--ul-grey-0)); }
-    &[data-section="navigation"]  { background: color-mix(in srgb, #3b82f6 4%, var(--ul-grey-0)); }
-    &[data-section="history"]     { background: color-mix(in srgb, var(--ul-grey-5) 4%, var(--ul-grey-0)); }
-    &[data-section="recent"]      { background: color-mix(in srgb, var(--ul-grey-5) 3%, var(--ul-grey-0)); }
-    &[data-section="cities"]      { background: color-mix(in srgb, #f59e0b 4%, var(--ul-grey-0)); }
+    &[data-section="pins"]        { background: color-mix(in srgb, var(--ul-primary-color) 5%, var(--ul-surface-raised)); }
+    &[data-section="places"]      { background: color-mix(in srgb, #22c55e 4%, var(--ul-surface-raised)); }
+    &[data-section="coordinates"] { background: color-mix(in srgb, #a855f7 4%, var(--ul-surface-raised)); }
+    &[data-section="suggestions"] { background: color-mix(in srgb, var(--ul-grey-6) 5%, var(--ul-surface-raised)); }
+    &[data-section="navigation"]  { background: color-mix(in srgb, #3b82f6 4%, var(--ul-surface-raised)); }
+    &[data-section="history"]     { background: color-mix(in srgb, var(--ul-grey-5) 4%, var(--ul-surface-raised)); }
+    &[data-section="recent"]      { background: color-mix(in srgb, var(--ul-grey-5) 3%, var(--ul-surface-raised)); }
+    &[data-section="cities"]      { background: color-mix(in srgb, #f59e0b 4%, var(--ul-surface-raised)); }
 
     // Collapsible sections show pointer and a chevron
     &[data-collapsible] {
@@ -2212,7 +2572,7 @@ div.container .addr-search-bar {
     padding: 7px 12px;
     font-size: 0.8rem;
     cursor: pointer;
-    border-bottom: 1px solid var(--ul-grey-1a);
+    border-bottom: 1px solid var(--ul-surface-raised-border);
     transition: background .1s;
 
     &:last-child {
@@ -2279,7 +2639,7 @@ div.container .addr-search-bar {
     padding: 6px 12px;
     font-size: .72rem;
     color: var(--ul-grey-5);
-    border-bottom: 1px solid var(--ul-grey-1a);
+    border-bottom: 1px solid var(--ul-surface-raised-border);
 }
 
 .addr-source-loading-label {
@@ -2331,9 +2691,7 @@ div.container .addr-search-bar {
 
 .addr-no-results-card {
     pointer-events: auto;
-    background: var(--ul-grey-0);
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: 12px;
+    @include surface($radius: 12px, $rung: null);
     box-shadow: 0 8px 32px rgba(0,0,0,.22);
     padding: 18px 24px 16px;
     max-width: min(340px, 90vw);
@@ -2378,14 +2736,22 @@ div.container .addr-search-bar {
 
 .leaflet-bar {
     a {
-        border-bottom: 1px solid var(--ul-grey-2)
+        border-bottom: 1px solid var(--ul-grey-2);
+    }
+
+    @include up($breakpoint-sm) {
+        opacity: 0.5;
+
+        &:hover {
+            opacity: 1;
+        }
     }
 }
 
 /* -- Pin popup ------------------------------------------------------ */
 .leaflet-popup-content-wrapper {
-    background: rgba(18, 22, 34, 0.97);
-    backdrop-filter: blur(12px);
+    background: rgba(18, 22, 34, 0.90);
+    backdrop-filter: blur(3px);
     -webkit-backdrop-filter: blur(12px);
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 10px;
@@ -2397,6 +2763,11 @@ div.container .addr-search-bar {
 
 .leaflet-popup-content {
     margin: 0;
+}
+
+.leaflet-popup {
+    // Push the popup a little further away from the pin.
+    margin-bottom: 32px;
 }
 
 .leaflet-popup-tip {
@@ -2550,10 +2921,35 @@ div.container .addr-search-bar {
     color: $ui-link-on-dark-hover;
 }
 
-.popup-actions .edit-pin-button {
+.popup-actions .add-to-list-button {
     @include icon-btn(24px);
     color: rgba(255, 255, 255, .45);
     margin-left: auto;
+
+    &:hover {
+        color: rgba(255, 255, 255, .9);
+        background: rgba(255, 255, 255, .1);
+    }
+}
+
+// Child pin popup only (see map-annotations.ts's detailPinPopupContent) -
+// margin-left:auto here (rather than on .edit-pin-button, which this popup
+// also has) pushes both it and the edit button after it to the popup's
+// bottom-right corner as a pair, matching .add-to-list-button's pattern above.
+.popup-actions .promote-pin-button {
+    @include icon-btn(24px);
+    color: rgba(255, 255, 255, .45);
+    margin-left: auto;
+
+    &:hover {
+        color: rgba(255, 255, 255, .9);
+        background: rgba(255, 255, 255, .1);
+    }
+}
+
+.popup-actions .edit-pin-button {
+    @include icon-btn(24px);
+    color: rgba(255, 255, 255, .45);
 
     &:hover {
         color: rgba(255, 255, 255, .9);
@@ -2680,6 +3076,118 @@ div.container .addr-search-bar {
     .bulk-select-close {
         margin-left: $space-sm;
     }
+}
+
+// -- Child pins (child pins) layer on the main map -----------------------------
+// Smaller, softer markers so child pins read as subordinate to root pins.
+.child-pin-marker-wrap {
+    background: none !important;
+    border: none !important;
+}
+
+.child-pin-marker {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, .92);
+    border: 2px dashed rgba(124, 58, 237, .65);
+    box-shadow: 0 1px 5px rgba(0, 0, 0, .35);
+
+    .child-pin-icon {
+        font-size: 16px !important;
+        line-height: 1 !important;
+    }
+
+    .child-pin-emoji {
+        font-size: 14px;
+        line-height: 1;
+    }
+
+    .child-pin-img {
+        width: 18px;
+        height: 18px;
+        object-fit: contain;
+        border-radius: 50%;
+    }
+}
+
+.nearby-pin-marker-wrap {
+    background: none !important;
+    border: none !important;
+}
+
+.nearby-pin-marker {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, .92);
+    border: 2px solid rgba(13, 148, 136, .75);
+    box-shadow: 0 1px 5px rgba(0, 0, 0, .35);
+
+    .nearby-pin-icon {
+        font-size: 16px !important;
+        line-height: 1 !important;
+        color: #0d9488;
+    }
+
+    .nearby-pin-emoji {
+        font-size: 14px;
+        line-height: 1;
+    }
+}
+
+// "Sub pin of {parent}" line inside child-pin popups (main map + pin detail).
+.popup-child-parent {
+    display: flex;
+    align-items: center;
+    gap: .3rem;
+    font-size: .78rem;
+    color: $text-muted;
+    margin: .2rem 0 .35rem;
+
+    i {
+        font-size: .95rem;
+    }
+
+    a {
+        font-weight: 600;
+    }
+}
+
+// Merge dialog docked to the side on wide screens: the map stays interactive
+// and is panned/zoomed so every selected pin remains visible beside it.
+.bulk-merge-dialog--docked {
+    position: fixed;
+    top: 50%;
+    right: 18px;
+    left: auto;
+    bottom: auto;
+    transform: translateY(-50%);
+    margin: 0;
+    width: min(380px, 40vw);
+    max-height: min(80vh, 640px);
+    overflow-y: auto;
+    z-index: 1300;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, .45);
+}
+
+.cat-merge-empty-hint {
+    font-size: .82rem;
+    color: $text-muted;
+    margin: .25rem 0;
+}
+
+// Hover tooltip labelling the property/building boundary polygons.
+.boundary-tooltip {
+    font-size: .78rem;
+    font-weight: 600;
+    padding: 2px 8px;
 }
 
 // Undo action embedded inside the bulk-delete toastr message.
@@ -2813,9 +3321,18 @@ div.container .addr-search-bar {
     }
 }
 
-/* Boundary editing auto-saves in the background, so the Leaflet.draw
-   Save/Cancel action list next to "Edit Layers" is redundant - always hidden. */
-.leaflet-draw-actions {
+/* Boundary editing (map-annotations.ts, mounted on #map) auto-saves in the
+   background and uses its own right-click-to-delete-a-vertex handler
+   (edit: { remove: false }), so the Leaflet.draw Save/Cancel action list
+   next to "Edit Layers" is redundant there - hidden, but scoped to #map
+   only. Every other Leaflet-Draw usage on the site (e.g. the saved-filter
+   region map, _saved_filter_dialog_scripts.html) uses the vanilla
+   edit: { remove: true } flow, which *requires* that action bar to confirm
+   a pending delete - hiding it globally silently broke deleting a region:
+   Leaflet-Draw reverts an unconfirmed deletion back onto the map the
+   moment another tool is selected, since DELETED never fires without a
+   click on the (invisible) Save action. */
+#map .leaflet-draw-actions {
     display: none !important;
 }
 
@@ -2906,6 +3423,18 @@ div.container .addr-search-bar {
 #map.filter-open .map-buttons {
     @include up($breakpoint-sm) {
         right: calc(272px + 12px);
+    }
+}
+
+/* Same shift for the bottom-right saved-filters toolbar - needs !important since
+   .map-saved-filters-toolbar (_layout.scss) already pins `right` with !important
+   to stay bottom-right at every breakpoint (unlike .map-buttons, which flips to
+   top-right on desktop) - without matching !important here, that unconditional
+   pin always won regardless of source order/specificity, so the toolbar never
+   moved out from under the filter panel when it opened. */
+#map.filter-open .map-saved-filters-toolbar {
+    @include up($breakpoint-sm) {
+        right: calc(272px + 12px) !important;
     }
 }
 
@@ -3514,8 +4043,8 @@ div.container .addr-search-bar {
     justify-content: center;
     gap: 6px;
     padding: 7px 12px 7px 9px;
-    background: var(--ul-grey-0);
-    border: 1px solid var(--ul-grey-3);
+    background: var(--ul-surface-raised);
+    border: 1px solid var(--ul-surface-raised-border);
     border-radius: 8px;
     box-shadow: 0 2px 6px rgba(0, 0, 0, .14);
     cursor: pointer;
@@ -3550,6 +4079,10 @@ div.container .addr-search-bar {
         padding: 6px 4px 5px;
         min-width: 0;
         font-size: clamp(.55rem, 3cqmin, .67rem);
+        // Room for the (now-visible) thumb plus its label below - the base
+        // max-height above is sized for the icon+label row layout only and
+        // is too short once the thumb (up to 54px here) takes its place.
+        max-height: clamp(58px, 26cqmin, 96px);
 
         .map-layers-toggle-thumb {
             display: block;
@@ -3558,6 +4091,26 @@ div.container .addr-search-bar {
         .map-layers-toggle-icon {
             display: none;
         }
+    }
+
+    @include up($breakpoint-md) {
+        // Matches .map-layer-thumb's own md+ ceiling (4rem) plus padding/gap/label.
+        max-height: clamp(70px, 28cqmin, 104px);
+    }
+
+    // The md+ ceiling above was also the ceiling for every larger screen too -
+    // on a genuinely wide desktop the map container itself is well past the
+    // point these clamp() maxes ever mattered, so the toggle plateaued at a
+    // size sized for a "standard laptop", never actually growing any larger
+    // no matter how much room the map had. Let it keep scaling up through lg/xl.
+    @include up($breakpoint-lg) {
+        max-width: clamp(90px, 22cqmin, 112px);
+        max-height: clamp(104px, 28cqmin, 130px);
+    }
+
+    @include up($breakpoint-xl) {
+        max-width: clamp(112px, 22cqmin, 136px);
+        max-height: clamp(130px, 28cqmin, 156px);
     }
 
     &:hover, &.active, &:focus, &:active { opacity: 1; box-shadow: 0 3px 10px rgba(0, 0, 0, .18); }
@@ -3572,9 +4125,7 @@ div.container .addr-search-bar {
     position: absolute;
     left: 0;
     bottom: calc(100% + 8px);
-    background: var(--ul-grey-0);
-    border: 1px solid var(--ul-grey-1a);
-    border-radius: 10px;
+    @include surface($radius: 10px, $rung: null);
     box-shadow: 0 4px 20px rgba(0, 0, 0, .22);
     padding: 5px;
     display: grid;
@@ -3597,7 +4148,7 @@ div.container .addr-search-bar {
         align-items: flex-end;
         gap: 4px;
         padding: 6px;
-        max-width: 220px;
+        max-width: 22rem;
     }
 
     @include up($breakpoint-sm) {
@@ -3641,7 +4192,9 @@ div.container .addr-search-bar {
     font-weight: 600;
     color: var(--ul-grey-7);
     text-align: center;
-    transition: background .12s, color .12s, border-color .12s;
+    // Inactive layers recede (greyed via opacity) so active ones stand out at a glance.
+    opacity: .6;
+    transition: background .12s, color .12s, border-color .12s, opacity .12s;
     min-width: 0;
     box-sizing: border-box;
     overflow: hidden;
@@ -3658,12 +4211,33 @@ div.container .addr-search-bar {
         max-width: clamp(44px, 18cqmin, 62px);
     }
 
-    &:hover { background: var(--ul-grey-1); color: var(--ul-grey-9); }
+    @include up($breakpoint-md) {
+        // Matches .map-layer-thumb's own md+ ceiling (4rem) plus padding/gap/label -
+        // otherwise the thumb outgrows this button's max-height and clips the label.
+        max-width: clamp(52px, 20cqmin, 76px);
+        max-height: clamp(70px, 24cqmin, 112px);
+    }
+
+    // See .map-layers-toggle's matching lg/xl comment - this menu's options
+    // were capped at the same "standard laptop" ceiling regardless of how
+    // much wider the map actually got.
+    @include up($breakpoint-lg) {
+        max-width: clamp(76px, 20cqmin, 92px);
+        max-height: clamp(112px, 24cqmin, 136px);
+    }
+
+    @include up($breakpoint-xl) {
+        max-width: clamp(92px, 20cqmin, 108px);
+        max-height: clamp(136px, 24cqmin, 160px);
+    }
+
+    &:hover, &:focus-visible { background: var(--ul-hover-bg); color: var(--ul-grey-9); opacity: .85; }
 
     &.active {
         background: rgba($color-blue-500, .1);
         border-color: rgba($color-blue-500, .35);
         color: $color-blue-700;
+        opacity: 1;
 
         .map-layer-thumb--icon .material-icons { color: $color-blue-700; }
     }
@@ -3678,7 +4252,7 @@ div.container .addr-search-bar {
     border-radius: 5px;
     overflow: hidden;
     flex-shrink: 0;
-    background: var(--ul-grey-2);
+    background: var(--ul-surface-border);
 
     @include up($breakpoint-xs) {
         width: clamp(30px, 14cqmin, 54px);
@@ -3688,9 +4262,21 @@ div.container .addr-search-bar {
 
 
     @include up($breakpoint-md) {
-        width: clamp(40px, 16cqmin, 5rem);
-        height: clamp(40px, 16cqmin, 5rem);
+        // Ceiling deliberately stays well under the toggle/btn buttons' own
+        // max-height (below) so the label under the thumb never gets clipped.
+        width: clamp(40px, 16cqmin, 4rem);
+        height: clamp(40px, 16cqmin, 4rem);
         border-radius: 7px;
+    }
+
+    @include up($breakpoint-lg) {
+        width: clamp(56px, 16cqmin, 4.5rem);
+        height: clamp(56px, 16cqmin, 4.5rem);
+    }
+
+    @include up($breakpoint-xl) {
+        width: clamp(64px, 16cqmin, 5rem);
+        height: clamp(64px, 16cqmin, 5rem);
     }
 
     img {
@@ -3753,16 +4339,16 @@ div.container .addr-search-bar {
 
 .map-layer-btn.active .map-layer-thumb img { opacity: 1; }
 
-// -- Combined badge filter section ---------------------------------------------
+// -- Combined label filter section ---------------------------------------------
 
-.fp-badge-selected {
+.fp-label-selected {
     display: flex;
     gap: 6px;
     margin-bottom: 8px;
     flex-wrap: wrap;
 }
 
-.fp-badge-col {
+.fp-label-col {
     flex: 1;
     min-width: 0;
     border-radius: 8px;
@@ -3778,7 +4364,7 @@ div.container .addr-search-bar {
     }
 }
 
-.fp-badge-col-label {
+.fp-label-col-title {
     display: flex;
     align-items: center;
     gap: 4px;
@@ -3791,8 +4377,8 @@ div.container .addr-search-bar {
     .material-symbols-outlined,
     .material-icons { font-size: .85rem; }
 
-    .fp-badge-col--incl & { color: rgba(134, 239, 172, .85); }
-    .fp-badge-col--excl & { color: rgba(252, 165, 165, .85); }
+    .fp-label-col--incl & { color: rgba(134, 239, 172, .85); }
+    .fp-label-col--excl & { color: rgba(252, 165, 165, .85); }
 }
 
 // -- Complex formula display (replaces 2-column when mixed AND/OR active) ------
@@ -3844,13 +4430,13 @@ div.container .addr-search-bar {
     }
 }
 
-.fp-badge-chips {
+.fp-label-chips {
     display: flex;
     flex-wrap: wrap;
     gap: 4px;
 }
 
-.fp-badge-drop-remove {
+.fp-label-drop-remove {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -3874,12 +4460,12 @@ div.container .addr-search-bar {
     }
 }
 
-.fp-badge-col.fp-drag-over {
+.fp-label-col.fp-drag-over {
     outline: 2px dashed rgba(100, 180, 255, .6);
     outline-offset: 2px;
 }
 
-.fp-badge-chip {
+.fp-label-chip {
     display: inline-flex;
     align-items: center;
     gap: 3px;
@@ -3903,14 +4489,14 @@ div.container .addr-search-bar {
     }
 }
 
-.fp-badge-chip-label {
+.fp-label-chip-text {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    max-width: 80px;
+    max-width: 8rem;
 }
 
-.fp-badge-list-hint {
+.fp-label-list-hint {
     font-size: .62rem;
     color: rgba(255, 255, 255, .22);
     text-align: center;
@@ -3920,7 +4506,7 @@ div.container .addr-search-bar {
 
 // -- AND/OR mode toggle (inside column header) ---------------------------------
 
-.fp-badge-mode-btn {
+.fp-label-mode-btn {
     margin-left: auto;
     padding: 1px 6px;
     font-size: .6rem;
@@ -3983,8 +4569,10 @@ div.container .addr-search-bar {
     left: 0;
     right: 0;
     z-index: 200;
-    background: var(--ul-grey-1);
-    border: 1px solid var(--ul-grey-1a);
+    // Fixed dark, not theme-adaptive - the filter panel itself (#filter-panel)
+    // always renders on a dark backdrop and must not invert in light mode.
+    background: rgba(30, 34, 46, .97);
+    border: 1px solid rgba(255, 255, 255, .12);
     border-radius: 7px;
     box-shadow: 0 4px 14px rgba(0, 0, 0, .25);
     overflow: hidden;
@@ -3998,11 +4586,11 @@ div.container .addr-search-bar {
     gap: 6px;
     padding: 6px 10px;
     font-size: .78rem;
-    color: var(--ul-grey-8);
+    color: rgba(255, 255, 255, .75);
     cursor: pointer;
     transition: background .1s;
 
-    &:hover, &.active { background: rgba(100, 160, 255, .12); color: var(--ul-grey-9); }
+    &:hover, &.active { background: rgba(100, 160, 255, .12); color: #fff; }
 }
 
 .fp-formula-errors {
@@ -4130,6 +4718,7 @@ div.container .addr-search-bar {
 .pin-list-item__btn,
 .pin-list-item__edit,
 .pin-list-handle,
+.filter-panel-handle,
 .pagination-btn,
 .leaflet-control-zoom a,
 .leaflet-control-attribution a,
@@ -4164,7 +4753,11 @@ div.container .addr-search-bar {
 
 // - Map Dark Mode
 [data-map-style="dark"] {
-    .search-result-marker-icon {
+    // Places-layer markers only. Temporary search/context markers
+    // (.search-result-marker-wrap--temp) keep their own blue/amber colours -
+    // this used to recolour them near-white on dark tiles, which made the
+    // search-jump marker practically invisible.
+    .search-result-marker-wrap:not(.search-result-marker-wrap--temp) .search-result-marker-icon {
         color: var(--ul-grey-8);
 
         &--places-nps {
@@ -4172,6 +4765,27 @@ div.container .addr-search-bar {
         }
         &--places-wiki {
             color: $color-blue-700;
+        }
+    }
+
+    #cmcc-search-input {
+        background: transparent;
+        border: 0 none;
+    }
+
+    .addr-search-bar {
+        @include input-selectors {
+            background-color: transparent;
+            border-color: transparent;
+        }
+    }
+
+    .map-context-menu {
+        &__item {
+            &:hover {
+                background: rgba(0,0,0,0.2);
+                color: #fff;
+            }
         }
     }
 }

@@ -1,5 +1,6 @@
 {% extends 'dashboard/themes/base.html' %}
 {% load static %}
+{% load memories_components %}
 
 {% block header %}
 {# Leaflet powers the "confirm where this pin goes" dialog's placement map. #}
@@ -10,21 +11,27 @@
 
 {% block title %}Photos{% endblock %}
 
+{% block hero %}
+{% include "dashboard/partials/ui/_page_hero.html" with icon="photo_library" title="Photos" subtitle="Every photo you've added, and a quick way to turn them into visits." modifier="top" %}
+{% endblock %}
+
+{% block subnav %}
+<div class="ul-page-subnav">
+    <div class="ul-page-subnav__inner">
+        {% memories_tabs "photos" %}
+    </div>
+</div>
+{% endblock %}
+
 {% block content %}
 <div id="photos-page" class="memories-tab-page"
      data-upload-url="{% url 'memories.photos.upload' %}"
-     data-action-base="{% url 'memories.photos' %}">
-
-    <div class="memories-header">
-        <div>
-            <h1 class="memories-title"><i class="material-symbols-outlined">photo_library</i> Photos</h1>
-            <p class="memories-subtitle">Every photo you've added, and a quick way to turn them into visits.</p>
-        </div>
-    </div>
+     data-action-base="{% url 'memories.photos' %}"
+     data-storage-used="{{ storage_used_bytes }}"
+     data-storage-quota="{{ storage_quota_bytes|default_if_none:'' }}"
+     data-max-file-size="{{ max_upload_file_size_bytes }}">
 
     <div class="page-inner">
-        {% include "dashboard/partials/memories/_photos_tabs.html" with active="photos" %}
-
         <input type="file" id="photos-file-input" accept="image/*" multiple hidden
                onchange="photosHandleFiles(this.files); this.value='';">
 
@@ -66,28 +73,8 @@
     </div>
 </div>
 
-{# -- Lightbox ---------------------------------------------------------------- #}
-<dialog id="photos-lightbox" class="gallery-lightbox ul-dialog">
-    <div class="lightbox-inner">
-        <button type="button" class="lightbox-close" onclick="document.getElementById('photos-lightbox').close()">
-            <i class="material-symbols-outlined">close</i>
-        </button>
-        <button type="button" class="lightbox-nav lightbox-prev" onclick="photosLightboxNav(-1)">
-            <i class="material-symbols-outlined">chevron_left</i>
-        </button>
-        <img id="photos-lightbox-img" src="" alt="" class="lightbox-img">
-        <button type="button" class="lightbox-nav lightbox-next" onclick="photosLightboxNav(1)">
-            <i class="material-symbols-outlined">chevron_right</i>
-        </button>
-        <p id="photos-lightbox-caption" class="lightbox-caption" hidden></p>
-        <div id="photos-lightbox-meta" class="lightbox-meta">
-            <p id="photos-lightbox-author" class="lightbox-meta-line" hidden></p>
-            <p id="photos-lightbox-taken-at" class="lightbox-meta-line" hidden></p>
-            <p id="photos-lightbox-copyright" class="lightbox-meta-line" hidden></p>
-            <a id="photos-lightbox-source-link" class="lightbox-meta-line lightbox-source-link" target="_blank" rel="noopener noreferrer" hidden></a>
-        </div>
-    </div>
-</dialog>
+{# -- Lightbox (shared component - same as the pin detail gallery and the profile page) -- #}
+{% include "dashboard/partials/_photo_lightbox.html" %}
 
 {# -- Full-page drag overlay -------------------------------------------------- #}
 <div id="photos-drop-overlay" class="gallery-drop-overlay" hidden
@@ -137,7 +124,15 @@
         confirmMap = L.map(mapEl, { attributionControl: false }).setView([lat, lng], 15);
         // Shared layers engine + panel - the exact same component as the main map
         // (see {% templatetag openblock %} map_layers_panel {% templatetag closeblock %} in _photo_pin_confirm.html).
-        window.MapLayers.create(confirmMap, { root: document.getElementById('photo-pin-confirm-layers') });
+        // Attribution renders below the map (#photo-pin-confirm-attribution)
+        // instead of an on-map overlay - attributionControl is disabled above.
+        window.MapLayers.create(confirmMap, {
+            root: document.getElementById('photo-pin-confirm-layers'),
+            onAttribution: function (text) {
+                var el = document.getElementById('photo-pin-confirm-attribution');
+                if (el) el.textContent = text;
+            },
+        });
         var marker = L.marker([lat, lng], { draggable: true }).addTo(confirmMap);
         nearbyPinsLayer = L.layerGroup().addTo(confirmMap);
 
@@ -165,6 +160,7 @@
                 googlePlaces: { url: root.dataset.placesUrl },
             },
             resolvePlaceUrl: root.dataset.resolveUrl,
+            pinCacheProfileUuid: root.dataset.profileUuid,
             enableMyLocation: false,
             defaultZoom: 16,
             onSelect: function (result) {
@@ -243,6 +239,37 @@
     var ACTION_BASE = root.dataset.actionBase;
     var CSRF = window.csrftoken || '{{ csrf_token }}';
 
+    // -- Client-side size/quota pre-check ---------------------------------------
+    // Mirrors the server's file_size_error_for_upload/quota_error_for_upload
+    // (services/storage.py) so an obviously-doomed upload is rejected instantly
+    // instead of only after a full round-trip - the server checks are still the
+    // real enforcement (this is a UX nicety, not a security boundary).
+    var MAX_FILE_SIZE = Number.parseInt(root.dataset.maxFileSize, 10) || 0;
+    var STORAGE_USED = Number.parseInt(root.dataset.storageUsed, 10) || 0;
+    var STORAGE_QUOTA = root.dataset.storageQuota ? Number.parseInt(root.dataset.storageQuota, 10) : null; // null = unlimited
+
+    function _formatBytes(bytes) {
+        var units = ['bytes', 'KB', 'MB', 'GB', 'TB'];
+        var i = 0;
+        var n = bytes;
+        while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
+        return (i === 0 ? n : n.toFixed(1)) + ' ' + units[i];
+    }
+
+    // Returns null if the file is fine to upload, or a user-facing error
+    // string. `committed` is how much of the batch-in-flight has already been
+    // provisionally counted against quota, so a multi-file drop can't blow
+    // past the limit just because each check ran against the same starting total.
+    function _precheckError(file, committed) {
+        if (MAX_FILE_SIZE && file.size > MAX_FILE_SIZE) {
+            return 'That file is too large (' + _formatBytes(file.size) + '). The maximum upload size is ' + _formatBytes(MAX_FILE_SIZE) + '.';
+        }
+        if (STORAGE_QUOTA !== null && STORAGE_USED + committed + file.size > STORAGE_QUOTA) {
+            return 'This upload would exceed your storage quota (' + _formatBytes(STORAGE_USED + committed) + ' of ' + _formatBytes(STORAGE_QUOTA) + ' used). Delete some photos or lower your image size in Settings → Storage.';
+        }
+        return null;
+    }
+
     // -- Drag-to-upload detection (depth-counted, page-wide) --------------------
     var _dragDepth = 0;
     var _overlay = document.getElementById('photos-drop-overlay');
@@ -263,6 +290,24 @@
     window.photosHandleFiles = function (files) {
         files = Array.from(files || []).filter(function (f) { return f.type.indexOf('image/') === 0; });
         if (!files.length) return;
+
+        // Reject what we can up-front, and only count the rest against quota -
+        // a batch that's part valid/part oversized shouldn't have the oversized
+        // files eat into the budget the valid ones actually need.
+        var committed = 0;
+        var accepted = [];
+        files.forEach(function (file) {
+            var error = _precheckError(file, committed);
+            if (error) {
+                if (window.toastr) toastr.error(file.name + ': ' + error);
+                return;
+            }
+            committed += file.size;
+            accepted.push(file);
+        });
+        files = accepted;
+        if (!files.length) return;
+
         var progress = document.getElementById('photos-upload-progress');
         var bar = document.getElementById('photos-upload-bar');
         if (progress) progress.hidden = false;
@@ -280,7 +325,7 @@
                         return data;
                     });
                 })
-                .then(function (img) { ok++; _prependTile(img); })
+                .then(function (img) { ok++; STORAGE_USED += file.size; _prependTile(img); })
                 .catch(function (err) {
                     if (window.toastr) toastr.error(file.name + ': ' + (err.message || 'upload failed'));
                 })
@@ -306,6 +351,26 @@
         setTimeout(function () { document.body.dispatchEvent(new Event('refreshQueue')); }, delay);
     }
 
+    // Upload/delete mutate the grid directly (no htmx refetch, so the "All
+    // photos" count next to the gallery header would otherwise stay at its
+    // value as of last page load).
+    function _updatePhotoCountBadge(delta) {
+        var head = document.querySelector('.photos-gallery-head');
+        if (!head) return;
+        var badge = head.querySelector('.badge');
+        var next = Math.max(0, (badge ? Number.parseInt(badge.textContent, 10) || 0 : 0) + delta);
+        if (next === 0) {
+            if (badge) badge.remove();
+            return;
+        }
+        if (!badge) {
+            badge = document.createElement('span');
+            badge.className = 'badge';
+            head.appendChild(badge);
+        }
+        badge.textContent = next;
+    }
+
     function _prependTile(img) {
         var grid = document.getElementById('photo-grid');
         if (!grid) { window.location.reload(); return; } // grid was in empty state
@@ -327,6 +392,7 @@
             '<button type="button" class="photo-tile-del" title="Delete photo" onclick="photosDelete(' + img.id + ')">' +
             '<i class="material-symbols-outlined">delete</i></button>';
         grid.insertBefore(li, grid.firstChild);
+        _updatePhotoCountBadge(1);
     }
 
     // -- Delete ----------------------------------------------------------------
@@ -336,7 +402,7 @@
             .then(function (r) {
                 if (!r.ok) return;
                 var el = document.getElementById('photo-tile-' + id);
-                if (el) el.remove();
+                if (el) { el.remove(); _updatePhotoCountBadge(-1); }
                 var card = document.getElementById('photo-card-' + id);
                 if (card) card.remove();
                 if (window.toastr) toastr.info('Photo deleted.');
@@ -344,56 +410,20 @@
     };
 
     // -- Lightbox --------------------------------------------------------------
-    var _lbIdx = 0, _lbItems = [];
-    function _collectItems() {
-        _lbItems = Array.prototype.map.call(document.querySelectorAll('.photo-tile'), function (el) {
+    // Opens the shared lightbox (dashboard/partials/_photo_lightbox.html,
+    // included above) with every photo currently in the grid.
+    window.photosOpenLightbox = function (id) {
+        var items = Array.prototype.map.call(document.querySelectorAll('.photo-tile'), function (el) {
             return {
-                id: parseInt(el.dataset.id, 10), url: el.dataset.url, caption: el.dataset.caption || '',
+                url: el.dataset.url, caption: el.dataset.caption || '',
                 author: el.dataset.author || '', copyright: el.dataset.copyright || '',
-                sourceUrl: el.dataset.sourceUrl || '', takenAt: el.dataset.takenAt || '',
+                sourceUrl: el.dataset.sourceUrl || '', sourceName: '', takenAt: el.dataset.takenAt || '',
+                imageId: parseInt(el.dataset.id, 10), canRelevance: false, relevant: null,
             };
         });
-    }
-    window.photosOpenLightbox = function (id) {
-        _collectItems();
-        _lbIdx = _lbItems.findIndex(function (i) { return i.id === id; });
-        if (_lbIdx < 0) _lbIdx = 0;
-        _showLb();
-        document.getElementById('photos-lightbox').showModal();
+        var idx = items.findIndex(function (i) { return i.imageId === id; });
+        window.galleryOpenLightboxItem(items, Math.max(idx, 0));
     };
-    window.photosLightboxNav = function (dir) {
-        if (!_lbItems.length) return;
-        _lbIdx = (_lbIdx + dir + _lbItems.length) % _lbItems.length;
-        _showLb();
-    };
-    function _showLb() {
-        var it = _lbItems[_lbIdx];
-        if (!it) return;
-        document.getElementById('photos-lightbox-img').src = it.url;
-        var captionEl = document.getElementById('photos-lightbox-caption');
-        captionEl.textContent = it.caption || '';
-        captionEl.hidden = !it.caption;
-        var authorEl = document.getElementById('photos-lightbox-author');
-        authorEl.textContent = it.author ? 'By ' + it.author : '';
-        authorEl.hidden = !it.author;
-        var takenEl = document.getElementById('photos-lightbox-taken-at');
-        var takenText = '';
-        if (it.takenAt) { var d = new Date(it.takenAt); if (!isNaN(d)) takenText = d.toLocaleString(); }
-        takenEl.textContent = takenText;
-        takenEl.hidden = !takenText;
-        var copyrightEl = document.getElementById('photos-lightbox-copyright');
-        copyrightEl.textContent = it.copyright || '';
-        copyrightEl.hidden = !it.copyright;
-        var sourceEl = document.getElementById('photos-lightbox-source-link');
-        if (it.sourceUrl) { sourceEl.href = it.sourceUrl; sourceEl.textContent = 'View source'; sourceEl.hidden = false; }
-        else { sourceEl.removeAttribute('href'); sourceEl.textContent = ''; sourceEl.hidden = true; }
-    }
-    document.addEventListener('keydown', function (e) {
-        var lb = document.getElementById('photos-lightbox');
-        if (!lb || !lb.open) return;
-        if (e.key === 'ArrowLeft') photosLightboxNav(-1);
-        else if (e.key === 'ArrowRight') photosLightboxNav(1);
-    });
 }());
 </script>
 {% endblock %}

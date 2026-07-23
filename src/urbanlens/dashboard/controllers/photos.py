@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 from typing import TYPE_CHECKING, Any
+import uuid as uuid_lib
 
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.db.models import Q
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
@@ -15,7 +18,7 @@ from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion, VisitSuggestionStatus
-from urbanlens.dashboard.services.images import compute_checksum, image_to_gallery_json
+from urbanlens.dashboard.services.images import compute_checksum, image_to_gallery_json, image_upload_error
 from urbanlens.dashboard.services.memories.photos import classify_photo, create_pin_and_log_visit, log_visit_on_pin
 from urbanlens.dashboard.services.memories.unlogged import unlogged_visited_pins
 from urbanlens.dashboard.services.pagination import get_page
@@ -136,6 +139,8 @@ class MemoriesPhotosView(LoginRequiredMixin, View):
         Returns:
             The rendered Photos page.
         """
+        from urbanlens.dashboard.services.storage import get_quota_bytes, get_storage_used_bytes, max_upload_file_size_bytes
+
         profile, _ = Profile.objects.get_or_create(user=request.user)
         gallery = Image.objects.uploaded_by(profile).select_related("pin", "wiki")
         page_obj = get_page(request, gallery, _GALLERY_PAGE_SIZE)
@@ -150,6 +155,9 @@ class MemoriesPhotosView(LoginRequiredMixin, View):
                 "profile": profile,
                 "photo_count": gallery.count(),
                 "unlogged_visits_count": len(unlogged_visited_pins(profile)),
+                "storage_used_bytes": get_storage_used_bytes(profile),
+                "storage_quota_bytes": get_quota_bytes(profile),
+                "max_upload_file_size_bytes": max_upload_file_size_bytes(),
             },
         )
 
@@ -217,16 +225,40 @@ class PhotoUploadView(LoginRequiredMixin, View):
         Returns:
             The new image serialized for the gallery grid, or a 400 error.
         """
+        import posixpath
+
+        from urbanlens.dashboard.models.images.model import MediaKind
+        from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
+        from urbanlens.dashboard.services.documents import DOCUMENT_EXTENSIONS
+
         profile, _ = Profile.objects.get_or_create(user=request.user)
         image_file = request.FILES.get("image")
         if not image_file:
             return JsonResponse({"error": "No image provided."}, status=400)
-        if not (image_file.content_type or "").startswith("image/"):
-            return JsonResponse({"error": "That file is not an image."}, status=400)
+
+        content_type = image_file.content_type or ""
+        extension = posixpath.splitext(image_file.name or "")[1].lower()
+        if content_type.startswith("video/"):
+            media_type = MediaKind.VIDEO
+            if not user_has_feature(request.user, SiteFeature.VIDEO_UPLOADS):
+                return JsonResponse({"error": "Video uploads are not enabled for your account."}, status=403)
+        elif content_type.startswith("image/"):
+            media_type = MediaKind.PHOTO
+        elif content_type == "application/pdf" or extension in DOCUMENT_EXTENSIONS:
+            media_type = MediaKind.DOCUMENT
+            if not user_has_feature(request.user, SiteFeature.DOCUMENT_UPLOADS):
+                return JsonResponse({"error": "Document uploads are not enabled for your account."}, status=403)
+        else:
+            return JsonResponse({"error": "That file is not an image, video, or supported document type."}, status=400)
+
+        upload_error = image_upload_error(image_file, media_type)
+        if upload_error:
+            message, status = upload_error
+            return JsonResponse({"error": message}, status=status)
 
         checksum = compute_checksum(image_file)
         if Image.objects.filter(profile=profile, checksum=checksum).exists():
-            return JsonResponse({"error": "You already uploaded this photo."}, status=409)
+            return JsonResponse({"error": "You already uploaded this file."}, status=409)
 
         from urbanlens.dashboard.services.storage import quota_error_for_upload
 
@@ -234,7 +266,7 @@ class PhotoUploadView(LoginRequiredMixin, View):
         if quota_error:
             return JsonResponse({"error": quota_error}, status=413)
 
-        img = Image.objects.create(image=image_file, profile=profile, checksum=checksum, file_size=image_file.size)
+        img = Image.objects.create(image=image_file, profile=profile, checksum=checksum, file_size=image_file.size, media_type=media_type)
 
         from urbanlens.dashboard.services.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import process_image_upload
@@ -267,14 +299,14 @@ class PhotoActionView(LoginRequiredMixin, View):
             return _render_card(request, image, toast="That suggestion is no longer available.")
         if accept_visit_suggestion(suggestion, profile) is None:
             return _render_card(request, image, toast="Visit logging is turned off - enable it in Settings to add this to your visit history.")
-        return _toast("Added to your visit history.")
+        return _toast("Added to your visit history.", refresh_queue=True)
 
     def reject(self, request: HttpRequest, image: Image, profile: Profile) -> HttpResponse:
         """Reject a photo-origin suggestion."""
         suggestion = self._pending_suggestion(image)
         if suggestion is not None:
             reject_visit_suggestion(suggestion)
-        return _toast("Suggestion dismissed.", "info")
+        return _toast("Suggestion dismissed.", "info", refresh_queue=True)
 
     def create_pin(self, request: HttpRequest, image: Image, profile: Profile) -> HttpResponse:
         """Create a pin and log a visit, honouring the confirmation dialog's placement.
@@ -296,7 +328,7 @@ class PhotoActionView(LoginRequiredMixin, View):
             lng = float(image.effective_longitude) if image.effective_longitude is not None else None
         if lat is None or lng is None:
             return _render_card(request, image, toast="This photo has no location.", level="error")
-        # TODO: We must sanitize the name to prevent XSS attacks.
+        # name is sanitized in Pin.save() (see naming.sanitize_name), not here.
         _, visit = create_pin_and_log_visit(profile, image, latitude=lat, longitude=lng, name=request.POST.get("name"))
         if visit is None:
             return _toast("Pin created. Visit logging is turned off, so no visit was recorded.", "info", refresh_queue=True)
@@ -304,25 +336,31 @@ class PhotoActionView(LoginRequiredMixin, View):
 
     def log_visit(self, request: HttpRequest, image: Image, profile: Profile) -> HttpResponse:
         """Log a visit on the pin the user chose in the manual search."""
-        pin_slug = request.POST.get("pin_slug")
-        pin = Pin.objects.filter(slug=pin_slug, profile=profile).first()
+        pin_slug = request.POST.get("pin_slug") or ""
+        # The shared location-search engine identifies pins by slug, falling back to
+        # the uuid when a pin has no slug (see AutocompleteResult.pin_slug) - accept
+        # either form here rather than only the slug.
+        pin_filter = Q(slug=pin_slug)
+        with contextlib.suppress(ValueError, AttributeError, TypeError):
+            pin_filter |= Q(uuid=uuid_lib.UUID(pin_slug))
+        pin = Pin.objects.filter(pin_filter, profile=profile).first()
         if pin is None:
             return _render_card(request, image, toast="That pin could not be found.", level="error")
         visit = log_visit_on_pin(profile, image, pin)
         if visit is None:
-            return _toast("Photo filed. Visit logging is turned off, so no visit was recorded.", "info")
-        return _toast("Visit logged.")
+            return _toast("Photo filed. Visit logging is turned off, so no visit was recorded.", "info", refresh_queue=True)
+        return _toast("Visit logged.", refresh_queue=True)
 
     def dismiss(self, request: HttpRequest, image: Image, profile: Profile) -> HttpResponse:
         """Clear a photo out of the organize queue without deleting it."""
         Image.objects.filter(pk=image.pk).update(organize_dismissed=True)
-        return _toast("Photo cleared from your to-do list.", "info")
+        return _toast("Photo dismissed.", "info", refresh_queue=True)
 
     def delete_photo(self, request: HttpRequest, image: Image, profile: Profile) -> HttpResponse:
         """Delete the photo entirely."""
         image.image.delete(save=False)
         image.delete()
-        return _toast("Photo deleted.", "info")
+        return _toast("Photo deleted.", "info", refresh_queue=True)
 
     _ACTIONS = {
         "accept": accept,

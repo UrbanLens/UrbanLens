@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.controllers.comments import (
     _parse_map_data,
     _sanitize_markup_color,
@@ -19,7 +19,7 @@ def _request(map_data_json: str) -> MagicMock:
     return req
 
 
-class CommentMapDataSanitizationTests(TestCase):
+class CommentMapDataSanitizationTests(SimpleTestCase):
     """_parse_map_data strips dangerous color/style values before storage."""
 
     def test_malicious_hex_injection_in_color_is_rejected(self) -> None:
@@ -99,7 +99,7 @@ class CommentMapDataSanitizationTests(TestCase):
         assert result["zoom"] <= 22  # nosec B101
 
 
-class SanitizeColorUnitTests(TestCase):
+class SanitizeColorUnitTests(SimpleTestCase):
     """Unit tests for _sanitize_markup_color."""
 
     def test_valid_hex_passes(self) -> None:
@@ -114,7 +114,7 @@ class SanitizeColorUnitTests(TestCase):
         assert _sanitize_markup_color("bad", "#000000") == "#000000"  # nosec B101
 
 
-class SanitizeNumberUnitTests(TestCase):
+class SanitizeNumberUnitTests(SimpleTestCase):
     """Unit tests for _sanitize_number."""
 
     def test_clamps_above_hi(self) -> None:

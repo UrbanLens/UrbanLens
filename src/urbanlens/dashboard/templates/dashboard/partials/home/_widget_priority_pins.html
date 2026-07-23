@@ -1,0 +1,20 @@
+{% comment %}
+High-priority unvisited pins widget. Context: home_priority_unvisited_pins (Pin queryset, up to 6).
+{% endcomment %}
+{% if home_priority_unvisited_pins %}
+<section class="home-widget ul-section" data-widget-key="priority_pins">
+    <div class="home-widget-heading">
+        <span class="home-widget-icon home-widget-icon--warm"><i class="material-symbols-outlined">priority_high</i></span>
+        <div><h3>High-priority places to visit</h3><p>Your most important unvisited pins.</p></div>
+    </div>
+    <div class="home-card-strip">
+        {% for pin in home_priority_unvisited_pins %}
+        <a class="home-mini-card home-mini-card--priority" href="{% url 'pin.details' pin.slug %}">
+            <i class="material-symbols-outlined">flag</i>
+            <strong>{{ pin.display_label|default:pin.name|default:"Unnamed pin" }}</strong>
+            <span>Priority {{ pin.priority }}{% if pin.location.address %} · {{ pin.location.address|truncatechars:42 }}{% endif %}</span>
+        </a>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}

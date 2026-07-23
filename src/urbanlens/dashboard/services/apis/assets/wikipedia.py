@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import logging
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from django.utils.html import escape
 
@@ -12,30 +12,33 @@ from django.utils.html import escape
 import lxml.html as lxml_html  # nosec B410
 import nh3
 
+from urbanlens.dashboard.services.apis.assets.base import MediaItem, MediaProvider
 from urbanlens.dashboard.services.gateway import Gateway
 from urbanlens.dashboard.services.redact import redact_coordinate
+
+if TYPE_CHECKING:
+    from collections.abc import Generator
 
 logger = logging.getLogger(__name__)
 
 _GEO_SEARCH_URL = "https://en.wikipedia.org/w/api.php"
 _SUMMARY_URL = "https://en.wikipedia.org/api/rest_v1/page/summary/{title}"
+_MEDIA_LIST_URL = "https://en.wikipedia.org/api/rest_v1/page/media-list/{title}"
 _RADIUS_METERS = 500
 _MAX_CANDIDATES = 5
 _USER_AGENT = "UrbanLens/1.0 (https://github.com/urbanlens/urbanlens; jess.a.mann@gmail.com) python-requests/2.x"
 
-# The REST summary endpoint (`_fetch_summary`) truncates well below the
-# article's actual lead section, and the lead section itself is often not
-# enough to fill the card's available space either (e.g. a cemetery article
-# whose lead is a couple hundred words but whose body has several more
-# sections of real content). Below this length, pull a much bigger slice of
-# the whole article body instead of just the lead, so the frontend has real
-# margin to work with regardless of how tall its card ends up (see the
-# client-side clamp in dashboard/pages/location/index.html).
-_SHORT_EXTRACT_CHARS = 1200
+# The REST summary endpoint (`_fetch_summary`) only ever returns the lead
+# section, which is frequently a couple hundred words even for articles with
+# several more sections of real body content. The pin details page's
+# Wikipedia sub-tab renders this as a standalone full page (not a
+# space-constrained card - see docs/prompts/completed.md for the history of
+# removing the CSS height clamp that used to apply here), so the full article
+# body is always pulled instead of just the lead.
 # Server-side cap on the extended extract - generous, but bounded so a single
 # huge article (some run 50k+ characters) doesn't get pulled in wholesale.
 # Measured in visible text characters, not markup bytes.
-_EXTENDED_EXTRACT_CHARS = 5000
+_EXTENDED_EXTRACT_CHARS = 20_000
 
 # `prop=extracts` (without `explaintext`) returns the article's real parsed
 # markup instead of flattened plain text, so headings/paragraphs/lists survive.
@@ -73,6 +76,19 @@ _ALLOWED_TAGS = frozenset(
 # into the card as noise (chart axis labels, raw JSON, etc.).
 _CLEAN_CONTENT_TAGS = frozenset({"wiki-chart", "svg", "style", "script", "table"})
 _HEADING_TAGS = frozenset({"h1", "h2", "h3", "h4", "h5", "h6"})
+
+# Infobox extraction is the one case that needs the opposite allowlist from
+# the prose extract above: table structure kept, everything else (article
+# body, navboxes, footnotes) unwrapped down to plain text so lxml can walk
+# just the rows. `class` is kept on `table` only, so the infobox itself can
+# still be found by class after sanitizing - every other attribute is
+# stripped, same as the prose extract.
+_INFOBOX_ALLOWED_TAGS = frozenset({"table", "thead", "tbody", "tr", "th", "td"})
+_INFOBOX_CLEAN_CONTENT_TAGS = frozenset({"script", "style", "svg"})
+_INFOBOX_ALLOWED_ATTRIBUTES: dict[str, set[str]] = {"table": {"class"}}
+# Defensive cap - a real infobox has a handful of rows; this only guards
+# against something pathological slipping through.
+_MAX_INFOBOX_ROWS = 20
 # Sections whose content reads poorly as prose (bibliography entries, bare
 # citation text, etc.) - the extended extract is truncated at the first
 # heading matching one of these rather than including them.
@@ -194,28 +210,85 @@ class WikipediaGateway(Gateway):
 
         Returns:
             A dict with keys ``title``, ``extract``, ``url``, ``thumbnail``,
-            ``description``, ``page_id`` - or None if no matching article found.
+            ``description``, ``page_id``, ``infobox`` (ordered ``[label,
+            value]`` pairs, possibly empty - see ``_fetch_infobox``) - or
+            None if no matching article found.
         """
         candidates = self._geo_search(latitude, longitude)
         for candidate in candidates:
             summary = self._fetch_summary(candidate["title"])
             if summary and self._address_matches(summary, address_components, name):
                 article = self._normalise(summary)
-                self._fill_short_extract(article, candidate["title"])
+                self._fill_full_extract(article, candidate["title"])
+                article["infobox"] = self._fetch_infobox(candidate["title"])
                 return article
         return None
 
+    def get_article_media(self, title: str) -> list[dict[str, Any]]:
+        """
+        Return the images actually shown on a specific Wikipedia article.
+
+        Unlike a Wikimedia Commons text search (which only finds files whose
+        own title/description text happens to match a query - see
+        ``WikimediaGateway``), this reads the article's own curated media list,
+        so it also picks up images that are only reachable through an in-body
+        gallery and aren't independently discoverable by name (a known gap:
+        see docs/PROBLEMS.md/completed.md for the original report). Should
+        only be called once an article has already been confidently matched
+        to a location (e.g. via ``get_article_for_location``) - this takes the
+        article title directly, not a search query.
+
+        Args:
+            title: Exact Wikipedia article title (as returned by
+                ``get_article_for_location``'s ``title`` key).
+
+        Returns:
+            List of dicts with keys ``title`` (the Commons ``File:`` page
+            title, useful for cross-provider dedup), ``url`` (largest
+            available rendition), and ``thumb_url`` (smallest). Empty on
+            failure or no matches.
+        """
+        url = _MEDIA_LIST_URL.format(title=title.replace(" ", "_"))
+        try:
+            resp = self.session.get(url, timeout=10)
+            if resp.status_code == 404:
+                return []
+            resp.raise_for_status()
+            items = resp.json().get("items", [])
+        except Exception:
+            logger.warning("Wikipedia media-list fetch failed for %r", title)
+            return []
+
+        media: list[dict[str, Any]] = []
+        for item in items:
+            if item.get("type") != "image":
+                continue
+            srcset = item.get("srcset") or []
+            if not srcset:
+                continue
+            urls = [_absolute_media_url(src.get("src", "")) for src in srcset if src.get("src")]
+            urls = [u for u in urls if u]
+            if not urls:
+                continue
+            media.append(
+                {
+                    "title": (item.get("title") or "").removeprefix("File:"),
+                    "url": urls[-1],
+                    "thumb_url": urls[0],
+                },
+            )
+        return media
+
     # -- private ----------------------------------------------------------------
 
-    def _fill_short_extract(self, article: dict[str, Any], title: str) -> None:
-        """Mutate ``article["extract"]`` in place with more text when it's short.
+    def _fill_full_extract(self, article: dict[str, Any], title: str) -> None:
+        """Mutate ``article["extract"]`` in place with the full article body.
 
-        The lead section alone is frequently not enough content to fill a
-        card's available space, so this pulls from later sections of the
-        article body too rather than stopping at the lead.
+        The lead section alone (all the REST summary endpoint returns) is
+        frequently only a fraction of the article's real content, so this
+        always pulls from later sections of the body too rather than
+        stopping at the lead.
         """
-        if self._visible_length(article["extract"]) >= _SHORT_EXTRACT_CHARS:
-            return
         extended = self._fetch_extended_extract(title)
         if extended and self._visible_length(extended) > self._visible_length(article["extract"]):
             article["extract"] = extended
@@ -244,6 +317,64 @@ class WikipediaGateway(Gateway):
         except Exception:
             logger.warning("Wikipedia extended extract fetch failed for %r", title)
         return None
+
+    def _fetch_infobox(self, title: str) -> list[list[str]]:
+        """Fetch and extract an article's infobox as ordered label/value fact pairs.
+
+        `_fetch_summary`/`_fetch_extended_extract` are both backed by the
+        TextExtracts extension, which strips infoboxes (and every other
+        table) before returning "extract" text - there's no way to reach the
+        infobox through either. This instead requests the article's real
+        rendered HTML (``action=parse``) and pulls just the infobox table out
+        of it, since that's the only Wikipedia response that contains it.
+
+        Args:
+            title: Exact Wikipedia article title.
+
+        Returns:
+            Ordered ``[label, value]`` pairs for infobox rows that have both
+            a label and real text content - skips the infobox's own title
+            row, section-divider rows (e.g. "Details"), and any image/map-only
+            row (the embedded Kartographer map has no Markdown equivalent).
+            Empty list on failure, a missing infobox, or no matching rows.
+        """
+        params: dict[str, str] = {
+            "action": "parse",
+            "page": title,
+            "prop": "text",
+            "format": "json",
+            "formatversion": "2",
+        }
+        try:
+            resp = self.session.get(self.base_url, params=params, timeout=10)
+            resp.raise_for_status()
+            raw_html = resp.json().get("parse", {}).get("text", "")
+        except Exception:
+            logger.warning("Wikipedia infobox fetch failed for %r", title)
+            return []
+        if not raw_html:
+            return []
+
+        safe_html = nh3.clean(raw_html, tags=_INFOBOX_ALLOWED_TAGS, clean_content_tags=_INFOBOX_CLEAN_CONTENT_TAGS, attributes=_INFOBOX_ALLOWED_ATTRIBUTES)
+        root = lxml_html.fromstring(f"<div>{safe_html}</div>")
+        tables = root.xpath('//table[contains(concat(" ", normalize-space(@class), " "), " infobox ")]')
+        if not tables:
+            return []
+
+        pairs: list[list[str]] = []
+        for row in tables[0].xpath(".//tr"):
+            th = row.find("th")
+            td = row.find("td")
+            if th is None or td is None:
+                continue
+            label = " ".join(th.text_content().split())
+            value = " ".join(td.text_content().split())
+            if not label or not value:
+                continue
+            pairs.append([label, value])
+            if len(pairs) >= _MAX_INFOBOX_ROWS:
+                break
+        return pairs
 
     @staticmethod
     def _visible_length(html_fragment: str) -> int:
@@ -313,14 +444,21 @@ class WikipediaGateway(Gateway):
     @staticmethod
     def _address_matches(summary: dict, components: dict[str, str], name: str = "") -> bool:
         """
-        Returns True if the candidate's title matches ``name``, or at least one
-        address component appears in the article text.
+        Returns True only when there's a genuine positive signal that the
+        candidate is specifically about the queried place - a title match on
+        the place's own name, or an address component (locality/route/street
+        number) mentioned in the article text.
 
         A title match on the place's own name is checked first since it is the
         strongest signal available - stronger than any address mention, which
         can also be true of unrelated articles about nearby places. We check
         the extract (first few paragraphs) for the city/locality as a fallback
         signal.  A street address match is stronger but optional.
+
+        Geosearch alone only proves the candidate is *nearby* - it says
+        nothing about whether the article is actually about this specific
+        place, so a candidate with no matching signal at all (no title match,
+        no extract, no address mention) is rejected rather than guessed at.
         """
         title = (summary.get("title") or "").strip().lower()
         name = name.strip().lower()
@@ -329,7 +467,7 @@ class WikipediaGateway(Gateway):
 
         text = (summary.get("extract") or "").lower()
         if not text:
-            return True  # no extract - accept the article, let the user judge
+            return False
 
         locality = (components.get("locality") or "").lower()
         route = (components.get("route") or "").lower()
@@ -339,12 +477,7 @@ class WikipediaGateway(Gateway):
             return True
         if route and route in text:
             return True
-        if street_number and street_number in text:
-            return True
-
-        # Fallback: accept articles with very short extracts (stub articles
-        # often lack address mentions but are still correct).
-        return len(text) < 200
+        return bool(street_number and street_number in text)
 
     @staticmethod
     def _normalise(summary: dict) -> dict[str, Any]:
@@ -367,3 +500,52 @@ class WikipediaGateway(Gateway):
             "description": summary.get("description", ""),
             "page_id": summary.get("pageid"),
         }
+
+
+def _absolute_media_url(src: str) -> str:
+    """Prefix a protocol-relative media-list URL (``//upload.wikimedia.org/...``) with https:."""
+    if src.startswith("//"):
+        return f"https:{src}"
+    return src
+
+
+@dataclass(slots=True, kw_only=True)
+class WikipediaMediaGateway(MediaProvider):
+    """
+    Images from a pin's own already-matched Wikipedia article (see
+    ``WikipediaGateway.get_article_media``), as a second, independent path
+    into the Media gallery alongside ``WikimediaGateway``'s generic Commons
+    text search - the two catch different failure modes (an unmatchable
+    query vs. a gallery image with no matching Commons metadata), and
+    together are meant to make it unlikely that images visibly present on a
+    confidently-matched Wikipedia article never reach the gallery.
+
+    The "search term" this provider is given (see ``WikipediaMediaPanelSource``)
+    is the exact matched article title, not a free-text query - it makes no
+    sense to call this provider without one.
+    """
+
+    service_key: ClassVar[str] = "wikipedia_media"
+    display_name: ClassVar[str] = "Wikipedia"
+    paid_service: ClassVar[bool] = False
+
+    #: URLs already surfaced by the Wikimedia Commons panel for the same
+    #: Location, populated by ``WikipediaMediaPanelSource`` before fetching -
+    #: skipped here so the same photo doesn't appear twice in the gallery.
+    known_urls: frozenset[str] = field(default_factory=frozenset)
+
+    def _generate_media(self, search_term: str, address: str | None = None) -> Generator[MediaItem]:
+        if not search_term:
+            return
+        for img in WikipediaGateway().get_article_media(search_term):
+            url = img.get("url") or img.get("thumb_url") or ""
+            if not url or url in self.known_urls:
+                continue
+            title = img.get("title") or ""
+            yield MediaItem(
+                url=url,
+                thumb_url=img.get("thumb_url") or url,
+                caption=title,
+                source=self.display_name,
+                page_url=f"https://commons.wikimedia.org/wiki/File:{title}" if title else "",
+            )

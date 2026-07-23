@@ -16,8 +16,11 @@ from urbanlens.dashboard.services.connections import are_connections
 from urbanlens.dashboard.services.locations.naming import is_meaningful_name
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
     import datetime
     from decimal import Decimal
+
+    from django.contrib.gis.geos import Point as GEOSPoint
 
     from urbanlens.dashboard.models.images.model import Image
     from urbanlens.dashboard.models.location.model import Location
@@ -299,8 +302,13 @@ def create_visit_suggestion(
             there is no Location - never stored.
 
     Returns:
-        The created VisitSuggestion, or None if nothing would change for suggested_to.
+        The created VisitSuggestion, or None if nothing would change for
+        suggested_to, or if suggested_to has turned off visit-history
+        tracking - a pending suggestion is itself a location-history record.
     """
+    if not visit_logging_allowed(suggested_to):
+        return None
+
     existing_visit = find_existing_visit_on_date(suggested_to, location=location, latitude=latitude, longitude=longitude, visited_at=visited_at)
 
     mutual = _mutual_candidates(suggested_to, suggested_by, candidate_profiles)
@@ -477,35 +485,36 @@ def reject_visit_suggestion(suggestion: VisitSuggestion) -> None:
 
 
 def add_visited_status(pin: Pin) -> None:
-    """Add the profile's "Visited" status badge to the pin if not already present.
+    """Add the profile's "Visited" status label to the pin if not already present.
 
     Args:
         pin: Pin instance whose statuses should be updated.
     """
-    from urbanlens.dashboard.models.badges.model import Badge
+    from urbanlens.dashboard.models.labels.model import Label
 
-    visited_badge = Badge.objects.filter(profile=pin.profile, kind="status", name="Visited").first()
-    if visited_badge and not pin.badges.filter(pk=visited_badge.pk).exists():
-        pin.badges.add(visited_badge)
+    visited_label = Label.objects.filter(profile=pin.profile, kind="status", name="Visited").first()
+    if visited_label and not pin.labels.filter(pk=visited_label.pk).exists():
+        pin.labels.add(visited_label)
+        pin.save(update_fields=["updated"])
 
 
 def remove_visited_status(pin: Pin) -> None:
-    """Clear a pin's "Visited" marking - the profile's status badge and last_visited.
+    """Clear a pin's "Visited" marking - the profile's status label and last_visited.
 
-    Used when a pin was marked visited by mistake (e.g. a stray status badge or
+    Used when a pin was marked visited by mistake (e.g. a stray status label or
     an import glitch) and the user doesn't want to log a dated visit for it, so
     it should stop being surfaced in the Memories "log your visits" queue.
 
     Args:
         pin: Pin instance to update in-place.
     """
-    from urbanlens.dashboard.models.badges.model import Badge
+    from urbanlens.dashboard.models.labels.model import Label
 
-    visited_badge = Badge.objects.filter(profile=pin.profile, kind="status", name="Visited").first()
-    if visited_badge:
-        pin.badges.remove(visited_badge)
+    visited_label = Label.objects.filter(profile=pin.profile, kind="status", name="Visited").first()
+    if visited_label:
+        pin.labels.remove(visited_label)
     pin.last_visited = None
-    pin.save(update_fields=["last_visited"])
+    pin.save(update_fields=["last_visited", "updated"])
 
 
 def sync_last_visited(pin: Pin) -> None:
@@ -516,7 +525,56 @@ def sync_last_visited(pin: Pin) -> None:
     """
     latest = pin.visit_history.order_by("-visited_at").values_list("visited_at", flat=True).first()
     pin.last_visited = latest
-    pin.save(update_fields=["last_visited"])
+    pin.save(update_fields=["last_visited", "updated"])
+
+
+def _pin_contains_point(pin: Pin, point: GEOSPoint) -> bool:
+    """Whether a pin's effective property boundary contains a point.
+
+    Falls back to a 50 m proximity check (mirroring the default circle
+    boundary) for pins with no resolvable boundary polygon at all.
+
+    Args:
+        pin: Pin to test (its ``location`` should be prefetched to avoid an
+            extra query per candidate).
+        point: GEOS point to test containment for.
+
+    Returns:
+        True if the point falls within the pin's effective boundary.
+    """
+    from django.contrib.gis.measure import D
+
+    from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
+
+    polygon = Boundary.objects.effective_polygon_for_pin(pin, BoundaryType.PROPERTY)
+    if polygon is not None:
+        return bool(polygon.contains(point))
+    return Pin.objects.filter(pk=pin.pk, location__point__distance_lte=(point, D(m=50))).exists()
+
+
+def find_pin_containing_point(profile: Profile, point: GEOSPoint, *, pins: Iterable[Pin] | None = None) -> Pin | None:
+    """Return the first of a profile's root pins whose effective boundary contains a point.
+
+    This is the codebase's actual "is this point inside one of my pins"
+    check - a pin's effective *property boundary* (its own drawing, a wiki
+    drawing, the API-generated default, or the 50 m circle/coordinate
+    fallback), not a literal stored bounding box.
+
+    Args:
+        profile: Profile whose root pins should be checked.
+        point: GEOS point to test.
+        pins: Pre-fetched candidate pins, for callers checking many points
+            against the same profile (avoids re-querying per point). Defaults
+            to a fresh query of the profile's root pins.
+
+    Returns:
+        The first matching Pin, or None.
+    """
+    candidates = pins if pins is not None else Pin.objects.filter(profile=profile).root_pins().select_related("location")
+    for pin in candidates:
+        if _pin_contains_point(pin, point):
+            return pin
+    return None
 
 
 def record_geolocation_pin_visits(profile: Profile, *, latitude: float | Decimal, longitude: float | Decimal, visited_at: datetime.datetime | None = None) -> list[PinVisit]:
@@ -542,27 +600,30 @@ def record_geolocation_pin_visits(profile: Profile, *, latitude: float | Decimal
         return []
 
     from django.contrib.gis.geos import Point
-    from django.contrib.gis.measure import D
     from django.utils import timezone
-
-    from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
 
     timestamp = visited_at or timezone.now()
     point = Point(float(longitude), float(latitude), srid=4326)
-    pins = Pin.objects.filter(profile=profile).root_pins().select_related("location")
+    # Pre-filter with an indexed PostGIS distance query before running the
+    # per-pin boundary-containment loop below - without this, a profile with
+    # many pins (e.g. after a bulk import) forces an unbounded, unbatched
+    # boundary-resolution chain over every single root pin on every geolocation
+    # ping, which was blowing well past nginx's 60s upstream timeout in
+    # production. 5km is a deliberately generous upper bound on any real
+    # property boundary's size, so this can only ever exclude pins that
+    # couldn't possibly contain the point anyway - it doesn't change which
+    # pins end up matching, just how many are checked.
+    pins = Pin.objects.filter(profile=profile).near_point(point, radius_km=5).select_related("location")
     created_visits: list[PinVisit] = []
 
+    already_visited_today = set(
+        PinVisit.objects.filter(pin__in=pins, visited_at__date=timestamp.date()).values_list("pin_id", flat=True),
+    )
+
     for pin in pins:
-        if pin.visit_history.filter(visited_at__date=timestamp.date()).exists():
+        if pin.pk in already_visited_today:
             continue
-
-        polygon = Boundary.objects.effective_polygon_for_pin(pin, BoundaryType.PROPERTY)
-        if polygon is not None:
-            contains_point = polygon.contains(point)
-        else:
-            contains_point = Pin.objects.filter(pk=pin.pk, location__point__distance_lte=(point, D(m=50))).exists()
-
-        if not contains_point:
+        if not _pin_contains_point(pin, point):
             continue
 
         visit = PinVisit.objects.create(pin=pin, visited_at=timestamp, source=VisitSource.GEOLOCATION)

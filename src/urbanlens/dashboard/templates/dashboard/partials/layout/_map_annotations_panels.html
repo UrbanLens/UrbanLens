@@ -12,53 +12,51 @@ a sibling #map-annotations-config element, not from this partial).
 {% endcomment %}
 {% load map_components %}
 
-{# -- Map sidebar panel (Details + Photos tabs) -- #}
-<div id="detail-pin-list-panel" class="map-dialog map-dialog--details" style="display:none">
-    <button type="button" class="detail-pin-list-toggle" id="detail-pin-list-toggle">
+{# -- Map sidebar panel (Details + Photos tabs) - same collapsible left-docked #}
+{# sidebar UX as the main map's #pin-list-panel / .pin-list-handle (_map.scss): #}
+{# collapses to an edge handle button, expands into a full-height sidebar.      #}
+<div id="detail-pin-list-panel" class="detail-pin-list-panel">
+    <div class="detail-pin-list-header">
         <i class="material-symbols-outlined">layers</i>
         <span id="detail-pin-count-label">0 Layers</span>
-        <i class="material-icons detail-pin-list-chevron" id="detail-pin-list-chevron">expand_more</i>
-    </button>
-    <div id="detail-pin-list-drawer" class="detail-pin-list-drawer" style="display:none">
-        <div class="map-panel-tabs">
-            <button type="button" class="map-panel-tab is-active" data-tab="details">
-                <i class="material-symbols-outlined">layers</i>Details
-            </button>
-            <button type="button" class="map-panel-tab" data-tab="photos" id="map-panel-tab-photos">
-                <i class="material-symbols-outlined">photo_library</i>Photos
-            </button>
-        </div>
-        <div id="map-panel-details" class="map-panel-body">
-            <ul id="detail-pin-list-ul" class="detail-pin-list-ul"></ul>
-        </div>
-        <div id="map-panel-photos" class="map-panel-body" hidden>
-            <ul id="photo-panel-list" class="photo-panel-list"></ul>
-        </div>
+    </div>
+    <div class="map-panel-tabs">
+        <button type="button" class="map-panel-tab is-active" data-tab="details">
+            <i class="material-symbols-outlined">layers</i>Details
+        </button>
+        <button type="button" class="map-panel-tab" data-tab="photos" id="map-panel-tab-photos">
+            <i class="material-symbols-outlined">photo_library</i>Photos
+        </button>
+    </div>
+    <div id="map-panel-details" class="map-panel-body">
+        <ul id="detail-pin-list-ul" class="detail-pin-list-ul"></ul>
+    </div>
+    <div id="map-panel-photos" class="map-panel-body" hidden>
+        <ul id="photo-panel-list" class="photo-panel-list"></ul>
     </div>
 </div>
+{# Always-visible edge handle (hidden by JS via refreshPanelHeader() until there's #}
+{# at least one detail pin, markup item, or photo to show).                        #}
+<button type="button" id="detail-pin-list-handle" class="detail-pin-list-handle" style="display:none"
+        onclick="_toggleDetailPinListPanel()" aria-label="Toggle detail pin list" aria-expanded="false"
+        data-tooltip="Layers" data-tooltip-float="true" data-tooltip-pos="right">
+    <i class="material-symbols-outlined">chevron_right</i>
+</button>
 
 <div id="map"></div>
+{# -- Map toolbar (tools only; shared component - same as the main map). The  #}
+{# markup drawing tools (formerly a separate "Add Detail" dropdown docked in  #}
+{# .map-bottom-controls) live here as plain icon buttons like every other     #}
+{# map tool. Boundary editing has no dedicated button - click an existing     #}
+{# property/building boundary on the map to edit or delete it.                #}
+{% map_toolbar "markup_pin,markup_line,markup_arrow,markup_text,markup_square,markup_circle,markup_polygon,select_detail_pins,screenshot" panel_id="detail-map-buttons" screenshot_onclick="_openMapScreenshot()" %}
 
 {# -- Bottom-left map controls -- #}
 <div class="map-bottom-controls">
     {# Shared layers panel - same component and engine as the main map. The  #}
     {# details/photos buttons are page-registered toggles (see the `custom`  #}
     {# option in ts/entries/map-annotations.ts).                             #}
-    {% map_layers_panel "street,terrain,satellite,weather,borders,details,photos" panel_id="detail-map-layers" extra_class="map-layers-panel--inline" %}
-    <button id="screenshot-map-button" type="button" class="btn btn--ghost map-overlay-btn" onclick="_openMapScreenshot()"
-            title="Take a screenshot of this map">
-        <i class="material-symbols-outlined">photo_camera</i> Screenshot
-    </button>
-    <div id="edit-boundary-btns" class="map-overlay-btn-group">
-        <button id="edit-property-boundary-btn" class="btn btn--ghost map-overlay-btn map-overlay-btn--boundary" onclick="startEditBoundary('property')"
-                title="Draw or reshape the property (grounds/parcel) boundary">
-            <i class="material-symbols-outlined">pentagon</i> Property
-        </button>
-        <button id="edit-building-boundary-btn" class="btn btn--ghost map-overlay-btn map-overlay-btn--building" onclick="startEditBoundary('building')"
-                title="Draw or reshape the building footprint boundary">
-            <i class="material-symbols-outlined">home_work</i> Building
-        </button>
-    </div>
+    {% map_layers_panel layers|default:"street,terrain,satellite,weather,borders,details,photos" panel_id="detail-map-layers" extra_class="map-layers-panel--inline" %}
     <div id="boundary-save-controls" class="map-overlay-btn-group" style="display:none">
         <button class="btn btn--ghost map-overlay-btn map-overlay-btn--clear" onclick="clearBoundary()">
             <i class="material-symbols-outlined">delete_outline</i> Clear
@@ -70,8 +68,6 @@ a sibling #map-annotations-config element, not from this partial).
             <i class="material-symbols-outlined">check</i> Done
         </button>
     </div>
-    {# "Add Detail" dropdown - shared with the safety check-in map #}
-    {% include "dashboard/partials/layout/_markup_toolbar_panel.html" with show_add_pin_item=True %}
 </div>
 
 {# Unified draw/edit panel this dropdown opens - must be a sibling of #}
@@ -95,12 +91,14 @@ a sibling #map-annotations-config element, not from this partial).
         <div class="form-row">
             <label for="dp-type">Type</label>
             <select id="dp-type" name="pin_type">
+                <option value="">Auto (detect)</option>
                 {% for value, label in pin_type_choices %}
                 {% if value != "location" %}
                 <option value="{{ value }}">{{ label }}</option>
                 {% endif %}
                 {% endfor %}
             </select>
+            <p class="form-hint">Auto marks the pin as a building when it lands on a known building footprint.</p>
         </div>
         <div class="form-row">
             <label>Icon <span class="form-optional">(optional)</span></label>

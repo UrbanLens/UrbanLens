@@ -20,9 +20,9 @@ from django.views import View
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.markup.model import MarkupMap
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinContact, SafetyContactOptOutScope
+from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinContact, SafetyCheckinStatus, SafetyContactOptOutScope
 from urbanlens.dashboard.services.connections import get_connections
-from urbanlens.dashboard.services.images import image_to_gallery_json
+from urbanlens.dashboard.services.images import image_to_gallery_json, parse_reposition_payload
 from urbanlens.dashboard.services.map_snapshot import default_markup_map_title
 from urbanlens.dashboard.services.pagination import get_page
 from urbanlens.dashboard.services.safety import (
@@ -187,7 +187,7 @@ def _contact_display_label(contact_profile: Profile | None, email: str | None, l
 
 
 def _contact_status_map(checkin: SafetyCheckin, contacts: Iterable[SafetyCheckinContact]) -> dict[int | str, dict[str, str]]:
-    """Build a {contact identity -> {"label", "class"}} map for the contact-picker's status badges.
+    """Build a {contact identity -> {"label", "class"}} map for the contact-picker's status labels.
 
     Args:
         checkin: The check-in these contacts belong to (used to resolve opt-out scopes).
@@ -200,11 +200,11 @@ def _contact_status_map(checkin: SafetyCheckin, contacts: Iterable[SafetyCheckin
     status_map: dict[int | str, dict[str, str]] = {}
     for contact in contacts:
         if contact.found_safe_at:
-            label, css_class = "Found you", "safety-badge--success"
+            label, css_class = "Found you", "safety-label--success"
         elif is_contact_opted_out(contact.contact_profile, contact.email, owner=checkin.profile, checkin=checkin):
-            label, css_class = "Opted out", "safety-badge--muted"
+            label, css_class = "Opted out", "safety-label--muted"
         elif contact.notified_at:
-            label, css_class = "Notified", "safety-badge--warning"
+            label, css_class = "Notified", "safety-label--warning"
         else:
             label, css_class = "Not yet notified", ""
         key = contact.contact_profile_id or contact.email
@@ -213,6 +213,29 @@ def _contact_status_map(checkin: SafetyCheckin, contacts: Iterable[SafetyCheckin
             continue
         status_map[key] = {"label": label, "class": css_class}
     return status_map
+
+
+def _overview_stats(checkins: Iterable[SafetyCheckin]) -> dict[str, int]:
+    """Compute the safety overview page's stat-tile counts.
+
+    Evaluates ``checkins`` into a list (populating its queryset result cache,
+    if it came from one) so the overview page's own iteration over the same
+    checkins for the check-in list doesn't re-query.
+
+    Args:
+        checkins: The profile's check-ins, any order.
+
+    Returns:
+        Dict with ``total``, ``active`` (not yet resolved), ``checked_in``,
+        and ``escalated`` (contacts were ever notified) counts.
+    """
+    checkins = list(checkins)
+    return {
+        "total": len(checkins),
+        "active": sum(1 for c in checkins if not c.is_resolved),
+        "checked_in": sum(1 for c in checkins if c.status == SafetyCheckinStatus.CHECKED_IN),
+        "escalated": sum(1 for c in checkins if c.escalated_at is not None),
+    }
 
 
 def _parse_grace_period(request: HttpRequest) -> datetime.timedelta:
@@ -276,14 +299,43 @@ class SafetyActiveCheckinBannerView(LoginRequiredMixin, View):
 
 
 class SafetyHomeView(LoginRequiredMixin, View):
-    """Safety defaults + check-in list.
+    """Safety overview: stats, the profile's check-ins, and check-ins shared with them.
 
-    GET  /safety/
-    POST /safety/ - update default emergency contacts and message/grace period.
+    GET /safety/
     """
 
     def get(self, request: HttpRequest) -> HttpResponse:
-        """Render the safety home page with defaults and the profile's check-ins.
+        """Render the safety overview page.
+
+        Args:
+            request: Incoming HTTP request.
+
+        Returns:
+            Rendered page.
+        """
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        checkins = SafetyCheckin.objects.filter(profile=profile).prefetch_related("contacts")
+        return render(
+            request,
+            "dashboard/pages/safety/home.html",
+            {
+                "checkins": checkins,
+                "active_checkin": get_active_checkin(profile),
+                "stats": _overview_stats(checkins),
+                "shared_checkins": SafetyCheckin.objects.shared_with(profile).select_related("profile"),
+            },
+        )
+
+
+class SafetySettingsView(LoginRequiredMixin, View):
+    """Safety defaults: default contacts, message, grace period, and auto-delete window.
+
+    GET  /safety/settings/
+    POST /safety/settings/ - update default emergency contacts and message/grace period.
+    """
+
+    def get(self, request: HttpRequest) -> HttpResponse:
+        """Render the safety settings page with the profile's defaults.
 
         Args:
             request: Incoming HTTP request.
@@ -293,14 +345,11 @@ class SafetyHomeView(LoginRequiredMixin, View):
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
         preference = get_or_create_preference(profile)
-        checkins = SafetyCheckin.objects.filter(profile=profile).prefetch_related("contacts")
         return render(
             request,
-            "dashboard/pages/safety/home.html",
+            "dashboard/pages/safety/settings.html",
             {
                 "preference": preference,
-                "checkins": checkins,
-                "active_checkin": get_active_checkin(profile),
                 "default_contacts": default_contacts_as_input(profile),
                 "connections": get_connections(profile),
             },
@@ -318,7 +367,7 @@ class SafetyHomeView(LoginRequiredMixin, View):
 
         Returns:
             For an XHR autosave request, a JSON summary of the saved defaults.
-            Otherwise, a redirect back to the safety home page.
+            Otherwise, a redirect back to the safety settings page.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
         preference = get_or_create_preference(profile)
@@ -341,7 +390,7 @@ class SafetyHomeView(LoginRequiredMixin, View):
             )
         for message in rejected:
             messages.error(request, message)
-        return redirect("safety.home")
+        return redirect("safety.settings")
 
 
 class SafetyCheckinCreateView(LoginRequiredMixin, View):
@@ -517,36 +566,51 @@ class SafetyCheckinDetailView(LoginRequiredMixin, View):
         )
 
     def _render_community_view(self, request: HttpRequest, checkin_slug: str) -> HttpResponse:
-        """Render the read-only community status page for a wiki-posted check-in.
+        """Render the read-only shared status page for a check-in the requester doesn't own.
 
-        Only check-ins that already posted to a community wiki (``wiki_notified_at``
-        set) are visible, and only by UUID - slugs are unique per-profile, not
-        globally, so a slug can't safely identify another user's check-in. The
-        page deliberately omits the trip plan, contacts, and chat: the owner
-        opted into telling the community *that* they're overdue and where, not
-        into sharing their whole check-in.
+        Reachable two ways, only by UUID - slugs are unique per-profile, not
+        globally, so a slug can't safely identify another user's check-in:
+
+        * Anyone, once the check-in has posted to a community wiki
+          (``wiki_notified_at`` set) - linked from that wiki comment.
+        * A logged-in profile who is a registered emergency contact
+          (``SafetyCheckinContact.contact_profile``) on the check-in, at any
+          point in its lifecycle - surfaced on their safety overview page's
+          "Shared with you" section.
+
+        Either way the page deliberately omits the trip plan, full contact
+        list, and chat: the owner opted into telling the community/a contact
+        *that* they're overdue (or planning a trip) and where, not into
+        sharing the whole check-in.
 
         Args:
             request: Incoming HTTP request.
             checkin_slug: The URL identifier - must be the check-in's UUID.
 
         Returns:
-            Rendered community status page.
+            Rendered shared status page.
 
         Raises:
-            Http404: If the identifier isn't a UUID of a wiki-posted check-in.
+            Http404: If the identifier isn't a UUID, or the requester is
+                neither a wiki visitor of an escalated check-in nor a
+                registered contact.
         """
         try:
-            checkin = get_object_or_404(SafetyCheckin.objects.select_related("profile"), uuid=checkin_slug, wiki_notified_at__isnull=False)
+            checkin = get_object_or_404(SafetyCheckin.objects.select_related("profile"), uuid=checkin_slug)
         except ValidationError as exc:
             raise Http404 from exc
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        is_contact = checkin.contacts.filter(contact_profile=profile).exists()
+        if checkin.wiki_notified_at is None and not is_contact:
+            raise Http404
         return render(
             request,
             "dashboard/pages/safety/community_status.html",
             {
                 "checkin": checkin,
-                "wiki": find_community_wiki(checkin.destination_latitude, checkin.destination_longitude),
+                "wiki": find_community_wiki(checkin.destination_latitude, checkin.destination_longitude) if checkin.wiki_notified_at else None,
                 "map_attribution": _MAP_ATTRIBUTION,
+                "viewer_is_contact": is_contact,
             },
         )
 
@@ -650,7 +714,7 @@ class SafetyCheckinDetailView(LoginRequiredMixin, View):
                 },
                 request=request,
             )
-            return JsonResponse({"ok": True, "warnings": warnings, "contacts_html": contacts_html})
+            return JsonResponse({"ok": True, "warnings": warnings, "contacts_html": contacts_html, "title": checkin.title})
         for warning in warnings:
             messages.warning(request, warning)
         return redirect("safety.checkin.detail", checkin_slug=checkin.slug)
@@ -834,7 +898,7 @@ class SafetyCheckinMapPickerView(LoginRequiredMixin, View):
         excluded_ids = list(checkin.markup_maps.values_list("pk", flat=True))
         if checkin.markup_map_id:
             excluded_ids.append(checkin.markup_map_id)
-        candidates = MarkupMap.objects.filter(profile=profile).exclude(pk__in=excluded_ids)
+        candidates = MarkupMap.objects.filter(profile=profile).select_related("shared_by__user").exclude(pk__in=excluded_ids)
         query = request.GET.get("q", "").strip()
         if query:
             candidates = candidates.filter(title__icontains=query)
@@ -947,7 +1011,13 @@ class SafetyGalleryView(LoginRequiredMixin, View):
         image_file = request.FILES.get("image")
         if not image_file:
             return JsonResponse({"error": "No image provided."}, status=400)
-        from urbanlens.dashboard.services.images import compute_checksum
+        from urbanlens.dashboard.models.images.model import MediaKind
+        from urbanlens.dashboard.services.images import compute_checksum, image_upload_error
+
+        upload_error = image_upload_error(image_file, MediaKind.PHOTO)
+        if upload_error:
+            message, status = upload_error
+            return JsonResponse({"error": message}, status=status)
 
         checksum = compute_checksum(image_file)
         if Image.objects.filter(safety_checkin=checkin, checksum=checksum).exists():
@@ -998,13 +1068,11 @@ class SafetyImageView(LoginRequiredMixin, View):
         """
         img = self._get_image(request, checkin_slug, image_id)
         try:
-            data = json.loads(request.body)
-            img.latitude = Decimal(str(data["latitude"]))
-            img.longitude = Decimal(str(data["longitude"]))
-            img.save(update_fields=["latitude", "longitude", "updated"])
-        except (KeyError, ValueError, json.JSONDecodeError) as exc:
+            img.latitude, img.longitude = parse_reposition_payload(request.body)
+        except ValueError as exc:
             logger.warning("Failed to update image %s on checkin %s: %s", image_id, checkin_slug, exc)
             return JsonResponse({"error": "Invalid request data."}, status=400)
+        img.save(update_fields=["latitude", "longitude", "updated"])
         return JsonResponse({"latitude": float(img.latitude), "longitude": float(img.longitude)})
 
     def delete(self, request: HttpRequest, checkin_slug: str, image_id: int) -> HttpResponse:
@@ -1040,7 +1108,7 @@ class SafetyContactPortalView(View):
         Returns:
             Rendered page, or 404 if the token is invalid.
         """
-        contact = get_object_or_404(SafetyCheckinContact.objects.select_related("checkin", "checkin__profile"), token=token)
+        contact = get_object_or_404(SafetyCheckinContact.objects.select_related("checkin", "checkin__profile").by_token(token))
         checkin = contact.checkin
         return render(
             request,
@@ -1071,7 +1139,7 @@ class SafetyContactMarkSafeView(View):
         Returns:
             Redirect back to the contact portal.
         """
-        contact = get_object_or_404(SafetyCheckinContact, token=token)
+        contact = get_object_or_404(SafetyCheckinContact.objects.by_token(token))
         mark_found_safe(contact)
         return redirect("safety.contact.portal", token=token)
 
@@ -1101,7 +1169,7 @@ class SafetyContactOptOutView(View):
         """
         if SafetyContactOptOutScope.invalid(scope):
             raise Http404
-        contact = get_object_or_404(SafetyCheckinContact.objects.select_related("checkin", "checkin__profile"), token=token)
+        contact = get_object_or_404(SafetyCheckinContact.objects.select_related("checkin", "checkin__profile").by_token(token))
         return render(
             request,
             "dashboard/pages/safety/contact_optout_confirm.html",
@@ -1126,7 +1194,7 @@ class SafetyContactOptOutView(View):
         """
         if SafetyContactOptOutScope.invalid(scope):
             raise Http404
-        contact = get_object_or_404(SafetyCheckinContact, token=token)
+        contact = get_object_or_404(SafetyCheckinContact.objects.by_token(token))
         record_contact_opt_out(contact, SafetyContactOptOutScope(scope))
         messages.success(request, "You won't receive further notifications about this trip.")
         return redirect("safety.contact.portal", token=token)
@@ -1189,7 +1257,7 @@ class SafetyCheckinMessageView(View):
                 any contact.
         """
         if token is not None:
-            contact = get_object_or_404(SafetyCheckinContact.objects.select_related("checkin"), token=token)
+            contact = get_object_or_404(SafetyCheckinContact.objects.select_related("checkin").by_token(token))
             return contact.checkin, contact
         if not request.user.is_authenticated:
             from django.http import Http404

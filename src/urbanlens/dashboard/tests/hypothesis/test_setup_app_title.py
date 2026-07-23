@@ -7,7 +7,7 @@ from django.test import Client, RequestFactory, override_settings
 from django.urls import reverse
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.controllers.setup import (
     app_title_name_suggestions,
     is_official_urbanlens_site,
@@ -20,7 +20,7 @@ from urbanlens.dashboard.models.site_settings import SiteSettings
 from urbanlens.dashboard.services.site_admin import add_user_to_site_admin_group
 
 
-class AppTitleNormalizationTests(TestCase):
+class AppTitleNormalizationTests(SimpleTestCase):
     """Reserved-name detection is case-insensitive and ignores punctuation."""
 
     def test_normalize_strips_spaces_and_symbols(self) -> None:

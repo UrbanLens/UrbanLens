@@ -5,19 +5,65 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
-from django.db.models import CASCADE, SET_NULL, BigIntegerField, BooleanField, CharField, DateTimeField, DecimalField, ForeignKey, ImageField, Index, JSONField, URLField, UUIDField
+from django.db.models import CASCADE, SET_NULL, BigIntegerField, BooleanField, CharField, DateTimeField, DecimalField, ForeignKey, ImageField, Index, JSONField, ManyToManyField, TextField, URLField, UUIDField
 
 from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.abstract.choices import TextChoices
 from urbanlens.dashboard.models.images.queryset import ImageManager
 
 if TYPE_CHECKING:
     from decimal import Decimal
 
 
+class ImageSource(TextChoices):
+    """Where a photo originated - drives the Media section's per-source tabs.
+
+    ``UPLOAD`` is the default for ordinary user uploads (personal galleries).
+    The external values are set only on rows materialized from the Media
+    gallery's transient provider results (see ``services.external_data`` and
+    ``services.media_materialize``) when a user sends one to a wiki or sets it
+    as a cover photo - the Media gallery itself renders straight from each
+    provider's live results without persisting an ``Image`` row per item.
+    """
+
+    UPLOAD = "upload", "Upload"
+    YELP = "yelp", "Yelp"
+    GOOGLE_IMAGES = "google_images", "Google Images"
+    GOOGLE_MAPS = "google_maps", "Google Maps"
+    WIKIMEDIA = "wikimedia", "Wikimedia Commons"
+    WIKIPEDIA_MEDIA = "wikipedia_media", "Wikipedia"
+    SMITHSONIAN = "smithsonian", "Smithsonian Open Access"
+    LIBRARY_OF_CONGRESS = "library_of_congress", "Library of Congress"
+    INTERNET_ARCHIVE = "internet_archive", "Internet Archive"
+    IMMICH = "immich", "Immich"
+    FLICKR = "flickr", "Flickr"
+    GOOGLE_PHOTOS = "google_photos", "Google Photos"
+    LOOPNET = "loopnet", "LoopNet"
+    CRIS = "cris", "NY Historic Preservation (CRIS)"
+
+
+class MediaKind(TextChoices):
+    """What kind of file this Image row actually holds.
+
+    Photos, videos, and documents all share every other field on this model
+    (caption, author, location, labels, etc.) - this is only a discriminator
+    for upload-time processing (services.videos/services.documents) and
+    display (player vs. viewer vs. image tag).
+    """
+
+    PHOTO = "photo", "Photo"
+    VIDEO = "video", "Video"
+    DOCUMENT = "document", "Document"
+
+
 class Image(abstract.FrontendDashboardModel):
-    """A photo uploaded by a user, attached to a pin, community wiki, or safety check-in."""
+    """A photo, video, or document uploaded by a user, attached to a pin, community wiki, or safety check-in."""
 
     image = ImageField(upload_to="pin_images/")
+    media_type = CharField(max_length=10, choices=MediaKind.choices, default=MediaKind.PHOTO, db_index=True)
+    # Provenance for the Media gallery's per-source tabs (see ImageSource). Only
+    # meaningful once a row exists; almost every Image row is a plain upload.
+    source = CharField(max_length=30, choices=ImageSource.choices, default=ImageSource.UPLOAD)
     pin = ForeignKey(
         "dashboard.Pin",
         on_delete=SET_NULL,
@@ -61,6 +107,26 @@ class Image(abstract.FrontendDashboardModel):
         null=True,
         blank=True,
     )
+    # The direct message this photo was attached to, if sent as a DM attachment.
+    direct_message = ForeignKey(
+        "dashboard.DirectMessage",
+        on_delete=SET_NULL,
+        related_name="images",
+        null=True,
+        blank=True,
+    )
+    # Set only while this is a candidate photo the user opted to upload during a
+    # local-folder location scan, staged for possible import into a pin's gallery
+    # if the pending PinSuggestion is accepted. Cleared (set back to null) once the
+    # photo graduates to a real gallery photo on accept; the row itself is deleted
+    # (not just unlinked) if the suggestion is rejected or the photo wasn't selected.
+    pin_suggestion = ForeignKey(
+        "dashboard.PinSuggestion",
+        on_delete=SET_NULL,
+        related_name="candidate_images",
+        null=True,
+        blank=True,
+    )
     profile = ForeignKey(
         "dashboard.Profile",
         on_delete=CASCADE,
@@ -84,6 +150,14 @@ class Image(abstract.FrontendDashboardModel):
     # photo belongs to.
     latitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     longitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    # Compass bearing (0-360, true or magnetic north per the device's own
+    # EXIF GPSImgDirectionRef - not itself preserved, see
+    # services.images.extract_gps_direction) the camera was facing when this
+    # photo was taken. Standardized field for a future "same place, same
+    # angle, over time" comparison UI - not read or displayed anywhere yet.
+    # Same GPS-IFD-sourced privacy opt-out as latitude/longitude: never
+    # extracted for a profile with visit-history tracking off.
+    direction = DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
     # SHA-256 hex digest of the uploaded file, used to reject duplicate uploads.
     # Nullable because rows predating this field are backfilled lazily (in
     # process_image_upload) - duplicate checks simply skip unhashed rows.
@@ -103,11 +177,20 @@ class Image(abstract.FrontendDashboardModel):
     # is re-encoded. Keys are human-readable tag names; values are
     # JSON-sanitized (rationals/bytes stringified).
     exif_data = JSONField(null=True, blank=True)
+    # Extracted text for a document upload: the PDF's native text layer plus
+    # OCR output from any embedded raster images (see services.documents).
+    # Searched by the Media section's search box (labels__name, caption, etc.)
+    # the same way as every other text field on this model.
+    ocr_text = TextField(null=True, blank=True)
     # Set when the user explicitly clears an unfiled photo out of the Memories
     # "needs attention" organize queue without deleting it (e.g. a photo with no
     # GPS they don't want to tie to a visit). Keeps that queue finite; the photo
     # still appears in the full gallery.
     organize_dismissed = BooleanField(default=False)
+    # Media (kind='media') labels help the user find this photo/video/document
+    # via the main site search; unlike Pin/Wiki labels, media labels have no
+    # effect on map icons or filtering.
+    labels = ManyToManyField("dashboard.Label", related_name="images", blank=True)
 
     if TYPE_CHECKING:
         pin_id: int | None
@@ -115,7 +198,9 @@ class Image(abstract.FrontendDashboardModel):
         location_id: int | None
         safety_checkin_id: int | None
         visit_id: int | None
+        direct_message_id: int | None
         profile_id: int | None
+        pin_suggestion_id: int | None
 
     objects = ImageManager()
 
