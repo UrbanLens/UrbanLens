@@ -76,7 +76,7 @@ def fetch_parcel_buildings(location: Location) -> dict[str, Any]:
         parcel_uuid = gateway.lookup_parcel_uuid(latitude, longitude)
         buildings = gateway.lookup_buildings(parcel_uuid) if parcel_uuid else []
     except (PropertyRecordsUnavailableError, ValueError):
-        logger.debug("parcel_buildings: REData unavailable at %s,%s", latitude, longitude, exc_info=True)
+        logger.debug("parcel_buildings: REData unavailable near %.2f,%.2f", latitude, longitude, exc_info=True)
         buildings = []
 
     if buildings:

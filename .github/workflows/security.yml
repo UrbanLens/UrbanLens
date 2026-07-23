@@ -30,6 +30,7 @@ jobs:
         uses: github/codeql-action/init@v4
         with:
           languages: python,javascript-typescript
+          config-file: ./.github/codeql/codeql-config.yml
 
       - name: Perform CodeQL analysis
         uses: github/codeql-action/analyze@v4
@@ -46,4 +47,3 @@ jobs:
         uses: actions/dependency-review-action@v5
         with:
           fail-on-severity: high
-          deny-licenses: GPL-3.0, AGPL-3.0

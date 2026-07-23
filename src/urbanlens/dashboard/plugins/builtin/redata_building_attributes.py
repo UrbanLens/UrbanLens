@@ -127,7 +127,7 @@ def _fetch_building_payload(latitude: float, longitude: float, *, location: Loca
             return {}
         buildings = gateway.lookup_buildings(parcel_uuid)
     except (PropertyRecordsUnavailableError, ValueError):
-        logger.debug("redata_building_attributes: no buildings available at %s,%s", latitude, longitude, exc_info=True)
+        logger.debug("redata_building_attributes: no buildings available near %.2f,%.2f", latitude, longitude, exc_info=True)
         return {}
 
     return _nearest_building(buildings, latitude, longitude) or {}

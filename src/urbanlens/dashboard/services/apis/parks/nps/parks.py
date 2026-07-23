@@ -208,10 +208,10 @@ class NPSGateway(Gateway):
             # un-cached pins can legitimately exceed it. logger.warning (not
             # .exception) so it doesn't read as a crash - see GDELT's gateway
             # for the same convention on its own expected failures.
-            logger.warning("NPS boundary lookup skipped - rate limit exceeded (lat=%r, lng=%r)", latitude, longitude)
+            logger.warning("NPS boundary lookup skipped - rate limit exceeded (near lat=%.2f, lng=%.2f)", latitude, longitude)
             return None
         except Exception:
-            logger.exception("NPS boundary lookup failed (lat=%r, lng=%r)", latitude, longitude)
+            logger.exception("NPS boundary lookup failed (near lat=%.2f, lng=%.2f)", latitude, longitude)
             return None
 
         if not park_code:
