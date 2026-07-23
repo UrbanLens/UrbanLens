@@ -89,4 +89,18 @@ class Migration(migrations.Migration):
             code=mark_existing_types_as_user_provided,
             reverse_code=unmark_all,
         ),
+        
+        migrations.RenameField(
+            model_name="pin",
+            old_name="buildings_offer_dismissed",
+            new_name="restructure_offer_dismissed",
+        ),
+        migrations.AddField(
+            model_name="profile",
+            name="suggest_pin_restructure",
+            field=models.BooleanField(
+                default=True,
+                help_text="Offer to organize pins into buildings and sub pins when you open a property that has several.",
+            ),
+        ),
     ]
