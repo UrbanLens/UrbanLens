@@ -70,6 +70,16 @@ def _json_body(request: HttpRequest) -> dict[str, Any] | None:
     return data if isinstance(data, dict) else None
 
 
+def _require_current_password_proof(user: Any, data: dict[str, Any]) -> JsonResponse | None:
+    """Require proof of the current login credential for password accounts."""
+    if not user.has_usable_password():
+        return None
+    current_password = data.get("current_password", "")
+    if not isinstance(current_password, str) or not user.check_password(current_password):
+        return JsonResponse({"error": "Current password is incorrect."}, status=403)
+    return None
+
+
 class E2EELoginParamsView(View):
     """GET (anonymous): report how an identifier's account authenticates.
 
@@ -149,15 +159,15 @@ class E2EEEnrollView(LoginRequiredMixin, View):
         if bool(password_wrapped) != bool(password_wrap_salt):
             return HttpResponseBadRequest("password_wrapped_secret and password_wrap_salt must be provided together")
 
+        proof_error = _require_current_password_proof(user, data)
+        if proof_error is not None:
+            return proof_error
+
         rotate_auth = bool(auth_key)
         if rotate_auth:
             if not valid_blob(auth_key, MAX_SALT_LENGTH + 64) or not valid_blob(auth_salt, MAX_SALT_LENGTH):
                 return HttpResponseBadRequest("Invalid auth_key/auth_salt")
-            # Rotating the login credential requires proof the caller knows the
-            # current password - a hijacked session must not be able to lock
-            # the real owner out.
-            current_password = data.get("current_password", "")
-            if not user.has_usable_password() or not user.check_password(current_password):
+            if not user.has_usable_password():
                 return JsonResponse({"error": "Current password is incorrect."}, status=403)
 
         try:
@@ -392,6 +402,10 @@ class E2EERewrapView(LoginRequiredMixin, View):
             return HttpResponseBadRequest("password_wrapped_secret and password_wrap_salt must be provided together")
         if not password_wrapped and not recovery_wrapped:
             return HttpResponseBadRequest("Nothing to update")
+        if password_wrapped:
+            proof_error = _require_current_password_proof(profile.user, data)
+            if proof_error is not None:
+                return proof_error
 
         update_fields = ["updated"]
         if password_wrapped:
@@ -727,6 +741,9 @@ class E2EEResetView(LoginRequiredMixin, View):
             return HttpResponseBadRequest("Malformed JSON body")
         if data.get("confirm") != RESET_CONFIRMATION:
             return HttpResponseBadRequest("Missing confirmation")
+        proof_error = _require_current_password_proof(profile.user, data)
+        if proof_error is not None:
+            return proof_error
 
         public_key = data.get("public_key", "")
         recovery_wrapped = data.get("recovery_wrapped_secret", "")
