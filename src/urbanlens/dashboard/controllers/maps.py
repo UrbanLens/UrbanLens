@@ -406,6 +406,12 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         except (TypeError, ValueError):
             return JsonResponse({"error": "invalid coordinates"}, status=400)
 
+        # Same opt-out gate as autocomplete_places: this fires on every map
+        # right-click, sending the clicked coordinates to Google - a user who
+        # turned off External Services must not trigger that call.
+        if not request.user.profile.external_apis_enabled:
+            return JsonResponse({"available": False, "reason": "disabled"})
+
         api_key = settings.google_domain_restricted_api_key or settings.google_unrestricted_api_key
         if not api_key:
             return JsonResponse({"available": False, "reason": "no_key"})

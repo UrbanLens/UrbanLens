@@ -602,7 +602,11 @@ class GroupMemberSearchView(LoginRequiredMixin, View):
         results: list[Profile] = []
         if len(query) >= 2:
             candidates = Profile.objects.select_related("user").filter(Q(user__username__icontains=query) | Q(slug__icontains=query)).exclude(pk=profile.pk).order_by("user__username")[: MEMBER_SEARCH_LIMIT * 4]
-            results = [candidate for candidate in candidates if can_direct_message(profile, candidate)][:MEMBER_SEARCH_LIMIT]
+            # can_view_profile mirrors RecipientSearchView: the results partial
+            # renders each candidate's real slug/username/avatar, so a profile
+            # hidden from the requester must not be enumerable through this
+            # picker either.
+            results = [candidate for candidate in candidates if can_direct_message(profile, candidate) and candidate.can_view_profile(profile)][:MEMBER_SEARCH_LIMIT]
             for candidate in results:
                 candidate.ensure_slug()
             # Distinct-per-list fallback avatar colors - see GroupMembersDialogView.get.

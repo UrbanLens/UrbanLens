@@ -27,7 +27,7 @@ the user has any DM history at all - selects the empty-state copy).
             <span class="msg-dropdown-item__time">{{ conv.last_activity|human_timesince }}</span>
           </span>
           <span class="msg-dropdown-item__row">
-            <span class="msg-dropdown-item__preview">{% if conv.last_message %}{{ conv.last_message.sender.username }}: {% if conv.last_message.is_encrypted %}🔒 Message{% elif conv.last_message.body %}{{ conv.last_message.body|truncatechars:50 }}{% else %}Message{% endif %}{% else %}New group{% endif %}</span>
+            <span class="msg-dropdown-item__preview">{% if conv.last_message %}{{ conv.last_sender_display_name }}: {% if conv.last_message.is_encrypted %}🔒 Message{% elif conv.last_message.body %}{{ conv.last_message.body|truncatechars:50 }}{% else %}Message{% endif %}{% else %}New group{% endif %}</span>
             <span class="msg-unread-pill">{{ conv.unread_count }}</span>
           </span>
         </span>

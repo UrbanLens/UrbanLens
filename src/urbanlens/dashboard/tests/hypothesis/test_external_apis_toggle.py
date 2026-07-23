@@ -128,3 +128,23 @@ def test_weather_forecast_blocked_when_external_apis_disabled() -> None:
     response = PinController.as_view({"get": "weather_forecast"})(request, pin_slug=pin.slug)
 
     assert response.status_code == 403
+
+
+@pytest.mark.django_db
+def test_streetview_check_blocked_when_external_apis_disabled() -> None:
+    """Regression: the map's right-click Street View probe called Google (with
+    the clicked coordinates) even for profiles that opted out of external
+    lookups - it must short-circuit before ever building the API request."""
+    import json
+
+    from urbanlens.dashboard.controllers import maps as maps_module
+
+    profile = _make_profile(external_apis_enabled=False)
+    request = RequestFactory().get(reverse("map.streetview_check"), {"lat": "40.7", "lng": "-74.0"})
+    request.user = profile.user
+
+    with mock.patch.object(maps_module.urllib.request, "urlopen") as mocked_urlopen:
+        response = maps_module.MapController.as_view({"get": "streetview_check"})(request)
+
+    mocked_urlopen.assert_not_called()
+    assert json.loads(response.content) == {"available": False, "reason": "disabled"}
