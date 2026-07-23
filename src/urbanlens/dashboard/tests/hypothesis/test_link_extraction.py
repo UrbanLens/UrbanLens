@@ -28,6 +28,7 @@ from urbanlens.dashboard.models.property_owner import PinOwner, PinPropertySale
 from urbanlens.dashboard.models.site_settings import SiteSettings
 from urbanlens.dashboard.models.subscriptions.model import SiteFeature
 from urbanlens.dashboard.services.ai.link_extraction import (
+    _MAX_REDIRECTS,
     EXTRACTABLE_FIELDS,
     LinkExtractionError,
     _html_to_text,
@@ -37,6 +38,7 @@ from urbanlens.dashboard.services.ai.link_extraction import (
     ai_extract_button_context,
     apply_extracted_fields,
     extractions_remaining_today,
+    fetch_page_text,
     link_extraction_available,
     parse_ai_response,
     recently_requested_urls,
@@ -94,10 +96,75 @@ class ParseHelpersTests(SimpleTestCase):
         self.assertNotIn("<", text)
 
     def test_validate_url_rejects_non_http_and_private_hosts(self) -> None:
-        self.assertEqual(_validate_extraction_url("https://example.com/page"), "https://example.com/page")
+        with patch("socket.getaddrinfo", return_value=[(2, 1, 6, "", ("93.184.216.34", 0))]):
+            self.assertEqual(_validate_extraction_url("https://example.com/page"), "https://example.com/page")
         for bad in ("ftp://example.com", "javascript:alert(1)", "http://localhost/x", "http://127.0.0.1/x", "http://192.168.1.1/x", "http://[::1]/x", "", "https://" + "a" * 2100):
             with self.assertRaises(LinkExtractionError):
                 _validate_extraction_url(bad)
+
+    def test_validate_url_rejects_a_hostname_that_resolves_to_a_private_address(self) -> None:
+        """A domain the requester controls can point DNS at an internal IP (SSRF); resolved addresses are checked too."""
+        with patch("socket.getaddrinfo", return_value=[(2, 1, 6, "", ("169.254.169.254", 0))]), self.assertRaises(LinkExtractionError):
+            _validate_extraction_url("https://attacker-controlled.example/x")
+
+    def test_validate_url_rejects_when_dns_resolution_fails(self) -> None:
+        import socket
+
+        with patch("socket.getaddrinfo", side_effect=socket.gaierror("nope")), self.assertRaises(LinkExtractionError):
+            _validate_extraction_url("https://does-not-resolve.example/x")
+
+
+class _FakeResponse:
+    def __init__(self, status_code: int = 200, headers: dict | None = None, chunks: list[bytes] | None = None):
+        self.status_code = status_code
+        self.headers = headers or {}
+        self.encoding = "utf-8"
+        self._chunks = chunks or [b"<p>Some page text.</p>"]
+
+    @property
+    def is_redirect(self) -> bool:
+        return "location" in {k.lower() for k in self.headers} and self.status_code in (301, 302, 303, 307, 308)
+
+    def close(self) -> None:
+        pass
+
+    def raise_for_status(self) -> None:
+        pass
+
+    def iter_content(self, chunk_size: int):
+        yield from self._chunks
+
+
+class FetchPageTextTests(SimpleTestCase):
+    """fetch_page_text manually follows redirects, re-validating each hop against SSRF targets."""
+
+    def test_follows_and_revalidates_a_redirect_chain(self) -> None:
+        responses = [
+            _FakeResponse(302, {"Location": "http://93.184.216.34/step2"}),
+            _FakeResponse(200, chunks=[b"<p>Final page.</p>"]),
+        ]
+        with patch("requests.get", side_effect=responses):
+            text = fetch_page_text("http://93.184.216.34/step1")
+        self.assertEqual(text, "Final page.")
+
+    def test_rejects_a_redirect_to_a_private_address(self) -> None:
+        responses = [_FakeResponse(302, {"Location": "http://127.0.0.1/internal"})]
+        with patch("requests.get", side_effect=responses), self.assertRaises(LinkExtractionError):
+            fetch_page_text("http://93.184.216.34/step1")
+
+    def test_enforces_a_max_redirect_count(self) -> None:
+        def _always_redirect(url, **kwargs):
+            return _FakeResponse(302, {"Location": "http://93.184.216.34/next"})
+
+        with patch("requests.get", side_effect=_always_redirect), self.assertRaises(LinkExtractionError):
+            fetch_page_text("http://93.184.216.34/step1")
+
+    def test_a_reasonable_redirect_count_still_succeeds(self) -> None:
+        responses = [_FakeResponse(302, {"Location": "http://93.184.216.34/next"}) for _ in range(_MAX_REDIRECTS)]
+        responses.append(_FakeResponse(200, chunks=[b"<p>Reached the end.</p>"]))
+        with patch("requests.get", side_effect=responses):
+            text = fetch_page_text("http://93.184.216.34/step1")
+        self.assertEqual(text, "Reached the end.")
 
 
 class ApplyExtractedFieldsTests(TestCase):

@@ -37,8 +37,9 @@ import ipaddress
 import json
 import logging
 import re
+import socket
 from typing import TYPE_CHECKING, Any
-from urllib.parse import urlsplit
+from urllib.parse import urljoin, urlsplit
 
 from urbanlens.dashboard.models.link_extraction.model import MAX_EXTRACTION_URL_LENGTH, LinkExtraction, LinkExtractionStatus
 
@@ -455,15 +456,25 @@ class LinkExtractionError(Exception):
     """User-facing failure starting an extraction (limit, bad url, gated off)."""
 
 
+def _is_blocked_address(address: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    """True if ``address`` shouldn't be reachable from a user-directed fetch (SSRF guard)."""
+    return address.is_private or address.is_loopback or address.is_link_local or address.is_reserved or address.is_multicast
+
+
 def _validate_extraction_url(url: str) -> str:
     """Validate a user-submitted extraction target url.
 
-    Enforces http(s), a length cap, and rejects literal loopback/private/
-    link-local IP hosts - the fetch runs from inside the server's network, so
-    without this a user could point the extractor at internal services (SSRF).
-    Hostname-based targets are resolved by the OS at fetch time; this guard
-    covers the literal-IP forms that make up the practical abuse surface for a
-    feature limited to a few runs per day per paying user.
+    Enforces http(s), a length cap, and rejects loopback/private/link-local/
+    reserved hosts - both literal IPs in the url and, by resolving the
+    hostname, any domain that currently points at one. The fetch runs from
+    inside the server's network, so without this a user could point the
+    extractor at internal services (SSRF), including via a hostname whose DNS
+    they control.
+
+    This closes the DNS-at-submission-time gap but not a rebind that happens
+    *between* this check and the actual fetch - callers on that path (see
+    :func:`fetch_page_text`) re-validate immediately before connecting to
+    keep that window as small as possible.
 
     Args:
         url: The submitted url.
@@ -481,12 +492,24 @@ def _validate_extraction_url(url: str) -> str:
     if parts.scheme not in ("http", "https") or not parts.hostname:
         raise LinkExtractionError("Only http(s) links can be processed.")
     hostname = parts.hostname
-    try:
-        address = ipaddress.ip_address(hostname)
-    except ValueError:
-        address = None
-    if hostname == "localhost" or (address is not None and (address.is_private or address.is_loopback or address.is_link_local or address.is_reserved)):
+    if hostname == "localhost":
         raise LinkExtractionError("That link can't be processed.")
+    try:
+        literal_address = ipaddress.ip_address(hostname)
+    except ValueError:
+        literal_address = None
+    if literal_address is not None:
+        if _is_blocked_address(literal_address):
+            raise LinkExtractionError("That link can't be processed.")
+        return url
+
+    try:
+        resolved = socket.getaddrinfo(hostname, None)
+    except OSError as exc:
+        raise LinkExtractionError("That link can't be processed.") from exc
+    for _family, _type, _proto, _canonname, sockaddr in resolved:
+        if _is_blocked_address(ipaddress.ip_address(sockaddr[0])):
+            raise LinkExtractionError("That link can't be processed.")
     return url
 
 
@@ -549,8 +572,19 @@ def _html_to_text(markup: str) -> str:
     return text[:MAX_PAGE_CHARS]
 
 
+#: Redirects are followed manually (see fetch_page_text) so each hop can be
+#: SSRF-validated; this bounds how many hops a hostile server can chain.
+_MAX_REDIRECTS = 5
+
+
 def fetch_page_text(url: str) -> str:
     """Fetch the target page and return its visible text.
+
+    Re-validates ``url`` (and every redirect hop) immediately before each
+    connection rather than trusting the submission-time check alone - this
+    call runs from a Celery task that may execute long after the request that
+    queued it, and a hostile server can otherwise SSRF via a 3xx redirect to
+    an internal address regardless of the original host's DNS.
 
     Args:
         url: A url already validated by :func:`_validate_extraction_url`.
@@ -560,17 +594,31 @@ def fetch_page_text(url: str) -> str:
 
     Raises:
         LinkExtractionError: On network failure, a non-success status, a
-            non-text body, or an empty page.
+            non-text body, an empty page, or a rejected/too-deep redirect.
     """
     import requests
 
     try:
-        response = requests.get(
-            url,
-            timeout=FETCH_TIMEOUT_SECONDS,
-            stream=True,
-            headers={"User-Agent": "UrbanLens link analysis (+https://urbanlens.org)"},
-        )
+        for _hop in range(_MAX_REDIRECTS + 1):
+            url = _validate_extraction_url(url)
+            response = requests.get(
+                url,
+                timeout=FETCH_TIMEOUT_SECONDS,
+                stream=True,
+                allow_redirects=False,
+                headers={"User-Agent": "UrbanLens link analysis (+https://urbanlens.org)"},
+            )
+            if response.is_redirect:
+                location = response.headers.get("Location")
+                response.close()
+                if not location:
+                    raise LinkExtractionError("The page couldn't be fetched.")
+                url = urljoin(url, location)
+                continue
+            break
+        else:
+            raise LinkExtractionError("That link redirects too many times.")
+
         response.raise_for_status()
         content_type = response.headers.get("Content-Type", "")
         if content_type and not any(kind in content_type for kind in ("text/", "html", "xml", "json")):
