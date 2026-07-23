@@ -13,6 +13,7 @@ Features planned for this release.
 * Better selection UX for organize page (clicking row selects it, hide select boxes until hover or one row is selected, etc) [UL-265]
 * Main map > Edit pin dialog should have link to view full pin details. [UL-266]
 * On the pin details page, and on the wiki page, sections named "Media" should be named "Photos and Media" instead.
+* Sometimes multiple guidance tips come up on the same page. The user clicks "don't show this again" and another one pops up immediately after. That should never happen.
 
 ## Medium Features
 * Audit the import process for security (unzip, etc) [UL-268]

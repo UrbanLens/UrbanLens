@@ -90,17 +90,26 @@ body div.container {
         padding: 0.5em;
         border-radius: $radius-sm;
         border-color: var(--ul-surface-raised-border);
-        background-color: var(--ul-surface-raised);
+        background-color: rgba(0,0,0,0.1);
         color: var(--ul-grey-7);
 
         &:active, &:hover, &:focus {
             border-color: var(--ul-surface-2-border);
-            background-color: var(--ul-surface-2);
+            background-color: rgba(0,0,0,0.2);
             color: var(--ul-grey-8);
         }
 
         &::placeholder {
             color: var(--ul-grey-7);
+        }
+    }
+
+    .input-wrap {
+        @include input-selectors {
+            background-color: transparent;
+            &:active, &:hover, &:focus {
+                background-color: transparent;
+            }
         }
     }
 }
