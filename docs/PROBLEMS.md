@@ -23,6 +23,51 @@ is the starting point.
 
 ---
 
+## PR #111 (v0.5.0b0 release): CodeQL flagged 60 "new" alerts, mostly pre-existing debt attributed to an oversized diff (found 2026-07-23)
+
+Merging the `@features/v0.5.0` branch into `main` (PR #111) is a 300+-file diff, large enough that
+GitHub's own CodeQL check flags every finding across it as "new to this PR" - its own output says
+so directly: *"Alerts not introduced by this pull request might have been detected because the
+code changes were too large."* One was a genuine, directly-fixable critical: `fetch_page_text`
+(`services/ai/link_extraction.py`) auto-followed redirects and only validated hostnames at
+submission time, so a hostile page could 302 the fetch to an internal address, or a DNS-rebind
+could flip a hostname to a private IP in the gap before the Celery task ran - **fixed** same session
+(manual bounded redirect-following with per-hop revalidation, plus resolving hostnames at validate
+time instead of only checking literal IPs).
+
+The other ~59 (18 high, 41 medium) were not worked through individually - two spot-checks turned up
+false positives from this exact "oversized diff" effect, not real bugs:
+
+- `services/apis/security/hibp.py:55`'s "weak sensitive data hashing" flags a `hashlib.sha1(...,
+  usedforsecurity=False)` call - required by HIBP's k-anonymity Pwned Passwords API protocol itself
+  (SHA-1 prefix lookup is the documented API contract, not an app-chosen algorithm), already marked
+  `usedforsecurity=False` to say exactly that to scanners.
+- `_notification_push.html:82,97`'s "xss"/"client-side-unvalidated-url-redirection" flags
+  `window.location = n.url` - already gated behind a custom `isSafeUrl()` (same-origin-only,
+  rejects `javascript:`/scheme-relative) with an explanatory comment. CodeQL's JS taint tracking
+  doesn't model bespoke app sanitizer functions as a barrier, so this is very likely a false
+  positive too, though not re-verified with the same rigor as the SSRF fix.
+
+**Why the rest weren't triaged individually**: 59 alerts spanning dozens of files (stack-trace
+exposure across ~15 controllers, more XSS/redirect sites, clear-text-logging claims in files that -
+per `git log` - were already refactored specifically to redact sensitive values via
+`redact_coordinate`/`redact_params` helpers, `py/bad-tag-filter` in four hypothesis test files) is a
+full security-audit-scale task, not a PR-merge-blocking-CI-error-scale one, and this branch has
+already been through many rounds of exactly this kind of security hardening (see this file's other
+entries and `docs/prompts/completed.md`) - blind bulk-fixing without individually verifying each
+against current (often already-hardened) code risks both false "fixes" for things already correct
+and, worse, introducing new bugs across files this session never otherwise touched.
+
+**Suggested next step**: pull the full alert list (`gh api "repos/UrbanLens/UrbanLens/code-scanning/alerts?ref=refs/pull/111/merge&state=open"`
+while the PR is still open, or `state=open` against `main` after merge) and work through the
+`py/stack-trace-exposure` cluster first - it's the largest single group (~28 instances across
+`account.py`, `boundary.py`, `calendar_sync.py`, `direct_message_shares.py`, `direct_messages.py`,
+`group_chats.py`, `maps.py`, `pin.py`, `pin_edit.py`, `pin_lists.py`, `safety.py`, `webauthn.py`,
+`external_api/views.py`) and the most mechanically fixable if each is confirmed to actually return
+`str(exc)`/traceback content in an HTTP response rather than just logging it server-side.
+
+---
+
 ## UL-277: pin-detail external-data freshness window is one global knob, not per-source
 
 Original wording (`TODO.md:28`): "Cache time needs adjustments for some pin details data. Load
