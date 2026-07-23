@@ -1802,3 +1802,28 @@ def upgrade_placeholder_pin_names(batch_size: int = 1000) -> int:
     if upgraded:
         logger.info("upgrade_placeholder_pin_names: cleared %s placeholder pin name(s)", upgraded)
     return upgraded
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def dispatch_native_push(notification_id: int) -> int:
+    """Deliver one notification to the recipient's registered native push devices.
+
+    Enqueued by ``models.notifications.signals.enqueue_native_push`` on every
+    ``NotificationLog`` insert; exits immediately for the (common) profile with
+    no registered devices. Delivery itself is best-effort per device - see
+    ``services.push.send_push_to_profile``.
+
+    Args:
+        notification_id: Primary key of the ``NotificationLog`` row to deliver.
+
+    Returns:
+        Number of devices successfully delivered to.
+    """
+    from urbanlens.dashboard.models.notifications.model import NotificationLog
+    from urbanlens.dashboard.models.notifications.signals import as_push_payload
+    from urbanlens.dashboard.services.push import send_push_to_profile
+
+    notification = NotificationLog.objects.filter(pk=notification_id).first()
+    if notification is None or not notification.profile_id:
+        return 0
+    return send_push_to_profile(notification.profile_id, as_push_payload(notification))

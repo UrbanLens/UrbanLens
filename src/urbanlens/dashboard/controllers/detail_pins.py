@@ -225,7 +225,7 @@ class DetailPinJsonView(LoginRequiredMixin, View):
     """Return personal detail pins as JSON for Leaflet rendering on the pin details page.
 
     By default only the pin's direct children are returned. With ``?children=1``
-    (the page-wide "show sub pin details" toggle) the full descendant subtree is
+    (the page-wide "show child pin details" toggle) the full descendant subtree is
     returned instead, each nested pin annotated with the name of the child pin
     it belongs to so the map can label it.
     """

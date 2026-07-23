@@ -267,7 +267,7 @@ def _build_context(comments_qs, profile: Profile, request: HttpRequest, **extra)
 def _pin_comments_context(pin, profile: Profile, request: HttpRequest) -> dict:
     """Build the Notes panel context for a pin, aggregating child pins' notes on ``?children=1``.
 
-    Mirrors the page-wide "show sub pin details" toggle already applied to the
+    Mirrors the page-wide "show child pin details" toggle already applied to the
     map, photo gallery, and visit history (see ``controllers.visits._render_visit_history``)
     - a note left on a child pin must not be invisible from the parent's own
     Notes tab just because it happens to live on a nested row. Posting and

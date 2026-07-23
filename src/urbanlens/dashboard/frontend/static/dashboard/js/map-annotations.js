@@ -1005,7 +1005,7 @@ function init() {
     el.className = "pin-popup child-pin-popup";
     const owner = entry.owner_name ? `<div class="popup-child-parent"><i class="material-symbols-outlined">subdirectory_arrow_right</i> Inside ${escHtml(entry.owner_name)}</div>` : "";
     el.innerHTML = `
-            <div class="popup-title">${escHtml(entry.name || "Sub pin")}</div>
+            <div class="popup-title">${escHtml(entry.name || "Child pin")}</div>
             ${owner}
             ${entry.description ? `<div class="popup-desc">${escHtml(entry.description)}</div>` : ""}
             <div class="popup-actions">
@@ -1026,7 +1026,7 @@ function init() {
       const editBtn = document.createElement("button");
       editBtn.type = "button";
       editBtn.className = "edit-pin-button";
-      editBtn.title = "Edit sub pin";
+      editBtn.title = "Edit child pin";
       editBtn.innerHTML = '<i class="material-symbols-outlined">edit</i>';
       editBtn.addEventListener("click", () => {
         map.closePopup();
@@ -1178,7 +1178,7 @@ function init() {
     if (!uuids.length)
       return;
     const n = uuids.length;
-    if (!await confirmAction({ title: "Promote child pins?", message: `Promote ${n} sub pin${n === 1 ? "" : "s"} to top-level pins on your main map?`, confirmLabel: "Promote" }))
+    if (!await confirmAction({ title: "Promote child pins?", message: `Promote ${n} child pin${n === 1 ? "" : "s"} to top-level pins on your main map?`, confirmLabel: "Promote" }))
       return;
     const results = await Promise.all(uuids.map((uuid) => {
       const slug = detailPins.find((d) => d.uuid === uuid)?.slug || uuid;
@@ -1238,7 +1238,7 @@ function init() {
         } catch {}
       }
     } else {
-      toast.error("Failed to send sub pins to the wiki.");
+      toast.error("Failed to send child pins to the wiki.");
     }
     clearDpSelection();
   }
@@ -1247,7 +1247,7 @@ function init() {
     if (!uuids.length)
       return;
     const n = uuids.length;
-    if (!await confirmAction({ title: "Delete child pins?", message: `Delete ${n} sub pin${n === 1 ? "" : "s"}? This also removes reviews, visit history, and notes.`, confirmLabel: "Delete" }))
+    if (!await confirmAction({ title: "Delete child pins?", message: `Delete ${n} child pin${n === 1 ? "" : "s"}? This also removes reviews, visit history, and notes.`, confirmLabel: "Delete" }))
       return;
     const results = await Promise.all(uuids.map((uuid) => fetch(`${dpEditBase}${uuid}/`, { method: "DELETE", headers: { "X-CSRFToken": getCsrfToken() } }).then((r) => r.ok)));
     const deleted = results.filter(Boolean).length;
@@ -1632,7 +1632,7 @@ function init() {
     detailBuildingItems.clearLayers();
     (data.detail_buildings || []).forEach((entry) => {
       if (entry.polygon)
-        addGeoJSONPolygons(detailBuildingItems, entry.polygon, DETAIL_BUILDING_STYLE, "Building boundary (from a sub pin)");
+        addGeoJSONPolygons(detailBuildingItems, entry.polygon, DETAIL_BUILDING_STYLE, "Building boundary (from a child pin)");
     });
     setMainMarkerVisible(!boundaryHasRealPolygon("property"));
     if (!boundaryBoundsFitted) {

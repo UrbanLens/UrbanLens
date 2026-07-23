@@ -111,7 +111,7 @@ def search_local(query: str, profile) -> list[AutocompleteResult]:
 
         is_child = pin.parent_pin_id is not None
         if is_child and pin.parent_pin is not None:
-            subtitle = f"Sub pin of {pin.parent_pin.effective_name or 'a pin'}"
+            subtitle = f"Child pin of {pin.parent_pin.effective_name or 'a pin'}"
         else:
             subtitle = _pin_match_subtitle(pin, q_lower)
         results.append(

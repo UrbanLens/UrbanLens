@@ -21,6 +21,52 @@ adjacent notification delivery, the encrypted-message export format, a 650-line 
 sidebar). If picking this back up, the "Suggested next step"/"Why not fixed" text in each entry
 is the starting point.
 
+**Status update 2026-07-23**: a follow-up pass resolved six more entries (each struck through
+below with details in place): the UL-355 Overpass mirror pool (osm.ch + two dead mirrors
+removed), `schedule_panel_fetch`'s broker-outage 500s (now degrades to 204 and releases the
+single-flight marker), the `test_profile_photo_strip.py` coordinate collision, the "sub pin" →
+"child pin" terminology sweep (44 files, incl. migration `0011`; frontend rebuilt), the `.btn`
+`[hidden]` guard (already landed globally; redundant scoped rule removed), and the Smithsonian
+`online_media_type` param (live-probed: no-op; removed - no usable server-side syntax exists
+that preserves quoted-query relevance). Verified locally via ruff, mypy, `tsc`, `manage.py
+check`, `makemigrations --check`, and the non-DB test subset (celery helpers 9/9, Smithsonian
+25/25, Overpass failover 8/8); DB-backed tests (`test_external_apis_toggle.py`,
+`test_pin_panel_info.py`, `test_profile_photo_strip.py`, `test_child_pins.py`) need a
+Docker-environment pytest run - this Windows checkout has no local Postgres, and SSH to the
+dev VM was unavailable in this session.
+
+**Decisions recorded 2026-07-23** (Jess answered the open product questions; these are now the
+authoritative direction for each blocked entry):
+
+- **E2EE password policy**: build the server validation endpoint (option (a)) - raw password
+  crosses HTTPS once during signup/reset only, runs the full `AUTH_PASSWORD_VALIDATORS` chain.
+- **PR #111 deferred privacy items**: build all three - per-recipient WebSocket payloads
+  (group + 1:1), opaque E2EE rotation member IDs, media-proxy URL binding.
+- **`0001_initial` rename**: production's migration history has already been verified safe -
+  no bridge or manual UPDATE needed; entry closed.
+- **WhatsApp/SMS toggles**: wire delivery for ALL event-type toggles, following the DM
+  pattern (delayed Celery task, re-check relevance, debounce, `notification_delivery`).
+- **Identity masking**: fix both remaining sites - mask group member-add search results, and
+  gate trip comments by the author's `comment_visibility` (matching pin/wiki behavior).
+- **UL-255 map remember**: URL-params-win precedence is intended. Bug stays open pending a
+  browser repro; the two scenarios to distinguish are documented in the entry.
+- **UL-277 per-source TTLs**: skipped for now, to be reassessed later.
+- **UL-354 Wikipedia**: campus-aware radius only - child pins also geosearch from their
+  parent pin's coordinates; no manual-link override UI.
+- **Export importers**: build all four (comments, photos, trips-as-invitations, DMs with the
+  E2EE same-key caveat); fix the export target-reference shape (target_uuid) first.
+- **Internet Archive**: add `texts` to the mediatype filter (document tiles in the gallery).
+- **Overpass**: make the self-hosted instance (`overpass.osm.urbanlens.org`) primary with
+  the public endpoints as fallbacks, AND add empty-result cross-validation. (Deploy-side:
+  raise the openresty 90s proxy cap per the benchmark doc.)
+- **"Detail pins" naming**: user-facing copy referring to real Pin rows becomes "child
+  pins"; "detail pins" remains only for map-annotation markers.
+- **Label picker**: authorized - extract the main map's rich picker (~650 lines, drag +
+  formula mode) into a shared TS module used by map, bulk-edit, and saved-filter pages.
+- **Test infra**: build the dedicated compose test topology (localhost-reachable
+  Valkey/Postgres for a test-runner service); do NOT widen `LocalhostOnlyNetwork`.
+- **Hardcoded blues**: wait for a browser-verification session; leave untouched.
+
 ---
 
 ## PR #111 (v0.5.0b0 release): CodeQL's 63 alerts triaged and resolved (2026-07-23)
@@ -122,46 +168,6 @@ a spot fix, and were deliberately deferred:
    stability.
 
 ---
-
-## PR #111: `0001_initial.py` rename may break `manage.py migrate` on an installation that only ever applied the old squashed name (flagged by Codex, verified against dev DBs 2026-07-23)
-
-`d8eb1529` renamed `0001_initial_squashed_0006_alter_notificationlog_notification_type_and_more.py`
-to `0001_initial.py` (pure rename, matching the 0007/0008/0009 squash-renames), and `b829d49b`
-then dropped its `replaces` list entirely because its first entry, `('dashboard', '0001_initial')`,
-collided with the file's own new name and made `manage.py migrate` fail immediately with
-"Cyclical squash replacement found." Codex correctly points out that dropping `replaces` outright
-loses the bridge for any database that only ever recorded the *old squashed name* as applied
-(never the pre-squash individual `0001`-`0006` migrations under their original names) - such a
-database would have `0002_boundary_emailsendlog_...` (etc.) marked applied while its now-renamed
-dependency `0001_initial` is not, which is exactly `InconsistentMigrationHistory`.
-
-**Verified empirically against two real databases** (`ssh` to the `chiron` dev VM, queried
-`django_migrations` directly - see this session's transcript for the exact commands):
-
-- `urbanlens_development_db` (the canonical `~/UrbanLens` checkout's DB): has **both**
-  `0001_initial` through `0006_alter_notificationlog_notification_type_and_more` (the pre-squash
-  individual names) **and** `0001_initial_squashed_0006_alter_notificationlog_notification_type_and_more`
-  applied (the latter one second after the former six - Django's squash-bridging recording the
-  squash as satisfied once its `replaces` list was fully applied, back when `replaces` still
-  existed). `0001_initial` (matching the *new* filename) is therefore already marked applied here,
-  so the rename is safe on this specific database: nothing to re-run, nothing inconsistent.
-- `urbanlens_devs1_db`: only has the new-style `0001_initial` (a from-scratch install past this
-  point already) - trivially safe, no legacy naming involved at all.
-
-**Not verified**: the actual production database (Portainer-managed, not directly reachable the
-way the `chiron` dev VM is per `CLAUDE.md`). If production's migration history went straight from
-nothing to the *old* squashed name only (skipping the pre-squash individual `0001`-`0006` names
-entirely - e.g. a deploy that started after the squash was introduced but before this PR's rename),
-it would hit the exact break Codex describes.
-
-**Why not blind-fixed**: the "obvious" fix (restore the full original `replaces` list) is what
-caused the cyclical-self-reference bug `b829d49b` already had to back out. A *correct* fix needs
-`replaces` to name the **old squashed filename** specifically -
-`replaces = [('dashboard', '0001_initial_squashed_0006_alter_notificationlog_notification_type_and_more')]`
-- not the pre-squash individual names, and not its own new name - but getting Django's
-partial-replaces bridging semantics exactly right (what happens if only *some* of a `replaces`
-list is applied) isn't something to guess at without a scratch database in the specific "only the
-old squashed name applied" state to test against, which nothing currently reachable is in.
 
 **Suggested next step before deploying v0.5.0 to production**: run the same read-only check this
 session did - `SELECT name, applied FROM django_migrations WHERE app='dashboard' AND name LIKE
@@ -567,7 +573,14 @@ longer configure a value clamd can't actually stream-scan.
 
 ---
 
-## `.btn`'s `display: inline-flex` beats `[hidden]` sitewide (found 2026-07-20)
+## ~~`.btn`'s `display: inline-flex` beats `[hidden]` sitewide~~ (found 2026-07-20, RESOLVED by a later session + cleanup 2026-07-23)
+
+**RESOLVED**: the suggested global fix already landed in a later session - `btn-base`
+(`_mixins.scss:215`) now carries `&[hidden] { display: none; }` (added for the shared
+confirm-dialog's alt button, per its comment), covering every `.btn`/`btn-primary`/
+`btn-ghost`/`btn-danger` consumer. 2026-07-23 cleanup: removed the now-redundant scoped
+`#comment-map-composer-save[hidden]` override in `_comments.scss` (kept a pointer comment)
+and recompiled the stylesheet.
 
 While fixing the broken comment/Notes "Attach a Map" dialog (several elements toggled via JS
 `.hidden` were staying visible - see completed.md - because their own classes set `display`
@@ -590,7 +603,27 @@ silently broken the same way.
 
 ---
 
-## `SmithsonianGateway`'s `online_media_type` filter param is unverified against the live API (found 2026-07-22)
+## ~~`SmithsonianGateway`'s `online_media_type` filter param is unverified against the live API~~ (found 2026-07-22, RESOLVED 2026-07-23)
+
+**RESOLVED 2026-07-23** - ran the suggested live-endpoint diff (real API key from `.env`,
+`q="Pennsylvania prison"`, 97 rows unfiltered). Findings:
+
+- The bare `online_media_type=Images` GET param **is a silent no-op** (still 97 rows), as
+  suspected.
+- The candidate `fq=online_media_type:"Images"` (and unquoted variant) is **also a no-op** on
+  the public `/search` endpoint (still 97 rows) - the third-party client's syntax targets
+  EDAN's internal API, not this one.
+- The only syntax that filters server-side is embedding ` AND online_media_type:"Images"` in
+  `q` itself (97→40 rows) - **but it cannot be used**: appended to this gateway's real quoted
+  multi-phrase queries it regroups the expression and destroys relevance
+  (`'"Eastern State Penitentiary" "Philadelphia Pennsylvania"'` went from 5 hits to 9,951;
+  wrapping the phrases in parentheses made it 48,845).
+
+**Fix applied**: removed the no-op param entirely and documented the probe results at the
+call site (`smithsonian.py:get_data`); `_generate_media` already drops rows without a media
+URL client-side, so server-side filtering bought nothing anyway. Updated
+`test_api_called_with_correct_params` to assert the param's absence; all 25 Smithsonian
+tests pass.
 
 While tightening Smithsonian's search relevance (see `services/apis/assets/smithsonian.py` -
 `quote_name`/`quote_locality`/`include_address`/`search_with_country`/`reject_address_derived_names`,
@@ -652,7 +685,17 @@ matches rather than excluding the latter.
 
 ---
 
-## `schedule_panel_fetch` 500s the request when the Celery broker is unreachable (found 2026-07-22)
+## ~~`schedule_panel_fetch` 500s the request when the Celery broker is unreachable~~ (found 2026-07-22, RESOLVED 2026-07-23)
+
+**RESOLVED 2026-07-23**: exactly per the suggested next step - dispatch now goes through
+`safely_enqueue_task` (extended with a `queue=` passthrough), and on a failed enqueue the
+just-claimed `flight_key` marker is deleted and `schedule_panel_fetch` returns False (caller
+renders a quiet 204), so the next poll retries the enqueue instead of waiting out
+`FLIGHT_TTL_SECONDS` behind a task that was never queued. Regression tests added
+(`test_external_apis_toggle.py`: broker-down returns False; flight marker released so a
+recovered broker is retried immediately) plus a `queue=` unit test in
+`test_celery_helpers.py`. The three existing `apply_async` call-shape assertions were updated
+for the new call path.
 
 `services/external_data.py:schedule_panel_fetch` calls `fetch_panel_source.apply_async(...)`
 unguarded. When the broker/result backend is down, Celery raises
@@ -677,7 +720,24 @@ waiting out `FLIGHT_TTL_SECONDS` behind a task that was never queued.
 
 ---
 
-## Pin-share notification still says "sub pin" after the Child Pins rename (found 2026-07-22)
+## ~~Pin-share notification still says "sub pin" after the Child Pins rename~~ (found 2026-07-22, RESOLVED 2026-07-23)
+
+**RESOLVED 2026-07-23**: the wording decision was already made by `d5413907` ("Refactor 'Sub
+Pins' terminology to 'Child Pins' across the codebase") - this pass completed that sweep.
+All "sub pin"/"Sub pin"/"Sub-pin" strings across 44 files now read "child pin": the share
+notification + accept toast (`pin_sharing.py`, un-breaking
+`test_notification_mentions_sub_pins`), the FAB toggle ("Child pin details",
+`location/index.html`), wiki-sync toasts, detach/bulk-edit/restructure/share-dialog copy,
+map popups and confirm dialogs (TS rebuilt via `bun run build`), autocomplete subtitles,
+comment/visit/gallery chip titles, settings help_text (form + model, with migration
+`0011_child_pin_help_text`), and the comments/docstrings that referenced the old toggle
+name. Deliberately NOT renamed: "detail pins" - that term is used for the map-annotation
+markers (markup toolbar, community wiki detail pins), a different feature from child Pin
+rows; `location/index.html`'s onboarding card said "private sub-pins" for those markers and
+now says "private detail pins" to match `wiki.html`'s established tour copy. Whether
+"detail pins" should itself be unified with "child pins" where it refers to actual Pin rows
+(e.g. `detail_pins_panel.html`'s "Detail Pins" header, `_bulk_merge_dialog.html`) remains a
+genuine product naming question - the two concepts are currently conflated under one term.
 
 `test_child_pins.py::PinShareBundleTests::test_notification_mentions_sub_pins` asserts the bundled
 share notification contains `"2 child pins"`, but `controllers/pin_sharing.py` builds
@@ -698,7 +758,14 @@ encode the old wording alongside them.
 
 ---
 
-## `test_profile_photo_strip.py`'s `_location()` helper always collides (found 2026-07-22)
+## ~~`test_profile_photo_strip.py`'s `_location()` helper always collides~~ (found 2026-07-22, RESOLVED 2026-07-23)
+
+**RESOLVED 2026-07-23**: `_location()` now mints unique coordinates per call via a
+module-level counter, mirroring `test_child_pins.py`'s `_make_pin`. Sibling tests audited
+before changing the shared helper: none depends on two `_location()` calls colliding - every
+"same location" scenario reuses the returned `location` object rather than calling the
+helper twice. (Full-file DB verification still needs a Docker-environment pytest run - no
+local Postgres on this Windows checkout.)
 
 `test_own_profile_page_shows_wiki_attached_photo_not_pin_only_one` calls the module's `_location()`
 helper twice, and that helper hardcodes `latitude=40.0, longitude=-74.0`. `Location` has a unique
@@ -721,7 +788,20 @@ depended on the collision.
 
 ---
 
-## UL-355: `osm.ch` in the Overpass mirror pool is a Switzerland-only extract, silently returning "no data" worldwide
+## ~~UL-355: `osm.ch` in the Overpass mirror pool is a Switzerland-only extract, silently returning "no data" worldwide~~ (RESOLVED 2026-07-23)
+
+**RESOLVED 2026-07-23**: removed `osm.ch` from `_API_MIRRORS`, and also removed
+`private.coffee` (20/20 benchmark failures) and `kumi.systems` (19/20) per
+`docs/overpass-mirror-test.md`'s recommendations 2-3 - each dead mirror selected first cost a
+full ~30s socket timeout before failover. The pool is now `overpass-api.de` (base) +
+`maps.mail.ru` (both globally complete; benchmark recommendation 4). The module comment now
+documents the membership rules (globally-complete instances only; why a regional extract is
+poisonous). The failover test suite (`test_location_background_services.py`, written
+pool-size-independent) passes against the reduced pool. NOT done here (deliberately, per the
+original entry): making the self-hosted instance primary (deployment decision), and
+detecting/validating empty responses from pool members (larger design change). Note the
+original entry's caveat still stands: `LocationCache` may hold empty-result rows that osm.ch
+caused; they expire naturally via `external_data_cache_days`.
 
 Found while benchmarking the new self-hosted Overpass instance (full results and method:
 `docs/overpass-mirror-test.md`, run 2026-07-22).
@@ -836,3 +916,40 @@ attempted blind.
 **Suggested next step**: decide on a dedicated test-running topology (option (a) above) rather than
 patching the guard - it's the only fix that doesn't touch code whose entire job is to fail loud on
 anything that isn't provably local.
+
+---
+
+## Authenticated media gate - residual per-family risk (2026-07-23)
+
+`/media/...` is now served through `dashboard.controllers.media.MediaGateView` (nginx `location
+/media/` proxies to Django; authorized responses hand back to the `internal`-only
+`/_protected_media/` alias via X-Accel-Redirect). Ownership is enforced per path family where it
+is cleanly derivable, but several families intentionally fall back to **authenticated-only**
+access (any logged-in user can fetch, no per-object check). Marked with `TODO(media-auth)`
+comments in `src/urbanlens/dashboard/controllers/media.py`:
+
+- **`pin_custom_icons/` (Pin.custom_icon) and `label_icons/` (Label.custom_icon)**:
+  authenticated-only. Strict owner-only enforcement risks breaking any surface that renders
+  another user's shared/labeled pin (shared pin views, trip member maps, global labels with
+  `profile=None`). Residual risk is low (small decorative icons, not photos), but a determined
+  enumerator could fetch other users' custom icons. Fix would be: owner OR global label OR an
+  existing share/visibility relationship.
+- **Orphan files** (a file on disk under `pin_images/` or `comment_images/` whose owning
+  Image/Comment/TripComment row no longer exists, e.g. row deleted without file cleanup):
+  authenticated-only, since there is no owner left to check. Residual risk: pre-existing orphans
+  from deletions remain fetchable by any logged-in user who knows the filename.
+- **Unknown path families** (anything under MEDIA_ROOT outside the cataloged prefixes
+  `pin_images/`, `comment_images/`, `avatars/`, `pin_custom_icons/`, `label_icons/`):
+  authenticated-only, logged at INFO. Any future `upload_to` prefix must get an explicit branch
+  in `MediaGateView._authorized` or it silently inherits this fallback.
+- **`avatars/` (Profile.avatar)**: deliberately any-authenticated-user (avatars render site-wide
+  next to usernames) - not a gap, but noted for completeness.
+- **Safety check-in photos** (`Image.safety_checkin` set) currently follow the generic
+  `Image.objects.visible_to` photo-visibility logic rather than the safety feature's own
+  contact-sharing rules; if check-ins are ever shared with emergency contacts who fail the
+  photo-visibility check, those contacts would be denied the photos (and vice versa: users
+  passing `visible_to` but outside the check-in's audience can fetch them).
+
+**Suggested next step**: product decision on icon visibility (owner-only + share-relationship vs.
+authenticated-only), a cleanup job for orphaned media files, and a review of safety check-in photo
+audience rules.

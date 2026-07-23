@@ -29,7 +29,7 @@ interface DetailPinEntry {
     /** URL of the child pin's own detail page (Pin-backed detail pins only). */
     url?: string;
     /** Name of the child pin this entry belongs to, when it came from a
-     * descendant (the page-wide "show sub pin details" toggle). Entries with
+     * descendant (the page-wide "show child pin details" toggle). Entries with
      * an owner are display-only here - they're edited from their own page. */
     owner_name?: string;
     name: string;
@@ -727,7 +727,7 @@ function init(): void {
             .catch(() => toast.error("Could not swap these pins."));
     }
 
-    // Popup shown when a child pin's marker is clicked: name, which sub pin it
+    // Popup shown when a child pin's marker is clicked: name, which child pin it
     // belongs to (for nested entries), and a link to that pin's own detail
     // page - plus Edit/promote-to-parent shortcuts for this pin's own direct
     // children (no hover tooltip - the click popup already covers this, and a
@@ -737,7 +737,7 @@ function init(): void {
         el.className = "pin-popup child-pin-popup";
         const owner = entry.owner_name ? `<div class="popup-child-parent"><i class="material-symbols-outlined">subdirectory_arrow_right</i> Inside ${escHtml(entry.owner_name)}</div>` : "";
         el.innerHTML = `
-            <div class="popup-title">${escHtml(entry.name || "Sub pin")}</div>
+            <div class="popup-title">${escHtml(entry.name || "Child pin")}</div>
             ${owner}
             ${entry.description ? `<div class="popup-desc">${escHtml(entry.description)}</div>` : ""}
             <div class="popup-actions">
@@ -759,7 +759,7 @@ function init(): void {
             const editBtn = document.createElement("button");
             editBtn.type = "button";
             editBtn.className = "edit-pin-button";
-            editBtn.title = "Edit sub pin";
+            editBtn.title = "Edit child pin";
             editBtn.innerHTML = '<i class="material-symbols-outlined">edit</i>';
             editBtn.addEventListener("click", () => {
                 map.closePopup();
@@ -939,7 +939,7 @@ function init(): void {
         const uuids = Array.from(selectedDpUuids);
         if (!uuids.length) return;
         const n = uuids.length;
-        if (!(await confirmAction({ title: "Promote child pins?", message: `Promote ${n} sub pin${n === 1 ? "" : "s"} to top-level pins on your main map?`, confirmLabel: "Promote" }))) return;
+        if (!(await confirmAction({ title: "Promote child pins?", message: `Promote ${n} child pin${n === 1 ? "" : "s"} to top-level pins on your main map?`, confirmLabel: "Promote" }))) return;
         const results = await Promise.all(
             uuids.map((uuid) => {
                 const slug = detailPins.find((d) => d.uuid === uuid)?.slug || uuid;
@@ -998,7 +998,7 @@ function init(): void {
                 }
             }
         } else {
-            toast.error("Failed to send sub pins to the wiki.");
+            toast.error("Failed to send child pins to the wiki.");
         }
         clearDpSelection();
     }
@@ -1007,7 +1007,7 @@ function init(): void {
         const uuids = Array.from(selectedDpUuids);
         if (!uuids.length) return;
         const n = uuids.length;
-        if (!(await confirmAction({ title: "Delete child pins?", message: `Delete ${n} sub pin${n === 1 ? "" : "s"}? This also removes reviews, visit history, and notes.`, confirmLabel: "Delete" }))) return;
+        if (!(await confirmAction({ title: "Delete child pins?", message: `Delete ${n} child pin${n === 1 ? "" : "s"}? This also removes reviews, visit history, and notes.`, confirmLabel: "Delete" }))) return;
         const results = await Promise.all(uuids.map((uuid) => fetch(`${dpEditBase}${uuid}/`, { method: "DELETE", headers: { "X-CSRFToken": getCsrfToken() } }).then((r) => r.ok)));
         const deleted = results.filter(Boolean).length;
         if (deleted) toast.success(`${deleted} pin${deleted === 1 ? "" : "s"} deleted.`);
@@ -1437,7 +1437,7 @@ function init(): void {
         // exists, no building layer is shown at all ("no known building here").
         detailBuildingItems.clearLayers();
         (data.detail_buildings || []).forEach((entry: any) => {
-            if (entry.polygon) addGeoJSONPolygons(detailBuildingItems, entry.polygon, DETAIL_BUILDING_STYLE, "Building boundary (from a sub pin)");
+            if (entry.polygon) addGeoJSONPolygons(detailBuildingItems, entry.polygon, DETAIL_BUILDING_STYLE, "Building boundary (from a child pin)");
         });
         // The center marker stays visible unless a real (non-circle) property
         // polygon marks the place's extent.

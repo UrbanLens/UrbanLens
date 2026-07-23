@@ -490,7 +490,7 @@ class PinDetachChildView(LoginRequiredMixin, View):
             return HttpResponse("This pin is already a top-level pin.", status=400)
         conflict = Pin.objects.filter(profile=pin.profile, location_id=pin.location_id, parent_pin__isnull=True).exclude(pk=pin.pk).exists()
         if conflict:
-            return HttpResponse("You already have a top-level pin at this exact location. Move this sub pin slightly before detaching it.", status=400)
+            return HttpResponse("You already have a top-level pin at this exact location. Move this child pin slightly before detaching it.", status=400)
         logger.info("User %s detached child pin %s from parent %s", request.user.id, pin.id, pin.parent_pin_id)
         pin.parent_pin = None
         pin.save(update_fields=["parent_pin"])

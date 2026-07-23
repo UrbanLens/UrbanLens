@@ -72,7 +72,7 @@ Context:
       <button type="button" class="gallery-thumb-btn" onclick="galleryOpenLightbox({{ img.pk }})">
         <img src="{{ img.image.url }}" alt="{{ img.caption|default:'Photo' }}" class="gallery-thumb">
         {% if include_children and img.pin_id != pin.id %}
-        <span class="gallery-child-ribbon" title="Photo from the sub pin {{ img.pin.effective_name }}">{{ img.pin.effective_name }}</span>
+        <span class="gallery-child-ribbon" title="Photo from the child pin {{ img.pin.effective_name }}">{{ img.pin.effective_name }}</span>
         {% endif %}
         {% if img.latitude and img.longitude %}
         <span class="gallery-has-coords" title="Has GPS coordinates">

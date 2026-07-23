@@ -26,8 +26,20 @@ from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.profile_photos import attachment_points_for_image, strip_photos_for_owner, strip_photos_visible_to
 
 
+_coord_counter = 0
+
+
 def _location(**kwargs) -> Location:
-    return baker.make(Location, latitude=40.0, longitude=-74.0, **kwargs)
+    """A Location with per-call unique coordinates.
+
+    Locations are unique per (latitude, longitude), so tests that create more
+    than one (e.g. a wiki location plus a separate pin-only location) would
+    otherwise hit the unique constraint (mirrors test_child_pins.py's
+    ``_make_pin``).
+    """
+    global _coord_counter
+    _coord_counter += 1
+    return baker.make(Location, latitude=40.0 + _coord_counter * 0.001, longitude=-74.0 - _coord_counter * 0.001, **kwargs)
 
 
 def _wiki_with_pin(profile, **wiki_kwargs) -> tuple[Location, Wiki]:

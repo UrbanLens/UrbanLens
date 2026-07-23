@@ -42,7 +42,7 @@ def _wiki_for_location(location: Location | None) -> Wiki | None:
 def _pin_gallery_images(request: HttpRequest, pin: Pin, profile: Profile):
     """Images for a pin's gallery, optionally including child-pin photos.
 
-    With ``?children=1`` (the pin page's "show sub pin details" toggle) photos
+    With ``?children=1`` (the pin page's "show child pin details" toggle) photos
     uploaded to any descendant child pin are included too, so the parent's
     gallery shows the whole place.
 
@@ -54,7 +54,7 @@ def _pin_gallery_images(request: HttpRequest, pin: Pin, profile: Profile):
     Returns:
         Tuple of (queryset, include_children flag).
     """
-    # Child expansion is owner-only: the "show sub pin details" toggle exists
+    # Child expansion is owner-only: the "show child pin details" toggle exists
     # on the owner's own pin page, and another user's child pins are theirs.
     include_children = request.GET.get("children") == "1" and pin.profile_id == profile.pk
     if include_children:

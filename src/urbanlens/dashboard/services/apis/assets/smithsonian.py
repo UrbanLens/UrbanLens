@@ -50,10 +50,20 @@ class SmithsonianGateway(MediaProvider):
         data = cache.get(cache_key)
         # If the data is not in the cache
         if data is None:
+            # No server-side images-only filter is applied, deliberately.
+            # Verified against the live endpoint (2026-07-23): the previously
+            # sent bare `online_media_type=Images` GET param is silently
+            # ignored ("Pennsylvania prison": 97 rows with or without it), as
+            # are both `fq=online_media_type:"Images"` shapes. The only syntax
+            # that does filter - appending ` AND online_media_type:"Images"`
+            # to q - regroups this gateway's quoted multi-phrase queries and
+            # destroys their relevance ('"Eastern State Penitentiary"
+            # "Philadelphia Pennsylvania"' went from 5 hits to 9,951; adding
+            # parentheses made it 48,845). _generate_media already drops rows
+            # without a media URL client-side, so the filter buys nothing.
             params = {
                 "api_key": self.api_key,
                 "q": search_term,
-                "online_media_type": "Images",
             }
             # (connect, read) tuple: bounds connect and inactivity-between-reads
             # separately. This runs inside the panel-fetch Celery task

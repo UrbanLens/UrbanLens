@@ -170,7 +170,11 @@ class SmithsonianGetDataCacheMissTests(SimpleTestCase):
             params = call_kwargs[1]["params"]
             self.assertEqual(params["q"], "steel factory")
             self.assertEqual(params["api_key"], "test-key")
-            self.assertEqual(params["online_media_type"], "Images")
+            # No images-only param: the live endpoint silently ignores the
+            # bare `online_media_type` GET param, and every filtering syntax
+            # that does work breaks quoted multi-phrase query relevance (see
+            # get_data's comment). Filtering happens client-side instead.
+            self.assertNotIn("online_media_type", params)
 
     def test_raises_for_status_is_called(self):
         with patch("urbanlens.dashboard.services.apis.assets.smithsonian.cache") as mock_cache:

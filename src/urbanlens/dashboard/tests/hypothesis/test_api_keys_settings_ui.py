@@ -96,7 +96,7 @@ class ApiKeysSettingsPageContentTests(TestCase):
         response = self.client.get(reverse("settings.view"))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, reverse("external_api:whoami"))
-        self.assertContains(response, reverse("external_api:pins.create"))
+        self.assertContains(response, reverse("external_api:pins"))
 
     def test_page_shows_recent_activity_for_a_key_with_usage(self) -> None:
         api_key, _raw_key = generate_api_key(self.user, "Zapier")

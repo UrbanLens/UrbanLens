@@ -101,7 +101,7 @@ class PinUndoHandler(UndoHandler):
                     pin.parent_pin = old_to_new[old_parent_pk]
                     pin.save(update_fields=["parent_pin"])
                 else:
-                    # The parent wasn't part of this deletion (a sub pin was
+                    # The parent wasn't part of this deletion (a child pin was
                     # deleted on its own) - reattach to it if it still exists.
                     surviving_parent = Pin.objects.filter(pk=old_parent_pk, profile_id=entry["profile_id"]).first()
                     if surviving_parent is not None:

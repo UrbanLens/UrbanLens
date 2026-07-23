@@ -176,7 +176,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         # parcel's building list stands in for them. See services.locations.site_scope.
         site_scope = is_site_scope(pin)
 
-        # Page-wide "show sub pin details" toggle: when on (?children=1), the
+        # Page-wide "show child pin details" toggle: when on (?children=1), the
         # map, photo gallery, and visit history all include content from this
         # pin's child pins (any depth). Off by default so the page stays
         # simple for the majority of users who never nest pins - except on a

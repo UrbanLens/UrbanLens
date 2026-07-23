@@ -137,7 +137,7 @@
 <div class="pin-detail-grid">
     <div id="pin-detail-onboarding" class="page-onboarding" aria-live="polite"></div>
 
-    {# The one-time "organize this property?" suggestion: sub pins for the     #}
+    {# The one-time "organize this property?" suggestion: child pins for the     #}
     {# buildings here, plus nesting any top-level pins that stand inside it.   #}
     {# 204s (and removes itself) whenever there's nothing to suggest, the      #}
     {# owner has declined for this pin, or they've turned suggestions off.     #}
@@ -153,9 +153,9 @@
     {% if parent_pin %}
     {# -- Child pin: obvious way back up to the parent -------------------- #}
     <a class="pin-parent-breadcrumb" href="{% url 'pin.details' parent_pin.slug|default:parent_pin.uuid %}"
-       title="This is a sub pin - open its parent pin">
+       title="This is a child pin - open its parent pin">
         <i class="material-symbols-outlined">arrow_back</i>
-        <span>Sub pin of <strong>{{ parent_pin.effective_name }}</strong></span>
+        <span>Child pin of <strong>{{ parent_pin.effective_name }}</strong></span>
     </a>
     {% endif %}
 
@@ -755,7 +755,7 @@
 {% if has_child_pins or parent_pin %}
 {# -- Floating actions menu (bottom-right, follows scroll) ----------------- #}
 {# Holds the uncommon pin-hierarchy actions so they never clutter the page:  #}
-{# the page-wide "sub pin details" toggle, jump-to-parent, and detach.       #}
+{# the page-wide "child pin details" toggle, jump-to-parent, and detach.       #}
 <div class="pin-actions-fab" id="pin-actions-fab">
     <div class="pin-actions-menu" id="pin-actions-menu" hidden>
         {% if has_child_pins %}
@@ -766,7 +766,7 @@
            href="{% url 'pin.details' pin.slug %}?children={% if include_children %}0{% else %}1{% endif %}"
            title="Show everything from this pin's child pins on this page - map details, photos, and visit history">
             <i class="material-symbols-outlined">{% if include_children %}toggle_on{% else %}toggle_off{% endif %}</i>
-            <span>Sub pin details</span>
+            <span>Child pin details</span>
             <span class="pin-actions-state">{% if include_children %}On{% else %}Off{% endif %}</span>
         </a>
         {% endif %}
@@ -789,7 +789,7 @@
             aria-haspopup="true" aria-expanded="false" title="Pin actions">
         <i class="material-symbols-outlined">account_tree</i>
         <span class="pin-actions-fab-label">Actions</span>
-        {% if include_children %}<span class="pin-actions-fab-dot" title="Sub pin details are on"></span>{% endif %}
+        {% if include_children %}<span class="pin-actions-fab-dot" title="Child pin details are on"></span>{% endif %}
     </button>
 </div>
 <script>
@@ -1072,7 +1072,7 @@
 <script>
 
 
-    // -- Pin the "sub pin of" breadcrumb to the corner once it scrolls away --
+    // -- Pin the "child pin of" breadcrumb to the corner once it scrolls away --
     (function initPinParentBreadcrumbScroll() {
         const breadcrumb = document.querySelector('.pin-parent-breadcrumb');
         const header = document.querySelector('.app-nav');
@@ -1104,7 +1104,7 @@
             {
                 id: 'personal-detail-map', icon: 'add_location_alt', target: '#markup-pin-button',
                 eyebrow: 'Personal layer', title: 'Map entrances, hazards, routes, and notes for yourself',
-                body: 'The map toolbar lets you place private sub-pins, shapes, arrows, and labels on this exact location map.',
+                body: 'The map toolbar lets you place private detail pins, shapes, arrows, and labels on this exact location map.',
                 button: 'Add a detail', watchSelector: '#markup-pin-button',
                 action: function () { document.getElementById('markup-pin-button')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); setTimeout(() => document.getElementById('markup-pin-button')?.click(), 100 ); },
                 ready: function () { return !!document.getElementById('markup-pin-button'); },

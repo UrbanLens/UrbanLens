@@ -75,7 +75,7 @@ def _visit_dialog_context(pin: Pin, visit: PinVisit | None = None) -> dict[str, 
 def _render_visit_history(request: HttpRequest, pin: Pin) -> HttpResponse:
     """Render the visit history panel for a pin, paginated newest-first.
 
-    With ``?children=1`` (the pin page's "show sub pin details" toggle) the
+    With ``?children=1`` (the pin page's "show child pin details" toggle) the
     panel also lists visits logged on the pin's child pins (any depth), each
     labelled with the child pin it belongs to.
 

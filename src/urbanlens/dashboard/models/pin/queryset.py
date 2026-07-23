@@ -146,6 +146,23 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
     def by_updated_year(self, year):
         return self.filter(updated__year=year)
 
+    def modified_since(self, since) -> Self:
+        """Return pins created or edited at or after ``since``.
+
+        ``updated`` is ``auto_now``, so any save - create or edit - moves a pin
+        into this window. Deletions never appear here; delta-sync callers pair
+        this with ``PinTombstone.objects.deleted_since`` to learn about those.
+        Rides the ``idxdb_profile_update`` index when combined with a profile
+        filter.
+
+        Args:
+            since: Inclusive lower bound on the last-modified time.
+
+        Returns:
+            This queryset filtered to pins modified at or after ``since``.
+        """
+        return self.filter(updated__gte=since)
+
     def near_point(self, point: Point, radius_km: float) -> Self:
         """Return root pins whose location falls within ``radius_km`` of ``point``, closest first.
 

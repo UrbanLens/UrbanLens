@@ -116,7 +116,7 @@ class PinBulkMergeView(LoginRequiredMixin, View):
     """Merge selected pins: all but the target become the target's detail pins.
 
     The target becomes (or stays) the top-level pin; a target that's currently
-    a sub pin is promoted first (see the conflict check below).
+    a child pin is promoted first (see the conflict check below).
     """
 
     def post(self, request: HttpRequest, *args, **kwargs) -> HttpResponse:
@@ -135,7 +135,7 @@ class PinBulkMergeView(LoginRequiredMixin, View):
         profile = _request_profile(request)
         target = get_object_or_404(Pin.objects.filter(profile=profile), uuid=target_uuid)
         if target.parent_pin_id is not None:
-            # The target is itself a sub pin - promote it to top-level first, since
+            # The target is itself a child pin - promote it to top-level first, since
             # merging always makes the chosen target the new top-level pin.
             conflict = Pin.objects.filter(profile=profile, location_id=target.location_id, parent_pin__isnull=True).exclude(pk=target.pk).exists()
             if conflict:

@@ -39,7 +39,7 @@ def _make_location(**kwargs) -> Location:
 
 
 class DetailPinCreationTypeTests(TestCase):
-    """Creating a sub pin: blank type means "detect it", an explicit one is final."""
+    """Creating a child pin: blank type means "detect it", an explicit one is final."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -85,7 +85,7 @@ class DetailPinCreationTypeTests(TestCase):
 
 
 class DetailPinEditTypeTests(TestCase):
-    """Editing a sub pin: an omitted type is left entirely alone."""
+    """Editing a child pin: an omitted type is left entirely alone."""
 
     def setUp(self) -> None:
         super().setUp()

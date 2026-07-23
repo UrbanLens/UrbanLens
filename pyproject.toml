@@ -73,6 +73,8 @@ dependencies = [
     "overturemaps>=1.0.1",
     "filetype~=1.2.0",
     "clamd~=1.0.2",
+    "drf-spectacular>=0.30.0",
+    "django-oauth-toolkit>=3.3.0",
 ]
 
 [project.scripts]

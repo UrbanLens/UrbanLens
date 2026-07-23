@@ -1,6 +1,6 @@
 """Tests for pin deletion via ``DELETE /rest/pins/<uuid>/``.
 
-Covers ownership scoping, the sub-pin decision handshake (409 until the
+Covers ownership scoping, the child-pin decision handshake (409 until the
 client says whether children are deleted or kept), keep-mode promotion
 (including root-slot conflicts), and undo restoration of full subtrees at
 arbitrary nesting depth.

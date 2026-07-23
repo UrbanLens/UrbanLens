@@ -65,6 +65,12 @@ INSTALLED_APPS = [
     "corsheaders",
     "urbanlens.dashboard.apps.DashboardConfig",
     "social_django",
+    # OAuth2/OIDC provider for native clients (mobile/desktop apps) hitting the
+    # external API - browser sessions and PAT-style ApiKeys are unaffected.
+    "oauth2_provider",
+    # OpenAPI schema generation, served only for the external API surface
+    # (see external_api.schema's preprocessing hook).
+    "drf_spectacular",
 ]
 
 # Routes the websocket protocol (see UrbanLens/asgi.py); HTTP keeps using
@@ -354,6 +360,19 @@ STORAGES = {
 MEDIA_URL = "/media/"
 MEDIA_ROOT = os.path.join(PROJECT_ROOT, "media")
 
+# Authenticated media serving (dashboard.controllers.media.MediaGateView).
+# When nginx fronts the app (docker/staging/production), the gate view answers
+# authorized requests with an X-Accel-Redirect to the internal-only
+# /_protected_media/ location and nginx streams the file; in local dev
+# (runserver, no nginx) the view streams the file itself via FileResponse.
+# Override with UL_MEDIA_X_ACCEL if a deployment diverges from this default
+# (e.g. a development-flagged docker stack that still runs behind nginx and
+# wants the more efficient handoff).
+MEDIA_X_ACCEL = _env_bool("UL_MEDIA_X_ACCEL", not _is_dev)
+# Must match the `location /_protected_media/` block in
+# src/urbanlens/config/nginx/django.conf.
+MEDIA_X_ACCEL_PREFIX = "/_protected_media/"
+
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
@@ -506,6 +525,39 @@ REST_FRAMEWORK = {
         # with a user's other keys.
         "external_api_key": "120/hour",
     },
+    # Only consulted by views whose schema is actually generated - the
+    # preprocessing hook in external_api.schema limits that to the external API.
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+}
+
+# OpenAPI schema for the external API only - the internal HTMX/REST surface has
+# no public contract and is deliberately excluded (external_api.schema).
+SPECTACULAR_SETTINGS = {
+    "TITLE": "UrbanLens External API",
+    "DESCRIPTION": "Versioned API for external applications and native clients holding a user's API key or OAuth2 token.",
+    "VERSION": "v1",
+    "SERVE_INCLUDE_SCHEMA": False,
+    "PREPROCESSING_HOOKS": ["urbanlens.dashboard.external_api.schema.preprocess_external_api_only"],
+}
+
+# OAuth2 provider (django-oauth-toolkit) - the auth path for native clients
+# (the mobile app registers as a *public* client and must use PKCE; PAT-style
+# ApiKeys remain for simple server-to-server integrations). Scope names
+# deliberately mirror dashboard.models.account.ApiKeyScope values so
+# external_api.permissions.HasApiKeyScope can enforce either credential kind
+# with the same required_scopes declarations.
+OAUTH2_PROVIDER = {
+    "PKCE_REQUIRED": True,
+    "SCOPES": {
+        "profile:read": "Read your profile UUID",
+        "pins:read": "Read your pins (including deletions, for sync)",
+        "pins:write": "Create pins on your behalf",
+        "push:manage": "Register and remove this device's push notifications",
+    },
+    "DEFAULT_SCOPES": ["profile:read", "pins:read", "pins:write", "push:manage"],
+    "ACCESS_TOKEN_EXPIRE_SECONDS": 3600,
+    "REFRESH_TOKEN_EXPIRE_SECONDS": 60 * 60 * 24 * 90,
+    "ROTATE_REFRESH_TOKEN": True,
 }
 
 LOG_DIR = os.getenv("UL_LOG_DIR", os.path.join(PROJECT_ROOT, "logs"))

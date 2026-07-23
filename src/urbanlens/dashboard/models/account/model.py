@@ -167,7 +167,9 @@ class ApiKeyScope(TextChoices):
     """Capabilities an ``ApiKey`` can grant to the external application holding it."""
 
     PROFILE_READ = "profile:read", "Read your profile UUID"
+    PINS_READ = "pins:read", "Read your pins (including deletions, for sync)"
     PINS_WRITE = "pins:write", "Create pins on your behalf"
+    PUSH_MANAGE = "push:manage", "Register and remove this device's push notifications"
 
 
 def _default_api_key_scopes() -> list[str]:
@@ -178,7 +180,7 @@ def _default_api_key_scopes() -> list[str]:
     what gets written here; ``external_api.permissions`` already checks
     per-key scopes rather than trusting the mere existence of a valid key.
     """
-    return [ApiKeyScope.PROFILE_READ.value, ApiKeyScope.PINS_WRITE.value]
+    return [ApiKeyScope.PROFILE_READ.value, ApiKeyScope.PINS_READ.value, ApiKeyScope.PINS_WRITE.value, ApiKeyScope.PUSH_MANAGE.value]
 
 
 class ApiKey(DashboardModel):

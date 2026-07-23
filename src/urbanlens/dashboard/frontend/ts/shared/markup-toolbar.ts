@@ -34,7 +34,7 @@ export interface MarkupItem {
     };
     label?: string;
     /** Name of the child pin this markup belongs to, when it was loaded via
-     * the pin page's "show sub pin details" toggle. Display-only here. */
+     * the pin page's "show child pin details" toggle. Display-only here. */
     owner_name?: string;
     color: string;
     border_color?: string | null;
@@ -379,7 +379,7 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
         // Clicking any interactive layer opens the edit dialog; also bind a
         // tooltip showing the label (if any) on hover. Markup belonging to a
         // child pin (owner_name) is display-only here - no edit on click, and
-        // the tooltip says which sub pin it comes from.
+        // the tooltip says which child pin it comes from.
         layers.forEach((l) => {
             const interactive = l as L.Layer & { on?: L.Evented["on"]; bindTooltip?: L.Layer["bindTooltip"] };
             if (!interactive.on) return;

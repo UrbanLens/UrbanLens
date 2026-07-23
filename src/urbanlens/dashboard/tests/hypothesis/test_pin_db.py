@@ -162,7 +162,7 @@ class GetNearbyOrCreateCreationTests(TestCase):
 # -- PinQuerySet structural filters --------------------------------------------
 
 class PinQuerySetRootPinsTests(TestCase):
-    """root_pins() must exclude all sub-pin variants."""
+    """root_pins() must exclude all child-pin variants."""
 
     profile: Profile
 

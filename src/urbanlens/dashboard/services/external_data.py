@@ -647,8 +647,9 @@ def schedule_panel_fetch(source_key: str, pin: Pin) -> bool:
     Returns:
         True when a fetch is in flight (newly scheduled or already running) --
         the caller should return a polling placeholder. False when the source
-        is unknown (e.g. its plugin was disabled) or currently suppressed
-        after a failure or disable -- the caller should give up quietly (204).
+        is unknown (e.g. its plugin was disabled), currently suppressed after
+        a failure or disable, or the Celery broker was unreachable -- the
+        caller should give up quietly (204).
     """
     source = get_panel_source(source_key)
     if source is None:
@@ -660,10 +661,17 @@ def schedule_panel_fetch(source_key: str, pin: Pin) -> bool:
         logger.debug("schedule_panel_fetch: %s for pin %s is suppressed, skipping", source_key, pin.pk)
         return False
     if cache.add(source.flight_key(pin), 1, FLIGHT_TTL_SECONDS):
+        from urbanlens.dashboard.services.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import fetch_panel_source
 
         logger.debug("schedule_panel_fetch: dispatching %s for pin %s to queue '%s'", source_key, pin.pk, source.queue)
-        fetch_panel_source.apply_async(args=[source_key, pin.pk], queue=source.queue)
+        if safely_enqueue_task(fetch_panel_source, source_key, pin.pk, queue=source.queue) is None:
+            # Broker down: a raised error here would 500 every panel on the pin
+            # detail page at once. Release the just-claimed single-flight marker
+            # so the next poll retries the enqueue instead of waiting out
+            # FLIGHT_TTL_SECONDS behind a task that was never queued.
+            cache.delete(source.flight_key(pin))
+            return False
     return True
 
 

@@ -5,8 +5,6 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from django.conf import settings as django_settings
-from django.conf.urls.static import static
 from django.contrib import admin
 from django.contrib.auth import views as auth_views
 from django.http import HttpResponseServerError
@@ -33,6 +31,7 @@ from urbanlens.dashboard.controllers.account import (
 )
 from urbanlens.dashboard.controllers.health import HealthController
 from urbanlens.dashboard.controllers.index import IndexController
+from urbanlens.dashboard.controllers.media import MediaGateView
 from urbanlens.dashboard.urls import urlpatterns as dashboard_urls
 
 if TYPE_CHECKING:
@@ -92,9 +91,21 @@ urlpatterns = [
     path("verify-email/<uuid:token>/", VerifyEmailView.as_view(), name="verify_email"),
     path("resend-verification/", ResendVerificationView.as_view(), name="resend_verification"),
     path("dashboard/", include(dashboard_urls), name="dashboard"),
+    # OAuth2 provider (django-oauth-toolkit): authorize/token/revoke plus the
+    # logged-in application-management views. Native clients (the mobile app)
+    # register a *public* application here and authenticate with PKCE; the
+    # tokens are honored only by the external API (see external_api.views).
+    path("oauth/", include("oauth2_provider.urls", namespace="oauth2_provider")),
     path("health/", HealthController.as_view({"get": "check"}), name="health"),
     path("", IndexController.as_view(), name="index"),
-    *static(django_settings.MEDIA_URL, document_root=django_settings.MEDIA_ROOT),
+    # Authenticated media gate - replaces the old unconditional
+    # `*static(MEDIA_URL, ...)` entry (which only ever served files when
+    # DEBUG=True, leaving production /media/ to an unauthenticated nginx
+    # alias). Every /media/... request, dev and production alike, now goes
+    # through MediaGateView, which authenticates + authorizes and then either
+    # streams the file (dev) or X-Accel-Redirects to nginx (production).
+    # Must stay ahead of the 404 catch-all below.
+    path("media/<path:path>", MediaGateView.as_view(), name="media"),
     # 404 catch-all - must be last. Anything not explicitly routed above (including
     # Django/library default URLs we haven't deliberately wired up) lands here.
     re_path(".*", _render_404_page, name="404"),

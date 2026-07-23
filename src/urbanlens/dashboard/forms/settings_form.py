@@ -340,7 +340,7 @@ class MapDisplayForm(forms.ModelForm):
         required=False,
         widget=forms.CheckboxInput(attrs={"class": "settings-checkbox"}),
         label="Pin Organization Suggestions",
-        help_text="When you open a property with several buildings, offer to add a sub pin for each one and to nest any of your existing pins that stand inside it.",
+        help_text="When you open a property with several buildings, offer to add a child pin for each one and to nest any of your existing pins that stand inside it.",
     )
 
     class Meta:

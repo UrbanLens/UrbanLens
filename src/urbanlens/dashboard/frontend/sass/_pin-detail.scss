@@ -5264,9 +5264,9 @@ body.page-location-details .pin-detail-grid {
     font-family: var(--ul-font-family, sans-serif);
 }
 
-// -- Pin hierarchy: breadcrumb, floating actions menu, sub-pin content labels --
+// -- Pin hierarchy: breadcrumb, floating actions menu, child-pin content labels --
 
-// "Sub pin of {parent}" breadcrumb at the top of a child pin's detail page.
+// "Child pin of {parent}" breadcrumb at the top of a child pin's detail page.
 .pin-parent-breadcrumb {
     display: inline-flex;
     align-items: center;
@@ -5340,7 +5340,7 @@ body.page-location-details .pin-detail-grid {
     }
 }
 
-// Small indicator dot on the FAB while "sub pin details" is on.
+// Small indicator dot on the FAB while "child pin details" is on.
 .pin-actions-fab-dot {
     position: absolute;
     top: 4px;
@@ -5421,7 +5421,7 @@ body.page-location-details .pin-detail-grid {
     }
 }
 
-// Gallery: name ribbon across photos that belong to a sub pin.
+// Gallery: name ribbon across photos that belong to a child pin.
 .gallery-child-ribbon {
     position: absolute;
     left: 0;
@@ -5440,7 +5440,7 @@ body.page-location-details .pin-detail-grid {
     pointer-events: none;
 }
 
-// Visit history: chip linking a visit row to the sub pin it was logged on.
+// Visit history: chip linking a visit row to the child pin it was logged on.
 .visit-child-chip {
     display: inline-flex;
     align-items: center;
@@ -5482,7 +5482,7 @@ body.page-location-details .pin-detail-grid {
     }
 }
 
-// Share detail page: bundled sub pin list.
+// Share detail page: bundled child pin list.
 .pin-share-bundle {
     margin: .75rem 0;
 }

@@ -11,17 +11,22 @@ services.pin_creation.create_pin_for_profile call.
 
 from __future__ import annotations
 
+from datetime import timedelta
 from unittest import mock
+from uuid import uuid4
 
 from django.contrib.auth.models import User
 from django.urls import reverse
+from django.utils import timezone
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope, ApiKeyUsageLog
 from urbanlens.dashboard.models.pin.model import Pin
+from urbanlens.dashboard.models.pin_tombstone import PinTombstone
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.api_keys import generate_api_key
+from urbanlens.dashboard.services.pin_creation import create_pin_for_profile
 
 
 def _bearer(raw_key: str) -> dict:
@@ -77,7 +82,7 @@ class PinCreateViewTests(TestCase):
         baker.make(User)  # first user auto-promoted to bootstrap site admin
         self.user = baker.make(User)
         self.profile = Profile.objects.get(user=self.user)
-        self.url = reverse("external_api:pins.create")
+        self.url = reverse("external_api:pins")
         _api_key, self.raw_key = generate_api_key(self.user, "Zapier")
 
     def _post(self, payload: dict):
@@ -173,13 +178,13 @@ class ApiKeyUsageLoggingTests(TestCase):
 
     def test_successful_pin_create_call_logs_the_endpoint(self) -> None:
         self.client.post(
-            reverse("external_api:pins.create"),
+            reverse("external_api:pins"),
             data={"name": "Old Mill", "latitude": 42.5, "longitude": -73.5},
             content_type="application/json",
             **_bearer(self.raw_key),
         )
         entry = ApiKeyUsageLog.objects.for_api_key(self.api_key).get()
-        self.assertEqual(entry.endpoint, reverse("external_api:pins.create"))
+        self.assertEqual(entry.endpoint, reverse("external_api:pins"))
 
     def test_invalid_key_is_never_logged(self) -> None:
         self.client.get(reverse("external_api:whoami"), **_bearer("ulk_not_a_real_key"))
@@ -194,10 +199,230 @@ class ApiKeyUsageLoggingTests(TestCase):
         """Scope enforcement happens after authentication - the attempt itself is real activity."""
         ApiKey.objects.filter(pk=self.api_key.pk).update(scopes=[ApiKeyScope.PROFILE_READ.value])
         response = self.client.post(
-            reverse("external_api:pins.create"),
+            reverse("external_api:pins"),
             data={"name": "Old Mill", "latitude": 42.5, "longitude": -73.5},
             content_type="application/json",
             **_bearer(self.raw_key),
         )
         self.assertEqual(response.status_code, 403)
         self.assertTrue(ApiKeyUsageLog.objects.for_api_key(self.api_key).exists())
+
+
+class PinSyncViewTests(TestCase):
+    """GET pins/ delta-syncs the key owner's pins: window, cursor, watermark, scope."""
+
+    def setUp(self) -> None:
+        baker.make(User)  # first user auto-promoted to bootstrap site admin
+        self.user = baker.make(User)
+        self.profile = Profile.objects.get(user=self.user)
+        self.url = reverse("external_api:pins")
+        _api_key, self.raw_key = generate_api_key(self.user, "Sync client")
+
+    def _get(self, **params):
+        return self.client.get(self.url, data=params, **_bearer(self.raw_key))
+
+    def _make_pin(self, name: str, latitude: float, longitude: float) -> Pin:
+        return create_pin_for_profile(self.profile, name=name, latitude=latitude, longitude=longitude).pin
+
+    def test_requires_pins_read_scope(self) -> None:
+        """GET and POST on the same path demand different scopes - a write-only key cannot read."""
+        ApiKey.objects.filter(user=self.user).update(scopes=[ApiKeyScope.PINS_WRITE.value])
+        response = self._get()
+        self.assertEqual(response.status_code, 403)
+
+    def test_write_scope_alone_cannot_be_used_to_read_via_post_scope(self) -> None:
+        """The inverse asymmetry: a read-only key cannot create."""
+        ApiKey.objects.filter(user=self.user).update(scopes=[ApiKeyScope.PINS_READ.value])
+        response = self.client.post(self.url, data={"latitude": 1, "longitude": 1}, content_type="application/json", **_bearer(self.raw_key))
+        self.assertEqual(response.status_code, 403)
+
+    def test_empty_sync_returns_no_pins_and_a_watermark(self) -> None:
+        response = self._get()
+        self.assertEqual(response.status_code, 200, response.content)
+        body = response.json()
+        self.assertEqual(body["pins"], [])
+        self.assertIsNone(body["next_cursor"])
+        self.assertTrue(body["sync_watermark"])
+
+    def test_full_sync_includes_sync_fields(self) -> None:
+        pin = self._make_pin("Old Mill", 42.5, -73.5)
+        body = self._get().json()
+        self.assertEqual(len(body["pins"]), 1)
+        payload = body["pins"][0]
+        self.assertEqual(payload["uuid"], str(pin.uuid))
+        self.assertIsNone(payload["parent_uuid"])
+        self.assertEqual(payload["pin_type"], pin.pin_type)
+        self.assertTrue(payload["updated"])
+        self.assertTrue(payload["created"])
+        self.assertAlmostEqual(float(payload["latitude"]), 42.5, places=3)
+
+    def test_other_users_pins_are_never_served(self) -> None:
+        other = baker.make(User)
+        create_pin_for_profile(Profile.objects.get(user=other), name="Not yours", latitude=1.0, longitude=1.0)
+        body = self._get().json()
+        self.assertEqual(body["pins"], [])
+
+    def test_cursor_pages_through_every_pin_without_duplicates(self) -> None:
+        expected = {str(self._make_pin(f"Pin {i}", 40.0 + i, -73.0).uuid) for i in range(3)}
+        seen: list[str] = []
+        cursor = None
+        for _ in range(5):
+            params = {"limit": 1}
+            if cursor:
+                params["cursor"] = cursor
+            body = self._get(**params).json()
+            seen.extend(p["uuid"] for p in body["pins"])
+            cursor = body["next_cursor"]
+            if cursor is None:
+                break
+        self.assertEqual(len(seen), len(set(seen)))
+        self.assertEqual(set(seen), expected)
+
+    def test_modified_since_excludes_unchanged_pins(self) -> None:
+        old_pin = self._make_pin("Untouched", 42.5, -73.5)
+        Pin.objects.filter(pk=old_pin.pk).update(updated=timezone.now() - timedelta(days=2))
+        fresh_pin = self._make_pin("Fresh", 43.5, -74.5)
+        body = self._get(modified_since=(timezone.now() - timedelta(days=1)).isoformat()).json()
+        uuids = [p["uuid"] for p in body["pins"]]
+        self.assertEqual(uuids, [str(fresh_pin.uuid)])
+
+    def test_include_total_counts_the_whole_window(self) -> None:
+        for i in range(2):
+            self._make_pin(f"Pin {i}", 40.0 + i, -73.0)
+        body = self._get(limit=1, include_total="1").json()
+        self.assertEqual(body["total"], 2)
+        self.assertEqual(len(body["pins"]), 1)
+
+    def test_garbage_cursor_is_a_400_not_a_500(self) -> None:
+        response = self._get(cursor="not-a-cursor")
+        self.assertEqual(response.status_code, 400)
+
+    def test_child_pins_are_served_with_their_parent_uuid(self) -> None:
+        parent = self._make_pin("Campus", 42.5, -73.5)
+        child = create_pin_for_profile(self.profile, name="Entrance", latitude=42.5001, longitude=-73.5001).pin
+        Pin.objects.filter(pk=child.pk).update(parent_pin=parent)
+        by_uuid = {p["uuid"]: p for p in self._get().json()["pins"]}
+        self.assertEqual(by_uuid[str(child.uuid)]["parent_uuid"], str(parent.uuid))
+        self.assertIsNone(by_uuid[str(parent.uuid)]["parent_uuid"])
+
+
+class PinTombstoneTests(TestCase):
+    """Deleting a pin durably records a tombstone; the deleted feed serves it."""
+
+    def setUp(self) -> None:
+        baker.make(User)  # first user auto-promoted to bootstrap site admin
+        self.user = baker.make(User)
+        self.profile = Profile.objects.get(user=self.user)
+        self.url = reverse("external_api:pins.deleted")
+        _api_key, self.raw_key = generate_api_key(self.user, "Sync client")
+
+    def _get(self, **params):
+        return self.client.get(self.url, data=params, **_bearer(self.raw_key))
+
+    def _make_pin(self, name: str, latitude: float, longitude: float) -> Pin:
+        return create_pin_for_profile(self.profile, name=name, latitude=latitude, longitude=longitude).pin
+
+    def test_single_delete_writes_a_tombstone(self) -> None:
+        pin = self._make_pin("Doomed", 42.5, -73.5)
+        pin_uuid = pin.uuid
+        pin.delete()
+        tombstone = PinTombstone.objects.get(pin_uuid=pin_uuid)
+        self.assertEqual(tombstone.profile_id, self.profile.pk)
+
+    def test_queryset_delete_writes_tombstones_for_every_pin(self) -> None:
+        uuids = {self._make_pin(f"Pin {i}", 40.0 + i, -73.0).uuid for i in range(2)}
+        Pin.objects.filter(profile=self.profile).delete()
+        self.assertEqual(set(PinTombstone.objects.values_list("pin_uuid", flat=True)), uuids)
+
+    def test_deleting_a_parent_tombstones_its_cascaded_children_too(self) -> None:
+        parent = self._make_pin("Campus", 42.5, -73.5)
+        child = create_pin_for_profile(self.profile, name="Entrance", latitude=42.6, longitude=-73.6).pin
+        Pin.objects.filter(pk=child.pk).update(parent_pin=parent)
+        expected = {parent.uuid, child.uuid}
+        parent.delete()
+        self.assertEqual(set(PinTombstone.objects.values_list("pin_uuid", flat=True)), expected)
+
+    def test_account_deletion_writes_no_tombstones_and_does_not_crash(self) -> None:
+        """A profile/user cascade must not insert rows FK'ing the mid-delete profile."""
+        self._make_pin("Goes with the account", 42.5, -73.5)
+        self.user.delete()
+        self.assertFalse(PinTombstone.objects.exists())
+
+    def test_deleted_feed_serves_the_tombstone(self) -> None:
+        pin = self._make_pin("Doomed", 42.5, -73.5)
+        pin_uuid = str(pin.uuid)
+        pin.delete()
+        body = self._get().json()
+        self.assertEqual([t["pin_uuid"] for t in body["tombstones"]], [pin_uuid])
+        self.assertTrue(body["tombstones"][0]["deleted_at"])
+
+    def test_deleted_since_excludes_older_tombstones(self) -> None:
+        old_pin = self._make_pin("Long gone", 42.5, -73.5)
+        old_uuid = old_pin.uuid
+        old_pin.delete()
+        PinTombstone.objects.filter(pin_uuid=old_uuid).update(created=timezone.now() - timedelta(days=2))
+        fresh_pin = self._make_pin("Just deleted", 43.5, -74.5)
+        fresh_uuid = str(fresh_pin.uuid)
+        fresh_pin.delete()
+        body = self._get(deleted_since=(timezone.now() - timedelta(days=1)).isoformat()).json()
+        self.assertEqual([t["pin_uuid"] for t in body["tombstones"]], [fresh_uuid])
+
+    def test_requires_pins_read_scope(self) -> None:
+        ApiKey.objects.filter(user=self.user).update(scopes=[ApiKeyScope.PINS_WRITE.value])
+        response = self._get()
+        self.assertEqual(response.status_code, 403)
+
+    def test_other_users_deletions_are_never_served(self) -> None:
+        other = baker.make(User)
+        other_pin = create_pin_for_profile(Profile.objects.get(user=other), name="Not yours", latitude=1.0, longitude=1.0).pin
+        other_pin.delete()
+        body = self._get().json()
+        self.assertEqual(body["tombstones"], [])
+
+
+class PinCreateIdempotencyTests(TestCase):
+    """A caller-generated uuid makes POST pins/ safe to retry from an offline outbox."""
+
+    def setUp(self) -> None:
+        baker.make(User)  # first user auto-promoted to bootstrap site admin
+        self.user = baker.make(User)
+        self.profile = Profile.objects.get(user=self.user)
+        self.url = reverse("external_api:pins")
+        _api_key, self.raw_key = generate_api_key(self.user, "Outbox client")
+
+    def _post(self, payload: dict):
+        return self.client.post(self.url, data=payload, content_type="application/json", **_bearer(self.raw_key))
+
+    def test_client_uuid_is_stamped_onto_the_created_pin(self) -> None:
+        client_uuid = str(uuid4())
+        response = self._post({"name": "Old Mill", "latitude": 42.5, "longitude": -73.5, "uuid": client_uuid})
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertEqual(response.json()["uuid"], client_uuid)
+        self.assertTrue(response.json()["created"])
+        self.assertTrue(Pin.objects.filter(uuid=client_uuid, profile=self.profile).exists())
+
+    def test_replaying_the_same_uuid_returns_the_existing_pin_without_a_duplicate(self) -> None:
+        client_uuid = str(uuid4())
+        payload = {"name": "Old Mill", "latitude": 42.5, "longitude": -73.5, "uuid": client_uuid}
+        first = self._post(payload)
+        self.assertEqual(first.status_code, 201, first.content)
+        replay = self._post(payload)
+        self.assertEqual(replay.status_code, 200, replay.content)
+        self.assertEqual(replay.json()["uuid"], client_uuid)
+        self.assertFalse(replay.json()["created"])
+        self.assertEqual(Pin.objects.filter(profile=self.profile).count(), 1)
+
+    def test_a_uuid_owned_by_another_profile_is_rejected_without_leaking_it(self) -> None:
+        other = baker.make(User)
+        other_pin = create_pin_for_profile(Profile.objects.get(user=other), name="Theirs", latitude=1.0, longitude=1.0).pin
+        response = self._post({"name": "Mine", "latitude": 42.5, "longitude": -73.5, "uuid": str(other_pin.uuid)})
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(Pin.objects.filter(profile=self.profile).count(), 0)
+
+    def test_duplicate_location_without_a_uuid_is_a_clean_400(self) -> None:
+        """The one-root-pin-per-location constraint surfaces as a friendly error, not a 500."""
+        first = self._post({"name": "Old Mill", "latitude": 42.5, "longitude": -73.5})
+        self.assertEqual(first.status_code, 201, first.content)
+        duplicate = self._post({"name": "Old Mill again", "latitude": 42.5, "longitude": -73.5})
+        self.assertEqual(duplicate.status_code, 400)
+        self.assertIn("already have a pin", duplicate.json()["error"])

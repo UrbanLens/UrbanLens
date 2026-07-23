@@ -267,7 +267,7 @@ class PinShareCreateView(LoginRequiredMixin, View):
 
         base_message = f"{sender.username} shared {pin.display_label} with you."
         if bundled_count:
-            base_message += f" It comes with {bundled_count} sub pin{'s' if bundled_count != 1 else ''}."
+            base_message += f" It comes with {bundled_count} child pin{'s' if bundled_count != 1 else ''}."
         if already_pinned:
             base_message += " You already have this location pinned."
         notification = NotificationLog.objects.create(
@@ -375,7 +375,7 @@ def apply_pin_share_response(share: PinShare, action: str) -> tuple[Pin | None, 
             bundled_count = _accept_bundled_shares(share, target_pin)
             share.status = PinShareStatus.ACCEPTED
             share.save(update_fields=["status", "updated"])
-        message = f"Pin added to your map with {bundled_count} sub pin{'s' if bundled_count != 1 else ''}." if bundled_count else "Pin added to your map."
+        message = f"Pin added to your map with {bundled_count} child pin{'s' if bundled_count != 1 else ''}." if bundled_count else "Pin added to your map."
     elif action == "reject":
         share.status = PinShareStatus.REJECTED
         share.save(update_fields=["status", "updated"])

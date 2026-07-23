@@ -41,7 +41,7 @@
 
     {% if bundled_shares %}
     <div class="pin-share-bundle">
-      <h3 class="pin-share-section-title"><i class="material-symbols-outlined">subdirectory_arrow_right</i> Includes {{ bundled_shares|length }} sub pin{{ bundled_shares|length|pluralize }}</h3>
+      <h3 class="pin-share-section-title"><i class="material-symbols-outlined">subdirectory_arrow_right</i> Includes {{ bundled_shares|length }} child pin{{ bundled_shares|length|pluralize }}</h3>
       <p class="pin-share-section-hint">Accepting adds these nested pins to your map along with the main pin.</p>
       <ul class="pin-share-bundle-list">
         {% for child_share in bundled_shares %}

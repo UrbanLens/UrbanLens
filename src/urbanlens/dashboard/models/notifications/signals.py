@@ -92,3 +92,31 @@ def push_notification_to_browser(sender: type[NotificationLog], instance: Notifi
                     logger.warning("Live push of notification %s to %s failed; it will appear on the next refresh", payload["id"], group, exc_info=True)
 
         transaction.on_commit(_send)
+
+
+@receiver(post_save, sender=NotificationLog, dispatch_uid="notification_native_push")
+def enqueue_native_push(sender: type[NotificationLog], instance: NotificationLog, created: bool, **kwargs: Any) -> None:
+    """Enqueue delivery of a new notification to the recipient's native devices.
+
+    The WebSocket broadcast above only reaches open browser tabs; a native app
+    in the background needs a real push (UnifiedPush/ntfy - see
+    ``services.push``). Runs after commit so the Celery worker is guaranteed
+    to see the row, and the task itself exits immediately for profiles with no
+    registered devices.
+
+    Args:
+        sender: The ``NotificationLog`` model class.
+        instance: The notification that was saved.
+        created: True when the save was an insert.
+        **kwargs: Remaining signal arguments (unused).
+    """
+    if created and instance.profile_id:
+        notification_id = instance.pk
+
+        def _enqueue() -> None:
+            from urbanlens.dashboard.services.celery import safely_enqueue_task
+            from urbanlens.dashboard.tasks import dispatch_native_push
+
+            safely_enqueue_task(dispatch_native_push, notification_id)
+
+        transaction.on_commit(_enqueue)

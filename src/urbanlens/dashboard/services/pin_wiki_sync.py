@@ -190,7 +190,7 @@ def send_pins_to_wiki(parent_pin: Pin, children: list[Pin], profile: Profile) ->
         WikiEdit.objects.create(
             wiki=wiki,
             editor=profile,
-            changes={"child_wikis_imported": {"from": None, "to": f"{created} marker{'s' if created != 1 else ''} from your sub pins"}},
+            changes={"child_wikis_imported": {"from": None, "to": f"{created} marker{'s' if created != 1 else ''} from your child pins"}},
         )
     return created
 

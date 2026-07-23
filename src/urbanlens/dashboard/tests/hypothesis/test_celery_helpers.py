@@ -85,6 +85,12 @@ class SafelyEnqueueTaskTests(SimpleTestCase):
         self.assertEqual(safely_enqueue_task(task, 1, countdown=30, named=True), "async-result")
         task.apply_async.assert_called_once_with(args=(1,), kwargs={"named": True}, countdown=30)
 
+    def test_uses_apply_async_with_queue(self) -> None:
+        task = mock.Mock()
+        task.apply_async.return_value = "async-result"
+        self.assertEqual(safely_enqueue_task(task, 1, queue="panel_fetch"), "async-result")
+        task.apply_async.assert_called_once_with(args=(1,), kwargs={}, queue="panel_fetch")
+
     def test_returns_none_on_broker_exception(self) -> None:
         task = mock.Mock(name="broken_task")
         task.apply_async.side_effect = KombuError("broker down")

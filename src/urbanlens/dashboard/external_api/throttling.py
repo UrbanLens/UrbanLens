@@ -34,4 +34,7 @@ class ApiKeyRateThrottle(SimpleRateThrottle):
         api_key = getattr(request, "auth", None)
         if api_key is None:
             return None
-        return self.cache_format % {"scope": self.scope, "ident": api_key.pk}
+        # The type name disambiguates the pk namespace - an ApiKey and an
+        # OAuth2 AccessToken can share a pk, and each credential deserves its
+        # own budget for the same reason two ApiKeys do.
+        return self.cache_format % {"scope": self.scope, "ident": f"{type(api_key).__name__}:{api_key.pk}"}

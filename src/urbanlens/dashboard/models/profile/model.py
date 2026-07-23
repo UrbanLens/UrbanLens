@@ -354,7 +354,7 @@ class Profile(abstract.PublicDashboardModel):
     # Off silences the suggestion everywhere at once; declining it on a single
     # pin instead is per-pin and permanent (Pin.restructure_offer_dismissed).
     # See services.pin_restructure.
-    suggest_pin_restructure = BooleanField(default=True, help_text="Offer to organize pins into buildings and sub pins when you open a property that has several.")
+    suggest_pin_restructure = BooleanField(default=True, help_text="Offer to organize pins into buildings and child pins when you open a property that has several.")
 
     # Default ordering for the pin detail page's Media gallery. "relevant"
     # surfaces items this user has explicitly marked relevant first (falling

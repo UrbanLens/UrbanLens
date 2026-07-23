@@ -153,7 +153,7 @@ class PanelSourceTests(TestCase):
         self.assertTrue(self.source.gate(self.pin))
 
     def test_gate_rejects_a_child_pin(self) -> None:
-        """A sub pin marks one building; it has no buildings of its own to list."""
+        """A child pin marks one building; it has no buildings of its own to list."""
         child = baker.make(Pin, profile=self.profile, location=_make_location(), parent_pin=self.pin)
         self.assertFalse(self.source.gate(child))
 

@@ -548,7 +548,7 @@
 }
 // -- Buildings on this property ------------------------------------------------
 // Every structure known to stand on the parcel (see plugins.builtin.parcel_buildings),
-// on both the pin detail page and the wiki. Rows that already have a sub pin are
+// on both the pin detail page and the wiki. Rows that already have a child pin are
 // linked and flagged; the rest are what the import button below the list creates.
 .parcel-buildings {
     .card__body {

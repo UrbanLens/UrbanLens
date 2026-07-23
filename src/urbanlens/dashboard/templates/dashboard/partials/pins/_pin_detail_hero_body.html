@@ -20,7 +20,7 @@ in context, plus the wiki/linking context used by the overview panel.
     <div class="pin-detail-hero-main">
         {% if pin.parent_pin %}
         <p class="ul-page-hero__eyebrow">
-            <i class="material-symbols-outlined">subdirectory_arrow_right</i> Sub-pin
+            <i class="material-symbols-outlined">subdirectory_arrow_right</i> Child pin
         </p>
         <h1 id="pin-detail-hero-title" class="ul-page-hero__title">
             <a class="pin-detail-hero-parent-link" href="{% url 'pin.details' pin.parent_pin.slug|default:pin.parent_pin.uuid %}"

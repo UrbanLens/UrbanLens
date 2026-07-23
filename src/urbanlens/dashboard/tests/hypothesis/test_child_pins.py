@@ -1,6 +1,6 @@
 """Tests for child (sub) pin functionality: merge property retention, the main
 map's Child Pins layer, jump-to-pin search coverage, detaching a child pin, the
-pin page's "show sub pin details" toggle endpoints, share bundles, and the
+pin page's "show child pin details" toggle endpoints, share bundles, and the
 Visited-label propagation to ancestors."""
 
 from __future__ import annotations
@@ -531,7 +531,7 @@ class VisitHistoryChildrenTests(TestCase):
 
 
 class PinShareBundleTests(TestCase):
-    """Sharing with include_children bundles every sub pin as its own share."""
+    """Sharing with include_children bundles every child pin as its own share."""
 
     def setUp(self) -> None:
         self.sender_user = baker.make(User)
@@ -592,7 +592,7 @@ class PinShareBundleTests(TestCase):
 
 
 class PinShareSelectedChildrenTests(TestCase):
-    """Sharing a specific subset of sub pins - the detail page's multi-select
+    """Sharing a specific subset of child pins - the detail page's multi-select
     toolbar's "Share" action - rather than the "share every descendant" checkbox.
     """
 

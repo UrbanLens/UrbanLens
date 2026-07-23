@@ -15,6 +15,8 @@ from dataclasses import dataclass, field
 import logging
 from typing import TYPE_CHECKING
 
+from django.db import IntegrityError, transaction
+
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
@@ -22,6 +24,7 @@ from urbanlens.dashboard.services.locations.geocoding import get_pin_by_address
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+    from uuid import UUID
 
     from django.core.files.uploadedfile import UploadedFile
 
@@ -55,6 +58,9 @@ class PinCreationResult:
     #: callers only need to act on this when there's more than one, meaning the
     #: point is ambiguous between two or more distinct places.
     all_locations: list[Location] = field(default_factory=list)
+    #: False when ``client_uuid`` matched an existing pin and the call was an
+    #: idempotent replay - nothing was created and no enrichment was enqueued.
+    created: bool = True
 
 
 def create_pin_for_profile(
@@ -72,6 +78,7 @@ def create_pin_for_profile(
     category_ids: Sequence[str] = (),
     google_place_id: str | None = None,
     place_canonical_name: str | None = None,
+    client_uuid: UUID | None = None,
 ) -> PinCreationResult:
     """Create a Pin for a profile from raw, untrusted-shaped input.
 
@@ -98,16 +105,28 @@ def create_pin_for_profile(
         category_ids: Category-kind label ids to attach when ``label_ids`` wasn't given.
         google_place_id: A Google Place id to link on both the pin and location.
         place_canonical_name: Canonical name to seed a newly-created Location with.
+        client_uuid: A caller-generated uuid making the create idempotent: when a
+            pin with this uuid already belongs to ``profile``, that pin is
+            returned (``result.created`` False) instead of creating a duplicate.
+            The external API's offline-outbox clients retry creates until
+            acknowledged, so the same submission may legitimately arrive twice.
 
     Returns:
-        The created pin plus every Location match at this point.
+        The created (or, for an idempotent replay, existing) pin plus every
+        Location match at this point.
 
     Raises:
         PinCreationError: Neither coordinates nor a usable address were given,
-            or the address couldn't be geocoded.
+            the address couldn't be geocoded, ``client_uuid`` is already used
+            by a pin that isn't this profile's, or the profile already has a
+            pin at this exact location.
         PinCreationForbiddenError: An address needed geocoding but external lookups
             are turned off for this profile.
     """
+    if client_uuid is not None:
+        existing = Pin.objects.filter(profile=profile, uuid=client_uuid).select_related("location").first()
+        if existing is not None:
+            return PinCreationResult(pin=existing, all_locations=[existing.location], created=False)
     # An unset coordinate arrives as None or "" (e.g. the map's blank hidden
     # input) - normalize both to None so the checks below can use `is None`
     # without treating a valid 0/0.0 coordinate (equator, prime meridian) as missing.
@@ -136,18 +155,43 @@ def create_pin_for_profile(
 
     from urbanlens.dashboard.models.wiki.model import Wiki
 
-    pin = Pin.objects.create(
-        name=name,
-        name_is_user_provided=bool((name or "").strip()),
-        location=location,
+    create_kwargs: dict = {
+        "name": name,
+        "name_is_user_provided": bool((name or "").strip()),
+        "location": location,
         # Link to the place's community wiki when one already exists; wikis
         # are only ever created explicitly from the pin page.
-        wiki=Wiki.objects.get_for_location(location),
-        icon=icon,
-        custom_icon=custom_icon,
-        color=color,
-        profile=profile,
-    )
+        "wiki": Wiki.objects.get_for_location(location),
+        "icon": icon,
+        "custom_icon": custom_icon,
+        "color": color,
+        "profile": profile,
+    }
+    if client_uuid is not None:
+        # uuid is editable=False on the abstract base, so it must be passed
+        # explicitly at the ORM layer - serializers/forms never bind it.
+        create_kwargs["uuid"] = client_uuid
+
+    try:
+        with transaction.atomic():
+            pin = Pin.objects.create(**create_kwargs)
+    except IntegrityError as exc:
+        # Two constraints can fire here; both have well-defined answers:
+        # - uuid collision: a concurrent retry of the same client_uuid won the
+        #   race (return its pin - the idempotent outcome), or the uuid belongs
+        #   to another profile's pin (reject; uuids are caller-generated, so
+        #   this is either a caller bug or a guess - either way not theirs).
+        # - one-root-pin-per-location-per-profile: surfaced as a clean 4xx-able
+        #   error instead of the 500 an unhandled IntegrityError becomes.
+        if client_uuid is not None:
+            existing = Pin.objects.filter(profile=profile, uuid=client_uuid).select_related("location").first()
+            if existing is not None:
+                return PinCreationResult(pin=existing, all_locations=all_locations, created=False)
+            if Pin.objects.filter(uuid=client_uuid).exists():
+                raise PinCreationError("This uuid is already in use.") from exc
+        if Pin.objects.filter(profile=profile, location=location, parent_pin__isnull=True).exists():
+            raise PinCreationError("You already have a pin at this location.") from exc
+        raise
 
     # visible_to keeps the id__in lookups from resolving another user's
     # private labels - a guessed foreign label id would otherwise attach (and
