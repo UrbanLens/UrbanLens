@@ -286,7 +286,9 @@ class PinListEditView(LoginRequiredMixin, View):
         body = _parse_body(request)
 
         name = (body.get("name") or "").strip()
-        if name:
+        if name and name != pin_list.name:
+            if PinList.objects.filter(profile=profile, name=name).exclude(pk=pin_list.pk).exists():
+                return HttpResponse("You already have a list with that name.", status=409)
             pin_list.name = name
 
         if "description" in body:

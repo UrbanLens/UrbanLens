@@ -53,6 +53,14 @@ class GoogleMapsPhotoProxyView(LoginRequiredMixin, View):
 
         if not settings.google_unrestricted_api_key:
             return HttpResponse(status=404)
+        # Serving from cache above is free, but an upstream fetch consumes the
+        # site's Places quota on this requester's behalf - honor their own
+        # external-lookups opt-out for the actual API call.
+        from urbanlens.dashboard.models.profile.model import Profile
+
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        if not profile.external_apis_enabled:
+            return HttpResponse(status=404)
         try:
             content, content_type = GooglePlacesGateway(api_key=settings.google_unrestricted_api_key).get_photo_media(photo_name)
         except requests.exceptions.HTTPError as e:

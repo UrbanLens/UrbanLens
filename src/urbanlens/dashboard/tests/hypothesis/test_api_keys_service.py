@@ -110,6 +110,14 @@ class AuthenticateApiKeyTests(TestCase):
         api_key.refresh_from_db()
         self.assertIsNotNone(api_key.last_used_at)
 
+    def test_key_for_a_deactivated_user_is_rejected(self) -> None:
+        """revoke_api_key() only fires on explicit user action - an admin disabling
+        a compromised account (User.is_active=False) must also cut off its keys."""
+        user = baker.make(User)
+        _api_key, raw_key = generate_api_key(user, "Zapier")
+        User.objects.filter(pk=user.pk).update(is_active=False)
+        self.assertIsNone(authenticate_api_key(raw_key))
+
 
 class RecordApiKeyUsageTests(TestCase):
     """record_api_key_usage logs activity and keeps each key's trail bounded."""

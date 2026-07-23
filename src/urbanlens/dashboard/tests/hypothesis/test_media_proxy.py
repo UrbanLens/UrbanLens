@@ -75,3 +75,26 @@ class GoogleMapsPhotoProxyViewTests(TestCase):
             response = self.client.get(reverse("media.google_maps_photo", args=["places/ABC/photos/XYZ"]))
         self.assertEqual(response.status_code, 200)
         self.assertEqual(mocked.call_count, 1)
+
+    def test_external_apis_disabled_blocks_the_upstream_fetch(self) -> None:
+        """A requester who opted out of external lookups must not trigger a
+        quota-consuming Places API call through this proxy."""
+        from urbanlens.dashboard.models.profile.model import Profile
+
+        Profile.objects.filter(user=self.user).update(external_apis_enabled=False)
+        with mock.patch.object(GooglePlacesGateway, "get_photo_media") as mocked:
+            response = self.client.get(reverse("media.google_maps_photo", args=["places/ABC/photos/XYZ"]))
+        self.assertEqual(response.status_code, 404)
+        mocked.assert_not_called()
+
+    def test_external_apis_disabled_still_serves_an_already_cached_photo(self) -> None:
+        """Cache hits cost no external call, so the opt-out doesn't block them."""
+        from urbanlens.dashboard.models.profile.model import Profile
+
+        with mock.patch.object(GooglePlacesGateway, "get_photo_media", return_value=(b"fake-jpeg-bytes", "image/jpeg")):
+            self.client.get(reverse("media.google_maps_photo", args=["places/ABC/photos/XYZ"]))
+        Profile.objects.filter(user=self.user).update(external_apis_enabled=False)
+        with mock.patch.object(GooglePlacesGateway, "get_photo_media") as mocked:
+            response = self.client.get(reverse("media.google_maps_photo", args=["places/ABC/photos/XYZ"]))
+        self.assertEqual(response.status_code, 200)
+        mocked.assert_not_called()

@@ -86,6 +86,43 @@ All 63 alerts are now closed (2 fixed, 61 dismissed) and the native GitHub CodeQ
 
 ---
 
+## PR #111: three Codex identity/architecture findings deferred as design-level changes (2026-07-23)
+
+The final Codex review round on PR #111 surfaced a cluster of identity-masking gaps. The
+template/sidebar-level ones were fixed in-session (DM reply preview + image-consent/delete-confirm
+copy in `_message_items.html` now use the masked `display_name`; the group conversation-list
+preview resolves the last sender through `resolve_visible_identity`; a DM's bell-notification
+title routes through `display_identity_for`). Three related findings need design work rather than
+a spot fix, and were deliberately deferred:
+
+1. **E2EE group key rotation exposes every member's real slug** (`controllers/e2ee.py`,
+   `GroupKeysView.get` returns `members: [{slug, public_key}]`; `post` accepts a `wrapped` map
+   *keyed by those slugs*). Any group member fetching the rotation payload learns the real slugs
+   of members whose `profile_visibility` masks them elsewhere. Not spot-fixable: the slug is the
+   protocol-level member identifier the TS client round-trips back when wrapping the new key -
+   swapping it for an opaque per-member identifier requires changing the client rotation code and
+   this API in lockstep (and handling mixed-version clients mid-deploy).
+2. **Live WebSocket payloads ship the raw sender name to every recipient**
+   (`services/group_chats.py` `serialize_group_message` - and the same pattern in 1:1
+   `services/direct_messages.py` `serialize_direct_message`). The server-rendered thread masks
+   sender identity per viewer, but the broadcast payload is built once and delivered identically
+   to all members, so a live incoming message reveals a name a refresh would hide. The fix is
+   per-recipient payloads (the channel groups are already per-profile, so it's feasible) at the
+   cost of an identity resolution per member per message, or forcing a server-rendered refresh
+   for messages whose sender is masked from anyone - a performance/architecture tradeoff to
+   decide deliberately, in both the group and 1:1 paths together.
+3. **Google Maps photo proxy can't verify the photo belongs to an accessible pin**
+   (`controllers/media_proxy.py`). The requester-side `external_apis_enabled` gate was added
+   in-session (an opted-out user can no longer trigger quota-consuming upstream fetches; cache
+   hits still serve). The remaining gap: the proxied `photo_name` carries no pin/location
+   context, so any logged-in user with external lookups enabled can replay a copied photo
+   reference and consume Places quota. Closing that means binding proxy URLs to their originating
+   cache entry (e.g. verify the photo name appears in some `LocationCache` row's
+   `google_maps_photos` data, or signing proxy URLs) - a design choice about coupling vs. URL
+   stability.
+
+---
+
 ## PR #111: `0001_initial.py` rename may break `manage.py migrate` on an installation that only ever applied the old squashed name (flagged by Codex, verified against dev DBs 2026-07-23)
 
 `d8eb1529` renamed `0001_initial_squashed_0006_alter_notificationlog_notification_type_and_more.py`

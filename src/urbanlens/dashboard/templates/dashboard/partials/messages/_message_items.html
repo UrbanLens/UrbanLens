@@ -51,14 +51,14 @@ display name, from `display_identity_for` - used by the quoted-reply header).
     </div>
     {% elif image_permission_status == "rejected" %}
     <div class="dm-image-consent dm-image-consent--rejected">
-      <i class="material-symbols-outlined">hide_image</i> Images from {{ partner.username }} are blocked.
+      <i class="material-symbols-outlined">hide_image</i> Images from {{ display_name }} are blocked.
     </div>
     {% else %}
     <div class="dm-image-consent">
       <div class="dm-image-consent__blur">
         {% for image in images %}<img src="{{ image.image.url }}" alt="" class="dm-bubble__image dm-bubble__image--blurred">{% endfor %}
       </div>
-      <p class="dm-image-consent__prompt">{{ partner.username }} wants to send you an image.</p>
+      <p class="dm-image-consent__prompt">{{ display_name }} wants to send you an image.</p>
       <div class="dm-image-consent__actions">
         <button type="button" class="btn btn--primary btn--sm"
                 hx-post="{% url 'messages.image_permission' partner.slug %}" hx-vals='{"decision": "allow"}'
@@ -133,7 +133,7 @@ display name, from `display_identity_for` - used by the quoted-reply header).
   <div class="dm-bubble-menu" id="dm-bubble-menu-{{ message.id }}" hidden>
     {% if not tombstone %}
     <button type="button" class="dm-bubble-menu__item"
-            onclick="window.dmReplyTo({{ message.id }}, '{{ message.sender.username|escapejs }}', '{{ message|message_preview:viewer_id|escapejs }}')">
+            onclick="window.dmReplyTo({{ message.id }}, '{% if message.sender_id == partner.pk %}{{ display_name|escapejs }}{% else %}You{% endif %}', '{{ message|message_preview:viewer_id|escapejs }}')">
       <i class="material-symbols-outlined">reply</i> Reply
     </button>
     {% endif %}
@@ -141,14 +141,14 @@ display name, from `display_identity_for` - used by the quoted-reply header).
     <button type="button" class="dm-bubble-menu__item dm-bubble-menu__item--danger"
             hx-post="{% url 'messages.delete' partner.slug message.id %}" hx-vals='{"scope": "self"}'
             hx-target="#dm-thread-pane" hx-swap="innerHTML"
-            hx-confirm="Remove this message from your view? {{ partner.username }} will still see it.">
+            hx-confirm="Remove this message from your view? {{ display_name }} will still see it.">
       <i class="material-symbols-outlined">visibility_off</i> Remove for me
     </button>
     {% else %}
     <button type="button" class="dm-bubble-menu__item dm-bubble-menu__item--danger"
             hx-post="{% url 'messages.delete' partner.slug message.id %}" hx-vals='{"scope": "everyone"}'
             hx-target="#dm-thread-pane" hx-swap="innerHTML"
-            hx-confirm="Delete this message? {{ partner.username }} will see that it was deleted.">
+            hx-confirm="Delete this message? {{ display_name }} will see that it was deleted.">
       <i class="material-symbols-outlined">delete</i> Delete
     </button>
     {% endif %}

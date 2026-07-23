@@ -104,7 +104,7 @@ def authenticate_api_key(raw_key: str) -> ApiKey | None:
         return None
     prefix, secret = remainder[:_PREFIX_LENGTH], remainder[_PREFIX_LENGTH:]
 
-    api_key = ApiKey.objects.active().filter(prefix=prefix).select_related("user", "user__profile").first()
+    api_key = ApiKey.objects.active().filter(prefix=prefix, user__is_active=True).select_related("user", "user__profile").first()
     if api_key is None or not check_password(secret, api_key.key_hash):
         return None
 

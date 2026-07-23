@@ -631,9 +631,11 @@ def group_conversations_for(profile: Profile) -> list[dict[str, Any]]:
 
     Returns:
         A list of dicts with ``kind="group"``, ``group`` (GroupChat),
-        ``last_message`` (GroupMessage or None), ``unread_count`` (int),
-        ``member_count`` (int), ``is_muted`` (bool), and ``last_activity``
-        (datetime used for cross-kind sorting).
+        ``last_message`` (GroupMessage or None), ``last_sender_display_name``
+        (the last sender's viewer-scoped masked-if-needed name, "" when no
+        message), ``unread_count`` (int), ``member_count`` (int),
+        ``is_muted`` (bool), and ``last_activity`` (datetime used for
+        cross-kind sorting).
 
     Runs a fixed number of queries regardless of how many groups the profile
     is in, rather than three queries per group (last message, unread count,
@@ -667,6 +669,17 @@ def group_conversations_for(profile: Profile) -> list[dict[str, Any]]:
         last_message_by_group.setdefault(message.group_id, message)
     unread_counts = dict(GroupMessage.objects.filter(unread).values_list("group_id").annotate(count=Count("id")).order_by())
 
+    # The sidebar preview shows the last sender's name - resolve it through the
+    # same viewer-scoped identity masking the thread render uses, so a sender
+    # whose profile_visibility hides them from this viewer isn't revealed by
+    # the preview line before the (masked) thread is even opened.
+    from urbanlens.dashboard.services.identity_visibility import resolve_visible_identity
+
+    sender_display_names: dict[int, str] = {}
+    for message in last_message_by_group.values():
+        if message.sender_id not in sender_display_names:
+            sender_display_names[message.sender_id] = resolve_visible_identity(profile, message.sender)["display_name"]
+
     conversations: list[dict[str, Any]] = []
     for membership in memberships:
         group = membership.group
@@ -676,6 +689,7 @@ def group_conversations_for(profile: Profile) -> list[dict[str, Any]]:
                 "kind": "group",
                 "group": group,
                 "last_message": last_message,
+                "last_sender_display_name": sender_display_names.get(last_message.sender_id, "") if last_message is not None else "",
                 "unread_count": unread_counts.get(membership.group_id, 0),
                 "member_count": member_counts.get(membership.group_id, 0),
                 "is_muted": membership.muted,

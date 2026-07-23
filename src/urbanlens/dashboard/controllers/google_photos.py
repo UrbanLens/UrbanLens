@@ -193,6 +193,8 @@ class PinGooglePhotosSessionCreateView(LoginRequiredMixin, View):
         account = GooglePhotosAccount.objects.get_for_profile(profile)
         if account is None:
             raise Http404("Google Photos is not connected.")
+        if not profile.external_apis_enabled:
+            return render(request, _START_PARTIAL, {"pin": pin, "account": account, "error": "External lookups are turned off in your settings."})
 
         try:
             picker_session = GooglePhotosGateway(account=account).create_session()

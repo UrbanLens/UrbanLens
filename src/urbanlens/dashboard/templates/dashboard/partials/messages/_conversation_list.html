@@ -31,7 +31,7 @@ Conversation list for the messages page sidebar. Context: `conversations`
             <span class="dm-conv-item__time">{{ conv.last_activity|human_timesince }}</span>
           </span>
           <span class="dm-conv-item__bottom">
-            <span class="dm-conv-item__preview"{% if conv.last_message.is_encrypted %} data-e2ee-preview data-ct="{{ conv.last_message.ciphertext }}" data-nonce="{{ conv.last_message.nonce }}" data-kv="{{ conv.last_message.key_version }}" data-group="{{ conv.group.uuid }}"{% endif %}>{% if conv.last_message %}{{ conv.last_message.sender.username }}: {{ conv.last_message|message_preview:viewer_id|truncatechars:60 }}{% else %}{{ conv.member_count }} member{{ conv.member_count|pluralize }}{% endif %}</span>
+            <span class="dm-conv-item__preview"{% if conv.last_message.is_encrypted %} data-e2ee-preview data-ct="{{ conv.last_message.ciphertext }}" data-nonce="{{ conv.last_message.nonce }}" data-kv="{{ conv.last_message.key_version }}" data-group="{{ conv.group.uuid }}"{% endif %}>{% if conv.last_message %}{{ conv.last_sender_display_name }}: {{ conv.last_message|message_preview:viewer_id|truncatechars:60 }}{% else %}{{ conv.member_count }} member{{ conv.member_count|pluralize }}{% endif %}</span>
             {% if conv.unread_count %}<span class="msg-unread-pill">{{ conv.unread_count }}</span>{% endif %}
           </span>
         </span>

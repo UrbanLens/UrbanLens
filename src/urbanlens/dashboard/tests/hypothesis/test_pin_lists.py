@@ -242,6 +242,31 @@ class PinListDetailInlineEditableTests(TestCase):
         pin_list.refresh_from_db()
         self.assertEqual(pin_list.name, "Keep Me")
 
+    def test_renaming_to_another_owned_lists_name_is_rejected_not_a_500(self) -> None:
+        """Regression: this used to fall straight through to .save(), hitting
+        the model's UniqueConstraint(profile, name) as an unhandled
+        IntegrityError (500) instead of the same 409 the create endpoint
+        already returns for a duplicate name."""
+        baker.make(PinList, profile=self.profile, name="Taken Name")
+        pin_list = baker.make(PinList, profile=self.profile, name="Original Name")
+        response = self.client.post(
+            reverse("lists.edit", kwargs={"list_slug": pin_list.slug}),
+            data=json.dumps({"name": "Taken Name"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 409)
+        pin_list.refresh_from_db()
+        self.assertEqual(pin_list.name, "Original Name")
+
+    def test_renaming_to_its_own_current_name_is_a_no_op_not_a_conflict(self) -> None:
+        pin_list = baker.make(PinList, profile=self.profile, name="Same Name", description="Kept as-is.")
+        response = self.client.post(
+            reverse("lists.edit", kwargs={"list_slug": pin_list.slug}),
+            data=json.dumps({"name": "Same Name"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+
 
 class SelectingSavedFilterImmediatelyPopulatesListTests(TestCase):
     """Picking a saved filter must show matching pins right away, not only after also enabling "is_smart"."""
