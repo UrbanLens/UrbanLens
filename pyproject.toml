@@ -855,7 +855,7 @@ dev = [
     "kombu~=5.6.2",
     "libcst~=1.8.6",
     "model-bakery>=1.23.5,<1.25.0",
-    "mypy~=2.1.0",
+    "mypy>=2.1,<2.4",
     "pre-commit~=4.6.0",
     "prospector>=1.18,<1.20",
     # Server-side interop tests for the direct-message E2EE blob formats -
