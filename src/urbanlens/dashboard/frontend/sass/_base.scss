@@ -107,8 +107,10 @@ body div.container {
     .input-wrap {
         @include input-selectors {
             background-color: transparent;
+            box-shadow: none;
             &:active, &:hover, &:focus {
                 background-color: transparent;
+                box-shadow: none;
             }
         }
     }

@@ -274,23 +274,19 @@
                     <input type="hidden" name="include_regions" id="fp-include-regions">
                     <input type="hidden" name="exclude_regions" id="fp-exclude-regions">
 
-                    {# Selected labels area - two columns, shown only when something selected #}
+                    {# Selected labels area - two columns, shown only when something selected. #}
+                    {# All interactions (click/drag/drop/AND-OR toggle) are wired by the      #}
+                    {# shared picker engine - see ts/shared/label-picker.ts.                  #}
                     <div class="fp-label-selected" id="fp-label-selected" style="display:none">
-                        <div class="fp-label-col fp-label-col--incl" id="fp-label-col-incl"
-                             ondragover="event.preventDefault(); event.currentTarget.classList.add('fp-drag-over')"
-                             ondragleave="event.currentTarget.classList.remove('fp-drag-over')"
-                             ondrop="_onLabelColDrop(event, 'incl')">
+                        <div class="fp-label-col fp-label-col--incl" id="fp-label-col-incl">
                             <div class="fp-label-col-title">
                                 <i class="material-symbols-outlined">check_circle</i> Include
                                 <button type="button" class="fp-label-mode-btn" id="fp-incl-mode-btn"
-                                        onclick="_toggleInclMode()" title="Switch include matching: AND requires all, OR requires any">AND</button>
+                                        title="Switch include matching: AND requires all, OR requires any">AND</button>
                             </div>
                             <div class="fp-label-chips" id="fp-label-incl-chips"></div>
                         </div>
-                        <div class="fp-label-col fp-label-col--excl" id="fp-label-col-excl"
-                             ondragover="event.preventDefault(); event.currentTarget.classList.add('fp-drag-over')"
-                             ondragleave="event.currentTarget.classList.remove('fp-drag-over')"
-                             ondrop="_onLabelColDrop(event, 'excl')">
+                        <div class="fp-label-col fp-label-col--excl" id="fp-label-col-excl">
                             <div class="fp-label-col-title"><i class="material-symbols-outlined">cancel</i> Exclude</div>
                             <div class="fp-label-chips" id="fp-label-excl-chips"></div>
                         </div>
@@ -299,7 +295,7 @@
                     {# Complex formula display - shown instead of 2-column chips for mixed AND/OR expressions #}
                     <div class="fp-formula-display" id="fp-formula-display" style="display:none">
                         <span class="fp-formula-display-text" id="fp-formula-display-text"></span>
-                        <button type="button" class="fp-formula-display-clear" onclick="_clearAllLabelSelections()" title="Clear filter">
+                        <button type="button" class="fp-formula-display-clear" id="fp-formula-display-clear" title="Clear filter">
                             <i class="material-symbols-outlined">close</i>
                         </button>
                     </div>
@@ -325,8 +321,7 @@
                                 data-label-text="{{ label.name|escapejs }}"
                                 data-label-color="{{ label.color|default:'' }}"
                                 data-label-icon="{{ label.icon|default:'' }}"
-                                {% if label.color %}style="border-color:{{ label.color }}55;background:{{ label.color }}18;color:{{ label.color }}cc"{% endif %}
-                                onclick="_onLabelAvailClick(this)">
+                                {% if label.color %}style="border-color:{{ label.color }}55;background:{{ label.color }}18;color:{{ label.color }}cc"{% endif %}>
                             {% if label.icon %}<span style="font-size:.9em">{{ label.icon }}</span>{% endif %}
                             {{ label.name }}
                         </button>
@@ -3207,64 +3202,15 @@
     });
 
     // -- Bulk edit: description replace + label add/remove --------------------
+    // Thin id-based wrapper over the shared chip picker (ts/shared/label-picker.ts,
+    // installed globally by core.js) - the same component the saved-filter pages
+    // used to duplicate.
     function _makeLabelChipPicker(chipsElId, searchElId, suggElId) {
-        const chipsEl = document.getElementById(chipsElId);
-        const searchEl = document.getElementById(searchElId);
-        const suggEl = document.getElementById(suggElId);
-        let candidates = [];
-        let selected = [];
-
-        function renderChips() {
-            chipsEl.innerHTML = '';
-            selected.forEach(function (b) {
-                const chip = document.createElement('span');
-                chip.className = 'apdlg-label-chip-item';
-                chip.dataset.id = b.id;
-                const iconHtml = b.icon ? `<span class="apdlg-chip-icon">${_escHtml(b.icon)}</span>` : '';
-                chip.innerHTML = `${iconHtml}<span class="apdlg-chip-name">${_escHtml(b.name)}</span><button class="apdlg-chip-remove" type="button" aria-label="Remove">x</button>`;
-                chip.querySelector('.apdlg-chip-remove').addEventListener('click', function () {
-                    selected = selected.filter(function (s) { return s.id !== b.id; });
-                    renderChips();
-                });
-                chipsEl.appendChild(chip);
-            });
-        }
-
-        function renderSuggestions(query) {
-            const q = (query || '').toLowerCase().trim();
-            const selectedIds = new Set(selected.map(function (b) { return b.id; }));
-            const matches = candidates.filter(function (b) {
-                return !selectedIds.has(b.id) && (!q || b.name.toLowerCase().includes(q));
-            }).slice(0, 12);
-            if (!matches.length) { suggEl.hidden = true; suggEl.innerHTML = ''; return; }
-            suggEl.innerHTML = '';
-            matches.forEach(function (b) {
-                const item = document.createElement('button');
-                item.type = 'button';
-                item.className = 'apdlg-label-sugg-item';
-                const iconHtml = b.icon ? `<span class="apdlg-sugg-icon">${_escHtml(b.icon)}</span>` : '';
-                item.innerHTML = `${iconHtml}<span class="apdlg-sugg-name">${_escHtml(b.name)}</span>`;
-                item.addEventListener('click', function () {
-                    selected.push(b);
-                    renderChips();
-                    searchEl.value = '';
-                    suggEl.hidden = true;
-                    searchEl.focus();
-                });
-                suggEl.appendChild(item);
-            });
-            suggEl.hidden = false;
-        }
-
-        searchEl.addEventListener('input', function () { renderSuggestions(searchEl.value); });
-        searchEl.addEventListener('focus', function () { renderSuggestions(searchEl.value); });
-        searchEl.addEventListener('blur', function () { setTimeout(function () { suggEl.hidden = true; }, 150); });
-
-        return {
-            setCandidates: function (list) { candidates = list || []; },
-            reset: function () { selected = []; renderChips(); searchEl.value = ''; suggEl.hidden = true; },
-            getSelectedIds: function () { return selected.map(function (b) { return b.id; }); },
-        };
+        return window.UrbanLensLabelPicker.createChipPicker({
+            chipsEl: document.getElementById(chipsElId),
+            searchEl: document.getElementById(searchElId),
+            suggEl: document.getElementById(suggElId),
+        });
     }
 
     const _bulkEditAddPicker = _makeLabelChipPicker('bulk-edit-add-label-chips', 'bulk-edit-add-label-search', 'bulk-edit-add-label-suggestions');
@@ -3734,7 +3680,7 @@
         if (typeof _dateAbandonedRange !== 'undefined') _dateAbandonedRange.sync();
         if (typeof _lastViewedRange !== 'undefined') _lastViewedRange.sync();
         // Reset label selected area
-        if (typeof _clearAllLabelSelections === 'function') _clearAllLabelSelections();
+        if (_labelPicker) _labelPicker.clear();
         // Reset a saved filter's regions, if one had been applied
         const includeRegions = document.getElementById('fp-include-regions');
         const excludeRegions = document.getElementById('fp-exclude-regions');
@@ -3895,24 +3841,14 @@
         // only criterion is "include label X" (a very common case from that
         // dialog) merged nothing at all and looked like a dead click.
         if (Array.isArray(criteria.label_groups)) {
+            const mergeIds = [];
             for (const group of criteria.label_groups) {
                 if (group.op === 'not') continue;
-                for (const id of (group.ids || [])) {
-                    const key = String(id);
-                    if (_labelState.get(key) !== 'excl') _labelState.set(key, 'incl');
-                }
+                for (const id of (group.ids || [])) mergeIds.push(id);
             }
-            _formulaGroups = null; // merged state may mix groups; fall back to simple chip mode
-            _serializeLabelGroups();
-            _rebuildLabelSelected();
+            if (_labelPicker && mergeIds.length) _labelPicker.mergeIncludeIds(mergeIds);
         } else if (Array.isArray(criteria.tags) && criteria.tags.length) {
-            for (const id of criteria.tags) {
-                const key = String(id);
-                if (_labelState.get(key) !== 'excl') _labelState.set(key, 'incl');
-            }
-            _formulaGroups = null;
-            _serializeLabelGroups();
-            _rebuildLabelSelected();
+            if (_labelPicker) _labelPicker.mergeIncludeIds(criteria.tags);
         }
 
         // Custom fields: same "current wins if empty" rule, keyed by cf_<field_id>*.
@@ -4562,655 +4498,36 @@
         } catch (_) {}
     }, 0);
 
-    // -- Combined label filter section -----------------------------------------
-    // _labelState: Map of labelId(string) → 'incl' | 'excl'
-    // _inclMode:   'and' | 'or'  - how included labels are combined
-    const _labelState = new Map();
-    let _inclMode = 'and';
-    let _labelDragId = null;
-    let _labelDropHandled = false;  // set by drop handlers so dragend knows not to auto-remove
-    let _labelChipJustDragged = false;  // suppresses the click that browsers fire after dragend
-    let _labelAvailJustDragged = false; // same, for labels dragged straight from the suggestion list
-    let _formulaGroups = null;      // non-null in formula mode: parsed groups are the canonical state
-
-    // -- Helpers -------------------------------------------------------------
-    function _labelTextForId(id) {
-        return document.querySelector(`#fp-label-list [data-label-id="${id}"]`)?.dataset.labelText || String(id);
-    }
-
-    function _quoteLabelName(label) {
-        return /[\s\/\-\+\(\)]/.test(label) ? `"${label}"` : label;
-    }
-
-    // Build name→{id,label,color,icon} lookup from the label list DOM
-    function _labelByNameMap() {
-        const m = new Map();
-        document.querySelectorAll('#fp-label-list .fp-label-avail').forEach(btn => {
-            m.set((btn.dataset.labelText || '').toLowerCase(), {
-                id: btn.dataset.labelId,
-                label: btn.dataset.labelText || '',
-                color: btn.dataset.labelColor || '',
-                icon: btn.dataset.labelIcon  || '',
-            });
+    // -- Combined label filter section ----------------------------------------
+    // Backed by the shared picker engine (ts/shared/label-picker.ts, installed
+    // globally by core.js) - the same engine drives the saved-filter dialog and
+    // detail page, so include/exclude, chip dragging, the AND/OR toggle, and
+    // the formula bar behave identically everywhere labels filter pins.
+    // Serializes into the #fp-label-groups hidden input as label_groups JSON.
+    const _labelPicker = (function () {
+        const list = document.getElementById('fp-label-list');
+        if (!list) return null; // the Labels accordion only renders when the user has labels
+        return window.UrbanLensLabelPicker.createFilterPicker({
+            els: {
+                list: list,
+                selected: document.getElementById('fp-label-selected'),
+                colIncl: document.getElementById('fp-label-col-incl'),
+                colExcl: document.getElementById('fp-label-col-excl'),
+                inclChips: document.getElementById('fp-label-incl-chips'),
+                exclChips: document.getElementById('fp-label-excl-chips'),
+                modeBtn: document.getElementById('fp-incl-mode-btn'),
+                groupsInput: document.getElementById('fp-label-groups'),
+                formulaBar: document.getElementById('fp-label-formula'),
+                formulaSuggestions: document.getElementById('fp-formula-suggestions'),
+                formulaErrors: document.getElementById('fp-formula-errors'),
+                formulaDisplay: document.getElementById('fp-formula-display'),
+                formulaDisplayText: document.getElementById('fp-formula-display-text'),
+                formulaDisplayClear: document.getElementById('fp-formula-display-clear'),
+                accordion: document.getElementById('fp-acc-labels'),
+            },
+            onChange: function () { htmx.trigger(document.getElementById('filter-form'), 'change'); },
         });
-        return m;
-    }
-
-    // -- Chip HTML ------------------------------------------------------------
-    function _labelChipHtml(id, label, color, icon, mode) {
-        const bg     = color ? (color + '33') : (mode === 'incl' ? 'rgba(34,197,94,.18)' : 'rgba(239,68,68,.18)');
-        const border = color ? (color + '66') : (mode === 'incl' ? 'rgba(34,197,94,.4)' : 'rgba(239,68,68,.4)');
-        const txtCol = mode === 'incl' ? '#86efac' : '#fca5a5';
-        const iconHtml = icon ? `<span style="font-size:.85em">${icon}</span>` : '';
-        return `<span class="fp-label-chip fp-label-chip--${mode}" data-id="${id}" draggable="true"
-                      title="Click to remove · Right-click to ${mode === 'incl' ? 'exclude' : 'include'} · Drag to move or drop outside to remove"
-                      style="background:${bg};border-color:${border};color:${txtCol}">
-                    ${iconHtml}<span class="fp-label-chip-text">${label}</span>
-                </span>`;
-    }
-
-    // -- Serialise state → label_groups JSON ----------------------------------
-    // When _formulaGroups is set (formula mode), use it directly so group structure
-    // (mixed AND/OR) is preserved. Otherwise derive from _labelState + _inclMode.
-    function _serializeLabelGroups() {
-        let groups;
-        if (_formulaGroups !== null) {
-            groups = _formulaGroups;
-        } else {
-            const inclIds = [..._labelState.entries()].filter(([,m]) => m === 'incl').map(([id]) => Number(id));
-            const exclIds = [..._labelState.entries()].filter(([,m]) => m === 'excl').map(([id]) => Number(id));
-            groups = [];
-            if (inclIds.length > 0) groups.push({op: _inclMode, ids: inclIds});
-            if (exclIds.length > 0) groups.push({op: 'not', ids: exclIds});
-        }
-        const el = document.getElementById('fp-label-groups');
-        if (el) el.value = groups.length ? JSON.stringify(groups) : '';
-    }
-
-    function _updateFormulaFromState() {
-        const bar = document.getElementById('fp-label-formula');
-        if (!bar || document.activeElement === bar) return;
-        if (_formulaGroups !== null) {
-            // Reconstruct formula text from stored groups, preserving parentheses for OR groups
-            const byName = _labelByNameMap();
-            const byId = new Map([...byName.values()].map(v => [v.id, v]));
-            const parts = [];
-            for (const g of _formulaGroups) {
-                const names = g.ids.map(id => {
-                    const entry = byId.get(String(id));
-                    return entry ? _quoteLabelName(entry.label) : String(id);
-                });
-                if (g.op === 'not') {
-                    names.forEach(n => parts.push(`-${n}`));
-                } else if (g.op === 'or') {
-                    parts.push(names.length > 1 ? `(${names.join(' / ')})` : (names[0] || ''));
-                } else {
-                    parts.push(...names);
-                }
-            }
-            bar.value = parts.join(' ');
-        } else {
-            const inclIds = [..._labelState.entries()].filter(([,m]) => m === 'incl').map(([id]) => id);
-            const exclIds = [..._labelState.entries()].filter(([,m]) => m === 'excl').map(([id]) => id);
-            const parts = [];
-            if (inclIds.length > 0) {
-                const names = inclIds.map(id => _quoteLabelName(_labelTextForId(id)));
-                parts.push(_inclMode === 'or' && names.length > 1 ? `(${names.join(' / ')})` : names.join(' '));
-            }
-            exclIds.forEach(id => parts.push(`-${_quoteLabelName(_labelTextForId(id))}`));
-            bar.value = parts.join(' ');
-        }
-    }
-
-    // Returns true when _formulaGroups can be represented by the simple 2-column UI:
-    // all include groups use the same op (all-AND or a single OR), plus optional NOT groups.
-    function _isSimpleGroups(groups) {
-        if (!groups) return true;
-        const inclGroups = groups.filter(g => g.op !== 'not');
-        if (inclGroups.length === 0) return true;
-        const hasOr  = inclGroups.some(g => g.op === 'or');
-        const hasAnd = inclGroups.some(g => g.op === 'and');
-        if (hasOr && hasAnd) return false;   // mixed → complex
-        if (hasOr && inclGroups.length > 1) return false; // multiple OR groups → complex
-        return true;
-    }
-
-    // -- Rebuild selected chips UI --------------------------------------------
-    function _rebuildLabelSelected() {
-        const inclEl         = document.getElementById('fp-label-incl-chips');
-        const exclEl         = document.getElementById('fp-label-excl-chips');
-        const colIncl        = document.getElementById('fp-label-col-incl');
-        const colExcl        = document.getElementById('fp-label-col-excl');
-        const selectedEl     = document.getElementById('fp-label-selected');
-        const formulaDisplay = document.getElementById('fp-formula-display');
-        const formulaText    = document.getElementById('fp-formula-display-text');
-        const modeBtn        = document.getElementById('fp-incl-mode-btn');
-        const det            = document.getElementById('fp-acc-labels');
-
-        // Detect whether the active formula is too complex for the 2-column UI
-        const isComplex = _formulaGroups !== null && !_isSimpleGroups(_formulaGroups);
-
-        if (isComplex) {
-            // Show the formula text display; hide the 2-column chips area
-            if (selectedEl)     selectedEl.style.display     = 'none';
-            if (formulaDisplay) formulaDisplay.style.display = '';
-            if (formulaText) {
-                // Reconstruct formula text from _formulaGroups
-                const byName = _labelByNameMap();
-                const byId   = new Map([...byName.values()].map(v => [v.id, v]));
-                const parts  = [];
-                for (const g of _formulaGroups) {
-                    const names = g.ids.map(id => {
-                        const entry = byId.get(String(id));
-                        return entry ? _quoteLabelName(entry.label) : String(id);
-                    });
-                    if (g.op === 'not') {
-                        names.forEach(n => parts.push(`-${n}`));
-                    } else if (g.op === 'or') {
-                        parts.push(names.length > 1 ? `(${names.join(' / ')})` : (names[0] || ''));
-                    } else {
-                        parts.push(...names);
-                    }
-                }
-                formulaText.textContent = parts.join(' + ');
-            }
-            if (det) det.classList.add('fp-acc-active');
-            _serializeLabelGroups();
-            _updateFormulaFromState();
-            return;
-        }
-
-        // Simple mode: show 2-column chips; hide formula display
-        if (formulaDisplay) formulaDisplay.style.display = 'none';
-
-        inclEl.innerHTML = '';
-        exclEl.innerHTML = '';
-
-        let hasIncl = false, hasExcl = false;
-        let inclCount = 0;
-        _labelState.forEach((mode, id) => {
-            const avail = document.querySelector(`#fp-label-list [data-label-id="${id}"]`);
-            const label = avail?.dataset.labelText || id;
-            const color = avail?.dataset.labelColor || '';
-            const icon  = avail?.dataset.labelIcon  || '';
-            if (mode === 'incl') {
-                hasIncl = true;
-                inclCount++;
-                inclEl.insertAdjacentHTML('beforeend', _labelChipHtml(id, label, color, icon, 'incl'));
-            } else {
-                hasExcl = true;
-                exclEl.insertAdjacentHTML('beforeend', _labelChipHtml(id, label, color, icon, 'excl'));
-            }
-        });
-
-        // Attach chip events
-        [inclEl, exclEl].forEach(container => {
-            container.querySelectorAll('.fp-label-chip').forEach(chip => {
-                const id = chip.dataset.id;
-                chip.addEventListener('click', () => { if (!_labelChipJustDragged) _removeLabel(id); });
-                chip.addEventListener('contextmenu', (e) => { e.preventDefault(); _toggleLabelMode(id); });
-                chip.addEventListener('dragstart', (e) => {
-                    _labelDragId = id;
-                    _labelDropHandled = false;
-                    _labelChipJustDragged = true;
-                    e.dataTransfer.effectAllowed = 'move';
-                    chip.classList.add('fp-drag-active');
-                    // Ensure both columns are visible so the user can drag between them
-                    document.getElementById('fp-label-col-incl')?.style.removeProperty('display');
-                    document.getElementById('fp-label-col-excl')?.style.removeProperty('display');
-                });
-                chip.addEventListener('dragend', () => {
-                    const draggedId = _labelDragId;
-                    _labelDragId = null;
-                    chip.classList.remove('fp-drag-active');
-                    document.querySelectorAll('.fp-drag-over').forEach(el => el.classList.remove('fp-drag-over'));
-                    // If no drop handler claimed this drag, the chip was dropped outside → remove
-                    if (draggedId && !_labelDropHandled) _removeLabel(draggedId);
-                    _labelDropHandled = false;
-                    // Clear the drag flag after the click event that browsers fire post-drag has fired
-                    setTimeout(() => { _labelChipJustDragged = false; }, 0);
-                });
-            });
-        });
-
-        // AND/OR mode toggle: only meaningful (and visible) when 2+ labels included
-        if (modeBtn) {
-            modeBtn.textContent = _inclMode === 'or' ? 'OR' : 'AND';
-            modeBtn.classList.toggle('fp-label-mode-btn--or', _inclMode === 'or');
-            modeBtn.style.display = inclCount > 1 ? '' : 'none';
-        }
-
-        const anySelected = hasIncl || hasExcl;
-        selectedEl.style.display = anySelected ? '' : 'none';
-        colIncl.style.display = hasIncl ? '' : 'none';
-        colExcl.style.display = hasExcl ? '' : 'none';
-        if (det) det.classList.toggle('fp-acc-active', anySelected);
-
-        _serializeLabelGroups();
-        _updateFormulaFromState();
-    }
-
-    // -- Label state mutations ------------------------------------------------
-    function _onLabelAvailClick(btn) {
-        // Suppress the click some browsers fire on the source element right after a drag-drop
-        if (_labelAvailJustDragged) return;
-        _addLabel(btn, 'incl');
-    }
-
-    function _addLabel(btn, mode) {
-        _formulaGroups = null;  // chip interactions exit formula mode
-        const id = btn.dataset.labelId;
-        if (_labelState.has(id)) {
-            if (_labelState.get(id) !== mode) _toggleLabelMode(id);
-            return;
-        }
-        _labelState.set(id, mode);
-        btn.style.display = 'none';
-        _rebuildLabelSelected();
-        htmx.trigger(document.getElementById('filter-form'), 'change');
-    }
-
-    function _toggleLabelMode(id) {
-        _formulaGroups = null;
-        if (!_labelState.has(id)) return;
-        _labelState.set(id, _labelState.get(id) === 'incl' ? 'excl' : 'incl');
-        _rebuildLabelSelected();
-        htmx.trigger(document.getElementById('filter-form'), 'change');
-    }
-
-    function _removeLabel(id) {
-        _formulaGroups = null;
-        _labelState.delete(id);
-        const btn = document.querySelector(`#fp-label-list [data-label-id="${id}"]`);
-        if (btn) btn.style.display = '';
-        _rebuildLabelSelected();
-        htmx.trigger(document.getElementById('filter-form'), 'change');
-    }
-
-    function _clearAllLabelSelections() {
-        _labelState.clear();
-        _formulaGroups = null;
-        document.querySelectorAll('#fp-label-list .fp-label-avail').forEach(btn => { btn.style.display = ''; });
-        _inclMode = 'and';
-        _rebuildLabelSelected();
-        htmx.trigger(document.getElementById('filter-form'), 'change');
-    }
-
-    function _toggleInclMode() {
-        _formulaGroups = null;
-        _inclMode = _inclMode === 'and' ? 'or' : 'and';
-        _rebuildLabelSelected();
-        htmx.trigger(document.getElementById('filter-form'), 'change');
-    }
-
-    // -- Column drop handlers (switch mode / add from list) ------------------
-    function _onLabelColDrop(e, targetMode) {
-        e.currentTarget.classList.remove('fp-drag-over');
-        if (!_labelDragId) return;
-        _labelDropHandled = true;
-        if (_labelState.has(_labelDragId)) {
-            if (_labelState.get(_labelDragId) !== targetMode) _toggleLabelMode(_labelDragId);
-        } else {
-            const btn = document.querySelector(`#fp-label-list [data-label-id="${_labelDragId}"]`);
-            if (btn) _addLabel(btn, targetMode);
-        }
-    }
-
-    // Right-click on list label → add as exclude
-    document.getElementById('fp-label-list')?.addEventListener('contextmenu', function (e) {
-        const btn = e.target.closest('.fp-label-avail');
-        if (!btn) return;
-        e.preventDefault();
-        _addLabel(btn, 'excl');
-    });
-
-    // Drag a not-yet-selected label straight from the suggestion list into Include/Exclude
-    document.getElementById('fp-label-list')?.addEventListener('dragstart', function (e) {
-        const btn = e.target.closest('.fp-label-avail');
-        if (!btn) return;
-        _labelDragId = btn.dataset.labelId;
-        _labelDropHandled = false;
-        _labelAvailJustDragged = true;
-        e.dataTransfer.effectAllowed = 'move';
-        btn.classList.add('fp-drag-active');
-        // Reveal both columns as drop targets even though nothing is selected yet
-        const selectedEl = document.getElementById('fp-label-selected');
-        if (selectedEl) selectedEl.style.display = '';
-        document.getElementById('fp-label-col-incl')?.style.removeProperty('display');
-        document.getElementById('fp-label-col-excl')?.style.removeProperty('display');
-    });
-    document.getElementById('fp-label-list')?.addEventListener('dragend', function (e) {
-        const btn = e.target.closest('.fp-label-avail');
-        if (!btn) return;
-        _labelDragId = null;
-        btn.classList.remove('fp-drag-active');
-        document.querySelectorAll('.fp-drag-over').forEach(el => el.classList.remove('fp-drag-over'));
-        // If the label wasn't dropped into a column, restore the selected area's visibility
-        if (!_labelDropHandled) _rebuildLabelSelected();
-        _labelDropHandled = false;
-        // Clear the drag flag after the click event that browsers fire post-drag has fired
-        setTimeout(() => { _labelAvailJustDragged = false; }, 0);
-    });
-
-    // -- Label formula bar ----------------------------------------------------
-    (function _initLabelFormulaBar() {
-        const bar  = document.getElementById('fp-label-formula');
-        const sugg = document.getElementById('fp-formula-suggestions');
-        const errs = document.getElementById('fp-formula-errors');
-        if (!bar) return;
-
-        let _activeSuggIdx = -1;
-
-        // Returns true if no label name starts with `partial` - typing more cannot fix it
-        function _isDeadEnd(partial) {
-            if (!partial) return false;
-            const lo = partial.toLowerCase();
-            const byName = _labelByNameMap();
-            for (const name of byName.keys()) {
-                if (name.startsWith(lo)) return false;
-            }
-            return true;
-        }
-
-        // Tokenize formula → [{type, text, id?, start, end}]
-        // Types: LABEL, NOT, OR, LPAREN, RPAREN, UNKNOWN
-        function _tokenize(text) {
-            const byName = _labelByNameMap();
-            const sorted = [...byName.keys()].sort((a, b) => b.length - a.length);
-            const tokens = [];
-            let i = 0;
-            while (i < text.length) {
-                if (text[i] === ' ' || text[i] === '+') { i++; continue; }
-                if (text[i] === '-') { tokens.push({type:'NOT', text:'-', start:i, end:i+1}); i++; continue; }
-                if (text[i] === '/') { tokens.push({type:'OR', text:'/', start:i, end:i+1}); i++; continue; }
-                if (text[i] === '(') { tokens.push({type:'LPAREN', text:'(', start:i, end:i+1}); i++; continue; }
-                if (text[i] === ')') { tokens.push({type:'RPAREN', text:')', start:i, end:i+1}); i++; continue; }
-                if (text[i] === '"') {
-                    let j = i + 1;
-                    while (j < text.length && text[j] !== '"') j++;
-                    const raw = text.slice(i + 1, j);
-                    const match = byName.get(raw.toLowerCase());
-                    tokens.push(match
-                        ? {type:'LABEL', text:raw, id:match.id, start:i, end:j+1}
-                        : {type:'UNKNOWN', text:raw, start:i, end:j+1});
-                    i = j + 1;
-                    continue;
-                }
-                let matched = false;
-                for (const name of sorted) {
-                    if (text.slice(i).toLowerCase().startsWith(name)) {
-                        const end = i + name.length;
-                        const next = text[end];
-                        if (!next || ' /+-()"'.includes(next)) {
-                            const entry = byName.get(name);
-                            tokens.push({type:'LABEL', text:text.slice(i, end), id:entry.id, start:i, end});
-                            i = end;
-                            matched = true;
-                            break;
-                        }
-                    }
-                }
-                if (!matched) {
-                    let j = i;
-                    while (j < text.length && !' /+-()"\t'.includes(text[j])) j++;
-                    tokens.push({type:'UNKNOWN', text:text.slice(i, j), start:i, end:j});
-                    i = j;
-                }
-            }
-            return tokens;
-        }
-
-        // Parse tokens → {groups:[{op,ids}], errors:[text]}
-        // (A / B) C  → [{op:'or',ids:[A,B]}, {op:'and',ids:[C]}]
-        // A / B / C  → [{op:'or',ids:[A,B,C]}]  (bare / at top level = OR group)
-        // A B        → [{op:'and',ids:[A]}, {op:'and',ids:[B]}]  (adjacency = AND)
-        // -A         → [{op:'not',ids:[A]}]
-        function _parseTokens(tokens) {
-            const groups = [];
-            const errors = [];
-            let i = 0;
-            let negate = false;
-
-            while (i < tokens.length) {
-                const tok = tokens[i];
-                if (tok.type === 'NOT') { negate = true; i++; continue; }
-                if (tok.type === 'OR')  { i++; continue; }
-
-                if (tok.type === 'LPAREN') {
-                    const orIds = [];
-                    i++;
-                    while (i < tokens.length && tokens[i].type !== 'RPAREN') {
-                        if (tokens[i].type === 'LABEL') orIds.push(tokens[i].id);
-                        else if (tokens[i].type === 'UNKNOWN') errors.push(tokens[i].text);
-                        i++;
-                    }
-                    if (i < tokens.length) i++; // consume RPAREN
-                    if (orIds.length) groups.push({op: negate ? 'not' : 'or', ids: orIds.map(Number)});
-                    negate = false;
-                    continue;
-                }
-                if (tok.type === 'LABEL') {
-                    if (negate) {
-                        // NOT applies to the single label only, no lookahead for OR
-                        groups.push({op: 'not', ids: [Number(tok.id)]});
-                        negate = false;
-                        i++;
-                        continue;
-                    }
-                    // Collect consecutive OR-connected labels at top level: A / B / C → OR group
-                    const orIds = [tok.id];
-                    let j = i + 1;
-                    while (j < tokens.length && tokens[j].type === 'OR') {
-                        j++; // skip OR token
-                        if (j < tokens.length && tokens[j].type === 'LABEL') {
-                            orIds.push(tokens[j].id);
-                            j++;
-                        }
-                    }
-                    if (orIds.length > 1) {
-                        groups.push({op: 'or', ids: orIds.map(Number)});
-                    } else {
-                        groups.push({op: 'and', ids: [Number(tok.id)]});
-                    }
-                    negate = false;
-                    i = j;
-                    continue;
-                }
-                if (tok.type === 'UNKNOWN') {
-                    errors.push(tok.text);
-                    negate = false;
-                    i++;
-                    continue;
-                }
-                i++;
-            }
-            return {groups, errors};
-        }
-
-        // Apply parsed groups: update _labelState for chip display.
-        // Caller must set _formulaGroups before calling so serialization is correct.
-        function _applyGroups(groups) {
-            document.querySelectorAll('#fp-label-list .fp-label-avail').forEach(b => { b.style.display = ''; });
-            _labelState.clear();
-            _inclMode = 'and';
-            groups.forEach(g => {
-                if (g.op === 'not') {
-                    g.ids.forEach(id => { _labelState.set(String(id), 'excl'); });
-                } else {
-                    g.ids.forEach(id => { _labelState.set(String(id), 'incl'); });
-                    if (g.op === 'or') _inclMode = 'or';
-                }
-            });
-            _labelState.forEach((mode, id) => {
-                const btn = document.querySelector(`#fp-label-list [data-label-id="${id}"]`);
-                if (btn) btn.style.display = 'none';
-            });
-            _rebuildLabelSelected();
-            htmx.trigger(document.getElementById('filter-form'), 'change');
-        }
-
-        function _currentToken(text, cursor) {
-            let start = cursor;
-            while (start > 0 && !' /+-()"\t'.includes(text[start - 1])) start--;
-            return {text: text.slice(start, cursor), start, end: cursor};
-        }
-
-        function _showSuggestions(q) {
-            if (!sugg) return;
-            q = q.toLowerCase().trim();
-            _activeSuggIdx = -1;
-            if (!q) { sugg.hidden = true; return; }
-            const all = [...document.querySelectorAll('#fp-label-list .fp-label-avail')];
-            const matches = all.filter(btn => (btn.dataset.labelName || '').includes(q));
-            if (!matches.length) { sugg.hidden = true; return; }
-            sugg.innerHTML = matches.slice(0, 6).map((btn, i) =>
-                `<div class="fp-formula-sugg" data-idx="${i}" data-id="${btn.dataset.labelId}" data-label="${btn.dataset.labelText}">
-                    ${btn.dataset.labelIcon ? `<span>${btn.dataset.labelIcon}</span>` : ''}
-                    ${btn.dataset.labelText}
-                </div>`
-            ).join('');
-            sugg.hidden = false;
-            sugg.querySelectorAll('.fp-formula-sugg').forEach(el => {
-                el.addEventListener('mousedown', (e) => {
-                    e.preventDefault();
-                    _insertSuggestion(el.dataset.label);
-                });
-            });
-        }
-
-        function _selectSuggestion(delta) {
-            if (sugg.hidden) return false;
-            const items = sugg.querySelectorAll('.fp-formula-sugg');
-            if (!items.length) return false;
-            _activeSuggIdx = Math.max(0, Math.min(items.length - 1, _activeSuggIdx + delta));
-            items.forEach((el, i) => el.classList.toggle('active', i === _activeSuggIdx));
-            return true;
-        }
-
-        function _insertSuggestion(label) {
-            const cursor = bar.selectionStart;
-            const tok = _currentToken(bar.value, cursor);
-            const quoted = _quoteLabelName(label);
-            bar.value = bar.value.slice(0, tok.start) + quoted + bar.value.slice(tok.end);
-            const newPos = tok.start + quoted.length;
-            bar.setSelectionRange(newPos, newPos);
-            sugg.hidden = true;
-            _activeSuggIdx = -1;
-            _onFormulaChange();
-        }
-
-        // On each keystroke: update suggestions, filter label list, show dead-end errors only.
-        // Groups are NOT applied until Enter - prevents premature chip updates mid-formula.
-        function _onFormulaChange() {
-            const text = bar.value;
-            // If the user clears the box entirely (backspace/select-all-delete) while a
-            // formula or label filter is still applied, drop it and refresh the map
-            // instead of leaving the stale filter active until some other trigger.
-            if (!text.trim() && (_formulaGroups !== null || _labelState.size > 0)) {
-                _clearAllLabelSelections();
-                sugg.hidden = true;
-                if (errs) errs.hidden = true;
-                return;
-            }
-            const cursor = bar.selectionStart ?? text.length;
-            const tok = _currentToken(text, cursor);
-            _showSuggestions(tok.text);
-            document.querySelectorAll('#fp-label-list .fp-label-avail').forEach(btn => {
-                const q = tok.text.toLowerCase();
-                btn.style.display = (!q || (btn.dataset.labelName || '').includes(q)) ? '' : 'none';
-            });
-            // Only show an error when the current cursor token is a provable dead end
-            if (errs) {
-                if (tok.text && _isDeadEnd(tok.text)) {
-                    errs.textContent = `No label matches "${tok.text}"`;
-                    errs.hidden = false;
-                } else {
-                    errs.hidden = true;
-                }
-            }
-        }
-
-        bar.addEventListener('input', _onFormulaChange);
-
-        bar.addEventListener('keydown', function (e) {
-            if (e.key === 'Tab' || e.key === 'ArrowDown') {
-                if (!sugg.hidden) {
-                    e.preventDefault();
-                    if (_activeSuggIdx < 0) _selectSuggestion(0);
-                    else _selectSuggestion(e.key === 'ArrowDown' ? 1 : 0);
-                    const activeEl = sugg.querySelector('.fp-formula-sugg.active');
-                    if (activeEl && e.key === 'Tab') _insertSuggestion(activeEl.dataset.label);
-                } else if (e.key === 'Tab') {
-                    const cursor = bar.selectionStart;
-                    const tok = _currentToken(bar.value, cursor);
-                    if (tok.text) {
-                        const match = document.querySelector(`#fp-label-list .fp-label-avail:not([style*="display: none"])`);
-                        if (match) { e.preventDefault(); _insertSuggestion(match.dataset.labelText); }
-                    }
-                }
-            } else if (e.key === 'ArrowUp') {
-                if (!sugg.hidden) { e.preventDefault(); _selectSuggestion(-1); }
-            } else if (e.key === 'Enter') {
-                e.preventDefault();
-                // Insert highlighted suggestion
-                if (!sugg.hidden && _activeSuggIdx >= 0) {
-                    const activeEl = sugg.querySelector('.fp-formula-sugg.active');
-                    if (activeEl) { _insertSuggestion(activeEl.dataset.label); return; }
-                }
-                const text = bar.value.trim();
-                if (!text) {
-                    // Empty box + Enter should clear any active filter, not add a
-                    // random label (previously fell through to "simple mode" below).
-                    if (_formulaGroups !== null || _labelState.size > 0) _clearAllLabelSelections();
-                    sugg.hidden = true;
-                    if (errs) errs.hidden = true;
-                    return;
-                }
-                const hasOps = /[-\/\+\(\)]/.test(text);
-                if (hasOps) {
-                    // Formula mode: parse the full expression and apply it
-                    const tokens = _tokenize(text);
-                    const {groups, errors} = _parseTokens(tokens);
-                    if (errs) {
-                        if (errors.length) {
-                            errs.textContent = `Unknown: ${errors.join(', ')}`;
-                            errs.hidden = false;
-                        } else {
-                            errs.hidden = true;
-                        }
-                    }
-                    if (groups.length) {
-                        _formulaGroups = groups;  // set before _applyGroups so serialization is correct
-                        _applyGroups(groups);
-                        bar.value = '';
-                        sugg.hidden = true;
-                        document.querySelectorAll('#fp-label-list .fp-label-avail').forEach(b => { b.style.display = ''; });
-                        if (errs && !errors.length) errs.hidden = true;
-                    }
-                } else {
-                    // Simple mode: add first visible label as include (plain search + Enter)
-                    const firstVisible = document.querySelector('#fp-label-list .fp-label-avail:not([style*="display: none"])');
-                    if (firstVisible) {
-                        _addLabel(firstVisible, 'incl');
-                        bar.value = '';
-                        sugg.hidden = true;
-                        document.querySelectorAll('#fp-label-list .fp-label-avail').forEach(b => { b.style.display = ''; });
-                        if (errs) errs.hidden = true;
-                    }
-                }
-            } else if (e.key === 'Escape') {
-                sugg.hidden = true;
-                if (errs) errs.hidden = true;
-            }
-        });
-
-        bar.addEventListener('blur', () => setTimeout(() => { if (sugg) sugg.hidden = true; }, 160));
-        bar.addEventListener('focus', () => {
-            const tok = _currentToken(bar.value, bar.selectionStart ?? 0);
-            if (tok.text) _showSuggestions(tok.text);
-        });
-    }());
-
+    })();
     // -- Shared UI helpers (also used in organize page) --------------------
     function _escHtml(s) {
         return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -5836,7 +5153,8 @@
             btn.style.color = label.color + 'cc';
         }
         btn.innerHTML = (label.icon ? `<span style="font-size:.9em">${_escHtml(label.icon)}</span>` : '') + _escHtml(label.name || '');
-        btn.addEventListener('click', () => _onLabelAvailClick(btn));
+        // No per-button wiring needed: the shared picker engine's delegated
+        // list listeners (click/right-click/drag) cover appended buttons.
         list.appendChild(btn);
     }
 
