@@ -583,7 +583,11 @@ class RoundTripDirectMessagesTests(TestCase):
 
         self.me = baker.make(User).profile
         self.partner = baker.make(User).profile
-        ProfileModel.objects.filter(pk__in=[self.me.pk, self.partner.pk]).update(community_enabled=True, direct_message_visibility="anyone")
+        # profile_visibility "anyone" matters too: the export withholds
+        # partner_uuid whenever the partner's identity is masked from the
+        # exporter (masked partner => nothing restorable, by design), and two
+        # bare baker strangers mask each other under the default setting.
+        ProfileModel.objects.filter(pk__in=[self.me.pk, self.partner.pk]).update(community_enabled=True, direct_message_visibility="anyone", profile_visibility="anyone")
 
     def _export_and_import(self, exporter=None, importer=None) -> "import_data.ImportResult":
         result = import_data.ImportResult()

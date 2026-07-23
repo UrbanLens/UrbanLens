@@ -437,6 +437,13 @@ class PinWikiCommentAuthorPrivacyTests(TestCase):
         wiki = Wiki.objects.create(location=location, name="Old Mill Wiki")
         baker.make(Pin, profile=self.viewer, location=location)
         hidden_author = _profile(visibility=VisibilityChoice.NO_ONE)
+        # The author must have standing at this location (a pin - which is how
+        # wiki commenters see the wiki at all): it gives viewer and author a
+        # common pin, so the author's default comment_visibility
+        # (ANYTHING_IN_COMMON) passes and the comment CONTENT stays visible -
+        # what this test exercises is that the AUTHOR identity is still masked
+        # per profile_visibility once the content gate passes.
+        baker.make(Pin, profile=hidden_author, location=location)
         Comment.objects.create(wiki=wiki, profile=hidden_author, text="Watch the third floor.")
 
         self.client.force_login(self.viewer.user)

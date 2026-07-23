@@ -1250,6 +1250,18 @@ def _import_comments(
             result.inc_skipped("comments")
             continue
 
+        # Content-level idempotency backstop: when the archive's uuid is
+        # already taken by ANOTHER row (same-instance import - the exporter's
+        # own comment still holds it), the imported copy gets a fresh uuid, so
+        # the uuid check above can never catch a re-import. An identical
+        # (target, text, exported-created) row is the same comment.
+        from django.utils.dateparse import parse_datetime
+
+        exported_created = parse_datetime(str(row.get("created") or ""))
+        if exported_created is not None and Comment.objects.filter(profile=profile, pin_id=pin_pk, wiki=wiki, text=text, created=exported_created).exists():
+            result.inc_skipped("comments")
+            continue
+
         comment = Comment(profile=profile, pin_id=pin_pk, wiki=wiki, text=text)
         # Never inherit a uuid already taken by someone else's row - the
         # archive is user-supplied input.
