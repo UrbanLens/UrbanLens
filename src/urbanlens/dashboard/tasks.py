@@ -1730,6 +1730,34 @@ def send_direct_message_text_alerts_if_unread(message_id: int) -> None:
     send_message_text_alerts_now(message)
 
 
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def send_notification_text_alerts_if_unread(notification_id: int) -> None:
+    """Send the delayed WhatsApp/SMS alert for a site notification, unless read or debounced.
+
+    Scheduled by ``services.notification_text_alerts.schedule_notification_text_alerts``
+    (via the ``notification_text_alerts`` post_save signal) with a countdown,
+    mirroring the DM text-alert flow: no-ops when the notification was read in
+    the meantime, when a same-type text recently went to this recipient, or
+    when the recipient turned the toggles off after it was enqueued.
+
+    Args:
+        notification_id: PK of the notification to check and possibly alert about.
+    """
+    from urbanlens.dashboard.models.notifications.meta import Status
+    from urbanlens.dashboard.models.notifications.model import NotificationLog
+    from urbanlens.dashboard.services.notification_text_alerts import is_text_alert_debounced, send_notification_text_alerts_now
+
+    try:
+        notification = NotificationLog.objects.select_related("profile__user").get(pk=notification_id)
+    except NotificationLog.DoesNotExist:
+        return
+    if notification.profile_id is None or notification.status != Status.UNREAD:
+        return
+    if is_text_alert_debounced(notification.profile_id, notification.notification_type):
+        return
+    send_notification_text_alerts_now(notification)
+
+
 @shared_task
 def run_link_extraction(extraction_id: int) -> None:
     """Execute one queued AI link-extraction run (fetch, AI call, apply, notify).

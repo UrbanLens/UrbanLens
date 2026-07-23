@@ -70,13 +70,13 @@ class BuildQueryTests(SimpleTestCase):
         outside_phrases = _PHRASE_LITERAL.sub(" ", query)
         # Only field names, boolean operators, the mediatype/collection filter
         # values, and punctuation may remain.
-        allowed = {"AND", "OR", "NOT", "title:", "subject:", "description:", "coverage:", "mediatype:", "collection:", "image", "movies", *_EXCLUDED_COLLECTIONS}
+        allowed = {"AND", "OR", "NOT", "title:", "subject:", "description:", "coverage:", "mediatype:", "collection:", "image", "movies", "texts", *_EXCLUDED_COLLECTIONS}
         leftover = [token for token in re.split(r"[()\s]+", outside_phrases) if token and token not in allowed]
         self.assertEqual(leftover, [])
 
     def test_media_type_and_collection_filters_are_always_applied(self) -> None:
         query = InternetArchiveGateway.build_query("Bannerman Castle")
-        self.assertIn("mediatype:(image OR movies)", query)
+        self.assertIn("mediatype:(image OR movies OR texts)", query)
         self.assertIn("NOT collection:(", query)
         self.assertIn("TV-NEWS", query)
         self.assertIn("tvarchive", query)
@@ -103,7 +103,7 @@ class BuildQueryPropertyTests(SimpleTestCase):
     @given(st.text(min_size=1, max_size=40).filter(lambda s: s.strip() != ""))
     def test_filters_are_present_for_any_name(self, name: str) -> None:
         query = InternetArchiveGateway.build_query(name)
-        self.assertIn("mediatype:(image OR movies)", query)
+        self.assertIn("mediatype:(image OR movies OR texts)", query)
         self.assertIn("NOT collection:(", query)
 
     @hypothesis_settings(deadline=None, max_examples=200)

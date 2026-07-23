@@ -262,7 +262,7 @@ relationships, bulk edit and bulk convert between kinds, per-user color/icon cus
 - Real-time push over WebSockets (`ws/notifications/`) with desktop `Notification` API support and
   a 60s polling fallback
 - Outbound email notifications with per-role rate caps (hourly/daily/monthly) and safety controls
-- **11-event × 4-channel notification matrix** (Settings → Account): each event type (new message, friend request, check-in alert, AI task completion, etc.) can be independently configured for in-app, email, WhatsApp, and SMS delivery. WhatsApp/SMS require a phone number on the profile. **Delivery caveat:** WhatsApp/SMS dispatch is currently implemented only for safety check-in alerts and new direct messages — the other event types' WhatsApp toggles are stored but not yet wired to a sender (see `docs/PROBLEMS.md`).
+- **11-event × 4-channel notification matrix** (Settings → Account): each event type (new message, friend request, check-in alert, AI task completion, etc.) can be independently configured for in-app, email, WhatsApp, and SMS delivery. WhatsApp/SMS require a phone number on the profile. WhatsApp/SMS delivery is wired for every event type: DMs and safety check-ins keep their dedicated pipelines, and all other types dispatch centrally via a `NotificationLog` post_save signal (`services/notification_text_alerts.py`) — delayed 2 minutes, skipped if read in the meantime, debounced per type per 6h.
 - Admin-only critical alerting via email + Gotify push (distinct from user-facing notifications)
 
 ## Custom Fields

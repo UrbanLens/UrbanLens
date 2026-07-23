@@ -4,7 +4,7 @@ Decided 2026-07-23. Android ships first; iOS and desktop follow from the same co
 
 Context
 
-UrbanLens needs native clients: Android first, with iOS and desktop planned (docs/designs/split-architecture.md names desktop/mobile apps as next releases, talking to `/api/v1/` grown from dashboard/external_api/). Requirements that shaped the choice: the map is the core interaction (~8k pins today, clustered); field capture happens where connectivity doesn't (offline is a requirement, not a feature); E2EE messaging must interoperate byte-for-byte with the web client; the project is AGPL-3.0, privacy-first, and built by a solo developer.
+UrbanLens needs native clients: Android, iOS and desktop planned (talking to `/api/v1/` grown from dashboard/external_api/). Requirements that shaped the choice: the map is the core interaction (~8k pins today, clustered); field capture happens where connectivity doesn't (offline is a requirement, not a feature); E2EE messaging must interoperate byte-for-byte with the web client; the project is AGPL-3.0, privacy-first, and built by a solo developer.
 
 Decision: Flutter + Dart
 

@@ -174,16 +174,28 @@ def can_direct_message(sender: Profile, recipient: Profile) -> bool:
     return recipient.accepts_direct_messages_from(sender)
 
 
-def serialize_direct_message(message: DirectMessage) -> dict[str, Any]:
+def serialize_direct_message(message: DirectMessage, *, viewer: Profile | None = None) -> dict[str, Any]:
     """Serialize a message into the JSON payload pushed over the WebSocket.
 
     Args:
         message: The message to serialize.
+        viewer: The profile this payload will be delivered to. When given,
+            sender names are resolved through ``display_identity_for`` so a
+            live incoming message never reveals a name the server-rendered
+            thread would mask for that viewer (docs/PROBLEMS.md; decision
+            2026-07-23: per-recipient payloads). None keeps the raw names -
+            correct only for the sender's own sessions.
 
     Returns:
         A JSON-serializable dict; ``sender_slug``/``recipient_slug`` let the
         frontend route the payload to the right open conversation.
     """
+
+    def _name_for(subject: Profile) -> str:
+        if viewer is None or viewer.pk == subject.pk:
+            return subject.username
+        return display_identity_for(viewer, subject)["display_name"]
+
     reply_to = None
     if message.reply_to_id and message.reply_to is not None:
         quoted = message.reply_to
@@ -197,7 +209,7 @@ def serialize_direct_message(message: DirectMessage) -> dict[str, Any]:
             quoted_preview = "📷 Photo" if quoted.images.exists() else ("🗺️ Map" if quoted.markup_map_id else "Message")
         reply_to = {
             "id": quoted.pk,
-            "sender_name": quoted.sender.username,
+            "sender_name": _name_for(quoted.sender),
             "preview": quoted_preview,
             "ciphertext": quoted.ciphertext,
             "nonce": quoted.nonce,
@@ -213,7 +225,7 @@ def serialize_direct_message(message: DirectMessage) -> dict[str, Any]:
         "key_version": message.key_version,
         "created": message.created.isoformat(),
         "sender_slug": message.sender.slug or "",
-        "sender_name": message.sender.username,
+        "sender_name": _name_for(message.sender),
         "recipient_slug": message.recipient.slug or "",
         "images": [{"id": image.pk, "url": image.image.url} for image in message.images.all()],
         "images_revealed": message.images_revealed,
@@ -243,14 +255,19 @@ def _broadcast_direct_message(message: DirectMessage) -> None:
     Args:
         message: The freshly created message.
     """
-    payload = serialize_direct_message(message)
-    groups = {direct_message_group_name(message.sender_id), direct_message_group_name(message.recipient_id)}
+    # Per-recipient payloads: the recipient's copy resolves the sender's name
+    # through their own visibility (a live message must never reveal a name a
+    # refresh would mask); the sender's copy keeps raw names (self-view).
+    deliveries = [
+        (direct_message_group_name(message.sender_id), serialize_direct_message(message)),
+        (direct_message_group_name(message.recipient_id), serialize_direct_message(message, viewer=message.recipient)),
+    ]
 
     def _send() -> None:
         layer = get_channel_layer()
         if layer is None:
             return
-        for group in groups:
+        for group, payload in deliveries:
             try:
                 async_to_sync(layer.group_send)(group, {"type": "dm.message", "message": payload})
             except Exception:

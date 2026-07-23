@@ -98,6 +98,32 @@ def fake_auth_salt(identifier: str) -> str:
     return base64.b64encode(digest[:16]).decode()
 
 
+def group_member_token(group_uuid: Any, profile_id: int) -> str:
+    """Opaque per-(group, member) identifier for the key-rotation API.
+
+    The rotation payload used to be keyed by profile slugs, which handed every
+    group member the real slug of members whose ``profile_visibility`` masks
+    them elsewhere (docs/PROBLEMS.md PR #111 finding; decision 2026-07-23:
+    opaque identifiers). This token is deterministic (the client round-trips
+    it between GET and POST, and the server just recomputes the mapping -
+    nothing is decoded), scoped to one group by the uuid in the HMAC input (so
+    tokens can't correlate a member across groups), and reveals nothing about
+    the member.
+
+    Args:
+        group_uuid: The group chat's UUID.
+        profile_id: The member profile's pk.
+
+    Returns:
+        A hex token stable for this (group, member) pair.
+    """
+    return hmac.new(
+        settings.SECRET_KEY.encode(),
+        f"e2ee-group-member:{group_uuid}:{profile_id}".encode(),
+        hashlib.sha256,
+    ).hexdigest()
+
+
 def resolve_login_user(identifier: str) -> User | None:
     """Find the account an identifier would log in as (username or email).
 

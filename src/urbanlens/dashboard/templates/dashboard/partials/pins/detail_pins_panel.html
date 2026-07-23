@@ -1,7 +1,7 @@
 <div id="detail-pins-panel" class="detail-pins-panel card">
     <div class="card-header">
         <i class="material-symbols-outlined">{% if is_site_scope %}apartment{% else %}push_pin{% endif %}</i>
-        <span>{% if is_site_scope %}Buildings &amp; Detail Pins{% else %}Detail Pins{% endif %}</span>
+        <span>{% if is_site_scope %}Buildings &amp; Child Pins{% else %}Child Pins{% endif %}</span>
         {% if has_wiki %}
         <button type="button" class="btn btn--sm btn--ghost detail-pin-pull-wiki-btn" title="Add a child pin for anything the community wiki already has that you don't"
                 hx-post="{% url 'pin.detail_pins.pull_from_wiki' pin.slug %}"
@@ -41,7 +41,7 @@
                         hx-delete="{% url 'pin.detail_pin.edit' pin.slug dp.uuid %}"
                         hx-target="#detail-pin-{{ dp.uuid }}"
                         hx-swap="outerHTML"
-                        hx-confirm="Delete this detail pin?"
+                        hx-confirm="Delete this child pin?"
                         hx-on::before-request="this.closest('li').classList.add('is-deleting')">
                     <i class="material-symbols-outlined">delete</i>
                 </button>
@@ -50,6 +50,6 @@
         {% endfor %}
     </ul>
     {% else %}
-    <p class="detail-pin-empty">No detail pins yet. Add sub-markers for buildings, entrances, points of interest, or hazards.</p>
+    <p class="detail-pin-empty">No child pins yet. Add markers for buildings, entrances, points of interest, or hazards.</p>
     {% endif %}
 </div>

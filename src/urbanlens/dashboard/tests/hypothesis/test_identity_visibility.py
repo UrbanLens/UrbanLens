@@ -184,6 +184,140 @@ class TripCommentAuthorPrivacyTests(TestCase):
         self.assertContains(response, "Member")
 
 
+class TripCommentVisibilityGateTests(TestCase):
+    """The author's comment_visibility gates the whole trip comment (all-or-nothing),
+    matching pin/wiki comments - distinct from profile_visibility, which only
+    masks the author's identity while keeping the content visible."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.creator = _profile()
+        self.trip = _make_trip(self.creator)
+        self.author = _profile()
+        TripMembership.objects.create(trip=self.trip, profile=self.author)
+
+    def _comment(self, text: str = "Meet at the loading dock."):
+        from urbanlens.dashboard.models.trips.model import TripComment
+
+        return TripComment.objects.create(trip=self.trip, author=self.author, text=text)
+
+    def _set_comment_visibility(self, value: str) -> None:
+        Profile.objects.filter(pk=self.author.pk).update(comment_visibility=value)
+
+    def _panel(self):
+        return self.client.get(reverse("trips.comments", kwargs={"trip_slug": self.trip.slug}))
+
+    def test_comment_hidden_when_authors_comment_visibility_excludes_viewer(self) -> None:
+        self._comment()
+        self._set_comment_visibility(VisibilityChoice.NO_ONE)
+        self.client.force_login(self.creator.user)
+        self.assertNotContains(self._panel(), "Meet at the loading dock.")
+
+    def test_comment_visible_when_authors_comment_visibility_permits(self) -> None:
+        self._comment()
+        self._set_comment_visibility(VisibilityChoice.ANYONE)
+        self.client.force_login(self.creator.user)
+        self.assertContains(self._panel(), "Meet at the loading dock.")
+
+    def test_author_always_sees_their_own_comment(self) -> None:
+        self._comment()
+        self._set_comment_visibility(VisibilityChoice.NO_ONE)
+        self.client.force_login(self.author.user)
+        self.assertContains(self._panel(), "Meet at the loading dock.")
+
+    def test_reply_from_hidden_author_is_gated_independently(self) -> None:
+        from urbanlens.dashboard.models.trips.model import TripComment
+
+        visible = TripComment.objects.create(trip=self.trip, author=self.creator, text="Anyone been inside?")
+        TripComment.objects.create(trip=self.trip, author=self.author, parent=visible, text="Yes, last spring.")
+        self._set_comment_visibility(VisibilityChoice.NO_ONE)
+        self.client.force_login(self.creator.user)
+        response = self._panel()
+        self.assertContains(response, "Anyone been inside?")
+        self.assertNotContains(response, "Yes, last spring.")
+
+    def test_reaction_endpoint_404s_for_a_gated_comment(self) -> None:
+        comment = self._comment()
+        self._set_comment_visibility(VisibilityChoice.NO_ONE)
+        self.client.force_login(self.creator.user)
+        response = self.client.post(
+            reverse("trips.comment.react", kwargs={"trip_slug": self.trip.slug, "comment_id": comment.pk}),
+            {"emoji": "\U0001f44d"},
+        )
+        self.assertEqual(response.status_code, 404)
+
+
+class LiveMessagePayloadMaskingTests(TestCase):
+    """WebSocket message payloads resolve the sender's identity per recipient.
+
+    docs/PROBLEMS.md (PR #111 deferred item, decision 2026-07-23): the
+    broadcast payload used to be built once and delivered identically to every
+    member, so a live incoming message revealed a raw sender name that a page
+    refresh would mask. Payloads are now built per recipient.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.viewer = _profile()
+        self.hidden_sender = _profile(visibility=VisibilityChoice.NO_ONE)
+
+    def test_group_payload_masks_a_hidden_sender_for_another_member(self) -> None:
+        from urbanlens.dashboard.services.group_chats import create_group_chat, create_group_message, serialize_group_message
+
+        group = create_group_chat(self.viewer, "Crew", [self.hidden_sender])
+        message = create_group_message(self.hidden_sender, group, "Meet at the gate")
+
+        payload = serialize_group_message(message, viewer=self.viewer)
+
+        self.assertNotEqual(payload["sender_name"], self.hidden_sender.username)
+        self.assertEqual(payload["body"], "Meet at the gate")
+
+    def test_group_payload_keeps_the_senders_own_name_for_their_sessions(self) -> None:
+        from urbanlens.dashboard.services.group_chats import create_group_chat, create_group_message, serialize_group_message
+
+        group = create_group_chat(self.viewer, "Crew", [self.hidden_sender])
+        message = create_group_message(self.hidden_sender, group, "Meet at the gate")
+
+        payload = serialize_group_message(message, viewer=self.hidden_sender)
+
+        self.assertEqual(payload["sender_name"], self.hidden_sender.username)
+
+    def test_group_payload_keeps_a_visible_senders_name(self) -> None:
+        from urbanlens.dashboard.services.group_chats import create_group_chat, create_group_message, serialize_group_message
+
+        visible = _profile()
+        Friendship.objects.create(from_profile=self.viewer, to_profile=visible, status=FriendshipStatus.ACCEPTED, relationship_type=FriendshipType.FRIEND, permissions=Permission.VIEW_PROFILE)
+        group = create_group_chat(self.viewer, "Crew", [visible])
+        message = create_group_message(visible, group, "Heading out")
+
+        payload = serialize_group_message(message, viewer=self.viewer)
+
+        self.assertEqual(payload["sender_name"], visible.username)
+
+    def test_direct_message_payload_masks_a_hidden_sender_for_the_recipient(self) -> None:
+        from urbanlens.dashboard.models.direct_messages.model import DirectMessage
+        from urbanlens.dashboard.services.direct_messages import display_identity_for, serialize_direct_message
+
+        message = DirectMessage.objects.create(sender=self.hidden_sender, recipient=self.viewer, body="hi")
+
+        payload = serialize_direct_message(message, viewer=self.viewer)
+
+        expected = display_identity_for(self.viewer, self.hidden_sender)["display_name"]
+        self.assertEqual(payload["sender_name"], expected)
+        self.assertNotEqual(payload["sender_name"], self.hidden_sender.username)
+
+    def test_direct_message_payload_without_viewer_keeps_raw_names(self) -> None:
+        """The sender's own copy (viewer=None) is the self-view - unmasked."""
+        from urbanlens.dashboard.models.direct_messages.model import DirectMessage
+        from urbanlens.dashboard.services.direct_messages import serialize_direct_message
+
+        message = DirectMessage.objects.create(sender=self.hidden_sender, recipient=self.viewer, body="hi")
+
+        payload = serialize_direct_message(message)
+
+        self.assertEqual(payload["sender_name"], self.hidden_sender.username)
+
+
 class GroupMembersDialogPrivacyTests(TestCase):
     """Group members dialog masks a member's identity per their own privacy setting."""
 

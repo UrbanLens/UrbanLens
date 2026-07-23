@@ -8,11 +8,13 @@ so repeated views/pagination don't re-hit the upstream API.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import logging
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.cache import cache
+from django.core.signing import Signer
 from django.http import HttpResponse
 from django.views import View
 import requests
@@ -23,6 +25,27 @@ if TYPE_CHECKING:
     from django.http import HttpRequest
 
 logger = logging.getLogger(__name__)
+
+#: Salt for the proxy-URL signature. The photo_name path segment is otherwise
+#: fully client-controlled: any logged-in user could replay copied/guessed
+#: photo references and consume Places quota through this proxy. Signing binds
+#: each URL to a photo name the server itself put in a LocationCache row
+#: (see GoogleMapsPhotosPanelSource.media_items), without needing a per-photo
+#: database lookup here. Deterministic (no timestamp) so the URL for a given
+#: photo stays stable and cacheable.
+_PHOTO_SIGNER_SALT = "urbanlens.media_proxy.google_maps_photo"
+
+
+def sign_photo_name(photo_name: str) -> str:
+    """Signature token binding a proxy URL to a server-issued photo name.
+
+    Args:
+        photo_name: The raw (unquoted) Places API photo name.
+
+    Returns:
+        The URL-safe signature to pass as the proxy URL's ``sig`` param.
+    """
+    return Signer(salt=_PHOTO_SIGNER_SALT).signature(photo_name)
 
 _PHOTO_CACHE_TTL = 24 * 3600
 #: How long a *confirmed-expired* photo reference is cached as gone, before
@@ -42,6 +65,12 @@ class GoogleMapsPhotoProxyView(LoginRequiredMixin, View):
 
     def get(self, request: HttpRequest, photo_name: str) -> HttpResponse:
         from urbanlens.dashboard.services.apis.locations.google.places import GooglePlacesGateway
+
+        # Reject unsigned/tampered references before touching the cache or the
+        # upstream API - the only legitimate URLs are the ones the gallery
+        # itself rendered (which carry a signature over the exact photo name).
+        if not hmac.compare_digest(request.GET.get("sig", ""), sign_photo_name(photo_name)):
+            return HttpResponse(status=404)
 
         cache_key = f"ul_gmaps_photo_{hashlib.sha256(photo_name.encode()).hexdigest()}"
         cached = cache.get(cache_key)

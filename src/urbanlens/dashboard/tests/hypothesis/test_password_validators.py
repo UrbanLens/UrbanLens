@@ -209,3 +209,82 @@ class SignupPasswordValidationIntegrationTests(TestCase):
             with pytest.raises(ValidationError):
                 validate_password("short1A")
             validate_password("LongEnoughPassphrase9")
+
+
+class ValidatePasswordPolicyViewTests(TestCase):
+    """POST /accounts/validate-password/ - the E2EE flows' pre-derive policy check.
+
+    The client derives the login credential before submit, so this endpoint is
+    the only place the configured AUTH_PASSWORD_VALIDATORS ever see the real
+    password (docs/PROBLEMS.md, decision 2026-07-23).
+    """
+
+    def _post(self, body: dict):
+        import json as jsonlib
+
+        return self.client.post(reverse("validate_password_policy"), jsonlib.dumps(body), content_type="application/json")
+
+    def test_strong_password_is_valid(self) -> None:
+        with patch(_HIBP_PATCH, return_value=False):
+            response = self._post({"password": _STRONG_PASSWORD})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"valid": True, "errors": []})
+
+    def test_short_password_reports_length_error(self) -> None:
+        with patch(_HIBP_PATCH, return_value=False):
+            response = self._post({"password": "Ab1!"})
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertFalse(payload["valid"])
+        self.assertTrue(any("12" in message for message in payload["errors"]))
+
+    def test_complexity_failure_is_reported(self) -> None:
+        with patch(_HIBP_PATCH, return_value=False):
+            response = self._post({"password": "alllowercaseonly!"})
+        payload = response.json()
+        self.assertFalse(payload["valid"])
+        self.assertTrue(any("uppercase" in message.lower() for message in payload["errors"]))
+
+    def test_pwned_password_is_rejected(self) -> None:
+        with patch(_HIBP_PATCH, return_value=True):
+            response = self._post({"password": _STRONG_PASSWORD})
+        payload = response.json()
+        self.assertFalse(payload["valid"])
+        self.assertTrue(any("breach" in message.lower() for message in payload["errors"]))
+
+    def test_username_similarity_is_checked(self) -> None:
+        with patch(_HIBP_PATCH, return_value=False):
+            response = self._post({"password": "Jessamyn-Barrows1", "username": "jessamyn-barrows1", "email": ""})
+        payload = response.json()
+        self.assertFalse(payload["valid"])
+
+    def test_anonymous_access_is_allowed(self) -> None:
+        """Signup has no session yet - the endpoint must not require login."""
+        with patch(_HIBP_PATCH, return_value=False):
+            response = self._post({"password": _STRONG_PASSWORD})
+        self.assertEqual(response.status_code, 200)
+
+    def test_missing_password_is_400(self) -> None:
+        self.assertEqual(self._post({}).status_code, 400)
+
+    def test_malformed_body_is_400(self) -> None:
+        response = self.client.post(reverse("validate_password_policy"), "not json", content_type="application/json")
+        self.assertEqual(response.status_code, 400)
+
+    def test_oversized_password_is_invalid_not_500(self) -> None:
+        response = self._post({"password": "Aa1!" * 500})
+        payload = response.json()
+        self.assertFalse(payload["valid"])
+
+    def test_rate_limit_returns_429(self) -> None:
+        from urbanlens.dashboard.controllers import account as account_controller
+
+        with patch(_HIBP_PATCH, return_value=False), patch.object(account_controller, "_PASSWORD_CHECK_RATE_LIMIT", 2):
+            self.assertEqual(self._post({"password": _STRONG_PASSWORD}).status_code, 200)
+            self.assertEqual(self._post({"password": _STRONG_PASSWORD}).status_code, 200)
+            self.assertEqual(self._post({"password": _STRONG_PASSWORD}).status_code, 429)
+
+    def test_password_never_appears_in_the_response(self) -> None:
+        with patch(_HIBP_PATCH, return_value=False):
+            response = self._post({"password": "SuperSecretValue77!"})
+        self.assertNotIn("SuperSecretValue77!", response.content.decode())

@@ -49,6 +49,10 @@ export interface E2EEUrls {
     /** POST target for password change/set. Optional; only the settings and
      * set-password pages wire it. */
     changePassword?: string;
+    /** POST target running a raw password through AUTH_PASSWORD_VALIDATORS
+     * before the credential is derived (see serverPolicyErrors). Optional;
+     * pages without it skip the server-side policy check. */
+    validatePassword?: string;
     /** The login form's POST target, for the fetch-based login flow. */
     login: string;
     /** FAQ entry explaining encryption/recovery keys in plain language, shown
@@ -317,9 +321,55 @@ async function unlockAfterDerivedLogin(password: string): Promise<void> {
 // Signup / password-reset form wiring
 // ---------------------------------------------------------------------------
 
-/** Django's default minimum password length, enforced client-side because the
- * server only ever sees the derived credential (which always "looks strong"). */
-const MIN_PASSWORD_LENGTH = 8;
+/** The configured MinimumLengthValidator floor (settings/base.py), enforced
+ * client-side because the server only ever sees the derived credential (which
+ * always "looks strong"). The full validator chain (complexity,
+ * common-password, HIBP breach check) additionally runs server-side via the
+ * validate-password endpoint - see serverPolicyErrors(). */
+const MIN_PASSWORD_LENGTH = 12;
+
+/**
+ * Run the raw password through the server's configured validator chain.
+ *
+ * The one deliberate raw-password transmission in the derived-auth design:
+ * without it, none of AUTH_PASSWORD_VALIDATORS ever sees the real password
+ * (the derived credential always "looks strong"). Sent once over HTTPS,
+ * validated in memory server-side, never stored or logged.
+ *
+ * @param password - The candidate raw password.
+ * @param username - The username typed into the form ("" when unknown), for
+ *   the similarity validator.
+ * @param email - The email typed into the form ("" when unknown).
+ * @returns Policy-violation messages; empty when the password passes, when
+ *   the endpoint isn't wired on this page, or when the check can't be
+ *   reached (fail open - the MIN_PASSWORD_LENGTH floor still applies).
+ */
+async function serverPolicyErrors(password: string, username: string, email: string): Promise<string[]> {
+    const url = cfg().urls.validatePassword;
+    if (!url) {
+        return [];
+    }
+    try {
+        const response = await postJson(url, { password, username, email });
+        if (!response.ok) {
+            return [];
+        }
+        const payload = (await response.json()) as { valid?: boolean; errors?: string[] };
+        if (payload.valid === false) {
+            return payload.errors && payload.errors.length ? payload.errors : ["This password doesn't meet the password policy."];
+        }
+    } catch {
+        // Network failure - fall through to fail-open.
+    }
+    return [];
+}
+
+/** Show policy errors on a password input as a native validation message. */
+function reportPolicyErrors(input: HTMLInputElement, errors: string[]): void {
+    input.setCustomValidity(errors.join(" "));
+    input.reportValidity();
+    input.addEventListener("input", () => input.setCustomValidity(""), { once: true });
+}
 
 /**
  * Wire the signup form: derive the login credential before submit so the raw
@@ -353,9 +403,14 @@ async function prepareSignupSubmit(form: HTMLFormElement): Promise<void> {
         return;
     }
     if (password1.value.length < MIN_PASSWORD_LENGTH || /^\d+$/.test(password1.value)) {
-        password1.setCustomValidity(`Use at least ${MIN_PASSWORD_LENGTH} characters, not all numbers.`);
-        password1.reportValidity();
-        password1.addEventListener("input", () => password1.setCustomValidity(""), { once: true });
+        reportPolicyErrors(password1, [`Use at least ${MIN_PASSWORD_LENGTH} characters, not all numbers.`]);
+        return;
+    }
+    const username = (form.elements.namedItem("username") as HTMLInputElement | null)?.value ?? "";
+    const email = (form.elements.namedItem("email") as HTMLInputElement | null)?.value ?? "";
+    const policyErrors = await serverPolicyErrors(password1.value, username, email);
+    if (policyErrors.length) {
+        reportPolicyErrors(password1, policyErrors);
         return;
     }
     await cryptoReady();
@@ -414,9 +469,14 @@ async function prepareResetSubmit(form: HTMLFormElement): Promise<void> {
         return;
     }
     if (password1.value.length < MIN_PASSWORD_LENGTH || /^\d+$/.test(password1.value)) {
-        password1.setCustomValidity(`Use at least ${MIN_PASSWORD_LENGTH} characters, not all numbers.`);
-        password1.reportValidity();
-        password1.addEventListener("input", () => password1.setCustomValidity(""), { once: true });
+        reportPolicyErrors(password1, [`Use at least ${MIN_PASSWORD_LENGTH} characters, not all numbers.`]);
+        return;
+    }
+    // The reset form carries no username/email fields; the similarity check
+    // simply has nothing extra to compare against here.
+    const policyErrors = await serverPolicyErrors(password1.value, "", "");
+    if (policyErrors.length) {
+        reportPolicyErrors(password1, policyErrors);
         return;
     }
     await cryptoReady();
@@ -683,6 +743,10 @@ export async function changePassword(currentPassword: string, newPassword: strin
     }
     if (newPassword.length < MIN_PASSWORD_LENGTH || /^\d+$/.test(newPassword)) {
         return { ok: false, error: `Use at least ${MIN_PASSWORD_LENGTH} characters, not all numbers.` };
+    }
+    const policyErrors = await serverPolicyErrors(newPassword, identifier, "");
+    if (policyErrors.length) {
+        return { ok: false, error: policyErrors.join(" ") };
     }
     await cryptoReady();
 
@@ -1092,7 +1156,12 @@ interface GroupKeysPayload {
     keys: { version: number; wrapped_key: string }[];
     latest: number;
     needs_rotation: boolean;
-    members: { slug: string; public_key: string }[] | null;
+    /** One entry per active member when all are enrolled, else null. `id` is
+     * an opaque per-(group, member) rotation token - deliberately not a slug,
+     * which would reveal masked members' identities (see the server's
+     * group_member_token). It is round-tripped verbatim as the `wrapped` key
+     * when posting a new version. */
+    members: { id: string; public_key: string }[] | null;
 }
 
 function groupKeyUrl(groupUuid: string): string {
@@ -1175,7 +1244,7 @@ async function createGroupKeyVersion(
     const key = generateConversationKey();
     const wrapped: Record<string, string> = {};
     for (const member of payload.members) {
-        wrapped[member.slug] = sealToPublicKey(key, member.public_key);
+        wrapped[member.id] = sealToPublicKey(key, member.public_key);
     }
     const version = payload.latest + 1;
     const response = await postJson(groupKeyUrl(groupUuid), { version, wrapped });

@@ -450,11 +450,15 @@ class E2EEGroupKeyView(LoginRequiredMixin, View):
 
         Returns:
             JSON ``{keys, latest, needs_rotation, members}`` - ``members`` is
-            a ``[{slug, public_key}]`` list when every active member is
-            enrolled (so the caller can rotate), else null; 404 for
+            a ``[{id, public_key}]`` list when every active member is enrolled
+            (so the caller can rotate), else null. ``id`` is an opaque
+            per-(group, member) token (see ``services.e2ee.group_member_token``)
+            - never a slug, which would hand every member the real identity of
+            members whose ``profile_visibility`` masks them elsewhere. 404 for
             non-members and unknown groups.
         """
         from urbanlens.dashboard.models.e2ee import GroupKey, GroupKeyEnvelope, MessagingKeyBundle
+        from urbanlens.dashboard.services.e2ee import group_member_token
 
         resolved = self._resolve(request, group_uuid)
         if resolved is None:
@@ -477,7 +481,7 @@ class E2EEGroupKeyView(LoginRequiredMixin, View):
 
         members = None
         if all_enrolled:
-            members = [{"slug": member.ensure_slug(), "public_key": bundles[member.pk].public_key} for member in member_profiles]
+            members = [{"id": group_member_token(group.uuid, member.pk), "public_key": bundles[member.pk].public_key} for member in member_profiles]
         return JsonResponse({"keys": keys, "latest": latest, "needs_rotation": needs_rotation, "members": members})
 
     def post(self, request: HttpRequest, group_uuid) -> HttpResponse:
@@ -485,8 +489,9 @@ class E2EEGroupKeyView(LoginRequiredMixin, View):
 
         Args:
             request: JSON body with ``version`` and ``wrapped`` (a mapping of
-                member profile slug to that member's sealed blob; must cover
-                the active membership exactly).
+                each member's opaque rotation token - the ``id`` the GET
+                response issued - to that member's sealed blob; must cover the
+                active membership exactly).
             group_uuid: UUID of the group chat.
 
         Returns:
@@ -494,6 +499,7 @@ class E2EEGroupKeyView(LoginRequiredMixin, View):
             winner's envelope when racing; 400/404/409 on invalid input.
         """
         from urbanlens.dashboard.models.e2ee import GroupKey, GroupKeyEnvelope, MessagingKeyBundle
+        from urbanlens.dashboard.services.e2ee import group_member_token
 
         resolved = self._resolve(request, group_uuid)
         if resolved is None:
@@ -507,14 +513,18 @@ class E2EEGroupKeyView(LoginRequiredMixin, View):
         if not isinstance(wrapped, dict) or not wrapped:
             return HttpResponseBadRequest("Invalid wrapped envelopes")
 
-        members_by_slug = {membership.profile.ensure_slug(): membership.profile for membership in group.active_memberships().select_related("profile", "profile__user")}
-        if set(wrapped) != set(members_by_slug):
+        # Keyed by opaque per-(group, member) tokens, recomputed here rather
+        # than decoded - the client just round-trips the ids the GET response
+        # issued. A stale client still keying by slug gets the same 409 as any
+        # other membership mismatch and retries after refetching.
+        members_by_token = {group_member_token(group.uuid, membership.profile_id): membership.profile for membership in group.active_memberships().select_related("profile", "profile__user")}
+        if set(wrapped) != set(members_by_token):
             return JsonResponse({"error": "Envelopes must cover the group's current members exactly."}, status=409)
         for blob in wrapped.values():
             if not valid_blob(blob, MAX_WRAPPED_CONVERSATION_KEY_LENGTH):
                 return HttpResponseBadRequest("Invalid wrapped envelopes")
-        enrolled_count = MessagingKeyBundle.objects.for_profiles(members_by_slug.values()).count()
-        if enrolled_count != len(members_by_slug):
+        enrolled_count = MessagingKeyBundle.objects.for_profiles(members_by_token.values()).count()
+        if enrolled_count != len(members_by_token):
             return JsonResponse({"error": "Every member must be enrolled before the group can encrypt."}, status=409)
 
         latest = GroupKey.objects.for_group(group).order_by("-version").first()
@@ -530,7 +540,7 @@ class E2EEGroupKeyView(LoginRequiredMixin, View):
             with transaction.atomic():
                 key_row = GroupKey.objects.create(group=group, version=requested_version, created_by=profile)
                 GroupKeyEnvelope.objects.bulk_create(
-                    [GroupKeyEnvelope(key=key_row, profile=member, wrapped_key=wrapped[slug]) for slug, member in members_by_slug.items()],
+                    [GroupKeyEnvelope(key=key_row, profile=member, wrapped_key=wrapped[token]) for token, member in members_by_token.items()],
                 )
         except IntegrityError:
             # Lost the race - the concurrent creator's key is canonical.
@@ -539,7 +549,7 @@ class E2EEGroupKeyView(LoginRequiredMixin, View):
             if envelope is None:
                 return JsonResponse({"error": "No envelope for this member."}, status=409)
             return JsonResponse({"version": winner.version, "wrapped_key": envelope.wrapped_key}, status=200)
-        return JsonResponse({"version": key_row.version, "wrapped_key": wrapped[profile.ensure_slug()]}, status=201)
+        return JsonResponse({"version": key_row.version, "wrapped_key": wrapped[group_member_token(group.uuid, profile.pk)]}, status=201)
 
 
 class E2EEChangePasswordView(LoginRequiredMixin, View):

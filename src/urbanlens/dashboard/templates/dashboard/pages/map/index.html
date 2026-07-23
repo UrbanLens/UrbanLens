@@ -242,7 +242,7 @@
             {# Links & child pins -- collapsible -- #}
             <details class="fp-accordion-item" id="fp-acc-links" data-importance="low">
                 <summary class="fp-accordion-summary">
-                    <span class="fp-accordion-label">Links &amp; Detail Pins</span>
+                    <span class="fp-accordion-label">Links &amp; Child Pins</span>
                     <i class="material-icons fp-acc-arrow">expand_more</i>
                 </summary>
                 <div class="fp-accordion-body">
@@ -255,7 +255,7 @@
                         </select>
                     </div>
                     <div class="fp-score-group">
-                        <div class="fp-score-label">Detail pin count</div>
+                        <div class="fp-score-label">Child pin count</div>
                         {% include "dashboard/partials/ui/_dual_range_slider.html" with min=0 max=20 min_value=0 max_value=20 min_field="min_detail_pins" max_field="max_detail_pins" format="default" htmx_form="filter-form" accordion_id="fp-acc-links" %}
                     </div>
                 </div>
@@ -1940,7 +1940,7 @@
     })();
 
     // -- Child pins (child pins) layer ---------------------------------------------
-    // Pins nested inside another pin (merged pins, detail pins) are hidden from
+    // Pins nested inside another pin (merged pins, child pins) are hidden from
     // the main map by default; this layer renders them as smaller markers with
     // a link back to their parent. Loaded lazily the first time it's turned on,
     // and re-fetched with the active filter criteria whenever filters change.

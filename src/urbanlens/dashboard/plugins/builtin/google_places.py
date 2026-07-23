@@ -64,18 +64,24 @@ class GoogleMapsPhotosPanelSource(GalleryMediaSource):
         )
 
     def media_items(self, data: dict) -> list[MediaItem]:
-        """Build proxied media items from the cached photo names."""
+        """Build proxied media items from the cached photo names.
+
+        Each proxy URL carries a signature over its photo name - the proxy
+        view rejects anything else, so a copied/guessed reference can't burn
+        Places quota (see ``controllers.media_proxy.sign_photo_name``).
+        """
         from urllib.parse import quote
 
         from django.urls import reverse
 
+        from urbanlens.dashboard.controllers.media_proxy import sign_photo_name
         from urbanlens.dashboard.services.apis.assets.base import MediaItem
 
         place_id = (data or {}).get("place_id") or ""
         page_url = f"https://www.google.com/maps/place/?q=place_id:{place_id}" if place_id else ""
         items = []
         for photo_name in (data or {}).get("photo_names") or []:
-            proxy_url = reverse("media.google_maps_photo", args=[quote(photo_name, safe="")])
+            proxy_url = reverse("media.google_maps_photo", args=[quote(photo_name, safe="")]) + f"?sig={quote(sign_photo_name(photo_name), safe='')}"
             items.append(MediaItem(url=proxy_url, thumb_url=proxy_url, caption="", source="Google Maps", page_url=page_url or proxy_url))
         return items
 
