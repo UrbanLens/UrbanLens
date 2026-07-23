@@ -1629,6 +1629,7 @@
     if (!card || !window.UrbanLensE2EE) return;
     UrbanLensE2EE.init({
         selfSlug: "{{ self_slug }}",
+        loginIdentifier: "{{ request.user.username|escapejs }}",
         urls: {
             loginParams: "{% url 'e2ee.login_params' %}",
             enroll: "{% url 'e2ee.enroll' %}",

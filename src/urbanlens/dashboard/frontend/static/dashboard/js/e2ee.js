@@ -21900,6 +21900,10 @@ https://github.com/browserify/crypto-browserify`);
       const authSalt = randomSalt();
       body.auth_key = bytesToB64(deriveKey(options.password, authSalt));
       body.auth_salt = authSalt;
+    }
+    if (options.currentPasswordProof) {
+      body.current_password = options.currentPasswordProof;
+    } else if (options.rotateAuth && options.password) {
       body.current_password = options.password;
     }
     const response = await postJson(cfg().urls.enroll, body);
@@ -21956,26 +21960,26 @@ https://github.com/browserify/crypto-browserify`);
     const destination = loginResponse.url;
     try {
       if (params.mode === "legacy") {
-        const result = await enroll({ password, rotateAuth: true });
+        const result = await enroll({ password, rotateAuth: true, currentPasswordProof: credential });
         if (result) {
           await showRecoveryDialog(result.recoveryDisplay);
         }
       } else {
-        await unlockAfterDerivedLogin(password);
+        await unlockAfterDerivedLogin(password, credential);
       }
     } catch (error) {
       console.error("E2EE post-login key handling failed", error);
     }
     window.location.assign(destination);
   }
-  async function unlockAfterDerivedLogin(password) {
+  async function unlockAfterDerivedLogin(password, currentPasswordProof2) {
     const keysResponse = await fetch(cfg().urls.keys, { credentials: "same-origin" });
     if (!keysResponse.ok) {
       return;
     }
     const bundle = await keysResponse.json();
     if (!bundle.enrolled) {
-      const result = await enroll({ password, rotateAuth: false });
+      const result = await enroll({ password, rotateAuth: false, currentPasswordProof: currentPasswordProof2 });
       if (result) {
         await showRecoveryDialog(result.recoveryDisplay);
       }
@@ -21994,7 +21998,8 @@ https://github.com/browserify/crypto-browserify`);
       const wrapSalt = randomSalt();
       await postJson(cfg().urls.rewrap, {
         password_wrapped_secret: wrapSecretKey(cached.privateKey, deriveKey(password, wrapSalt, bundle.kdf_opslimit, bundle.kdf_memlimit)),
-        password_wrap_salt: wrapSalt
+        password_wrap_salt: wrapSalt,
+        current_password: currentPasswordProof2
       });
     }
   }
@@ -22281,6 +22286,21 @@ https://github.com/browserify/crypto-browserify`);
     }
     return { ok: false, error: "Could not change your password. Please try again." };
   }
+  async function currentPasswordProof(password) {
+    const identifier = cfg().loginIdentifier;
+    if (!identifier) {
+      return password;
+    }
+    const paramsResponse = await fetch(`${cfg().urls.loginParams}?identifier=${encodeURIComponent(identifier)}`, { credentials: "same-origin" });
+    if (!paramsResponse.ok) {
+      return password;
+    }
+    const params = await paramsResponse.json();
+    if (params.mode === "derived") {
+      return bytesToB64(deriveKey(password, params.auth_salt));
+    }
+    return password;
+  }
   async function regenerateRecoveryKey() {
     await cryptoReady();
     const identity = await requireIdentity();
@@ -22330,6 +22350,7 @@ https://github.com/browserify/crypto-browserify`);
       const wrapSalt = randomSalt();
       body.password_wrapped_secret = wrapSecretKey(identity.privateKey, deriveKey(password, wrapSalt));
       body.password_wrap_salt = wrapSalt;
+      body.current_password = await currentPasswordProof(password);
     }
     if (oldPrivateKey !== null && cfg().urls.rewrapAll) {
       const rewrapResponse = await fetch(cfg().urls.rewrapAll, { credentials: "same-origin" });

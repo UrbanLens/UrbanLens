@@ -148,6 +148,38 @@ class EnrollEndpointTests(TestCase):
         self.assertTrue(MessagingKeyBundle.objects.filter(profile=profile).exists())
         self.assertFalse(AccountKdf.objects.filter(user=profile.user).exists())
 
+    def test_password_account_enroll_requires_current_password_proof(self) -> None:
+        profile = _profile(password="correct-horse")
+        response = _client_for(profile).post(reverse("e2ee.enroll"), data=json.dumps(self._payload()), content_type="application/json")
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(MessagingKeyBundle.objects.filter(profile=profile).exists())
+
+    def test_password_account_enroll_accepts_current_password_proof_without_rotation(self) -> None:
+        profile = _profile(password="correct-horse")
+        response = _client_for(profile).post(
+            reverse("e2ee.enroll"),
+            data=json.dumps(self._payload(current_password="correct-horse")),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertTrue(MessagingKeyBundle.objects.filter(profile=profile).exists())
+
+    def test_derived_account_enroll_accepts_current_auth_credential(self) -> None:
+        profile = _profile(password="initial")
+        auth_key = _b64(os.urandom(32))
+        profile.user.set_password(auth_key)
+        profile.user.save(update_fields=["password"])
+        AccountKdf.objects.create(user=profile.user, auth_salt=_b64(os.urandom(16)))
+
+        response = _client_for(profile).post(
+            reverse("e2ee.enroll"),
+            data=json.dumps(self._payload(current_password=auth_key)),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertTrue(MessagingKeyBundle.objects.filter(profile=profile).exists())
+
     def test_enroll_is_idempotent(self) -> None:
         profile = _profile()
         client = _client_for(profile)
@@ -301,12 +333,24 @@ class RewrapAndResetTests(TestCase):
         MessagingKeyBundle.objects.filter(pk=bundle.pk).update(password_wrap_stale=True)
         response = _client_for(profile).post(
             reverse("e2ee.rewrap"),
-            data=json.dumps({"password_wrapped_secret": _b64(os.urandom(72)), "password_wrap_salt": _b64(os.urandom(16))}),
+            data=json.dumps({"password_wrapped_secret": _b64(os.urandom(72)), "password_wrap_salt": _b64(os.urandom(16)), "current_password": "pw"}),
             content_type="application/json",
         )
         self.assertEqual(response.status_code, 200)
         bundle.refresh_from_db()
         self.assertFalse(bundle.password_wrap_stale)
+
+    def test_rewrap_password_copy_requires_current_password_proof(self) -> None:
+        profile = _profile(password="pw")
+        bundle = _enroll(profile)
+        response = _client_for(profile).post(
+            reverse("e2ee.rewrap"),
+            data=json.dumps({"password_wrapped_secret": _b64(os.urandom(72)), "password_wrap_salt": _b64(os.urandom(16))}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 403)
+        bundle.refresh_from_db()
+        self.assertEqual(bundle.password_wrapped_secret, "")
 
     def test_reset_requires_confirmation(self) -> None:
         profile = _profile()
@@ -329,6 +373,29 @@ class RewrapAndResetTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["version"], 2)
         self.assertEqual(response.json()["rewrapped"], 0)
+
+    def test_password_account_reset_requires_current_password_proof(self) -> None:
+        profile = _profile(password="pw")
+        bundle = _enroll(profile)
+        response = _client_for(profile).post(
+            reverse("e2ee.reset"),
+            data=json.dumps({"confirm": "RESET", "public_key": _b64(os.urandom(32)), "recovery_wrapped_secret": _b64(os.urandom(72))}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 403)
+        bundle.refresh_from_db()
+        self.assertEqual(bundle.version, 1)
+
+    def test_password_account_reset_accepts_current_password_proof(self) -> None:
+        profile = _profile(password="pw")
+        _enroll(profile)
+        response = _client_for(profile).post(
+            reverse("e2ee.reset"),
+            data=json.dumps({"confirm": "RESET", "public_key": _b64(os.urandom(32)), "recovery_wrapped_secret": _b64(os.urandom(72)), "current_password": "pw"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["version"], 2)
 
 
 class RewrapAllAndResetPreservationTests(TestCase):
