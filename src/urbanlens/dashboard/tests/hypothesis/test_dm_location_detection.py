@@ -32,6 +32,7 @@ from urbanlens.dashboard.services.dm_location_detection import (
     parse_addresses,
     parse_coordinates,
 )
+from urbanlens.dashboard.services.text_limits import MAX_DIRECT_MESSAGE_LENGTH
 
 
 class ParseCoordinatesTests(TestCase):
@@ -96,6 +97,41 @@ class ParseCoordinatesTests(TestCase):
     def test_mention_cap(self):
         text = " ".join(f"41.{i}00001, -73.{i}00001" for i in range(1, 9))
         self.assertEqual(len(parse_coordinates(text)), 5)
+
+    def test_adversarial_input_does_not_hang(self):
+        """Regression for the py/polynomial-redos CodeQL alert on _DECIMAL_HEMI_RE/_DMS_RE.
+
+        Long runs of near-matching whitespace with no terminating hemisphere
+        letter used to trigger catastrophic/polynomial backtracking. Uses
+        bait sized right up to the DM length cap (so the length-cap
+        defense-in-depth guard doesn't just truncate the regexes' way out of
+        it) - this must complete near-instantly regardless.
+        """
+        pad = MAX_DIRECT_MESSAGE_LENGTH // 2 - 10
+        hemi_bait = ("40." + "0" * pad + " " * pad + "X")[:MAX_DIRECT_MESSAGE_LENGTH]
+        dms_bait = ("40d40" + " " * pad + "X")[:MAX_DIRECT_MESSAGE_LENGTH]
+
+        start = time.perf_counter()
+        parse_coordinates(hemi_bait)
+        parse_coordinates(dms_bait)
+        elapsed = time.perf_counter() - start
+
+        self.assertLess(elapsed, 1.0, f"parse_coordinates took {elapsed:.3f}s on adversarial input - possible ReDoS regression")
+
+    def test_oversized_input_is_bounded_by_length_cap(self):
+        """A message far exceeding MAX_DIRECT_MESSAGE_LENGTH still returns fast.
+
+        Defense-in-depth: parse_coordinates truncates before scanning, so
+        even a hypothetical caller that skips body-length validation can't
+        feed these regexes unbounded text.
+        """
+        huge_bait = "40." + "0" * 200_000 + " " * 200_000 + "X"
+
+        start = time.perf_counter()
+        parse_coordinates(huge_bait)
+        elapsed = time.perf_counter() - start
+
+        self.assertLess(elapsed, 1.0, f"parse_coordinates took {elapsed:.3f}s on oversized input - length cap not applied")
 
     @given(
         st.floats(min_value=-89.9, max_value=89.9).filter(lambda v: abs(v) > 0.001),
