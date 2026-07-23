@@ -83,16 +83,41 @@ debounced save with `sendBeacon` fallback). The two scenarios to distinguish whe
 
 ---
 
-## Saved-filter include/exclude label picker: no drag-reorder or formula mode (extraction authorized)
+## ~~Saved-filter include/exclude label picker: no drag-reorder or formula mode~~ (RESOLVED 2026-07-23, browser-verified on dev)
 
-**Status 2026-07-23**: Jess authorized the full extraction - pull the main map's rich picker
-(~650 lines of inline JS/markup at `pages/map/index.html` ~lines 4451-5099, closure-scoped
-`fp-*` element IDs) into a shared TS module (`frontend/ts/shared/`), used by the main map, the
-bulk-edit dialog (currently the smaller `_makeLabelChipPicker` factory, ~line 3115), and the
-saved-filter detail page/dialog (`_saved_filter_label_picker.html` +
-`initSavedFilterLabelPickers()`), giving the latter two drag-between-boxes and formula mode.
-A session-sized refactor of a large, sensitive, frequently-touched file - schedule it as its
-own focused task with browser verification available.
+**RESOLVED 2026-07-23** - the authorized extraction is done and verified live:
+
+- **`frontend/ts/shared/label-picker.ts`** (installed globally as
+  `window.UrbanLensLabelPicker` by core.js) now owns both picker shapes:
+  `createFilterPicker` (the map sidebar's full engine - include/exclude columns, chip
+  dragging, AND/OR combinator, formula bar with tokenizer/parser/suggestions,
+  `label_groups` serialization) and `createChipPicker` (the flat search+chips component the
+  bulk-edit dialog and saved-filter scripts each used to duplicate). One deliberate
+  improvement over the inline original: label names are HTML-escaped in generated
+  chip/suggestion markup (the old code interpolated them raw - a UL-362-class XSS vector).
+- **Main map**: the ~650-line inline engine is gone; the page instantiates the module
+  against the existing fp-* DOM (inline on* handlers removed - the module wires delegated
+  listeners, which also covers labels appended later by the create-label dialog).
+  `applySavedFilter` merges via `mergeIncludeIds`, reset via `clear()`.
+- **Bulk-edit dialog**: `_makeLabelChipPicker` is a thin id-based wrapper over
+  `createChipPicker`. The rich include/exclude pairing deliberately does NOT apply there -
+  add-labels and remove-labels are separate actions with separate candidate pools.
+- **Saved-filter dialog + detail page**: the two flat pickers became ONE rich picker
+  (`_saved_filter_label_picker.html`, sf-* ids, reusing the global fp-* styles). It
+  serializes structured `label_groups` into the form (the create/edit endpoints already
+  parsed that field) AND mirrors flat `tags`/`exclude_tags` hidden checkboxes; it seeds
+  from stored groups (falling back to flat sets), so formulas round-trip and the "advanced
+  rules will be replaced" warning was removed as no longer true.
+
+**Browser-verified on dev.urbanlens.org** (Playwright in the official image on the chiron
+VM, driving a real login): 22/22 checks - click-include, right-click-exclude, AND/OR
+toggle, chip drag include→exclude, chip-click removal, formula `(Visited / Rooftop) -
+Demolished` parsing to `[{or,[..]},{not,[..]}]`, filter POSTs firing, and on the
+saved-filter page: seeding from flat criteria, hidden-input sync, formula entry, save, and
+byte-identical `label_groups` round-trip after reload (map preview showed exactly the 2
+matching pins). Screenshots reviewed. Remaining follow-up: the two updated template tests
+(`test_saved_filter_detail.py`, `test_region_filter.py`) run in the compose test pod with
+the rest of the verification-debt list.
 
 ---
 
