@@ -48,7 +48,9 @@ def _profile(*, username: str | None = None, password: str | None = None) -> Pro
     user = baker.make("auth.User", username=username) if username else baker.make("auth.User")
     if password:
         user.set_password(password)
-        user.save(update_fields=["password"])
+    else:
+        user.set_unusable_password()
+    user.save(update_fields=["password"])
     return user.profile
 
 
