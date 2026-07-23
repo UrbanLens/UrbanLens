@@ -21,7 +21,7 @@
         Hi <strong>{{ recipient.username }}</strong>,
       </p>
       <p style="margin:0 0 16px;color:#6b7280;font-size:14px;line-height:1.65">
-        <strong>{{ sender.username }}</strong> sent you a message on UrbanLens:
+        <strong>{{ sender_display_name }}</strong> sent you a message on UrbanLens:
       </p>
 
       {% if preview %}<p style="margin:0 0 24px;padding:14px 18px;background:#f9fafb;border-left:3px solid #6366f1;border-radius:6px;color:#374151;font-size:14px;line-height:1.6;white-space:pre-wrap">{{ preview }}</p>{% endif %}

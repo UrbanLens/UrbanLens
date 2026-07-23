@@ -777,7 +777,12 @@ class RecipientSearchView(LoginRequiredMixin, View):
 
         Only profiles whose privacy settings permit a message from the
         requester are returned - the picker never offers someone who would
-        reject the send.
+        reject the send. Candidates whose ``profile_visibility`` hides their
+        identity from the requester are excluded too: the results partial
+        renders each candidate's real username/slug/avatar, so returning a
+        hidden-but-messageable profile would let anyone enumerate identities
+        by querying short substrings that every other surface (thread,
+        sidebar, notifications) deliberately masks.
 
         Args:
             request: The incoming request. Reads ``q``.
@@ -790,7 +795,7 @@ class RecipientSearchView(LoginRequiredMixin, View):
         results: list[Profile] = []
         if len(query) >= 2:
             candidates = Profile.objects.select_related("user").filter(Q(user__username__icontains=query) | Q(slug__icontains=query)).exclude(pk=profile.pk).order_by("user__username")[: RECIPIENT_SEARCH_LIMIT * 4]
-            results = [candidate for candidate in candidates if can_direct_message(profile, candidate)][:RECIPIENT_SEARCH_LIMIT]
+            results = [candidate for candidate in candidates if can_direct_message(profile, candidate) and candidate.can_view_profile(profile)][:RECIPIENT_SEARCH_LIMIT]
             for candidate in results:
                 candidate.ensure_slug()
         return render(

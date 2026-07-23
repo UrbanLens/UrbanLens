@@ -424,6 +424,10 @@ def _notify_group_message(message: GroupMessage) -> None:
         # gets the in-app row rather than silently nothing.
         if pref == DeliveryPreference.NONE:
             continue
+        # Same viewer-scoped masking the thread render applies - a sender whose
+        # profile_visibility hides them from this member must not be revealed
+        # by the bell notification before the (masked) thread is even opened.
+        sender_display_name = resolve_visible_identity(membership.profile, message.sender)["display_name"]
         NotificationLog.objects.create(
             profile=membership.profile,
             source_profile=message.sender,
@@ -431,7 +435,7 @@ def _notify_group_message(message: GroupMessage) -> None:
             importance=Importance.MEDIUM,
             notification_type=NotificationType.MESSAGE,
             title=f"New message in {group.name}",
-            message=f"{message.sender.username}: {preview}",
+            message=f"{sender_display_name}: {preview}",
             url=url,
         )
 
@@ -673,8 +677,6 @@ def group_conversations_for(profile: Profile) -> list[dict[str, Any]]:
     # same viewer-scoped identity masking the thread render uses, so a sender
     # whose profile_visibility hides them from this viewer isn't revealed by
     # the preview line before the (masked) thread is even opened.
-    from urbanlens.dashboard.services.identity_visibility import resolve_visible_identity
-
     sender_display_names: dict[int, str] = {}
     for message in last_message_by_group.values():
         if message.sender_id not in sender_display_names:

@@ -486,7 +486,9 @@ def send_message_text_alerts_now(message: DirectMessage) -> None:
 
     cache.set(_text_alert_debounce_key(message.sender_id, message.recipient_id), 1, timeout=_EMAIL_DEBOUNCE_TTL_SECONDS)
 
-    body = f"UrbanLens: new message from {message.sender.username}. Open the site to read it."
+    # Recipient-scoped masking, same as the thread/email/notification paths.
+    sender_display_name = display_identity_for(message.recipient, message.sender)["display_name"]
+    body = f"UrbanLens: new message from {sender_display_name}. Open the site to read it."
     if prefs.message_whatsapp:
         send_whatsapp(message.recipient, body)
     if prefs.message_sms:
@@ -522,12 +524,16 @@ def send_message_email_now(message: DirectMessage) -> None:
         preview = message.body if len(message.body) <= 200 else message.body[:200].rstrip() + "…"
     conversation_path = reverse("messages.conversation", kwargs={"profile_slug": message.sender.ensure_slug()})
     conversation_url = f"{settings.SITE_URL.rstrip('/')}{conversation_path}"
-    context = {"sender": message.sender, "recipient": message.recipient, "preview": preview, "conversation_url": conversation_url}
-    subject = f"New message from {message.sender.username}"
+    # Same recipient-scoped masking the thread render applies - a sender whose
+    # profile_visibility hides them from this recipient must not have their
+    # real name leak out-of-band through the email subject/body.
+    sender_display_name = display_identity_for(message.recipient, message.sender)["display_name"]
+    context = {"sender_display_name": sender_display_name, "recipient": message.recipient, "preview": preview, "conversation_url": conversation_url}
+    subject = f"New message from {sender_display_name}"
     if preview:
-        text_body = f"{message.sender.username} sent you a message on UrbanLens:\n\n{preview}\n\nReply: {conversation_url}"
+        text_body = f"{sender_display_name} sent you a message on UrbanLens:\n\n{preview}\n\nReply: {conversation_url}"
     else:
-        text_body = f"{message.sender.username} sent you a message on UrbanLens.\n\nReply: {conversation_url}"
+        text_body = f"{sender_display_name} sent you a message on UrbanLens.\n\nReply: {conversation_url}"
     html_body = render_to_string("dashboard/email/new_direct_message.html", context)
 
     try:

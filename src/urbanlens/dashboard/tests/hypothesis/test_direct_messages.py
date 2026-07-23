@@ -433,6 +433,22 @@ class DirectMessageEndpointTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, f">{self.partner.username}<")
 
+    def test_recipient_search_finds_a_visible_messageable_profile(self) -> None:
+        Profile.objects.filter(pk=self.partner.pk).update(profile_visibility=VisibilityChoice.ANYONE)
+        response = self.client.get(reverse("messages.recipients"), {"q": self.partner.username[:5]})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.partner.username)
+
+    def test_recipient_search_excludes_a_profile_masked_from_the_requester(self) -> None:
+        """Regression: a messageable profile with profile_visibility=NO_ONE was
+        still returned with its real username/slug/avatar, letting anyone
+        enumerate hidden identities by substring even though every other
+        surface (thread, sidebar, notifications) masks them."""
+        Profile.objects.filter(pk=self.partner.pk).update(profile_visibility=VisibilityChoice.NO_ONE)
+        response = self.client.get(reverse("messages.recipients"), {"q": self.partner.username[:5]})
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, self.partner.username)
+
     def test_navbar_icon_hidden_until_first_message(self) -> None:
         response = self.client.get(reverse("messages.view"))
         self.assertNotContains(response, 'id="nav-msg"')
@@ -777,6 +793,8 @@ class MessageTextAlertTests(TestCase):
     def test_alert_body_never_contains_message_content(self) -> None:
         from urbanlens.dashboard.services.direct_messages import send_message_text_alerts_now
 
+        Profile.objects.filter(pk=self.sender.pk).update(profile_visibility=VisibilityChoice.ANYONE)
+        self.sender.refresh_from_db()
         self._set_toggles(sms=True)
         message = create_direct_message(self.sender, self.recipient, "secret rooftop door code 4711")
         with patch("urbanlens.dashboard.services.notification_delivery.send_sms") as mock_sms:
@@ -784,6 +802,22 @@ class MessageTextAlertTests(TestCase):
         body = mock_sms.call_args.args[1]
         self.assertNotIn("4711", body)
         self.assertIn(self.sender.username, body)
+
+    def test_alert_body_masks_a_sender_the_recipient_cant_view(self) -> None:
+        """Same recipient-scoped masking as the thread/bell/email paths - the
+        text alert goes out-of-band through a carrier, so a hidden sender's
+        real username must not appear there either."""
+        from urbanlens.dashboard.services.direct_messages import display_identity_for, send_message_text_alerts_now
+
+        Profile.objects.filter(pk=self.sender.pk).update(profile_visibility=VisibilityChoice.NO_ONE)
+        self.sender.refresh_from_db()
+        self._set_toggles(sms=True)
+        message = create_direct_message(self.sender, self.recipient, "hi")
+        with patch("urbanlens.dashboard.services.notification_delivery.send_sms") as mock_sms:
+            send_message_text_alerts_now(message)
+        body = mock_sms.call_args.args[1]
+        self.assertNotIn(self.sender.username, body)
+        self.assertIn(display_identity_for(self.recipient, self.sender)["display_name"], body)
 
     def test_task_no_ops_once_the_message_is_read(self) -> None:
         from django.utils import timezone
