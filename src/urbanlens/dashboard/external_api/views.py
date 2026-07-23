@@ -40,7 +40,7 @@ from urbanlens.dashboard.models.pin_suggestions.model import PinSuggestion, PinS
 from urbanlens.dashboard.services.locations.geocoding import get_pin_by_address
 from urbanlens.dashboard.services.pin_creation import PinCreationError, PinCreationForbiddenError, create_pin_for_profile
 from urbanlens.dashboard.services.pin_suggestions import LocationHit, attach_suggestion_photos, ingest_location_hits
-from urbanlens.dashboard.services.pin_sync import InvalidSyncCursorError, sync_pins_page, sync_tombstones_page
+from urbanlens.dashboard.services.pin_sync import InvalidSyncCursorError, StaleDeletedSinceError, sync_pins_page, sync_tombstones_page
 from urbanlens.dashboard.services.push import PushRegistrationError, register_device, unregister_device
 from urbanlens.dashboard.services.visits import visit_logging_allowed
 
@@ -283,7 +283,7 @@ class PinTombstonesView(ExternalApiView):
         "GET": frozenset({ApiKeyScope.PINS_READ}),
     }
 
-    @extend_schema(parameters=[TombstoneSyncQuerySerializer], responses={200: TombstoneSyncResponseSerializer, 400: ErrorSerializer})
+    @extend_schema(parameters=[TombstoneSyncQuerySerializer], responses={200: TombstoneSyncResponseSerializer, 400: ErrorSerializer, 410: ErrorSerializer})
     def get(self, request: Request) -> Response:
         """Return one page of the key owner's pin deletions."""
         serializer = TombstoneSyncQuerySerializer(data=request.query_params)
@@ -299,6 +299,12 @@ class PinTombstonesView(ExternalApiView):
             )
         except InvalidSyncCursorError as exc:
             return Response({"error": str(exc)}, status=400)
+        except StaleDeletedSinceError as exc:
+            # 410 Gone: tombstones this old may already be pruned, so the
+            # incremental deletions feed can no longer be trusted from that
+            # point. The client must full-resync (walk pins/ without
+            # modified_since and drop local pins absent from the result).
+            return Response({"error": str(exc), "full_resync_required": True}, status=410)
 
         return Response(
             {

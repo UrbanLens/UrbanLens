@@ -1131,9 +1131,427 @@ def _apply_exported_custom_field_value(value_obj: Any, field_type: str, exported
     return True
 
 
+def _safe_uuid(value: Any) -> str | None:
+    """Return ``value`` when it parses as a UUID string, else None."""
+    import uuid as uuid_module
+
+    try:
+        return str(uuid_module.UUID(str(value)))
+    except (TypeError, ValueError, AttributeError):
+        return None
+
+
+def _resolve_import_target(profile: Any, row: dict[str, Any], pin_uuid_map: dict[str, int]) -> tuple[int | None, Any | None, bool]:
+    """Resolve a comment/photo row's exported target to a local pin pk or Wiki.
+
+    Matches on ``target_uuid`` only (names are neither unique nor stable). Pin
+    targets must resolve to the importing user's OWN pin - the archive is
+    user-supplied, so a uuid pointing at someone else's pin must never attach
+    content there. Wiki targets must pass the same access check the wiki page
+    itself enforces (``location_visible_to``): a crafted archive must not
+    attach content to a wiki its owner couldn't even see.
+
+    Args:
+        profile: The importing profile.
+        row: The exported row (reads ``target_type``/``target_uuid``).
+        pin_uuid_map: Archive pin uuid -> local pk, built by the pins step.
+
+    Returns:
+        ``(pin_pk, wiki, resolved)`` - ``resolved`` False means the row named
+        a target that could not (or must not) be matched here; ``(None, None,
+        True)`` means the row genuinely had no target.
+    """
+    from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.models.wiki.model import Wiki
+    from urbanlens.dashboard.services.wiki_access import location_visible_to
+
+    target_type = row.get("target_type") or ""
+    target_uuid = _safe_uuid(row.get("target_uuid"))
+    if not target_type:
+        return None, None, True
+    if target_uuid is None:
+        return None, None, False
+    if target_type == "pin":
+        pin_pk = pin_uuid_map.get(target_uuid)
+        if pin_pk is None:
+            pin = Pin.objects.filter(uuid=target_uuid, profile=profile).first()
+            if pin is None:
+                return None, None, False
+            pin_pk = pin.pk
+            pin_uuid_map[target_uuid] = pin_pk
+        return pin_pk, None, True
+    if target_type == "location":
+        wiki = Wiki.objects.filter(uuid=target_uuid).select_related("location").first()
+        if wiki is None or not location_visible_to(wiki.location, profile):
+            return None, None, False
+        return None, wiki, True
+    return None, None, False
+
+
+def _apply_exported_created(instance: Any, created_raw: Any) -> None:
+    """Backdate an imported row's ``created`` to the exported timestamp.
+
+    ``created`` is ``auto_now_add`` so it can't be set at create time; a
+    queryset ``update`` after the fact preserves the original ordering
+    (comment threads, message history) without fighting the field definition.
+    Unparseable timestamps are simply left at import time.
+    """
+    from django.utils.dateparse import parse_datetime
+
+    created = parse_datetime(str(created_raw or ""))
+    if created is not None:
+        type(instance).objects.filter(pk=instance.pk).update(created=created)
+
+
+def _import_comments(
+    profile: Any,
+    data_dir: str,
+    result: ImportResult,
+    *,
+    pin_uuid_map: dict[str, int],
+    label_uuid_map: dict[str, int],
+    report_progress: ProgressReporter | None = None,
+) -> None:
+    """Import the user's own pin/wiki comments (Notes), matched by ``target_uuid``.
+
+    A comment only means something attached to its target, so rows whose
+    target can't be resolved (pin not in this import or not the user's own;
+    wiki absent on this instance or not visible to the user - the same
+    ``location_visible_to`` gate the wiki page enforces) are skipped with a
+    warning rather than imported as orphans. Idempotent per comment uuid.
+    Only archives from before the ``target_uuid`` export field can hit the
+    "no target_uuid" skip - name-based matching is deliberately not attempted.
+    """
+    from urbanlens.dashboard.models.comments.model import Comment
+    from urbanlens.dashboard.services.text_limits import MAX_COMMENT_TEXT_LENGTH
+
+    rows = _read_json(data_dir, "comments.json")
+    if not rows:
+        return
+    total_rows = len(rows)
+    unresolved = 0
+
+    for idx, row in enumerate(rows, start=1):
+        if report_progress:
+            report_progress(idx, total_rows)
+        uuid_str = _safe_uuid(row.get("uuid"))
+        if uuid_str and Comment.objects.filter(uuid=uuid_str, profile=profile).exists():
+            result.inc_skipped("comments")
+            continue
+
+        text = (row.get("text") or "").strip()
+        if not text or len(text) > MAX_COMMENT_TEXT_LENGTH:
+            result.inc_skipped("comments")
+            continue
+
+        pin_pk, wiki, resolved = _resolve_import_target(profile, row, pin_uuid_map)
+        if not resolved or (pin_pk is None and wiki is None):
+            unresolved += 1
+            result.inc_skipped("comments")
+            continue
+
+        comment = Comment(profile=profile, pin_id=pin_pk, wiki=wiki, text=text)
+        # Never inherit a uuid already taken by someone else's row - the
+        # archive is user-supplied input.
+        if uuid_str and not Comment.objects.filter(uuid=uuid_str).exists():
+            comment.uuid = uuid_str
+        comment.save()
+        _apply_exported_created(comment, row.get("created"))
+        result.inc_created("comments")
+
+    if unresolved:
+        result.warnings.append(f"Skipped {unresolved} comment(s) whose pin or wiki could not be matched on this instance.")
+
+
+def _import_photos(
+    profile: Any,
+    data_dir: str,
+    result: ImportResult,
+    *,
+    pin_uuid_map: dict[str, int],
+    label_uuid_map: dict[str, int],
+    report_progress: ProgressReporter | None = None,
+) -> None:
+    """Import the archive's ``photos/`` files back into storage.
+
+    Every archive file was already malware-scanned at extraction
+    (``_scan_extracted_files``). Each photo re-enters storage through the
+    same quota and max-file-size checks a fresh upload gets; ones that don't
+    fit are skipped with a warning rather than blowing the quota. A photo
+    whose target can't be resolved still imports as an unattached upload
+    (the data is the user's own either way - unlike a comment, a photo
+    doesn't need a target to be meaningful). Idempotent per image uuid.
+    """
+    from decimal import Decimal, InvalidOperation
+
+    from django.core.files import File
+
+    from urbanlens.dashboard.models.images.model import Image, MediaKind
+    from urbanlens.dashboard.services.storage import file_size_error_for_upload, quota_error_for_upload
+
+    rows = _read_json(data_dir, os.path.join("photos", "metadata.json"))
+    if not rows:
+        return
+    photos_dir = os.path.join(data_dir, "photos")
+    total_rows = len(rows)
+    missing_files = 0
+    over_quota = 0
+
+    def _decimal(value: Any) -> Decimal | None:
+        if value in (None, ""):
+            return None
+        try:
+            return Decimal(str(value))
+        except InvalidOperation:
+            return None
+
+    for idx, row in enumerate(rows, start=1):
+        if report_progress:
+            report_progress(idx, total_rows)
+        uuid_str = _safe_uuid(row.get("uuid"))
+        if uuid_str and Image.objects.filter(uuid=uuid_str, profile=profile).exists():
+            result.inc_skipped("photos")
+            continue
+
+        # basename() guards against traversal - metadata.json is part of the
+        # user-supplied archive, so its filenames are untrusted input.
+        filename = os.path.basename(str(row.get("filename") or ""))
+        src_path = os.path.join(photos_dir, filename) if filename else ""
+        if not filename or not os.path.isfile(src_path):
+            missing_files += 1
+            result.inc_skipped("photos")
+            continue
+
+        size = os.path.getsize(src_path)
+        if file_size_error_for_upload(size) or quota_error_for_upload(profile, size):
+            over_quota += 1
+            result.inc_skipped("photos")
+            continue
+
+        pin_pk, wiki, _resolved = _resolve_import_target(profile, row, pin_uuid_map)
+
+        media_type = row.get("media_type") if row.get("media_type") in MediaKind.values else MediaKind.PHOTO
+        image = Image(
+            profile=profile,
+            pin_id=pin_pk,
+            wiki=wiki,
+            caption=(row.get("caption") or "")[:500] or None,
+            media_type=media_type,
+            latitude=_decimal(row.get("latitude")),
+            longitude=_decimal(row.get("longitude")),
+            file_size=size,
+        )
+        if uuid_str and not Image.objects.filter(uuid=uuid_str).exists():
+            image.uuid = uuid_str
+        with open(src_path, "rb") as fh:
+            image.image.save(filename, File(fh), save=True)
+
+        label_pks = [label_uuid_map[label_uuid] for label_uuid in (row.get("label_uuids") or []) if label_uuid in label_uuid_map]
+        if label_pks:
+            image.labels.add(*label_pks)
+        _apply_exported_created(image, row.get("created"))
+        result.inc_created("photos")
+
+    if missing_files:
+        result.warnings.append(f"Skipped {missing_files} photo(s) whose file was missing from the archive.")
+    if over_quota:
+        result.warnings.append(f"Skipped {over_quota} photo(s) that would exceed your storage quota or the maximum upload size.")
+
+
+def _import_trips(
+    profile: Any,
+    data_dir: str,
+    result: ImportResult,
+    *,
+    pin_uuid_map: dict[str, int],
+    label_uuid_map: dict[str, int],
+    report_progress: ProgressReporter | None = None,
+) -> None:
+    """Re-create the trips the user owned; members become fresh invitations.
+
+    Requests-not-facts, exactly like ``_import_connections``: only trips the
+    user *created* are rebuilt (a membership in someone else's trip records
+    THEIR trip - it cannot be reconstructed on their behalf), and exported
+    members are re-invited through the same guards the trip UI applies
+    (connections only, ``max_trip_members`` cap, ``STATUS_INVITED`` so each
+    person still accepts for themselves). The upcoming-trips cap is honored
+    for trips with a future start date. Idempotent per trip uuid.
+    """
+    from django.utils.dateparse import parse_date
+
+    from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.models.site_settings.model import SiteSettings
+    from urbanlens.dashboard.models.trips.model import Trip, TripMembership
+    from urbanlens.dashboard.services.connections import get_connections
+
+    rows = _read_json(data_dir, "trips.json")
+    if not rows:
+        return
+    total_rows = len(rows)
+
+    site_settings = SiteSettings.get_current()
+    max_upcoming = site_settings.max_upcoming_trips_per_user
+    max_members = site_settings.max_trip_members
+    upcoming_count = Trip.objects.upcoming(profile).count()
+    connection_uuids = {str(connection.uuid) for connection in get_connections(profile)}
+    not_owned = 0
+
+    for idx, row in enumerate(rows, start=1):
+        if report_progress:
+            report_progress(idx, total_rows)
+
+        if not row.get("is_creator", False):
+            not_owned += 1
+            result.inc_skipped("trips")
+            continue
+
+        name = (row.get("name") or "").strip()[:255]
+        if not name:
+            result.inc_skipped("trips")
+            continue
+
+        uuid_str = _safe_uuid(row.get("uuid"))
+        if uuid_str:
+            existing = Trip.objects.filter(uuid=uuid_str).first()
+            if existing is not None:
+                # Ours already (same-instance restore): nothing to do. Someone
+                # else's: a user-supplied archive must never claim it.
+                result.inc_skipped("trips")
+                continue
+
+        start_date = parse_date(str(row.get("start_date") or "")) if row.get("start_date") else None
+        end_date = parse_date(str(row.get("end_date") or "")) if row.get("end_date") else None
+
+        from django.utils import timezone
+
+        if start_date is not None and start_date >= timezone.localdate() and max_upcoming > 0 and upcoming_count >= max_upcoming:
+            result.warnings.append(f"Skipped trip '{name}': you already have the maximum of {max_upcoming} upcoming trips.")
+            result.inc_skipped("trips")
+            continue
+
+        trip = Trip(name=name, description=row.get("description") or None, start_date=start_date, end_date=end_date, creator=profile)
+        if uuid_str:
+            trip.uuid = uuid_str
+        trip.save()
+        TripMembership.objects.get_or_create(trip=trip, profile=profile, defaults={"rsvp": "yes", "status": TripMembership.STATUS_JOINED})
+        if start_date is not None and start_date >= timezone.localdate():
+            upcoming_count += 1
+
+        # Re-invite exported members: connections only (mirroring
+        # TripCreateView - never trust arbitrary identifiers from the
+        # archive), capped, always as an invitation the member accepts or
+        # ignores themselves.
+        member_uuids = [_safe_uuid(value) for value in (row.get("member_uuids") or [])]
+        invitable = [member_uuid for member_uuid in member_uuids if member_uuid and member_uuid in connection_uuids]
+        remaining = max_members - trip.profiles.count()
+        for member_profile in Profile.objects.filter(uuid__in=invitable)[: max(remaining, 0)]:
+            if member_profile.pk == profile.pk:
+                continue
+            _membership, invited = TripMembership.objects.get_or_create(trip=trip, profile=member_profile, defaults={"status": TripMembership.STATUS_INVITED})
+            if invited:
+                from urbanlens.dashboard.controllers.trip import _notify_added_to_trip
+
+                _notify_added_to_trip(profile, member_profile, trip)
+        _apply_exported_created(trip, row.get("created"))
+        result.inc_created("trips")
+
+    if not_owned:
+        result.warnings.append(f"Skipped {not_owned} trip(s) created by someone else - only trips you created can be rebuilt from an export.")
+
+
+def _import_direct_messages(
+    profile: Any,
+    data_dir: str,
+    result: ImportResult,
+    *,
+    pin_uuid_map: dict[str, int],
+    label_uuid_map: dict[str, int],
+    report_progress: ProgressReporter | None = None,
+) -> None:
+    """Restore the user's own SENT plaintext messages into their conversations.
+
+    The narrow slice that can be restored honestly:
+
+    * **Received rows are never imported** - that would let a crafted archive
+      fabricate messages "from" a real user (the same forgery
+      ``_import_connections`` refuses for incoming friendship rows).
+    * **Encrypted rows are never imported** - their ciphertext is sealed to
+      the exporting account's key material and the server can't re-wrap what
+      it can't read; the ciphertext stays available in the archive itself.
+    * Sent plaintext rows are re-created only when the partner exists here,
+      isn't muted either way, and ``can_direct_message`` (the same chokepoint
+      the composer uses) still permits messaging them.
+
+    Rows are inserted directly - deliberately NOT through
+    ``create_direct_message`` - so restoring history never pushes live
+    WebSocket events, bell notifications, or text alerts at the partner.
+    Exported read state is preserved so old messages don't reappear unread.
+    Idempotent per (partner, exported timestamp).
+    """
+    from django.utils.dateparse import parse_datetime
+
+    from urbanlens.dashboard.models.direct_messages.model import DirectMessage
+    from urbanlens.dashboard.models.direct_messages.mute import DirectMessageMute
+    from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.services.direct_messages import can_direct_message
+    from urbanlens.dashboard.services.text_limits import MAX_DIRECT_MESSAGE_LENGTH
+
+    rows = _read_json(data_dir, "direct_messages.json")
+    if not rows:
+        return
+    total_rows = len(rows)
+    not_restorable = 0
+    partner_cache: dict[str, Any] = {}
+
+    for idx, row in enumerate(rows, start=1):
+        if report_progress:
+            report_progress(idx, total_rows)
+
+        partner_uuid = _safe_uuid(row.get("partner_uuid"))
+        body = (row.get("body") or "").strip()
+        if row.get("direction") != "sent" or row.get("encrypted") or row.get("is_tombstoned") or not body or partner_uuid is None or len(body) > MAX_DIRECT_MESSAGE_LENGTH:
+            not_restorable += 1
+            result.inc_skipped("direct_messages")
+            continue
+
+        if partner_uuid not in partner_cache:
+            partner_cache[partner_uuid] = Profile.objects.filter(uuid=partner_uuid).first()
+        partner = partner_cache[partner_uuid]
+        if partner is None or partner.pk == profile.pk or not can_direct_message(profile, partner) or DirectMessageMute.objects.for_pair(profile, partner).exists() or DirectMessageMute.objects.for_pair(partner, profile).exists():
+            not_restorable += 1
+            result.inc_skipped("direct_messages")
+            continue
+
+        created = parse_datetime(str(row.get("created") or ""))
+        if created is None:
+            result.inc_skipped("direct_messages")
+            continue
+        if DirectMessage.objects.filter(sender=profile, recipient=partner, created=created).exists():
+            result.inc_skipped("direct_messages")
+            continue
+
+        message = DirectMessage.objects.create(
+            sender=profile,
+            recipient=partner,
+            body=body,
+            # Preserve exported read state (read timestamps aren't exported,
+            # so the deletion moment is approximated by the send moment) - a
+            # restored years-old message must not land as "unread" in the
+            # partner's badge count.
+            read_at=created if row.get("read") else None,
+        )
+        _apply_exported_created(message, row.get("created"))
+        result.inc_created("direct_messages")
+
+    if not_restorable:
+        result.warnings.append(
+            f"{not_restorable} direct message(s) were archive-only and not restored (received, encrypted, or the partner isn't reachable on this instance). They remain readable in the export file itself.",
+        )
+
+
 # -- Dispatch table -------------------------------------------------------------
 
-_IMPORT_ORDER = ["labels", "pins", "custom_fields", "pin_lists", "visit_history", "connections", "settings"]
+_IMPORT_ORDER = ["labels", "pins", "custom_fields", "pin_lists", "visit_history", "comments", "photos", "trips", "direct_messages", "connections", "settings"]
 
 _IMPORTERS: dict[str, Any] = {
     "labels": _import_labels,
@@ -1141,6 +1559,10 @@ _IMPORTERS: dict[str, Any] = {
     "custom_fields": _import_custom_fields,
     "pin_lists": _import_pin_lists,
     "visit_history": _import_visit_history,
+    "comments": _import_comments,
+    "photos": _import_photos,
+    "trips": _import_trips,
+    "direct_messages": _import_direct_messages,
     "connections": _import_connections,
     "settings": _import_settings,
 }
@@ -1151,6 +1573,10 @@ _STEP_MESSAGES = {
     "custom_fields": "Importing custom fields...",
     "pin_lists": "Importing lists...",
     "visit_history": "Importing visit history...",
+    "comments": "Importing notes and comments...",
+    "photos": "Importing photos...",
+    "trips": "Importing trips...",
+    "direct_messages": "Restoring messages...",
     "connections": "Importing connections...",
     "settings": "Applying settings...",
 }

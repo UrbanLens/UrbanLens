@@ -295,6 +295,13 @@ CELERY_BEAT_SCHEDULE = {
         "task": "urbanlens.dashboard.tasks.upgrade_placeholder_pin_names",
         "schedule": 60 * 60,
     },
+    # Daily is plenty: retention is measured in hundreds of days
+    # (services.pin_sync.TOMBSTONE_RETENTION), and the pins/deleted/ feed's 410
+    # full-resync signal guards clients against any pruning-induced gap.
+    "pin-tombstone-pruning": {
+        "task": "urbanlens.dashboard.tasks.prune_pin_tombstones",
+        "schedule": 24 * 60 * 60,
+    },
 }
 
 

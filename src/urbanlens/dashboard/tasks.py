@@ -1730,6 +1730,29 @@ def send_direct_message_text_alerts_if_unread(message_id: int) -> None:
     send_message_text_alerts_now(message)
 
 
+@shared_task
+def prune_pin_tombstones() -> int:
+    """Remove pin-deletion tombstones older than the sync retention window.
+
+    Scheduled daily (see ``CELERY_BEAT_SCHEDULE``). Retention is
+    ``services.pin_sync.TOMBSTONE_RETENTION`` - the longest supported
+    sync-client offline gap. A client whose ``deleted_since`` predates that
+    floor gets an HTTP 410 full-resync signal from ``pins/deleted/`` instead
+    of a silently incomplete deletions feed, so pruning can never cause a
+    quiet miss.
+
+    Returns:
+        Number of tombstone rows deleted.
+    """
+    from urbanlens.dashboard.models.pin_tombstone import PinTombstone
+    from urbanlens.dashboard.services.pin_sync import TOMBSTONE_RETENTION
+
+    deleted = PinTombstone.objects.prune_older_than(TOMBSTONE_RETENTION)
+    if deleted:
+        logger.info("Pruned %d pin tombstone(s) older than %s", deleted, TOMBSTONE_RETENTION)
+    return deleted
+
+
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def send_notification_text_alerts_if_unread(notification_id: int) -> None:
     """Send the delayed WhatsApp/SMS alert for a site notification, unless read or debounced.

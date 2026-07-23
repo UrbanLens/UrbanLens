@@ -379,6 +379,42 @@ class PinTombstoneTests(TestCase):
         body = self._get().json()
         self.assertEqual(body["tombstones"], [])
 
+    def test_deleted_since_older_than_retention_gets_410_full_resync(self) -> None:
+        """Pruning makes deletions that old unrecoverable - the feed must say so
+        loudly (410 + full_resync_required) instead of silently omitting them."""
+        from urbanlens.dashboard.services.pin_sync import TOMBSTONE_RETENTION
+
+        stale = timezone.now() - TOMBSTONE_RETENTION - timedelta(days=1)
+        response = self._get(deleted_since=stale.isoformat())
+        self.assertEqual(response.status_code, 410)
+        body = response.json()
+        self.assertTrue(body["full_resync_required"])
+        self.assertIn("resync", body["error"])
+
+    def test_deleted_since_inside_retention_is_served_normally(self) -> None:
+        from urbanlens.dashboard.services.pin_sync import TOMBSTONE_RETENTION
+
+        recent = timezone.now() - TOMBSTONE_RETENTION + timedelta(days=1)
+        response = self._get(deleted_since=recent.isoformat())
+        self.assertEqual(response.status_code, 200)
+
+    def test_prune_task_removes_only_expired_tombstones(self) -> None:
+        from urbanlens.dashboard.services.pin_sync import TOMBSTONE_RETENTION
+        from urbanlens.dashboard.tasks import prune_pin_tombstones
+
+        old_pin = self._make_pin("Ancient", 42.5, -73.5)
+        old_uuid = old_pin.uuid
+        old_pin.delete()
+        PinTombstone.objects.filter(pin_uuid=old_uuid).update(created=timezone.now() - TOMBSTONE_RETENTION - timedelta(days=1))
+        fresh_pin = self._make_pin("Recent", 43.5, -74.5)
+        fresh_uuid = fresh_pin.uuid
+        fresh_pin.delete()
+
+        deleted = prune_pin_tombstones()
+
+        self.assertEqual(deleted, 1)
+        self.assertEqual(set(PinTombstone.objects.values_list("pin_uuid", flat=True)), {fresh_uuid})
+
 
 class PinCreateIdempotencyTests(TestCase):
     """A caller-generated uuid makes POST pins/ safe to retry from an offline outbox."""
