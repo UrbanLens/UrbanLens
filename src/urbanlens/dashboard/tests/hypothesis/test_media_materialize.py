@@ -31,7 +31,14 @@ def _ok_response(content: bytes = b"fake-jpeg-bytes") -> mock.Mock:
     response = mock.Mock()
     response.raise_for_status = mock.Mock()
     response.raw.read.return_value = content
+    response.is_redirect = False
     return response
+
+
+#: These tests fetch "https://example.test/..." (RFC 2606 non-resolving),
+#: so the SSRF guard's hostname resolution is mocked to a fixed public IP -
+#: the guard itself is covered separately by MaterializeMediaItemSsrfTests.
+_FAKE_DNS_RESULT = [(2, 1, 6, "", ("93.184.216.34", 0))]
 
 
 class MaterializeMediaItemTests(TestCase):
@@ -39,6 +46,9 @@ class MaterializeMediaItemTests(TestCase):
         self.user = baker.make(User)
         self.profile = self.user.profile
         self.location = baker.make(Location)
+        self._dns_patch = mock.patch("socket.getaddrinfo", return_value=_FAKE_DNS_RESULT)
+        self._dns_patch.start()
+        self.addCleanup(self._dns_patch.stop)
 
     def test_downloads_and_creates_an_image_row(self) -> None:
         with mock.patch("urbanlens.dashboard.services.media_materialize.requests.get", return_value=_ok_response()):
@@ -112,6 +122,43 @@ class MaterializeMediaItemTests(TestCase):
         mocked.assert_called_once()
 
 
+class MaterializeMediaItemSsrfTests(TestCase):
+    """The `url` a caller supplies is untrusted (comes straight from a client
+    request body via PinController.media_relevance/media_send_to_wiki) - it
+    must never let a caller direct the server's download at an internal
+    address, either directly or via a redirect.
+    """
+
+    def setUp(self) -> None:
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+        self.location = baker.make(Location)
+
+    def test_a_literal_private_ip_target_is_rejected(self) -> None:
+        with mock.patch("urbanlens.dashboard.services.media_materialize.requests.get") as mocked, pytest.raises(MaterializeError):
+            materialize_media_item(location=self.location, profile=self.profile, source="wikimedia", url="http://169.254.169.254/latest/meta-data/")
+        mocked.assert_not_called()
+
+    def test_a_hostname_that_resolves_to_a_private_ip_is_rejected(self) -> None:
+        with (
+            mock.patch("socket.getaddrinfo", return_value=[(2, 1, 6, "", ("127.0.0.1", 0))]),
+            mock.patch("urbanlens.dashboard.services.media_materialize.requests.get") as mocked,
+            pytest.raises(MaterializeError),
+        ):
+            materialize_media_item(location=self.location, profile=self.profile, source="wikimedia", url="https://attacker-controlled.example/photo.jpg")
+        mocked.assert_not_called()
+
+    def test_a_redirect_to_a_private_ip_is_rejected(self) -> None:
+        redirect_response = mock.Mock(status_code=302, headers={"Location": "http://127.0.0.1/internal"}, is_redirect=True)
+        with (
+            mock.patch("socket.getaddrinfo", return_value=[(2, 1, 6, "", ("93.184.216.34", 0))]),
+            mock.patch("urbanlens.dashboard.services.media_materialize.requests.get", return_value=redirect_response),
+            pytest.raises(MaterializeError),
+        ):
+            materialize_media_item(location=self.location, profile=self.profile, source="wikimedia", url="https://example.test/photo.jpg")
+        self.assertFalse(Image.objects.filter(location=self.location).exists())
+
+
 class MediaRelevanceMaterializesTests(TestCase):
     """PinController.media_relevance: marking relevant materializes; other actions don't."""
 
@@ -121,6 +168,9 @@ class MediaRelevanceMaterializesTests(TestCase):
         self.client.force_login(self.user)
         self.location = baker.make(Location)
         self.pin = baker.make(Pin, profile=self.profile, location=self.location)
+        self._dns_patch = mock.patch("socket.getaddrinfo", return_value=_FAKE_DNS_RESULT)
+        self._dns_patch.start()
+        self.addCleanup(self._dns_patch.stop)
 
     def _post(self, payload: dict):
         return self.client.post(reverse("pin.media.relevance", args=[self.pin.slug]), payload, content_type="application/json")

@@ -33,13 +33,11 @@ from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal, InvalidOperation
 import html as html_module
-import ipaddress
 import json
 import logging
 import re
-import socket
 from typing import TYPE_CHECKING, Any
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import urljoin
 
 from urbanlens.dashboard.models.link_extraction.model import MAX_EXTRACTION_URL_LENGTH, LinkExtraction, LinkExtractionStatus
 
@@ -456,20 +454,14 @@ class LinkExtractionError(Exception):
     """User-facing failure starting an extraction (limit, bad url, gated off)."""
 
 
-def _is_blocked_address(address: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
-    """True if ``address`` shouldn't be reachable from a user-directed fetch (SSRF guard)."""
-    return address.is_private or address.is_loopback or address.is_link_local or address.is_reserved or address.is_multicast
-
-
 def _validate_extraction_url(url: str) -> str:
     """Validate a user-submitted extraction target url.
 
     Enforces http(s), a length cap, and rejects loopback/private/link-local/
-    reserved hosts - both literal IPs in the url and, by resolving the
-    hostname, any domain that currently points at one. The fetch runs from
-    inside the server's network, so without this a user could point the
-    extractor at internal services (SSRF), including via a hostname whose DNS
-    they control.
+    reserved hosts via the shared :func:`url_safety.ensure_public_http_url`
+    guard - the fetch runs from inside the server's network, so without this
+    a user could point the extractor at internal services (SSRF), including
+    via a hostname whose DNS they control.
 
     This closes the DNS-at-submission-time gap but not a rebind that happens
     *between* this check and the actual fetch - callers on that path (see
@@ -485,32 +477,12 @@ def _validate_extraction_url(url: str) -> str:
     Raises:
         LinkExtractionError: With a user-facing message on any rejection.
     """
-    url = (url or "").strip()
-    if not url or len(url) > MAX_EXTRACTION_URL_LENGTH:
-        raise LinkExtractionError("That link isn't usable.")
-    parts = urlsplit(url)
-    if parts.scheme not in ("http", "https") or not parts.hostname:
-        raise LinkExtractionError("Only http(s) links can be processed.")
-    hostname = parts.hostname
-    if hostname == "localhost":
-        raise LinkExtractionError("That link can't be processed.")
-    try:
-        literal_address = ipaddress.ip_address(hostname)
-    except ValueError:
-        literal_address = None
-    if literal_address is not None:
-        if _is_blocked_address(literal_address):
-            raise LinkExtractionError("That link can't be processed.")
-        return url
+    from urbanlens.dashboard.services.url_safety import UnsafeUrlError, ensure_public_http_url
 
     try:
-        resolved = socket.getaddrinfo(hostname, None)
-    except OSError as exc:
-        raise LinkExtractionError("That link can't be processed.") from exc
-    for _family, _type, _proto, _canonname, sockaddr in resolved:
-        if _is_blocked_address(ipaddress.ip_address(sockaddr[0])):
-            raise LinkExtractionError("That link can't be processed.")
-    return url
+        return ensure_public_http_url(url, max_length=MAX_EXTRACTION_URL_LENGTH)
+    except UnsafeUrlError as exc:
+        raise LinkExtractionError(str(exc)) from exc
 
 
 def start_link_extraction(user, profile: Profile, pin: Pin, url: str) -> LinkExtraction:

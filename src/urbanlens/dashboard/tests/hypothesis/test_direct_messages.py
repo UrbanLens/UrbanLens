@@ -710,6 +710,22 @@ class NotificationChannelPreferenceTests(TestCase):
         create_direct_message(self.sender, self.recipient, "hi")
         self.assertEqual(self._message_notifications().count(), 0)
 
+    def test_notification_title_masks_a_sender_the_recipient_cant_view(self) -> None:
+        """Regression: the thread itself anonymizes a sender the recipient has
+        no standing access to (display_identity_for), but this notification's
+        title used the raw username directly - exposing the hidden sender in
+        the bell/dropdown before the anonymized thread was ever opened.
+        """
+        from urbanlens.dashboard.services.direct_messages import display_identity_for
+
+        Profile.objects.filter(pk=self.sender.pk).update(profile_visibility=VisibilityChoice.NO_ONE)
+        self.sender.refresh_from_db()
+        create_direct_message(self.sender, self.recipient, "hi")
+        notification = self._message_notifications().get()
+        expected_name = display_identity_for(self.recipient, self.sender)["display_name"]
+        self.assertNotIn(self.sender.username, notification.title)
+        self.assertIn(expected_name, notification.title)
+
 
 class MessageTextAlertTests(TestCase):
     """The message_whatsapp/message_sms toggles actually deliver.

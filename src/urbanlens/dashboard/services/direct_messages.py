@@ -304,12 +304,13 @@ def _notify_recipient(message: DirectMessage) -> None:
         preview = "📷 Shared a photo"
     else:
         preview = "New message"
+    sender_display_name = display_identity_for(message.recipient, message.sender)["display_name"]
     NotificationLog.objects.create(
         profile=message.recipient,
         status=Status.UNREAD,
         importance=Importance.MEDIUM,
         notification_type=NotificationType.MESSAGE,
-        title=f"New message from {message.sender.username}",
+        title=f"New message from {sender_display_name}",
         message=preview,
         url=reverse("messages.conversation", kwargs={"profile_slug": message.sender.ensure_slug()}),
         source_profile=message.sender,

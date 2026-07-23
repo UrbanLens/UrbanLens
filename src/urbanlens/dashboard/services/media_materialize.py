@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import logging
 from typing import TYPE_CHECKING
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 from django.core.files.base import ContentFile
 import requests
@@ -22,6 +22,7 @@ import requests
 from urbanlens.dashboard.models.images.model import Image, ImageSource
 from urbanlens.dashboard.services.images import compute_checksum
 from urbanlens.dashboard.services.storage import quota_error_for_upload
+from urbanlens.dashboard.services.url_safety import UnsafeUrlError, ensure_public_http_url
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
@@ -36,6 +37,9 @@ _DOWNLOAD_TIMEOUT = 15
 # bound the download defensively regardless of what a provider's Content-Length claims.
 _MAX_DOWNLOAD_BYTES = 20 * 1024 * 1024
 _DEFAULT_FILENAME = "photo.jpg"
+# Redirects are followed manually (see materialize_media_item) so each hop can
+# be SSRF-validated; this bounds how many hops a hostile server can chain.
+_MAX_REDIRECTS = 5
 
 # The Media gallery's per-provider panel key (GalleryMediaSource.key, what's
 # actually sent as `source` here) doesn't always match the ImageSource value
@@ -120,10 +124,23 @@ def materialize_media_item(
         return existing
 
     try:
-        response = requests.get(url, timeout=_DOWNLOAD_TIMEOUT, stream=True)
+        fetch_url = url
+        for _hop in range(_MAX_REDIRECTS + 1):
+            fetch_url = ensure_public_http_url(fetch_url)
+            response = requests.get(fetch_url, timeout=_DOWNLOAD_TIMEOUT, stream=True, allow_redirects=False)
+            if response.is_redirect:
+                redirect_target = response.headers.get("Location")
+                response.close()
+                if not redirect_target:
+                    raise MaterializeError(f"{url} redirected with no target.")
+                fetch_url = urljoin(fetch_url, redirect_target)
+                continue
+            break
+        else:
+            raise MaterializeError(f"{url} redirects too many times.")
         response.raise_for_status()
         content = response.raw.read(_MAX_DOWNLOAD_BYTES + 1, decode_content=True)
-    except (requests.RequestException, OSError) as exc:
+    except (requests.RequestException, OSError, UnsafeUrlError) as exc:
         raise MaterializeError(f"Could not download {url}: {exc}") from exc
     if len(content) > _MAX_DOWNLOAD_BYTES:
         raise MaterializeError(f"{url} is larger than the {_MAX_DOWNLOAD_BYTES // (1024 * 1024)}MB limit for Media gallery photos.")
