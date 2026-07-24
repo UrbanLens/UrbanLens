@@ -412,6 +412,59 @@ class Guess(abstract.DashboardModel):
         ]
 
 
+class GamePhotoFeedbackKind(abstract.TextChoices):
+    """What a participant did (or didn't do) about the photo shown in a Photos-mode round.
+
+    See ``services.media_relevance.effective_relevance`` for how these feed
+    into a photo's overall relevance score - notably, ``THUMBS_DOWN`` is
+    recorded here but deliberately excluded from that score.
+    """
+
+    THUMBS_UP = "thumbs_up", "Thumbs Up"
+    THUMBS_DOWN = "thumbs_down", "Thumbs Down"
+    REPORTED = "reported", "Reported"
+    NO_REACTION = "no_reaction", "No Reaction"
+
+
+class GamePhotoFeedback(abstract.DashboardModel):
+    """One participant's reaction to the photo shown in one Photos-mode round.
+
+    An event log, not a per-profile mark like ``MediaRelevance`` - the same
+    profile can (and, for ``NO_REACTION``, usually will) accumulate a fresh
+    row every time they're shown the same photo again in a later round, since
+    the whole point of the "shown, no reaction" signal is that it's very weak
+    per-impression and only means something in aggregate over many plays. An
+    explicit reaction (thumbs up/down, report) always overwrites whatever was
+    recorded for that round instead - see ``services.spotguessr.relevance``.
+    """
+
+    kind = CharField(max_length=15, choices=GamePhotoFeedbackKind.choices)
+
+    round = ForeignKey(
+        "dashboard.GameRound",
+        on_delete=CASCADE,
+        related_name="photo_feedback",
+    )
+    profile = ForeignKey(
+        "dashboard.Profile",
+        on_delete=CASCADE,
+        related_name="spotguessr_photo_feedback",
+    )
+
+    if TYPE_CHECKING:
+        round_id: int
+        profile_id: int
+
+    def __str__(self) -> str:
+        return f"GamePhotoFeedback(round={self.round_id}, profile={self.profile_id}, kind={self.kind})"
+
+    class Meta(abstract.DashboardModel.Meta):
+        db_table = "dashboard_spotguessr_photo_feedback"
+        constraints = [
+            UniqueConstraint(fields=["round", "profile"], name="db_sg_photo_feedback_unique"),
+        ]
+
+
 class GameSessionChatMessage(abstract.DashboardModel):
     """One chat message in a multiplayer session's live text chat (UL-392).
 

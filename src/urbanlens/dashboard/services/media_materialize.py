@@ -20,6 +20,7 @@ from django.core.files.base import ContentFile
 import requests
 
 from urbanlens.dashboard.models.images.model import Image, ImageSource
+from urbanlens.dashboard.models.images.relevance import media_item_key
 from urbanlens.dashboard.services.images import compute_checksum
 from urbanlens.dashboard.services.storage import quota_error_for_upload
 from urbanlens.dashboard.services.url_safety import UnsafeUrlError, ensure_public_http_url
@@ -112,15 +113,36 @@ def materialize_media_item(
             doesn't have room for it.
     """
     source_url = page_url or url
-    dedupe_filter = {"location": location, "source": source, "source_url": source_url}
+    item_key = media_item_key(url)
+    # Translated *before* the dedupe check - existing rows are persisted with
+    # `source=django_source` (see the `Image.objects.create` call below), so
+    # filtering on the untranslated panel key here would never match a
+    # previously materialized "loc"/"cris_building" item and re-download +
+    # duplicate it on every subsequent vote.
+    translated_source = _PANEL_KEY_TO_IMAGE_SOURCE.get(source, source)
+    django_source = translated_source if ImageSource.valid(translated_source) else ImageSource.UPLOAD
+
+    dedupe_filter = {"location": location, "source": django_source, "source_url": source_url}
     if pin is not None:
         dedupe_filter["pin"] = pin
         dedupe_filter["profile"] = profile
     existing = Image.objects.filter(**dedupe_filter).first()
     if existing:
+        update_fields = []
         if wiki is not None and existing.wiki_id != wiki.pk:
             existing.wiki = wiki
-            existing.save(update_fields=["wiki", "updated"])
+            update_fields.append("wiki")
+        # Backfills the (source, item_key) identity onto rows materialized
+        # before these fields existed, or onto any row a dedupe hit reused
+        # without them having been set - see Image.media_source_key's
+        # docstring for why this identity can't be reconstructed from
+        # `source_url` alone.
+        if existing.media_source_key != source or existing.media_item_key != item_key:
+            existing.media_source_key = source
+            existing.media_item_key = item_key
+            update_fields += ["media_source_key", "media_item_key"]
+        if update_fields:
+            existing.save(update_fields=[*update_fields, "updated"])
         return existing
 
     try:
@@ -151,8 +173,6 @@ def materialize_media_item(
     if quota_error:
         raise MaterializeError(quota_error)
 
-    translated_source = _PANEL_KEY_TO_IMAGE_SOURCE.get(source, source)
-    django_source = translated_source if ImageSource.valid(translated_source) else ImageSource.UPLOAD
     file_obj = ContentFile(content, name=_filename_from_url(url))
     checksum = compute_checksum(file_obj)
     file_obj.seek(0)
@@ -165,6 +185,8 @@ def materialize_media_item(
         profile=profile,
         source=django_source,
         source_url=source_url,
+        media_source_key=source,
+        media_item_key=item_key,
         caption=caption.strip() or None,
         checksum=checksum,
         file_size=len(content),

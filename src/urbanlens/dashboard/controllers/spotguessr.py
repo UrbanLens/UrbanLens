@@ -32,12 +32,13 @@ from urbanlens.dashboard.models.spotguessr.model import (
     GameRound,
     GameSession,
     GameSessionParticipant,
+    Guess,
     PlayerModeRating,
     SpotGuessrMode,
     SpotGuessrPreference,
 )
 from urbanlens.dashboard.services.connections import get_connections
-from urbanlens.dashboard.services.spotguessr import chat as spotguessr_chat, serializers, session as spotguessr_session
+from urbanlens.dashboard.services.spotguessr import chat as spotguessr_chat, relevance as spotguessr_relevance, serializers, session as spotguessr_session
 from urbanlens.dashboard.services.spotguessr.social import visible_friend_ratings
 
 logger = logging.getLogger(__name__)
@@ -118,6 +119,7 @@ def _config_from_request(request: HttpRequest) -> tuple[spotguessr_session.GameC
     config = spotguessr_session.GameConfig(
         difficulty=difficulty,
         external_media_only=request.POST.get("external_media_only") == "on",
+        allow_arbitrary_external_photos=request.POST.get("allow_arbitrary_external_photos") == "on",
         require_visited_all=request.POST.get("require_visited_all") == "on",
         date_guessing_enabled=request.POST.get("date_guessing_enabled") == "on",
         use_aliases=request.POST.get("use_aliases", "on") == "on",
@@ -156,6 +158,7 @@ def _url_templates() -> dict[str, str]:
         "begin": reverse("spotguessr.begin", kwargs=session_kwargs),
         "round": reverse("spotguessr.round", kwargs=session_kwargs),
         "guess": reverse("spotguessr.guess", kwargs={"session_id": _SESSION_ID_SENTINEL, "round_id": _ROUND_ID_SENTINEL}),
+        "photo_feedback": reverse("spotguessr.photo_feedback", kwargs={"session_id": _SESSION_ID_SENTINEL, "round_id": _ROUND_ID_SENTINEL}),
         "chat_history": reverse("spotguessr.chat_history", kwargs=session_kwargs),
         "summary": reverse("spotguessr.summary", kwargs=session_kwargs),
         "session_id_sentinel": str(_SESSION_ID_SENTINEL),
@@ -407,6 +410,39 @@ class SpotGuessrGuessView(LoginRequiredMixin, View):
 
         round_.refresh_from_db()
         return JsonResponse(serializers.serialize_reveal(round_, guess))
+
+
+class SpotGuessrPhotoFeedbackView(LoginRequiredMixin, View):
+    """Thumbs up/down, or report, the photo a Photos-mode round just showed.
+
+    POST /spotguessr/session/<session_id>/round/<round_id>/feedback/   body: ``kind`` (thumbs_up/thumbs_down/reported)
+
+    Feeds ``services.media_relevance.effective_relevance`` at a reduced
+    weight (or, for a report, full weight against "not relevant") - see
+    ``services.spotguessr.relevance`` for exactly how. A no-op for a round
+    with no photo (Named Place/Street View) or one this profile never
+    guessed on - there's no "reaction to a photo you weren't shown" case to
+    support.
+    """
+
+    def post(self, request: HttpRequest, session_id: int, round_id: int) -> HttpResponse:
+        profile = _current_profile(request)
+        game_session = _participant_session(profile, session_id)
+        participant = _joined_participant(profile, game_session)
+        if not participant.is_joined:
+            return JsonResponse({"error": "Accept the invite before playing."}, status=403)
+
+        round_ = get_object_or_404(GameRound, pk=round_id, session=game_session)
+        kind = request.POST.get("kind")
+        if kind not in spotguessr_relevance.EXPLICIT_KINDS:
+            return JsonResponse({"error": f"kind must be one of {', '.join(spotguessr_relevance.EXPLICIT_KINDS)}."}, status=400)
+        if not Guess.objects.filter(round=round_, profile=profile).exists():
+            return JsonResponse({"error": "You can only react to a round you've guessed on."}, status=403)
+
+        feedback = spotguessr_relevance.record_feedback(round_, profile, kind)
+        if feedback is None:
+            return JsonResponse({"error": "This round has no photo to react to."}, status=400)
+        return JsonResponse({"kind": feedback.kind})
 
 
 class SpotGuessrChatHistoryView(LoginRequiredMixin, View):

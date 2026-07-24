@@ -16,6 +16,7 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.spotguessr.model import GameSession, SpotGuessrMode, SpotGuessrPreference
+from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.spotguessr.session import GameConfig, begin_session, join_session, start_multiplayer_session
 
 _coordinate_counter = count()
@@ -42,6 +43,7 @@ class SpotGuessrStartViewTests(TestCase):
             latitude=None,
             longitude=None,
             image=ContentFile(b"fake image bytes", name="test.jpg"),
+            wiki=baker.make(Wiki, location=self.location),
         )
         self.client.force_login(self.profile.user)
         self.start_url = reverse("spotguessr.start")
@@ -60,6 +62,18 @@ class SpotGuessrStartViewTests(TestCase):
         self.assertIn("image_url", data["round"])
         self.assertNotIn("latitude", json.dumps(data))
         self.assertEqual(GameSession.objects.get(pk=data["session_id"]).total_rounds, 3)
+
+    def test_allow_arbitrary_external_photos_is_persisted_on_the_session_config(self) -> None:
+        response = self.client.post(self.start_url, {"allow_arbitrary_external_photos": "on"})
+        self.assertEqual(response.status_code, 200)
+        session = GameSession.objects.get(pk=response.json()["session_id"])
+        self.assertTrue(session.config["allow_arbitrary_external_photos"])
+
+    def test_allow_arbitrary_external_photos_defaults_off(self) -> None:
+        response = self.client.post(self.start_url, {})
+        self.assertEqual(response.status_code, 200)
+        session = GameSession.objects.get(pk=response.json()["session_id"])
+        self.assertFalse(session.config["allow_arbitrary_external_photos"])
 
     def test_invalid_difficulty_is_rejected(self) -> None:
         response = self.client.post(self.start_url, {"difficulty": "not-a-number"})
@@ -86,7 +100,7 @@ class SpotGuessrGuessFlowTests(TestCase):
         self.profile = _make_profile()
         self.location = _make_location()
         baker.make(Pin, profile=self.profile, location=self.location)
-        baker.make(Image, location=self.location, media_type=MediaKind.PHOTO, latitude=None, longitude=None)
+        baker.make(Image, location=self.location, media_type=MediaKind.PHOTO, latitude=None, longitude=None, wiki=baker.make(Wiki, location=self.location))
         self.client.force_login(self.profile.user)
         start = self.client.post(reverse("spotguessr.start"), {"total_rounds": "1"}).json()
         self.session_id = start["session_id"]
@@ -143,6 +157,69 @@ class SpotGuessrPinsViewTests(TestCase):
         self.assertEqual(len(response.json()["pins"]), 1)
 
 
+class SpotGuessrPhotoFeedbackViewTests(TestCase):
+    def setUp(self) -> None:
+        self.profile = _make_profile()
+        self.location = _make_location()
+        baker.make(Pin, profile=self.profile, location=self.location)
+        baker.make(Image, location=self.location, media_type=MediaKind.PHOTO, latitude=None, longitude=None, wiki=baker.make(Wiki, location=self.location))
+        self.client.force_login(self.profile.user)
+        start = self.client.post(reverse("spotguessr.start"), {"total_rounds": "1"}).json()
+        self.session_id = start["session_id"]
+        self.round_id = start["round"]["round_id"]
+        self.feedback_url = reverse("spotguessr.photo_feedback", args=[self.session_id, self.round_id])
+
+    def test_reacting_before_guessing_is_rejected(self) -> None:
+        response = self.client.post(self.feedback_url, {"kind": "thumbs_up"})
+        self.assertEqual(response.status_code, 403)
+
+    def test_thumbs_up_after_guessing_is_recorded(self) -> None:
+        from urbanlens.dashboard.models.spotguessr.model import GamePhotoFeedback, GamePhotoFeedbackKind
+
+        self.client.post(reverse("spotguessr.guess", args=[self.session_id, self.round_id]), {"latitude": str(self.location.latitude), "longitude": str(self.location.longitude)})
+        response = self.client.post(self.feedback_url, {"kind": "thumbs_up"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["kind"], "thumbs_up")
+        feedback = GamePhotoFeedback.objects.get(round_id=self.round_id, profile=self.profile)
+        self.assertEqual(feedback.kind, GamePhotoFeedbackKind.THUMBS_UP)
+
+    def test_explicit_reaction_overrides_the_automatic_no_reaction_backfill(self) -> None:
+        """Solo play completes (and backfills NO_REACTION for) the round the
+        instant its one guess is submitted - an explicit reaction afterward
+        must still win."""
+        from urbanlens.dashboard.models.spotguessr.model import GamePhotoFeedback, GamePhotoFeedbackKind
+
+        self.client.post(reverse("spotguessr.guess", args=[self.session_id, self.round_id]), {"latitude": str(self.location.latitude), "longitude": str(self.location.longitude)})
+        self.assertEqual(GamePhotoFeedback.objects.get(round_id=self.round_id, profile=self.profile).kind, GamePhotoFeedbackKind.NO_REACTION)
+
+        self.client.post(self.feedback_url, {"kind": "reported"})
+        self.assertEqual(GamePhotoFeedback.objects.get(round_id=self.round_id, profile=self.profile).kind, GamePhotoFeedbackKind.REPORTED)
+
+    def test_an_invalid_kind_is_rejected(self) -> None:
+        self.client.post(reverse("spotguessr.guess", args=[self.session_id, self.round_id]), {"latitude": str(self.location.latitude), "longitude": str(self.location.longitude)})
+        response = self.client.post(self.feedback_url, {"kind": "not_a_real_kind"})
+        self.assertEqual(response.status_code, 400)
+
+    def test_a_non_participant_cannot_react_on_someone_elses_session(self) -> None:
+        outsider = _make_profile()
+        self.client.force_login(outsider.user)
+        response = self.client.post(self.feedback_url, {"kind": "thumbs_up"})
+        self.assertEqual(response.status_code, 404)
+
+    def test_a_named_place_round_has_no_photo_to_react_to(self) -> None:
+        named_location = _make_location()
+        baker.make(Pin, profile=self.profile, location=named_location)
+        baker.make(Wiki, location=named_location, name="Old Mill House")
+        response = self.client.post(reverse("spotguessr.start"), {"mode": "named_place", "total_rounds": "1"})
+        data = response.json()
+        guess_url = reverse("spotguessr.guess", args=[data["session_id"], data["round"]["round_id"]])
+        self.client.post(guess_url, {"latitude": str(named_location.latitude), "longitude": str(named_location.longitude)})
+
+        feedback_url = reverse("spotguessr.photo_feedback", args=[data["session_id"], data["round"]["round_id"]])
+        response = self.client.post(feedback_url, {"kind": "thumbs_up"})
+        self.assertEqual(response.status_code, 400)
+
+
 class SpotGuessrSettingsViewTests(TestCase):
     def test_toggling_show_ratings_to_friends(self) -> None:
         profile = _make_profile()
@@ -172,7 +249,7 @@ class SpotGuessrMultiplayerGuessRevealTests(TestCase):
         self.location = _make_location()
         baker.make(Pin, profile=self.host, location=self.location)
         baker.make(Pin, profile=self.guest, location=self.location)
-        baker.make(Image, location=self.location, media_type=MediaKind.PHOTO, latitude=None, longitude=None)
+        baker.make(Image, location=self.location, media_type=MediaKind.PHOTO, latitude=None, longitude=None, wiki=baker.make(Wiki, location=self.location))
 
         session = start_multiplayer_session(self.host, SpotGuessrMode.PHOTOS, GameConfig(), [self.guest])
         join_session(session, self.guest)

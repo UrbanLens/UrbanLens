@@ -3,6 +3,8 @@ from urbanlens.dashboard.models.spotguessr.model import (
     DEFAULT_RATING_DEVIATION,
     DEFAULT_VOLATILITY,
     GLICKO2_SCALE,
+    GamePhotoFeedback,
+    GamePhotoFeedbackKind,
     GameRound,
     GameSession,
     GameSessionChatMessage,

@@ -72,6 +72,8 @@ from urbanlens.dashboard.models.search_history import SearchHistory
 from urbanlens.dashboard.models.site_settings import SiteSettings
 from urbanlens.dashboard.models.social_link import SocialLink
 from urbanlens.dashboard.models.spotguessr import (
+    GamePhotoFeedback,
+    GamePhotoFeedbackKind,
     GameRound,
     GameSession,
     GameSessionChatMessage,

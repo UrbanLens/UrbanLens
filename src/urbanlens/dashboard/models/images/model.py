@@ -148,6 +148,21 @@ class Image(abstract.FrontendDashboardModel):
     author = CharField(max_length=255, null=True, blank=True)
     source_url = URLField(max_length=500, null=True, blank=True)
     copyright = CharField(max_length=255, null=True, blank=True)
+    # Set only on rows materialized from the Media gallery's transient provider
+    # results (see services.media_materialize) - the *raw* provider panel key
+    # (e.g. "wikimedia", "loc") and the sha1 hash of the item's full-resolution
+    # url, i.e. exactly the (source, item_key) identity MediaRelevance marks
+    # are keyed by (models.images.relevance.media_item_key). `source_url`
+    # can't stand in for this: it's set to `page_url or url`, which diverges
+    # from the raw `url` that item_key is always hashed from whenever a
+    # provider supplies a page_url - these two fields are what let a
+    # materialized Image row be reliably joined back to its wiki votes (see
+    # services.media_relevance.effective_relevance). Deliberately NOT the
+    # same value as `source` above, which stores the *translated*
+    # ImageSource value and can differ from the raw panel key (see
+    # media_materialize._PANEL_KEY_TO_IMAGE_SOURCE).
+    media_source_key = CharField(max_length=30, null=True, blank=True)
+    media_item_key = CharField(max_length=40, null=True, blank=True)
     # The photo's own GPS position (EXIF, or user drag-placement on the map).
     # Kept separate from the `location` FK so each photo can scatter at its exact
     # capture point on the map layer; `location` records which shared place the
@@ -245,4 +260,7 @@ class Image(abstract.FrontendDashboardModel):
     class Meta(abstract.FrontendDashboardModel.Meta):
         db_table = "dashboard_images"
         get_latest_by = "updated"
-        indexes = [Index(fields=["uuid"], name="idxdb_image_uuid")]
+        indexes = [
+            Index(fields=["uuid"], name="idxdb_image_uuid"),
+            Index(fields=["location", "media_source_key", "media_item_key"], name="idxdb_image_media_key"),
+        ]

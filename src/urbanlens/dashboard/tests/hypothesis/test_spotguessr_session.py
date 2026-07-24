@@ -19,6 +19,7 @@ from urbanlens.dashboard.models.spotguessr.model import (
     PlayerModeRating,
     SpotGuessrMode,
 )
+from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.spotguessr.session import (
     GameConfig,
     SpotGuessrError,
@@ -78,7 +79,7 @@ class GetOrCreateRoundTests(TestCase):
     def test_pinned_location_with_a_photo_produces_a_round(self) -> None:
         location = _make_location()
         baker.make(Pin, profile=self.profile, location=location)
-        baker.make(Image, location=location, media_type=MediaKind.PHOTO)
+        baker.make(Image, location=location, media_type=MediaKind.PHOTO, wiki=baker.make(Wiki, location=location))
 
         session = start_solo_session(self.profile, SpotGuessrMode.PHOTOS, GameConfig())
         round_ = get_or_create_round(session)
@@ -90,7 +91,7 @@ class GetOrCreateRoundTests(TestCase):
     def test_the_same_unanswered_round_is_returned_on_repeat_calls(self) -> None:
         location = _make_location()
         baker.make(Pin, profile=self.profile, location=location)
-        baker.make(Image, location=location, media_type=MediaKind.PHOTO)
+        baker.make(Image, location=location, media_type=MediaKind.PHOTO, wiki=baker.make(Wiki, location=location))
 
         session = start_solo_session(self.profile, SpotGuessrMode.PHOTOS, GameConfig())
         first = get_or_create_round(session)
@@ -105,7 +106,7 @@ class SubmitGuessTests(TestCase):
         self.profile = _make_profile()
         self.location = _make_location()
         baker.make(Pin, profile=self.profile, location=self.location)
-        baker.make(Image, location=self.location, media_type=MediaKind.PHOTO, latitude=None, longitude=None)
+        baker.make(Image, location=self.location, media_type=MediaKind.PHOTO, latitude=None, longitude=None, wiki=baker.make(Wiki, location=self.location))
         self.session = start_solo_session(self.profile, SpotGuessrMode.PHOTOS, GameConfig(), total_rounds=1)
         round_ = get_or_create_round(self.session)
         assert round_ is not None
@@ -148,7 +149,7 @@ class SessionSummaryTests(TestCase):
         profile = _make_profile()
         location = _make_location()
         baker.make(Pin, profile=profile, location=location)
-        baker.make(Image, location=location, media_type=MediaKind.PHOTO, latitude=None, longitude=None)
+        baker.make(Image, location=location, media_type=MediaKind.PHOTO, latitude=None, longitude=None, wiki=baker.make(Wiki, location=location))
 
         session = start_solo_session(profile, SpotGuessrMode.PHOTOS, GameConfig(), total_rounds=1)
         round_ = get_or_create_round(session)

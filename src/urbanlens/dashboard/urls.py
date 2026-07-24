@@ -159,6 +159,11 @@ urlpatterns = [
                     spotguessr.SpotGuessrGuessView.as_view(),
                     name="spotguessr.guess",
                 ),
+                path(
+                    "session/<int:session_id>/round/<int:round_id>/feedback/",
+                    spotguessr.SpotGuessrPhotoFeedbackView.as_view(),
+                    name="spotguessr.photo_feedback",
+                ),
                 path("session/<int:session_id>/chat/", spotguessr.SpotGuessrChatHistoryView.as_view(), name="spotguessr.chat_history"),
                 path("session/<int:session_id>/summary/", spotguessr.SpotGuessrSummaryView.as_view(), name="spotguessr.summary"),
             ],

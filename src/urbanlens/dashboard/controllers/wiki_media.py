@@ -80,12 +80,26 @@ class WikiMediaProviderView(LoginRequiredMixin, View):
             return self._pending(request, location, profile, source, panel)
         items = panel.media_items(cached.data or {})
 
+        from urbanlens.dashboard.services.media_relevance import local_images_for_gallery_items
+
         scores = MediaRelevance.objects.vote_scores(location, source)
         my_marks = dict(MediaRelevance.objects.for_gallery(profile, location, source).values_list("item_key", "is_relevant"))
+        # Prefer an already-materialized local copy over hot-linking the
+        # provider - see the matching comment in controllers.pin. Voting is
+        # wiki-side too, so this is the same lookup either flow benefits from.
+        local_images = local_images_for_gallery_items(location, source, [item.url for item in items])
         rendered_items = []
         for item in items:
             key = media_item_key(item.url)
-            rendered_items.append({"item": item, "key": key, "is_relevant": my_marks.get(key), "vote_score": scores.get(key, 0)})
+            rendered_items.append(
+                {
+                    "item": item,
+                    "key": key,
+                    "is_relevant": my_marks.get(key),
+                    "vote_score": scores.get(key, 0),
+                    "local_url": local_images[item.url].image.url if item.url in local_images else None,
+                },
+            )
 
         return render(request, "dashboard/partials/pins/pin_media_items.html", {"rendered_items": rendered_items, "source_key": source, "wiki_mode": True})
 

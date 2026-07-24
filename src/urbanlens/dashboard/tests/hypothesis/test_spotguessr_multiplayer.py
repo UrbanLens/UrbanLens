@@ -23,6 +23,7 @@ from urbanlens.dashboard.models.spotguessr.model import (
     GameSessionStatus,
     SpotGuessrMode,
 )
+from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.spotguessr.session import (
     GameConfig,
     SpotGuessrError,
@@ -151,7 +152,7 @@ class BeginSessionTests(TestCase):
         self.location = _make_location()
         baker.make(Pin, profile=self.host, location=self.location)
         baker.make(Pin, profile=self.guest, location=self.location)
-        baker.make(Image, location=self.location, media_type=MediaKind.PHOTO, latitude=None, longitude=None)
+        baker.make(Image, location=self.location, media_type=MediaKind.PHOTO, latitude=None, longitude=None, wiki=baker.make(Wiki, location=self.location))
         self.session = start_multiplayer_session(self.host, SpotGuessrMode.PHOTOS, GameConfig(), [self.guest])
         join_session(self.session, self.guest)
 
@@ -193,7 +194,7 @@ class JoinedOnlyRoundAndGuessTests(TestCase):
         baker.make(Pin, profile=self.guest, location=self.location)
         # Deliberately no pin for `never_joins` - if their pins were required,
         # this location would be ineligible and the round could never be created.
-        baker.make(Image, location=self.location, media_type=MediaKind.PHOTO, latitude=None, longitude=None)
+        baker.make(Image, location=self.location, media_type=MediaKind.PHOTO, latitude=None, longitude=None, wiki=baker.make(Wiki, location=self.location))
 
         self.session = start_multiplayer_session(self.host, SpotGuessrMode.PHOTOS, GameConfig(), [self.guest, self.never_joins])
         join_session(self.session, self.guest)
@@ -236,7 +237,7 @@ class JoinedOnlyRoundAndGuessTests(TestCase):
         second_location = _make_location()
         baker.make(Pin, profile=self.host, location=second_location)
         baker.make(Pin, profile=self.guest, location=second_location)
-        baker.make(Image, location=second_location, media_type=MediaKind.PHOTO, latitude=None, longitude=None)
+        baker.make(Image, location=second_location, media_type=MediaKind.PHOTO, latitude=None, longitude=None, wiki=baker.make(Wiki, location=second_location))
 
         guess_point = Point(float(self.location.longitude), float(self.location.latitude), srid=4326)
         submit_guess(self.round_, self.host, guess_point)

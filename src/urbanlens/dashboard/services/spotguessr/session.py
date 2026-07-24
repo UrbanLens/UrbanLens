@@ -28,7 +28,7 @@ from urbanlens.dashboard.models.spotguessr.model import (
     SpotGuessrMode,
 )
 from urbanlens.dashboard.services.connections import are_connections
-from urbanlens.dashboard.services.spotguessr import eligibility, named_place, photos, realtime, scoring, selection, serializers, street_view
+from urbanlens.dashboard.services.spotguessr import eligibility, named_place, photos, realtime, relevance, scoring, selection, serializers, street_view
 from urbanlens.dashboard.services.spotguessr.ratings import apply_round_ratings
 
 if TYPE_CHECKING:
@@ -63,6 +63,7 @@ class GameConfig:
 
     difficulty: float = 0.5
     external_media_only: bool = False
+    allow_arbitrary_external_photos: bool = False
     require_visited_all: bool = False
     date_guessing_enabled: bool = False
     use_aliases: bool = True
@@ -279,7 +280,11 @@ def get_or_create_round(session: GameSession) -> GameRound | None:
         image = None
         display_text = None
         if session.mode == SpotGuessrMode.PHOTOS:
-            image = photos.candidate_image_for_location(location, external_media_only=config.external_media_only)
+            image = photos.candidate_image_for_location(
+                location,
+                external_media_only=config.external_media_only,
+                allow_arbitrary_external_photos=config.allow_arbitrary_external_photos,
+            )
             if image is None:
                 excluded_ids.append(location.pk)
                 continue  # this location has no usable photo yet - try another
@@ -376,7 +381,9 @@ def submit_guess(round_: GameRound, profile: Profile, guess_point: Point, guesse
 
     if round_completed_now:
         round_.refresh_from_db()
-        apply_round_ratings(round_, list(Guess.objects.for_round(round_).select_related("profile")))
+        completed_guesses = list(Guess.objects.for_round(round_).select_related("profile"))
+        apply_round_ratings(round_, completed_guesses)
+        relevance.backfill_no_reaction(round_, [guess.profile for guess in completed_guesses])
         realtime.broadcast(session.pk, "round.revealed", serializers.serialize_round_reveal(round_))
 
         next_round = get_or_create_round(session)

@@ -26,6 +26,7 @@ declare global {
             begin: string;
             round: string;
             guess: string;
+            photo_feedback: string;
             chat_history: string;
             summary: string;
             session_id_sentinel: string;
@@ -457,6 +458,8 @@ function renderRound(round: RoundPayload, roundNumber: number): void {
     }
 
     el("sg-date-field").hidden = !dateGuessingEnabled;
+    el("sg-photo-feedback").hidden = true;
+    el("sg-photo-feedback-thanks").hidden = true;
     resetGuessMap();
     // The map container was hidden (display:none) while another panel was
     // showing, so Leaflet needs a nudge once it's visible again.
@@ -507,10 +510,21 @@ function renderScoreboard(): void {
     }
 }
 
+function showPhotoFeedbackIfApplicable(): void {
+    // The photo itself (unlike the answer) has been visible since the round
+    // started, whether or not everyone's guessed yet - so feedback on it is
+    // always fair game once there's a reveal panel to put the buttons in.
+    // Street View also shows imagery, but only Photos-mode rounds have a
+    // `round.image` for GamePhotoFeedback to attach to server-side.
+    el("sg-photo-feedback").hidden = currentMode !== "photos";
+    el("sg-photo-feedback-thanks").hidden = true;
+}
+
 function showReveal(reveal: RevealPayload): void {
     el<HTMLButtonElement>("sg-submit-guess-btn").disabled = true;
     sessionScore += reveal.points + reveal.date_points;
     el("sg-score-status").textContent = isMultiplayer ? "" : `Score: ${sessionScore}`;
+    showPhotoFeedbackIfApplicable();
 
     const distanceKm = (reveal.distance_meters / 1000).toFixed(2);
     if (!reveal.revealed) {
@@ -609,6 +623,7 @@ async function startGame(event: Event): Promise<void> {
         difficulty: String(Number(el<HTMLInputElement>("sg-difficulty").value) / 100),
         total_rounds: el<HTMLInputElement>("sg-rounds").value,
         external_media_only: el<HTMLInputElement>("sg-external-media-only").checked ? "on" : "off",
+        allow_arbitrary_external_photos: el<HTMLInputElement>("sg-allow-arbitrary-external-photos").checked ? "on" : "off",
         require_visited_all: el<HTMLInputElement>("sg-require-visited-all").checked ? "on" : "off",
         date_guessing_enabled: dateGuessingEnabled ? "on" : "off",
         use_aliases: el<HTMLInputElement>("sg-use-aliases").checked ? "on" : "off",
@@ -655,6 +670,16 @@ async function submitGuess(): Promise<void> {
         return;
     }
     showReveal(reveal);
+}
+
+async function submitPhotoFeedback(kind: "thumbs_up" | "thumbs_down" | "reported"): Promise<void> {
+    if (sessionId === null || currentRoundId === null) return;
+    const response = await postForm(urlFor(urls.photo_feedback, sessionId, currentRoundId), { kind });
+    if (response.error) {
+        window.alert(response.error);
+        return;
+    }
+    el("sg-photo-feedback-thanks").hidden = false;
 }
 
 async function goToNextRound(): Promise<void> {
@@ -838,6 +863,9 @@ initFriendPicker();
 initChat();
 el("sg-start-form").addEventListener("submit", (event) => void startGame(event));
 el("sg-submit-guess-btn").addEventListener("click", () => void submitGuess());
+el("sg-photo-thumbs-up-btn").addEventListener("click", () => void submitPhotoFeedback("thumbs_up"));
+el("sg-photo-thumbs-down-btn").addEventListener("click", () => void submitPhotoFeedback("thumbs_down"));
+el("sg-photo-report-btn").addEventListener("click", () => void submitPhotoFeedback("reported"));
 el("sg-next-round-btn").addEventListener("click", () => void goToNextRound());
 el("sg-play-again-btn").addEventListener("click", resetToSettings);
 el("sg-join-lobby-btn").addEventListener("click", () => void joinLobby());

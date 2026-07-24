@@ -473,11 +473,27 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             return self._pending_media(request, pin, source)
         items = panel.media_items(cached.data or {})
 
+        from urbanlens.dashboard.services.media_relevance import local_images_for_gallery_items
+
         profile, _ = Profile.objects.get_or_create(user=request.user)
         relevance = dict(
             MediaRelevance.objects.for_gallery(profile, location, source).values_list("item_key", "is_relevant"),
         )
-        rendered_items = [{"item": item, "key": media_item_key(item.url), "is_relevant": relevance.get(media_item_key(item.url))} for item in items]
+        # Prefer an already-materialized local copy over hot-linking the
+        # provider, if anyone (this profile or another) has previously voted
+        # this exact item relevant - see media_relevance.py and
+        # services.media_materialize's docstring. The remote page_url stays
+        # the "Open source" link regardless, so the original is never lost.
+        local_images = local_images_for_gallery_items(location, source, [item.url for item in items])
+        rendered_items = [
+            {
+                "item": item,
+                "key": media_item_key(item.url),
+                "is_relevant": relevance.get(media_item_key(item.url)),
+                "local_url": local_images[item.url].image.url if item.url in local_images else None,
+            }
+            for item in items
+        ]
 
         # Render even when a provider found nothing, so admins can see what was
         # searched (including every candidate query tried) in the debug overlay
