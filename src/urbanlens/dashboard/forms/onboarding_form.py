@@ -27,7 +27,7 @@ class WelcomeOnboardingForm(forms.ModelForm):
         required=False,
         initial=False,
         widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
-        label="Customize which features are enabled",
+        label="Choose features to disable.",
     )
     history_enabled = forms.BooleanField(
         required=False,

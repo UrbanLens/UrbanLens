@@ -148,6 +148,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     huggingface_ai_endpoint: Url | None = Field(default=None, description="The huggingface ai endpoint")
     huggingface_ai_api_key: str | None = Field(default=None, description="The huggingface ai key")
     openai_api_key: str | None = Field(default=None, description="The openai key")
+    anthropic_api_key: str | None = Field(default=None, description="The anthropic (claude) key")
     google_unrestricted_api_key: str | None = Field(default=None, description="The google unrestricted api key")
     google_domain_restricted_api_key: str | None = Field(default=None, description="The google domain restricted api key")
     google_public_api_key: str | None = Field(default=None, description="The google public api key")

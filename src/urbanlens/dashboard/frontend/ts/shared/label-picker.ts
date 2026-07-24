@@ -619,8 +619,8 @@ export function createFilterPicker(options: FilterPickerOptions): FilterPickerAp
                 sugg.hidden = true;
                 return;
             }
-            sugg.innerHTML = matches
-                .slice(0, 6)
+            const shown = matches.slice(0, 6);
+            sugg.innerHTML = shown
                 .map(
                     (btn, i) =>
                         `<div class="fp-formula-sugg" data-idx="${i}" data-id="${escHtml(btn.dataset.labelId || "")}" data-label="${escHtml(btn.dataset.labelText || "")}">
@@ -630,10 +630,13 @@ export function createFilterPicker(options: FilterPickerOptions): FilterPickerAp
                 )
                 .join("");
             sugg.hidden = false;
-            sugg.querySelectorAll<HTMLElement>(".fp-formula-sugg").forEach((el) => {
+            sugg.querySelectorAll<HTMLElement>(".fp-formula-sugg").forEach((el, i) => {
+                // Clicking a suggestion picks it outright (like clicking the
+                // availability list) rather than merely inserting formula text.
                 el.addEventListener("mousedown", (e) => {
                     e.preventDefault();
-                    insertSuggestion(el.dataset.label || "");
+                    const target = shown[i];
+                    if (target) chooseSuggestion(target);
                 });
             });
         }
@@ -657,6 +660,19 @@ export function createFilterPicker(options: FilterPickerOptions): FilterPickerAp
             if (sugg) sugg.hidden = true;
             activeSuggIdx = -1;
             onFormulaChange();
+        }
+
+        // Commits a suggestion as a chosen label immediately - the decisive
+        // counterpart to insertSuggestion(), which only autocompletes text.
+        function chooseSuggestion(btn: HTMLElement): void {
+            addLabel(btn, "incl");
+            bar.value = "";
+            if (sugg) sugg.hidden = true;
+            activeSuggIdx = -1;
+            availButtons().forEach((b) => {
+                b.style.display = "";
+            });
+            if (errs) errs.hidden = true;
         }
 
         // Per keystroke: suggestions + list filtering + dead-end errors only.
@@ -718,8 +734,9 @@ export function createFilterPicker(options: FilterPickerOptions): FilterPickerAp
                 e.preventDefault();
                 if (sugg && !sugg.hidden && activeSuggIdx >= 0) {
                     const activeEl = sugg.querySelector<HTMLElement>(".fp-formula-sugg.active");
-                    if (activeEl) {
-                        insertSuggestion(activeEl.dataset.label || "");
+                    const activeBtn = activeEl ? availButtons().find((btn) => btn.dataset.labelId === activeEl.dataset.id) : undefined;
+                    if (activeBtn) {
+                        chooseSuggestion(activeBtn);
                         return;
                     }
                 }
@@ -731,37 +748,29 @@ export function createFilterPicker(options: FilterPickerOptions): FilterPickerAp
                     if (errs) errs.hidden = true;
                     return;
                 }
-                const hasOps = /[-\/\+\(\)]/.test(text);
-                if (hasOps) {
-                    const { groups, errors } = parseTokens(tokenize(text));
-                    if (errs) {
-                        if (errors.length) {
-                            errs.textContent = `Unknown: ${errors.join(", ")}`;
-                            errs.hidden = false;
-                        } else {
-                            errs.hidden = true;
-                        }
-                    }
-                    if (groups.length) {
-                        applyGroups(groups);
-                        bar.value = "";
-                        if (sugg) sugg.hidden = true;
-                        availButtons().forEach((b) => {
-                            b.style.display = "";
-                        });
-                        if (errs && !errors.length) errs.hidden = true;
-                    }
+                // Always try to resolve the box as a formula first - this covers
+                // both multi-label formulas and a single fully-typed label name,
+                // so an in-progress formula is submitted rather than overridden
+                // by the "grab the top search match" fallback below.
+                const { groups, errors } = parseTokens(tokenize(text));
+                if (groups.length) {
+                    applyGroups(groups);
+                    bar.value = "";
+                    if (sugg) sugg.hidden = true;
+                    availButtons().forEach((b) => {
+                        b.style.display = "";
+                    });
+                    if (errs) errs.hidden = !errors.length;
+                    if (errs && errors.length) errs.textContent = `Unknown: ${errors.join(", ")}`;
                 } else {
-                    // Plain search + Enter: add the first visible label as include.
+                    // Nothing resolvable yet (partial/unmatched search text) -
+                    // fall back to choosing the top visible match, same as a click.
                     const firstVisible = availButtons().find((btn) => btn.style.display !== "none");
                     if (firstVisible) {
-                        addLabel(firstVisible, "incl");
-                        bar.value = "";
-                        if (sugg) sugg.hidden = true;
-                        availButtons().forEach((b) => {
-                            b.style.display = "";
-                        });
-                        if (errs) errs.hidden = true;
+                        chooseSuggestion(firstVisible);
+                    } else if (errs && errors.length) {
+                        errs.textContent = `Unknown: ${errors.join(", ")}`;
+                        errs.hidden = false;
                     }
                 }
             } else if (e.key === "Escape") {

@@ -536,15 +536,18 @@
           sugg.hidden = true;
           return;
         }
-        sugg.innerHTML = matches.slice(0, 6).map((btn, i) => `<div class="fp-formula-sugg" data-idx="${i}" data-id="${escHtml(btn.dataset.labelId || "")}" data-label="${escHtml(btn.dataset.labelText || "")}">
+        const shown = matches.slice(0, 6);
+        sugg.innerHTML = shown.map((btn, i) => `<div class="fp-formula-sugg" data-idx="${i}" data-id="${escHtml(btn.dataset.labelId || "")}" data-label="${escHtml(btn.dataset.labelText || "")}">
                             ${btn.dataset.labelIcon ? `<span>${escHtml(btn.dataset.labelIcon)}</span>` : ""}
                             ${escHtml(btn.dataset.labelText || "")}
                         </div>`).join("");
         sugg.hidden = false;
-        sugg.querySelectorAll(".fp-formula-sugg").forEach((el) => {
+        sugg.querySelectorAll(".fp-formula-sugg").forEach((el, i) => {
           el.addEventListener("mousedown", (e) => {
             e.preventDefault();
-            insertSuggestion(el.dataset.label || "");
+            const target = shown[i];
+            if (target)
+              chooseSuggestion(target);
           });
         });
       }
@@ -569,6 +572,18 @@
           sugg.hidden = true;
         activeSuggIdx = -1;
         onFormulaChange();
+      }
+      function chooseSuggestion(btn) {
+        addLabel(btn, "incl");
+        bar.value = "";
+        if (sugg)
+          sugg.hidden = true;
+        activeSuggIdx = -1;
+        availButtons().forEach((b) => {
+          b.style.display = "";
+        });
+        if (errs)
+          errs.hidden = true;
       }
       function onFormulaChange() {
         const text = bar.value;
@@ -628,8 +643,9 @@
           e.preventDefault();
           if (sugg && !sugg.hidden && activeSuggIdx >= 0) {
             const activeEl = sugg.querySelector(".fp-formula-sugg.active");
-            if (activeEl) {
-              insertSuggestion(activeEl.dataset.label || "");
+            const activeBtn = activeEl ? availButtons().find((btn) => btn.dataset.labelId === activeEl.dataset.id) : undefined;
+            if (activeBtn) {
+              chooseSuggestion(activeBtn);
               return;
             }
           }
@@ -643,40 +659,26 @@
               errs.hidden = true;
             return;
           }
-          const hasOps = /[-\/\+\(\)]/.test(text);
-          if (hasOps) {
-            const { groups, errors } = parseTokens(tokenize(text));
-            if (errs) {
-              if (errors.length) {
-                errs.textContent = `Unknown: ${errors.join(", ")}`;
-                errs.hidden = false;
-              } else {
-                errs.hidden = true;
-              }
-            }
-            if (groups.length) {
-              applyGroups(groups);
-              bar.value = "";
-              if (sugg)
-                sugg.hidden = true;
-              availButtons().forEach((b) => {
-                b.style.display = "";
-              });
-              if (errs && !errors.length)
-                errs.hidden = true;
-            }
+          const { groups, errors } = parseTokens(tokenize(text));
+          if (groups.length) {
+            applyGroups(groups);
+            bar.value = "";
+            if (sugg)
+              sugg.hidden = true;
+            availButtons().forEach((b) => {
+              b.style.display = "";
+            });
+            if (errs)
+              errs.hidden = !errors.length;
+            if (errs && errors.length)
+              errs.textContent = `Unknown: ${errors.join(", ")}`;
           } else {
             const firstVisible = availButtons().find((btn) => btn.style.display !== "none");
             if (firstVisible) {
-              addLabel(firstVisible, "incl");
-              bar.value = "";
-              if (sugg)
-                sugg.hidden = true;
-              availButtons().forEach((b) => {
-                b.style.display = "";
-              });
-              if (errs)
-                errs.hidden = true;
+              chooseSuggestion(firstVisible);
+            } else if (errs && errors.length) {
+              errs.textContent = `Unknown: ${errors.join(", ")}`;
+              errs.hidden = false;
             }
           }
         } else if (e.key === "Escape") {

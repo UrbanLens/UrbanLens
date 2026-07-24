@@ -12,6 +12,7 @@ from django.db.models.fields import BooleanField, CharField
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.fields import EncryptedTextField
 from urbanlens.dashboard.models.site_settings.meta import (
+    DEFAULT_ANTHROPIC_MODEL,
     DEFAULT_CLOUDFLARE_MODEL,
     DEFAULT_OPENAI_MODEL,
     AiProviderChoice,
@@ -124,6 +125,12 @@ class SiteSettings(abstract.FrontendDashboardModel):
         default=DEFAULT_CLOUDFLARE_MODEL,
         help_text="Cloudflare Workers AI model name. Only used when provider is Cloudflare.",
         verbose_name="Cloudflare model",
+    )
+    anthropic_model = CharField(
+        max_length=100,
+        default=DEFAULT_ANTHROPIC_MODEL,
+        help_text="Anthropic (Claude) model name (e.g. claude-haiku-4-5, claude-sonnet-5). Only used when provider is Anthropic.",
+        verbose_name="Anthropic model",
     )
 
     # --- AI - Feature toggles ---

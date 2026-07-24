@@ -154,6 +154,7 @@ function renderFriendCheckboxes(container, friends, excludeIds) {
     const checkbox = document.createElement("input");
     checkbox.type = "checkbox";
     checkbox.value = String(friend.profile_id);
+    checkbox.checked = selectedInviteIds.has(friend.profile_id);
     checkbox.addEventListener("change", () => {
       if (checkbox.checked)
         selectedInviteIds.add(friend.profile_id);
@@ -296,6 +297,8 @@ function renderRound(round, roundNumber) {
     photo.src = (round.mode === "street_view" ? round.street_view_image : round.image_url) ?? "";
   }
   el("sg-date-field").hidden = !dateGuessingEnabled;
+  el("sg-photo-feedback").hidden = true;
+  el("sg-photo-feedback-thanks").hidden = true;
   resetGuessMap();
   setTimeout(() => guessMap?.invalidateSize(), 0);
 }
@@ -340,7 +343,27 @@ function renderScoreboard() {
     list.appendChild(item);
   }
 }
+function showPhotoFeedbackIfApplicable() {
+  el("sg-photo-feedback").hidden = currentMode !== "photos";
+  el("sg-photo-feedback-thanks").hidden = true;
+}
 function showReveal(reveal) {
+  el("sg-submit-guess-btn").disabled = true;
+  sessionScore += reveal.points + reveal.date_points;
+  el("sg-score-status").textContent = isMultiplayer ? "" : `Score: ${sessionScore}`;
+  showPhotoFeedbackIfApplicable();
+  const distanceKm = (reveal.distance_meters / 1000).toFixed(2);
+  if (!reveal.revealed) {
+    el("sg-reveal-panel").hidden = false;
+    el("sg-reveal-title").textContent = "Guess submitted!";
+    let detail2 = `${reveal.points} points – ${distanceKm} km away. Waiting for other players…`;
+    if (reveal.date_points)
+      detail2 = `${reveal.points} points (+${reveal.date_points} for the date guess) – ${distanceKm} km away. Waiting for other players…`;
+    el("sg-reveal-detail").textContent = detail2;
+    el("sg-reveal-results").hidden = true;
+    el("sg-next-round-btn").hidden = true;
+    return;
+  }
   lastRevealedRoundId = reveal.round_id;
   const map = ensureGuessMap();
   const actualLatLng = L.latLng(reveal.actual_latitude, reveal.actual_longitude);
@@ -352,18 +375,14 @@ function showReveal(reveal) {
   } else {
     map.setView(actualLatLng, 14);
   }
-  el("sg-submit-guess-btn").disabled = true;
   el("sg-reveal-panel").hidden = false;
   el("sg-reveal-title").textContent = reveal.location_name || "Revealed!";
-  const distanceKm = (reveal.distance_meters / 1000).toFixed(2);
   let detail = `${reveal.points} points – ${distanceKm} km away`;
   if (reveal.date_points)
     detail += ` (+${reveal.date_points} for the date guess)`;
   el("sg-reveal-detail").textContent = detail;
   el("sg-reveal-results").hidden = true;
   el("sg-next-round-btn").hidden = isMultiplayer;
-  sessionScore += reveal.points + reveal.date_points;
-  el("sg-score-status").textContent = isMultiplayer ? "" : `Score: ${sessionScore}`;
 }
 function showBroadcastReveal(data) {
   if (lastRevealedRoundId !== data.round_id) {
@@ -416,6 +435,7 @@ async function startGame(event) {
     difficulty: String(Number(el("sg-difficulty").value) / 100),
     total_rounds: el("sg-rounds").value,
     external_media_only: el("sg-external-media-only").checked ? "on" : "off",
+    allow_arbitrary_external_photos: el("sg-allow-arbitrary-external-photos").checked ? "on" : "off",
     require_visited_all: el("sg-require-visited-all").checked ? "on" : "off",
     date_guessing_enabled: dateGuessingEnabled ? "on" : "off",
     use_aliases: el("sg-use-aliases").checked ? "on" : "off"
@@ -460,6 +480,16 @@ async function submitGuess() {
     return;
   }
   showReveal(reveal);
+}
+async function submitPhotoFeedback(kind) {
+  if (sessionId === null || currentRoundId === null)
+    return;
+  const response = await postForm(urlFor(urls.photo_feedback, sessionId, currentRoundId), { kind });
+  if (response.error) {
+    window.alert(response.error);
+    return;
+  }
+  el("sg-photo-feedback-thanks").hidden = false;
 }
 async function goToNextRound() {
   if (sessionId === null)
@@ -621,6 +651,9 @@ initFriendPicker();
 initChat();
 el("sg-start-form").addEventListener("submit", (event) => void startGame(event));
 el("sg-submit-guess-btn").addEventListener("click", () => void submitGuess());
+el("sg-photo-thumbs-up-btn").addEventListener("click", () => void submitPhotoFeedback("thumbs_up"));
+el("sg-photo-thumbs-down-btn").addEventListener("click", () => void submitPhotoFeedback("thumbs_down"));
+el("sg-photo-report-btn").addEventListener("click", () => void submitPhotoFeedback("reported"));
 el("sg-next-round-btn").addEventListener("click", () => void goToNextRound());
 el("sg-play-again-btn").addEventListener("click", resetToSettings);
 el("sg-join-lobby-btn").addEventListener("click", () => void joinLobby());

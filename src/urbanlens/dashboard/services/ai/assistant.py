@@ -267,7 +267,11 @@ def run_assistant_turn(profile: Profile, history: list[dict[str, Any]], user_mes
     Raises:
         AssistantUnavailableError: When AI is off for the site or this profile.
     """
-    gateway = get_gateway(profile=profile, instructions=_INSTRUCTIONS, formatting=_FORMATTING)
+    # Pinned to Anthropic regardless of the site-wide AI provider: the assistant's
+    # tool-calling protocol requires reliably following the <ANSWER>-wrapped JSON
+    # format, which small/free models (e.g. the Cloudflare default) frequently
+    # ignore outright, breaking every turn silently (see UL-293 follow-up).
+    gateway = get_gateway(profile=profile, provider="anthropic", instructions=_INSTRUCTIONS, formatting=_FORMATTING)
     if gateway is None:
         raise AssistantUnavailableError("AI features are turned off.")
 

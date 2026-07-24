@@ -69,7 +69,7 @@ class SiteSettingsAdmin(admin.ModelAdmin):
         (
             "AI - Models",
             {
-                "fields": ["openai_model", "cloudflare_model"],
+                "fields": ["openai_model", "cloudflare_model", "anthropic_model"],
                 "description": ("Model names are only used for the matching provider. Changing the model here takes effect immediately - no restart needed."),
                 "classes": ["collapse"],
             },
