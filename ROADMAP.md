@@ -223,6 +223,15 @@ Features planned for future releases.
 * For text document upload, use claude haiku.
 * During pin import (main map page, pin import dialog), the user is given an opportunity to select a label to apply to everything in a group. However, the selection is just a plain dropdown, which is hard to use. Use the label picker ui we use in other areas of the application, which allows for searching, and multi-selection. That label picker should allow the user to create a new label directly from the picker if they wish.
 
+## SpotGuessr (GeoGuessr-style location-guessing game)
+Full design: `docs/designs/spotguessr.md`.
+* IN PROGRESS: Core engine - Glicko-2 player skill + per-mode location difficulty ratings, "only locations every participant has pinned" eligibility, point-vs-boundary distance scoring (boundary distance for a place/photo with no specific coordinates, point distance when one exists), optional date-guessing bonus, difficulty slider, geographic boundary filter, anti-clustering location selection, solo-only Photos mode end to end, own rating + friends' ratings (opt-out setting) on the overview page. [UL-391]
+* Multiplayer sessions: invite/join, real-time round sync and scoreboard, live text chat. [UL-392]
+* Named Place mode (guess from a name/alias, boundary-distance scored, no map search) and Street View mode. [UL-393]
+* Community photo submission pipeline: upload-to-wiki with submit-to-game opt-in, "submit to game" button in the photo lightbox, report/flag buttons, thumbs up/down, and a moderation classifier (Cloudflare Workers AI) that silently excludes disqualified photos. [UL-394]
+* Voice chat: peer-to-peer WebRTC mesh signaled over Django Channels (no new server infra). [UL-395]
+* Engagement polish: reveal animations, leaderboards/streaks, competitive and non-competitive play framing. [UL-396]
+
 ## Really Big Ideas / Features
 * Native android / ios apps (allowing expansion into additional features). [UL-72]
 * Visualize a location, room, etc, by browsing similar photos chronologically in a visually stimulating way. [UL-73]

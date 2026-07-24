@@ -1,0 +1,116 @@
+{% extends 'dashboard/themes/base.html' %}
+{% load static %}
+
+{% block header %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
+<script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="spotguessr-page page-content">
+    <div class="spotguessr-header card">
+        <div class="spotguessr-header-title">
+            <i class="material-symbols-outlined">travel_explore</i>
+            <span>SpotGuessr</span>
+        </div>
+        <div class="spotguessr-ratings">
+            <div class="spotguessr-rating-chip spotguessr-rating-chip--self">
+                <span class="spotguessr-rating-label">Your rating</span>
+                <span class="spotguessr-rating-value">{{ own_rating.rating|default:"1500"|floatformat:0 }}</span>
+            </div>
+            {% for entry in friend_ratings %}
+            <div class="spotguessr-rating-chip">
+                <span class="spotguessr-rating-label">{{ entry.profile.username }}</span>
+                <span class="spotguessr-rating-value">{{ entry.rating.rating|default:"1500"|floatformat:0 }}</span>
+            </div>
+            {% endfor %}
+        </div>
+        <label class="spotguessr-friends-toggle">
+            <input type="checkbox" id="sg-show-ratings-to-friends" {% if show_ratings_to_friends %}checked{% endif %}>
+            Show my rating to friends
+        </label>
+    </div>
+
+    <section id="sg-settings-panel" class="spotguessr-panel card">
+        <h2>Play SpotGuessr</h2>
+        <p class="spotguessr-panel-hint">
+            Guess where a photo from one of your own pinned locations was taken. Only places you've pinned are ever used.
+        </p>
+        <form id="sg-start-form" class="spotguessr-settings-form">
+            <div class="spotguessr-field">
+                <label for="sg-difficulty">Difficulty</label>
+                <input type="range" id="sg-difficulty" min="0" max="100" value="50">
+                <span id="sg-difficulty-label">Medium</span>
+            </div>
+            <div class="spotguessr-field">
+                <label for="sg-rounds">Rounds</label>
+                <input type="number" id="sg-rounds" min="{{ min_rounds }}" max="{{ max_rounds }}" value="{{ default_rounds }}">
+            </div>
+            <div class="spotguessr-field spotguessr-field--checkbox">
+                <label><input type="checkbox" id="sg-external-media-only"> Use only external media (not my own uploads)</label>
+            </div>
+            <div class="spotguessr-field spotguessr-field--checkbox">
+                <label><input type="checkbox" id="sg-require-visited-all"> Only places I've actually visited</label>
+            </div>
+            <div class="spotguessr-field spotguessr-field--checkbox">
+                <label><input type="checkbox" id="sg-date-guessing"> Also guess the photo's date (bonus points)</label>
+            </div>
+            <div class="spotguessr-field spotguessr-field--checkbox">
+                <label><input type="checkbox" id="sg-restrict-area"> Restrict to a chosen area</label>
+            </div>
+            <div id="sg-area-map-wrap" class="spotguessr-area-map-wrap" hidden>
+                <div id="sg-area-map" class="spotguessr-area-map"></div>
+                <p class="spotguessr-panel-hint">Draw a rectangle to restrict rounds to that area.</p>
+            </div>
+            <button type="submit" class="btn btn--primary btn--lg">Start playing</button>
+        </form>
+    </section>
+
+    <section id="sg-game-panel" class="spotguessr-panel card" hidden>
+        <div class="spotguessr-game-status">
+            <span id="sg-round-status"></span>
+            <span id="sg-score-status"></span>
+        </div>
+        <div class="spotguessr-game-layout">
+            <div class="spotguessr-photo-col">
+                <img id="sg-round-photo" class="spotguessr-round-photo" alt="Guess this location">
+            </div>
+            <div class="spotguessr-guess-col">
+                <div class="spotguessr-pin-search">
+                    <input type="text" id="sg-pin-search" list="sg-pin-options" placeholder="Or search your pins&hellip;" autocomplete="off">
+                    <datalist id="sg-pin-options"></datalist>
+                </div>
+                <div id="sg-guess-map" class="spotguessr-guess-map"></div>
+                <div id="sg-date-field" class="spotguessr-field" hidden>
+                    <label for="sg-guessed-date">Guess the date</label>
+                    <input type="date" id="sg-guessed-date">
+                </div>
+                <button type="button" id="sg-submit-guess-btn" class="btn btn--primary btn--lg" disabled>Submit guess</button>
+            </div>
+        </div>
+        <div id="sg-reveal-panel" class="spotguessr-reveal-panel" hidden>
+            <h3 id="sg-reveal-title"></h3>
+            <p id="sg-reveal-detail"></p>
+            <button type="button" id="sg-next-round-btn" class="btn btn--primary btn--lg">Next round</button>
+        </div>
+    </section>
+
+    <section id="sg-summary-panel" class="spotguessr-panel card" hidden>
+        <h2>Game over!</h2>
+        <p id="sg-summary-score"></p>
+        <button type="button" id="sg-play-again-btn" class="btn btn--primary btn--lg">Play again</button>
+    </section>
+</div>
+
+<script>
+    window.SPOTGUESSR_URLS = {
+        start: "{% url 'spotguessr.start' %}",
+        pins: "{% url 'spotguessr.pins' %}",
+        settings: "{% url 'spotguessr.settings' %}",
+    };
+</script>
+<script type="module" src="{% static 'dashboard/js/spotguessr.js' %}"></script>
+{% endblock %}

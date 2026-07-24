@@ -147,6 +147,7 @@ urlpatterns = [
                 path("", spotguessr.SpotGuessrHomeView.as_view(), name="spotguessr"),
                 path("settings/", spotguessr.SpotGuessrSettingsView.as_view(), name="spotguessr.settings"),
                 path("start/", spotguessr.SpotGuessrStartView.as_view(), name="spotguessr.start"),
+                path("pins/", spotguessr.SpotGuessrPinsView.as_view(), name="spotguessr.pins"),
                 path("session/<int:session_id>/round/", spotguessr.SpotGuessrRoundView.as_view(), name="spotguessr.round"),
                 path(
                     "session/<int:session_id>/round/<int:round_id>/guess/",
