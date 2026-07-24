@@ -65,6 +65,8 @@ export interface E2EEConfig {
     urls: E2EEUrls;
     /** The signed-in user's profile slug; null on anonymous pages. */
     selfSlug: string | null;
+    /** Username/email identifier for deriving current-auth proofs on signed-in pages. */
+    loginIdentifier?: string;
 }
 
 let config: E2EEConfig | null = null;
@@ -140,6 +142,8 @@ interface EnrollOptions {
     password?: string;
     /** Rotate the login credential to derived mode (password accounts). */
     rotateAuth?: boolean;
+    /** Credential that Django's current password hash verifies. */
+    currentPasswordProof?: string;
 }
 
 interface EnrollResult {
@@ -174,6 +178,10 @@ export async function enroll(options: EnrollOptions): Promise<EnrollResult | nul
         const authSalt = randomSalt();
         body.auth_key = bytesToB64(deriveKey(options.password, authSalt));
         body.auth_salt = authSalt;
+    }
+    if (options.currentPasswordProof) {
+        body.current_password = options.currentPasswordProof;
+    } else if (options.rotateAuth && options.password) {
         body.current_password = options.password;
     }
     const response = await postJson(cfg().urls.enroll, body);
@@ -259,12 +267,12 @@ async function runLoginFlow(form: HTMLFormElement): Promise<void> {
     const destination = loginResponse.url;
     try {
         if (params.mode === "legacy") {
-            const result = await enroll({ password, rotateAuth: true });
+            const result = await enroll({ password, rotateAuth: true, currentPasswordProof: credential });
             if (result) {
                 await showRecoveryDialog(result.recoveryDisplay);
             }
         } else {
-            await unlockAfterDerivedLogin(password);
+            await unlockAfterDerivedLogin(password, credential);
         }
     } catch (error) {
         // Key handling must never block getting the user into the app.
@@ -278,7 +286,7 @@ async function runLoginFlow(form: HTMLFormElement): Promise<void> {
  *
  * @param password - The raw password, still in memory from the login form.
  */
-async function unlockAfterDerivedLogin(password: string): Promise<void> {
+async function unlockAfterDerivedLogin(password: string, currentPasswordProof: string): Promise<void> {
     const keysResponse = await fetch(cfg().urls.keys, { credentials: "same-origin" });
     if (!keysResponse.ok) {
         return;
@@ -287,7 +295,7 @@ async function unlockAfterDerivedLogin(password: string): Promise<void> {
     if (!bundle.enrolled) {
         // AccountKdf exists (signup created it) but no bundle yet - finish
         // enrollment now that we're authenticated.
-        const result = await enroll({ password, rotateAuth: false });
+        const result = await enroll({ password, rotateAuth: false, currentPasswordProof });
         if (result) {
             await showRecoveryDialog(result.recoveryDisplay);
         }
@@ -311,6 +319,7 @@ async function unlockAfterDerivedLogin(password: string): Promise<void> {
         await postJson(cfg().urls.rewrap, {
             password_wrapped_secret: wrapSecretKey(cached.privateKey, deriveKey(password, wrapSalt, bundle.kdf_opslimit, bundle.kdf_memlimit)),
             password_wrap_salt: wrapSalt,
+            current_password: currentPasswordProof,
         });
     }
     // Otherwise this device stays locked; the messages page offers the
@@ -790,6 +799,22 @@ export async function changePassword(currentPassword: string, newPassword: strin
     return { ok: false, error: "Could not change your password. Please try again." };
 }
 
+async function currentPasswordProof(password: string): Promise<string> {
+    const identifier = cfg().loginIdentifier;
+    if (!identifier) {
+        return password;
+    }
+    const paramsResponse = await fetch(`${cfg().urls.loginParams}?identifier=${encodeURIComponent(identifier)}`, { credentials: "same-origin" });
+    if (!paramsResponse.ok) {
+        return password;
+    }
+    const params = (await paramsResponse.json()) as LoginParams;
+    if (params.mode === "derived") {
+        return bytesToB64(deriveKey(password, params.auth_salt));
+    }
+    return password;
+}
+
 /**
  * Generate and store a replacement recovery key (device must be unlocked).
  *
@@ -886,6 +911,7 @@ export async function resetKeys(password?: string): Promise<ResetResult | null> 
         const wrapSalt = randomSalt();
         body.password_wrapped_secret = wrapSecretKey(identity.privateKey, deriveKey(password, wrapSalt));
         body.password_wrap_salt = wrapSalt;
+        body.current_password = await currentPasswordProof(password);
     }
 
     // Re-encrypt history: unseal every wrapped key copy with the OLD key and

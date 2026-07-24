@@ -180,6 +180,7 @@
     if (E2EE) {
         E2EE.init({
             selfSlug: mySlug,
+            loginIdentifier: "{{ request.user.username|escapejs }}",
             urls: {
                 loginParams: "{% url 'e2ee.login_params' %}",
                 enroll: "{% url 'e2ee.enroll' %}",
