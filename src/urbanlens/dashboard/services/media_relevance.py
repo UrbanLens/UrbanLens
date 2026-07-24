@@ -39,15 +39,19 @@ GAME_REPORT_WEIGHT = 1.0
 #: across many plays.
 GAME_NO_REACTION_WEIGHT = 0.01
 
-#: In-game thumbs down is deliberately given zero weight here. "Wrong photo
-#: for this game" (blurry, ambiguous, gives away the answer too easily) is
-#: not the same claim as "not relevant to this location's wiki" - folding it
-#: into the wiki's own relevance signal would let bad *game* fit tank a
-#: photo's standing on the wiki itself. The row is still recorded (see
-#: GamePhotoFeedback) so this weighting choice stays visible/auditable and
-#: reversible, it just isn't added into the score below.
+#: In-game thumbs down counts toward "not relevant" at a token weight only -
+#: "wrong photo for this game" (blurry, ambiguous, gives away the answer too
+#: easily) is not the same claim as "not relevant to this location's wiki",
+#: so it must never be enough on its own (or even in real numbers) to drag a
+#: genuinely relevant photo's score to or below zero and knock it out of
+#: eligibility. It still nudges the *ordering* among already-relevant photos
+#: a little, which is the intended use - a future "sort by relevance"
+#: ranking can use it to break ties among photos that are all positive.
+GAME_THUMBS_DOWN_WEIGHT = 0.001
+
 _GAME_WEIGHTS = {
     GamePhotoFeedbackKind.THUMBS_UP: GAME_THUMBS_UP_WEIGHT,
+    GamePhotoFeedbackKind.THUMBS_DOWN: -GAME_THUMBS_DOWN_WEIGHT,
     GamePhotoFeedbackKind.REPORTED: -GAME_REPORT_WEIGHT,
     GamePhotoFeedbackKind.NO_REACTION: GAME_NO_REACTION_WEIGHT,
 }
@@ -68,8 +72,8 @@ def effective_relevance(image: Image) -> float:
 
     Returns:
         wiki net vote score (each mark counts as +1/-1) plus the weighted
-        SpotGuessr gameplay signal (thumbs up/report/no-reaction; thumbs
-        down is excluded - see ``_GAME_WEIGHTS``).
+        SpotGuessr gameplay signal (thumbs up/down/report/no-reaction - see
+        ``_GAME_WEIGHTS``).
     """
     if not image.media_source_key or not image.media_item_key or image.location_id is None:
         return 0.0

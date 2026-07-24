@@ -54,11 +54,21 @@ class EffectiveRelevanceTests(TestCase):
         _feedback(image, _make_profile(), GamePhotoFeedbackKind.THUMBS_UP)
         self.assertEqual(effective_relevance(image), 0.5)
 
-    def test_game_thumbs_down_contributes_nothing(self) -> None:
-        """Deliberate: 'wrong photo for this game' must not tank the wiki's own relevance signal."""
+    def test_game_thumbs_down_counts_at_only_a_token_weight(self) -> None:
+        """Deliberate: 'wrong photo for this game' must not meaningfully tank the wiki's
+        own relevance signal - it's real, but tiny (only useful for ordering among
+        already-relevant photos later, not for the eligibility filter)."""
         image = _make_external_image(_make_location(), "c" * 40)
         _feedback(image, _make_profile(), GamePhotoFeedbackKind.THUMBS_DOWN)
-        self.assertEqual(effective_relevance(image), 0.0)
+        self.assertAlmostEqual(effective_relevance(image), -0.001)
+
+    def test_a_realistic_number_of_thumbs_down_cannot_zero_out_a_relevant_photo(self) -> None:
+        location = _make_location()
+        image = _make_external_image(location, "9" * 40)
+        MediaRelevance.objects.create(profile=_make_profile(), location=location, source="wikimedia", item_key="9" * 40, is_relevant=True)
+        for _ in range(10):
+            _feedback(image, _make_profile(), GamePhotoFeedbackKind.THUMBS_DOWN)
+        self.assertGreater(effective_relevance(image), 0.0)
 
     def test_game_report_counts_at_full_negative_weight(self) -> None:
         image = _make_external_image(_make_location(), "d" * 40)

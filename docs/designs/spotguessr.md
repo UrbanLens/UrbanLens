@@ -177,7 +177,7 @@ anyone who never explicitly reacted (`services.spotguessr.relevance`). `services
 | Wiki thumbs up/down (existing) | ±1.0 | the wiki's own organic signal, unchanged |
 | In-game thumbs up | +0.5 | deliberate positive reaction, but weaker than a wiki visitor voting on this exact photo |
 | In-game report | -1.0 | a direct "this doesn't belong here" claim - same weight as a wiki downvote |
-| In-game thumbs down | **0 (excluded)** | means "wrong photo for this game" (blurry, gives away the answer, ambiguous), not "not relevant to this wiki" - conflating the two would let bad game-fit tank a photo's wiki standing |
+| In-game thumbs down | -0.001 (token weight) | means "wrong photo for this game" (blurry, gives away the answer, ambiguous), not "not relevant to this wiki" - a real but deliberately tiny nudge, never enough by itself to drag a genuinely relevant photo's score to/below zero and knock it out of eligibility; intended to matter only for a future "order relevant photos by how relevant" ranking, not for the eligibility filter below |
 | Shown, no reaction | +0.01 | most impressions are silent; only meaningful in aggregate over many plays, and is exactly what lets a never-voted photo bootstrap a score |
 
 `config.allow_arbitrary_external_photos` (default **off**) controls whether an externally-
@@ -414,7 +414,7 @@ is lifted; all three modes are now startable, solo or multiplayer.
 | Glicko-2: rating / RD / volatility / scale / τ | 1500 / 350 / 0.06 / 173.7178 / 0.5 | Glickman's published defaults |
 | `use_aliases` | True | Named Place mode; per-session config, not a site-wide constant |
 | `allow_arbitrary_external_photos` | False | Photos mode; skips the relevance filter entirely when true - see "Photo relevance feedback" |
-| `GAME_THUMBS_UP_WEIGHT` / `GAME_REPORT_WEIGHT` / `GAME_NO_REACTION_WEIGHT` | 0.5 / 1.0 / 0.01 | `services.media_relevance` - in-game thumbs down is excluded (weight 0), not merely low |
+| `GAME_THUMBS_UP_WEIGHT` / `GAME_REPORT_WEIGHT` / `GAME_NO_REACTION_WEIGHT` / `GAME_THUMBS_DOWN_WEIGHT` | 0.5 / 1.0 / 0.01 / 0.001 | `services.media_relevance` - thumbs down is a token weight, not a real "not relevant" vote |
 | `CHAT_HISTORY_LIMIT` | 50 | messages returned by the chat-history GET on reconnect |
 
 ## Social: ratings visibility

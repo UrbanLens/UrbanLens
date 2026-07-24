@@ -387,7 +387,7 @@ all three guess modes.** Everything below the line is not yet built.
   map-click or pin search)
 - Photos-mode community-relevance feedback: in-game thumbs up/down/report on the shown photo
   feed a blended relevance score (`services.media_relevance.effective_relevance`) alongside the
-  wiki's own thumbs, weighted down for in-game signal (and thumbs down excluded entirely - see
+  wiki's own thumbs, weighted down for in-game signal (thumbs down at only a token weight - see
   the design doc's "Photo relevance feedback"); an "allow arbitrary external photos" setting
   (off by default) opts a session out of the relevance filter
 - Eligibility engine: a location is only ever offered if it's pinned by every *joined*
