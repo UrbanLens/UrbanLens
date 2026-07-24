@@ -26,27 +26,57 @@ still open.
 
 ---
 
-## Verification debt: recent DB-backed tests need one run in the compose test pod
+## ~~Verification debt~~ RESOLVED 2026-07-23 (pod ran; all session-added tests pass) → 17 PRE-EXISTING full-suite failures triaged below
 
-Local Windows has no Postgres, so every DB-backed test added in the 2026-07-23 rounds has been
-lint/type-checked but not executed. Run once in the test pod (see CLAUDE.md "Running DB-backed
-tests"):
+**The debt itself is cleared**: the test pod ran for the first time (it works - two workflow
+gotchas found and documented in CLAUDE.md: the runner bakes source at build time, and
+rebuilding it orphans test-db/test-valkey's shared namespace). The 2026-07-23 rounds' own
+test files were executed and now **all pass** - the run surfaced 14 findings (2 real code
+bugs in that day's work: the photo-proxy signature was computed over the raw name while
+Django delivers the percent-encoded path segment, and same-instance comment re-imports
+duplicated once the uuid was taken; plus 6 stale/fragile pre-existing tests) - all fixed in
+`06de47fd`/`35ac4100`.
 
-```bash
-docker compose --profile test up -d --build test-runner test-db test-valkey
-docker compose exec -e UL_TEST_DB_NAME=ul_test_$RANDOM test-runner python -m pytest src/urbanlens/dashboard/tests/
-docker compose --profile test down
-```
+**The FULL suite then ran end-to-end for the first time ever: 6,277 passed, 17 failed
+(34m45s).** None of the 17 touch code changed on 2026-07-23; they are pre-existing test debt
+that had simply never executed against a real DB. Triage (each verified from the run log,
+`/tmp/pod-full.log` on chiron):
 
-Files to watch: `test_identity_visibility.py` (TripCommentVisibilityGateTests,
-LiveMessagePayloadMaskingTests), `test_wikipedia_gateway.py::WikipediaCampusFallbackTests`,
-`test_notification_text_alerts.py`, `test_password_validators.py::ValidatePasswordPolicyViewTests`,
-`test_media_proxy.py` (signing tests), `test_group_chats.py::GroupKeyEndpointTests`,
-`test_external_apis_toggle.py` (broker-outage tests), `test_pin_panel_info.py`,
-`test_profile_photo_strip.py`, `test_child_pins.py`,
-`test_external_api.py::PinTombstoneTests` (410/pruning tests), and
-`test_export_import_completeness.py` (the four new RoundTrip* classes). This is also the
-first real execution of the test pod itself.
+- **`test_site_admin_stats` (4) + `test_infrastructure_stats` (1)** - the stats collectors
+  probe the real infra services and trip `LocalhostOnlyNetwork` on the dev stack's
+  container-bridge IPs (`172.18.0.10`). These tests need the probes mocked (per the repo's
+  own testing policy) - they can never pass inside the pod as written.
+- **`test_avatar_colors::GroupMemberSearchAvatarColorTests`** - `0 != 4`: member search now
+  filters through `can_view_profile`, and the test's baker profiles keep the default
+  `profile_visibility` (ANYTHING_IN_COMMON) with nothing in common → 0 results. Stale since
+  the member-search masking hardening; fix by setting candidates' visibility (mirror
+  `_profile()` in test_identity_visibility.py).
+- **`test_flickr_album_import::test_blank_url_shows_an_error`** - the pod has no Flickr
+  keys, so the view short-circuits to "Flickr integration is not configured" before the
+  blank-URL branch; the test must stub the settings keys.
+- **`test_media_own_photos_preview` (2)** - endpoint returns 204 where the tests expect
+  200-with-tiles; mechanism not yet dug into (likely fixture gap - files/coords - or a
+  moved gate).
+- **`test_pin_edit_controller::PinDescriptionEditableTests` (2)** - the rendered page no
+  longer carries `data-raw-description=""` / carries `pin-description--empty` unexpectedly;
+  description-editor markup drift.
+- **`test_profile_hero_meta_editable` (2)** - "Add your area..." placeholders NOW render
+  where the tests expect them hidden; either deliberate own-profile placeholder behavior
+  change (update tests) or a regression in the hidden-when-empty rule (check intent first).
+- **`test_settings_tos_accepted_display`** - "Mar 4, 2025" not found though the label
+  renders; date-format drift.
+- **`test_pin_media_endpoints::test_media_relevance_route_reaches_the_post_handler`** -
+  `TypeError: Cannot mix str and non-str arguments` (an os.path/reverse join receiving a
+  Mock/None); needs its traceback read.
+- **`test_property_records_plugin` (2)** - one test assigns `location.address`, which is
+  now a read-only property (`AttributeError: no setter`); the other renders no chips
+  (`'Tier 1' not found in []`), likely downstream of the same fixture rot.
+
+**Suggested next step**: one focused session over these 9 files - none looks like a
+production bug on its face (env coupling, fixture rot, template drift), but
+`test_media_own_photos_preview`'s 204 and `test_profile_hero_meta_editable`'s
+placeholder-visibility change deserve a real look at intent before the tests are edited to
+match current behavior. The pod is left running on chiron for it.
 
 ---
 
