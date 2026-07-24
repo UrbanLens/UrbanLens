@@ -189,6 +189,44 @@ pool size, and deliberately generating gameplay signal on exactly the photos tha
 it. Personal uploads shared to the wiki are always eligible either way - they were never
 rendered through the Media gallery, so they have no relevance identity to score.
 
+## Crowd-sourced photo coordinates
+
+A photo shown in a Photos-mode round with no coordinates of its own scores
+against the location's boundary (see "Scoring" above) - which means every
+such guess is, incidentally, also a guess at where the photo itself actually
+is. `services.spotguessr.photo_coordinates.record_guess()` captures that
+signal anonymously: for any round whose photo lacked coordinates when the
+round was generated (`not round_.target_is_point`), every guess becomes a
+`PhotoCoordinateGuess` row - the guessed point, a correct/incorrect flag
+(correct meaning "inside the location's boundary", reusing the guess's
+already-computed boundary distance rather than a second lookup), and a
+timestamp. **No profile, round, or session FK at all** - structurally, not
+just by convention, there is no way to trace a row back to who made it.
+This definition of "correct" is deliberately independent of the round's own
+scoring; it only decides whether a guess counts toward the average below.
+
+Once a photo has 5+ correct guesses, `services.photo_coordinates
+.recompute_estimated_coordinates()` averages them into
+`Image.estimated_latitude`/`estimated_longitude`, recomputed fresh from the
+photo's full correct-guess set after every new correct guess (not
+incrementally) - per-photo guess volume is small enough that this stays
+cheap, and it's simpler to keep correct as the outlier trim's boundary
+shifts with more data than to maintain running-average bookkeeping. Once
+there are 10+ correct guesses (enough for "outlier" to mean anything),
+before averaging it drops the ~15% of points farthest from the overall
+centroid - a loose, cheap trim (plain lat/lng degree-distance, not a real
+geodesic one), not a rigorous statistical test, matched to "our best effort
+to approximate a position" rather than precision.
+
+`Image.effective_latitude`/`effective_longitude` read this as a middle tier:
+a real (manual or EXIF) coordinate always wins outright, no matter how many
+guesses back the estimate; then the estimate, if one exists; then the
+shared Location's own coordinates as a last resort. This is what lets a
+still-unplaced photo show up (approximately) on the site's maps at all -
+which is the point: surfacing it is what gets a wiki user to notice and
+correct the exact placement, rather than the photo staying invisible until
+someone manually places it first.
+
 ## External media caching + relevance
 
 Not SpotGuessr-specific, but implemented alongside it since the game's relevance feedback
@@ -415,6 +453,7 @@ is lifted; all three modes are now startable, solo or multiplayer.
 | `use_aliases` | True | Named Place mode; per-session config, not a site-wide constant |
 | `allow_arbitrary_external_photos` | False | Photos mode; skips the relevance filter entirely when true - see "Photo relevance feedback" |
 | `GAME_THUMBS_UP_WEIGHT` / `GAME_REPORT_WEIGHT` / `GAME_NO_REACTION_WEIGHT` / `GAME_THUMBS_DOWN_WEIGHT` | 0.5 / 1.0 / 0.01 / 0.001 | `services.media_relevance` - thumbs down is a token weight, not a real "not relevant" vote |
+| `MIN_GUESSES_FOR_ESTIMATE` / `MIN_GUESSES_FOR_OUTLIER_TRIM` / `OUTLIER_TRIM_FRACTION` | 5 / 10 / 0.15 | `services.photo_coordinates` - crowd-sourced unplaced-photo coordinates |
 | `CHAT_HISTORY_LIMIT` | 50 | messages returned by the chat-history GET on reconnect |
 
 ## Social: ratings visibility

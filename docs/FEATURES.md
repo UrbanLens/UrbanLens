@@ -390,6 +390,12 @@ all three guess modes.** Everything below the line is not yet built.
   wiki's own thumbs, weighted down for in-game signal (thumbs down at only a token weight - see
   the design doc's "Photo relevance feedback"); an "allow arbitrary external photos" setting
   (off by default) opts a session out of the relevance filter
+- Crowd-sourced coordinates for still-unplaced photos: every guess against a Photos-mode photo
+  with no coordinates of its own is anonymously recorded (no profile/round FK at all - just the
+  guessed point, correct/incorrect, and a timestamp); 5+ correct guesses average into an
+  estimated position (with a loose outlier trim past 10), shown on maps via
+  `Image.effective_latitude`/`effective_longitude` until a real coordinate takes over - see the
+  design doc's "Crowd-sourced photo coordinates"
 - Eligibility engine: a location is only ever offered if it's pinned by every *joined*
   participant (an invited-but-not-yet-accepted player never gates this) — no exceptions, no
   caching across sessions
