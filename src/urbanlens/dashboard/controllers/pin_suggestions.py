@@ -22,7 +22,7 @@ from django.views import View
 from urbanlens.dashboard.models.immich.model import ImmichAccount
 from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_STATUS, KIND_TAG
 from urbanlens.dashboard.models.labels.model import Label
-from urbanlens.dashboard.models.pin_suggestions.model import PinSuggestion, PinSuggestionStatus
+from urbanlens.dashboard.models.pin_suggestions.model import PinSuggestion, PinSuggestionOrigin, PinSuggestionStatus
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.apis.immich import ImmichGateway
 from urbanlens.dashboard.services.celery import safely_enqueue_task
@@ -57,8 +57,16 @@ _BULK_ACTIONS = [
 
 
 def _pending_suggestions(profile: Profile) -> QuerySet[PinSuggestion]:
-    """Return the profile's pending suggestions, newest first."""
-    return PinSuggestion.objects.for_profile(profile).pending().select_related("pin", "pin__location").prefetch_related("candidate_images").order_by("-created")
+    """Return the profile's pending suggestions, newest first.
+
+    Community public-location suggestions are hidden (not deleted) while the
+    profile's ``suggest_public_pins`` toggle is off, so flipping it back on
+    restores whatever was already pending.
+    """
+    qs = PinSuggestion.objects.for_profile(profile).pending().select_related("pin", "pin__location").prefetch_related("candidate_images").order_by("-created")
+    if not profile.suggest_public_pins:
+        qs = qs.exclude(origin=PinSuggestionOrigin.COMMUNITY)
+    return qs
 
 
 def _toast(message: str, level: str = "success", *, status: int = 200, refresh_queue: bool = False, view_pin_url: str | None = None) -> HttpResponse:

@@ -302,6 +302,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "urbanlens.dashboard.tasks.prune_pin_tombstones",
         "schedule": 24 * 60 * 60,
     },
+    "public-pin-candidate-evaluation": {
+        "task": "urbanlens.dashboard.tasks.evaluate_public_pin_candidates",
+        "schedule": 60 * 60,
+    },
 }
 
 

@@ -36,6 +36,7 @@ class PinSuggestionOrigin(abstract.TextChoices):
     IMMICH = "immich", "Immich library scan"
     LOCAL_SCAN = "local_scan", "Local folder scan"
     EXTERNAL_API = "external_api", "External app"
+    COMMUNITY = "community", "Community public location"
 
 
 class PinSuggestionStatus(abstract.TextChoices):

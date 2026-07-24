@@ -27,6 +27,7 @@ from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
 from urbanlens.dashboard.models.wiki_stat_vote import WikiStatField, WikiStatVote
 from urbanlens.dashboard.services.locations import site_scope
+from urbanlens.dashboard.services.public_pins import PublicVoteError, cast_public_vote, public_vote_context
 from urbanlens.dashboard.services.text_limits import MAX_WIKI_DESCRIPTION_LENGTH, text_length_error
 from urbanlens.dashboard.services.undo.handlers.wiki import with_wiki_descendants
 from urbanlens.dashboard.services.undo.service import stash_for_undo
@@ -172,6 +173,7 @@ class LocationWikiView(LoginRequiredMixin, View):
                 "pin_count_display": pin_count_display,
                 "first_pinned": first_pinned,
                 "wiki_stats": [_wiki_stat_context(wiki, field, profile) for field in WikiStatField.values],
+                "public_vote": public_vote_context(location, profile),
                 "user_pin": user_pin,
                 "other_locations": other_locations,
                 "page_name": "location-wiki",
@@ -513,6 +515,31 @@ class LocationWikiEditDeleteView(LoginRequiredMixin, View):
         target_edit.delete()
 
         return _render_history(request, location, wiki)
+
+
+class PublicPinVoteView(LoginRequiredMixin, View):
+    """Cast, change, or withdraw the requester's public-pin ballot.
+
+    POST /location/<slug>/wiki/public-vote/
+    Body: ``choice`` = ``public`` | ``private`` | ``withdraw``.
+
+    Re-renders just the vote block. Ballots are anonymous and no tally is
+    ever shown - the response only reflects the requester's own choice.
+    """
+
+    def post(self, request, location_slug):
+        location, _wiki, profile = resolve_visible_wiki(request, location_slug)
+
+        try:
+            cast_public_vote(location, profile, request.POST.get("choice") or "")
+        except PublicVoteError as exc:
+            return JsonResponse({"error": str(exc)}, status=400)
+
+        return render(
+            request,
+            "dashboard/partials/pins/_public_pin_vote_block.html",
+            {"location": location, "public_vote": public_vote_context(location, profile)},
+        )
 
 
 class WikiStatVoteView(LoginRequiredMixin, View):

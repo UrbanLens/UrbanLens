@@ -1212,6 +1212,11 @@ urlpatterns = [
                     location_wiki.WikiStatVoteView.as_view(),
                     name="location.wiki.stat_vote",
                 ),
+                path(
+                    "<slug:location_slug>/wiki/public-vote/",
+                    location_wiki.PublicPinVoteView.as_view(),
+                    name="location.wiki.public_vote",
+                ),
                 # Media gallery: the vote endpoint must precede the catch-all
                 # media/<source>/ loader so "vote" isn't captured as a source.
                 path(

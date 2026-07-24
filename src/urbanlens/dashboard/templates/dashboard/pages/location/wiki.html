@@ -153,6 +153,7 @@
                 {% include "dashboard/partials/pins/_wiki_stat_rating_item.html" with wiki=wiki field=stat.field label=stat.label help=stat.help modifier=stat.modifier wide=stat.wide my_vote=stat.my_vote composite=stat.composite %}
                 {% endfor %}
             </div>
+            {% include "dashboard/partials/pins/_public_pin_vote_block.html" with location=location public_vote=public_vote %}
         </div>
 
         {# -- Location map (boundary editor + community detail pins + markup) -- #}

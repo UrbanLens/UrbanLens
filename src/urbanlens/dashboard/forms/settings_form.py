@@ -583,10 +583,16 @@ class CommunitySettingsForm(forms.ModelForm):
         label="Auto-Start Pin Articles from Wikipedia",
         help_text="When a Wikipedia article is matched to one of your pins, automatically start that pin's article from it (only if it doesn't already have one).",
     )
+    suggest_public_pins = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
+        label="Suggest Public Locations",
+        help_text="Occasionally suggest well-documented locations the community has voted to share with everyone. These are rare, and never include anything vulnerable.",
+    )
 
     class Meta:
         model = Profile
-        fields = ["community_enabled", "show_wiki_cover_photos", "auto_create_pin_article_from_wikipedia"]
+        fields = ["community_enabled", "show_wiki_cover_photos", "auto_create_pin_article_from_wikipedia", "suggest_public_pins"]
 
 
 class WikiSyncSettingsForm(forms.ModelForm):

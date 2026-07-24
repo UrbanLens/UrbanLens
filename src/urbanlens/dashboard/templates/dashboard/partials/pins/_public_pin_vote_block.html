@@ -1,0 +1,59 @@
+{% comment %}
+Public-pin vote block, shown under the Community Ratings grid on a wiki page.
+Renders nothing unless services.public_pins decided this viewer should see it
+(public_vote context is None otherwise) - ineligibility is never explained.
+Ballots are anonymous: only the viewer's own choice is ever displayed, never
+a tally.
+
+Usage:
+  {% include "dashboard/partials/pins/_public_pin_vote_block.html" with location=location public_vote=public_vote %}
+{% endcomment %}
+<div class="public-pin-vote" id="public-pin-vote-block">
+{% if public_vote %}
+    {% if public_vote.is_public %}
+    <div class="public-pin-vote__badge" title="The community voted to share this location with every UrbanLens user.">
+        <i class="material-symbols-outlined">public</i>
+        <span>Public location</span>
+    </div>
+    {% elif public_vote.my_vote is None %}
+    <div class="public-pin-vote__prompt">
+        <span class="public-pin-vote__question">Should this location be visible to every UrbanLens user?</span>
+        <div class="public-pin-vote__actions">
+            <button type="button" class="btn btn--primary btn--sm"
+                    hx-post="{% url 'location.wiki.public_vote' location.slug %}"
+                    hx-target="#public-pin-vote-block" hx-swap="outerHTML"
+                    hx-vals='{"choice": "public"}'>
+                Make it public
+            </button>
+            <button type="button" class="btn btn--secondary btn--sm"
+                    hx-post="{% url 'location.wiki.public_vote' location.slug %}"
+                    hx-target="#public-pin-vote-block" hx-swap="outerHTML"
+                    hx-vals='{"choice": "private"}'>
+                Keep it private
+            </button>
+            <a href="{% url 'faq' %}#public-locations" class="public-pin-vote__help" target="_blank" rel="noopener">What's this?</a>
+        </div>
+    </div>
+    {% else %}
+    <div class="public-pin-vote__prompt">
+        <span class="public-pin-vote__question">
+            You voted to {% if public_vote.my_vote %}make this location public{% else %}keep this location private{% endif %}.
+        </span>
+        <div class="public-pin-vote__actions">
+            <button type="button" class="btn btn--ghost btn--sm"
+                    hx-post="{% url 'location.wiki.public_vote' location.slug %}"
+                    hx-target="#public-pin-vote-block" hx-swap="outerHTML"
+                    hx-vals='{"choice": "{% if public_vote.my_vote %}private{% else %}public{% endif %}"}'>
+                Change to {% if public_vote.my_vote %}private{% else %}public{% endif %}
+            </button>
+            <button type="button" class="btn btn--ghost btn--sm"
+                    hx-post="{% url 'location.wiki.public_vote' location.slug %}"
+                    hx-target="#public-pin-vote-block" hx-swap="outerHTML"
+                    hx-vals='{"choice": "withdraw"}'>
+                Withdraw
+            </button>
+        </div>
+    </div>
+    {% endif %}
+{% endif %}
+</div>

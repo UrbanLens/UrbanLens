@@ -1753,6 +1753,26 @@ def prune_pin_tombstones() -> int:
     return deleted
 
 
+@shared_task
+def evaluate_public_pin_candidates() -> dict[str, int]:
+    """Run the public-pin eligibility engine and settle open votes.
+
+    Scheduled hourly (see ``CELERY_BEAT_SCHEDULE``). Everything lives in
+    ``services.public_pins`` - this is only the beat entry point. Idempotent
+    at any frequency; hourly keeps vote outcomes and suggestion fan-out
+    reasonably fresh without the engine's aggregate queries running hot.
+
+    Returns:
+        Transition counters (opened/reopened/suspended/passed/rejected).
+    """
+    from urbanlens.dashboard.services import public_pins
+
+    counters = public_pins.evaluate_public_pin_candidates()
+    if any(counters.values()):
+        logger.info("Public-pin evaluation: %s", counters)
+    return counters
+
+
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def send_notification_text_alerts_if_unread(notification_id: int) -> None:
     """Send the delayed WhatsApp/SMS alert for a site notification, unless read or debounced.

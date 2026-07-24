@@ -356,6 +356,12 @@ class Profile(abstract.PublicDashboardModel):
     # See services.pin_restructure.
     suggest_pin_restructure = BooleanField(default=True, help_text="Offer to organize pins into buildings and child pins when you open a property that has several.")
 
+    # Whether community-approved public locations appear in this profile's
+    # suggestion queue. Public locations are the (rare) outcome of the
+    # public-pin vote - see services.public_pins. Off both stops new
+    # suggestions from being created and hides any pending ones.
+    suggest_public_pins = BooleanField(default=True, help_text="Suggest community-approved public locations that you haven't pinned yet.")
+
     # Default ordering for the pin detail page's Media gallery. "relevant"
     # surfaces items this user has explicitly marked relevant first (falling
     # back to arrival order); "recent" ignores relevance marks entirely.
