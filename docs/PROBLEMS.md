@@ -24,6 +24,23 @@ importers** (see the struck entry below for the design decisions that shaped the
 round-trip tests in `test_export_import_completeness.py`). Everything below is genuinely
 still open.
 
+**Feature build, 2026-07-24** (from the ROADMAP.md feature analysis, five of the six
+recommended items - see ROADMAP.md for full RESOLVED notes and commit hashes): public pins
+by community vote (UL-58), trip-planning OSRM drive-time legs + optional/generated trip
+names (UL-60 partial, UL-360), an AI chat assistant with an allowlisted tool loop (UL-293),
+KML/GPX/GeoJSON/CSV quick exports + emailed full exports (UL-382, UL-373), and
+recency-weighted boundary voting (Pin Restructure section). All five pod-tested green
+(60 + 30 = 90 new tests) and browser-verified on dev.urbanlens.org. Offline maps (UL-287,
+the sixth recommended item) was intentionally skipped this round. Explicitly **not** built:
+UL-377's search/list-scoped targeted exports (blocked on lists, which don't exist yet),
+UL-60's AI-driven schedule-timing suggestions and inline "AI suggests pins for this trip" UI
+(the assistant can add a specific pin to a trip on request, which covers part of this in a
+chat-driven form only), and UL-163's broader AI-sandboxing ticket (MCP security, local
+models) - the assistant's allowlist-only tool loop is a first answer to the same concern but
+doesn't close that ticket. The boundary-voting dialog auto-opens only while zero votes exist
+(not, as the spec's prose could be read, until consensus forms) - a deliberate simplification
+worth knowing about if the UX is revisited.
+
 ---
 
 ## ~~Verification debt~~ RESOLVED 2026-07-23 (pod ran; all session-added tests pass) → 17 PRE-EXISTING full-suite failures triaged below
