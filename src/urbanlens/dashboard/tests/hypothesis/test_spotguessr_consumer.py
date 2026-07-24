@@ -52,6 +52,13 @@ class GameSessionConsumerTests(TransactionTestCase):
     def setUp(self) -> None:
         self.host = _make_profile()
         self.guest = _make_profile()
+        self.outsider = _make_profile()
+        # Force these onto the instances now, in this synchronous setUp -
+        # the async test bodies below must never trigger a *lazy* DB query
+        # (e.g. a first-touch of `.user`), since Django's async-safety guard
+        # blocks ORM access from a running event loop with no thread bridge.
+        _ = self.host.user, self.guest.user, self.outsider.user
+
         friendship = Friendship.request(self.host, self.guest)
         assert friendship is not None
         friendship.accept()
@@ -85,8 +92,7 @@ class GameSessionConsumerTests(TransactionTestCase):
         _run(self._a_non_participant_is_rejected())
 
     async def _a_non_participant_is_rejected(self) -> None:
-        outsider = _make_profile()
-        comm = self._communicator(outsider.user)
+        comm = self._communicator(self.outsider.user)
         connected, close_code = await comm.connect()
         self.assertFalse(connected)
         self.assertEqual(close_code, 4404)
