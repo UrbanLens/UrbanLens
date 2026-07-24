@@ -57,16 +57,33 @@ class RecordGuessTests(TestCase):
         guess = PhotoCoordinateGuess.objects.get(image=image)
         self.assertFalse(guess.is_correct)
 
-    def test_a_point_target_round_is_a_no_op(self) -> None:
+    def test_a_point_target_round_still_records_a_guess(self) -> None:
         """The photo already had its own coordinates when this round was
-        generated - crowd-sourcing an estimate for it serves no purpose."""
+        generated - the estimate mechanism has no use for this guess, but
+        it's saved anyway (no current use, but plausibly useful later)."""
         location = _make_location()
         image = baker.make(Image, location=location, media_type=MediaKind.PHOTO, latitude="42.0", longitude="-73.0")
         round_ = _make_photo_round(location, target_is_point=True, image=image)
 
         record_guess(round_, Point(-73.0, 42.0, srid=4326), distance=0.0)
 
-        self.assertFalse(PhotoCoordinateGuess.objects.filter(image=image).exists())
+        self.assertEqual(PhotoCoordinateGuess.objects.filter(image=image).count(), 1)
+        self.assertTrue(PhotoCoordinateGuess.objects.get(image=image).is_correct)
+
+    def test_a_point_target_round_never_triggers_an_estimate_recompute(self) -> None:
+        """Recomputing an estimate for an already-placed photo would be pure
+        waste - Image.effective_latitude/longitude never reads it once the
+        real coordinates are set."""
+        location = _make_location()
+        image = baker.make(Image, location=location, media_type=MediaKind.PHOTO, latitude="42.0", longitude="-73.0")
+        round_ = _make_photo_round(location, target_is_point=True, image=image)
+
+        for _ in range(5):
+            record_guess(round_, Point(-73.0, 42.0, srid=4326), distance=0.0)
+
+        image.refresh_from_db()
+        self.assertIsNone(image.estimated_latitude)
+        self.assertIsNone(image.estimated_longitude)
 
     def test_a_round_with_no_photo_is_a_no_op(self) -> None:
         location = _make_location()

@@ -195,28 +195,36 @@ A photo shown in a Photos-mode round with no coordinates of its own scores
 against the location's boundary (see "Scoring" above) - which means every
 such guess is, incidentally, also a guess at where the photo itself actually
 is. `services.spotguessr.photo_coordinates.record_guess()` captures that
-signal anonymously: for any round whose photo lacked coordinates when the
-round was generated (`not round_.target_is_point`), every guess becomes a
-`PhotoCoordinateGuess` row - the guessed point, a correct/incorrect flag
-(correct meaning "inside the location's boundary", reusing the guess's
-already-computed boundary distance rather than a second lookup), and a
-timestamp. **No profile, round, or session FK at all** - structurally, not
-just by convention, there is no way to trace a row back to who made it.
-This definition of "correct" is deliberately independent of the round's own
-scoring; it only decides whether a guess counts toward the average below.
+signal anonymously: **every** Photos-mode guess becomes a
+`PhotoCoordinateGuess` row - the guessed point, a correct/incorrect flag,
+and a timestamp - regardless of whether the photo already has its own
+coordinates. Currently-placed photos' guesses aren't used for anything
+(the estimate below would be moot for them, since a real coordinate already
+wins), but they're saved anyway on the theory they may be useful later -
+e.g. flagging or correcting a coordinate that turns out to be wrong. "Correct"
+reuses the guess's already-computed distance rather than a second lookup
+(0 or less): for a boundary-target round that's "inside the location's
+boundary", for a point-target round that's "guessed the exact point" (a much
+rarer bar, but the same underlying value) - deliberately independent of the
+round's own scoring either way; it only decides whether a guess counts
+toward the average below. **No profile, round, or session FK at all** -
+structurally, not just by convention, there is no way to trace a row back
+to who made it.
 
-Once a photo has 5+ correct guesses, `services.photo_coordinates
-.recompute_estimated_coordinates()` averages them into
-`Image.estimated_latitude`/`estimated_longitude`, recomputed fresh from the
-photo's full correct-guess set after every new correct guess (not
-incrementally) - per-photo guess volume is small enough that this stays
-cheap, and it's simpler to keep correct as the outlier trim's boundary
-shifts with more data than to maintain running-average bookkeeping. Once
-there are 10+ correct guesses (enough for "outlier" to mean anything),
-before averaging it drops the ~15% of points farthest from the overall
-centroid - a loose, cheap trim (plain lat/lng degree-distance, not a real
-geodesic one), not a rigorous statistical test, matched to "our best effort
-to approximate a position" rather than precision.
+Once a photo *without its own coordinates* has 5+ correct guesses,
+`services.photo_coordinates.recompute_estimated_coordinates()` averages
+them into `Image.estimated_latitude`/`estimated_longitude`, recomputed
+fresh from the photo's full correct-guess set after every new correct guess
+(not incrementally) - per-photo guess volume is small enough that this
+stays cheap, and it's simpler to keep correct as the outlier trim's
+boundary shifts with more data than to maintain running-average
+bookkeeping. A point-target round's guesses are recorded but never trigger
+this recompute, since there's nothing for the estimate to do once a real
+coordinate already exists. Once there are 10+ correct guesses (enough for
+"outlier" to mean anything), before averaging it drops the ~15% of points
+farthest from the overall centroid - a loose, cheap trim (plain lat/lng
+degree-distance, not a real geodesic one), not a rigorous statistical test,
+matched to "our best effort to approximate a position" rather than precision.
 
 `Image.effective_latitude`/`effective_longitude` read this as a middle tier:
 a real (manual or EXIF) coordinate always wins outright, no matter how many

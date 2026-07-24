@@ -413,7 +413,13 @@ class Guess(abstract.DashboardModel):
 
 
 class PhotoCoordinateGuess(abstract.DashboardModel):
-    """One anonymized guess toward an as-yet-unplaced photo's own coordinates.
+    """One anonymized guess toward a photo's own coordinates.
+
+    Recorded for every Photos-mode guess, whether or not the photo already
+    has real coordinates - see ``services.spotguessr.photo_coordinates``'s
+    ``record_guess`` docstring for why (currently only used to *estimate* a
+    still-unplaced photo's position, but kept for every photo regardless in
+    case it's useful later, e.g. for flagging/correcting a wrong placement).
 
     Deliberately carries no profile or round FK - see
     ``services.spotguessr.photo_coordinates`` for the full rationale. This is
