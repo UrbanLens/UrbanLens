@@ -397,6 +397,54 @@
         }
     }
 
+    // Public-pin vote block: quiet strip under the ratings grid. Only
+    // renders when the eligibility engine says so (see services.public_pins);
+    // empty shells collapse to nothing.
+    .public-pin-vote {
+        &:empty,
+        &:not(:has(*)) {
+            display: none;
+        }
+
+        margin-top: .85rem;
+        padding: .75rem .85rem;
+        border-top: 1px solid var(--ul-surface-border);
+
+        .public-pin-vote__prompt {
+            display: flex;
+            flex-direction: column;
+            gap: .5rem;
+        }
+
+        .public-pin-vote__question {
+            font-size: .9rem;
+            color: var(--ul-text-secondary, inherit);
+        }
+
+        .public-pin-vote__actions {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: .5rem;
+        }
+
+        .public-pin-vote__help {
+            font-size: .8rem;
+            opacity: .75;
+        }
+
+        .public-pin-vote__badge {
+            display: inline-flex;
+            align-items: center;
+            gap: .4rem;
+            font-weight: 600;
+
+            .material-symbols-outlined {
+                font-size: 1.1rem;
+            }
+        }
+    }
+
     .wiki-stat-item {
         display: flex;
         flex-direction: column;

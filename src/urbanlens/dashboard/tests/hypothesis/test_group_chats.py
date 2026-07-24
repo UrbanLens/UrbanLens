@@ -433,7 +433,10 @@ class GroupEndpointTests(TestCase):
         self.assertEqual(self.group.name, "Renamed")
 
     def test_remove_member_endpoint(self) -> None:
-        response = self.client.post(self._url("messages.group.members.remove"), {"profile_slug": self.member.slug})
+        # profile_id, not slug: the endpoint deliberately refuses slugs, since
+        # a slug in the request body would leak a masked member's identity
+        # (see GroupRemoveMemberView's comment).
+        response = self.client.post(self._url("messages.group.members.remove"), {"profile_id": self.member.pk})
         self.assertEqual(response.status_code, 200)
         self.assertIsNone(self.group.membership_for(self.member))
 

@@ -16,6 +16,7 @@ from urbanlens.dashboard.controllers import (
     aliases,
     api_keys,
     article,
+    assistant,
     boundary,
     calendar_sync,
     comments,
@@ -59,6 +60,7 @@ from urbanlens.dashboard.controllers import (
     settings,
     setup,
     site_admin,
+    spotguessr,
     thanks,
     tools,
     trip,
@@ -135,6 +137,26 @@ urlpatterns = [
     ),
     path("thanks/", thanks.ThanksView.as_view(), name="thanks"),
     path("costs/", costs.CostsView.as_view(), name="costs"),
+    path("assistant/", assistant.AssistantView.as_view(), name="assistant"),
+    path("assistant/message/", assistant.AssistantMessageView.as_view(), name="assistant.message"),
+    path("assistant/reset/", assistant.AssistantResetView.as_view(), name="assistant.reset"),
+    path(
+        "spotguessr/",
+        include(
+            [
+                path("", spotguessr.SpotGuessrHomeView.as_view(), name="spotguessr"),
+                path("settings/", spotguessr.SpotGuessrSettingsView.as_view(), name="spotguessr.settings"),
+                path("start/", spotguessr.SpotGuessrStartView.as_view(), name="spotguessr.start"),
+                path("session/<int:session_id>/round/", spotguessr.SpotGuessrRoundView.as_view(), name="spotguessr.round"),
+                path(
+                    "session/<int:session_id>/round/<int:round_id>/guess/",
+                    spotguessr.SpotGuessrGuessView.as_view(),
+                    name="spotguessr.guess",
+                ),
+                path("session/<int:session_id>/summary/", spotguessr.SpotGuessrSummaryView.as_view(), name="spotguessr.summary"),
+            ],
+        ),
+    ),
     path(
         "help/import-pins/",
         TemplateView.as_view(
@@ -1041,6 +1063,11 @@ urlpatterns = [
                     name="location.wiki.boundary",
                 ),
                 path(
+                    "<slug:location_slug>/wiki/boundary/vote/",
+                    location_wiki.BoundaryVoteView.as_view(),
+                    name="location.wiki.boundary_vote",
+                ),
+                path(
                     "<slug:location_slug>/wiki/history/",
                     location_wiki.LocationWikiHistoryView.as_view(),
                     name="location.wiki.history",
@@ -1212,6 +1239,11 @@ urlpatterns = [
                     location_wiki.WikiStatVoteView.as_view(),
                     name="location.wiki.stat_vote",
                 ),
+                path(
+                    "<slug:location_slug>/wiki/public-vote/",
+                    location_wiki.PublicPinVoteView.as_view(),
+                    name="location.wiki.public_vote",
+                ),
                 # Media gallery: the vote endpoint must precede the catch-all
                 # media/<source>/ loader so "vote" isn't captured as a source.
                 path(
@@ -1284,6 +1316,16 @@ urlpatterns = [
                     "<slug:trip_slug>/activities/<int:activity_id>/complete/",
                     trip.TripActivityCompleteView.as_view(),
                     name="trips.activity.complete",
+                ),
+                path(
+                    "<slug:trip_slug>/activities/apply-order/",
+                    trip.TripApplySuggestedOrderView.as_view(),
+                    name="trips.activity.apply_order",
+                ),
+                path(
+                    "<slug:trip_slug>/ai-suggestions/",
+                    trip.TripAiSuggestionsView.as_view(),
+                    name="trips.ai_suggestions",
                 ),
                 path(
                     "<slug:trip_slug>/child-trip-search/",
@@ -1503,6 +1545,7 @@ urlpatterns = [
                 path("export/start/", tools.ExportStartView.as_view(), name="tools.export.start"),
                 path("export/status/<str:job_id>/", tools.ExportStatusView.as_view(), name="tools.export.status"),
                 path("export/download/<str:job_id>/", tools.ExportDownloadView.as_view(), name="tools.export.download"),
+                path("export/format/<str:fmt>/", tools.ExportFormatDownloadView.as_view(), name="tools.export.format"),
                 path("import/start/", tools.ImportStartView.as_view(), name="tools.import.start"),
                 path("import/status/<str:job_id>/", tools.ImportStatusView.as_view(), name="tools.import.status"),
                 path("backup/start/", tools.BackupStartView.as_view(), name="tools.backup.start"),

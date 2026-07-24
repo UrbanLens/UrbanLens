@@ -47,6 +47,15 @@ if TYPE_CHECKING:
 #: transaction was in flight (stamped, not yet visible) while a sync ran.
 SYNC_WATERMARK_GRACE = timedelta(seconds=10)
 
+#: How long deletion tombstones are retained before the scheduled pruning task
+#: (``tasks.prune_pin_tombstones``) removes them. This is the longest supported
+#: sync-client offline gap: a client that hasn't synced within this window can
+#: no longer trust the deletions feed incrementally (pruned tombstones are
+#: unrecoverable) and is told to full-resync via ``StaleDeletedSinceError`` /
+#: HTTP 410. 400 days = "over a year offline" with margin, while still bounding
+#: unbounded row growth.
+TOMBSTONE_RETENTION = timedelta(days=400)
+
 
 class InvalidSyncCursorError(ValueError):
     """The supplied cursor is not one this service issued.
@@ -56,6 +65,20 @@ class InvalidSyncCursorError(ValueError):
 
     def __init__(self) -> None:
         super().__init__("Invalid sync cursor.")
+
+
+class StaleDeletedSinceError(ValueError):
+    """``deleted_since`` predates the tombstone retention floor.
+
+    Tombstones older than :data:`TOMBSTONE_RETENTION` are pruned, so a client
+    asking for deletions from before that floor could silently miss some -
+    incremental sync is no longer trustworthy and the client must resync its
+    pins from scratch (drop local rows absent from a full ``pins/`` walk).
+    The message is safe to surface to the caller.
+    """
+
+    def __init__(self) -> None:
+        super().__init__("deleted_since is older than the deletion-history retention window; do a full resync instead.")
 
 
 @dataclass(frozen=True, slots=True)
@@ -206,7 +229,12 @@ def sync_tombstones_page(
 
     Raises:
         InvalidSyncCursorError: ``cursor`` is malformed or was never ours.
+        StaleDeletedSinceError: ``deleted_since`` predates the tombstone
+            retention floor - pruning may have removed deletions the client
+            never saw, so it must full-resync instead (HTTP 410 upstream).
     """
+    if deleted_since is not None and deleted_since < timezone.now() - TOMBSTONE_RETENTION:
+        raise StaleDeletedSinceError
     watermark = _watermark()
     limit = min(max(int(limit or MapPinPayloadService.DEFAULT_LIMIT), 1), MapPinPayloadService.MAX_LIMIT)
 

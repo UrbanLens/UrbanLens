@@ -15,12 +15,12 @@ from __future__ import annotations
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.controllers.trip import _apply_trip_visibility_filter
 from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
+from urbanlens.dashboard.services.trip_visibility import apply_trip_visibility_filter as _apply_trip_visibility_filter
 
 
 def _make_user_with_profile(username=None):

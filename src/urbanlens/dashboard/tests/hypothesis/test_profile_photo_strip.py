@@ -210,11 +210,18 @@ class ProfilePageShowsPhotoStripTests(TestCase):
         self.owner.profile.save(update_fields=["photo_upload_visibility", "profile_visibility"])
 
     def test_own_profile_page_shows_wiki_attached_photo_not_pin_only_one(self) -> None:
+        from django.core.files.base import ContentFile
+
         self.client.force_login(self.owner)
         _location_unused, wiki = _wiki_with_pin(self.owner.profile)
         pin = baker.make(Pin, profile=self.owner.profile, location=_location())
         shown = baker.make(Image, profile=self.owner.profile, wiki=wiki, pin=None, media_type=MediaKind.PHOTO)
         hidden = baker.make(Image, profile=self.owner.profile, pin=pin, wiki=None, media_type=MediaKind.PHOTO)
+        # The strip template renders each shown photo's image.url - a bare
+        # baker Image has no file behind its ImageField, which raises
+        # ValueError at render time rather than showing nothing.
+        shown.image.save("shown.jpg", ContentFile(b"fake-jpeg-bytes"), save=True)
+        hidden.image.save("hidden.jpg", ContentFile(b"fake-jpeg-bytes"), save=True)
 
         response = self.client.get(reverse("profile.view"))
 

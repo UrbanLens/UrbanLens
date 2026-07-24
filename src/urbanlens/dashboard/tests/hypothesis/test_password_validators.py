@@ -219,6 +219,17 @@ class ValidatePasswordPolicyViewTests(TestCase):
     password (docs/PROBLEMS.md, decision 2026-07-23).
     """
 
+    def setUp(self) -> None:
+        super().setUp()
+        # The per-IP rate key is shared cache state - every test in this class
+        # posts from the same test-client IP, so without a reset the rate-limit
+        # test inherits the hit count from whichever tests ran before it.
+        from django.core.cache import cache
+
+        from urbanlens.dashboard.controllers.account import _PASSWORD_CHECK_RATE_KEY
+
+        cache.delete(_PASSWORD_CHECK_RATE_KEY.format(ip="127.0.0.1"))
+
     def _post(self, body: dict):
         import json as jsonlib
 

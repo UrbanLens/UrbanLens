@@ -19,6 +19,11 @@ logger = logging.getLogger(__name__)
 
 EXPORT_TTL_SECONDS = 3600
 
+#: Largest export ZIP that gets attached to the "your export is ready" email
+#: directly (UL-373); anything bigger gets a download link instead, so the
+#: email never blows past typical mailbox attachment limits.
+EMAIL_ATTACHMENT_MAX_BYTES = 15 * 1024 * 1024
+
 VALID_EXPORT_TYPES = frozenset(
     {
         "profile",
@@ -113,7 +118,7 @@ def schedule_export_cleanup(export_dir_path: str, job_status: ExportJobStatus | 
         logger.warning("Unable to schedule cleanup for export directory %s", export_dir_path)
 
 
-def run_export(user_id: int, export_types: list[str], export_dir_path: str, base_url: str, *, job_id: str | None = None) -> bool:
+def run_export(user_id: int, export_types: list[str], export_dir_path: str, base_url: str, *, job_id: str | None = None, email_to_user: bool = False) -> bool:
     """Run all export steps for a user and return True on success.
 
     Args:
@@ -123,6 +128,10 @@ def run_export(user_id: int, export_types: list[str], export_dir_path: str, base
         base_url: Absolute site root URL, used to build pin detail URLs.
         job_id: UUID string for this export job. Derived from ``export_dir_path``
             basename when not provided, but callers should always pass it explicitly.
+        email_to_user: When True, email the finished export to the user's account
+            address (UL-373) - see :func:`send_export_email`. Email problems (no
+            address on file, delivery failure) never fail the export itself; the
+            outcome is surfaced through the job status message instead.
     """
     from django.contrib.auth import get_user_model
     from django.core.exceptions import ObjectDoesNotExist
@@ -172,6 +181,7 @@ def run_export(user_id: int, export_types: list[str], export_dir_path: str, base
             export_dir_path=export_dir_path,
             temp_dir=temp_dir,
             base_url=base_url,
+            email_to_user=email_to_user,
         )
         return True
     except Exception:
@@ -193,6 +203,7 @@ def _run_export_steps(
     export_dir_path: str,
     temp_dir: str,
     base_url: str,
+    email_to_user: bool = False,
 ) -> None:
     _write_manifest(profile, temp_dir, export_types)
 
@@ -207,17 +218,27 @@ def _run_export_steps(
     ExportJobStatus(job_id).write("running", 90, "Creating archive...")
     _build_zip(export_dir_path, temp_dir)
     shutil.rmtree(temp_dir, ignore_errors=True)
-    ExportJobStatus(job_id).write("done", 100, "Export ready!")
+
+    message = "Export ready!"
+    if email_to_user:
+        ExportJobStatus(job_id).write("running", 95, "Sending email...")
+        email_note = send_export_email(profile.user, export_dir_path, base_url, job_id=job_id)
+        message = f"Export ready! {email_note}"
+    ExportJobStatus(job_id).write("done", 100, message)
 
 
-def _resolve_target(obj: Any) -> tuple[str, str]:
-    """Return (target_type, target_name) for an object with a pin or wiki FK."""
+def _resolve_target(obj: Any) -> tuple[str, str, str]:
+    """Return (target_type, target_name, target_uuid) for an object with a pin or wiki FK.
+
+    ``target_uuid`` is what the importer matches on (names are neither unique
+    nor stable); the name is kept for human readability of the archive.
+    """
     if obj.pin:
-        return "pin", obj.pin.effective_name
+        return "pin", obj.pin.effective_name, str(obj.pin.uuid)
     wiki = getattr(obj, "wiki", None)
     if wiki:
-        return "location", wiki.name
-    return "", ""
+        return "location", wiki.name, str(wiki.uuid)
+    return "", "", ""
 
 
 def _build_zip(export_dir_path: str, temp_dir: str) -> None:
@@ -229,6 +250,78 @@ def _build_zip(export_dir_path: str, temp_dir: str) -> None:
                 file_path = os.path.join(root, filename)
                 arcname = os.path.join(f"urbanlens_export_{today}", os.path.relpath(file_path, temp_dir))
                 zf.write(file_path, arcname)
+
+
+def send_export_email(user: Any, export_dir_path: str, base_url: str, *, job_id: str) -> str:
+    """Email the finished export ZIP to the user's account address (UL-373).
+
+    Small archives (up to ``EMAIL_ATTACHMENT_MAX_BYTES``) are attached
+    directly; larger ones get a link to the existing authenticated download
+    endpoint instead, which stays valid until the job's artifacts expire
+    (``EXPORT_TTL_SECONDS``). Follows the established outbound-email pattern
+    (see ``services.account_deletion._send_email``): ``EmailMultiAlternatives``
+    with the site's default from-address, HTML alternative rendered from a
+    ``dashboard/email/`` template, and delivery failures logged rather than
+    raised - an email problem must never fail an otherwise-finished export.
+
+    Args:
+        user: The Django user the export belongs to.
+        export_dir_path: Filesystem path of the job directory holding ``export.zip``.
+        base_url: Absolute site root URL (same value the export pipeline receives).
+        job_id: UUID string for this export job, used to build the download URL.
+
+    Returns:
+        A short user-facing sentence describing the outcome, appended to the
+        job's "done" status message (emailed as attachment, emailed as link,
+        no address on file, or send failure).
+    """
+    import smtplib
+
+    from django.core.mail import EmailMultiAlternatives
+    from django.template.loader import render_to_string
+    from django.urls import reverse
+
+    email = getattr(user, "email", "") or ""
+    if not email:
+        logger.info("Export email requested but user %s has no email address; skipping", getattr(user, "pk", None))
+        return "Your account has no email address, so the export was not emailed."
+
+    zip_path = os.path.join(export_dir_path, "export.zip")
+    try:
+        zip_size = os.path.getsize(zip_path)
+    except OSError:
+        logger.exception("Export email: archive missing for job %s", job_id)
+        return "The export email could not be sent."
+
+    attach = zip_size <= EMAIL_ATTACHMENT_MAX_BYTES
+    download_url = f"{base_url.rstrip('/')}{reverse('tools.export.download', kwargs={'job_id': job_id})}"
+    today = date.today().isoformat()
+    filename = f"urbanlens_export_{today}.zip"
+
+    subject = "Your UrbanLens data export is ready"
+    if attach:
+        text_body = f"Your UrbanLens data export is attached.\n\nIt is also available to download for about an hour: {download_url}"
+    else:
+        text_body = f"Your UrbanLens data export is ready.\n\nThe archive was too large to attach, so download it here (available for about an hour): {download_url}"
+    html_body = render_to_string(
+        "dashboard/email/export_ready.html",
+        {"attached": attach, "download_url": download_url, "filename": filename},
+    )
+
+    try:
+        msg = EmailMultiAlternatives(subject=subject, body=text_body, from_email=None, to=[email])
+        msg.attach_alternative(html_body, "text/html")
+        if attach:
+            with open(zip_path, "rb") as fh:
+                msg.attach(filename, fh.read(), "application/zip")
+        msg.send()
+    except (smtplib.SMTPException, OSError):
+        logger.exception("Failed to send export email for job %s to user %s", job_id, getattr(user, "pk", None))
+        return "The export email could not be sent - you can still download it below."
+
+    if attach:
+        return "A copy was emailed to you."
+    return "A download link was emailed to you (the archive was too large to attach)."
 
 
 # -- Manifest ------------------------------------------------------------------
@@ -657,10 +750,16 @@ def _export_direct_messages(profile: Any, temp_dir: str, *, base_url: str = "") 
         is_sender = message.sender_id == profile.pk
         partner = message.recipient if is_sender else message.sender
         tombstone = message.tombstone_text_for(profile.pk)
+        identity = _identity(partner)
         row: dict[str, Any] = {
             "id": message.pk,
             "direction": "sent" if is_sender else "received",
-            "partner_display_name": _identity(partner)["display_name"],
+            "partner_display_name": identity["display_name"],
+            # Stable identifier for the restore path (sent messages only, see
+            # _import_direct_messages). Withheld whenever the partner's
+            # identity is masked from the exporter - the uuid would identify
+            # them just as surely as their name.
+            "partner_uuid": None if identity["is_anonymized"] else str(partner.uuid),
             "is_tombstoned": bool(tombstone),
             "image_count": message.images.count() if not tombstone else 0,
             "has_map": bool(message.markup_map_id) and not tombstone,
@@ -716,12 +815,13 @@ def _export_comments(profile: Any, temp_dir: str, *, base_url: str = "") -> None
 
     rows = []
     for comment in comments:
-        target_type, target = _resolve_target(comment)
+        target_type, target, target_uuid = _resolve_target(comment)
         rows.append(
             {
                 "uuid": str(comment.uuid),
                 "target_type": target_type,
                 "target_name": target,
+                "target_uuid": target_uuid,
                 "text": comment.text,
                 "created": str(comment.created),
             },
@@ -741,7 +841,7 @@ def _export_photos(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
 
     metadata = []
     for image in images:
-        target_type, target = _resolve_target(image)
+        target_type, target, target_uuid = _resolve_target(image)
         file_path = image.image.path if image.image else None
         filename = os.path.basename(file_path) if file_path else None
 
@@ -758,8 +858,10 @@ def _export_photos(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
                 "uuid": str(image.uuid),
                 "filename": filename,
                 "caption": image.caption or "",
+                "media_type": image.media_type,
                 "target_type": target_type,
                 "target_name": target,
+                "target_uuid": target_uuid,
                 "latitude": str(image.latitude) if image.latitude else None,
                 "longitude": str(image.longitude) if image.longitude else None,
                 "created": str(image.created),
@@ -786,7 +888,15 @@ def _export_trips(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
                 "start_date": str(trip.start_date) if trip.start_date else None,
                 "end_date": str(trip.end_date) if trip.end_date else None,
                 "creator": trip.creator.user.username if trip.creator else None,
+                # Whether the exporting user created this trip - the importer
+                # only re-creates trips the user owned (a membership in someone
+                # else's trip records THEIR trip, which an import can't rebuild
+                # on their behalf).
+                "is_creator": trip.creator_id == profile.pk,
                 "members": [p.user.username for p in trip.profiles.all()],
+                # Stable identifiers for re-inviting members on import; same
+                # order as ``members``.
+                "member_uuids": [str(p.uuid) for p in trip.profiles.all()],
                 "created": str(trip.created),
             },
         )

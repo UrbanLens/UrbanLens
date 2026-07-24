@@ -1,25 +1,62 @@
-{% load dashboard_tags %}
-{# Search-driven chip picker - same markup/CSS (.apdlg-*, see _map.scss) as the #}
-{# main map's add-pin and bulk-edit label pickers, so "pick from a search box, #}
-{# selected ones become removable chips" behaves identically everywhere labels #}
-{# are picked. initSavedFilterLabelPickers() in _saved_filter_dialog_scripts.html #}
-{# drives this from the catalog below. Hidden checkboxes (name=field_name, #}
-{# value=label pk) are created/removed to match the chip selection, so the #}
-{# existing server-side ModelMultipleChoiceField processing needs no changes. #}
-<div class="saved-filter-label-picker" data-field-name="{{ field_name }}">
-    <div class="apdlg-label-chips" id="sf-label-chips-{{ field_name }}"></div>
-    <div class="apdlg-label-input-wrap form-input-wrap">
-        <input type="text" class="form-input apdlg-label-input" autocomplete="off"
-               id="sf-label-search-{{ field_name }}" placeholder="Search labels...">
-        <div class="apdlg-label-suggestions" id="sf-label-suggestions-{{ field_name }}" hidden></div>
+{# Rich include/exclude label picker - the same shared engine                  #}
+{# (ts/shared/label-picker.ts, window.UrbanLensLabelPicker via core.js) as the #}
+{# main map's filter sidebar: click to include, right-click to exclude, drag   #}
+{# chips between the Include/Exclude columns (or out to remove), an AND/OR     #}
+{# combinator, and a formula bar. Driven by initSavedFilterLabelPickers() in   #}
+{# _saved_filter_dialog_scripts.html. Serializes two ways on every change:     #}
+{# the label_groups hidden input (structured groups - what the server          #}
+{# prefers), plus hidden tags/exclude_tags checkbox inputs kept in sync so     #}
+{# the existing flat ModelMultipleChoiceField processing needs no changes.     #}
+<div class="saved-filter-label-picker sf-rich-label-picker" id="sf-label-picker"
+     data-initial-groups="{{ initial_label_groups_json|default:'' }}">
+    <input type="hidden" name="label_groups" id="sf-label-groups">
+
+    <div class="fp-label-selected" id="sf-label-selected" style="display:none">
+        <div class="fp-label-col fp-label-col--incl" id="sf-label-col-incl">
+            <div class="fp-label-col-title">
+                <i class="material-symbols-outlined">check_circle</i> Include
+                <button type="button" class="fp-label-mode-btn" id="sf-incl-mode-btn"
+                        title="Switch include matching: AND requires all, OR requires any">AND</button>
+            </div>
+            <div class="fp-label-chips" id="sf-label-incl-chips"></div>
+        </div>
+        <div class="fp-label-col fp-label-col--excl" id="sf-label-col-excl">
+            <div class="fp-label-col-title"><i class="material-symbols-outlined">cancel</i> Exclude</div>
+            <div class="fp-label-chips" id="sf-label-excl-chips"></div>
+        </div>
     </div>
-    <div class="saved-filter-label-catalog" id="sf-label-catalog-{{ field_name }}" hidden>
+
+    <div class="fp-formula-display" id="sf-formula-display" style="display:none">
+        <span class="fp-formula-display-text" id="sf-formula-display-text"></span>
+        <button type="button" class="fp-formula-display-clear" id="sf-formula-display-clear" title="Clear labels">
+            <i class="material-symbols-outlined">close</i>
+        </button>
+    </div>
+
+    <div class="fp-formula-wrap">
+        <input type="text" class="fp-formula-bar" id="sf-label-formula"
+               placeholder="Search, or a formula: (Visited / Rooftop) - Demolished"
+               autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+        <div class="fp-formula-suggestions" id="sf-formula-suggestions" hidden></div>
+        <div class="fp-formula-errors" id="sf-formula-errors" hidden></div>
+    </div>
+
+    <div class="fp-tag-list" id="sf-label-list">
         {% for label in labels %}
-        <span data-id="{{ label.pk }}" data-name="{{ label.name }}" data-icon="{{ label.icon|default:'' }}"
-              data-color="{{ label.color|default:'' }}"
-              data-selected="{% if label.pk in selected_ids %}1{% else %}0{% endif %}"></span>
+        <button type="button" class="fp-chip fp-label-avail" draggable="true"
+                data-label-id="{{ label.pk }}"
+                data-label-name="{{ label.name|lower }}"
+                data-label-text="{{ label.name }}"
+                data-label-color="{{ label.color|default:'' }}"
+                data-label-icon="{{ label.icon|default:'' }}"
+                data-selected-mode="{% if label.pk in selected_tag_ids %}incl{% elif label.pk in selected_exclude_tag_ids %}excl{% endif %}"
+                {% if label.color %}style="border-color:{{ label.color }}55;background:{{ label.color }}18;color:{{ label.color }}cc"{% endif %}>
+            {% if label.icon %}<span style="font-size:.9em">{{ label.icon }}</span>{% endif %}
+            {{ label.name }}
+        </button>
         {% empty %}
         <span class="tag-chips-empty">No labels yet.</span>
         {% endfor %}
     </div>
+    <div class="fp-label-list-hint">Click to include &nbsp;·&nbsp; Right-click to exclude &nbsp;·&nbsp; Drag between columns</div>
 </div>

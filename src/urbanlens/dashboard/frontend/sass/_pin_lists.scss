@@ -652,23 +652,8 @@
     }
 }
 
-.saved-filter-form-warning {
-    display: flex;
-    align-items: flex-start;
-    gap: .5rem;
-    background: rgba(234, 179, 8, .12);
-    border: 1px solid rgba(234, 179, 8, .35);
-    border-radius: 8px;
-    padding: .6rem .75rem;
-    font-size: .82rem;
-    color: var(--ul-grey-7);
-
-    .material-symbols-outlined { color: #eab308; flex-shrink: 0; }
-}
-
 .saved-filter-score-grid,
-.saved-filter-date-grid,
-.saved-filter-label-grid {
+.saved-filter-date-grid {
     display: grid;
     grid-template-columns: 1fr;
     gap: .9rem;
@@ -678,10 +663,27 @@
     }
 }
 
-// .saved-filter-label-picker itself needs no layout rules of its own - it's a
-// plain stack of the shared .apdlg-* chip/search/suggestions pieces (see
-// _map.scss), reused as-is so the include/exclude pickers here look and
-// behave identically to the main map's add-pin and bulk-edit label pickers.
+// The rich label picker reuses the main map filter sidebar's fp-* components
+// (see _map.scss) wholesale, so include/exclude columns, chip dragging, the
+// AND/OR toggle, and the formula bar look and behave identically here. Only
+// the available-label list needs a height cap: the sidebar scrolls as a
+// whole, but inside the dialog/detail card a large label collection would
+// otherwise stretch the form.
+.sf-rich-label-picker {
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+
+    .fp-tag-list {
+        max-height: 180px;
+        overflow-y: auto;
+    }
+
+    // The suggestions dropdown anchors to the formula bar wrapper.
+    .fp-formula-wrap {
+        position: relative;
+    }
+}
 
 .saved-filter-custom-fields {
     display: flex;

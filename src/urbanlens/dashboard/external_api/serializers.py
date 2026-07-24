@@ -12,9 +12,18 @@ regardless of caller.
 
 from __future__ import annotations
 
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.core.validators import URLValidator
 from rest_framework import serializers
 
+from urbanlens.dashboard.models.links.model import MAX_LINK_URL_LENGTH
+from urbanlens.dashboard.models.pin.model import PinType
+from urbanlens.dashboard.models.pin_suggestions.model import MAX_SUGGESTION_ALIASES, MAX_SUGGESTION_LINKS, MAX_SUGGESTION_PHOTOS
 from urbanlens.dashboard.models.push_device import PushTransport
+
+#: Same scheme restriction as controllers.links._clean_link_input - external
+#: submissions are untrusted input, so this validates before anything else does.
+_validate_link_url = URLValidator(schemes=["http", "https"])
 
 
 class WhoAmISerializer(serializers.Serializer):
@@ -38,6 +47,13 @@ class PinCreateSerializer(serializers.Serializer):
     address = serializers.CharField(max_length=500, required=False, allow_blank=True, allow_null=True, default=None)
     icon = serializers.CharField(max_length=255, required=False, allow_blank=True, allow_null=True, default=None)
     color = serializers.CharField(max_length=20, required=False, allow_blank=True, allow_null=True, default=None)
+    #: Personal notes captured in the field - same free-text field the pin
+    #: detail page edits; bounded here because external input is untrusted.
+    description = serializers.CharField(max_length=10000, required=False, allow_blank=True, allow_null=True, default=None)
+    #: What the marker physically represents. Omitted/null keeps the
+    #: "location" default, leaving the pin eligible for automatic
+    #: classification exactly like a map-UI drop.
+    pin_type = serializers.ChoiceField(choices=PinType.choices, required=False, allow_null=True, default=None)
     #: Caller-generated idempotency uuid - an offline client stamps its pin at
     #: capture time and retries the same submission until acknowledged; a
     #: repeat is answered with the already-created pin instead of a duplicate.
@@ -50,6 +66,71 @@ class PinCreateSerializer(serializers.Serializer):
         if not has_coords and not has_address:
             raise serializers.ValidationError("Provide either latitude/longitude or an address.")
         return attrs
+
+
+class LinkInputSerializer(serializers.Serializer):
+    """One external link proposed for a pin suggestion."""
+
+    name = serializers.CharField(max_length=255, required=False, allow_blank=True, default="")
+    url = serializers.CharField(max_length=MAX_LINK_URL_LENGTH)
+
+    def validate_url(self, value: str) -> str:
+        """Restrict to http(s) - same rule ``controllers.links`` enforces for manually-added links."""
+        try:
+            _validate_link_url(value)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError("That doesn't look like a valid http(s) url.") from exc
+        return value
+
+
+class PinSuggestionCreateSerializer(serializers.Serializer):
+    """Validates an untrusted pin-*suggestion* payload from an external application.
+
+    Unlike ``PinCreateSerializer``, nothing here is written to a real Pin
+    immediately - it's staged as a ``PinSuggestion`` the profile owner must
+    explicitly accept before anything appears on their map (see
+    ``services.pin_suggestions.ingest_location_hits``). This is why an
+    external "discovery" app (finds candidate places autonomously, without
+    the user having been there) should use this endpoint rather than
+    ``PinCreateSerializer``/``PinsView.post``, which creates a real pin outright.
+    """
+
+    name = serializers.CharField(max_length=255, required=False, allow_blank=True, allow_null=True, default=None)
+    latitude = serializers.FloatField(required=False, allow_null=True, default=None, min_value=-90, max_value=90)
+    longitude = serializers.FloatField(required=False, allow_null=True, default=None, min_value=-180, max_value=180)
+    address = serializers.CharField(max_length=500, required=False, allow_blank=True, allow_null=True, default=None)
+    description = serializers.CharField(max_length=10000, required=False, allow_blank=True, allow_null=True, default=None)
+    pin_type = serializers.ChoiceField(choices=PinType.choices, required=False, allow_null=True, default=None)
+    #: Alternate names for the place - offered as PinAlias rows if accepted.
+    aliases = serializers.ListField(child=serializers.CharField(max_length=255, allow_blank=False), required=False, default=list)
+    #: External links about the place - offered as PinLink rows if accepted.
+    links = LinkInputSerializer(many=True, required=False, default=list)
+    #: Photo urls to download and stage as candidate gallery photos.
+    photos = serializers.ListField(child=serializers.URLField(max_length=2048), required=False, default=list)
+
+    def validate(self, attrs: dict) -> dict:
+        """Require coordinates or an address, and enforce the same caps ``PinSuggestion`` stores."""
+        has_coords = attrs.get("latitude") is not None and attrs.get("longitude") is not None
+        has_address = bool((attrs.get("address") or "").strip())
+        if not has_coords and not has_address:
+            raise serializers.ValidationError("Provide either latitude/longitude or an address.")
+        if len(attrs.get("aliases") or []) > MAX_SUGGESTION_ALIASES:
+            raise serializers.ValidationError(f"Provide at most {MAX_SUGGESTION_ALIASES} aliases.")
+        if len(attrs.get("links") or []) > MAX_SUGGESTION_LINKS:
+            raise serializers.ValidationError(f"Provide at most {MAX_SUGGESTION_LINKS} links.")
+        if len(attrs.get("photos") or []) > MAX_SUGGESTION_PHOTOS:
+            raise serializers.ValidationError(f"Provide at most {MAX_SUGGESTION_PHOTOS} photos.")
+        return attrs
+
+
+class PinSuggestionCreateResponseSerializer(serializers.Serializer):
+    """Documents the pin-suggestion-create response (schema-only)."""
+
+    suggestion_id = serializers.IntegerField(read_only=True)
+    status = serializers.CharField(read_only=True)
+    matched_existing_pin = serializers.BooleanField(read_only=True)
+    photos_attached = serializers.IntegerField(read_only=True)
+    review_url = serializers.CharField(read_only=True)
 
 
 class PinSyncQuerySerializer(serializers.Serializer):

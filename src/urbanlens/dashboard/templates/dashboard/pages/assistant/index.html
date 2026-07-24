@@ -1,0 +1,49 @@
+{% extends 'dashboard/themes/base.html' %}
+{% load static %}
+
+{% block content %}
+<div class="assistant-page">
+    <div class="assistant-card card">
+        <div class="card-header">
+            <i class="material-symbols-outlined">smart_toy</i>
+            <span>Assistant</span>
+            <div class="card-header-actions">
+                <button type="button" class="btn btn--ghost btn--sm"
+                        hx-post="{% url 'assistant.reset' %}"
+                        hx-target="#assistant-messages" hx-swap="outerHTML"
+                        title="Clear this conversation">
+                    <i class="material-symbols-outlined">mop</i> Clear
+                </button>
+            </div>
+        </div>
+
+        {% if assistant_enabled %}
+        {% include "dashboard/partials/assistant/_messages.html" %}
+        <form class="assistant-input-row"
+              hx-post="{% url 'assistant.message' %}"
+              hx-target="#assistant-messages" hx-swap="outerHTML"
+              hx-disabled-elt="find button, find input"
+              hx-indicator="#assistant-typing"
+              hx-on::after-request="if(event.detail.successful){this.reset();var m=document.getElementById('assistant-messages');if(m)m.scrollTop=m.scrollHeight;}">
+            {% csrf_token %}
+            <input type="text" name="message" maxlength="{{ max_message_chars }}" autocomplete="off"
+                   placeholder="Find pins, plan a trip..." required>
+            <span id="assistant-typing" class="assistant-typing htmx-indicator">thinking&hellip;</span>
+            <button type="submit" class="btn btn--primary">
+                <i class="material-symbols-outlined">send</i>
+            </button>
+        </form>
+        <p class="assistant-footnote">
+            The assistant only sees and organizes your own pins and trips. It can create trips and
+            add activities for you; it can never delete or share anything.
+        </p>
+        {% else %}
+        <div class="assistant-disabled">
+            <i class="material-symbols-outlined">smart_toy</i>
+            <p>AI features are turned off{% if not profile.ai_enabled %} for your account{% endif %}.</p>
+            <a class="btn btn--secondary" href="{% url 'settings.view' %}#ai-settings-section">Open AI settings</a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

@@ -379,6 +379,42 @@ class PinTombstoneTests(TestCase):
         body = self._get().json()
         self.assertEqual(body["tombstones"], [])
 
+    def test_deleted_since_older_than_retention_gets_410_full_resync(self) -> None:
+        """Pruning makes deletions that old unrecoverable - the feed must say so
+        loudly (410 + full_resync_required) instead of silently omitting them."""
+        from urbanlens.dashboard.services.pin_sync import TOMBSTONE_RETENTION
+
+        stale = timezone.now() - TOMBSTONE_RETENTION - timedelta(days=1)
+        response = self._get(deleted_since=stale.isoformat())
+        self.assertEqual(response.status_code, 410)
+        body = response.json()
+        self.assertTrue(body["full_resync_required"])
+        self.assertIn("resync", body["error"])
+
+    def test_deleted_since_inside_retention_is_served_normally(self) -> None:
+        from urbanlens.dashboard.services.pin_sync import TOMBSTONE_RETENTION
+
+        recent = timezone.now() - TOMBSTONE_RETENTION + timedelta(days=1)
+        response = self._get(deleted_since=recent.isoformat())
+        self.assertEqual(response.status_code, 200)
+
+    def test_prune_task_removes_only_expired_tombstones(self) -> None:
+        from urbanlens.dashboard.services.pin_sync import TOMBSTONE_RETENTION
+        from urbanlens.dashboard.tasks import prune_pin_tombstones
+
+        old_pin = self._make_pin("Ancient", 42.5, -73.5)
+        old_uuid = old_pin.uuid
+        old_pin.delete()
+        PinTombstone.objects.filter(pin_uuid=old_uuid).update(created=timezone.now() - TOMBSTONE_RETENTION - timedelta(days=1))
+        fresh_pin = self._make_pin("Recent", 43.5, -74.5)
+        fresh_uuid = fresh_pin.uuid
+        fresh_pin.delete()
+
+        deleted = prune_pin_tombstones()
+
+        self.assertEqual(deleted, 1)
+        self.assertEqual(set(PinTombstone.objects.values_list("pin_uuid", flat=True)), {fresh_uuid})
+
 
 class PinCreateIdempotencyTests(TestCase):
     """A caller-generated uuid makes POST pins/ safe to retry from an offline outbox."""
@@ -426,3 +462,38 @@ class PinCreateIdempotencyTests(TestCase):
         duplicate = self._post({"name": "Old Mill again", "latitude": 42.5, "longitude": -73.5})
         self.assertEqual(duplicate.status_code, 400)
         self.assertIn("already have a pin", duplicate.json()["error"])
+
+
+class PinCreateFieldTests(TestCase):
+    """The field-capture payload: description and pin_type on POST pins/."""
+
+    def setUp(self) -> None:
+        baker.make(User)  # first user auto-promoted to bootstrap site admin
+        self.user = baker.make(User)
+        self.profile = Profile.objects.get(user=self.user)
+        self.url = reverse("external_api:pins")
+        _api_key, self.raw_key = generate_api_key(self.user, "Capture client")
+
+    def _post(self, payload: dict):
+        return self.client.post(self.url, data=payload, content_type="application/json", **_bearer(self.raw_key))
+
+    def test_description_and_pin_type_are_stored(self) -> None:
+        response = self._post({"name": "Boiler house", "latitude": 42.5, "longitude": -73.5, "description": "Rusted catwalks, watch the floor.", "pin_type": "building"})
+        self.assertEqual(response.status_code, 201, response.content)
+        pin = Pin.objects.get(uuid=response.json()["uuid"])
+        self.assertEqual(pin.description, "Rusted catwalks, watch the floor.")
+        self.assertEqual(pin.pin_type, "building")
+        self.assertTrue(pin.pin_type_is_user_provided)
+
+    def test_omitted_pin_type_keeps_the_classifiable_default(self) -> None:
+        """No explicit type must leave the pin eligible for automatic classification."""
+        response = self._post({"name": "Somewhere", "latitude": 42.5, "longitude": -73.5})
+        self.assertEqual(response.status_code, 201, response.content)
+        pin = Pin.objects.get(uuid=response.json()["uuid"])
+        self.assertEqual(pin.pin_type, "location")
+        self.assertFalse(pin.pin_type_is_user_provided)
+
+    def test_unknown_pin_type_is_rejected(self) -> None:
+        response = self._post({"name": "Bad type", "latitude": 42.5, "longitude": -73.5, "pin_type": "spaceship"})
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(Pin.objects.filter(name="Bad type").exists())

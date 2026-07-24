@@ -168,7 +168,7 @@ class ApiKeyScope(TextChoices):
 
     PROFILE_READ = "profile:read", "Read your profile UUID"
     PINS_READ = "pins:read", "Read your pins (including deletions, for sync)"
-    PINS_WRITE = "pins:write", "Create pins on your behalf"
+    PINS_WRITE = "pins:write", "Create or suggest pins on your behalf"
     PUSH_MANAGE = "push:manage", "Register and remove this device's push notifications"
 
 

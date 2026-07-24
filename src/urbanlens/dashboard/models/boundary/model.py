@@ -27,6 +27,20 @@ class BoundaryType(TextChoices):
     BUILDING = "building", "Building"
 
 
+class BoundarySource(TextChoices):
+    """External provider a candidate boundary's geometry came from.
+
+    Only providers whose geometry is authoritative enough to serve as a
+    location's *official* matching boundary get a value here - REData (county
+    assessor GIS) and Overpass (OpenStreetMap). Blank (``""``) marks every
+    other row: the canonical location default, wiki/pin customizations, and
+    legacy rows from before per-source candidates existed.
+    """
+
+    REDATA = "redata", "County records (REData)"
+    OVERPASS = "overpass", "OpenStreetMap (Overpass)"
+
+
 class Boundary(abstract.DashboardModel):
     """A typed spatial boundary (property or building) for a place.
 
@@ -39,6 +53,15 @@ class Boundary(abstract.DashboardModel):
         (even when it found nothing). These rows are the only ones used for
         point→location matching, and only via ``generated_polygon`` so a
         user-drawn shape can never inflate a location's match area.
+
+    Source candidate (location=<Location>, source="redata"|"overpass", pin=None, wiki=None, profile=None):
+        A per-provider copy of a location's externally-sourced property
+        geometry, kept so users can vote on which provider's boundary is most
+        accurate (see ``services.boundary_voting``). One per (location,
+        boundary_type, source). Candidates never participate in
+        point→location matching directly - the winning candidate's polygon is
+        materialized onto the canonical location-default row (``source=""``),
+        which every matching path already consumes.
 
     Wiki boundary (wiki=<Wiki>, pin=None):
         Community-drawn customization made on the wiki page. Overrides the
@@ -60,6 +83,9 @@ class Boundary(abstract.DashboardModel):
     """
 
     boundary_type = CharField(max_length=20, choices=BoundaryType.choices, default=BoundaryType.PROPERTY)
+    # External provider for source-candidate rows (see class docstring).
+    # Blank on the canonical default, wiki, and pin rows.
+    source = CharField(max_length=20, choices=BoundarySource.choices, blank=True, default="")
 
     # User-drawn boundary (clearable). None = fall back to generated_polygon.
     polygon = MultiPolygonField(geography=True, srid=4326, null=True, blank=True)
@@ -116,8 +142,13 @@ class Boundary(abstract.DashboardModel):
 
     @property
     def is_location_default(self) -> bool:
-        """True if this is the shared location-default row (no pin, wiki, or profile)."""
-        return self.pin_id is None and self.wiki_id is None and self.profile_id is None
+        """True if this is the shared location-default row (no pin, wiki, profile, or source)."""
+        return self.pin_id is None and self.wiki_id is None and self.profile_id is None and not self.source
+
+    @property
+    def is_source_candidate(self) -> bool:
+        """True if this is a per-provider candidate row for boundary voting."""
+        return bool(self.source) and self.pin_id is None and self.wiki_id is None and self.profile_id is None
 
     @property
     def coordinate_location(self):
@@ -157,6 +188,8 @@ class Boundary(abstract.DashboardModel):
             owner = f"pin={self.pin_id}, profile={self.profile_id}"
         elif self.wiki_id:
             owner = f"wiki={self.wiki_id}"
+        elif self.source:
+            owner = f"location={self.location_id}, source={self.source}"
         else:
             owner = f"location={self.location_id}"
         return f"Boundary({self.boundary_type}, {owner})"
@@ -168,8 +201,13 @@ class Boundary(abstract.DashboardModel):
         constraints = [
             UniqueConstraint(
                 fields=["location", "boundary_type"],
-                condition=Q(pin__isnull=True, wiki__isnull=True, profile__isnull=True),
+                condition=Q(pin__isnull=True, wiki__isnull=True, profile__isnull=True, source=""),
                 name="boundary_unique_location_default",
+            ),
+            UniqueConstraint(
+                fields=["location", "boundary_type", "source"],
+                condition=Q(pin__isnull=True, wiki__isnull=True, profile__isnull=True) & ~Q(source=""),
+                name="boundary_unique_source_candidate",
             ),
             UniqueConstraint(
                 fields=["wiki", "boundary_type"],

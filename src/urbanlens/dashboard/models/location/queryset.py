@@ -67,7 +67,7 @@ class LocationQuerySet(abstract.PublicDashboardQuerySet):
         property and building boundaries count - a point inside a building is
         on that building's property.
         """
-        return Q(boundaries__pin__isnull=True) & Q(boundaries__wiki__isnull=True) & Q(boundaries__profile__isnull=True) & Q(boundaries__generated_polygon__contains=pt)
+        return Q(boundaries__pin__isnull=True) & Q(boundaries__wiki__isnull=True) & Q(boundaries__profile__isnull=True) & Q(boundaries__source="") & Q(boundaries__generated_polygon__contains=pt)
 
     def _locations_without_boundary_polygon(self):
         """Return locations that have no default *generated* boundary polygon."""

@@ -48,6 +48,14 @@
         <ul class="trip-activity-list">
             {% for item in activities_with_index %}
             {% with act=item.activity act_index=item.index %}
+            {% if item.leg %}
+            {# Driving leg from the previous visible stop (cached OSRM). Only #}
+            {# rendered on the full Upcoming itinerary - see tripSetTab.      #}
+            <li class="trip-activity-leg" aria-hidden="true">
+                <i class="material-symbols-outlined">directions_car</i>
+                <span>{{ item.leg.duration_display }} &middot; {{ item.leg.distance_display }}</span>
+            </li>
+            {% endif %}
             <li class="trip-activity-item{% if act.status == 'completed' %} trip-activity--completed{% endif %}"
                 id="trip-activity-{{ act.id }}"
                 data-act-id="{{ act.id }}"

@@ -21,9 +21,10 @@
         {% csrf_token %}
         <input type="hidden" name="source" value="{{ source|default:'list' }}">
         <div class="form-row">
-            <label for="trip-name">Trip name <span class="required">*</span></label>
-            <input type="text" name="name" id="trip-name" required
-                   placeholder="e.g. Detroit Factory Run" maxlength="255">
+            <label for="trip-name">Trip name</label>
+            <input type="text" name="name" id="trip-name"
+                   placeholder="e.g. Rust Belt Ramble" maxlength="255">
+            <span class="settings-help">Leave blank and we'll name it for you.</span>
         </div>
         <div class="form-row">
             <label for="trip-description">Description</label>
@@ -94,5 +95,23 @@
             if (row) { row.hidden = true; }
             if (toggle) { toggle.hidden = false; }
         };
+
+        // Rotate the name placeholder so the suggestion doesn't go stale
+        // (UL-360). Display-only flavor: blank submissions get their real
+        // generated name server-side (services.trip_names).
+        var _tripNameIdeas = [
+            'Rust Belt Ramble', 'Backroads Recon', 'Off-Season Loop', 'First Light Run',
+            'Smokestack Circuit', 'Freight Line Detour', 'Powerhouse Crawl', 'Overgrown Wander',
+            'Turbine Hall Survey', 'Night Shift Expedition', 'Millpond Weekender', 'Watchtower Field Trip',
+        ];
+        var _tripNameInput = document.getElementById('trip-name');
+        var _tripCreateDialog = document.getElementById('create-trip-dialog');
+        function _tripRotateNamePlaceholder() {
+            if (_tripNameInput) {
+                _tripNameInput.placeholder = 'e.g. ' + _tripNameIdeas[Math.floor(Math.random() * _tripNameIdeas.length)];
+            }
+        }
+        _tripRotateNamePlaceholder();
+        if (_tripCreateDialog) { _tripCreateDialog.addEventListener('close', _tripRotateNamePlaceholder); }
     })();
 </script>

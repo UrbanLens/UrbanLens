@@ -145,7 +145,10 @@ def _build_filter_form_context(profile: Profile, filter_uuid) -> dict:
         "security_fields": SECURITY_FIELDS,
         "security_level_choices": SecurityLevel.choices,
         "security_values": security_values,
-        "has_label_groups": bool(saved_filter.criteria.get("label_groups")) if saved_filter else False,
+        # The rich picker seeds itself from the stored structured groups when
+        # present (formulas round-trip now - see _saved_filter_label_picker.html),
+        # falling back to the flat include/exclude sets below.
+        "initial_label_groups_json": json.dumps(saved_filter.criteria["label_groups"]) if saved_filter and saved_filter.criteria.get("label_groups") else "",
         "selected_tag_ids": initial.get("tags", []),
         "selected_exclude_tag_ids": initial.get("exclude_tags", []),
         "icon_categories": ICON_CATEGORIES,

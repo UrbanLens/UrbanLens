@@ -209,13 +209,13 @@ def push_trip_to_calendar(trip_id: int) -> int:
 
 
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
-def run_user_data_export(self, user_id: int, export_types: list[str], export_dir: str, base_url: str, job_id: str | None = None) -> bool:
+def run_user_data_export(self, user_id: int, export_types: list[str], export_dir: str, base_url: str, job_id: str | None = None, email_to_user: bool = False) -> bool:
     """Build a user's data export archive outside the web request."""
     from urbanlens.dashboard.services.export import run_export
 
     logger.info("Starting data export for user %s", user_id)
     update_task_progress(self, current=0, total=1, message="Preparing export...")
-    success = run_export(user_id, export_types, export_dir, base_url, job_id=job_id)
+    success = run_export(user_id, export_types, export_dir, base_url, job_id=job_id, email_to_user=email_to_user)
     if success:
         update_task_progress(self, current=1, total=1, message="Export ready")
         logger.info("Finished data export for user %s", user_id)
@@ -1728,6 +1728,49 @@ def send_direct_message_text_alerts_if_unread(message_id: int) -> None:
     if is_text_alert_debounced(message.sender_id, message.recipient_id):
         return
     send_message_text_alerts_now(message)
+
+
+@shared_task
+def prune_pin_tombstones() -> int:
+    """Remove pin-deletion tombstones older than the sync retention window.
+
+    Scheduled daily (see ``CELERY_BEAT_SCHEDULE``). Retention is
+    ``services.pin_sync.TOMBSTONE_RETENTION`` - the longest supported
+    sync-client offline gap. A client whose ``deleted_since`` predates that
+    floor gets an HTTP 410 full-resync signal from ``pins/deleted/`` instead
+    of a silently incomplete deletions feed, so pruning can never cause a
+    quiet miss.
+
+    Returns:
+        Number of tombstone rows deleted.
+    """
+    from urbanlens.dashboard.models.pin_tombstone import PinTombstone
+    from urbanlens.dashboard.services.pin_sync import TOMBSTONE_RETENTION
+
+    deleted = PinTombstone.objects.prune_older_than(TOMBSTONE_RETENTION)
+    if deleted:
+        logger.info("Pruned %d pin tombstone(s) older than %s", deleted, TOMBSTONE_RETENTION)
+    return deleted
+
+
+@shared_task
+def evaluate_public_pin_candidates() -> dict[str, int]:
+    """Run the public-pin eligibility engine and settle open votes.
+
+    Scheduled hourly (see ``CELERY_BEAT_SCHEDULE``). Everything lives in
+    ``services.public_pins`` - this is only the beat entry point. Idempotent
+    at any frequency; hourly keeps vote outcomes and suggestion fan-out
+    reasonably fresh without the engine's aggregate queries running hot.
+
+    Returns:
+        Transition counters (opened/reopened/suspended/passed/rejected).
+    """
+    from urbanlens.dashboard.services import public_pins
+
+    counters = public_pins.evaluate_public_pin_candidates()
+    if any(counters.values()):
+        logger.info("Public-pin evaluation: %s", counters)
+    return counters
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})

@@ -64,12 +64,20 @@ class GoogleMapsPhotoProxyView(LoginRequiredMixin, View):
     """GET media-photo/google-maps/<photo_name>/ - proxies one Google Maps place photo."""
 
     def get(self, request: HttpRequest, photo_name: str) -> HttpResponse:
-        from urbanlens.dashboard.services.apis.locations.google.places import GooglePlacesGateway
-
         # Reject unsigned/tampered references before touching the cache or the
         # upstream API - the only legitimate URLs are the ones the gallery
         # itself rendered (which carry a signature over the exact photo name).
-        if not hmac.compare_digest(request.GET.get("sig", ""), sign_photo_name(photo_name)):
+        # The producer signs the RAW name but reverses the URL with the name
+        # percent-encoded (photo names contain slashes), and Django's <path:>
+        # converter hands the still-encoded segment through - so accept the
+        # signature against either form rather than caring which decoding
+        # depth this deployment's URL stack landed on.
+        from urllib.parse import unquote
+
+        from urbanlens.dashboard.services.apis.locations.google.places import GooglePlacesGateway
+
+        sig = request.GET.get("sig", "")
+        if not (hmac.compare_digest(sig, sign_photo_name(photo_name)) or hmac.compare_digest(sig, sign_photo_name(unquote(photo_name)))):
             return HttpResponse(status=404)
 
         cache_key = f"ul_gmaps_photo_{hashlib.sha256(photo_name.encode()).hexdigest()}"

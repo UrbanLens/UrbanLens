@@ -10,7 +10,7 @@ from typing import Any
 import uuid
 
 from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
-from django.http import FileResponse, HttpRequest, HttpResponse, JsonResponse
+from django.http import FileResponse, Http404, HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.views import View
@@ -126,7 +126,9 @@ class ExportStartView(LoginRequiredMixin, View):
         """Accept export parameters, enqueue a Celery task, return progress fragment.
 
         Args:
-            request: POST with ``export_types`` list and optional ``google_takeout`` flag.
+            request: POST with ``export_types`` list, optional ``google_takeout``
+                flag, and optional ``email_export`` flag (email the finished
+                archive to the account address, UL-373).
 
         Returns:
             Rendered export progress partial so HTMX can swap it in.
@@ -141,6 +143,8 @@ class ExportStartView(LoginRequiredMixin, View):
                 status=400,
             )
 
+        email_to_user = bool(request.POST.get("email_export"))
+
         job_id = str(uuid.uuid4())
         exp_dir = _export_dir(job_id)
         os.makedirs(exp_dir, exist_ok=True)
@@ -150,7 +154,7 @@ class ExportStartView(LoginRequiredMixin, View):
         from urbanlens.dashboard.services.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import run_user_data_export
 
-        result = safely_enqueue_task(run_user_data_export, request.user.pk, export_types, exp_dir, base_url, job_id)
+        result = safely_enqueue_task(run_user_data_export, request.user.pk, export_types, exp_dir, base_url, job_id, email_to_user)
         if result is None:
             ExportJobStatus(job_id).write("error", 0, "Export queue is unavailable. Please try again later.", user_id=request.user.pk)
             return render(
@@ -253,6 +257,48 @@ class ExportDownloadView(LoginRequiredMixin, View):
         fh = open(zip_path, "rb")  # noqa: SIM115 - FileResponse takes ownership and closes the handle
         response = FileResponse(fh, content_type="application/zip")
         response["Content-Disposition"] = f'attachment; filename="urbanlens_export_{today}.zip"'
+        return response
+
+
+class ExportFormatDownloadView(LoginRequiredMixin, View):
+    """Download ALL of the requester's root pins as a single GeoJSON/KML/GPX/CSV file (UL-382).
+
+    The quick, synchronous counterpart to the full ZIP export above: no Celery
+    job, no polling - one GET straight to a file download, using the same
+    per-format writers the targeted bulk export uses
+    (``controllers.pin_bulk.PinBulkExportView``). Root pins only: detail (sub)
+    pins share their parent's site and would just duplicate coordinates in
+    formats that carry nothing but name/coords/description.
+    """
+
+    def get(self, request: HttpRequest, fmt: str) -> HttpResponse:
+        """Serve every root pin the requester owns in the requested format.
+
+        Args:
+            request: The authenticated HTTP request.
+            fmt: Format key from ``EXPORT_FORMATS`` (geojson, kml, gpx, csv).
+
+        Returns:
+            The serialized file with an attachment Content-Disposition.
+
+        Raises:
+            Http404: If ``fmt`` is not a known export format.
+        """
+        from urbanlens.dashboard.models.pin.model import Pin
+        from urbanlens.dashboard.services.export_formats import EXPORT_FORMATS
+
+        if fmt not in EXPORT_FORMATS:
+            raise Http404("Unknown export format.")
+
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        pins = Pin.objects.filter(profile=profile, parent_pin__isnull=True).select_related("location").order_by("created")
+
+        writer, extension, content_type = EXPORT_FORMATS[fmt]
+        content = writer(pins)
+
+        today = datetime.date.today().isoformat()
+        response = HttpResponse(content, content_type=content_type)
+        response["Content-Disposition"] = f'attachment; filename="urbanlens_pins_{today}.{extension}"'
         return response
 
 

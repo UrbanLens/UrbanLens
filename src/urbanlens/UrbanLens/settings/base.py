@@ -295,6 +295,17 @@ CELERY_BEAT_SCHEDULE = {
         "task": "urbanlens.dashboard.tasks.upgrade_placeholder_pin_names",
         "schedule": 60 * 60,
     },
+    # Daily is plenty: retention is measured in hundreds of days
+    # (services.pin_sync.TOMBSTONE_RETENTION), and the pins/deleted/ feed's 410
+    # full-resync signal guards clients against any pruning-induced gap.
+    "pin-tombstone-pruning": {
+        "task": "urbanlens.dashboard.tasks.prune_pin_tombstones",
+        "schedule": 24 * 60 * 60,
+    },
+    "public-pin-candidate-evaluation": {
+        "task": "urbanlens.dashboard.tasks.evaluate_public_pin_candidates",
+        "schedule": 60 * 60,
+    },
 }
 
 
@@ -548,10 +559,14 @@ SPECTACULAR_SETTINGS = {
 # with the same required_scopes declarations.
 OAUTH2_PROVIDER = {
     "PKCE_REQUIRED": True,
+    # The native app's redirect targets: its custom scheme on Android/iOS, and
+    # RFC 8252 loopback (any port - django-oauth-toolkit matches loopback IPs
+    # port-insensitively) on desktop. "https" stays for any future web client.
+    "ALLOWED_REDIRECT_URI_SCHEMES": ["https", "http", "urbanlens"],
     "SCOPES": {
         "profile:read": "Read your profile UUID",
         "pins:read": "Read your pins (including deletions, for sync)",
-        "pins:write": "Create pins on your behalf",
+        "pins:write": "Create or suggest pins on your behalf",
         "push:manage": "Register and remove this device's push notifications",
     },
     "DEFAULT_SCOPES": ["profile:read", "pins:read", "pins:write", "push:manage"],
