@@ -66,20 +66,18 @@ reporter considers too slow to refresh.
 
 ---
 
-## UL-255: "Remember last map position" - server side verified correct; needs a browser repro
+## ~~UL-255: "Remember last map position"~~ (RESOLVED 2026-07-23 - browser-verified WORKING, recommend closing)
 
-**Status 2026-07-23**: Jess confirmed the URL-params-win precedence is intended, and doesn't
-remember which navigation path showed the bug - will re-test. Stays open pending that repro.
-
-The whole server chain is verified correct (`MapCenterForm.save()`, `get_map_center()`,
-`SaveMapPositionView` debounced + gated on `map_center_mode == REMEMBER`, the map page's
-debounced save with `sendBeacon` fallback). The two scenarios to distinguish when re-testing:
-
-1. **Fresh navigation** (nav link / new tab / bookmark, no `?lat=&lng=&zoom=` in the URL) loads
-   the wrong starting position → a real defect in the REMEMBER chain not yet found.
-2. **Same-tab reload** after panning → the URL already carries view params from the
-   shareable-view sync (`pages/map/index.html` `_parseMapViewFromUrl`, which takes absolute
-   priority over `_serverCenter`) → working as designed; close the ticket.
+**RESOLVED 2026-07-23**: reproduced the exact suspect scenario in a real browser against dev
+(Playwright, REMEMBER mode enabled, remembered position cleared first): two real mouse-drag
+pans fired 2 debounced POSTs to `settings/map-position/` with the panned coordinates, and a
+**fresh navigation to the bare map URL** (no `?lat/lng/zoom`) restored the view to the exact
+remembered position - delta 0.00000°/0.00000°, zoom matched. The REMEMBER chain works
+end-to-end on fresh navigation, and Jess confirmed the other scenario (same-tab reload where
+URL params win) is intended behavior. Both possible readings of the original report are
+therefore accounted for; recommend closing UL-255. If it recurs, capture the exact
+navigation path - the repro script is `ul255.js` in this session's scratchpad pattern
+(login → pan → fresh goto → compare `map.getCenter()`).
 
 ---
 
@@ -198,20 +196,24 @@ audience rules.
 
 ---
 
-## Hardcoded (non-theme-aware) `#2563eb`/`#4f46e5` blue in `_explainer.scss`, `_map.scss`, `_e2ee.scss`
+## ~~Hardcoded (non-theme-aware) `#2563eb`/`#4f46e5` blue in `_explainer.scss`, `_map.scss`, `_e2ee.scss`~~ (RESOLVED 2026-07-23 - browser-verified acceptable in both themes, no change needed)
 
-**Status 2026-07-23**: Jess chose to wait for a browser-verification session; leave untouched
-until then.
+**RESOLVED 2026-07-23**: the browser verification the entry was waiting for happened - the
+components were rendered in BOTH themes (real login on dev; the explainer/toggle/E2EE-button
+composite via an injected exact-markup probe, plus the map onboarding card observed live
+during the label-picker verification) and none is a legibility bug:
 
-These three files use the same blue (`#2563eb` in `_explainer.scss`/`_map.scss`, `#4f46e5` in
-`_e2ee.scss`) as genuine hardcoded literals - `color: #2563eb;`, several `rgba(37, 99, 235,
-.NN)` washes, and `linear-gradient(135deg, #2563eb, #06b6d4)` gradients - not the broken
-`var(--undefined, #hex)` references a prior fix already converted to `--ul-primary-color`.
-`_explainer.scss` builds a whole small design system out of this blue (border/background/text
-coordinated at different opacities), so a blind find-replace on just the solid instances would
-leave the rgba() washes mismatched. Verifying each is genuinely a dark-mode legibility bug (vs.
-a component whose surface is intentionally dark in both themes) needs checking each component's
-rendered surface.
+- **Explainer** (`.ul-page-explainer` + the (?) toggle): legible in light and dark; the blue
+  "TIP" kicker on the dark glass panel is the lowest-contrast piece but reads clearly (bold,
+  uppercase, short) - deliberate branding, not breakage.
+- **Map onboarding card** (`_map.scss` gradient icon + `FAST START` eyebrow): verified live
+  in dark mode during the picker work - legible.
+- **E2EE** (`#4f46e5`): a solid indigo button with white text (theme-independent by
+  construction) and a title-icon accent - fine in both themes.
+
+Per Jess's decision these were left untouched; converting them to `--ul-primary-color`
+tokens remains optional polish, not a defect. Screenshot evidence: `blues-probe-dark.png` /
+`blues-probe-light.png` from this session's verification run.
 
 ---
 
@@ -229,15 +231,21 @@ matches rather than excluding the latter.
 
 ---
 
-## Overpass deploy-side follow-up: raise the openresty 90s proxy cap (found 2026-07-22)
+## Overpass deploy-side follow-up: raise the openresty 90s proxy cap (found 2026-07-22; edge box located 2026-07-23)
 
 The self-hosted Overpass instance (`overpass.osm.urbanlens.org`, now the primary endpoint) sits
 behind an openresty reverse proxy that cuts every connection at exactly 90s, regardless of the
 Overpass `[timeout:N]` the client requested - the benchmark's only self-hosted failures were
 region-scale scans hitting this cap, not Overpass giving up (see
 `docs/overpass-mirror-test.md`). Until the proxy timeout is raised above the intended
-`[timeout:N]` ceiling, any query needing >90s fails at the proxy. This is configuration on the
-Overpass host, not in this repo.
+`[timeout:N]` ceiling, any query needing >90s fails at the proxy.
+
+**Narrowed 2026-07-23**: the Overpass container itself runs on chiron
+(`overpass`, `wiktorn/overpass-api:latest`, host port 21890), but the openresty is NOT on
+chiron (no 80/443 listener, no openresty/nginx service there; the domain resolves to
+163.182.80.211, a separate edge box proxying to chiron:21890). Raising the cap means editing
+`proxy_read_timeout`/`proxy_send_timeout` (or the openresty equivalent) on that edge box -
+access only Jess has.
 
 ---
 
