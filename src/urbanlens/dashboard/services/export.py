@@ -19,6 +19,11 @@ logger = logging.getLogger(__name__)
 
 EXPORT_TTL_SECONDS = 3600
 
+#: Largest export ZIP that gets attached to the "your export is ready" email
+#: directly (UL-373); anything bigger gets a download link instead, so the
+#: email never blows past typical mailbox attachment limits.
+EMAIL_ATTACHMENT_MAX_BYTES = 15 * 1024 * 1024
+
 VALID_EXPORT_TYPES = frozenset(
     {
         "profile",
@@ -113,7 +118,7 @@ def schedule_export_cleanup(export_dir_path: str, job_status: ExportJobStatus | 
         logger.warning("Unable to schedule cleanup for export directory %s", export_dir_path)
 
 
-def run_export(user_id: int, export_types: list[str], export_dir_path: str, base_url: str, *, job_id: str | None = None) -> bool:
+def run_export(user_id: int, export_types: list[str], export_dir_path: str, base_url: str, *, job_id: str | None = None, email_to_user: bool = False) -> bool:
     """Run all export steps for a user and return True on success.
 
     Args:
@@ -123,6 +128,10 @@ def run_export(user_id: int, export_types: list[str], export_dir_path: str, base
         base_url: Absolute site root URL, used to build pin detail URLs.
         job_id: UUID string for this export job. Derived from ``export_dir_path``
             basename when not provided, but callers should always pass it explicitly.
+        email_to_user: When True, email the finished export to the user's account
+            address (UL-373) - see :func:`send_export_email`. Email problems (no
+            address on file, delivery failure) never fail the export itself; the
+            outcome is surfaced through the job status message instead.
     """
     from django.contrib.auth import get_user_model
     from django.core.exceptions import ObjectDoesNotExist
@@ -172,6 +181,7 @@ def run_export(user_id: int, export_types: list[str], export_dir_path: str, base
             export_dir_path=export_dir_path,
             temp_dir=temp_dir,
             base_url=base_url,
+            email_to_user=email_to_user,
         )
         return True
     except Exception:
@@ -193,6 +203,7 @@ def _run_export_steps(
     export_dir_path: str,
     temp_dir: str,
     base_url: str,
+    email_to_user: bool = False,
 ) -> None:
     _write_manifest(profile, temp_dir, export_types)
 
@@ -207,7 +218,13 @@ def _run_export_steps(
     ExportJobStatus(job_id).write("running", 90, "Creating archive...")
     _build_zip(export_dir_path, temp_dir)
     shutil.rmtree(temp_dir, ignore_errors=True)
-    ExportJobStatus(job_id).write("done", 100, "Export ready!")
+
+    message = "Export ready!"
+    if email_to_user:
+        ExportJobStatus(job_id).write("running", 95, "Sending email...")
+        email_note = send_export_email(profile.user, export_dir_path, base_url, job_id=job_id)
+        message = f"Export ready! {email_note}"
+    ExportJobStatus(job_id).write("done", 100, message)
 
 
 def _resolve_target(obj: Any) -> tuple[str, str, str]:
@@ -233,6 +250,78 @@ def _build_zip(export_dir_path: str, temp_dir: str) -> None:
                 file_path = os.path.join(root, filename)
                 arcname = os.path.join(f"urbanlens_export_{today}", os.path.relpath(file_path, temp_dir))
                 zf.write(file_path, arcname)
+
+
+def send_export_email(user: Any, export_dir_path: str, base_url: str, *, job_id: str) -> str:
+    """Email the finished export ZIP to the user's account address (UL-373).
+
+    Small archives (up to ``EMAIL_ATTACHMENT_MAX_BYTES``) are attached
+    directly; larger ones get a link to the existing authenticated download
+    endpoint instead, which stays valid until the job's artifacts expire
+    (``EXPORT_TTL_SECONDS``). Follows the established outbound-email pattern
+    (see ``services.account_deletion._send_email``): ``EmailMultiAlternatives``
+    with the site's default from-address, HTML alternative rendered from a
+    ``dashboard/email/`` template, and delivery failures logged rather than
+    raised - an email problem must never fail an otherwise-finished export.
+
+    Args:
+        user: The Django user the export belongs to.
+        export_dir_path: Filesystem path of the job directory holding ``export.zip``.
+        base_url: Absolute site root URL (same value the export pipeline receives).
+        job_id: UUID string for this export job, used to build the download URL.
+
+    Returns:
+        A short user-facing sentence describing the outcome, appended to the
+        job's "done" status message (emailed as attachment, emailed as link,
+        no address on file, or send failure).
+    """
+    import smtplib
+
+    from django.core.mail import EmailMultiAlternatives
+    from django.template.loader import render_to_string
+    from django.urls import reverse
+
+    email = getattr(user, "email", "") or ""
+    if not email:
+        logger.info("Export email requested but user %s has no email address; skipping", getattr(user, "pk", None))
+        return "Your account has no email address, so the export was not emailed."
+
+    zip_path = os.path.join(export_dir_path, "export.zip")
+    try:
+        zip_size = os.path.getsize(zip_path)
+    except OSError:
+        logger.exception("Export email: archive missing for job %s", job_id)
+        return "The export email could not be sent."
+
+    attach = zip_size <= EMAIL_ATTACHMENT_MAX_BYTES
+    download_url = f"{base_url.rstrip('/')}{reverse('tools.export.download', kwargs={'job_id': job_id})}"
+    today = date.today().isoformat()
+    filename = f"urbanlens_export_{today}.zip"
+
+    subject = "Your UrbanLens data export is ready"
+    if attach:
+        text_body = f"Your UrbanLens data export is attached.\n\nIt is also available to download for about an hour: {download_url}"
+    else:
+        text_body = f"Your UrbanLens data export is ready.\n\nThe archive was too large to attach, so download it here (available for about an hour): {download_url}"
+    html_body = render_to_string(
+        "dashboard/email/export_ready.html",
+        {"attached": attach, "download_url": download_url, "filename": filename},
+    )
+
+    try:
+        msg = EmailMultiAlternatives(subject=subject, body=text_body, from_email=None, to=[email])
+        msg.attach_alternative(html_body, "text/html")
+        if attach:
+            with open(zip_path, "rb") as fh:
+                msg.attach(filename, fh.read(), "application/zip")
+        msg.send()
+    except (smtplib.SMTPException, OSError):
+        logger.exception("Failed to send export email for job %s to user %s", job_id, getattr(user, "pk", None))
+        return "The export email could not be sent - you can still download it below."
+
+    if attach:
+        return "A copy was emailed to you."
+    return "A download link was emailed to you (the archive was too large to attach)."
 
 
 # -- Manifest ------------------------------------------------------------------

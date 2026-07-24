@@ -209,13 +209,13 @@ def push_trip_to_calendar(trip_id: int) -> int:
 
 
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
-def run_user_data_export(self, user_id: int, export_types: list[str], export_dir: str, base_url: str, job_id: str | None = None) -> bool:
+def run_user_data_export(self, user_id: int, export_types: list[str], export_dir: str, base_url: str, job_id: str | None = None, email_to_user: bool = False) -> bool:
     """Build a user's data export archive outside the web request."""
     from urbanlens.dashboard.services.export import run_export
 
     logger.info("Starting data export for user %s", user_id)
     update_task_progress(self, current=0, total=1, message="Preparing export...")
-    success = run_export(user_id, export_types, export_dir, base_url, job_id=job_id)
+    success = run_export(user_id, export_types, export_dir, base_url, job_id=job_id, email_to_user=email_to_user)
     if success:
         update_task_progress(self, current=1, total=1, message="Export ready")
         logger.info("Finished data export for user %s", user_id)
