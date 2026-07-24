@@ -37,9 +37,18 @@
     <section id="sg-settings-panel" class="spotguessr-panel card">
         <h2>Play SpotGuessr</h2>
         <p class="spotguessr-panel-hint">
-            Guess where a photo from one of your own pinned locations was taken. Only places you've pinned are ever used.
+            Guess locations you've pinned yourself - or, in a multiplayer game, locations every invited
+            player has pinned.
         </p>
         <form id="sg-start-form" class="spotguessr-settings-form">
+            <div class="spotguessr-field">
+                <label for="sg-mode">Mode</label>
+                <select id="sg-mode">
+                    {% for value, label in modes %}
+                    <option value="{{ value }}">{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
             <div class="spotguessr-field">
                 <label for="sg-difficulty">Difficulty</label>
                 <input type="range" id="sg-difficulty" min="0" max="100" value="50">
@@ -49,14 +58,18 @@
                 <label for="sg-rounds">Rounds</label>
                 <input type="number" id="sg-rounds" min="{{ min_rounds }}" max="{{ max_rounds }}" value="{{ default_rounds }}">
             </div>
-            <div class="spotguessr-field spotguessr-field--checkbox">
+            <div class="spotguessr-field spotguessr-field--checkbox" data-mode-only="photos">
                 <label><input type="checkbox" id="sg-external-media-only"> Use only external media (not my own uploads)</label>
+            </div>
+            <div class="spotguessr-field spotguessr-field--checkbox" data-mode-only="photos">
+                <label><input type="checkbox" id="sg-date-guessing"> Also guess the photo's date (bonus points)</label>
+            </div>
+            <div class="spotguessr-field spotguessr-field--checkbox" data-mode-only="named_place">
+                <input type="hidden" name="use_aliases" value="off">
+                <label><input type="checkbox" id="sg-use-aliases" checked> Use aliases/nicknames (not just the official name)</label>
             </div>
             <div class="spotguessr-field spotguessr-field--checkbox">
                 <label><input type="checkbox" id="sg-require-visited-all"> Only places I've actually visited</label>
-            </div>
-            <div class="spotguessr-field spotguessr-field--checkbox">
-                <label><input type="checkbox" id="sg-date-guessing"> Also guess the photo's date (bonus points)</label>
             </div>
             <div class="spotguessr-field spotguessr-field--checkbox">
                 <label><input type="checkbox" id="sg-restrict-area"> Restrict to a chosen area</label>
@@ -65,8 +78,32 @@
                 <div id="sg-area-map" class="spotguessr-area-map"></div>
                 <p class="spotguessr-panel-hint">Draw a rectangle to restrict rounds to that area.</p>
             </div>
+
+            <div class="spotguessr-field spotguessr-field--checkbox">
+                <label><input type="checkbox" id="sg-play-with-friends"> Play with friends</label>
+            </div>
+            <div id="sg-invite-wrap" class="spotguessr-invite-wrap" hidden>
+                <p class="spotguessr-panel-hint">
+                    Only locations every invited friend has pinned too will ever come up.
+                </p>
+                <div id="sg-friend-list" class="spotguessr-friend-list">
+                    <p class="spotguessr-panel-hint">Loading friends&hellip;</p>
+                </div>
+            </div>
+
             <button type="submit" class="btn btn--primary btn--lg">Start playing</button>
         </form>
+    </section>
+
+    <section id="sg-lobby-panel" class="spotguessr-panel card" hidden>
+        <h2>Waiting room</h2>
+        <p class="spotguessr-panel-hint">Everyone needs to accept before you can start - locations are checked once the game begins.</p>
+        <ul id="sg-lobby-participants" class="spotguessr-lobby-list"></ul>
+        <div class="spotguessr-lobby-actions">
+            <button type="button" id="sg-invite-more-btn" class="btn btn--secondary" hidden>Invite another friend</button>
+            <button type="button" id="sg-join-lobby-btn" class="btn btn--primary" hidden>Accept invite</button>
+            <button type="button" id="sg-begin-btn" class="btn btn--primary btn--lg" hidden>Start the game</button>
+        </div>
     </section>
 
     <section id="sg-game-panel" class="spotguessr-panel card" hidden>
@@ -74,12 +111,14 @@
             <span id="sg-round-status"></span>
             <span id="sg-score-status"></span>
         </div>
+        <ul id="sg-scoreboard" class="spotguessr-scoreboard" hidden></ul>
         <div class="spotguessr-game-layout">
             <div class="spotguessr-photo-col">
-                <img id="sg-round-photo" class="spotguessr-round-photo" alt="Guess this location">
+                <img id="sg-round-photo" class="spotguessr-round-photo" alt="Guess this location" hidden>
+                <h3 id="sg-round-name" class="spotguessr-round-name" hidden></h3>
             </div>
             <div class="spotguessr-guess-col">
-                <div class="spotguessr-pin-search">
+                <div id="sg-pin-search-wrap" class="spotguessr-pin-search">
                     <input type="text" id="sg-pin-search" list="sg-pin-options" placeholder="Or search your pins&hellip;" autocomplete="off">
                     <datalist id="sg-pin-options"></datalist>
                 </div>
@@ -94,23 +133,29 @@
         <div id="sg-reveal-panel" class="spotguessr-reveal-panel" hidden>
             <h3 id="sg-reveal-title"></h3>
             <p id="sg-reveal-detail"></p>
+            <ul id="sg-reveal-results" class="spotguessr-reveal-results"></ul>
             <button type="button" id="sg-next-round-btn" class="btn btn--primary btn--lg">Next round</button>
+        </div>
+
+        <div id="sg-chat-panel" class="spotguessr-chat-panel" hidden>
+            <div id="sg-chat-log" class="spotguessr-chat-log"></div>
+            <form id="sg-chat-form" class="spotguessr-chat-form">
+                <input type="text" id="sg-chat-input" placeholder="Say something&hellip;" maxlength="1000" autocomplete="off">
+                <button type="submit" class="btn btn--secondary">Send</button>
+            </form>
         </div>
     </section>
 
     <section id="sg-summary-panel" class="spotguessr-panel card" hidden>
         <h2>Game over!</h2>
-        <p id="sg-summary-score"></p>
+        <ul id="sg-summary-scores" class="spotguessr-scoreboard"></ul>
         <button type="button" id="sg-play-again-btn" class="btn btn--primary btn--lg">Play again</button>
     </section>
 </div>
 
+{{ urls|json_script:"sg-urls" }}
 <script>
-    window.SPOTGUESSR_URLS = {
-        start: "{% url 'spotguessr.start' %}",
-        pins: "{% url 'spotguessr.pins' %}",
-        settings: "{% url 'spotguessr.settings' %}",
-    };
+    window.SPOTGUESSR_URLS = JSON.parse(document.getElementById('sg-urls').textContent);
 </script>
 <script type="module" src="{% static 'dashboard/js/spotguessr.js' %}"></script>
 {% endblock %}

@@ -5,7 +5,9 @@ from urbanlens.dashboard.models.spotguessr.model import (
     GLICKO2_SCALE,
     GameRound,
     GameSession,
+    GameSessionChatMessage,
     GameSessionParticipant,
+    GameSessionParticipantStatus,
     GameSessionStatus,
     Guess,
     LocationModeRating,
@@ -16,6 +18,8 @@ from urbanlens.dashboard.models.spotguessr.model import (
 from urbanlens.dashboard.models.spotguessr.queryset import (
     GameRoundManager,
     GameRoundQuerySet,
+    GameSessionChatMessageManager,
+    GameSessionChatMessageQuerySet,
     GameSessionManager,
     GameSessionParticipantManager,
     GameSessionParticipantQuerySet,

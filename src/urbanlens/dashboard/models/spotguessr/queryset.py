@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.spotguessr.model import (
         GameRound,
         GameSession,
+        GameSessionChatMessage,
         GameSessionParticipant,
         Guess,
         LocationModeRating,
@@ -62,13 +63,13 @@ class GameSessionQuerySet(abstract.DashboardQuerySet["GameSession"]):
     """QuerySet for GameSession."""
 
     def active(self) -> GameSessionQuerySet:
-        """Restrict to sessions still in progress."""
+        """Restrict to sessions still in progress (lobby or active)."""
         from urbanlens.dashboard.models.spotguessr.model import GameSessionStatus
 
-        return self.filter(status=GameSessionStatus.ACTIVE)
+        return self.filter(status__in=[GameSessionStatus.LOBBY, GameSessionStatus.ACTIVE])
 
     def for_profile(self, profile: Profile) -> GameSessionQuerySet:
-        """Restrict to sessions ``profile`` is (or was) a participant in."""
+        """Restrict to sessions ``profile`` is (or was) a participant in, any status."""
         return self.filter(participants__profile=profile).distinct()
 
 
@@ -79,9 +80,27 @@ class GameSessionManager(abstract.DashboardManager.from_queryset(GameSessionQuer
 class GameSessionParticipantQuerySet(abstract.DashboardQuerySet["GameSessionParticipant"]):
     """QuerySet for GameSessionParticipant."""
 
+    def joined(self) -> GameSessionParticipantQuerySet:
+        """Restrict to participants who have actually accepted (not just invited)."""
+        from urbanlens.dashboard.models.spotguessr.model import GameSessionParticipantStatus
+
+        return self.filter(status=GameSessionParticipantStatus.JOINED)
+
 
 class GameSessionParticipantManager(abstract.DashboardManager.from_queryset(GameSessionParticipantQuerySet)):
     """Manager for GameSessionParticipant."""
+
+
+class GameSessionChatMessageQuerySet(abstract.DashboardQuerySet["GameSessionChatMessage"]):
+    """QuerySet for GameSessionChatMessage."""
+
+    def for_session(self, session: GameSession) -> GameSessionChatMessageQuerySet:
+        """Every chat message in ``session``, oldest first."""
+        return self.filter(session=session).order_by("created")
+
+
+class GameSessionChatMessageManager(abstract.DashboardManager.from_queryset(GameSessionChatMessageQuerySet)):
+    """Manager for GameSessionChatMessage."""
 
 
 class GameRoundQuerySet(abstract.DashboardQuerySet["GameRound"]):

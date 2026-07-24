@@ -1,8 +1,8 @@
 # SpotGuessr (UL-391..UL-396)
 
-Status: DRAFT — rules normalized from product notes 2026-07-24. Phase 1 (UL-391) is being
-built now; UL-392..UL-396 are follow-up tickets, specified here so the data model doesn't
-need to be re-shaped when they land.
+Status: DRAFT — rules normalized from product notes 2026-07-24. Phase 1 (UL-391) shipped
+2026-07-24. Phase 2 (UL-392, multiplayer) and Phase 3 (UL-393, Named Place + Street View
+modes) are being built now; UL-394..UL-396 remain follow-up tickets.
 
 ## Goal
 
@@ -39,10 +39,13 @@ A Location is eligible for a round in session S iff:
    polygon/bbox) — the location's `point` falls inside it.
 4. **Not already used in this session** — GeoGuessr-style, no repeats within one
    playthrough.
-5. **Mode-specific data exists** — Photos mode additionally requires at least one eligible
-   `Image` (see Photo selection below); Named Place mode requires a non-blank wiki name (not
-   built in Phase 1); Street View mode requires the Street View API to have imagery (not
-   built in Phase 1).
+5. **Mode-specific data exists** — Photos mode requires at least one eligible `Image` (see
+   Photo selection below); Named Place mode requires a *meaningful* wiki name or alias (see
+   Named Place selection); Street View mode requires the Street View Static API to report
+   imagery coverage near the location (see Street View selection).
+6. **Joined, not just invited** (multiplayer only) — "every participant" means every profile
+   with `GameSessionParticipant.status = JOINED`. An invited-but-not-yet-accepted profile is
+   not yet a player and does not gate eligibility on their pins — see "Multiplayer sessions."
 
 ## Scoring: point vs. boundary distance
 
@@ -154,13 +157,184 @@ showing a stranger's private photo without consent would actually matter — see
 existing `ImageSource` enum — everything that isn't a plain personal upload already reads as
 "externally sourced": Wikimedia, Google Images, Smithsonian, etc.).
 
-## Solo vs. multiplayer (Phase 1 = solo only)
+## Solo vs. multiplayer
 
-`GameSession` and `GameSessionParticipant` are modeled as a proper many-participant session
-from the start (not a "solo-only" shape retrofitted later) because every eligibility/scoring
-rule already reads "all participants," not "the player." Phase 1 only ever creates
-single-participant sessions; UL-392 adds the invite/join/real-time-sync flow on top of the
-same tables.
+`GameSession` and `GameSessionParticipant` were modeled as a proper many-participant session
+from Phase 1 (not a "solo-only" shape retrofitted later) because every eligibility/scoring
+rule already reads "all participants," not "the player." Phase 1 only ever created
+single-participant sessions; UL-392 (below) adds the invite/join/real-time-sync flow on top
+of the same tables — no schema changes to the round/guess/rating path were needed, only a
+`status` field on the participant row and two new models (chat, and nothing else).
+
+## Multiplayer sessions (UL-392)
+
+### Lobby lifecycle
+
+A new `GameSessionStatus.LOBBY` precedes `ACTIVE`: a multiplayer session is created in
+`LOBBY`, sits there while people join, and only transitions to `ACTIVE` (creating round 1)
+when the host explicitly starts it. Solo sessions skip the lobby entirely — `start_solo_session`
+still creates an `ACTIVE` session with one `JOINED` participant, unchanged from Phase 1.
+
+```
+(created) → LOBBY ──host starts──▶ ACTIVE ──all rounds played──▶ COMPLETED
+                                       │
+                                       └──no eligible locations remain──▶ COMPLETED (early)
+```
+
+No `ABANDONED` transition is added by this phase — an inactive lobby just sits in `LOBBY`
+forever, harmlessly (see "not built" below).
+
+### Participants: invited vs. joined
+
+`GameSessionParticipant.status` (new field, `GameSessionParticipantStatus`: `INVITED` |
+`JOINED`) mirrors `TripMembership.status` exactly (`models/trips/model.py`) — the same
+model row that will later hold the accepted membership *is* the invite record, there is no
+separate `GameSessionInvite` model. The host's own row is created as `JOINED` immediately
+(`start_multiplayer_session`); every invitee's row is created as `INVITED`.
+
+- **Inviting**: friends-only, matching the trip-invite precedent (`controllers/trip.py`) —
+  `services.connections.get_connections(host)` gates who can be picked. Inviting a non-friend
+  is rejected server-side, not just hidden in the picker UI. One `GameSessionParticipant`
+  per invitee, plus one `NotificationLog` (`NotificationType.SPOTGUESSR_INVITE`) that reaches
+  the invitee live via the existing `notification_new` Channels push — no new notification
+  infra needed, just a new `NotificationType` value and a creation call, same shape as
+  `_notify_added_to_trip`.
+- **Joining**: `POST` flips `INVITED → JOINED` and broadcasts `participant.joined` to the
+  session's WebSocket group. A profile can only join a session they were invited to (404
+  otherwise, same not-found-not-forbidden convention as everywhere else in this feature).
+- **Starting**: host-only. Locks the roster — **no one can join after round 1 exists**. This
+  is a deliberate simplification (see "Explicitly not built" below): GeoGuessr-style private
+  lobbies don't support mid-game joins either, and supporting it here would mean a late
+  joiner either replays already-finished rounds (confusing) or skips them (breaks the
+  "N rounds, everyone plays the same N" scoreboard invariant).
+- **Eligibility uses only `JOINED` participants** — an invitee who never accepts must not
+  gate what locations are playable (rule 6 in "Eligibility" above). Similarly, "has everyone
+  guessed this round" and the final scoreboard both read `JOINED` participants only.
+
+### Real-time sync: `GameSessionConsumer`
+
+One `AsyncWebsocketConsumer`, one channel-layer group per session
+(`f"spotguessr_session_{session_id}"`) — modeled directly on `SafetyCheckinChatConsumer`
+(`dashboard/consumers.py`), **not** `DirectMessageConsumer`'s per-profile-group shape, since
+every participant genuinely needs the same broadcast (unlike a DM/group-chat's per-viewer
+identity-masked payloads, which don't apply here — session participants already see each
+other by name on the scoreboard). Route: `ws/spotguessr/session/<int:session_id>/`.
+
+`connect()` requires the connecting profile to already be a `GameSessionParticipant` (any
+status — an invitee should see the live lobby fill up before accepting) — 404-equivalent
+close code `4404` otherwise, `4500` for unexpected errors, matching every other consumer's
+convention.
+
+Broadcast event types (channel-layer `type`, dot-notation dispatched to `snake_case` handler
+methods per Channels convention):
+
+| Event | Sent when | Payload |
+|---|---|---|
+| `participant.joined` | An invitee accepts | profile id/username |
+| `session.started` | Host begins the game | round 1 (safe-serialized, no answer) |
+| `guess.submitted` | Any participant guesses | which profile, so others see "waiting on 2 more" — **not** their guess coordinates or score, which stay hidden until reveal |
+| `round.revealed` | The **last** joined participant guesses that round | the answer, every participant's distance/points, updated scoreboard totals |
+| `round.started` | The next round is generated (server-driven, right after a reveal broadcast) | round N (safe-serialized) |
+| `session.completed` | Final round revealed | full summary (same shape as `session_summary()`) |
+| `chat.message` | Any participant sends chat | sender, body, timestamp |
+
+The HTTP endpoints from Phase 1 (`start`/`round`/`guess`/`summary`) are unchanged and still
+work standalone (a solo session never opens a WebSocket at all) — multiplayer sessions use
+both: HTTP for the action that changes state (submitting a guess is still a POST, since it
+must be durably recorded even if the WebSocket briefly drops), and the WebSocket purely to
+*fan out* what happened to everyone else. `submit_guess()` in `services.spotguessr.session`
+is the single choke point that decides when a round is fully guessed and triggers both the
+rating update (unchanged from Phase 1) and the `round.revealed`/`round.started` broadcast.
+
+### Session chat
+
+`GameSessionChatMessage` (new model: `session` FK, `profile` FK, `body`, `created`) — plain
+text, no E2EE. Unlike `DirectMessage`/`GroupMessage`, session chat is inherently ephemeral
+match banter between people already visible to each other on the scoreboard, not a private
+conversation — the encryption machinery those models carry doesn't buy anything here and
+would add real complexity (key exchange, ciphertext fallback UI) for no privacy benefit.
+Sent and broadcast over the WebSocket only (`chat.message` incoming → save → broadcast) — no
+HTTP fallback send path in this phase (see "not built" below); read history is served over
+HTTP (`GET` the last N messages) so reconnecting/late-opening the page shows recent context.
+
+### Explicitly not built in UL-392 (tracked as follow-up, not silently dropped)
+
+- **Join-by-link** (inviting someone who isn't yet a friend). Friends-only matches this
+  app's existing invite model everywhere else and avoids a new "who can see this session
+  exists" exposure surface; revisit only if user feedback specifically asks for it.
+- **Mid-game joining / reconnecting after a dropped roster.** A session's roster is fixed at
+  `session.started`.
+- **Session abandonment/cleanup** for lobbies nobody ever starts, or active sessions where a
+  participant goes AFK forever (no timeout, no host-skip-round control). A stuck round simply
+  waits; the host can't currently force a reveal. Worth a follow-up if this proves annoying
+  in practice.
+- **HTTP fallback for sending chat** (mirroring `ws/messages/`'s pattern) — WebSocket-only
+  for now, consistent with keeping this phase's scope to what multiplayer actually needs.
+- **Voice chat** — still UL-395, unchanged.
+
+## Named Place and Street View modes (UL-393)
+
+### Named Place mode
+
+**Selection** (`services.spotguessr.named_place.candidate_name_for_location`): the location
+needs a *meaningful* name to show. Reuses `services.public_pins.is_meaningful_name()`
+verbatim (already filters blank/placeholder/coordinate-shaped strings — see
+`docs/designs/public-pins-by-vote.md`) rather than inventing a second heuristic:
+
+1. If `config.use_aliases` (default **True** — per spec, aliases are on by default with a
+   setting to turn them off) and the wiki has at least one meaningful `WikiAlias`, pick one
+   at random.
+2. Otherwise, fall back to `wiki.name` if meaningful.
+3. If neither is meaningful, the location is **not eligible** for a Named Place round this
+   session (excluded the same way Photos mode excludes a location with no usable photo —
+   `get_or_create_round` tries the next candidate rather than surfacing an unplayable round).
+
+No photo, no `Image` row involved at all — `GameRound.image` stays null for this mode.
+
+**Scoring**: always boundary-distance (`target_is_point = False`), never a point — this is
+the mode's whole reason to exist, restated from the "Scoring" section above: a name names a
+*place*, not a coordinate.
+
+**No search** — per spec, Named Place mode's guess UI is map-click only, with no "search my
+pins" affordance (the point of the mode is testing whether the player recognizes the name
+*without* being able to just look it up in their own pin list). The client omits the pin
+search box entirely when `round.mode == "named_place"`.
+
+### Street View mode
+
+**Selection** (`services.spotguessr.street_view.candidate_street_view_for_location`): calls
+the existing `GoogleMapsGateway.get_street_view_single()` (`services/apis/locations/google/
+maps.py`) — the same server-side fetch already used for the pin-detail Street View carousel,
+including its coverage-metadata check and radius-expansion search. Returns a base64
+`data:image/jpeg;base64,...` URI (never a client-exposed API key, never a raw Google Maps
+embed) or `None` if there's no coverage nearby, in which case the location is excluded from
+this session's Street View rounds the same way an image-less location is excluded from
+Photos mode. Wrapped in a broad `except Exception` at the call site — this is a paid,
+rate-limited external API on the critical path of picking a round, and a transient failure
+must degrade to "try another location," never crash round generation.
+
+**Scoring**: point-based (`target_is_point = True`), using the *location's own* `point` as
+the target coordinate (there is no `Image` row to carry a more specific point — Street View
+imagery is definitionally centered on the location's coordinate). Distance therefore behaves
+exactly like a coordinate-bearing photo, per the "Scoring" section above.
+
+**Search allowed** — like Photos mode (and unlike Named Place), the player may click the map
+or search their own pins.
+
+**Cost note**: Street View Static API calls are billed per request. `get_street_view_single()`
+already caches (`StreetViewProvider.get_street_view_slides()`'s
+`make_cache_key`/`SiteSettings.external_data_cache_days` wrapper), so repeat rounds at the
+same location within the cache window don't re-bill — no additional caching added here.
+
+### Shared plumbing change
+
+`get_or_create_round` (`services.spotguessr.session`) gained a per-mode branch: Photos calls
+`photos.candidate_image_for_location`, Named Place calls
+`named_place.candidate_name_for_location`, Street View calls
+`street_view.candidate_street_view_for_location`. All three return "nothing usable" as
+`None`/falsy and are handled identically — try the next candidate location, give up after
+`_MAX_LOCATION_ATTEMPTS`. `start_solo_session`'s Phase 1 restriction to `SpotGuessrMode.PHOTOS`
+is lifted; all three modes are now startable, solo or multiplayer.
 
 ## Config defaults (tunable — one dataclass, `SpotGuessrConfig`)
 
@@ -177,6 +351,8 @@ same tables.
 | `MIN_GAMES_FOR_DIFFICULTY_WEIGHTING` | 5 | below this, treat as neutral (1500) |
 | `MIN_SEPARATION_KM` | 0.5 | anti-clustering exclusion radius from the previous round |
 | Glicko-2: rating / RD / volatility / scale / τ | 1500 / 350 / 0.06 / 173.7178 / 0.5 | Glickman's published defaults |
+| `use_aliases` | True | Named Place mode; per-session config, not a site-wide constant |
+| `CHAT_HISTORY_LIMIT` | 50 | messages returned by the chat-history GET on reconnect |
 
 ## Social: ratings visibility
 
@@ -193,18 +369,23 @@ same tables.
 
 ## Phase mapping
 
-- **UL-391 (this pass)** — data model (ratings, session, round, guess, preference);
+- **UL-391 (shipped 2026-07-24)** — data model (ratings, session, round, guess, preference);
   Glicko-2 engine; eligibility engine; point/boundary distance scoring; date-guessing bonus;
   difficulty slider; geographic boundary filter; anti-clustering selection; solo-only Photos
   mode end to end (start session → round → guess → reveal → summary); own-rating + friends'
   -ratings-with-opt-out display. Models: `models/spotguessr/`. Services:
   `services/spotguessr/`. Controller: `controllers/spotguessr.py`. UI: Leaflet click-to-guess
   map + pin-search, `frontend/ts/entries/spotguessr.ts`.
-- **UL-392 (follow-up)** — multiplayer sessions: invite/join flow, a `GameSessionConsumer`
-  (Channels, mirroring `DirectMessageConsumer`'s group-per-session pattern) for round
-  sync/live scoreboard, and live text chat scoped to the session.
-- **UL-393 (follow-up)** — Named Place mode (boundary-distance guessing from a name/alias,
-  no search, with a setting to disable aliases) and Street View mode.
+- **UL-392 (this pass)** — multiplayer sessions: friends-only invite/join lobby
+  (`GameSessionParticipant.status`), a `GameSessionConsumer` (Channels, one group per
+  session) for round sync/live scoreboard, and WebSocket-only live text chat
+  (`GameSessionChatMessage`). See "Multiplayer sessions" above for the full design and its
+  explicit non-goals (join-by-link, mid-game joining, session cleanup/timeouts, chat's HTTP
+  fallback — all deferred, not silently dropped).
+- **UL-393 (this pass)** — Named Place mode (boundary-distance guessing from a name/alias,
+  no search, aliases on by default with a setting to disable them) and Street View mode
+  (point-distance, reusing the existing `GoogleMapsGateway` Street View integration). See
+  "Named Place and Street View modes" above.
 - **UL-394 (follow-up)** — community photo submission pipeline: upload-to-wiki with a
   submit-to-game checkbox (and an upload notice that it was added to the location's wiki),
   a "submit this wiki photo to the game" button in the lightbox, report/flag buttons (photo

@@ -1,11 +1,9 @@
-"""SpotGuessr models - Glicko-2 ratings, game sessions, rounds, and guesses.
+"""SpotGuessr models - Glicko-2 ratings, game sessions, rounds, guesses, and chat.
 
 See ``docs/designs/spotguessr.md`` for the full rules this schema encodes -
-eligibility ("pinned by every participant"), point-vs-boundary distance
-scoring, the difficulty slider, and the Glicko-2 player/location rating
-pairing. Only ``SpotGuessrMode.PHOTOS`` has round-generation logic as of
-UL-391; ``NAMED_PLACE``/``STREET_VIEW`` are defined now so later phases
-(UL-393) don't need a schema migration just to add a mode.
+eligibility ("pinned by every joined participant"), point-vs-boundary
+distance scoring, the difficulty slider, the Glicko-2 player/location rating
+pairing, and the multiplayer lobby lifecycle (UL-392).
 """
 
 from __future__ import annotations
@@ -22,6 +20,7 @@ from django.db.models import (
     DateTimeField,
     FloatField,
     ForeignKey,
+    Index,
     JSONField,
     OneToOneField,
     PositiveIntegerField,
@@ -32,6 +31,7 @@ from django.db.models.constraints import UniqueConstraint
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.spotguessr.queryset import (
     GameRoundManager,
+    GameSessionChatMessageManager,
     GameSessionManager,
     GameSessionParticipantManager,
     GuessManager,
@@ -59,11 +59,30 @@ class SpotGuessrMode(abstract.TextChoices):
 
 
 class GameSessionStatus(abstract.TextChoices):
-    """Lifecycle of a GameSession."""
+    """Lifecycle of a GameSession.
 
+    Solo sessions skip LOBBY entirely (created directly as ACTIVE with one
+    JOINED participant). Multiplayer sessions start in LOBBY and only
+    become ACTIVE when the host explicitly begins the game - see
+    ``docs/designs/spotguessr.md``'s "Multiplayer sessions" section.
+    """
+
+    LOBBY = "lobby", "Lobby"
     ACTIVE = "active", "Active"
     COMPLETED = "completed", "Completed"
     ABANDONED = "abandoned", "Abandoned"
+
+
+class GameSessionParticipantStatus(abstract.TextChoices):
+    """Whether a participant has accepted their invitation yet.
+
+    Mirrors ``TripMembership.status`` - the same row that will hold the
+    accepted membership *is* the invite record, so there is no separate
+    invite model.
+    """
+
+    INVITED = "invited", "Invited"
+    JOINED = "joined", "Joined"
 
 
 class _Glicko2RatingFields:
@@ -171,11 +190,11 @@ class LocationModeRating(_Glicko2RatingFields, abstract.DashboardModel):
 class GameSession(abstract.DashboardModel):
     """One SpotGuessr playthrough: a mode, a config snapshot, a fixed round count.
 
-    Modeled as a proper many-participant session from the start (see
-    ``GameSessionParticipant``) even though UL-391 only ever creates
-    single-participant sessions - every eligibility/scoring rule already
-    reads "all participants," not "the player," so multiplayer (UL-392) can
-    reuse these tables unchanged.
+    Modeled as a proper many-participant session from Phase 1 (see
+    ``GameSessionParticipant``) - every eligibility/scoring rule reads "all
+    (joined) participants," not "the player," so multiplayer (UL-392) reuses
+    these tables unchanged; only ``GameSessionParticipant.status`` and the
+    ``LOBBY`` status were added.
 
     Attributes:
         mode: Which game mode this session plays.
@@ -226,8 +245,22 @@ class GameSessionParticipant(abstract.DashboardModel):
     ``total_points`` is a denormalized cache (mirrors ``Pin.last_visited``'s
     role) kept in sync by ``services.spotguessr.session`` as guesses are
     submitted, so the scoreboard never needs to re-sum every guess.
+
+    Attributes:
+        status: INVITED until the profile accepts, then JOINED. A solo
+            session's host row is created directly as JOINED - there is no
+            invite step when you're the only player. Eligibility, "has
+            everyone in this round guessed," and the final scoreboard all
+            read JOINED participants only (see
+            ``docs/designs/spotguessr.md``'s eligibility rule 6) - an
+            invitee who never accepts is not yet a player.
+        joined_at: When this row was created. Despite the name, this is set
+            for INVITED rows too (it's really "created_at" - kept as
+            ``joined_at`` since every Phase 1 row really was a join, and a
+            rename would be a needless migration for an internal field).
     """
 
+    status = CharField(max_length=10, choices=GameSessionParticipantStatus.choices, default=GameSessionParticipantStatus.JOINED)
     total_points = PositiveIntegerField(default=0)
     joined_at = DateTimeField(auto_now_add=True)
 
@@ -248,8 +281,13 @@ class GameSessionParticipant(abstract.DashboardModel):
 
     objects = GameSessionParticipantManager()
 
+    @property
+    def is_joined(self) -> bool:
+        """Whether this participant has actually accepted (vs. still just invited)."""
+        return self.status == GameSessionParticipantStatus.JOINED
+
     def __str__(self) -> str:
-        return f"GameSessionParticipant(session={self.session_id}, profile={self.profile_id})"
+        return f"GameSessionParticipant(session={self.session_id}, profile={self.profile_id}, status={self.status})"
 
     class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_spotguessr_session_participants"
@@ -266,6 +304,14 @@ class GameRound(abstract.DashboardModel):
         sequence_index: 0-based position within the session's round order.
         location: The answer.
         image: The photo shown (Photos mode only; null for other modes).
+        display_text: The name/alias text shown (Named Place mode only;
+            null for other modes). Snapshotted at round-creation time -
+            when aliases are enabled, a random one is chosen once per round
+            and must stay fixed for every participant and across
+            reconnects, not re-rolled on every read. Street View mode shows
+            no persisted text or photo - its imagery is re-fetched (cache-
+            backed, see ``services.spotguessr.street_view``) from the
+            location's coordinates each time.
         target_is_point: Whether scoring measures from ``target_point``
             (the image had its own coordinates) rather than the location's
             *current* effective boundary. See ``docs/designs/spotguessr.md``
@@ -282,6 +328,7 @@ class GameRound(abstract.DashboardModel):
     """
 
     sequence_index = PositiveSmallIntegerField()
+    display_text = CharField(max_length=255, null=True, blank=True)
     target_is_point = BooleanField(default=False)
     target_point = PointField(geography=True, srid=4326, null=True, blank=True)
     revealed_at = DateTimeField(null=True, blank=True)
@@ -362,6 +409,47 @@ class Guess(abstract.DashboardModel):
         db_table = "dashboard_spotguessr_guesses"
         constraints = [
             UniqueConstraint(fields=["round", "profile"], name="db_sg_guess_unique"),
+        ]
+
+
+class GameSessionChatMessage(abstract.DashboardModel):
+    """One chat message in a multiplayer session's live text chat (UL-392).
+
+    Plain text, no E2EE - unlike DirectMessage/GroupMessage, session chat is
+    ephemeral match banter between participants already visible to each
+    other on the scoreboard, not a private conversation, so the
+    ciphertext/key-exchange machinery those models carry buys nothing here.
+    Sent and broadcast over ``GameSessionConsumer`` only; read history is
+    served over HTTP for reconnects/late page-opens (see
+    ``docs/designs/spotguessr.md``'s "Session chat").
+    """
+
+    body = CharField(max_length=1000)
+
+    session = ForeignKey(
+        "dashboard.GameSession",
+        on_delete=CASCADE,
+        related_name="chat_messages",
+    )
+    profile = ForeignKey(
+        "dashboard.Profile",
+        on_delete=CASCADE,
+        related_name="spotguessr_chat_messages",
+    )
+
+    if TYPE_CHECKING:
+        session_id: int
+        profile_id: int
+
+    objects = GameSessionChatMessageManager()
+
+    def __str__(self) -> str:
+        return f"GameSessionChatMessage(session={self.session_id}, profile={self.profile_id})"
+
+    class Meta(abstract.DashboardModel.Meta):
+        db_table = "dashboard_spotguessr_chat_messages"
+        indexes = [
+            Index(fields=["session", "created"], name="idxdb_sg_chat_session_created"),
         ]
 
 

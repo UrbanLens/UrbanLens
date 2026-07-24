@@ -5,8 +5,8 @@ Features planned for this release.
 * Include screenshots of the app in About page, and in the README.md file. [UL-16]
 * UI: Edit category dialog [UL-146]
 * UI: Bulk edit category dialog (buttons are awful) [UL-147]
-* Add descriptions to badges that are pre-populated. [UL-245]
-* Remove work account from github project. [UL-247]
+* Add descriptions to labels that are pre-populated. [UL-245]
+* ~~Remove work account from github project. [UL-247]~~
 * Pull additional google place info from some supported google takeout files (Reviews.json, and others?) [UL-262]
 * Consider: handle temporary markers when a user pin exists on that exact point. [UL-263]
 * Ensure proper attribution in the smaller maps we're showing around the site (main map should be correct already. Others may or may not need work, though.) [UL-264]
@@ -14,6 +14,7 @@ Features planned for this release.
 * Main map > Edit pin dialog should have link to view full pin details. [UL-266]
 * On the pin details page, and on the wiki page, sections named "Media" should be named "Photos and Media" instead.
 * Sometimes multiple guidance tips come up on the same page. The user clicks "don't show this again" and another one pops up immediately after. That should never happen.
+* On main map, when right clicking and then clicking the coordinates, more specific coordinates should be copied to clipboard.
 
 ## Medium Features
 * Audit the import process for security (unzip, etc) [UL-268]

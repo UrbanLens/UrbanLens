@@ -1,8 +1,9 @@
-"""Session orchestration: starting a session, generating rounds, scoring guesses.
+"""Session orchestration: solo/multiplayer lifecycle, round generation, scoring guesses.
 
-The one place ``controllers.spotguessr`` calls into - the only layer that
-knows how eligibility, selection, photo-picking, scoring, and ratings
-compose together. See ``docs/designs/spotguessr.md`` for the full rules.
+The one place ``controllers.spotguessr``/``consumers.GameSessionConsumer`` call
+into - the only layer that knows how eligibility, mode-specific selection,
+scoring, ratings, and real-time broadcast compose together. See
+``docs/designs/spotguessr.md`` for the full rules.
 """
 
 from __future__ import annotations
@@ -20,14 +21,17 @@ from urbanlens.dashboard.models.spotguessr.model import (
     GameRound,
     GameSession,
     GameSessionParticipant,
+    GameSessionParticipantStatus,
     GameSessionStatus,
     Guess,
     SpotGuessrMode,
 )
-from urbanlens.dashboard.services.spotguessr import eligibility, photos, scoring, selection
+from urbanlens.dashboard.services.connections import are_connections
+from urbanlens.dashboard.services.spotguessr import eligibility, named_place, photos, realtime, scoring, selection, serializers, street_view
 from urbanlens.dashboard.services.spotguessr.ratings import apply_round_ratings
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
     from datetime import date
 
     from django.contrib.gis.geos import Point
@@ -40,12 +44,12 @@ MAX_ROUNDS_PER_SESSION = 20
 
 #: How many locations to try before giving up on generating a round - guards
 #: against looping forever when a whole eligible pool turns out to have no
-#: usable photo (Photos mode) without erroring the whole session.
+#: usable photo/name/imagery without erroring the whole session.
 _MAX_LOCATION_ATTEMPTS = 25
 
 
 class SpotGuessrError(Exception):
-    """Raised for invalid session/round/guess operations."""
+    """Raised for invalid session/round/guess/lobby operations."""
 
 
 @dataclass(frozen=True)
@@ -60,6 +64,7 @@ class GameConfig:
     external_media_only: bool = False
     require_visited_all: bool = False
     date_guessing_enabled: bool = False
+    use_aliases: bool = True
     geo_bounds_geojson: dict | None = None
 
     def to_dict(self) -> dict:
@@ -80,24 +85,157 @@ def _config_from_session(session: GameSession) -> GameConfig:
     return GameConfig(**{key: value for key, value in (session.config or {}).items() if key in known_fields})
 
 
-def start_solo_session(profile: Profile, mode: str, config: GameConfig, *, total_rounds: int = DEFAULT_ROUNDS_PER_SESSION) -> GameSession:
-    """Create a new single-participant SpotGuessr session for ``profile``."""
-    if mode != SpotGuessrMode.PHOTOS:
-        raise SpotGuessrError(f"Mode {mode!r} is not yet implemented (see docs/designs/spotguessr.md's phase mapping).")
+def _clamp_rounds(total_rounds: int) -> int:
+    return max(MIN_ROUNDS_PER_SESSION, min(MAX_ROUNDS_PER_SESSION, total_rounds))
 
-    clamped_rounds = max(MIN_ROUNDS_PER_SESSION, min(MAX_ROUNDS_PER_SESSION, total_rounds))
+
+def start_solo_session(profile: Profile, mode: str, config: GameConfig, *, total_rounds: int = DEFAULT_ROUNDS_PER_SESSION) -> GameSession:
+    """Create a new single-participant, immediately-ACTIVE SpotGuessr session for ``profile``."""
     session = GameSession.objects.create(
         host_profile=profile,
         mode=mode,
+        status=GameSessionStatus.ACTIVE,
         config=config.to_dict(),
-        total_rounds=clamped_rounds,
+        total_rounds=_clamp_rounds(total_rounds),
     )
-    GameSessionParticipant.objects.create(session=session, profile=profile)
+    GameSessionParticipant.objects.create(session=session, profile=profile, status=GameSessionParticipantStatus.JOINED)
     return session
+
+
+def start_multiplayer_session(
+    host: Profile,
+    mode: str,
+    config: GameConfig,
+    invite_profiles: Iterable[Profile],
+    *,
+    total_rounds: int = DEFAULT_ROUNDS_PER_SESSION,
+) -> GameSession:
+    """Create a LOBBY session hosted by ``host`` and invite the given (friend) profiles.
+
+    The host's own participant row is created JOINED immediately - no
+    invite step for yourself. Each invitee gets an INVITED row plus a
+    notification (see ``_notify_invite``). See "Multiplayer sessions" in
+    ``docs/designs/spotguessr.md`` for the full lobby lifecycle.
+    """
+    session = GameSession.objects.create(
+        host_profile=host,
+        mode=mode,
+        status=GameSessionStatus.LOBBY,
+        config=config.to_dict(),
+        total_rounds=_clamp_rounds(total_rounds),
+    )
+    GameSessionParticipant.objects.create(session=session, profile=host, status=GameSessionParticipantStatus.JOINED)
+    for invitee in invite_profiles:
+        invite_to_session(session, host, invitee)
+    return session
+
+
+def invite_to_session(session: GameSession, host: Profile, invitee: Profile) -> GameSessionParticipant:
+    """Invite one friend to a lobby session, notifying them.
+
+    Host-only, friends-only (matching the trip-invite precedent) - inviting
+    a non-friend is rejected server-side, not just hidden in a picker UI.
+
+    Raises:
+        SpotGuessrError: if the caller isn't the host, the session has
+            already started, or ``invitee`` isn't a friend of the host.
+    """
+    if session.host_profile_id != host.pk:
+        raise SpotGuessrError("Only the host can invite players.")
+    if session.status != GameSessionStatus.LOBBY:
+        raise SpotGuessrError("Can't invite once the game has started.")
+    if not are_connections(host, invitee):
+        raise SpotGuessrError("You can only invite friends.")
+
+    participant, created = GameSessionParticipant.objects.get_or_create(
+        session=session,
+        profile=invitee,
+        defaults={"status": GameSessionParticipantStatus.INVITED},
+    )
+    if created:
+        _notify_invite(host, invitee, session)
+    return participant
+
+
+def _notify_invite(host: Profile, invitee: Profile, session: GameSession) -> None:
+    """Create the in-app (+ live toast, via the existing NotificationLog signal) invite notification."""
+    from django.urls import reverse
+
+    from urbanlens.dashboard.models.notifications.meta import Importance, NotificationType, Status
+    from urbanlens.dashboard.models.notifications.model import NotificationLog
+    from urbanlens.dashboard.services.identity_visibility import resolve_visible_identity
+
+    host_name = resolve_visible_identity(invitee, host)["display_name"]
+    NotificationLog.objects.create(
+        profile=invitee,
+        source_profile=host,
+        status=Status.UNREAD,
+        importance=Importance.MEDIUM,
+        notification_type=NotificationType.SPOTGUESSR_INVITE,
+        title="SpotGuessr invitation",
+        message=f"{host_name} invited you to play SpotGuessr.",
+        url=reverse("spotguessr.lobby", kwargs={"session_id": session.pk}),
+    )
+
+
+def join_session(session: GameSession, profile: Profile) -> GameSessionParticipant:
+    """Accept an invitation - flips INVITED to JOINED and broadcasts to the lobby.
+
+    Idempotent for a profile that's already JOINED (harmless re-POST, or a
+    reconnecting participant). Only actually-new joins are rejected once
+    the roster is locked - not a no-op re-call from someone already in.
+
+    Raises:
+        SpotGuessrError: if ``profile`` was never invited to this session,
+            or the roster is already locked (the session isn't in LOBBY)
+            and they hadn't joined before that happened - an invite that
+            arrived too late to act on.
+    """
+    try:
+        participant = GameSessionParticipant.objects.get(session=session, profile=profile)
+    except GameSessionParticipant.DoesNotExist:
+        raise SpotGuessrError("You were not invited to this session.") from None
+
+    if participant.status == GameSessionParticipantStatus.JOINED:
+        return participant
+
+    if session.status != GameSessionStatus.LOBBY:
+        raise SpotGuessrError("This game has already started - you can no longer join.")
+
+    participant.status = GameSessionParticipantStatus.JOINED
+    participant.save(update_fields=["status", "updated"])
+    realtime.broadcast(session.pk, "participant.joined", {"participant": serializers.serialize_participant(participant)})
+    return participant
+
+
+def begin_session(session: GameSession, host: Profile) -> GameRound | None:
+    """Host starts the game: locks the roster, transitions LOBBY to ACTIVE, creates round 1.
+
+    No one can join after this point (see "Multiplayer sessions" in the
+    design doc for why mid-game joining isn't supported).
+
+    Raises:
+        SpotGuessrError: if the caller isn't the host or the session isn't
+            still in its lobby.
+    """
+    if session.host_profile_id != host.pk:
+        raise SpotGuessrError("Only the host can start the game.")
+    if session.status != GameSessionStatus.LOBBY:
+        raise SpotGuessrError("This session has already started.")
+
+    session.status = GameSessionStatus.ACTIVE
+    session.save(update_fields=["status", "updated"])
+    round_ = get_or_create_round(session)
+    if round_ is not None:
+        realtime.broadcast(session.pk, "session.started", {"round": serializers.serialize_round(round_)})
+    return round_
 
 
 def get_or_create_round(session: GameSession) -> GameRound | None:
     """Return the session's current round, creating the next one once the prior round is fully guessed.
+
+    Only JOINED participants count - an invitee who never accepted is not
+    a player and must not gate eligibility or "has everyone guessed."
 
     Returns:
         The round to play/show next, or None when the session is complete
@@ -106,7 +244,10 @@ def get_or_create_round(session: GameSession) -> GameRound | None:
         "call ``complete_session``."
     """
     config = _config_from_session(session)
-    participant_count = session.participants.count()
+    joined_participants = list(session.participants.joined().select_related("profile"))
+    participant_count = len(joined_participants)
+    if participant_count == 0:
+        return None
 
     existing_rounds = list(GameRound.objects.for_session(session).select_related("location", "image"))
     if existing_rounds:
@@ -117,7 +258,7 @@ def get_or_create_round(session: GameSession) -> GameRound | None:
     if len(existing_rounds) >= session.total_rounds:
         return None
 
-    participants = [participant.profile for participant in session.participants.select_related("profile").all()]
+    participants = [participant.profile for participant in joined_participants]
     excluded_ids = [round_.location_id for round_ in existing_rounds]
     previous_location = existing_rounds[-1].location if existing_rounds else None
 
@@ -133,18 +274,33 @@ def get_or_create_round(session: GameSession) -> GameRound | None:
             return None  # nothing eligible left at all
 
         image = None
+        display_text = None
         if session.mode == SpotGuessrMode.PHOTOS:
             image = photos.candidate_image_for_location(location, external_media_only=config.external_media_only)
             if image is None:
                 excluded_ids.append(location.pk)
                 continue  # this location has no usable photo yet - try another
+            target = scoring.resolve_target(location, image)
+        elif session.mode == SpotGuessrMode.NAMED_PLACE:
+            display_text = named_place.candidate_name_for_location(location, use_aliases=config.use_aliases)
+            if display_text is None:
+                excluded_ids.append(location.pk)
+                continue  # no meaningful name/alias yet - try another
+            target = scoring.resolve_target(location, None)
+        elif session.mode == SpotGuessrMode.STREET_VIEW:
+            if street_view.candidate_street_view_for_location(location) is None:
+                excluded_ids.append(location.pk)
+                continue  # no Street View coverage nearby - try another
+            target = scoring.street_view_target(location)
+        else:
+            raise SpotGuessrError(f"Mode {session.mode!r} has no round-generation logic.")
 
-        target = scoring.resolve_target(location, image)
         return GameRound.objects.create(
             session=session,
             sequence_index=len(existing_rounds),
             location=location,
             image=image,
+            display_text=display_text,
             target_is_point=target.is_point,
             target_point=target.geometry if target.is_point else None,
         )
@@ -156,7 +312,12 @@ def submit_guess(round_: GameRound, profile: Profile, guess_point: Point, guesse
     """Score and record ``profile``'s guess for ``round_``.
 
     Triggers the Glicko-2 rating update (``apply_round_ratings``) once
-    every participant in the round has guessed.
+    every JOINED participant has guessed, and - for multiplayer sessions -
+    broadcasts ``guess.submitted`` immediately and ``round.revealed`` +
+    either ``round.started`` or ``session.completed`` once the round
+    completes (see "Real-time sync" in the design doc). Solo sessions still
+    work exactly as in Phase 1; broadcasting is simply a no-op without a
+    channel layer listener.
 
     Raises:
         SpotGuessrError: if ``profile`` already guessed this round.
@@ -189,11 +350,21 @@ def submit_guess(round_: GameRound, profile: Profile, guess_point: Point, guesse
     )
 
     GameSessionParticipant.objects.filter(session=session, profile=profile).update(total_points=F("total_points") + points + date_points)
+    realtime.broadcast(session.pk, "guess.submitted", {"profile_id": profile.pk})
 
-    if Guess.objects.for_round(round_).count() >= session.participants.count():
+    joined_count = session.participants.joined().count()
+    if Guess.objects.for_round(round_).count() >= joined_count:
         round_.revealed_at = timezone.now()
         round_.save(update_fields=["revealed_at", "updated"])
         apply_round_ratings(round_, list(Guess.objects.for_round(round_).select_related("profile")))
+        realtime.broadcast(session.pk, "round.revealed", serializers.serialize_round_reveal(round_))
+
+        next_round = get_or_create_round(session)
+        if next_round is not None:
+            realtime.broadcast(session.pk, "round.started", {"round": serializers.serialize_round(next_round)})
+        else:
+            complete_session(session)
+            realtime.broadcast(session.pk, "session.completed", session_summary(session))
 
     return guess
 
@@ -208,9 +379,9 @@ def complete_session(session: GameSession) -> GameSession:
 
 
 def session_summary(session: GameSession) -> dict:
-    """A JSON-ready summary: rounds played and per-participant totals."""
+    """A JSON-ready summary: rounds played and per-(joined)-participant totals."""
     rounds_played = GameRound.objects.for_session(session).count()
-    participants = session.participants.select_related("profile__user").order_by("-total_points")
+    participants = session.participants.joined().select_related("profile__user").order_by("-total_points")
     return {
         "session_id": session.pk,
         "mode": session.mode,

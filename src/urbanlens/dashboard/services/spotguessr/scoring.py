@@ -50,6 +50,18 @@ def resolve_target(location: Location, image: Image | None) -> RoundTarget:
     return RoundTarget(is_point=False, geometry=location_boundary_polygon(location))
 
 
+def street_view_target(location: Location) -> RoundTarget:
+    """Street View mode's target: the location's own point.
+
+    There is no Image row to carry a more specific coordinate - Street View
+    imagery is definitionally centered on the location's own point, so
+    distance behaves exactly like a coordinate-bearing photo (see
+    docs/designs/spotguessr.md's "Street View mode").
+    """
+    point = Point(float(location.longitude), float(location.latitude), srid=4326)
+    return RoundTarget(is_point=True, geometry=point)
+
+
 def distance_for_guess(location: Location, guess_point: Point, *, target_is_point: bool, target_point: Point | None) -> float:
     """Geodesic distance in meters from ``guess_point`` to a round's target.
 
