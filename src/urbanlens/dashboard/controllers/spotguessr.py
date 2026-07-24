@@ -173,6 +173,16 @@ class SpotGuessrHomeView(LoginRequiredMixin, View):
         profile = _current_profile(request)
         preference, _ = SpotGuessrPreference.objects.get_or_create(profile=profile)
         own_rating = PlayerModeRating.objects.filter(profile=profile, mode=SpotGuessrMode.PHOTOS).first()
+
+        # An invite notification links here with ?session=<id> (there's no
+        # dedicated per-session page - this single-page view holds all
+        # client-side session state) - only honored when the profile is
+        # actually a participant, same 404-shaped silence as everywhere else.
+        initial_session_id = None
+        raw_session_id = request.GET.get("session")
+        if raw_session_id and GameSessionParticipant.objects.filter(session_id=raw_session_id, profile=profile).exists():
+            initial_session_id = raw_session_id
+
         return render(
             request,
             "dashboard/pages/spotguessr/index.html",
@@ -187,6 +197,8 @@ class SpotGuessrHomeView(LoginRequiredMixin, View):
                 "default_rounds": spotguessr_session.DEFAULT_ROUNDS_PER_SESSION,
                 "modes": SpotGuessrMode.choices,
                 "urls": _url_templates(),
+                "my_profile_id": profile.pk,
+                "initial_session_id": initial_session_id,
             },
         )
 
