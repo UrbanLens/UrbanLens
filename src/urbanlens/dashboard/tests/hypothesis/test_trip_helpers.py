@@ -23,7 +23,6 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.controllers.trip import (
-    _activity_coords,
     _build_activity_forecasts,
     _can_perform,
     _compute_activity_index_map,
@@ -33,6 +32,7 @@ from urbanlens.dashboard.controllers.trip import (
 )
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
+from urbanlens.dashboard.services.trip_legs import activity_coords as _activity_coords
 
 if TYPE_CHECKING:
     from django.contrib.auth.models import User
