@@ -502,23 +502,18 @@ Add new services to `SERVICE_REGISTRY` in `dashboard/services/rate_limiter.py` w
 
 ---
 
-## Sibling Services Found During Property-Records Live Testing (2026-07-19)
+## Sibling Services Found During Property-Records Research (2026-07-19)
 
 Unlike the rest of this document (a general survey), everything below was a *specific, real
-endpoint or dataset* that turned up as a sibling item while live-testing the county property-
-records discovery pipeline (`services/apis/property_records/`) against ~70 real counties'
-ArcGIS Online item-search and portal results. Recorded here rather than acted on, per the plan's
-"note candidates, don't build speculatively" approach - these are concrete leads, not the general
-aspirational entries above.
+endpoint or dataset* that turned up as a sibling item while researching county property-records
+sources for ~70 real counties. Recorded here as candidate leads rather than acted on - these are
+concrete, not the general aspirational entries above.
 
 ### State GIS clearinghouses, encountered as statewide-parcels fallbacks but hosting far more
 
-The discovery pipeline's portal-search fallback (`discover_via_portal_search`) already treats
-these as acceptable *statewide parcels* sources for a county with no county-level GIS. Each one's
-own AGOL item-search or ArcGIS REST catalog was visibly full of non-parcels layers too, all
-reachable through the exact same generic ArcGIS REST client (`arcgis_socrata.ArcGisSocrataGateway`)
-already built for this feature - no new gateway class needed to try one, just a new
-`PropertyJurisdiction`-style registry row or a one-off query.
+A county with no county-level GIS of its own often falls back to one of these statewide
+clearinghouses for parcels data. Each one's own AGOL item-search or ArcGIS REST catalog was
+visibly full of non-parcels layers too - worth a look as standalone candidates:
 
 | State clearinghouse | Base URL | What else it hosts (observed, not exhaustive) |
 |---|---|---|
@@ -531,8 +526,7 @@ already built for this feature - no new gateway class needed to try one, just a 
 
 ### Environmental/hazard layers - directly on-theme for an urbex app
 
-Several turned up as *false positives* to reject during discovery (see `docs/NOTES.md`'s
-"Property-records discovery heuristics" section for the specific incidents), but the underlying
+Several turned up as tangential results while researching parcels data, but the underlying
 datasets are genuinely relevant to this app's actual audience:
 
 - **Groundwater contamination / consent-decree tracking** - Kent County, MI's "Parcel Status from
@@ -568,12 +562,12 @@ datasets are genuinely relevant to this app's actual audience:
 ### Standalone address-point layers
 
 Several county GIS services carried a **separate `AddressPoints` sub-layer** alongside their
-Parcels layer (e.g. the Nicholas County, WV service structure encountered while chasing a
-discovery bug: `AddressPoints`, `ParcelHooks`, `Roads`, `County_Boundary`, `Surrounding_Counties`,
-`TAX_DISTRICTS` all as sibling layers under one service). A free, often more-authoritative
-alternative/supplement to the Census geocoder already in use (`services/apis/locations/census_geocoder.py`)
-for any county whose Tier 1 parcels endpoint is already configured - same host, zero new
-discovery/registry work, just a second query against an already-known server.
+Parcels layer (e.g. a West Virginia county's service structure: `AddressPoints`, `ParcelHooks`,
+`Roads`, `County_Boundary`, `Surrounding_Counties`, `TAX_DISTRICTS` all as sibling layers under one
+service). A free, often more-authoritative alternative/supplement to the Census geocoder already
+in use (`services/apis/locations/census_geocoder.py`) for a county whose parcels data is already
+being queried from the same host - zero new discovery work, just a second query against an
+already-known server.
 
 ---
 

@@ -15,7 +15,7 @@ from urbanlens.dashboard.models.images.model import Image, MediaKind
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.models.spotguessr.model import GameSession, SpotGuessrMode, SpotGuessrPreference
+from urbanlens.dashboard.models.spotguessr.model import GameSession, GameSessionStatus, SpotGuessrMode, SpotGuessrPreference
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.spotguessr.session import GameConfig, begin_session, join_session, start_multiplayer_session
 
@@ -87,12 +87,28 @@ class SpotGuessrStartViewTests(TestCase):
         response = self.client.post(self.start_url, {"geo_bounds": json.dumps({"foo": "bar"})})
         self.assertEqual(response.status_code, 400)
 
-    def test_no_eligible_locations_returns_a_finished_summary_instead_of_erroring(self) -> None:
+    def test_no_eligible_locations_reports_error_code_without_creating_a_session(self) -> None:
+        """A profile with no pins used to get a fake 'finished' summary (0 rounds
+        played, GameSession created and immediately COMPLETED) indistinguishable
+        from a real completed game - see docs/prompts and the SpotGuessr UX
+        rewrite notes. It must now get a distinct error_code and no session at all."""
         other_profile = _make_profile()
         self.client.force_login(other_profile.user)
         response = self.client.post(self.start_url, {})
         self.assertEqual(response.status_code, 200)
-        self.assertTrue(response.json()["finished"])
+        data = response.json()
+        self.assertEqual(data.get("error_code"), "no_eligible_locations")
+        self.assertNotIn("finished", data)
+        self.assertNotIn("summary", data)
+        self.assertFalse(GameSession.objects.filter(host_profile=other_profile).exists())
+
+    def test_no_eligible_locations_within_a_restrictive_geo_bounds_is_also_reported(self) -> None:
+        far_away_bounds = json.dumps(
+            {"type": "Polygon", "coordinates": [[[-1, -1], [-1, 1], [1, 1], [1, -1], [-1, -1]]]},
+        )
+        response = self.client.post(self.start_url, {"geo_bounds": far_away_bounds})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json().get("error_code"), "no_eligible_locations")
 
 
 class SpotGuessrGuessFlowTests(TestCase):
@@ -286,3 +302,42 @@ class SpotGuessrMultiplayerGuessRevealTests(TestCase):
         data = response.json()
         self.assertTrue(data["revealed"])
         self.assertAlmostEqual(data["actual_latitude"], float(self.location.latitude), places=4)
+
+
+class SpotGuessrNoEligibleLocationsMidGameTests(TestCase):
+    """Unlike solo play, a multiplayer lobby can't be eligibility-checked at
+    start - the invitees haven't joined (and so haven't contributed their
+    pins to the eligible set) yet. The host only discovers there's nothing
+    to play once they begin the game. That must be reported distinctly from
+    a real finish, and must not mark the session COMPLETED - see
+    SpotGuessrBeginView's docstring."""
+
+    def setUp(self) -> None:
+        self.host = _make_profile()
+        self.guest = _make_profile()
+        friendship = Friendship.request(self.host, self.guest)
+        assert friendship is not None
+        friendship.accept()
+        # The host's pin isn't shared by the guest, so once both are JOINED
+        # there is nothing eligible for the pair.
+        baker.make(Pin, profile=self.host, location=_make_location())
+
+        self.client.force_login(self.host.user)
+        start = self.client.post(reverse("spotguessr.start"), {"invite_profile_ids": [str(self.guest.pk)]})
+        self.session_id = start.json()["session_id"]
+
+        self.client.force_login(self.guest.user)
+        self.client.post(reverse("spotguessr.join", args=[self.session_id]))
+
+    def test_begin_reports_no_eligible_locations_without_completing_the_session(self) -> None:
+        self.client.force_login(self.host.user)
+        response = self.client.post(reverse("spotguessr.begin", args=[self.session_id]))
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertFalse(data["finished"])
+        self.assertTrue(data.get("no_eligible_locations"))
+        self.assertNotIn("summary", data)
+
+        session = GameSession.objects.get(pk=self.session_id)
+        self.assertEqual(session.status, GameSessionStatus.ACTIVE)
+        self.assertEqual(session.participants.get(profile=self.host).total_points, 0)

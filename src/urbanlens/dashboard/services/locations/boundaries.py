@@ -88,13 +88,12 @@ class BoundaryProviderChain:
     filled or providers are exhausted. ``RedataBoundaryProvider`` runs first:
     when it has data at all, it's authoritative survey-grade county GIS
     geometry, not community-tagged or ML-derived - but its coverage is
-    narrower (US-only, and only jurisdictions REData has researched), so
-    every other provider still matters as a fallback. It's also a no-op, not
-    an error, for installs that haven't configured REData at all (see its own
-    docstring). A Regrid-backed provider (parcel/property data) was
-    investigated but never added - it's a paid service, and
-    ``RedataBoundaryProvider`` already fills the property-boundary slot
-    Regrid would have (see ``docs/redata.md``).
+    narrower (US-only, varies by jurisdiction), so every other provider still
+    matters as a fallback. It's also a no-op, not an error, for installs that
+    haven't configured REData at all (see its own docstring). A Regrid-backed
+    provider (parcel/property data) was investigated but never added - it's a
+    paid service, and ``RedataBoundaryProvider`` already fills the
+    property-boundary slot Regrid would have.
     """
 
     providers: tuple[BoundaryProvider, ...] = field(

@@ -38,7 +38,7 @@ from urbanlens.dashboard.models.spotguessr.model import (
     SpotGuessrPreference,
 )
 from urbanlens.dashboard.services.connections import get_connections
-from urbanlens.dashboard.services.spotguessr import chat as spotguessr_chat, relevance as spotguessr_relevance, serializers, session as spotguessr_session
+from urbanlens.dashboard.services.spotguessr import chat as spotguessr_chat, eligibility as spotguessr_eligibility, relevance as spotguessr_relevance, serializers, session as spotguessr_session
 from urbanlens.dashboard.services.spotguessr.social import visible_friend_ratings
 
 logger = logging.getLogger(__name__)
@@ -166,6 +166,21 @@ def _url_templates() -> dict[str, str]:
     }
 
 
+#: Presentation metadata for the 3 mode-selection cards on the overview page -
+#: keyed by SpotGuessrMode value so the template can loop over SpotGuessrMode.choices
+#: instead of hardcoding 3 cards (stays correct if a mode is ever added/removed).
+_MODE_CARD_META: dict[str, dict[str, str]] = {
+    SpotGuessrMode.PHOTOS: {"icon": "photo_camera", "description": "Guess where a photo was taken.", "accent": "photos"},
+    SpotGuessrMode.NAMED_PLACE: {"icon": "signpost", "description": "Guess a place from its name or alias.", "accent": "named_place"},
+    SpotGuessrMode.STREET_VIEW: {"icon": "streetview", "description": "Guess from a street-level view.", "accent": "street_view"},
+}
+
+
+def _mode_cards() -> list[dict[str, str]]:
+    """The 3 mode cards' display data, in ``SpotGuessrMode`` declaration order."""
+    return [{"value": value, "label": label, **_MODE_CARD_META[value]} for value, label in SpotGuessrMode.choices]
+
+
 class SpotGuessrHomeView(LoginRequiredMixin, View):
     """The SpotGuessr overview page: own rating, friends' ratings, start-game form.
 
@@ -199,6 +214,7 @@ class SpotGuessrHomeView(LoginRequiredMixin, View):
                 "max_rounds": spotguessr_session.MAX_ROUNDS_PER_SESSION,
                 "default_rounds": spotguessr_session.DEFAULT_ROUNDS_PER_SESSION,
                 "modes": SpotGuessrMode.choices,
+                "mode_cards": _mode_cards(),
                 "urls": _url_templates(),
                 "my_profile_id": profile.pk,
                 "initial_session_id": initial_session_id,
@@ -237,6 +253,14 @@ class SpotGuessrStartView(LoginRequiredMixin, View):
 
     POST /spotguessr/start/   body: ``mode``, ``total_rounds``, difficulty/toggle fields,
     optional ``invite_profile_ids`` (repeated) to start a multiplayer lobby instead of solo play.
+
+    A solo start whose config has no eligible locations at all (e.g. the
+    profile hasn't pinned anything yet, or a chosen ``geo_bounds`` excludes
+    every pin) never creates a ``GameSession`` - it responds with
+    ``{"error_code": "no_eligible_locations"}`` instead, so the frontend can
+    show a dedicated empty-state screen rather than a fake "game over."
+    Multiplayer can't be pre-checked this way (invitees haven't joined yet
+    to know their pins) - see ``SpotGuessrBeginView`` for that case.
     """
 
     def post(self, request: HttpRequest) -> HttpResponse:
@@ -271,6 +295,9 @@ class SpotGuessrStartView(LoginRequiredMixin, View):
                 return JsonResponse({"error": str(exc)}, status=400)
             return JsonResponse({"session_id": game_session.pk, "lobby": True, "session": serializers.serialize_session(game_session)})
 
+        if not spotguessr_eligibility.has_eligible_locations([profile], require_visited_by_all=config.require_visited_all, geo_bounds=config.geo_bounds):
+            return JsonResponse({"error_code": "no_eligible_locations"})
+
         try:
             game_session = spotguessr_session.start_solo_session(profile, mode, config, total_rounds=total_rounds)
         except spotguessr_session.SpotGuessrError as exc:
@@ -278,6 +305,11 @@ class SpotGuessrStartView(LoginRequiredMixin, View):
 
         round_ = spotguessr_session.get_or_create_round(game_session)
         if round_ is None:
+            # The pre-check above already ruled out "nothing eligible at
+            # all" - reaching None here means every eligible location was
+            # tried and failed to yield a playable round (e.g. no usable
+            # photo/name/imagery), a rarer failure that only surfaces once
+            # generation is attempted. Still a legitimate (if empty) finish.
             spotguessr_session.complete_session(game_session)
             return JsonResponse({"session_id": game_session.pk, "finished": True, "summary": spotguessr_session.session_summary(game_session)})
 
@@ -339,6 +371,13 @@ class SpotGuessrBeginView(LoginRequiredMixin, View):
     """Host starts the game: locks the roster and creates round 1.
 
     POST /spotguessr/session/<session_id>/begin/
+
+    Unlike solo start, the joined roster's combined eligibility can't be
+    checked before this point (invitees may not have joined yet). If
+    locking the roster reveals there's nothing eligible for this group,
+    the response is ``{"finished": false, "no_eligible_locations": true}``
+    rather than a completed summary - the session is left ACTIVE (not
+    marked COMPLETED) since it never actually played anything.
     """
 
     def post(self, request: HttpRequest, session_id: int) -> HttpResponse:
@@ -351,6 +390,8 @@ class SpotGuessrBeginView(LoginRequiredMixin, View):
             return JsonResponse({"error": str(exc)}, status=400)
 
         if round_ is None:
+            if spotguessr_session.rounds_played(game_session) == 0:
+                return JsonResponse({"finished": False, "no_eligible_locations": True})
             spotguessr_session.complete_session(game_session)
             return JsonResponse({"finished": True, "summary": spotguessr_session.session_summary(game_session)})
         return JsonResponse({"finished": False, "round": serializers.serialize_round(round_)})
@@ -360,6 +401,10 @@ class SpotGuessrRoundView(LoginRequiredMixin, View):
     """The session's current round (for reloads/reconnects).
 
     GET /spotguessr/session/<session_id>/round/
+
+    Same ``no_eligible_locations`` distinction as ``SpotGuessrBeginView`` -
+    a session that ran out of eligible locations before playing any round
+    at all is reported that way instead of as a completed game.
     """
 
     def get(self, request: HttpRequest, session_id: int) -> HttpResponse:
@@ -368,6 +413,8 @@ class SpotGuessrRoundView(LoginRequiredMixin, View):
 
         round_ = spotguessr_session.get_or_create_round(game_session)
         if round_ is None:
+            if spotguessr_session.rounds_played(game_session) == 0:
+                return JsonResponse({"finished": False, "no_eligible_locations": True})
             spotguessr_session.complete_session(game_session)
             return JsonResponse({"finished": True, "summary": spotguessr_session.session_summary(game_session)})
 

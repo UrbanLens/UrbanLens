@@ -15,7 +15,9 @@
             <li{% if nav_section == 'trips' %} class="app-nav-link--active"{% endif %}><a href="{% url 'trips.overview' %}" class="app-nav-link">Trips</a></li>
             <li{% if nav_section == 'memories' %} class="app-nav-link--active"{% endif %}><a href="{% url 'memories.view' %}" class="app-nav-link">Memories</a></li>
             <li{% if nav_section == 'safety' %} class="app-nav-link--active"{% endif %}><a href="{% url 'safety.home' %}" class="app-nav-link">Safety</a></li>
+            {% if show_games_nav %}
             <li{% if nav_section == 'games' %} class="app-nav-link--active"{% endif %}><a href="{% url 'games.overview' %}" class="app-nav-link">Games</a></li>
+            {% endif %}
             {% else %}
             <li{% if nav_section == 'about' %} class="app-nav-link--active"{% endif %}><a href="{% url 'about' %}" class="app-nav-link">About</a></li>
             <li{% if nav_section == 'values' %} class="app-nav-link--active"{% endif %}><a href="{% url 'values' %}" class="app-nav-link">Values</a></li>
@@ -182,7 +184,9 @@
         <li{% if nav_section == 'trips' %} class="app-nav-link--active"{% endif %}><a href="{% url 'trips.overview' %}" class="app-nav-link">Trips</a></li>
         <li{% if nav_section == 'memories' %} class="app-nav-link--active"{% endif %}><a href="{% url 'memories.view' %}" class="app-nav-link">Memories</a></li>
         <li{% if nav_section == 'safety' %} class="app-nav-link--active"{% endif %}><a href="{% url 'safety.home' %}" class="app-nav-link">Safety</a></li>
+        {% if show_games_nav %}
         <li{% if nav_section == 'games' %} class="app-nav-link--active"{% endif %}><a href="{% url 'games.overview' %}" class="app-nav-link">Games</a></li>
+        {% endif %}
         {% endif %}
         <li{% if nav_section == 'about' %} class="app-nav-link--active"{% endif %}><a href="{% url 'about' %}" class="app-nav-link">About</a></li>
         <li{% if nav_section == 'values' %} class="app-nav-link--active"{% endif %}><a href="{% url 'values' %}" class="app-nav-link">Values</a></li>

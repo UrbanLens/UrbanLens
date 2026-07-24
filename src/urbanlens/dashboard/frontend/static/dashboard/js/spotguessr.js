@@ -1,6 +1,7 @@
 import {
-  getCsrfToken
-} from "./article-wysiwyg-y9qpab7g.js";
+  getCsrfToken,
+  toast
+} from "./article-wysiwyg-5jnnp4sj.js";
 import"./article-wysiwyg-2vd5xdaq.js";
 
 // src/urbanlens/dashboard/frontend/ts/entries/spotguessr.ts
@@ -9,6 +10,7 @@ var DEFAULT_CENTER = [39.5, -98.35];
 var DEFAULT_ZOOM = 4;
 var pageEl = document.querySelector(".spotguessr-page");
 var myProfileId = Number(pageEl?.dataset.myProfileId ?? "0");
+var regionSearchUrl = pageEl?.dataset.regionSearchUrl ?? "";
 var sessionId = null;
 var currentRoundId = null;
 var currentMode = "photos";
@@ -25,6 +27,7 @@ var actualMarker = null;
 var resultLine = null;
 var areaMap = null;
 var areaDrawnItems = null;
+var restoredGeoBounds = null;
 var pinOptions = [];
 var friendOptions = [];
 var selectedInviteIds = new Set;
@@ -56,29 +59,92 @@ async function getJson(url) {
   const response = await fetch(url, { headers: { "X-Requested-With": "XMLHttpRequest" } });
   return response.json();
 }
-function initDifficultySlider() {
-  const slider = el("sg-difficulty");
-  const label = el("sg-difficulty-label");
-  const describe = (value) => value < 33 ? "Easy" : value < 66 ? "Medium" : "Hard";
+var DIFFICULTY_VALUES = { easy: 0.2, medium: 0.5, hard: 0.8 };
+function currentDifficulty() {
+  const checked = document.querySelector('input[name="sg-difficulty-choice"]:checked');
+  return DIFFICULTY_VALUES[checked?.value ?? "medium"];
+}
+function initRoundsSlider() {
+  const slider = el("sg-rounds");
+  const label = el("sg-rounds-label");
   slider.addEventListener("input", () => {
-    label.textContent = describe(Number(slider.value));
+    label.textContent = slider.value;
   });
 }
+function currentSettingsMode() {
+  return el("sg-settings-mode").value || "photos";
+}
 function updateModeVisibility() {
-  const mode = el("sg-mode").value;
+  const mode = currentSettingsMode();
   document.querySelectorAll("[data-mode-only]").forEach((field) => {
     field.hidden = field.dataset.modeOnly !== mode;
   });
 }
-function initModeSelect() {
-  el("sg-mode").addEventListener("change", updateModeVisibility);
+function openSettingsDialog(mode) {
+  el("sg-settings-mode").value = mode;
   updateModeVisibility();
+  el("sg-settings-dialog").showModal();
+  if (areaMap) {
+    areaMap.invalidateSize();
+  } else if (el("sg-restrict-area").checked) {
+    ensureAreaMap();
+    if (restoredGeoBounds) {
+      setAreaGeometry(restoredGeoBounds);
+      restoredGeoBounds = null;
+    }
+  }
+}
+function initModeCards() {
+  document.querySelectorAll(".spotguessr-mode-card-body").forEach((button) => {
+    button.addEventListener("click", () => {
+      const mode = button.dataset.mode;
+      if (!mode)
+        return;
+      el("sg-settings-mode").value = mode;
+      startGame(mode);
+    });
+  });
+  document.querySelectorAll(".spotguessr-card-gear").forEach((button) => {
+    button.addEventListener("click", () => {
+      const mode = button.dataset.mode;
+      if (mode)
+        openSettingsDialog(mode);
+    });
+  });
 }
 function initRatingsToggle() {
   const checkbox = el("sg-show-ratings-to-friends");
   checkbox.addEventListener("change", () => {
     postForm(urls.settings, { show_ratings_to_friends: checkbox.checked ? "on" : "off" });
   });
+}
+function ensureAreaMap() {
+  if (areaMap)
+    return areaMap;
+  areaMap = L.map("sg-area-map").setView(DEFAULT_CENTER, DEFAULT_ZOOM);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "&copy; OpenStreetMap contributors" }).addTo(areaMap);
+  areaDrawnItems = new L.FeatureGroup;
+  areaMap.addLayer(areaDrawnItems);
+  const drawControl = new L.Control.Draw({
+    draw: { polygon: {}, rectangle: false, circle: false, marker: false, polyline: false, circlemarker: false },
+    edit: { featureGroup: areaDrawnItems }
+  });
+  areaMap.addControl(drawControl);
+  areaMap.on(L.Draw.Event.CREATED, (event) => {
+    const { layer } = event;
+    setAreaGeometry(layer.toGeoJSON().geometry);
+  });
+  return areaMap;
+}
+function setAreaGeometry(geometry) {
+  const map = ensureAreaMap();
+  areaDrawnItems?.clearLayers();
+  const layer = L.geoJSON(geometry);
+  layer.eachLayer((shapeLayer) => areaDrawnItems?.addLayer(shapeLayer));
+  el("sg-area-geo-bounds").value = JSON.stringify(geometry);
+  const bounds = areaDrawnItems?.getBounds();
+  if (bounds?.isValid())
+    map.fitBounds(bounds, { padding: [40, 40] });
 }
 function initAreaRestriction() {
   const toggle = el("sg-restrict-area");
@@ -91,30 +157,62 @@ function initAreaRestriction() {
       areaMap.invalidateSize();
       return;
     }
-    areaMap = L.map("sg-area-map").setView(DEFAULT_CENTER, DEFAULT_ZOOM);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "&copy; OpenStreetMap contributors" }).addTo(areaMap);
-    areaDrawnItems = new L.FeatureGroup;
-    areaMap.addLayer(areaDrawnItems);
-    const drawControl = new L.Control.Draw({
-      draw: { rectangle: {}, polygon: false, circle: false, marker: false, polyline: false, circlemarker: false },
-      edit: { featureGroup: areaDrawnItems }
+    ensureAreaMap();
+  });
+}
+async function searchAreaRegion() {
+  const input = el("sg-area-search-input");
+  const query = input.value.trim();
+  const resultsEl = el("sg-area-search-results");
+  const messageEl = el("sg-area-search-message");
+  resultsEl.hidden = true;
+  resultsEl.innerHTML = "";
+  messageEl.hidden = true;
+  if (!query || !regionSearchUrl)
+    return;
+  let data;
+  try {
+    data = await getJson(`${regionSearchUrl}?q=${encodeURIComponent(query)}`);
+  } catch {
+    messageEl.textContent = "Could not search for that place right now.";
+    messageEl.hidden = false;
+    return;
+  }
+  const results = data.results ?? [];
+  if (!results.length) {
+    messageEl.textContent = "No area boundary found for that place - try a broader name, like a state or city, or draw the region manually.";
+    messageEl.hidden = false;
+    return;
+  }
+  const [onlyResult] = results;
+  if (results.length === 1 && onlyResult) {
+    setAreaGeometry(onlyResult.geojson);
+    return;
+  }
+  for (const result of results) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "spotguessr-area-search-result";
+    button.textContent = result.display_name;
+    button.addEventListener("click", () => {
+      setAreaGeometry(result.geojson);
+      resultsEl.hidden = true;
     });
-    areaMap.addControl(drawControl);
-    areaMap.on(L.Draw.Event.CREATED, (event) => {
-      const { layer } = event;
-      areaDrawnItems?.clearLayers();
-      areaDrawnItems?.addLayer(layer);
-    });
+    resultsEl.appendChild(button);
+  }
+  resultsEl.hidden = false;
+}
+function initAreaSearch() {
+  el("sg-area-search-btn").addEventListener("click", () => void searchAreaRegion());
+  el("sg-area-search-input").addEventListener("keydown", (event) => {
+    if (event.key !== "Enter")
+      return;
+    event.preventDefault();
+    searchAreaRegion();
   });
 }
 function currentGeoBoundsGeoJson() {
-  if (!areaDrawnItems)
-    return null;
-  const [layer] = areaDrawnItems.getLayers();
-  if (!layer || !("toGeoJSON" in layer))
-    return null;
-  const feature = layer.toGeoJSON();
-  return JSON.stringify(feature.geometry);
+  return el("sg-area-geo-bounds").value || null;
 }
 async function loadPinOptions() {
   const data = await getJson(urls.pins);
@@ -142,6 +240,25 @@ async function loadFriendOptions() {
   friendOptions = data.friends ?? [];
   return friendOptions;
 }
+async function fetchFriendsEagerly() {
+  const loadingEl = el("sg-friend-list-loading");
+  const errorEl = el("sg-friend-list-error");
+  loadingEl.hidden = false;
+  errorEl.hidden = true;
+  try {
+    await loadFriendOptions();
+  } catch {
+    loadingEl.hidden = true;
+    errorEl.hidden = false;
+    toast.error("Couldn't load your friends list.");
+    return;
+  }
+  loadingEl.hidden = true;
+  renderFriendCheckboxes(el("sg-friend-list"), friendOptions, new Set);
+}
+function initFriendListRetry() {
+  el("sg-friend-list-retry").addEventListener("click", () => void fetchFriendsEagerly());
+}
 function renderFriendCheckboxes(container, friends, excludeIds) {
   container.innerHTML = "";
   const available = friends.filter((friend) => !excludeIds.has(friend.profile_id));
@@ -151,6 +268,8 @@ function renderFriendCheckboxes(container, friends, excludeIds) {
   }
   for (const friend of available) {
     const label = document.createElement("label");
+    const wrap = document.createElement("span");
+    wrap.className = "ul-checkbox-wrap";
     const checkbox = document.createElement("input");
     checkbox.type = "checkbox";
     checkbox.value = String(friend.profile_id);
@@ -161,8 +280,12 @@ function renderFriendCheckboxes(container, friends, excludeIds) {
       else
         selectedInviteIds.delete(friend.profile_id);
     });
-    label.appendChild(checkbox);
-    label.appendChild(document.createTextNode(friend.username));
+    const box = document.createElement("span");
+    box.className = "ul-checkbox";
+    wrap.append(checkbox, box);
+    const nameSpan = document.createElement("span");
+    nameSpan.textContent = friend.username;
+    label.append(wrap, nameSpan);
     container.appendChild(label);
   }
 }
@@ -185,7 +308,7 @@ async function handleInviteMore() {
   const alreadyInvited = new Set(lobby.participants.map((participant) => participant.profile_id));
   const available = friends.filter((friend) => !alreadyInvited.has(friend.profile_id));
   if (!available.length) {
-    window.alert("Everyone on your friends list is already in this game.");
+    toast.error("Everyone on your friends list is already in this game.");
     return;
   }
   const chosenName = window.prompt(`Invite who? (${available.map((friend) => friend.username).join(", ")})`);
@@ -196,7 +319,7 @@ async function handleInviteMore() {
     return;
   const response = await postForm(urlFor(urls.invite, sessionId), { profile_id: String(chosen.profile_id) });
   if (response.error) {
-    window.alert(response.error);
+    toast.error(response.error);
     return;
   }
   const refreshed = await getJson(urlFor(urls.lobby, sessionId));
@@ -302,6 +425,60 @@ function renderRound(round, roundNumber) {
   resetGuessMap();
   setTimeout(() => guessMap?.invalidateSize(), 0);
 }
+function avatarInitial(username) {
+  return username.charAt(0).toUpperCase() || "?";
+}
+function renderScoreCard(data, rank) {
+  const template = el("sg-score-card-template");
+  const node = template.content.firstElementChild?.cloneNode(true);
+  if (!node)
+    throw new Error("SpotGuessr: score card template is empty");
+  const card = node;
+  card.dataset.profileId = String(data.profileId);
+  const rankEl = card.querySelector(".spotguessr-score-card-rank");
+  if (rankEl)
+    rankEl.textContent = rank ? `#${rank}` : "";
+  if (rank && rank <= 3)
+    card.classList.add(`spotguessr-score-card--rank-${rank}`);
+  const avatarWrap = card.querySelector(".spotguessr-score-card-avatar-wrap");
+  if (avatarWrap) {
+    if (data.avatarUrl) {
+      const img = document.createElement("img");
+      img.className = "friend-avatar-sm";
+      img.src = data.avatarUrl;
+      img.alt = data.username;
+      avatarWrap.appendChild(img);
+    } else {
+      const placeholder = document.createElement("span");
+      placeholder.className = "friend-avatar-sm friend-avatar-placeholder";
+      placeholder.textContent = avatarInitial(data.username);
+      avatarWrap.appendChild(placeholder);
+    }
+  }
+  const nameEl = card.querySelector(".spotguessr-score-card-name");
+  if (nameEl)
+    nameEl.textContent = data.username;
+  const subtitleEl = card.querySelector(".spotguessr-score-card-subtitle");
+  if (subtitleEl)
+    subtitleEl.textContent = data.subtitle ?? "";
+  const pointsEl = card.querySelector(".spotguessr-score-card-points");
+  if (pointsEl)
+    pointsEl.textContent = `${data.points} pts`;
+  return card;
+}
+function renderScoreCardList(container, entries, options) {
+  container.innerHTML = "";
+  const sorted = [...entries].sort((a, b) => b.points - a.points);
+  const [only] = sorted;
+  if (options.solo && sorted.length === 1 && only) {
+    const item = document.createElement("li");
+    item.className = "spotguessr-score-card spotguessr-score-card--solo";
+    item.textContent = `Your score: ${only.points} pts`;
+    container.appendChild(item);
+    return;
+  }
+  sorted.forEach((entry, index) => container.appendChild(renderScoreCard(entry, index + 1)));
+}
 function renderResultsList(results) {
   const list = el("sg-reveal-results");
   if (!isMultiplayer) {
@@ -309,25 +486,32 @@ function renderResultsList(results) {
     return;
   }
   list.hidden = false;
-  list.innerHTML = "";
-  for (const result of [...results].sort((a, b) => b.points - a.points)) {
-    const item = document.createElement("li");
-    const km = (result.distance_meters / 1000).toFixed(2);
-    const points = result.points + result.date_points;
-    item.textContent = `${result.username}: ${points} pts (${km} km away)`;
-    list.appendChild(item);
-  }
+  renderScoreCardList(list, results.map((result) => ({
+    profileId: result.profile_id,
+    username: result.username,
+    avatarUrl: result.avatar_url,
+    points: result.points + result.date_points,
+    subtitle: `${(result.distance_meters / 1000).toFixed(2)} km away`
+  })), { solo: false });
 }
 function updateScoreboardFromResults(results) {
   for (const result of results) {
     let entry = scoreboard.find((participant) => participant.profile_id === result.profile_id);
     if (!entry) {
-      entry = { profile_id: result.profile_id, username: result.username, total_points: 0 };
+      entry = { profile_id: result.profile_id, username: result.username, avatar_url: result.avatar_url, total_points: 0 };
       scoreboard.push(entry);
     }
     entry.total_points += result.points + result.date_points;
   }
   renderScoreboard();
+  const list = el("sg-scoreboard");
+  for (const result of results) {
+    const card = list.querySelector(`[data-profile-id="${result.profile_id}"]`);
+    if (!card)
+      continue;
+    card.classList.add("spotguessr-score-card--pulse");
+    card.addEventListener("animationend", () => card.classList.remove("spotguessr-score-card--pulse"), { once: true });
+  }
 }
 function renderScoreboard() {
   const list = el("sg-scoreboard");
@@ -336,16 +520,14 @@ function renderScoreboard() {
     return;
   }
   list.hidden = false;
-  list.innerHTML = "";
-  for (const entry of [...scoreboard].sort((a, b) => b.total_points - a.total_points)) {
-    const item = document.createElement("li");
-    item.textContent = `${entry.username}: ${entry.total_points}`;
-    list.appendChild(item);
-  }
+  renderScoreCardList(list, scoreboard.map((entry) => ({ profileId: entry.profile_id, username: entry.username, avatarUrl: entry.avatar_url, points: entry.total_points })), { solo: false });
 }
 function showPhotoFeedbackIfApplicable() {
   el("sg-photo-feedback").hidden = currentMode !== "photos";
   el("sg-photo-feedback-thanks").hidden = true;
+}
+function dropInMarker(marker) {
+  marker.getElement()?.classList.add("spotguessr-marker-drop");
 }
 function showReveal(reveal) {
   el("sg-submit-guess-btn").disabled = true;
@@ -368,6 +550,7 @@ function showReveal(reveal) {
   const map = ensureGuessMap();
   const actualLatLng = L.latLng(reveal.actual_latitude, reveal.actual_longitude);
   actualMarker = L.marker(actualLatLng).addTo(map);
+  dropInMarker(actualMarker);
   if (guessMarker) {
     const guessLatLng = guessMarker.getLatLng();
     resultLine = L.polyline([guessLatLng, actualLatLng], { color: "#e74c3c" }).addTo(map);
@@ -390,6 +573,7 @@ function showBroadcastReveal(data) {
     const map = ensureGuessMap();
     const actualLatLng = L.latLng(data.actual_latitude, data.actual_longitude);
     actualMarker = L.marker(actualLatLng).addTo(map);
+    dropInMarker(actualMarker);
     if (guessMarker) {
       const guessLatLng = guessMarker.getLatLng();
       resultLine = L.polyline([guessLatLng, actualLatLng], { color: "#e74c3c" }).addTo(map);
@@ -410,21 +594,19 @@ function showSummary(summary) {
   el("sg-game-panel").hidden = true;
   el("sg-lobby-panel").hidden = true;
   el("sg-summary-panel").hidden = false;
-  const list = el("sg-summary-scores");
-  list.innerHTML = "";
-  for (const participant of [...summary.participants].sort((a, b) => b.total_points - a.total_points)) {
-    const item = document.createElement("li");
-    item.textContent = `${participant.username}: ${participant.total_points}`;
-    list.appendChild(item);
-  }
+  renderScoreCardList(el("sg-summary-scores"), summary.participants.map((participant) => ({
+    profileId: participant.profile_id,
+    username: participant.username,
+    avatarUrl: participant.avatar_url,
+    points: participant.total_points
+  })), { solo: !isMultiplayer });
   if (ws) {
     ws.close();
     ws = null;
   }
 }
-async function startGame(event) {
-  event.preventDefault();
-  currentMode = el("sg-mode").value;
+async function startGame(mode) {
+  currentMode = mode;
   dateGuessingEnabled = currentMode === "photos" && el("sg-date-guessing").checked;
   sessionScore = 0;
   scoreboard = [];
@@ -432,7 +614,7 @@ async function startGame(event) {
   const geoBounds = el("sg-restrict-area").checked ? currentGeoBoundsGeoJson() : null;
   const body = new URLSearchParams({
     mode: currentMode,
-    difficulty: String(Number(el("sg-difficulty").value) / 100),
+    difficulty: String(currentDifficulty()),
     total_rounds: el("sg-rounds").value,
     external_media_only: el("sg-external-media-only").checked ? "on" : "off",
     allow_arbitrary_external_photos: el("sg-allow-arbitrary-external-photos").checked ? "on" : "off",
@@ -446,7 +628,11 @@ async function startGame(event) {
     body.append("invite_profile_ids", String(profileId));
   const response = await postForm(urls.start, body);
   if (response.error) {
-    window.alert(response.error);
+    toast.error(response.error);
+    return;
+  }
+  if (response.error_code === "no_eligible_locations") {
+    showNoEligibleLocations();
     return;
   }
   sessionId = response.session_id;
@@ -476,7 +662,7 @@ async function submitGuess() {
   }
   const reveal = await postForm(urlFor(urls.guess, sessionId, currentRoundId), payload);
   if (reveal.error) {
-    window.alert(reveal.error);
+    toast.error(reveal.error);
     return;
   }
   showReveal(reveal);
@@ -486,7 +672,7 @@ async function submitPhotoFeedback(kind) {
     return;
   const response = await postForm(urlFor(urls.photo_feedback, sessionId, currentRoundId), { kind });
   if (response.error) {
-    window.alert(response.error);
+    toast.error(response.error);
     return;
   }
   el("sg-photo-feedback-thanks").hidden = false;
@@ -495,6 +681,10 @@ async function goToNextRound() {
   if (sessionId === null)
     return;
   const data = await getJson(urlFor(urls.round, sessionId));
+  if (data.no_eligible_locations) {
+    showNoEligibleLocations();
+    return;
+  }
   if (data.finished) {
     showSummary(data.summary);
     return;
@@ -506,7 +696,7 @@ async function joinLobby() {
     return;
   const response = await postForm(urlFor(urls.join, sessionId), {});
   if (response.error) {
-    window.alert(response.error);
+    toast.error(response.error);
     return;
   }
   await refreshLobby();
@@ -516,10 +706,14 @@ async function beginGame() {
     return;
   const response = await postForm(urlFor(urls.begin, sessionId), {});
   if (response.error) {
-    window.alert(response.error);
+    toast.error(response.error);
     return;
   }
   el("sg-lobby-panel").hidden = true;
+  if (response.no_eligible_locations) {
+    showNoEligibleLocations();
+    return;
+  }
   if (response.finished) {
     showSummary(response.summary);
     return;
@@ -542,7 +736,44 @@ function resetToSettings() {
   el("sg-summary-panel").hidden = true;
   el("sg-lobby-panel").hidden = true;
   el("sg-game-panel").hidden = true;
+  el("sg-empty-state-panel").hidden = true;
   el("sg-settings-panel").hidden = false;
+}
+function showNoEligibleLocations() {
+  resetToSettings();
+  el("sg-settings-panel").hidden = true;
+  el("sg-empty-state-panel").hidden = false;
+}
+function initEmptyState() {
+  el("sg-empty-state-settings-btn").addEventListener("click", () => {
+    resetToSettings();
+    openSettingsDialog(currentMode);
+  });
+}
+function applyLastConfig() {
+  const config = window.SPOTGUESSR_LAST_CONFIG;
+  if (!config)
+    return;
+  let nearestDifficulty = "medium";
+  let smallestGap = Infinity;
+  for (const key of Object.keys(DIFFICULTY_VALUES)) {
+    const gap = Math.abs(DIFFICULTY_VALUES[key] - config.difficulty);
+    if (gap < smallestGap) {
+      smallestGap = gap;
+      nearestDifficulty = key;
+    }
+  }
+  el(`sg-difficulty-${nearestDifficulty}`).checked = true;
+  el("sg-external-media-only").checked = config.external_media_only;
+  el("sg-allow-arbitrary-external-photos").checked = config.allow_arbitrary_external_photos;
+  el("sg-date-guessing").checked = config.date_guessing_enabled;
+  el("sg-use-aliases").checked = config.use_aliases;
+  el("sg-require-visited-all").checked = config.require_visited_all;
+  if (config.geo_bounds_geojson) {
+    el("sg-restrict-area").checked = true;
+    el("sg-area-map-wrap").hidden = false;
+    restoredGeoBounds = config.geo_bounds_geojson;
+  }
 }
 function connectSessionSocket() {
   if (ws || sessionId === null)
@@ -636,20 +867,32 @@ async function loadInitialSession() {
   connectSessionSocket();
   await loadPinOptions();
   const data = await getJson(urlFor(urls.round, sessionId));
-  if (data.finished) {
+  if (data.no_eligible_locations) {
+    showNoEligibleLocations();
+  } else if (data.finished) {
     showSummary(data.summary);
   } else {
     renderRound(data.round, data.round.sequence_index + 1);
   }
 }
-initDifficultySlider();
-initModeSelect();
+applyLastConfig();
+initRoundsSlider();
+initModeCards();
 initRatingsToggle();
 initAreaRestriction();
+initAreaSearch();
 initPinSearch();
 initFriendPicker();
+initFriendListRetry();
+initEmptyState();
 initChat();
-el("sg-start-form").addEventListener("submit", (event) => void startGame(event));
+fetchFriendsEagerly();
+el("sg-start-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  const mode = currentSettingsMode();
+  el("sg-settings-dialog").close();
+  startGame(mode);
+});
 el("sg-submit-guess-btn").addEventListener("click", () => void submitGuess());
 el("sg-photo-thumbs-up-btn").addEventListener("click", () => void submitPhotoFeedback("thumbs_up"));
 el("sg-photo-thumbs-down-btn").addEventListener("click", () => void submitPhotoFeedback("thumbs_down"));

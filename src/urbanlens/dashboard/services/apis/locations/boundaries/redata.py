@@ -5,23 +5,19 @@ ML-derived building-footprint datasets), this is survey-grade geometry
 straight from the county assessor's own GIS layer - the same data
 ``plugins.builtin.property_records`` already fetches for the Ownership card,
 just consumed for its ``parcel_geometry``/``building_geometry`` instead of its
-attribute fields. See ``docs/redata.md`` for the extraction this depends on.
+attribute fields.
 
-REData's own internal storage for these fields is still Esri's ring-list
-shape, but its API converts them to standard GeoJSON on the way out
-(``core.services.geojson.esri_rings_to_geojson`` on REData's side) - this
-provider parses that GeoJSON directly (``geojson_polygon_to_geos``) rather
-than running the Esri-ring-fixing conversion (``esri_rings_to_polygon``)
-itself, which is still needed only for providers that hand back genuine
-Esri rings natively (Census TIGERweb, via ``geo_boundary.py``).
+REData's API returns these fields as standard GeoJSON, so this provider parses
+that directly (``geojson_polygon_to_geos``) rather than running the
+Esri-ring-fixing conversion (``esri_rings_to_polygon``), which is still needed
+only for providers that hand back genuine Esri rings natively (Census
+TIGERweb, via ``geo_boundary.py``).
 
-Coverage is real but partial: only jurisdictions REData has a Tier 1 ArcGIS
-endpoint configured for populate ``parcel_geometry`` at all (Socrata sources
-and any future Tier 2/3 scrape never do), and ``building_geometry`` only when
-that jurisdiction *additionally* has a sibling building-footprint layer
-configured - most counties that publish a parcels layer don't also publish
-one. Falling back to the next provider in the chain when either is missing is
-the expected, common case, not a failure.
+Coverage is real but partial - not every jurisdiction has ``parcel_geometry``
+available, and ``building_geometry`` is rarer still (not every county that
+publishes a parcels layer also publishes a building-footprint one). Falling
+back to the next provider in the chain when either is missing is the
+expected, common case, not a failure.
 """
 
 from __future__ import annotations

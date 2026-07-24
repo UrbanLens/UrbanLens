@@ -598,6 +598,11 @@ LOGGING = {
             "style": "{",
         },
     },
+    "filters": {
+        "health_check_access": {
+            "()": "urbanlens.UrbanLens.logging_filters.HealthCheckAccessLogFilter",
+        },
+    },
     "handlers": {
         "console": {
             "class": "logging.StreamHandler",
@@ -625,6 +630,20 @@ LOGGING = {
         "django.request": {
             "handlers": _log_handlers,
             "level": "ERROR",
+            "propagate": False,
+        },
+        # ASGI/WSGI dev-server access loggers - silence the health check
+        # probe's request line specifically, since it fires every ~30s.
+        "django.channels.server": {
+            "handlers": _log_handlers,
+            "filters": ["health_check_access"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "django.server": {
+            "handlers": _log_handlers,
+            "filters": ["health_check_access"],
+            "level": "INFO",
             "propagate": False,
         },
         "urbanlens": {

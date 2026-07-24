@@ -1,0 +1,109 @@
+{% comment %}
+Shared settings dialog for all 3 SpotGuessr modes - opened by a mode card's
+gear icon (spotguessr.ts's openSettingsDialog()), which sets #sg-settings-mode
+before showing it. Difficulty/rounds/toggles/area/friends apply regardless of
+which mode opened it; [data-mode-only] fields are shown/hidden per mode by
+updateModeVisibility().
+{% endcomment %}
+<dialog id="sg-settings-dialog" class="ul-dialog spotguessr-settings-dialog">
+    <div class="dialog-header">
+        <span><i class="material-symbols-outlined">tune</i> Game settings</span>
+        <button type="button" class="dialog-close" onclick="this.closest('dialog').close()" aria-label="Close dialog">
+            <i class="material-symbols-outlined">close</i>
+        </button>
+    </div>
+    <div class="ul-dialog-body">
+        <form id="sg-start-form" class="spotguessr-settings-form">
+            <input type="hidden" id="sg-settings-mode">
+            <div class="spotguessr-field">
+                <label>Difficulty</label>
+                <div class="spotguessr-difficulty-group" role="radiogroup" aria-label="Difficulty">
+                    <label class="ul-radio-button">
+                        <input type="radio" name="sg-difficulty-choice" value="easy" id="sg-difficulty-easy">
+                        <i class="material-symbols-outlined">sentiment_satisfied</i>
+                        Easy
+                    </label>
+                    <label class="ul-radio-button">
+                        <input type="radio" name="sg-difficulty-choice" value="medium" id="sg-difficulty-medium" checked>
+                        <i class="material-symbols-outlined">sentiment_neutral</i>
+                        Medium
+                    </label>
+                    <label class="ul-radio-button">
+                        <input type="radio" name="sg-difficulty-choice" value="hard" id="sg-difficulty-hard">
+                        <i class="material-symbols-outlined">sentiment_very_dissatisfied</i>
+                        Hard
+                    </label>
+                </div>
+            </div>
+            <div class="spotguessr-field">
+                <label for="sg-rounds">Rounds: <span id="sg-rounds-label">{{ default_rounds }}</span></label>
+                <input type="range" id="sg-rounds" min="{{ min_rounds }}" max="{{ max_rounds }}" value="{{ default_rounds }}">
+            </div>
+            <div class="spotguessr-field spotguessr-field--switch" data-mode-only="photos">
+                <label>
+                    <span class="ul-switch"><input type="checkbox" id="sg-external-media-only"><span class="ul-switch__track"></span></span>
+                    <span>Use only external media (not my own uploads)</span>
+                </label>
+            </div>
+            <div class="spotguessr-field spotguessr-field--switch" data-mode-only="photos">
+                <label>
+                    <span class="ul-switch"><input type="checkbox" id="sg-allow-arbitrary-external-photos"><span class="ul-switch__track"></span></span>
+                    <span>Allow any external wiki photo, not just relevant ones</span>
+                </label>
+                <p class="spotguessr-panel-hint">Off by default - on shows more photos, including ones the community hasn't vetted (or has flagged) yet.</p>
+            </div>
+            <div class="spotguessr-field spotguessr-field--switch" data-mode-only="photos">
+                <label>
+                    <span class="ul-switch"><input type="checkbox" id="sg-date-guessing"><span class="ul-switch__track"></span></span>
+                    <span>Also guess the photo's date (bonus points)</span>
+                </label>
+            </div>
+            <div class="spotguessr-field spotguessr-field--switch" data-mode-only="named_place">
+                <label>
+                    <span class="ul-switch"><input type="checkbox" id="sg-use-aliases" checked><span class="ul-switch__track"></span></span>
+                    <span>Use aliases/nicknames (not just the official name)</span>
+                </label>
+            </div>
+            <div class="spotguessr-field spotguessr-field--switch">
+                <label>
+                    <span class="ul-switch"><input type="checkbox" id="sg-require-visited-all"><span class="ul-switch__track"></span></span>
+                    <span>Only places I've actually visited</span>
+                </label>
+            </div>
+            <div class="spotguessr-field spotguessr-field--switch">
+                <label>
+                    <span class="ul-switch"><input type="checkbox" id="sg-restrict-area"><span class="ul-switch__track"></span></span>
+                    <span>Restrict to a chosen area</span>
+                </label>
+            </div>
+            <div id="sg-area-map-wrap" class="spotguessr-area-map-wrap" hidden>
+                <div class="spotguessr-area-search">
+                    <input type="text" id="sg-area-search-input" placeholder="Type a place name, e.g. Ohio" autocomplete="off">
+                    <button type="button" class="btn btn--secondary btn--sm" id="sg-area-search-btn">Search</button>
+                </div>
+                <div class="spotguessr-area-search-results" id="sg-area-search-results" hidden></div>
+                <p class="spotguessr-area-search-message" id="sg-area-search-message" hidden></p>
+                <div id="sg-area-map" class="spotguessr-area-map"></div>
+                <p class="spotguessr-panel-hint">Search for a place (like a state or city) or draw a polygon on the map - the newest one replaces the last.</p>
+                <input type="hidden" id="sg-area-geo-bounds">
+            </div>
+
+            <div class="spotguessr-field spotguessr-field--switch">
+                <label>
+                    <span class="ul-switch"><input type="checkbox" id="sg-play-with-friends"><span class="ul-switch__track"></span></span>
+                    <span>Play with friends</span>
+                </label>
+            </div>
+            <div id="sg-invite-wrap" class="spotguessr-invite-wrap" hidden>
+                <div id="sg-friend-list" class="spotguessr-friend-list">
+                    <p class="spotguessr-panel-hint" id="sg-friend-list-loading">Loading friends&hellip;</p>
+                    <p class="spotguessr-panel-hint" id="sg-friend-list-error" hidden>
+                        Couldn't load friends. <button type="button" class="btn btn--link" id="sg-friend-list-retry">Retry</button>
+                    </p>
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn--primary btn--lg">Start playing</button>
+        </form>
+    </div>
+</dialog>

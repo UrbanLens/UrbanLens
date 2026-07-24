@@ -9,6 +9,7 @@
  * open one at all.
  */
 import { getCsrfToken } from "../shared/csrf";
+import { toast } from "../shared/dialogs";
 
 declare const L: typeof import("leaflet");
 import type {} from "leaflet-draw";
@@ -32,7 +33,22 @@ declare global {
             session_id_sentinel: string;
             round_id_sentinel: string;
         };
+        SPOTGUESSR_LAST_CONFIG: LastConfig | null;
     }
+}
+
+// Mirrors services.spotguessr.session.GameConfig.to_dict() - the profile's
+// last-used settings, restored on page load (applyLastConfig). total_rounds
+// isn't part of this - it's a GameSession field, never persisted to
+// SpotGuessrPreference, so the rounds slider always starts at the default.
+interface LastConfig {
+    difficulty: number;
+    external_media_only: boolean;
+    allow_arbitrary_external_photos: boolean;
+    require_visited_all: boolean;
+    date_guessing_enabled: boolean;
+    use_aliases: boolean;
+    geo_bounds_geojson: GeoJSON.Geometry | null;
 }
 
 interface RoundPayload {
@@ -62,6 +78,7 @@ interface RevealPayload {
 interface RoundRevealResult {
     profile_id: number;
     username: string;
+    avatar_url: string | null;
     distance_meters: number;
     points: number;
     date_points: number;
@@ -78,6 +95,7 @@ interface RoundRevealBroadcast {
 interface ParticipantPayload {
     profile_id: number;
     username: string;
+    avatar_url: string | null;
     status: string;
     total_points: number;
     is_host: boolean;
@@ -95,6 +113,7 @@ interface SessionPayload {
 interface SummaryParticipant {
     profile_id: number;
     username: string;
+    avatar_url: string | null;
     total_points: number;
 }
 
@@ -130,6 +149,7 @@ const DEFAULT_ZOOM = 4;
 
 const pageEl = document.querySelector<HTMLElement>(".spotguessr-page");
 const myProfileId = Number(pageEl?.dataset.myProfileId ?? "0");
+const regionSearchUrl = pageEl?.dataset.regionSearchUrl ?? "";
 
 let sessionId: number | null = null;
 let currentRoundId: number | null = null;
@@ -149,6 +169,10 @@ let resultLine: L.Polyline | null = null;
 
 let areaMap: L.Map | null = null;
 let areaDrawnItems: L.FeatureGroup | null = null;
+// Set by applyLastConfig() when a saved geo_bounds exists - drawn once
+// ensureAreaMap() actually builds the map (deferred until the dialog is
+// visible, since a <dialog> without `open` has zero size before showModal()).
+let restoredGeoBounds: GeoJSON.Geometry | null = null;
 
 let pinOptions: PinOption[] = [];
 let friendOptions: FriendOption[] = [];
@@ -187,25 +211,75 @@ async function getJson(url: string): Promise<any> {
 // Settings panel
 // ---------------------------------------------------------------------------
 
-function initDifficultySlider(): void {
-    const slider = el<HTMLInputElement>("sg-difficulty");
-    const label = el("sg-difficulty-label");
-    const describe = (value: number): string => (value < 33 ? "Easy" : value < 66 ? "Medium" : "Hard");
+type Difficulty = "easy" | "medium" | "hard";
+
+// The backend accepts any float 0.0-1.0 (see docs/designs/spotguessr.md's
+// Gaussian-kernel difficulty mapping) - these 3 buttons just quantize the
+// player's choice down to one of 3 representative values.
+const DIFFICULTY_VALUES: Record<Difficulty, number> = { easy: 0.2, medium: 0.5, hard: 0.8 };
+
+function currentDifficulty(): number {
+    const checked = document.querySelector<HTMLInputElement>('input[name="sg-difficulty-choice"]:checked');
+    return DIFFICULTY_VALUES[(checked?.value as Difficulty) ?? "medium"];
+}
+
+function initRoundsSlider(): void {
+    const slider = el<HTMLInputElement>("sg-rounds");
+    const label = el("sg-rounds-label");
     slider.addEventListener("input", () => {
-        label.textContent = describe(Number(slider.value));
+        label.textContent = slider.value;
     });
 }
 
+function currentSettingsMode(): string {
+    return el<HTMLInputElement>("sg-settings-mode").value || "photos";
+}
+
 function updateModeVisibility(): void {
-    const mode = el<HTMLSelectElement>("sg-mode").value;
+    const mode = currentSettingsMode();
     document.querySelectorAll<HTMLElement>("[data-mode-only]").forEach((field) => {
         field.hidden = field.dataset.modeOnly !== mode;
     });
 }
 
-function initModeSelect(): void {
-    el<HTMLSelectElement>("sg-mode").addEventListener("change", updateModeVisibility);
+// The dialog is shared across all 3 mode cards - a gear icon click scopes it
+// to that card's mode (updateModeVisibility shows/hides [data-mode-only]
+// fields accordingly); there's no in-dialog mode switcher.
+function openSettingsDialog(mode: string): void {
+    el<HTMLInputElement>("sg-settings-mode").value = mode;
     updateModeVisibility();
+    el<HTMLDialogElement>("sg-settings-dialog").showModal();
+    if (areaMap) {
+        // Already built while the dialog was previously closed (0-size) -
+        // nudge Leaflet now that it's actually visible.
+        areaMap.invalidateSize();
+    } else if (el<HTMLInputElement>("sg-restrict-area").checked) {
+        // First time the dialog's ever been opened with restrict-area
+        // already on (applyLastConfig pre-checked it) - build the map now
+        // that it has real size, and draw the restored region once.
+        ensureAreaMap();
+        if (restoredGeoBounds) {
+            setAreaGeometry(restoredGeoBounds);
+            restoredGeoBounds = null;
+        }
+    }
+}
+
+function initModeCards(): void {
+    document.querySelectorAll<HTMLButtonElement>(".spotguessr-mode-card-body").forEach((button) => {
+        button.addEventListener("click", () => {
+            const mode = button.dataset.mode;
+            if (!mode) return;
+            el<HTMLInputElement>("sg-settings-mode").value = mode;
+            void startGame(mode);
+        });
+    });
+    document.querySelectorAll<HTMLButtonElement>(".spotguessr-card-gear").forEach((button) => {
+        button.addEventListener("click", () => {
+            const mode = button.dataset.mode;
+            if (mode) openSettingsDialog(mode);
+        });
+    });
 }
 
 function initRatingsToggle(): void {
@@ -213,6 +287,42 @@ function initRatingsToggle(): void {
     checkbox.addEventListener("change", () => {
         void postForm(urls.settings, { show_ratings_to_friends: checkbox.checked ? "on" : "off" });
     });
+}
+
+interface RegionSearchResult {
+    display_name: string;
+    geojson: GeoJSON.Geometry;
+}
+
+function ensureAreaMap(): L.Map {
+    if (areaMap) return areaMap;
+    areaMap = L.map("sg-area-map").setView(DEFAULT_CENTER, DEFAULT_ZOOM);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "&copy; OpenStreetMap contributors" }).addTo(areaMap);
+    areaDrawnItems = new L.FeatureGroup();
+    areaMap.addLayer(areaDrawnItems);
+    const drawControl = new L.Control.Draw({
+        draw: { polygon: {}, rectangle: false, circle: false, marker: false, polyline: false, circlemarker: false },
+        edit: { featureGroup: areaDrawnItems },
+    });
+    areaMap.addControl(drawControl);
+    areaMap.on(L.Draw.Event.CREATED, (event: L.LeafletEvent) => {
+        const { layer } = event as unknown as { layer: L.Polygon };
+        setAreaGeometry(layer.toGeoJSON().geometry);
+    });
+    return areaMap;
+}
+
+// Exactly one region is ever active - a new search selection or hand-drawn
+// polygon always replaces whatever was there before, matching the old
+// rectangle-only tool's single-shape behavior (no include/exclude sets).
+function setAreaGeometry(geometry: GeoJSON.Geometry): void {
+    const map = ensureAreaMap();
+    areaDrawnItems?.clearLayers();
+    const layer = L.geoJSON(geometry as GeoJSON.GeoJsonObject);
+    layer.eachLayer((shapeLayer) => areaDrawnItems?.addLayer(shapeLayer));
+    el<HTMLInputElement>("sg-area-geo-bounds").value = JSON.stringify(geometry);
+    const bounds = areaDrawnItems?.getBounds();
+    if (bounds?.isValid()) map.fitBounds(bounds, { padding: [40, 40] });
 }
 
 function initAreaRestriction(): void {
@@ -225,29 +335,65 @@ function initAreaRestriction(): void {
             areaMap.invalidateSize();
             return;
         }
-        areaMap = L.map("sg-area-map").setView(DEFAULT_CENTER, DEFAULT_ZOOM);
-        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "&copy; OpenStreetMap contributors" }).addTo(areaMap);
-        areaDrawnItems = new L.FeatureGroup();
-        areaMap.addLayer(areaDrawnItems);
-        const drawControl = new L.Control.Draw({
-            draw: { rectangle: {}, polygon: false, circle: false, marker: false, polyline: false, circlemarker: false },
-            edit: { featureGroup: areaDrawnItems },
+        ensureAreaMap();
+    });
+}
+
+async function searchAreaRegion(): Promise<void> {
+    const input = el<HTMLInputElement>("sg-area-search-input");
+    const query = input.value.trim();
+    const resultsEl = el("sg-area-search-results");
+    const messageEl = el("sg-area-search-message");
+    resultsEl.hidden = true;
+    resultsEl.innerHTML = "";
+    messageEl.hidden = true;
+    if (!query || !regionSearchUrl) return;
+
+    let data: { results?: RegionSearchResult[] };
+    try {
+        data = await getJson(`${regionSearchUrl}?q=${encodeURIComponent(query)}`);
+    } catch {
+        messageEl.textContent = "Could not search for that place right now.";
+        messageEl.hidden = false;
+        return;
+    }
+
+    const results = data.results ?? [];
+    if (!results.length) {
+        messageEl.textContent = "No area boundary found for that place - try a broader name, like a state or city, or draw the region manually.";
+        messageEl.hidden = false;
+        return;
+    }
+    const [onlyResult] = results;
+    if (results.length === 1 && onlyResult) {
+        setAreaGeometry(onlyResult.geojson);
+        return;
+    }
+    for (const result of results) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "spotguessr-area-search-result";
+        button.textContent = result.display_name;
+        button.addEventListener("click", () => {
+            setAreaGeometry(result.geojson);
+            resultsEl.hidden = true;
         });
-        areaMap.addControl(drawControl);
-        areaMap.on(L.Draw.Event.CREATED, (event: L.LeafletEvent) => {
-            const { layer } = event as unknown as { layer: L.Layer };
-            areaDrawnItems?.clearLayers();
-            areaDrawnItems?.addLayer(layer);
-        });
+        resultsEl.appendChild(button);
+    }
+    resultsEl.hidden = false;
+}
+
+function initAreaSearch(): void {
+    el("sg-area-search-btn").addEventListener("click", () => void searchAreaRegion());
+    el<HTMLInputElement>("sg-area-search-input").addEventListener("keydown", (event) => {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        void searchAreaRegion();
     });
 }
 
 function currentGeoBoundsGeoJson(): string | null {
-    if (!areaDrawnItems) return null;
-    const [layer] = areaDrawnItems.getLayers();
-    if (!layer || !("toGeoJSON" in layer)) return null;
-    const feature = (layer as L.Polygon).toGeoJSON();
-    return JSON.stringify(feature.geometry);
+    return el<HTMLInputElement>("sg-area-geo-bounds").value || null;
 }
 
 async function loadPinOptions(): Promise<void> {
@@ -281,6 +427,31 @@ async function loadFriendOptions(): Promise<FriendOption[]> {
     return friendOptions;
 }
 
+// Fetched unconditionally at page load (not gated behind the "Play with
+// friends" toggle) so the list is ready the moment someone opens that
+// section, instead of the old permanent "Loading friends..." whenever the
+// toggle was never successfully clicked.
+async function fetchFriendsEagerly(): Promise<void> {
+    const loadingEl = el("sg-friend-list-loading");
+    const errorEl = el("sg-friend-list-error");
+    loadingEl.hidden = false;
+    errorEl.hidden = true;
+    try {
+        await loadFriendOptions();
+    } catch {
+        loadingEl.hidden = true;
+        errorEl.hidden = false;
+        toast.error("Couldn't load your friends list.");
+        return;
+    }
+    loadingEl.hidden = true;
+    renderFriendCheckboxes(el("sg-friend-list"), friendOptions, new Set());
+}
+
+function initFriendListRetry(): void {
+    el("sg-friend-list-retry").addEventListener("click", () => void fetchFriendsEagerly());
+}
+
 function renderFriendCheckboxes(container: HTMLElement, friends: FriendOption[], excludeIds: Set<number>): void {
     container.innerHTML = "";
     const available = friends.filter((friend) => !excludeIds.has(friend.profile_id));
@@ -290,6 +461,8 @@ function renderFriendCheckboxes(container: HTMLElement, friends: FriendOption[],
     }
     for (const friend of available) {
         const label = document.createElement("label");
+        const wrap = document.createElement("span");
+        wrap.className = "ul-checkbox-wrap";
         const checkbox = document.createElement("input");
         checkbox.type = "checkbox";
         checkbox.value = String(friend.profile_id);
@@ -302,8 +475,12 @@ function renderFriendCheckboxes(container: HTMLElement, friends: FriendOption[],
             if (checkbox.checked) selectedInviteIds.add(friend.profile_id);
             else selectedInviteIds.delete(friend.profile_id);
         });
-        label.appendChild(checkbox);
-        label.appendChild(document.createTextNode(friend.username));
+        const box = document.createElement("span");
+        box.className = "ul-checkbox";
+        wrap.append(checkbox, box);
+        const nameSpan = document.createElement("span");
+        nameSpan.textContent = friend.username;
+        label.append(wrap, nameSpan);
         container.appendChild(label);
     }
 }
@@ -314,6 +491,9 @@ function initFriendPicker(): void {
     toggle.addEventListener("change", async () => {
         wrap.hidden = !toggle.checked;
         if (!toggle.checked) return;
+        // Friends are already fetched eagerly at page load (see
+        // fetchFriendsEagerly) - this await is just a safety net for the
+        // rare case the toggle is checked before that fetch resolves.
         const friends = await loadFriendOptions();
         renderFriendCheckboxes(el("sg-friend-list"), friends, new Set());
     });
@@ -326,7 +506,7 @@ async function handleInviteMore(): Promise<void> {
     const alreadyInvited = new Set(lobby.participants.map((participant) => participant.profile_id));
     const available = friends.filter((friend) => !alreadyInvited.has(friend.profile_id));
     if (!available.length) {
-        window.alert("Everyone on your friends list is already in this game.");
+        toast.error("Everyone on your friends list is already in this game.");
         return;
     }
     const chosenName = window.prompt(`Invite who? (${available.map((friend) => friend.username).join(", ")})`);
@@ -336,7 +516,7 @@ async function handleInviteMore(): Promise<void> {
 
     const response = await postForm(urlFor(urls.invite, sessionId), { profile_id: String(chosen.profile_id) });
     if (response.error) {
-        window.alert(response.error);
+        toast.error(response.error);
         return;
     }
     const refreshed: SessionPayload = await getJson(urlFor(urls.lobby, sessionId));
@@ -466,6 +646,76 @@ function renderRound(round: RoundPayload, roundNumber: number): void {
     setTimeout(() => guessMap?.invalidateSize(), 0);
 }
 
+// ---------------------------------------------------------------------------
+// Score card - shared by the reveal results list, the live scoreboard, and
+// the summary panel (renderResultsList/renderScoreboard/showSummary below).
+// ---------------------------------------------------------------------------
+
+interface ScoreCardData {
+    profileId: number;
+    username: string;
+    avatarUrl: string | null;
+    points: number;
+    subtitle?: string;
+}
+
+function avatarInitial(username: string): string {
+    return username.charAt(0).toUpperCase() || "?";
+}
+
+function renderScoreCard(data: ScoreCardData, rank?: number): HTMLElement {
+    const template = el<HTMLTemplateElement>("sg-score-card-template");
+    const node = template.content.firstElementChild?.cloneNode(true);
+    if (!node) throw new Error("SpotGuessr: score card template is empty");
+    const card = node as HTMLElement;
+    card.dataset.profileId = String(data.profileId);
+
+    const rankEl = card.querySelector<HTMLElement>(".spotguessr-score-card-rank");
+    if (rankEl) rankEl.textContent = rank ? `#${rank}` : "";
+    if (rank && rank <= 3) card.classList.add(`spotguessr-score-card--rank-${rank}`);
+
+    const avatarWrap = card.querySelector<HTMLElement>(".spotguessr-score-card-avatar-wrap");
+    if (avatarWrap) {
+        if (data.avatarUrl) {
+            const img = document.createElement("img");
+            img.className = "friend-avatar-sm";
+            img.src = data.avatarUrl;
+            img.alt = data.username;
+            avatarWrap.appendChild(img);
+        } else {
+            const placeholder = document.createElement("span");
+            placeholder.className = "friend-avatar-sm friend-avatar-placeholder";
+            placeholder.textContent = avatarInitial(data.username);
+            avatarWrap.appendChild(placeholder);
+        }
+    }
+
+    const nameEl = card.querySelector<HTMLElement>(".spotguessr-score-card-name");
+    if (nameEl) nameEl.textContent = data.username;
+    const subtitleEl = card.querySelector<HTMLElement>(".spotguessr-score-card-subtitle");
+    if (subtitleEl) subtitleEl.textContent = data.subtitle ?? "";
+    const pointsEl = card.querySelector<HTMLElement>(".spotguessr-score-card-points");
+    if (pointsEl) pointsEl.textContent = `${data.points} pts`;
+
+    return card;
+}
+
+// Solo sessions show "Your score: X" instead of a username-labeled card -
+// there's only ever one participant, and naming them is just noise.
+function renderScoreCardList(container: HTMLElement, entries: ScoreCardData[], options: { solo: boolean }): void {
+    container.innerHTML = "";
+    const sorted = [...entries].sort((a, b) => b.points - a.points);
+    const [only] = sorted;
+    if (options.solo && sorted.length === 1 && only) {
+        const item = document.createElement("li");
+        item.className = "spotguessr-score-card spotguessr-score-card--solo";
+        item.textContent = `Your score: ${only.points} pts`;
+        container.appendChild(item);
+        return;
+    }
+    sorted.forEach((entry, index) => container.appendChild(renderScoreCard(entry, index + 1)));
+}
+
 function renderResultsList(results: RoundRevealResult[]): void {
     const list = el("sg-reveal-results");
     if (!isMultiplayer) {
@@ -473,26 +723,39 @@ function renderResultsList(results: RoundRevealResult[]): void {
         return;
     }
     list.hidden = false;
-    list.innerHTML = "";
-    for (const result of [...results].sort((a, b) => b.points - a.points)) {
-        const item = document.createElement("li");
-        const km = (result.distance_meters / 1000).toFixed(2);
-        const points = result.points + result.date_points;
-        item.textContent = `${result.username}: ${points} pts (${km} km away)`;
-        list.appendChild(item);
-    }
+    renderScoreCardList(
+        list,
+        results.map((result) => ({
+            profileId: result.profile_id,
+            username: result.username,
+            avatarUrl: result.avatar_url,
+            points: result.points + result.date_points,
+            subtitle: `${(result.distance_meters / 1000).toFixed(2)} km away`,
+        })),
+        { solo: false },
+    );
 }
 
 function updateScoreboardFromResults(results: RoundRevealResult[]): void {
     for (const result of results) {
         let entry = scoreboard.find((participant) => participant.profile_id === result.profile_id);
         if (!entry) {
-            entry = { profile_id: result.profile_id, username: result.username, total_points: 0 };
+            entry = { profile_id: result.profile_id, username: result.username, avatar_url: result.avatar_url, total_points: 0 };
             scoreboard.push(entry);
         }
         entry.total_points += result.points + result.date_points;
     }
     renderScoreboard();
+    // Pulse whichever cards actually changed this round - renderScoreboard()
+    // rebuilds the whole list, so this has to run after, keyed off the
+    // profile_id dataset attribute renderScoreCard() stamps on each card.
+    const list = el("sg-scoreboard");
+    for (const result of results) {
+        const card = list.querySelector<HTMLElement>(`[data-profile-id="${result.profile_id}"]`);
+        if (!card) continue;
+        card.classList.add("spotguessr-score-card--pulse");
+        card.addEventListener("animationend", () => card.classList.remove("spotguessr-score-card--pulse"), { once: true });
+    }
 }
 
 function renderScoreboard(): void {
@@ -502,12 +765,11 @@ function renderScoreboard(): void {
         return;
     }
     list.hidden = false;
-    list.innerHTML = "";
-    for (const entry of [...scoreboard].sort((a, b) => b.total_points - a.total_points)) {
-        const item = document.createElement("li");
-        item.textContent = `${entry.username}: ${entry.total_points}`;
-        list.appendChild(item);
-    }
+    renderScoreCardList(
+        list,
+        scoreboard.map((entry) => ({ profileId: entry.profile_id, username: entry.username, avatarUrl: entry.avatar_url, points: entry.total_points })),
+        { solo: false },
+    );
 }
 
 function showPhotoFeedbackIfApplicable(): void {
@@ -518,6 +780,10 @@ function showPhotoFeedbackIfApplicable(): void {
     // `round.image` for GamePhotoFeedback to attach to server-side.
     el("sg-photo-feedback").hidden = currentMode !== "photos";
     el("sg-photo-feedback-thanks").hidden = true;
+}
+
+function dropInMarker(marker: L.Marker): void {
+    marker.getElement()?.classList.add("spotguessr-marker-drop");
 }
 
 function showReveal(reveal: RevealPayload): void {
@@ -547,6 +813,7 @@ function showReveal(reveal: RevealPayload): void {
     const map = ensureGuessMap();
     const actualLatLng = L.latLng(reveal.actual_latitude as number, reveal.actual_longitude as number);
     actualMarker = L.marker(actualLatLng).addTo(map);
+    dropInMarker(actualMarker);
 
     if (guessMarker) {
         const guessLatLng = guessMarker.getLatLng();
@@ -571,6 +838,7 @@ function showBroadcastReveal(data: RoundRevealBroadcast): void {
         const map = ensureGuessMap();
         const actualLatLng = L.latLng(data.actual_latitude, data.actual_longitude);
         actualMarker = L.marker(actualLatLng).addTo(map);
+        dropInMarker(actualMarker);
         if (guessMarker) {
             const guessLatLng = guessMarker.getLatLng();
             resultLine = L.polyline([guessLatLng, actualLatLng], { color: "#e74c3c" }).addTo(map);
@@ -592,13 +860,16 @@ function showSummary(summary: SummaryPayload): void {
     el("sg-game-panel").hidden = true;
     el("sg-lobby-panel").hidden = true;
     el("sg-summary-panel").hidden = false;
-    const list = el("sg-summary-scores");
-    list.innerHTML = "";
-    for (const participant of [...summary.participants].sort((a, b) => b.total_points - a.total_points)) {
-        const item = document.createElement("li");
-        item.textContent = `${participant.username}: ${participant.total_points}`;
-        list.appendChild(item);
-    }
+    renderScoreCardList(
+        el("sg-summary-scores"),
+        summary.participants.map((participant) => ({
+            profileId: participant.profile_id,
+            username: participant.username,
+            avatarUrl: participant.avatar_url,
+            points: participant.total_points,
+        })),
+        { solo: !isMultiplayer },
+    );
     if (ws) {
         ws.close();
         ws = null;
@@ -609,9 +880,8 @@ function showSummary(summary: SummaryPayload): void {
 // Actions
 // ---------------------------------------------------------------------------
 
-async function startGame(event: Event): Promise<void> {
-    event.preventDefault();
-    currentMode = el<HTMLSelectElement>("sg-mode").value;
+async function startGame(mode: string): Promise<void> {
+    currentMode = mode;
     dateGuessingEnabled = currentMode === "photos" && el<HTMLInputElement>("sg-date-guessing").checked;
     sessionScore = 0;
     scoreboard = [];
@@ -620,7 +890,7 @@ async function startGame(event: Event): Promise<void> {
     const geoBounds = el<HTMLInputElement>("sg-restrict-area").checked ? currentGeoBoundsGeoJson() : null;
     const body = new URLSearchParams({
         mode: currentMode,
-        difficulty: String(Number(el<HTMLInputElement>("sg-difficulty").value) / 100),
+        difficulty: String(currentDifficulty()),
         total_rounds: el<HTMLInputElement>("sg-rounds").value,
         external_media_only: el<HTMLInputElement>("sg-external-media-only").checked ? "on" : "off",
         allow_arbitrary_external_photos: el<HTMLInputElement>("sg-allow-arbitrary-external-photos").checked ? "on" : "off",
@@ -633,7 +903,11 @@ async function startGame(event: Event): Promise<void> {
 
     const response = await postForm(urls.start, body);
     if (response.error) {
-        window.alert(response.error);
+        toast.error(response.error);
+        return;
+    }
+    if (response.error_code === "no_eligible_locations") {
+        showNoEligibleLocations();
         return;
     }
 
@@ -666,7 +940,7 @@ async function submitGuess(): Promise<void> {
 
     const reveal: RevealPayload = await postForm(urlFor(urls.guess, sessionId, currentRoundId), payload);
     if (reveal.error) {
-        window.alert(reveal.error);
+        toast.error(reveal.error);
         return;
     }
     showReveal(reveal);
@@ -676,7 +950,7 @@ async function submitPhotoFeedback(kind: "thumbs_up" | "thumbs_down" | "reported
     if (sessionId === null || currentRoundId === null) return;
     const response = await postForm(urlFor(urls.photo_feedback, sessionId, currentRoundId), { kind });
     if (response.error) {
-        window.alert(response.error);
+        toast.error(response.error);
         return;
     }
     el("sg-photo-feedback-thanks").hidden = false;
@@ -687,6 +961,10 @@ async function goToNextRound(): Promise<void> {
     // broadcast - this button is hidden for them (see showReveal).
     if (sessionId === null) return;
     const data = await getJson(urlFor(urls.round, sessionId));
+    if (data.no_eligible_locations) {
+        showNoEligibleLocations();
+        return;
+    }
     if (data.finished) {
         showSummary(data.summary);
         return;
@@ -698,7 +976,7 @@ async function joinLobby(): Promise<void> {
     if (sessionId === null) return;
     const response = await postForm(urlFor(urls.join, sessionId), {});
     if (response.error) {
-        window.alert(response.error);
+        toast.error(response.error);
         return;
     }
     await refreshLobby();
@@ -708,10 +986,14 @@ async function beginGame(): Promise<void> {
     if (sessionId === null) return;
     const response = await postForm(urlFor(urls.begin, sessionId), {});
     if (response.error) {
-        window.alert(response.error);
+        toast.error(response.error);
         return;
     }
     el("sg-lobby-panel").hidden = true;
+    if (response.no_eligible_locations) {
+        showNoEligibleLocations();
+        return;
+    }
     if (response.finished) {
         showSummary(response.summary);
         return;
@@ -735,7 +1017,57 @@ function resetToSettings(): void {
     el("sg-summary-panel").hidden = true;
     el("sg-lobby-panel").hidden = true;
     el("sg-game-panel").hidden = true;
+    el("sg-empty-state-panel").hidden = true;
     el("sg-settings-panel").hidden = false;
+}
+
+// Distinguishes "never got to play a single round because nothing eligible
+// matched this mode/settings combination" from a real completed game -
+// see controllers.spotguessr's error_code/no_eligible_locations shapes.
+function showNoEligibleLocations(): void {
+    resetToSettings();
+    el("sg-settings-panel").hidden = true;
+    el("sg-empty-state-panel").hidden = false;
+}
+
+function initEmptyState(): void {
+    el("sg-empty-state-settings-btn").addEventListener("click", () => {
+        resetToSettings();
+        openSettingsDialog(currentMode);
+    });
+}
+
+// Pre-fills the (still-closed) settings dialog from the profile's last-used
+// settings, saved on every previous game start (SpotGuessrStartView) but
+// never read back until now. Runs once at page load, before any dialog is
+// opened - geo_bounds is only staged (restoredGeoBounds) since actually
+// drawing it requires the dialog to be visible first (see openSettingsDialog).
+function applyLastConfig(): void {
+    const config = window.SPOTGUESSR_LAST_CONFIG;
+    if (!config) return;
+
+    let nearestDifficulty: Difficulty = "medium";
+    let smallestGap = Infinity;
+    for (const key of Object.keys(DIFFICULTY_VALUES) as Difficulty[]) {
+        const gap = Math.abs(DIFFICULTY_VALUES[key] - config.difficulty);
+        if (gap < smallestGap) {
+            smallestGap = gap;
+            nearestDifficulty = key;
+        }
+    }
+    el<HTMLInputElement>(`sg-difficulty-${nearestDifficulty}`).checked = true;
+
+    el<HTMLInputElement>("sg-external-media-only").checked = config.external_media_only;
+    el<HTMLInputElement>("sg-allow-arbitrary-external-photos").checked = config.allow_arbitrary_external_photos;
+    el<HTMLInputElement>("sg-date-guessing").checked = config.date_guessing_enabled;
+    el<HTMLInputElement>("sg-use-aliases").checked = config.use_aliases;
+    el<HTMLInputElement>("sg-require-visited-all").checked = config.require_visited_all;
+
+    if (config.geo_bounds_geojson) {
+        el<HTMLInputElement>("sg-restrict-area").checked = true;
+        el("sg-area-map-wrap").hidden = false;
+        restoredGeoBounds = config.geo_bounds_geojson;
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -847,21 +1179,33 @@ async function loadInitialSession(): Promise<void> {
     connectSessionSocket();
     await loadPinOptions();
     const data = await getJson(urlFor(urls.round, sessionId));
-    if (data.finished) {
+    if (data.no_eligible_locations) {
+        showNoEligibleLocations();
+    } else if (data.finished) {
         showSummary(data.summary);
     } else {
         renderRound(data.round, data.round.sequence_index + 1);
     }
 }
 
-initDifficultySlider();
-initModeSelect();
+applyLastConfig();
+initRoundsSlider();
+initModeCards();
 initRatingsToggle();
 initAreaRestriction();
+initAreaSearch();
 initPinSearch();
 initFriendPicker();
+initFriendListRetry();
+initEmptyState();
 initChat();
-el("sg-start-form").addEventListener("submit", (event) => void startGame(event));
+void fetchFriendsEagerly();
+el("sg-start-form").addEventListener("submit", (event) => {
+    event.preventDefault();
+    const mode = currentSettingsMode();
+    el<HTMLDialogElement>("sg-settings-dialog").close();
+    void startGame(mode);
+});
 el("sg-submit-guess-btn").addEventListener("click", () => void submitGuess());
 el("sg-photo-thumbs-up-btn").addEventListener("click", () => void submitPhotoFeedback("thumbs_up"));
 el("sg-photo-thumbs-down-btn").addEventListener("click", () => void submitPhotoFeedback("thumbs_down"));

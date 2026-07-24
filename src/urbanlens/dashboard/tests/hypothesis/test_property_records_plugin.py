@@ -59,7 +59,7 @@ class PanelRenderContextTests(SimpleTestCase):
         self.assertEqual(ctx["chips"], ["Manual lookup required"])
         self.assertTrue(any(entry["href"] == "https://example.gov/assessor" for entry in ctx["meta"]))
 
-    def test_available_record_shows_owner_and_chips(self) -> None:
+    def test_available_record_shows_the_owner_and_no_chips_when_nothing_notable(self) -> None:
         data = {
             "available": True,
             "situs_address": "123 Main St",
@@ -72,14 +72,11 @@ class PanelRenderContextTests(SimpleTestCase):
             "assessed_value": None,
             "market_value": None,
             "tax_history": [],
-            "source": {"tier": 1, "provider": "ArcGIS REST", "url": "https://example.gov"},
-            "confidence": 0.7,
         }
         ctx = self.source.render_context(self.pin, data)
         assert ctx is not None
         self.assertEqual(ctx["heading_name"], "Jane Smith")
-        self.assertIn("Tier 1", ctx["chips"])
-        self.assertIn("70% confidence", ctx["chips"])
+        self.assertEqual(ctx["chips"], [])
 
     def test_delinquent_tax_history_adds_a_chip(self) -> None:
         data = {
@@ -94,8 +91,6 @@ class PanelRenderContextTests(SimpleTestCase):
             "assessed_value": None,
             "market_value": None,
             "tax_history": [{"year": 2024, "delinquent": True}],
-            "source": {"tier": 1, "provider": "ArcGIS REST", "url": ""},
-            "confidence": 0.7,
         }
         ctx = self.source.render_context(self.pin, data)
         assert ctx is not None
@@ -114,8 +109,6 @@ class PanelRenderContextTests(SimpleTestCase):
             "assessed_value": None,
             "market_value": None,
             "tax_history": [],
-            "source": {"tier": 1, "provider": "ArcGIS REST", "url": ""},
-            "confidence": 0.7,
         }
         data.update(overrides)
         return data

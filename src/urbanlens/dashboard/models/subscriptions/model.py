@@ -38,6 +38,11 @@ class SiteFeature(TextChoices):
     # nearby-regulated-facilities list) - separate from each plugin's own
     # unconditional "data about this exact pin" card, which everyone gets.
     NEARBY_RESEARCH = "nearby_research", "Nearby research data"
+    # Gates access to features still under active development (e.g. Games) -
+    # a single flag reused across every in-progress feature, rather than one
+    # SiteFeature per beta, so a feature can graduate out of beta by just
+    # removing its gate instead of touching this enum.
+    BETA_FEATURES = "beta_features", "Beta features"
 
 
 class SubscriptionRole(abstract.DashboardModel):
@@ -82,7 +87,9 @@ class SubscriptionRole(abstract.DashboardModel):
     # Canonical features every VIP role must include.  Add new SiteFeature values here
     # when they should be automatically granted to VIPs; ensure_defaults will merge them
     # into existing rows without removing any admin-configured extras.
-    _VIP_CANONICAL_FEATURES: frozenset[str] = frozenset({SiteFeature.AI, SiteFeature.PLACES, SiteFeature.SEARCH, SiteFeature.NEARBY_RESEARCH})
+    _VIP_CANONICAL_FEATURES: frozenset[str] = frozenset(
+        {SiteFeature.AI, SiteFeature.PLACES, SiteFeature.SEARCH, SiteFeature.NEARBY_RESEARCH, SiteFeature.BETA_FEATURES},
+    )
 
     # Default storage quota (GB) granted to the built-in VIP role on creation.
     _VIP_DEFAULT_STORAGE_QUOTA_GB: int = 500

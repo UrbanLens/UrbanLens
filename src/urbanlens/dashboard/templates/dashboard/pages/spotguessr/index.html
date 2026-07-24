@@ -10,7 +10,7 @@
 {% endblock %}
 
 {% block content %}
-<div class="spotguessr-page page-content" data-my-profile-id="{{ my_profile_id }}" data-initial-session-id="{{ initial_session_id|default:'' }}">
+<div class="spotguessr-page page-content" data-my-profile-id="{{ my_profile_id }}" data-initial-session-id="{{ initial_session_id|default:'' }}" data-region-search-url="{% url 'region_search.search' %}">
     <div class="spotguessr-header card">
         <div class="spotguessr-header-title">
             <i class="material-symbols-outlined">travel_explore</i>
@@ -29,75 +29,41 @@
             {% endfor %}
         </div>
         <label class="spotguessr-friends-toggle">
-            <input type="checkbox" id="sg-show-ratings-to-friends" {% if show_ratings_to_friends %}checked{% endif %}>
-            Show my rating to friends
+            <span class="ul-switch">
+                <input type="checkbox" id="sg-show-ratings-to-friends" {% if show_ratings_to_friends %}checked{% endif %}>
+                <span class="ul-switch__track"></span>
+            </span>
+            <span>Show my rating to friends</span>
         </label>
     </div>
 
-    <section id="sg-settings-panel" class="spotguessr-panel card">
+    <section id="sg-settings-panel" class="spotguessr-panel-wrap">
         <h2>Play SpotGuessr</h2>
         <p class="spotguessr-panel-hint">
-            Guess locations you've pinned yourself - or, in a multiplayer game, locations every invited
-            player has pinned.
+            Guess locations based on hints. Only locations that every invited player has pinned will be shown.
         </p>
-        <form id="sg-start-form" class="spotguessr-settings-form">
-            <div class="spotguessr-field">
-                <label for="sg-mode">Mode</label>
-                <select id="sg-mode">
-                    {% for value, label in modes %}
-                    <option value="{{ value }}">{{ label }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="spotguessr-field">
-                <label for="sg-difficulty">Difficulty</label>
-                <input type="range" id="sg-difficulty" min="0" max="100" value="50">
-                <span id="sg-difficulty-label">Medium</span>
-            </div>
-            <div class="spotguessr-field">
-                <label for="sg-rounds">Rounds</label>
-                <input type="number" id="sg-rounds" min="{{ min_rounds }}" max="{{ max_rounds }}" value="{{ default_rounds }}">
-            </div>
-            <div class="spotguessr-field spotguessr-field--checkbox" data-mode-only="photos">
-                <label><input type="checkbox" id="sg-external-media-only"> Use only external media (not my own uploads)</label>
-            </div>
-            <div class="spotguessr-field spotguessr-field--checkbox" data-mode-only="photos">
-                <label><input type="checkbox" id="sg-allow-arbitrary-external-photos"> Allow any external wiki photo, not just relevant ones</label>
-                <p class="spotguessr-panel-hint">Off by default - on shows more photos, including ones the community hasn't vetted (or has flagged) yet.</p>
-            </div>
-            <div class="spotguessr-field spotguessr-field--checkbox" data-mode-only="photos">
-                <label><input type="checkbox" id="sg-date-guessing"> Also guess the photo's date (bonus points)</label>
-            </div>
-            <div class="spotguessr-field spotguessr-field--checkbox" data-mode-only="named_place">
-                <input type="hidden" name="use_aliases" value="off">
-                <label><input type="checkbox" id="sg-use-aliases" checked> Use aliases/nicknames (not just the official name)</label>
-            </div>
-            <div class="spotguessr-field spotguessr-field--checkbox">
-                <label><input type="checkbox" id="sg-require-visited-all"> Only places I've actually visited</label>
-            </div>
-            <div class="spotguessr-field spotguessr-field--checkbox">
-                <label><input type="checkbox" id="sg-restrict-area"> Restrict to a chosen area</label>
-            </div>
-            <div id="sg-area-map-wrap" class="spotguessr-area-map-wrap" hidden>
-                <div id="sg-area-map" class="spotguessr-area-map"></div>
-                <p class="spotguessr-panel-hint">Draw a rectangle to restrict rounds to that area.</p>
-            </div>
-
-            <div class="spotguessr-field spotguessr-field--checkbox">
-                <label><input type="checkbox" id="sg-play-with-friends"> Play with friends</label>
-            </div>
-            <div id="sg-invite-wrap" class="spotguessr-invite-wrap" hidden>
-                <p class="spotguessr-panel-hint">
-                    Only locations every invited friend has pinned too will ever come up.
-                </p>
-                <div id="sg-friend-list" class="spotguessr-friend-list">
-                    <p class="spotguessr-panel-hint">Loading friends&hellip;</p>
-                </div>
-            </div>
-
-            <button type="submit" class="btn btn--primary btn--lg">Start playing</button>
-        </form>
+        {% include "dashboard/pages/spotguessr/_mode_cards.html" %}
     </section>
+
+    {% include "dashboard/pages/spotguessr/_settings_dialog.html" %}
+    {% include "dashboard/pages/spotguessr/_empty_state.html" %}
+
+    {% comment %}
+    Cloned by renderScoreCard() (spotguessr.ts) for every row in the reveal
+    results list, live scoreboard, and summary panel - one canonical markup
+    definition instead of three separate bare-text builders.
+    {% endcomment %}
+    <template id="sg-score-card-template">
+        <li class="spotguessr-score-card">
+            <span class="spotguessr-score-card-rank"></span>
+            <span class="spotguessr-score-card-avatar-wrap"></span>
+            <span class="spotguessr-score-card-info">
+                <span class="spotguessr-score-card-name"></span>
+                <span class="spotguessr-score-card-subtitle"></span>
+            </span>
+            <span class="spotguessr-score-card-points"></span>
+        </li>
+    </template>
 
     <section id="sg-lobby-panel" class="spotguessr-panel card" hidden>
         <h2>Waiting room</h2>
@@ -171,8 +137,10 @@
 </div>
 
 {{ urls|json_script:"sg-urls" }}
+{{ last_config|json_script:"sg-last-config" }}
 <script>
     window.SPOTGUESSR_URLS = JSON.parse(document.getElementById('sg-urls').textContent);
+    window.SPOTGUESSR_LAST_CONFIG = JSON.parse(document.getElementById('sg-last-config').textContent);
 </script>
 <script type="module" src="{% static 'dashboard/js/spotguessr.js' %}"></script>
 {% endblock %}

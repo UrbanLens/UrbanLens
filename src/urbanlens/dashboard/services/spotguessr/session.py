@@ -397,6 +397,17 @@ def submit_guess(round_: GameRound, profile: Profile, guess_point: Point, guesse
     return guess
 
 
+def rounds_played(session: GameSession) -> int:
+    """How many rounds this session has ever created.
+
+    Distinguishes "finished after playing some rounds" from "never got to
+    play a single round" when ``get_or_create_round`` returns None - the
+    two cases must not both be reported as a completed game. See
+    ``controllers.spotguessr`` for the callers that branch on this.
+    """
+    return GameRound.objects.for_session(session).count()
+
+
 def complete_session(session: GameSession) -> GameSession:
     """Mark a session finished (all rounds played, or no eligible locations remained)."""
     if session.status == GameSessionStatus.ACTIVE:
@@ -408,16 +419,20 @@ def complete_session(session: GameSession) -> GameSession:
 
 def session_summary(session: GameSession) -> dict:
     """A JSON-ready summary: rounds played and per-(joined)-participant totals."""
-    rounds_played = GameRound.objects.for_session(session).count()
     participants = session.participants.joined().select_related("profile__user").order_by("-total_points")
     return {
         "session_id": session.pk,
         "mode": session.mode,
         "status": session.status,
         "total_rounds": session.total_rounds,
-        "rounds_played": rounds_played,
+        "rounds_played": rounds_played(session),
         "participants": [
-            {"profile_id": participant.profile_id, "username": participant.profile.user.username, "total_points": participant.total_points}
+            {
+                "profile_id": participant.profile_id,
+                "username": participant.profile.user.username,
+                "avatar_url": participant.profile.avatar.url if participant.profile.avatar else None,
+                "total_points": participant.total_points,
+            }
             for participant in participants
         ],
     }

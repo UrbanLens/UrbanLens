@@ -1,3 +1,8 @@
+// src/urbanlens/dashboard/frontend/ts/shared/csrf.ts
+function getCsrfToken() {
+  return window.csrftoken ?? "";
+}
+
 // src/urbanlens/dashboard/frontend/ts/shared/dialogs.ts
 async function confirmAction(options) {
   if (window.confirmDialog) {
@@ -23,4 +28,4 @@ function htmxProcess(element) {
   window.htmx?.process(element);
 }
 
-export { confirmAction, toast, htmxProcess };
+export { getCsrfToken, confirmAction, toast, htmxProcess };

@@ -3,9 +3,11 @@
 Retrieval lives entirely in REData (the standalone service that already owns
 property records for this app - see ``plugins.builtin.property_records``):
 ``RedataGateway.lookup_parcel_uuid`` resolves the pin's address to a parcel,
-then ``lookup_listings`` returns REData's cached LoopNet data for it (REData
-never scrapes LoopNet inline with the request - see its own docs). Listing
-photos are exposed to the pin's Media gallery via :meth:`LoopnetPanelSource.media_items`,
+then ``lookup_listings`` returns REData's cached LoopNet data for it - never
+fetched live inline with the request, so a cache miss can mean "not yet
+fetched" rather than "nothing available"; see ``lookup_listings``'s own
+docstring for the ``refresh_queued`` flag this implies. Listing photos are
+exposed to the pin's Media gallery via :meth:`LoopnetPanelSource.media_items`,
 streamed through :class:`~urbanlens.dashboard.controllers.pin.PinLoopnetPhotoView`
 so REData's API key never reaches the browser (the same reasoning as every
 other authenticated media proxy in this app, e.g. Immich's thumbnail view).

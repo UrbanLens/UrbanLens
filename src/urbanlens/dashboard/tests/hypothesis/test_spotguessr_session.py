@@ -176,4 +176,4 @@ class SessionSummaryTests(TestCase):
 
         summary = session_summary(session)
         self.assertEqual(summary["rounds_played"], 1)
-        self.assertEqual(summary["participants"], [{"profile_id": profile.pk, "username": profile.username, "total_points": 5000}])
+        self.assertEqual(summary["participants"], [{"profile_id": profile.pk, "username": profile.username, "avatar_url": None, "total_points": 5000}])

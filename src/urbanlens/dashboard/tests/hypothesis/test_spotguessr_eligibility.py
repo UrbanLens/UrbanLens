@@ -13,7 +13,7 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.visits.model import PinVisit
-from urbanlens.dashboard.services.spotguessr.eligibility import eligible_locations
+from urbanlens.dashboard.services.spotguessr.eligibility import eligible_locations, has_eligible_locations
 
 _coordinate_counter = count()
 
@@ -76,3 +76,24 @@ class EligibleLocationsTests(TestCase):
         bounds = Polygon.from_bbox((-74.0, 42.0, -73.0, 43.0))
         bounds.srid = 4326
         self.assertEqual(list(eligible_locations([self.alice], geo_bounds=bounds)), [inside])
+
+
+class HasEligibleLocationsTests(TestCase):
+    """The cheap pre-check SpotGuessrStartView uses to avoid creating a session
+    that can never play a single round - see its docstring for the rationale."""
+
+    def test_false_for_a_profile_with_no_pins(self) -> None:
+        profile = _make_profile()
+        self.assertFalse(has_eligible_locations([profile]))
+
+    def test_true_once_a_pin_exists(self) -> None:
+        profile = _make_profile()
+        baker.make(Pin, profile=profile, location=_make_location())
+        self.assertTrue(has_eligible_locations([profile]))
+
+    def test_false_when_geo_bounds_excludes_every_pin(self) -> None:
+        profile = _make_profile()
+        baker.make(Pin, profile=profile, location=_make_location())
+        far_away = Polygon.from_bbox((10.0, 10.0, 11.0, 11.0))
+        far_away.srid = 4326
+        self.assertFalse(has_eligible_locations([profile], geo_bounds=far_away))

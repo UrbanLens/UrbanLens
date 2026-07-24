@@ -2,12 +2,11 @@
 
 Renders a pin-detail panel and a background enrichment source from records
 fetched over REData's REST API (``services.apis.property_records.redata_gateway``)
-- the standalone service that now owns the tiered retrieval pipeline this
-plugin used to implement locally (jurisdiction resolution, ArcGIS/Socrata,
-vendor scraping, bespoke recipes; see ``docs/redata.md``). Both panel and
-enrichment share one upstream fetch (``_fetch_payload``, mirroring the EPA
-ECHO plugin's ``_fetch_and_cache`` shared-row trick - see ``epa_echo.py``'s
-module docstring) so whichever runs first for a Location populates the same
+- the standalone service that retrieves county property records; how it does
+so is REData's own implementation detail. Both panel and enrichment share one
+upstream fetch (``_fetch_payload``, mirroring the EPA ECHO plugin's
+``_fetch_and_cache`` shared-row trick - see ``epa_echo.py``'s module
+docstring) so whichever runs first for a Location populates the same
 ``LocationCache`` row for the other.
 
 A successful fetch also upserts ``WikiOwner``/``WikiPropertySale`` rows with
@@ -19,14 +18,13 @@ Location (by name, case-insensitively) - manually-entered data always wins,
 matching every other auto-population code path in this codebase (AI link
 extraction, name resolution, ...). This is UrbanLens's own community-data
 layer on top of REData's raw facts - REData has no notion of Locations, wikis,
-or per-user privacy, and isn't meant to; see ``docs/redata.md``'s correction
-note on why that split is intentional.
+or per-user privacy, and isn't meant to.
 
 Unavailable jurisdictions render nothing (a quiet 204) except the deliberate
 "a human must do this" cases - ``MANUAL_ONLY`` and CAPTCHA-``blocked`` - which
 show a small card pointing at the county's manual-lookup links instead of
-silently disappearing: the plan's explicit ask that "not automatable" surface
-clearly rather than fail silently. A transient ``source_error`` (REData
+silently disappearing, so "not automatable" surfaces clearly rather than
+failing silently. A transient ``source_error`` (REData
 unreachable, or a county source it depends on is down) is never cached at all
 - the fetch raises so the panel framework's failure-skip/retry machinery
 handles it, instead of a days-long ``LocationCache`` row remembering an
@@ -67,9 +65,8 @@ def _fetch_payload(location: Location, latitude: float, longitude: float) -> dic
         location: The Location to fetch a property record for. Its own
             geocoded ``address`` (when already resolved - see
             ``services.enrichment.AddressEnrichmentSource``) is passed
-            through to REData as a Tier 2/3 search key; REData's own Tier 1
-            GIS-derived situs address still takes precedence over it when
-            both are available (see REData's own orchestrator).
+            through to REData as an additional search key; REData decides for
+            itself whether/how to use it alongside anything it already knows.
         latitude: The latitude to look up - passed explicitly (rather than
             re-read off ``location``) so the panel path can use the pin's
             own effective marker coordinates, keeping the coordinates
@@ -151,7 +148,7 @@ def _write_official_owners_and_sales(location: Location, payload: dict[str, Any]
     just happened and unlinks the previous owner - see
     ``controllers.property_owner.WikiPropertySaleTabView``), this only ever
     adds owners/links a Location to them - it never removes an existing
-    owner's link, since a single Tier 1 snapshot isn't a trustworthy enough
+    owner's link, since a single automated snapshot isn't a trustworthy enough
     signal to override community-visible ownership history.
 
     Args:
@@ -349,12 +346,11 @@ class PropertyRecordsPlugin(UrbanLensPlugin):
     name: ClassVar[str] = "property_records"
     verbose_name: ClassVar[str] = "Property Records"
     description: ClassVar[str] = (
-        "County GIS/open-data, vendor-platform, and bespoke-recipe parcel ownership, assessed value, and sale "
-        "history lookups, retrieved from REData (a standalone service - see docs/redata.md) with automatic "
-        "jurisdiction resolution. Populates the pin/wiki Ownership and Sale History cards with OFFICIAL-sourced "
-        "records and shows a details card on the pin detail page. Coverage depends on REData's own jurisdiction "
-        "registry - counties it hasn't researched surface as 'not automatable' rather than failing silently. "
-        "USA only. Requires UL_REDATA_API_URL/UL_REDATA_API_KEY to be configured."
+        "Parcel ownership, assessed value, and sale history lookups, retrieved from REData, a standalone "
+        "service. Populates the pin/wiki Ownership and Sale History cards with OFFICIAL-sourced records and "
+        "shows a details card on the pin detail page. Coverage varies by county - a place REData doesn't yet "
+        "have data for surfaces as 'not automatable' rather than failing silently. USA only. Requires "
+        "UL_REDATA_API_URL/UL_REDATA_API_KEY to be configured."
     )
     author: ClassVar[str] = "UrbanLens"
 
@@ -372,7 +368,7 @@ class PropertyRecordsPlugin(UrbanLensPlugin):
                 calls_per_minute=120,
                 calls_per_day=10000,
                 usa_only=True,
-                notes="Our own standalone property-records service (see docs/redata.md) - not a third-party budget, just a sanity ceiling.",
+                notes="Our own standalone property-records service - not a third-party budget, just a sanity ceiling.",
             ),
         }
 

@@ -1,16 +1,12 @@
 """Gateway for REData, the standalone property-records service.
 
-REData (``../REData``, a separate repo/deployment) owns the full tiered
-county-property-record retrieval pipeline - jurisdiction resolution, ArcGIS/
-Socrata, vendor-platform scraping, bespoke per-county recipes - that used to
-live directly in this package. See ``docs/property-records-plan.md`` (the
-original design) and ``docs/redata.md`` (the extraction/parity audit) for the
-history. This gateway is now the only thing in UrbanLens that talks to a
-property-record source: it calls REData's REST API
-(``GET /api/v1/parcels/lookup/``) and returns the same payload shape
-(effectively REData's own ``PropertyRecord.to_dict()``) that
-``plugins.builtin.property_records`` already expected from the old local
-orchestrator, so nothing downstream of ``_fetch_payload`` needed to change.
+REData (``../REData``, a separate repo/deployment) owns county property-record
+retrieval - how it produces an answer is REData's own implementation detail,
+not something UrbanLens depends on or documents. This gateway is the only
+thing in UrbanLens that talks to a property-record source: it calls REData's
+REST API (``GET /api/v1/parcels/lookup/``) and returns the payload shape
+(REData's own ``PropertyRecord.to_dict()``) that ``plugins.builtin.property_records``
+expects.
 """
 
 from __future__ import annotations
@@ -26,9 +22,9 @@ logger = logging.getLogger(__name__)
 
 _REQUEST_TIMEOUT = 30
 
-#: Mirrors REData's own ``parcels.services.property_records.orchestrator.REASON_*``
-#: string constants - a stable contract across the API boundary (REData's
-#: values, returned verbatim in its error responses' ``"error"`` field), not
+#: Mirrors REData's own ``REASON_*`` string constants - a stable contract
+#: across the API boundary (REData's values, returned verbatim in its error
+#: responses' ``"error"`` field), not
 #: Python objects importable across separate repos/deployments.
 REASON_MANUAL_ONLY = "manual_only"
 REASON_BLOCKED = "blocked"
@@ -150,7 +146,7 @@ class RedataGateway(Gateway):
             latitude: WGS-84 latitude.
             longitude: WGS-84 longitude.
             situs_address: Already-known street address, passed through to
-                REData as a Tier 2/3 search key.
+                REData as an additional search key.
             apn: Already-known parcel/APN, passed through the same way.
 
         Returns:
@@ -189,7 +185,7 @@ class RedataGateway(Gateway):
             latitude: WGS-84 latitude.
             longitude: WGS-84 longitude.
             situs_address: Already-known street address, passed through to
-                REData as a Tier 2/3 search key.
+                REData as an additional search key.
             apn: Already-known parcel/APN, passed through the same way.
 
         Returns:

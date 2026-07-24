@@ -328,11 +328,10 @@ def esri_rings_to_polygon(geometry: dict | None) -> Polygon | MultiPolygon | Non
 
     Only still needed for sources that hand back Esri's native ring-list shape
     directly - Census TIGERweb (``geo_boundary.py``) being the one remaining
-    caller. REData used to require this too, but its API now converts
-    ``parcel_geometry``/``building_geometry`` to standard GeoJSON server-side
-    (``core.services.geojson.esri_rings_to_geojson``, mirroring this exact
-    function) - see ``geojson_polygon_to_geos`` below for that shape instead,
-    used by ``RedataBoundaryProvider``.
+    caller. REData used to require this too, but its API now returns
+    ``parcel_geometry``/``building_geometry`` as standard GeoJSON - see
+    ``geojson_polygon_to_geos`` below for that shape instead, used by
+    ``RedataBoundaryProvider``.
 
     Esri's ring-winding convention is the opposite of GeoJSON's: a clockwise
     ring is an exterior shell, a counter-clockwise ring is a hole - and
@@ -416,10 +415,8 @@ def geojson_polygon_to_geos(geometry: dict | None) -> Polygon | MultiPolygon | N
 
     Unlike :func:`esri_rings_to_polygon`, the input here is already correct,
     standard GeoJSON (RFC 7946 winding order, holes already nested under their
-    shell) - REData's API converts its internally-stored Esri ring-list shape
-    to this on the way out (``core.services.geojson.esri_rings_to_geojson``,
-    a pure-Python port of ``esri_rings_to_polygon``'s own algorithm), so this
-    is a direct structural translation rather than a geometry-fixing one:
+    shell) - REData's API returns geometry in this shape directly, so this is
+    a direct structural translation rather than a geometry-fixing one:
     GeoJSON's ``coordinates`` array for a ``Polygon`` (``[exterior_ring,
     hole_ring, ...]``, each ring a list of ``[lon, lat]`` pairs) is exactly
     the ring-list shape Django's own ``Polygon(*rings)`` constructor expects.

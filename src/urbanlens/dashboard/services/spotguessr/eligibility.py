@@ -62,3 +62,29 @@ def eligible_locations(
         candidates = candidates.exclude(pk__in=exclude_ids)
 
     return candidates.distinct()
+
+
+def has_eligible_locations(
+    profiles: Iterable[Profile],
+    *,
+    require_visited_by_all: bool = False,
+    geo_bounds: GEOSGeometry | None = None,
+) -> bool:
+    """Whether ``eligible_locations`` would return anything at all, without materializing it.
+
+    Used as a cheap pre-check before creating a solo session - a profile
+    with no pins (or whose pins all fall outside a chosen ``geo_bounds``)
+    should never get an ACTIVE session with zero possible rounds; see
+    ``controllers.spotguessr.SpotGuessrStartView`` for how this replaces
+    the old "create a session, then discover it can't play, then fake a
+    completed summary" flow.
+
+    Args:
+        profiles: Every participant in the session.
+        require_visited_by_all: See ``eligible_locations``.
+        geo_bounds: See ``eligible_locations``.
+
+    Returns:
+        True if at least one location is eligible for every profile.
+    """
+    return eligible_locations(profiles, require_visited_by_all=require_visited_by_all, geo_bounds=geo_bounds).exists()

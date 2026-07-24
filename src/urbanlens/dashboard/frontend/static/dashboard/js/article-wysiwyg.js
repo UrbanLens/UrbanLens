@@ -1,9 +1,7 @@
 import {
-  confirmAction
-} from "./article-wysiwyg-gm2v5wzm.js";
-import {
+  confirmAction,
   getCsrfToken
-} from "./article-wysiwyg-y9qpab7g.js";
+} from "./article-wysiwyg-5jnnp4sj.js";
 import {
   __commonJS,
   __export,

@@ -9,9 +9,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.core.exceptions import PermissionDenied
 from django.shortcuts import render
 from django.urls import reverse
 from django.views import View
+
+from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
 
 if TYPE_CHECKING:
     from django.http import HttpRequest, HttpResponse
@@ -39,7 +42,7 @@ class GameEntry:
 GAMES = [
     GameEntry(
         name="SpotGuessr",
-        description="Guess locations from your own photos, place names, or Street View - solo or with friends.",
+        description="Guess locations from photos, Street View, or other hints - solo or with friends.",
         icon="travel_explore",
         url_name="spotguessr",
     ),
@@ -53,4 +56,6 @@ class GamesOverviewView(LoginRequiredMixin, View):
     """
 
     def get(self, request: HttpRequest) -> HttpResponse:
+        if not user_has_feature(request.user, SiteFeature.BETA_FEATURES):
+            raise PermissionDenied
         return render(request, "dashboard/pages/games/index.html", {"page_name": "games", "games": GAMES})

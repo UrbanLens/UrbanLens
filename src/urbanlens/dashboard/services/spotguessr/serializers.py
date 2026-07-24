@@ -87,6 +87,7 @@ def serialize_round_reveal(round_: GameRound) -> dict[str, Any]:
             {
                 "profile_id": guess.profile_id,
                 "username": guess.profile.user.username,
+                "avatar_url": guess.profile.avatar.url if guess.profile.avatar else None,
                 "distance_meters": guess.distance_meters,
                 "points": guess.points,
                 "date_points": guess.date_points,
@@ -101,6 +102,7 @@ def serialize_participant(participant: GameSessionParticipant) -> dict[str, Any]
     return {
         "profile_id": participant.profile_id,
         "username": participant.profile.user.username,
+        "avatar_url": participant.profile.avatar.url if participant.profile.avatar else None,
         "status": participant.status,
         "total_points": participant.total_points,
         "is_host": participant.session.host_profile_id == participant.profile_id,

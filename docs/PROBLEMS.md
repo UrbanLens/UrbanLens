@@ -85,9 +85,8 @@ that had simply never executed against a real DB. Triage (each verified from the
 - **`test_pin_media_endpoints::test_media_relevance_route_reaches_the_post_handler`** -
   `TypeError: Cannot mix str and non-str arguments` (an os.path/reverse join receiving a
   Mock/None); needs its traceback read.
-- **`test_property_records_plugin` (2)** - one test assigns `location.address`, which is
-  now a read-only property (`AttributeError: no setter`); the other renders no chips
-  (`'Tier 1' not found in []`), likely downstream of the same fixture rot.
+- **`test_property_records_plugin`** - `test_the_locations_address_is_passed_through_as_the_situs_search_key`
+  assigns `location.address`, which is now a read-only property (`AttributeError: no setter`).
 
 **Suggested next step**: one focused session over these 9 files - none looks like a
 production bug on its face (env coupling, fixture rot, template drift), but
@@ -317,3 +316,37 @@ needs a new model (`BoundaryVote` or similar), a weighting/tie-breaking algorith
 dialog with a side-by-side map, and a way to surface "cast a vote" once consensus already exists -
 a materially larger, standalone feature (see ROADMAP.md's "Pin Restructure" section, last
 bullet, which specifies the weighting rule in detail).
+
+---
+
+## `docker compose exec app pytest` can't reach Valkey in the `s1`/`s2`/`s3` dev environments (found 2026-07-24)
+
+Running the hypothesis suite via `docker compose exec app python -m pytest ...` inside any of
+the `~/dev/s1|s2|s3/UrbanLens` environments on chiron fails almost every test that touches a
+logged-in request or Celery/Channels broadcast (`realtime.broadcast`, channel-layer setup, etc.)
+with:
+
+```
+RuntimeError: External network access is disabled during tests. Attempted to connect to
+'172.23.0.3'; mock this integration or use localhost.
+```
+
+Root cause: `src/urbanlens/core/testing_network.py`'s `LocalhostOnlyNetwork` guard only permits
+connections to literal `localhost`/`localhost.localdomain` during tests (by design - see its
+docstring). But in these dev environments, `UL_VALKEY_URL` resolves to the `urbanlens_valkey`
+docker-compose service, i.e. a docker-network IP (`172.23.0.3` in this instance), not
+`localhost` - so anything touching Valkey during a test run trips the guard immediately.
+
+Confirmed this is **environment infrastructure, not application code**: a completely unrelated,
+untouched test file (`test_games_controller.py`) fails identically. Meanwhile, pure-DB-layer
+tests with no client/channel-layer involvement (e.g. `test_spotguessr_eligibility.py`) pass
+cleanly in the same run - so the guard itself and the DB-layer test infra are fine; it's
+specifically the Valkey reachability-vs-guard mismatch.
+
+Not investigated further (out of scope for the SpotGuessr UX work this was found during): worth
+checking whether `docker-compose.yml`'s `app` service should bind-mount/forward Valkey to
+`localhost` for these dev boxes specifically (other deployments may already do this correctly,
+or CI may run tests a different way that sidesteps it entirely - e.g. a dedicated test compose
+profile). Until fixed, verify backend changes on these dev machines via direct DB-layer/service
+tests (no Django test client, no `realtime.broadcast`) plus a manual browser walkthrough against
+the running `docker compose up` stack, rather than the full `pytest` suite.

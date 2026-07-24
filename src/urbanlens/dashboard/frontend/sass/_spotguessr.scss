@@ -1,4 +1,6 @@
 // SpotGuessr gameplay, multiplayer lobby, and chat (UL-391..UL-393).
+@use 'sass:color';
+@use 'variables' as *;
 
 .spotguessr-page {
     max-width: 960px;
@@ -65,11 +67,167 @@
 
 .spotguessr-panel {
     padding: 1.25rem;
+    // Applies to every top-level panel swap (lobby/game/summary/empty-state) -
+    // `hidden` toggling `display:none` on/off is enough to replay a CSS
+    // animation, so this alone gives every panel transition a consistent
+    // entrance without JS having to manage per-swap animation classes.
+    animation: spotguessr-fade-in .3s ease-out;
+}
+
+.spotguessr-panel-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+
+    h2 {
+        margin: 0;
+    }
 }
 
 .spotguessr-panel-hint {
     opacity: .75;
     font-size: .9rem;
+}
+
+// -- Mode selection cards -----------------------------------------------------
+
+$spotguessr-mode-accents: (
+    'photos': $color-indigo-500,
+    'named_place': $color-teal-500,
+    'street_view': $color-purple-500,
+);
+
+.spotguessr-mode-cards {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1.25rem;
+
+    @include up($breakpoint-sm) {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+.spotguessr-mode-card {
+    position: relative;
+    border-radius: $radius-md;
+    overflow: hidden;
+    transition: transform .15s, box-shadow .15s;
+
+    &:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 16px rgba(0, 0, 0, .12);
+    }
+}
+
+.spotguessr-card-gear {
+    @include icon-btn(32px);
+    position: absolute;
+    top: .6rem;
+    right: .6rem;
+    z-index: 1;
+    background: rgba(0, 0, 0, .25);
+    color: #fff;
+
+    &:hover {
+        background: rgba(0, 0, 0, .4);
+    }
+}
+
+.spotguessr-mode-card-body {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: .5rem;
+    width: 100%;
+    padding: 1.5rem;
+    border: none;
+    text-align: left;
+    cursor: pointer;
+    color: #fff;
+    font: inherit;
+}
+
+.spotguessr-mode-card-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 3rem;
+    height: 3rem;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, .18);
+
+    .material-symbols-outlined {
+        font-size: 1.75rem;
+    }
+}
+
+.spotguessr-mode-card-title {
+    font-size: 1.15rem;
+    font-weight: 700;
+}
+
+.spotguessr-mode-card-desc {
+    font-size: .9rem;
+    opacity: .9;
+}
+
+.spotguessr-mode-card-play {
+    margin-top: auto;
+    display: flex;
+    align-items: center;
+    gap: .25rem;
+    font-weight: 600;
+    font-size: .9rem;
+
+    .material-symbols-outlined {
+        font-size: 1.1rem;
+        transition: transform .15s;
+    }
+}
+
+.spotguessr-mode-card-body:hover .spotguessr-mode-card-play .material-symbols-outlined {
+    transform: translateX(3px);
+}
+
+@each $name, $accent in $spotguessr-mode-accents {
+    $accent-dark: color.adjust($accent, $lightness: -15%);
+
+    .spotguessr-mode-card--#{$name} {
+        background: linear-gradient(135deg, $accent, $accent-dark);
+    }
+}
+
+// -- Settings dialog -----------------------------------------------------------
+
+.spotguessr-settings-dialog {
+    .spotguessr-settings-form {
+        margin-top: 0;
+    }
+}
+
+// -- Empty state -----------------------------------------------------------
+
+.spotguessr-empty-state-panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: .5rem;
+    padding: 3rem 1.5rem;
+}
+
+.spotguessr-empty-state-icon {
+    font-size: 3rem;
+    opacity: .5;
+    margin-bottom: .5rem;
+}
+
+.spotguessr-empty-state-actions {
+    display: flex;
+    gap: .75rem;
+    margin-top: .75rem;
+    flex-wrap: wrap;
+    justify-content: center;
 }
 
 .spotguessr-settings-form {
@@ -84,22 +242,66 @@
     flex-direction: column;
     gap: .35rem;
 
-    &--checkbox {
+    &--switch {
         flex-direction: row;
         align-items: center;
 
         label {
             display: flex;
             align-items: center;
-            gap: .5rem;
+            gap: .6rem;
+            cursor: pointer;
         }
     }
+}
+
+.spotguessr-difficulty-group {
+    display: flex;
+    gap: .6rem;
+    flex-wrap: wrap;
 }
 
 .spotguessr-area-map-wrap {
     display: flex;
     flex-direction: column;
     gap: .35rem;
+}
+
+.spotguessr-area-search {
+    display: flex;
+    gap: .5rem;
+
+    input {
+        flex: 1;
+    }
+}
+
+.spotguessr-area-search-results {
+    display: flex;
+    flex-direction: column;
+    gap: .3rem;
+    max-height: 160px;
+    overflow-y: auto;
+}
+
+.spotguessr-area-search-result {
+    text-align: left;
+    background: var(--surface-2, rgba(127, 127, 127, .08));
+    border: 1px solid var(--border, rgba(127, 127, 127, .25));
+    border-radius: .4rem;
+    padding: .4rem .6rem;
+    font-size: .82rem;
+    cursor: pointer;
+
+    &:hover {
+        border-color: var(--primary-color);
+    }
+}
+
+.spotguessr-area-search-message {
+    margin: 0;
+    font-size: .82rem;
+    opacity: .75;
 }
 
 .spotguessr-area-map,
@@ -177,14 +379,6 @@
     flex-direction: column;
     gap: .35rem;
     text-align: left;
-
-    li {
-        display: flex;
-        justify-content: space-between;
-        padding: .35rem .6rem;
-        border-radius: .4rem;
-        background: var(--surface-2, rgba(127, 127, 127, .08));
-    }
 }
 
 .spotguessr-round-name {
@@ -261,15 +455,6 @@
     display: flex;
     flex-wrap: wrap;
     gap: .5rem;
-
-    li {
-        display: flex;
-        gap: .4rem;
-        padding: .3rem .65rem;
-        border-radius: 1rem;
-        background: var(--surface-2, rgba(127, 127, 127, .1));
-        font-size: .85rem;
-    }
 }
 
 .spotguessr-chat-panel {
@@ -304,6 +489,83 @@
     }
 }
 
+// -- Score card ----------------------------------------------------------------
+// Shared row used by the reveal-panel results list, the live scoreboard, and
+// the summary panel - see renderScoreCard()/renderScoreCardList() in spotguessr.ts.
+
+.spotguessr-score-card {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    padding: .35rem .6rem;
+    border-radius: .5rem;
+    background: var(--surface-2, rgba(127, 127, 127, .08));
+    font-size: .85rem;
+
+    &--rank-1 {
+        background: rgba(255, 215, 0, .18);
+    }
+
+    &--rank-2 {
+        background: rgba(192, 192, 192, .18);
+    }
+
+    &--rank-3 {
+        background: rgba(205, 127, 50, .18);
+    }
+
+    &--solo {
+        justify-content: center;
+        font-weight: 600;
+        font-size: 1rem;
+        background: none;
+    }
+
+    &--pulse {
+        animation: spotguessr-score-pulse .5s ease-out;
+    }
+}
+
+.spotguessr-score-card-rank {
+    font-weight: 700;
+    min-width: 1.5rem;
+    text-align: center;
+    opacity: .7;
+}
+
+.spotguessr-score-card-avatar-wrap {
+    display: flex;
+    flex-shrink: 0;
+}
+
+.spotguessr-score-card-info {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+}
+
+.spotguessr-score-card-name {
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.spotguessr-score-card-subtitle {
+    font-size: .75rem;
+    opacity: .7;
+
+    &:empty {
+        display: none;
+    }
+}
+
+.spotguessr-score-card-points {
+    font-weight: 700;
+    white-space: nowrap;
+}
+
 @keyframes spotguessr-fade-in {
     from {
         opacity: 0;
@@ -313,5 +575,40 @@
     to {
         opacity: 1;
         transform: translateY(0);
+    }
+}
+
+@keyframes spotguessr-score-pulse {
+    0% {
+        transform: scale(1);
+    }
+
+    30% {
+        transform: scale(1.06);
+        background: rgba(46, 160, 67, .3);
+    }
+
+    100% {
+        transform: scale(1);
+    }
+}
+
+// Applied to a Leaflet marker's own icon element (marker.getElement()) when
+// the actual-location marker is placed on reveal. Opacity-only deliberately -
+// Leaflet positions markers via an inline `transform: translate3d(...)`, and
+// a CSS animation on `transform` would fight that (or, with fill-mode set,
+// permanently strand the marker at the animation's final offset instead of
+// its real map position) - opacity has no such conflict.
+.spotguessr-marker-drop {
+    animation: spotguessr-marker-drop .4s ease-out;
+}
+
+@keyframes spotguessr-marker-drop {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
     }
 }
