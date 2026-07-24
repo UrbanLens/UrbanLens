@@ -82,6 +82,7 @@ from urbanlens.dashboard.models.spotguessr import (
     GameSessionStatus,
     Guess,
     LocationModeRating,
+    PhotoCoordinateGuess,
     PlayerModeRating,
     SpotGuessrMode,
     SpotGuessrPreference,

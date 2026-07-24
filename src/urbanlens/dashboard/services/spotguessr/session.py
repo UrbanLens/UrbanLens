@@ -28,7 +28,7 @@ from urbanlens.dashboard.models.spotguessr.model import (
     SpotGuessrMode,
 )
 from urbanlens.dashboard.services.connections import are_connections
-from urbanlens.dashboard.services.spotguessr import eligibility, named_place, photos, realtime, relevance, scoring, selection, serializers, street_view
+from urbanlens.dashboard.services.spotguessr import eligibility, named_place, photo_coordinates, photos, realtime, relevance, scoring, selection, serializers, street_view
 from urbanlens.dashboard.services.spotguessr.ratings import apply_round_ratings
 
 if TYPE_CHECKING:
@@ -337,6 +337,7 @@ def submit_guess(round_: GameRound, profile: Profile, guess_point: Point, guesse
         target_point=round_.target_point,
     )
     points = scoring.points_for_distance(distance)
+    photo_coordinates.record_guess(round_, guess_point, distance)
 
     session = round_.session
     config = _config_from_session(session)

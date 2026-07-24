@@ -118,6 +118,18 @@ class SubmitGuessTests(TestCase):
         self.assertEqual(guess.points, 5000)
         self.assertEqual(guess.distance_meters, 0.0)
 
+    def test_guessing_records_an_anonymized_coordinate_guess(self) -> None:
+        from urbanlens.dashboard.models.spotguessr.model import PhotoCoordinateGuess
+
+        guess_point = Point(float(self.location.longitude), float(self.location.latitude), srid=4326)
+        submit_guess(self.round_, self.profile, guess_point)
+
+        self.round_.refresh_from_db()
+        coordinate_guess = PhotoCoordinateGuess.objects.get(image_id=self.round_.image_id)
+        self.assertTrue(coordinate_guess.is_correct)
+        field_names = {f.name for f in PhotoCoordinateGuess._meta.get_fields()}
+        self.assertNotIn("profile", field_names)
+
     def test_a_second_guess_by_the_same_profile_is_rejected(self) -> None:
         guess_point = Point(float(self.location.longitude), float(self.location.latitude), srid=4326)
         submit_guess(self.round_, self.profile, guess_point)

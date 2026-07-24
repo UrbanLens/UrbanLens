@@ -412,6 +412,39 @@ class Guess(abstract.DashboardModel):
         ]
 
 
+class PhotoCoordinateGuess(abstract.DashboardModel):
+    """One anonymized guess toward an as-yet-unplaced photo's own coordinates.
+
+    Deliberately carries no profile or round FK - see
+    ``services.spotguessr.photo_coordinates`` for the full rationale. This is
+    crowd-sourced signal toward the photo's position, not gameplay history;
+    keeping it structurally impossible to trace back to who made a given
+    guess is the point, not an incidental privacy nicety. ``created``
+    (inherited) is the "datetime" this guess was made.
+    """
+
+    guess_point = PointField(geography=True, srid=4326)
+    is_correct = BooleanField()
+
+    image = ForeignKey(
+        "dashboard.Image",
+        on_delete=CASCADE,
+        related_name="coordinate_guesses",
+    )
+
+    if TYPE_CHECKING:
+        image_id: int
+
+    def __str__(self) -> str:
+        return f"PhotoCoordinateGuess(image={self.image_id}, is_correct={self.is_correct})"
+
+    class Meta(abstract.DashboardModel.Meta):
+        db_table = "dashboard_spotguessr_photo_coordinate_guesses"
+        indexes = [
+            Index(fields=["image", "is_correct"], name="idxdb_sg_coordguess_img_correct"),
+        ]
+
+
 class GamePhotoFeedbackKind(abstract.TextChoices):
     """What a participant did (or didn't do) about the photo shown in a Photos-mode round.
 
