@@ -65,13 +65,14 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
     ),
     "redata_cid_lookup": ServiceDefaults(
         display_name="REData CID Resolution",
-        # Our own outbound throttle on top of whatever REData enforces
-        # server-side (unknown until their endpoint exists) - deliberately
-        # generous since each call is a batch of many CIDs, not one lookup.
+        # Our own outbound throttle, well under REData's own dedicated
+        # 200 requests/hour-per-key limit on this endpoint (see
+        # ../REData/docs/api-reference.md) - deliberately generous since each
+        # call is a batch of up to 10,000 CIDs, not one lookup.
         calls_per_minute=10,
         calls_per_day=None,
         calls_per_30_days=None,
-        notes="Batch CID->coordinate resolution. Not yet live - see docs/redata-cid-resolution.md.",
+        notes="Batch CID->coordinate resolution via POST /places/resolve-cids/. See docs/redata-cid-resolution.md.",
     ),
     "google_search": ServiceDefaults(
         display_name="Google Custom Search",

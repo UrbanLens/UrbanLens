@@ -4,11 +4,14 @@ Single chokepoint for the "which provider resolves a CID" decision (see
 ``docs/redata-cid-resolution.md`` for the full background):
 
 - REData configured (``UL_REDATA_API_URL``/``UL_REDATA_API_KEY`` both set) -
-  the primary deployment's path. A batch call to REData's (proposed) CID
-  resolution endpoint. On failure, the whole batch is reported as ``pending``
-  for the caller to retry later - deliberately no fallback to Google here,
-  so behavior stays predictable per-install rather than silently mixing
-  providers.
+  the primary deployment's path. A batch call to REData's
+  ``POST /places/resolve-cids/`` (see ``../REData/docs/api-reference.md``,
+  "Google Maps CID resolution" - deliberately asynchronous on REData's end, so
+  a cid it hasn't finished resolving yet comes back as ``pending``, not an
+  error). On a request failure (REData unreachable, non-200, ...), the whole
+  batch is reported as ``pending`` for the caller to retry later - no fallback
+  to Google here, so behavior stays predictable per-install rather than
+  silently mixing providers.
 - REData not configured - assumed to be an install without access to it (e.g.
   someone else running UrbanLens themselves). Falls back to calling Google
   Places directly, one CID at a time, via the existing
@@ -73,18 +76,17 @@ def resolve_cids(cids: list[int]) -> CidResolutionResult:
 
 def _resolve_via_redata(cids: list[int]) -> CidResolutionResult:
     try:
-        raw = RedataCidGateway().resolve_cids(cids)
+        batch = RedataCidGateway().resolve_cids(cids)
     except GatewayRequestError:
         logger.warning("REData CID batch resolution failed for %d cid(s) - deferring for retry.", len(cids))
         return CidResolutionResult(provider=PROVIDER_REDATA, pending=list(cids))
 
-    result = CidResolutionResult(provider=PROVIDER_REDATA)
-    for cid, coords in raw.items():
-        if coords is None:
-            result.unresolvable.add(cid)
-        else:
-            result.resolved[cid] = coords
-    return result
+    return CidResolutionResult(
+        provider=PROVIDER_REDATA,
+        resolved=batch.resolved,
+        unresolvable=batch.unresolvable,
+        pending=list(batch.pending),
+    )
 
 
 def _resolve_via_google(cids: list[int]) -> CidResolutionResult:

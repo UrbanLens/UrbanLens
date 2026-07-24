@@ -21,74 +21,52 @@ Raw data, for reference:
 - `notes/geocoding-analysis/confirmed_mismatches.json` — the 120 confirmed-wrong places from that
   set, each with both the wrong guess and the correct coordinate.
 
-This can't be fixed with a better local heuristic — we looked (S2 cell level, leaf-ness, title
-language, multi-list membership; see the mismatches dataset). The only fix is an actual lookup
-against Google's own data for the CID.
+No local heuristic fixes this reliably (S2 cell level, leaf-ness, title language, and multi-list
+membership were all checked and none discriminate well enough - see the mismatches dataset). An
+actual lookup against Google's own data for the CID is the only fix.
 
-## The proof of concept
+## Resolution: REData
 
-`src/urbanlens/dashboard/services/apis/locations/google/scraping.py` — `GoogleMapsScraper` — proves
-this is solvable without per-call API billing. It drives a real headless browser (Playwright/
-Chromium) to `https://www.google.com/maps?cid={cid}`, waits for Google's own client-side JS to
-resolve the place, and reads the coordinates back out of the URL it redirects to (the
-`!3d{lat}!4d{lon}` pair in the resolved URL's data segment, falling back to the `/@{lat},{lon}`
-viewport-center pair).
+We initially proved this was solvable at all with a headless-browser proof of concept (drive a
+real Chromium instance to `google.com/maps?cid={cid}`, read the coordinates back out of the
+resolved URL - 100% agreement with the paid Places API across a 60-place validation sample,
+including every catastrophic S2-decode failure). That POC has since been removed: **REData now
+implements this natively**, so UrbanLens no longer needs to run its own browser-automation
+pipeline for it.
 
-Validated in `notes/geocoding-analysis/validate_scraper.py` /
-`notes/geocoding-analysis/scraper_validation.json`: 60 places sampled (30 known-good, 30
-known-bad per the ground-truth dataset above), **60/60 agreed with the paid Places API within
-100m**, including every one of the catastrophic S2-decode failures. Zero failed extractions.
+### The live endpoint
 
-This is the reference behavior REData's implementation should replicate (at whatever scale/
-infrastructure — proxy pools, browser farms, etc. — makes sense on your end; our POC deliberately
-does none of that, see the caveats in `scraping.py`'s module docstring).
+`POST /places/resolve-cids/` on REData — see `../REData/docs/api-reference.md`, "Google Maps CID
+resolution", for the authoritative contract (REData's code wins if this doc and that one ever
+disagree). Summary:
 
-## What UrbanLens needs from REData
-
-A CID → coordinate resolution endpoint. UrbanLens will call it from a background job (a pin import
-can involve anywhere from a few to several thousand CIDs at once), so a **batch** shape is strongly
-preferred over one-CID-per-request.
-
-### Proposed contract (not yet built on REData's side — open to adjustment)
-
-```
-POST /api/v1/places/resolve-cids/
-Authorization: Bearer <api key>   (same as the existing property-records API)
-
-Request:
-{
-  "cids": [6952009488037205194, 1234567890123456789, ...]
-}
-
-Response: 200
-{
-  "results": {
-    "6952009488037205194": {"lat": 40.4509922, "lng": -78.563521},
-    "1234567890123456789": null
+- **Auth**: same bearer-token REData account already used for property records
+  (`UL_REDATA_API_URL`/`UL_REDATA_API_KEY`) — the key needs REData's `places:read` scope.
+- **Request**: `{"cids": [<int>, ...]}`, up to 10,000 per call (REData returns `400` above that;
+  UrbanLens's gateway chunks transparently so callers never have to think about this).
+- **Response** (`200`):
+  ```jsonc
+  {
+    "results": {
+      "123456789012345678": { "lat": 38.456, "lng": -77.123 },
+      "987654321098765432": null   // confirmed, after repeated attempts, unresolvable
+    },
+    "pending": ["555555555555555555"]   // just queued / in flight server-side - poll again later
   }
-}
-```
-
-- `results` keys are the requested CIDs (as strings, since JSON object keys can't be numbers).
-- A value of `null` means REData confirmed there's no resolvable location for that CID — a
-  terminal "no answer," not "try again later." UrbanLens will not retry these.
-- Any HTTP-level failure (non-200, timeout, malformed body) is treated as fully transient — the
-  whole batch gets retried later with backoff. UrbanLens does **not** fall back to calling Google
-  directly when REData is configured, so an endpoint that's flaky or slow to come online will
-  visibly delay pin placement for UrbanLens users with REData configured, rather than silently
-  degrading — flag it to us if that's a problem so we can revisit that choice.
-- We assumed a synchronous response above for simplicity. If resolving a large batch server-side
-  needs to be async (submit → poll), that's fine, but our client will need a small follow-up change
-  to match — let us know before/while implementing so we can coordinate.
-- Follows the same auth/response conventions as the existing property-records API this same
-  UrbanLens codebase already talks to
-  (`src/urbanlens/dashboard/services/apis/property_records/redata_gateway.py` — bearer token,
-  `GET/POST` + JSON, `UL_REDATA_API_URL`/`UL_REDATA_API_KEY`).
+  ```
+  Resolution is asynchronous on REData's end (it can involve a real headless-browser page
+  navigation), so a cid not yet settled comes back in `pending`, not as an error or a missing key.
+- **Rate limits**: a dedicated 200 requests/hour per API key on this endpoint specifically (on top
+  of REData's general 2,000/hour per-key budget), rated in calls, not CIDs — see api-reference.md's
+  "Rate limiting" section.
 
 ### Where this plugs in on our side
 
 `src/urbanlens/dashboard/services/apis/locations/cid_resolution.py` — `resolve_cids()` — is the
-single chokepoint that decides REData vs. a direct-Google-Places fallback (used only for
-installs that never configured REData at all — see that module for details). Once this endpoint
-exists, `src/urbanlens/dashboard/services/apis/locations/google/redata_cid_gateway.py`
-(`RedataCidGateway.resolve_cids`) is the client that calls it.
+single chokepoint deciding REData vs. a direct-Google-Places fallback (used only for installs that
+never configured REData at all - e.g. someone else self-hosting UrbanLens). It returns a
+`CidResolutionResult` with `resolved`/`unresolvable`/`pending` buckets regardless of which provider
+answered, so callers (`tasks.resolve_deferred_pin_locations`) don't need to know which one ran.
+
+`src/urbanlens/dashboard/services/apis/locations/google/redata_cid_gateway.py`
+(`RedataCidGateway.resolve_cids`) is the actual REST client for the endpoint above.

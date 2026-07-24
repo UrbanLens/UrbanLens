@@ -11,6 +11,7 @@ from unittest import mock
 
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.apis.locations import cid_resolution
+from urbanlens.dashboard.services.apis.locations.google.redata_cid_gateway import RedataCidBatchResult
 from urbanlens.dashboard.services.gateway import GatewayRequestError
 from urbanlens.dashboard.services.rate_limiter import RateLimitExceededError
 from urbanlens.UrbanLens.settings.app import settings
@@ -25,7 +26,7 @@ class ResolveCidsProviderChoiceTests(SimpleTestCase):
                 "urbanlens.dashboard.services.apis.locations.cid_resolution.RedataCidGateway",
             ) as gateway_cls,
         ):
-            gateway_cls.return_value.resolve_cids.return_value = {1: (1.0, 2.0)}
+            gateway_cls.return_value.resolve_cids.return_value = RedataCidBatchResult(resolved={1: (1.0, 2.0)})
             result = cid_resolution.resolve_cids([1])
 
         self.assertEqual(result.provider, cid_resolution.PROVIDER_REDATA)
@@ -78,12 +79,26 @@ class ResolveViaRedataTests(SimpleTestCase):
         with mock.patch(
             "urbanlens.dashboard.services.apis.locations.cid_resolution.RedataCidGateway",
         ) as gateway_cls:
-            gateway_cls.return_value.resolve_cids.return_value = {1: (1.0, 2.0), 2: None}
+            gateway_cls.return_value.resolve_cids.return_value = RedataCidBatchResult(
+                resolved={1: (1.0, 2.0)},
+                unresolvable={2},
+            )
             result = cid_resolution.resolve_cids([1, 2])
 
         self.assertEqual(result.resolved, {1: (1.0, 2.0)})
         self.assertEqual(result.unresolvable, {2})
         self.assertEqual(result.pending, [])
+
+    def test_still_pending_on_redatas_end_is_reported_as_pending(self) -> None:
+        with mock.patch(
+            "urbanlens.dashboard.services.apis.locations.cid_resolution.RedataCidGateway",
+        ) as gateway_cls:
+            gateway_cls.return_value.resolve_cids.return_value = RedataCidBatchResult(pending={3})
+            result = cid_resolution.resolve_cids([3])
+
+        self.assertEqual(result.resolved, {})
+        self.assertEqual(result.unresolvable, set())
+        self.assertEqual(result.pending, [3])
 
 
 class ResolveViaGoogleTests(SimpleTestCase):
