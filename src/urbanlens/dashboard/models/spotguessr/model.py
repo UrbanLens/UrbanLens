@@ -447,7 +447,7 @@ class PhotoCoordinateGuess(abstract.DashboardModel):
     class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_spotguessr_photo_coordinate_guesses"
         indexes = [
-            Index(fields=["image", "is_correct"], name="idxdb_sg_coordguess_img_correct"),
+            Index(fields=["image", "is_correct"], name="idxdb_sg_cordgues_iscorrect"),
         ]
 
 

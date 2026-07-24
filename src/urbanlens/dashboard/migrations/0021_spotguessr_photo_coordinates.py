@@ -62,7 +62,7 @@ class Migration(migrations.Migration):
                 "indexes": [
                     models.Index(
                         fields=["image", "is_correct"],
-                        name="idxdb_sg_coordguess_img_correct",
+                        name="idxdb_sg_cordgues_iscorrect",
                     )
                 ],
             },

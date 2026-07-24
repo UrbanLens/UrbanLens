@@ -80,10 +80,9 @@ class RedataCidGateway(Gateway):
     def resolve_cids(self, cids: list[int]) -> RedataCidBatchResult:
         """Resolve a batch of Google Maps CIDs to coordinates via REData.
 
-        Deliberately asynchronous on REData's end (a resolution can involve a
-        real headless-browser page navigation) - a cid REData hasn't resolved
-        yet comes back in ``pending``, not as an error; call again later to
-        see if it's settled.
+        Deliberately asynchronous on REData's end - a cid REData hasn't
+        resolved yet comes back in ``pending``, not as an error; call again
+        later to see if it's settled.
 
         Args:
             cids: CIDs to resolve (the decimal value after the ``:0x`` in a

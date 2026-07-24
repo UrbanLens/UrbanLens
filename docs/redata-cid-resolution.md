@@ -27,12 +27,9 @@ actual lookup against Google's own data for the CID is the only fix.
 
 ## Resolution: REData
 
-We initially proved this was solvable at all with a headless-browser proof of concept (drive a
-real Chromium instance to `google.com/maps?cid={cid}`, read the coordinates back out of the
-resolved URL - 100% agreement with the paid Places API across a 60-place validation sample,
-including every catastrophic S2-decode failure). That POC has since been removed: **REData now
-implements this natively**, so UrbanLens no longer needs to run its own browser-automation
-pipeline for it.
+REData resolves a Google Maps CID to a coordinate as a first-class capability of its API. UrbanLens
+only depends on that API's contract (below), not on how REData produces an answer internally -
+that's REData's own implementation detail, subject to change without notice on this end.
 
 ### The live endpoint
 
@@ -54,8 +51,8 @@ disagree). Summary:
     "pending": ["555555555555555555"]   // just queued / in flight server-side - poll again later
   }
   ```
-  Resolution is asynchronous on REData's end (it can involve a real headless-browser page
-  navigation), so a cid not yet settled comes back in `pending`, not as an error or a missing key.
+  Resolution is asynchronous on REData's end, so a cid not yet settled comes back in `pending`,
+  not as an error or a missing key.
 - **Rate limits**: a dedicated 200 requests/hour per API key on this endpoint specifically (on top
   of REData's general 2,000/hour per-key budget), rated in calls, not CIDs — see api-reference.md's
   "Rate limiting" section.
