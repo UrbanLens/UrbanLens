@@ -379,11 +379,17 @@ A GeoGuessr-style game built on the user's own pin/wiki/photo data. Full design 
 mapping: `docs/designs/spotguessr.md`. **Built (UL-391..UL-393): solo and multiplayer play,
 all three guess modes.** Everything below the line is not yet built.
 
-- Three modes: **Photos** (a photo from a pinned location; guess by clicking a Leaflet map or
-  searching your own pins), **Named Place** (a meaningful place name or, by default, a random
-  alias/nickname - togglable off; map-click only, no pin search - the point is recognizing the
-  name without being able to look it up), and **Street View** (imagery from the existing
-  Street View integration, point-scored; map-click or pin search)
+- Three modes: **Photos** (a photo shared to a pinned location's wiki - never a private,
+  un-shared pin photo; guess by clicking a Leaflet map or searching your own pins), **Named
+  Place** (a meaningful place name or, by default, a random alias/nickname - togglable off;
+  map-click only, no pin search - the point is recognizing the name without being able to look
+  it up), and **Street View** (imagery from the existing Street View integration, point-scored;
+  map-click or pin search)
+- Photos-mode community-relevance feedback: in-game thumbs up/down/report on the shown photo
+  feed a blended relevance score (`services.media_relevance.effective_relevance`) alongside the
+  wiki's own thumbs, weighted down for in-game signal (and thumbs down excluded entirely - see
+  the design doc's "Photo relevance feedback"); an "allow arbitrary external photos" setting
+  (off by default) opts a session out of the relevance filter
 - Eligibility engine: a location is only ever offered if it's pinned by every *joined*
   participant (an invited-but-not-yet-accepted player never gates this) — no exceptions, no
   caching across sessions
@@ -408,8 +414,10 @@ all three guess modes.** Everything below the line is not yet built.
   between people already visible to each other on the scoreboard has no privacy surface to
   protect)
 
-Not yet built: the community photo submission/moderation pipeline and photo report/thumbs
-voting (UL-394), voice chat (UL-395), and engagement polish like reveal animations and
-leaderboards (UL-396). Also not built (deliberate scope cuts within UL-392, not oversights):
+Not yet built: the community photo submission/moderation pipeline itself - upload-to-wiki with
+a submit-to-game checkbox, a "submit this wiki photo to the game" lightbox button, and the
+nudity/person moderation classifier (UL-394; in-game thumbs/report voting is built, see above) -
+voice chat (UL-395), and engagement polish like reveal animations and leaderboards (UL-396).
+Also not built (deliberate scope cuts within UL-392, not oversights):
 join-by-link invites, mid-game joining, and automatic cleanup of stuck lobbies/AFK
 participants — see the design doc's "Multiplayer sessions" section.

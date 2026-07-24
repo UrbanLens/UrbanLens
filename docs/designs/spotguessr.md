@@ -144,18 +144,79 @@ Uniform-random selection over a small, geographically clustered pin set reliably
 
 ## Photo selection (Photos mode)
 
-`services.spotguessr.photos.candidate_image_for_location()` — for Phase 1, pulls from
-`Image` rows already on the location (`Image.location_id = location.id`, `media_type=photo`).
-There is deliberately **no separate "opted into the game" gate in Phase 1**: for a solo
-session this raises no privacy question (it's the player's own pins/photos, or public wiki
-photos on locations they've pinned), and gating on a not-yet-built community-submission flag
-would just mean Photos mode has nothing to show. The community submission/consent pipeline
-(UL-394) becomes the actual photo source once multiplayer (UL-392) ships, since that's where
-showing a stranger's private photo without consent would actually matter — see UL-394 below.
+`services.spotguessr.photos.candidate_image_for_location()` pulls from `Image` rows on the
+location (`Image.location_id = location.id`, `media_type=photo`).
 
-`config.external_media_only`, if set, restricts to `Image.source != upload` (uses the
-existing `ImageSource` enum — everything that isn't a plain personal upload already reads as
-"externally sourced": Wikimedia, Google Images, Smithsonian, etc.).
+**Privacy invariant (non-negotiable): `Image.wiki_id` must be set.** An earlier version of
+this gate reasoned "no separate opted-into-the-game gate is needed in Phase 1 - it's the
+player's own pins/photos, or public wiki photos" - that reasoning was wrong even for solo
+play: eligibility only requires the *location* be pinned by every participant, not that a
+given *photo* belongs to them, so any other profile's private pin photo at that same location
+was equally eligible, with no sharing action behind it at all. `Image.wiki` being null must
+always be read as "not eligible," never as "eligible with a caveat" - a photo only reaches a
+wiki through an explicit share (or, once the game gets its own upload flow, by attaching to
+the wiki at upload time), which is the one signal that reliably means a profile chose to make
+it public. See `services.spotguessr.photos`'s module docstring for the same invariant stated
+at the code level.
+
+`config.external_media_only`, if set, additionally excludes `Image.source == upload` (uses the
+existing `ImageSource` enum) from the wiki-attached pool, keeping only externally-sourced
+media (Wikimedia, Google Images, Smithsonian, etc.) that's been shared to the wiki.
+
+### Photo relevance feedback
+
+The game's secondary goal (besides being fun) is generating data that improves the site's own
+notion of which wiki photos are actually good - see "External media caching + relevance"
+below for the full design. Briefly: `GamePhotoFeedback` records one event per (round, guessing
+profile) - `thumbs_up`, `thumbs_down`, `reported`, or a server-backfilled `no_reaction` for
+anyone who never explicitly reacted (`services.spotguessr.relevance`). `services.media_relevance
+.effective_relevance()` blends this with the wiki's own organic `MediaRelevance` votes:
+
+| Signal | Weight | Why |
+|---|---|---|
+| Wiki thumbs up/down (existing) | ±1.0 | the wiki's own organic signal, unchanged |
+| In-game thumbs up | +0.5 | deliberate positive reaction, but weaker than a wiki visitor voting on this exact photo |
+| In-game report | -1.0 | a direct "this doesn't belong here" claim - same weight as a wiki downvote |
+| In-game thumbs down | **0 (excluded)** | means "wrong photo for this game" (blurry, gives away the answer, ambiguous), not "not relevant to this wiki" - conflating the two would let bad game-fit tank a photo's wiki standing |
+| Shown, no reaction | +0.01 | most impressions are silent; only meaningful in aggregate over many plays, and is exactly what lets a never-voted photo bootstrap a score |
+
+`config.allow_arbitrary_external_photos` (default **off**) controls whether an externally-
+sourced candidate must have a non-negative `effective_relevance` score to be shown. Off is
+non-negative rather than requiring strictly positive, since almost every wiki photo starts at
+exactly 0 (no votes yet) and it's this very mode that's expected to grow that score. On lifts
+the filter entirely, including for photos already known to be bad - trading photo quality for
+pool size, and deliberately generating gameplay signal on exactly the photos that most need
+it. Personal uploads shared to the wiki are always eligible either way - they were never
+rendered through the Media gallery, so they have no relevance identity to score.
+
+## External media caching + relevance
+
+Not SpotGuessr-specific, but implemented alongside it since the game's relevance feedback
+needed a reliable way to join a materialized photo back to its wiki votes. Two independent
+fixes/additions to the existing pin-detail/wiki Media gallery (`services.media_materialize`,
+`services.media_relevance`):
+
+- **Identity fix.** `Image.media_source_key`/`Image.media_item_key` now store the *raw*
+  provider panel key and the sha1 hash of the item's raw full-resolution url - exactly the
+  `(source, item_key)` identity `MediaRelevance` marks are keyed by. `Image.source_url` can't
+  serve this purpose: it's set to `page_url or url`, which diverges from the raw `url` that
+  `media_item_key()` is always hashed from whenever a provider supplies a `page_url`. Without
+  this, a materialized row had no reliable way to be joined back to its own votes at all.
+  Fixed alongside it: `materialize_media_item`'s dedupe filter compared the *raw* panel key
+  against `Image.source`, which stores the *translated* `ImageSource` value - for any source
+  with a translation (`"loc"` -> `library_of_congress`, `"cris_building"` -> `cris`), that
+  mismatch meant the filter could never match a previously materialized row, so every repeat
+  vote re-downloaded and duplicated it.
+- **Local-copy preference.** Marking an external Media gallery item "relevant" already
+  downloaded and materialized it into a durable `Image` row (existed before this pass, on the
+  pin-detail page only). What was missing: the gallery never *served* that local copy back -
+  every subsequent page load, by anyone, still hot-linked the live provider url straight from
+  `LocationCache`. `services.media_relevance.local_images_for_gallery_items()` bulk-looks-up
+  already-materialized rows for a panel's live results; both the pin-detail and wiki Media
+  views now prefer that local url for the displayed thumbnail/image, falling back to the
+  remote url when no local copy exists yet. The remote page (`item.page_url|default:item.url`)
+  stays the "Open source" link regardless, so the original is never dropped - only the default
+  display source changes once a cached copy exists.
 
 ## Solo vs. multiplayer
 
@@ -352,6 +413,8 @@ is lifted; all three modes are now startable, solo or multiplayer.
 | `MIN_SEPARATION_KM` | 0.5 | anti-clustering exclusion radius from the previous round |
 | Glicko-2: rating / RD / volatility / scale / τ | 1500 / 350 / 0.06 / 173.7178 / 0.5 | Glickman's published defaults |
 | `use_aliases` | True | Named Place mode; per-session config, not a site-wide constant |
+| `allow_arbitrary_external_photos` | False | Photos mode; skips the relevance filter entirely when true - see "Photo relevance feedback" |
+| `GAME_THUMBS_UP_WEIGHT` / `GAME_REPORT_WEIGHT` / `GAME_NO_REACTION_WEIGHT` | 0.5 / 1.0 / 0.01 | `services.media_relevance` - in-game thumbs down is excluded (weight 0), not merely low |
 | `CHAT_HISTORY_LIMIT` | 50 | messages returned by the chat-history GET on reconnect |
 
 ## Social: ratings visibility
@@ -386,10 +449,23 @@ is lifted; all three modes are now startable, solo or multiplayer.
   no search, aliases on by default with a setting to disable them) and Street View mode
   (point-distance, reusing the existing `GoogleMapsGateway` Street View integration). See
   "Named Place and Street View modes" above.
-- **UL-394 (follow-up)** — community photo submission pipeline: upload-to-wiki with a
-  submit-to-game checkbox (and an upload notice that it was added to the location's wiki),
-  a "submit this wiki photo to the game" button in the lightbox, report/flag buttons (photo
-  isn't of a location; revealed location is wrong for this photo), thumbs up/down, and the
+- **Photo privacy fix + relevance feedback (this pass)** — found and fixed a real privacy gap:
+  Photos-mode round generation had no gate at all on which `Image` rows it could show, so a
+  private pin's photo (or, in principle, a safety check-in photo) could reach another
+  profile's game session with no sharing action behind it. `candidate_image_for_location` now
+  unconditionally requires `wiki__isnull=False` — see "Photo selection" above. Also built the
+  in-game thumbs-up/thumbs-down/report feedback buttons and their weighted contribution to
+  `services.media_relevance.effective_relevance` (`GamePhotoFeedback`,
+  `services.spotguessr.relevance`), the `allow_arbitrary_external_photos` setting, and — not
+  SpotGuessr-specific, but needed to make relevance joinable at all — the `Image.media_source_key`/
+  `media_item_key` identity fields and local-copy-preferred serving in the pin-detail/wiki
+  Media gallery. See "Photo relevance feedback" and "External media caching + relevance" above.
+- **UL-394 (remaining follow-up)** — community photo submission pipeline: upload-to-wiki with a
+  submit-to-game checkbox (and an upload notice that it was added to the location's wiki,
+  which — per the new privacy invariant above — is also what makes it eligible for the game),
+  a "submit this wiki photo to the game" button in the lightbox, a post-reveal "wrong location
+  for this photo" flag distinct from the in-game report already built (that one means "doesn't
+  belong here at all"; this one means "right place, but not this exact spot"), and the
   moderation classifier — reusing the existing Cloudflare Workers AI vision gateway
   (`services/ai/vision.py`'s provider/rate-limit pattern) with a person/nudity-capable model.
   Per spec: a photo that fails the classifier is simply never used, silently — the submitter
