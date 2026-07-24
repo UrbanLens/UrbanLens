@@ -15,6 +15,8 @@ Features planned for this release.
 * On the pin details page, and on the wiki page, sections named "Media" should be named "Photos and Media" instead.
 * Sometimes multiple guidance tips come up on the same page. The user clicks "don't show this again" and another one pops up immediately after. That should never happen.
 * On main map, when right clicking and then clicking the coordinates, more specific coordinates should be copied to clipboard.
+* Add a section on the FAQ page to transparently communicate to users what data is encrypted, and what data is not.
+* Ensure that users who turn off external data sources also turns off sending anything to REData. That means the import pins process will be affected. When they try to import a google takeout file, and that setting it turned off, give them a warning dialog which allows them to bypass the permission just this once, or import only pins that don't require data from google maps. In the latter case, provide them a list of pins that could not be imported, because the google takeout data doesn't include enough information. Be sure that our wording of this places the blame squarely on google (because it is; this is the only way they make the data available, and the data they give doesn't even contain coordinates).
 
 ## Medium Features
 * Audit the import process for security (unzip, etc) [UL-268]
