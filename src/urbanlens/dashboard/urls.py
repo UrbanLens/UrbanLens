@@ -60,6 +60,7 @@ from urbanlens.dashboard.controllers import (
     settings,
     setup,
     site_admin,
+    spotguessr,
     thanks,
     tools,
     trip,
@@ -139,6 +140,23 @@ urlpatterns = [
     path("assistant/", assistant.AssistantView.as_view(), name="assistant"),
     path("assistant/message/", assistant.AssistantMessageView.as_view(), name="assistant.message"),
     path("assistant/reset/", assistant.AssistantResetView.as_view(), name="assistant.reset"),
+    path(
+        "spotguessr/",
+        include(
+            [
+                path("", spotguessr.SpotGuessrHomeView.as_view(), name="spotguessr"),
+                path("settings/", spotguessr.SpotGuessrSettingsView.as_view(), name="spotguessr.settings"),
+                path("start/", spotguessr.SpotGuessrStartView.as_view(), name="spotguessr.start"),
+                path("session/<int:session_id>/round/", spotguessr.SpotGuessrRoundView.as_view(), name="spotguessr.round"),
+                path(
+                    "session/<int:session_id>/round/<int:round_id>/guess/",
+                    spotguessr.SpotGuessrGuessView.as_view(),
+                    name="spotguessr.guess",
+                ),
+                path("session/<int:session_id>/summary/", spotguessr.SpotGuessrSummaryView.as_view(), name="spotguessr.summary"),
+            ],
+        ),
+    ),
     path(
         "help/import-pins/",
         TemplateView.as_view(
@@ -1298,6 +1316,16 @@ urlpatterns = [
                     "<slug:trip_slug>/activities/<int:activity_id>/complete/",
                     trip.TripActivityCompleteView.as_view(),
                     name="trips.activity.complete",
+                ),
+                path(
+                    "<slug:trip_slug>/activities/apply-order/",
+                    trip.TripApplySuggestedOrderView.as_view(),
+                    name="trips.activity.apply_order",
+                ),
+                path(
+                    "<slug:trip_slug>/ai-suggestions/",
+                    trip.TripAiSuggestionsView.as_view(),
+                    name="trips.ai_suggestions",
                 ),
                 path(
                     "<slug:trip_slug>/child-trip-search/",

@@ -34,6 +34,8 @@ from urbanlens.dashboard.services.text_limits import (
     MAX_TRIP_DESCRIPTION_LENGTH,
     text_length_error,
 )
+from urbanlens.dashboard.services.trip_legs import activity_coords
+from urbanlens.dashboard.services.trip_visibility import viewer_hidden_activity_ids
 from urbanlens.dashboard.services.undo.service import stash_for_undo
 from urbanlens.dashboard.services.visits import add_visited_status, create_visit_suggestion, get_or_create_pin_at, sync_last_visited, visit_logging_allowed
 
@@ -156,79 +158,6 @@ def _trip_overview_stats(trips: Iterable[Trip]) -> dict[str, int]:
     return stats
 
 
-def _apply_trip_visibility_filter(
-    sensitive: list[TripActivity],
-    viewer: Profile,
-    hidden_out: set[int],
-) -> None:
-    """Populate *hidden_out* with the IDs of activities whose location the viewer
-    may not see, based on each adder's trip_pin_location_visibility setting.
-
-    Args:
-        sensitive: Activities already filtered to non-ANYONE visibility and
-                   non-owner viewer.
-        viewer:    The profile viewing the trip.
-        hidden_out: Mutable set to add hidden activity IDs into.
-    """
-    from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
-    from urbanlens.dashboard.models.pin.model import Pin
-
-    # Activities where the adder's account was deleted: treat as most restrictive.
-    hidden_out.update(a.id for a in sensitive if a.added_by is None)
-    no_one_acts = [a for a in sensitive if a.added_by is not None and a.added_by.trip_pin_location_visibility == VisibilityChoice.NO_ONE]
-    common_pin_acts = [a for a in sensitive if a.added_by is not None and a.added_by.trip_pin_location_visibility == VisibilityChoice.COMMON_PIN]
-    friends_acts = [a for a in sensitive if a.added_by is not None and a.added_by.trip_pin_location_visibility == VisibilityChoice.FRIENDS]
-    c_friend_acts = [a for a in sensitive if a.added_by is not None and a.added_by.trip_pin_location_visibility == VisibilityChoice.COMMON_FRIEND]
-    # COMMON_TRIP and ANYTHING_IN_COMMON: the viewer shares this very trip with
-    # the adder, which satisfies both - treat as visible.
-
-    hidden_out.update(act.id for act in no_one_acts)
-
-    # Friends of the viewer always qualify for every option except NO_ONE, so
-    # compute the viewer's accepted-friend ids once for all branches below.
-    viewer_friend_ids: set[int] = set()
-    if common_pin_acts or friends_acts or c_friend_acts:
-        friend_pairs = Friendship.objects.filter(
-            Q(from_profile=viewer) | Q(to_profile=viewer),
-            status=FriendshipStatus.ACCEPTED,
-        ).values_list("from_profile_id", "to_profile_id")
-        for pair in friend_pairs:
-            viewer_friend_ids.update(pair)
-        viewer_friend_ids.discard(viewer.id)
-
-    if common_pin_acts:
-        loc_ids = {a.location_id for a in common_pin_acts}
-        viewer_locs = set(
-            Pin.objects.filter(profile=viewer, location_id__in=loc_ids).values_list("location_id", flat=True),
-        )
-        for act in common_pin_acts:
-            if act.added_by_id not in viewer_friend_ids and act.location_id not in viewer_locs:
-                hidden_out.add(act.id)
-
-    for act in friends_acts:
-        if act.added_by_id not in viewer_friend_ids:
-            hidden_out.add(act.id)
-
-    for act in c_friend_acts:
-        if act.added_by_id in viewer_friend_ids:
-            continue
-        # Adder's friends
-        adder_friends = set(
-            Friendship.objects.filter(
-                Q(from_profile_id=act.added_by_id) | Q(to_profile_id=act.added_by_id),
-                status=FriendshipStatus.ACCEPTED,
-            ).values_list("from_profile_id", "to_profile_id"),
-        )
-        adder_flat: set[int] = set()
-        for pair in adder_friends:
-            adder_flat.update(pair)
-        if act.added_by_id is not None:
-            adder_flat.discard(act.added_by_id)
-
-        if not (viewer_friend_ids & adder_flat):
-            hidden_out.add(act.id)
-
-
 class _ReplyData(TypedDict):
     comment: TripComment
     rendered_text: str
@@ -286,24 +215,6 @@ def _activity_qs(trip: Trip) -> QuerySet:
     )
 
 
-def _activity_coords(act: TripActivity) -> tuple[float, float] | None:
-    """Return (lat, lng) for an activity, respecting override fields.
-
-    Priority: lat_override/lng_override → pin effective coords → location coords.
-    Returns None if no coordinates are available.
-    """
-    if act.lat_override is not None and act.lng_override is not None:
-        return (act.lat_override, act.lng_override)
-    if act.pin:
-        lat = act.pin.effective_latitude
-        lng = act.pin.effective_longitude
-        if lat is not None and lng is not None:
-            return (float(lat), float(lng))
-    if act.location and act.location.latitude is not None and act.location.longitude is not None:
-        return (float(act.location.latitude), float(act.location.longitude))
-    return None
-
-
 def _create_visit_entries_for_completed_activity(trip: Trip, activity: TripActivity, completer: Profile) -> None:
     """Log the completer's own visit and suggest visits to other rsvp=yes trip members.
 
@@ -316,7 +227,7 @@ def _create_visit_entries_for_completed_activity(trip: Trip, activity: TripActiv
         activity: The activity that was just marked completed.
         completer: The profile who marked the activity completed.
     """
-    coords = _activity_coords(activity)
+    coords = activity_coords(activity)
     if coords is None:
         return
     lat, lng = coords
@@ -347,7 +258,7 @@ def _compute_activity_index_map(activities: Iterable[TripActivity]) -> dict[int,
     index_map: dict[int, int] = {}
     idx = 1
     for act in activities:
-        if _activity_coords(act) is not None and not act.location_hidden and act.status != TripActivity.STATUS_COMPLETED:
+        if activity_coords(act) is not None and not act.location_hidden and act.status != TripActivity.STATUS_COMPLETED:
             index_map[act.id] = idx
             idx += 1
     return index_map
@@ -607,10 +518,7 @@ def _activities_panel_html(request: HttpRequest, trip: Trip, profile: Profile, *
 
     # Determine which activities have their location hidden from this viewer
     # based on the adder's trip_pin_location_visibility privacy setting.
-    viewer_hidden: set[int] = set()
-    sensitive = [act for act in activities if not act.location_hidden and act.added_by_id and act.added_by_id != profile.id and act.added_by and act.added_by.trip_pin_location_visibility != VisibilityChoice.ANYONE and act.location_id]
-    if sensitive:
-        _apply_trip_visibility_filter(sensitive, profile, viewer_hidden)
+    viewer_hidden = viewer_hidden_activity_ids(activities, profile)
 
     viewer_is_organizer = _is_organizer(profile, trip)
     viewer_has_joined = _viewer_has_joined(profile, trip)
@@ -624,7 +532,7 @@ def _activities_panel_html(request: HttpRequest, trip: Trip, profile: Profile, *
             "can_manage": viewer_has_joined and (act.added_by_id == profile.id or viewer_is_organizer),
             "effective_location_hidden": act.location_hidden or (act.id in viewer_hidden),
             "pin_slug": act.pin.slug if (act.pin_id and act.pin.profile_id == profile.id) else None,
-            "has_coords": _activity_coords(act) is not None,
+            "has_coords": activity_coords(act) is not None,
         }
         for act in activities
     ]
@@ -637,7 +545,7 @@ def _activities_panel_html(request: HttpRequest, trip: Trip, profile: Profile, *
         act = item["activity"]
         if act.status == TripActivity.STATUS_COMPLETED or item["effective_location_hidden"]:
             continue
-        coords = _activity_coords(act)
+        coords = activity_coords(act)
         if coords is not None:
             leg_stops.append((act.id, coords))
     legs = compute_legs(leg_stops) if profile.external_apis_enabled and len(leg_stops) >= 2 else {}
@@ -1066,6 +974,86 @@ class TripActivitiesView(LoginRequiredMixin, View):
         from urbanlens.dashboard.services.trip_share_tracking import record_trip_activity_shares
 
         record_trip_activity_shares(activity)
+
+        return _render_activities_panel(request, trip, profile)
+
+
+class TripAiSuggestionsView(LoginRequiredMixin, View):
+    """AI-generated trip suggestions: pins worth adding, and a possible reorder.
+
+    GET  /trips/<slug>/ai-suggestions/  -> render panel (cached)
+    POST /trips/<slug>/ai-suggestions/  -> force a fresh generation (cooldown-limited)
+
+    Read-only: this view never creates or changes anything by itself. Adding
+    a suggested pin re-uses the normal add-activity endpoint (the suggestion
+    already carries the requester's own pin slug); applying a suggested order
+    is a separate, explicit action (see TripApplySuggestedOrderView).
+    """
+
+    def get(self, request, trip_slug):
+        return self._respond(request, trip_slug, force_refresh=False)
+
+    def post(self, request, trip_slug):
+        return self._respond(request, trip_slug, force_refresh=True)
+
+    def _respond(self, request, trip_slug, *, force_refresh: bool):
+        from urbanlens.dashboard.services.trip_ai_suggestions import get_trip_suggestions
+
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        result = _trip_or_403(request, trip_slug, profile)
+        if isinstance(result, HttpResponse):
+            return result
+        trip = result
+
+        if not _viewer_has_joined(profile, trip):
+            return HttpResponse("Join this trip to see suggestions.", status=403)
+
+        suggestions = get_trip_suggestions(trip, profile, force_refresh=force_refresh)
+        return render(
+            request,
+            "dashboard/partials/trips/_trip_ai_suggestions_panel.html",
+            {"trip": trip, "profile": profile, "suggestions": suggestions},
+        )
+
+
+class TripApplySuggestedOrderView(LoginRequiredMixin, View):
+    """Apply an AI-suggested activity order.
+
+    POST /trips/<slug>/activities/apply-order/
+    Body: {"order": [activity_id, ...]}
+
+    Only ever accepts an exact permutation of the trip's own current
+    non-completed activities - never partial, never containing another
+    trip's ids, so a stale or tampered order can't silently drop or hijack
+    activities.
+    """
+
+    def post(self, request, trip_slug):
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        result = _trip_or_403(request, trip_slug, profile)
+        if isinstance(result, HttpResponse):
+            return result
+        trip = result
+
+        if not _can_perform(profile, trip, trip.allow_edit_activities):
+            return HttpResponse("You don't have permission to reorder activities.", status=403)
+
+        try:
+            body = json.loads(request.body) if request.body else {}
+        except (json.JSONDecodeError, ValueError):
+            body = request.POST.dict()
+
+        try:
+            order = [int(value) for value in (body.get("order") or [])]
+        except (TypeError, ValueError):
+            return HttpResponse("Invalid order.", status=400)
+
+        valid_ids = set(trip.activities.exclude(status=TripActivity.STATUS_COMPLETED).values_list("id", flat=True))
+        if not order or len(order) != len(valid_ids) or set(order) != valid_ids:
+            return HttpResponse("The order must include exactly the trip's current non-completed activities.", status=400)
+
+        for position, activity_id in enumerate(order):
+            TripActivity.objects.filter(id=activity_id, trip=trip).update(order=position)
 
         return _render_activities_panel(request, trip, profile)
 
@@ -1583,10 +1571,7 @@ class TripMapDataView(LoginRequiredMixin, View):
         activities = list(_activity_qs(trip))
 
         # Determine activities viewer-hidden due to adder's privacy setting
-        viewer_hidden_map: set[int] = set()
-        sensitive_map = [act for act in activities if not act.location_hidden and act.added_by_id and act.added_by_id != profile.id and act.added_by and act.added_by.trip_pin_location_visibility != VisibilityChoice.ANYONE and act.location_id]
-        if sensitive_map:
-            _apply_trip_visibility_filter(sensitive_map, profile, viewer_hidden_map)
+        viewer_hidden_map = viewer_hidden_activity_ids(activities, profile)
 
         include_past = request.GET.get("include_past", "0") not in {"", "0", "false"}
 
@@ -1598,7 +1583,7 @@ class TripMapDataView(LoginRequiredMixin, View):
             if act.status == TripActivity.STATUS_COMPLETED and not include_past:
                 continue
 
-            coords = _activity_coords(act)
+            coords = activity_coords(act)
 
             if coords and not act.location_hidden and act.id not in viewer_hidden_map:
                 label = act.effective_title
@@ -1623,7 +1608,7 @@ class TripMapDataView(LoginRequiredMixin, View):
                 for child_act in child_acts:
                     if child_act.location_hidden:
                         continue
-                    child_coords = _activity_coords(child_act)
+                    child_coords = activity_coords(child_act)
                     if not child_coords:
                         continue
                     child_label = child_act.effective_title
@@ -1969,7 +1954,7 @@ def _build_activity_forecasts(activities: list[TripActivity], gateway: OpenWeath
     results = []
 
     for act in activities:
-        coords = _activity_coords(act)
+        coords = activity_coords(act)
 
         location_name = act.effective_title if act.effective_title != "Unnamed activity" else ""
 

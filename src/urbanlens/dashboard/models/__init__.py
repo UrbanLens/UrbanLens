@@ -71,6 +71,17 @@ from urbanlens.dashboard.models.saved_filter import SavedFilter
 from urbanlens.dashboard.models.search_history import SearchHistory
 from urbanlens.dashboard.models.site_settings import SiteSettings
 from urbanlens.dashboard.models.social_link import SocialLink
+from urbanlens.dashboard.models.spotguessr import (
+    GameRound,
+    GameSession,
+    GameSessionParticipant,
+    GameSessionStatus,
+    Guess,
+    LocationModeRating,
+    PlayerModeRating,
+    SpotGuessrMode,
+    SpotGuessrPreference,
+)
 from urbanlens.dashboard.models.subscriptions import PendingSubscriptionGrant, SiteFeature, SubscriptionRole, UserSubscription
 from urbanlens.dashboard.models.trips import Trip, TripActivity, TripComment
 from urbanlens.dashboard.models.undo import UndoAction

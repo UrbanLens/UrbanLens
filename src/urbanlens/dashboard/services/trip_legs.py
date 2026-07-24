@@ -14,11 +14,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 import itertools
 import logging
+from typing import TYPE_CHECKING
 
 from django.core.cache import cache
 
 from urbanlens.dashboard.services.apis.routing.osrm import OSRMGateway
 from urbanlens.dashboard.services.gateway import GatewayRequestError
+
+if TYPE_CHECKING:
+    from urbanlens.dashboard.models.trips.model import TripActivity
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +34,24 @@ _UNROUTABLE_CACHE_TTL = 24 * 60 * 60
 _MAX_LIVE_CALLS = 2
 
 _UNROUTABLE = {"unroutable": True}
+
+
+def activity_coords(act: TripActivity) -> tuple[float, float] | None:
+    """Return (lat, lng) for a trip activity, respecting override fields.
+
+    Priority: lat_override/lng_override -> pin effective coords -> location
+    coords. Returns None if no coordinates are available.
+    """
+    if act.lat_override is not None and act.lng_override is not None:
+        return (act.lat_override, act.lng_override)
+    if act.pin:
+        lat = act.pin.effective_latitude
+        lng = act.pin.effective_longitude
+        if lat is not None and lng is not None:
+            return (float(lat), float(lng))
+    if act.location and act.location.latitude is not None and act.location.longitude is not None:
+        return (float(act.location.latitude), float(act.location.longitude))
+    return None
 
 
 @dataclass(slots=True, frozen=True)

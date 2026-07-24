@@ -61,6 +61,22 @@
             </section>
         </div>
 
+        {# AI Suggestions #}
+        <div class="trip-section" data-section="ai-suggestions">
+            <div class="trip-section-grip" title="Drag to reorder">
+                <i class="material-symbols-outlined">drag_indicator</i>
+            </div>
+            <div id="trip-ai-suggestions-panel"
+                 hx-get="{% url 'trips.ai_suggestions' trip.slug %}"
+                 hx-trigger="load, activityChanged from:body"
+                 hx-swap="outerHTML">
+                <div class="trip-panel-loading">
+                    <i class="material-icons rotating">refresh</i>
+                    Loading suggestions...
+                </div>
+            </div>
+        </div>
+
         {# Members #}
         <div class="trip-section" data-section="members">
             <div class="trip-section-grip" title="Drag to reorder">

@@ -157,6 +157,11 @@ class SiteSettings(abstract.FrontendDashboardModel):
         verbose_name="Link extraction daily limit (per user)",
         validators=[MinValueValidator(0), MaxValueValidator(1000)],
     )
+    ai_trip_suggestions_enabled = BooleanField(
+        default=True,
+        help_text="Allow AI to suggest pins worth adding to a trip and a drive/weather/vote-aware activity order. Only ever sees pins every trip member already has and members' external-sharing preferences are honored.",
+        verbose_name="Trip suggestions",
+    )
 
     # --- Storage quotas & upload processing ---
 

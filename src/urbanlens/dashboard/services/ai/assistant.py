@@ -27,6 +27,7 @@ from typing import TYPE_CHECKING, Any
 from django.db.models import Exists, OuterRef, Q
 
 from urbanlens.dashboard.services.ai.factory import get_gateway
+from urbanlens.dashboard.services.ai.json_answer import parse_json_answer
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -245,19 +246,10 @@ def _history_block(history: list[dict[str, Any]]) -> str:
     return block
 
 
-def _parse_step(answer: str) -> dict | None:
-    """Parse one model step; tolerate stray text around the JSON object."""
-    answer = answer.strip()
-    try:
-        return json.loads(answer)
-    except json.JSONDecodeError:
-        start, end = answer.find("{"), answer.rfind("}")
-        if 0 <= start < end:
-            try:
-                return json.loads(answer[start : end + 1])
-            except json.JSONDecodeError:
-                return None
-    return None
+# Alias: the assistant's step protocol is the same "one JSON object" shape
+# used elsewhere (e.g. services.trip_ai_suggestions) - shared parser, kept
+# under this module's original name since tests reference it directly.
+_parse_step = parse_json_answer
 
 
 def run_assistant_turn(profile: Profile, history: list[dict[str, Any]], user_message: str) -> AssistantTurn:

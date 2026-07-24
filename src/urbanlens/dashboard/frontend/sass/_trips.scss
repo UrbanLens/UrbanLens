@@ -1083,6 +1083,90 @@
     margin: 0;
 }
 
+.trip-ai-suggestions {
+    padding: 1rem 1.25rem;
+
+    .card-header {
+        padding: 0 0 .5rem;
+    }
+
+    .trip-ai-suggestions-privacy-note {
+        margin: 0 0 .75rem;
+        font-size: .78rem;
+        opacity: .7;
+    }
+
+    .trip-ai-suggestions-refreshing {
+        display: none;
+        align-items: center;
+        gap: .4rem;
+        font-size: .82rem;
+        opacity: .75;
+        margin-bottom: .5rem;
+
+        &.htmx-request {
+            display: flex;
+        }
+    }
+
+    .trip-ai-suggestions-summary {
+        margin: 0 0 .85rem;
+        font-size: .9rem;
+    }
+
+    .trip-ai-suggestions-empty,
+    .trip-ai-suggestions-empty-note {
+        padding: .5rem 0 .25rem;
+        font-size: .85rem;
+        opacity: .75;
+    }
+
+    .trip-ai-suggestions-empty {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: .6rem;
+    }
+
+    .trip-ai-suggestions-pins {
+        display: flex;
+        flex-direction: column;
+        gap: .6rem;
+        margin-bottom: .5rem;
+    }
+
+    .trip-ai-suggestion-pin {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: .75rem;
+        padding: .6rem .75rem;
+        border-radius: 8px;
+        background: rgba(127, 127, 127, .08);
+    }
+
+    .trip-ai-suggestion-pin-body {
+        display: flex;
+        flex-direction: column;
+        gap: .15rem;
+        min-width: 0;
+    }
+
+    .trip-ai-suggestion-reason {
+        font-size: .8rem;
+        opacity: .75;
+    }
+
+    .trip-ai-suggestions-schedule {
+        padding-top: .5rem;
+        border-top: 1px solid var(--ul-surface-border);
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: .5rem;
+    }
+}
+
 .trip-panel-loading {
     padding: 1.5rem 1rem;
     display: flex;
