@@ -37,9 +37,9 @@ class Migration(migrations.Migration):
             constraint=models.UniqueConstraint(
                 condition=models.Q(
                     ("pin__isnull", True),
-                    ("wiki__isnull", True),
                     ("profile__isnull", True),
                     ("source", ""),
+                    ("wiki__isnull", True),
                 ),
                 fields=("location", "boundary_type"),
                 name="boundary_unique_location_default",
@@ -49,11 +49,9 @@ class Migration(migrations.Migration):
             model_name="boundary",
             constraint=models.UniqueConstraint(
                 condition=models.Q(
-                    models.Q(
-                        ("pin__isnull", True),
-                        ("wiki__isnull", True),
-                        ("profile__isnull", True),
-                    ),
+                    ("pin__isnull", True),
+                    ("profile__isnull", True),
+                    ("wiki__isnull", True),
                     models.Q(("source", ""), _negated=True),
                 ),
                 fields=("location", "boundary_type", "source"),
