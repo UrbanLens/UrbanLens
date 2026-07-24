@@ -14,6 +14,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib.gis.gdal.error import GDALException
 from django.contrib.gis.geos import GEOSException, Point
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, render
@@ -63,7 +64,7 @@ def _serialize_round(round_: GameRound) -> dict[str, Any]:
         "sequence_index": round_.sequence_index,
         "revealed": round_.revealed_at is not None,
     }
-    if round_.image_id and round_.image is not None:
+    if round_.image_id and round_.image is not None and round_.image.image:
         data["image_url"] = round_.image.image.url
         data["image_caption"] = round_.image.caption
     return data
@@ -154,7 +155,7 @@ class SpotGuessrStartView(LoginRequiredMixin, View):
             # force it now so a malformed-but-valid-JSON payload 400s here,
             # rather than surfacing as a 500 later inside round generation.
             _ = config.geo_bounds
-        except (GEOSException, ValueError, TypeError):
+        except (GEOSException, GDALException, ValueError, TypeError):
             return JsonResponse({"error": "Invalid geo_bounds - must be a valid GeoJSON polygon."}, status=400)
 
         try:

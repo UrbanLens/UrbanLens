@@ -5,6 +5,7 @@ from __future__ import annotations
 from itertools import count
 import json
 
+from django.core.files.base import ContentFile
 from django.urls import reverse
 from model_bakery import baker
 
@@ -32,7 +33,14 @@ class SpotGuessrStartViewTests(TestCase):
         self.profile = _make_profile()
         self.location = _make_location()
         baker.make(Pin, profile=self.profile, location=self.location)
-        baker.make(Image, location=self.location, media_type=MediaKind.PHOTO, latitude=None, longitude=None)
+        baker.make(
+            Image,
+            location=self.location,
+            media_type=MediaKind.PHOTO,
+            latitude=None,
+            longitude=None,
+            image=ContentFile(b"fake image bytes", name="test.jpg"),
+        )
         self.client.force_login(self.profile.user)
         self.start_url = reverse("spotguessr.start")
 
