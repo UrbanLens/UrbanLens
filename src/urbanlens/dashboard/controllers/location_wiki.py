@@ -26,6 +26,7 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
 from urbanlens.dashboard.models.wiki_stat_vote import WikiStatField, WikiStatVote
+from urbanlens.dashboard.services.boundary_voting import BoundaryVoteError, boundary_vote_context, cast_boundary_vote, has_consensus
 from urbanlens.dashboard.services.locations import site_scope
 from urbanlens.dashboard.services.public_pins import PublicVoteError, cast_public_vote, public_vote_context
 from urbanlens.dashboard.services.text_limits import MAX_WIKI_DESCRIPTION_LENGTH, text_length_error
@@ -174,6 +175,7 @@ class LocationWikiView(LoginRequiredMixin, View):
                 "first_pinned": first_pinned,
                 "wiki_stats": [_wiki_stat_context(wiki, field, profile) for field in WikiStatField.values],
                 "public_vote": public_vote_context(location, profile),
+                "boundary_vote": boundary_vote_context(location, profile),
                 "user_pin": user_pin,
                 "other_locations": other_locations,
                 "page_name": "location-wiki",
@@ -539,6 +541,39 @@ class PublicPinVoteView(LoginRequiredMixin, View):
             request,
             "dashboard/partials/pins/_public_pin_vote_block.html",
             {"location": location, "public_vote": public_vote_context(location, profile)},
+        )
+
+
+class BoundaryVoteView(LoginRequiredMixin, View):
+    """Cast or change the requester's vote for a location's official boundary.
+
+    POST /location/<slug>/wiki/boundary/vote/
+    Body: ``boundary_id`` = pk of one of the location's candidate boundaries.
+
+    Returns JSON with the requester's (new) choice and whether the community
+    now has consensus - the dialog updates itself client-side rather than
+    re-rendering (its mini Leaflet maps would otherwise need re-initializing).
+    """
+
+    def post(self, request, location_slug):
+        location, _wiki, profile = resolve_visible_wiki(request, location_slug)
+
+        try:
+            boundary_id = int(request.POST.get("boundary_id") or 0)
+        except (TypeError, ValueError):
+            boundary_id = 0
+
+        try:
+            vote = cast_boundary_vote(location, profile, boundary_id)
+        except BoundaryVoteError as exc:
+            return JsonResponse({"error": str(exc)}, status=400)
+
+        return JsonResponse(
+            {
+                "ok": True,
+                "my_vote_id": vote.boundary_id,
+                "has_consensus": has_consensus(location),
+            },
         )
 
 

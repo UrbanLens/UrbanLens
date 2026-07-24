@@ -161,6 +161,14 @@
             <div class="card-header">
                 <i class="material-symbols-outlined">place</i>
                 <h3>Location</h3>
+                {% if boundary_vote %}
+                <button type="button" class="btn btn--ghost btn--sm boundary-vote-open-btn"
+                        style="margin-left:auto"
+                        onclick="window.openBoundaryVoteDialog && window.openBoundaryVoteDialog()"
+                        title="Multiple official boundaries exist for this place - vote for the most accurate one.">
+                    <i class="material-symbols-outlined">how_to_vote</i> Vote on boundary
+                </button>
+                {% endif %}
             </div>
             <div class="map-wrapper">
                 {% include "dashboard/partials/layout/_map_annotations_panels.html" %}
@@ -425,6 +433,9 @@
             </div>
         </form>
     </dialog>
+
+    {# -- Boundary-vote dialog (renders nothing without 2+ candidates) ------- #}
+    {% include "dashboard/partials/wiki/_boundary_vote_dialog.html" with location=location boundary_vote=boundary_vote %}
 
 </div>
 

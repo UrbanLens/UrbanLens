@@ -7,7 +7,8 @@ from urbanlens.dashboard.models.api_call_log import ApiCallLog
 from urbanlens.dashboard.models.api_rate_limit import ApiRateLimit
 from urbanlens.dashboard.models.article import Article, ArticleRevision
 from urbanlens.dashboard.models.auto_removals import AutoRemovalKind, PinAutoRemoval, WikiAutoRemoval
-from urbanlens.dashboard.models.boundary import Boundary, BoundaryType
+from urbanlens.dashboard.models.boundary import Boundary, BoundarySource, BoundaryType
+from urbanlens.dashboard.models.boundary_vote import BoundaryVote
 from urbanlens.dashboard.models.cache import GeocodedLocation
 from urbanlens.dashboard.models.calendar_sync import CalendarSyncDirection, GoogleCalendarAccount, TripCalendarLink
 from urbanlens.dashboard.models.categories import Category
@@ -45,16 +46,16 @@ from urbanlens.dashboard.models.notifications import NotificationLog, Notificati
 from urbanlens.dashboard.models.pin import Pin, PinNote
 from urbanlens.dashboard.models.pin_list import PinList, PinListItem
 from urbanlens.dashboard.models.pin_share import ExposureSource, LocationExposure, PinShare, PinShareOrigin, PinShareStatus
-from urbanlens.dashboard.models.pin_tombstone import PinTombstone
 from urbanlens.dashboard.models.pin_suggestions import PinSuggestion, PinSuggestionOrigin, PinSuggestionStatus
+from urbanlens.dashboard.models.pin_tombstone import PinTombstone
 from urbanlens.dashboard.models.profile import Profile
-from urbanlens.dashboard.models.public_pins import PublicPinCandidate, PublicPinCandidateStatus, PublicPinVote
-from urbanlens.dashboard.models.push_device import PushDevice, PushTransport
 from urbanlens.dashboard.models.profile.email import ProfileEmail
 from urbanlens.dashboard.models.profile.nickname import ProfileNickname
 from urbanlens.dashboard.models.profile.note import ProfileNote
 from urbanlens.dashboard.models.profile.trust import ProfileTrust
 from urbanlens.dashboard.models.property_owner import OwnerSource, PinOwner, PinPropertySale, WikiOwner, WikiPropertySale
+from urbanlens.dashboard.models.public_pins import PublicPinCandidate, PublicPinCandidateStatus, PublicPinVote
+from urbanlens.dashboard.models.push_device import PushDevice, PushTransport
 from urbanlens.dashboard.models.reactions import Reaction
 from urbanlens.dashboard.models.reviews import Review
 from urbanlens.dashboard.models.routes import Route, RouteSource

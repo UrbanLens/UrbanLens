@@ -1045,6 +1045,11 @@ urlpatterns = [
                     name="location.wiki.boundary",
                 ),
                 path(
+                    "<slug:location_slug>/wiki/boundary/vote/",
+                    location_wiki.BoundaryVoteView.as_view(),
+                    name="location.wiki.boundary_vote",
+                ),
+                path(
                     "<slug:location_slug>/wiki/history/",
                     location_wiki.LocationWikiHistoryView.as_view(),
                     name="location.wiki.history",
