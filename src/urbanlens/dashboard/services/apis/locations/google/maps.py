@@ -41,6 +41,8 @@ from urbanlens.dashboard.services.text_limits import MAX_PIN_DESCRIPTION_LENGTH
 from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
+    from decimal import Decimal
+
     from urbanlens.dashboard.models.profile.model import Profile
 
 _CID_RE = re.compile(r"!1s0x[0-9a-fA-F]+:0x([0-9a-fA-F]+)")
@@ -88,6 +90,108 @@ def _attach_description_extras(pin: Pin, image_urls: list[str], link_urls: list[
         if image.pin_id is None:
             image.pin = pin
             image.save(update_fields=["pin", "updated"])
+
+
+def _create_pin_from_confirmed(
+    pin_dict: dict[str, Any],
+    *,
+    location: Location | None,
+    latitude: float | None,
+    longitude: float | None,
+    user_profile: Profile,
+    list_labels: list[Label],
+    category_label: Label | None,
+    auto_tag: bool,
+) -> tuple[Pin | None, bool]:
+    """Create (or merge into) a Pin from one confirmed-import pin dict.
+
+    Shared by the synchronous confirm-import loop (``import_preview_streaming``,
+    for pins that are already accurate - literal coords, or a cid already
+    cached/linked) and the background CID-resolution Celery task
+    (``tasks.resolve_deferred_pin_locations``, for pins whose cid needed a live
+    lookup) - both reach this once a pin's coordinates are known, so their
+    behavior (tagging, category/label application, description extras, cid
+    backfill) can never drift apart between the fast and slow paths.
+
+    Args:
+        pin_dict: dict with ``name``, ``description`` (raw, not yet
+            stripped/truncated), ``cid``, ``label_ids``.
+        location: an existing Location to attach to, when the cid/coords
+            matched one; None to create the pin from bare coordinates.
+        latitude: used when ``location`` is None.
+        longitude: used when ``location`` is None.
+        user_profile: importing profile.
+        list_labels: labels from the owning list's ``label_ids``.
+        category_label: the list's category label, if ``create_category`` was set.
+        auto_tag: whether to enqueue AI category suggestion for a newly-created pin.
+
+    Returns:
+        ``(pin, created)`` - ``pin`` is None if creation failed or was skipped.
+    """
+    pin_name = (pin_dict.get("name") or "")[:255]
+    raw_description = pin_dict.get("description") or ""
+    cid = pin_dict.get("cid")
+    pin_label_ids = pin_dict.get("label_ids") or []
+
+    image_urls = extract_image_urls(raw_description)
+    link_urls = extract_link_urls(raw_description)
+    description = strip_html(raw_description)[:MAX_PIN_DESCRIPTION_LENGTH]
+
+    pin_defaults: dict[str, Any] = {"name": pin_name, "description": description}
+    lookup_lat: float | Decimal | None
+    lookup_lon: float | Decimal | None
+    if location:
+        pin_defaults["location"] = location
+        lookup_lat, lookup_lon = location.latitude, location.longitude
+    else:
+        pin_defaults["latitude"] = latitude
+        pin_defaults["longitude"] = longitude
+        lookup_lat, lookup_lon = latitude, longitude
+
+    try:
+        pin, created = Pin.objects.get_nearby_or_create(
+            latitude=lookup_lat,
+            longitude=lookup_lon,
+            profile=user_profile,
+            defaults=pin_defaults,
+        )
+    except (DatabaseError, ValueError, OSError) as exc:
+        logger.warning("Failed to import pin '%s': %s", redact_text(pin_name), exc)
+        return None, False
+
+    if not pin:
+        return None, False
+
+    if created:
+        if image_urls or link_urls:
+            _attach_description_extras(pin, image_urls, link_urls, user_profile)
+        if auto_tag:
+            from urbanlens.dashboard.services.celery import safely_enqueue_task
+            from urbanlens.dashboard.tasks import suggest_pin_category
+
+            safely_enqueue_task(suggest_pin_category, pin.pk)
+    # Fill in a still-blank, non-user-provided name from this later import
+    # (UL-207) - get_nearby_or_create's `defaults` are only ever applied
+    # when creating a new row, never to an existing one it merges into.
+    elif pin_name and not pin.name and not pin.name_is_user_provided:
+        pin.name = pin_name
+        pin.save(update_fields=["name"])
+
+    if list_labels:
+        pin.labels.add(*list_labels)
+    if category_label:
+        pin.labels.add(category_label)
+    if pin_label_ids:
+        extra = list(Label.objects.filter(id__in=pin_label_ids))
+        if extra:
+            pin.labels.add(*extra)
+
+    if cid and not location and pin.location_id and not pin.location.cid:
+        # fetch_if_missing=False: never block the import loop on a live
+        # Places call per pin.
+        GooglePlaceService().set_cid_for_entity(pin.location, cid, fetch_if_missing=False)
+
+    return pin, created
 
 
 def _notify_pin_import_parse_failure(fmt: str) -> None:
@@ -811,13 +915,28 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
               Imports never create community wiki entries or hit external APIs;
               wikis are created explicitly by the user from the pin detail page.
 
+        A pin whose ``cid`` has no existing ``Location`` *and* no cached
+        Places lookup is never placed from the client-supplied ``lat``/``lng``
+        here - those preview-time coordinates come from a free heuristic
+        (decoding the Maps URL's embedded S2 cell) that's wrong roughly a
+        third of the time (see ``docs/redata-cid-resolution.md``). Instead
+        it's queued and handed off to ``tasks.resolve_deferred_pin_locations``
+        once this stream completes, so it only ever gets placed once its real
+        coordinates are known. This keeps this generator itself free of any
+        live REData/Google call - every pin it places here came from data
+        already on hand (a matched ``Location``, or a cached lookup).
+
         Yields:
-            str: SSE-formatted data lines (same event shapes as ``import_pins_streaming``).
+            str: SSE-formatted data lines (event shapes as ``import_pins_streaming``,
+            plus ``{type: "deferred", count}`` when pins were queued for background
+            resolution - see above).
 
         Args:
             confirmed_lists: User-confirmed selection from the preview step.
             user_profile: Profile to import pins for.
+            auto_tag: Whether to enqueue AI category suggestion for newly-created pins.
         """
+        from urbanlens.dashboard.services.apis.locations.google.geocoding import GoogleGeocodingGateway
 
         def sse(data: dict) -> str:
             return f"data: {json.dumps(data)}\n\n"
@@ -832,7 +951,12 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         created_count = 0
         exists_count = 0
         skipped_count = 0
+        deferred_count = 0
         current = 0
+        # Mirrors confirmed_lists' shape, but only the pins that need a live
+        # CID lookup - handed to resolve_deferred_pin_locations once streaming
+        # is done. A list only appears here if it has at least one such pin.
+        deferred_lists: list[dict[str, Any]] = []
 
         try:
             for lst in confirmed_lists:
@@ -850,97 +974,61 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                         defaults={"name": stem, "kind": "category"},
                     )
 
+                list_deferred_pins: list[dict[str, Any]] = []
+
                 for pin_dict in lst.get("pins", []):
                     current += 1
                     pin_name = (pin_dict.get("name") or "")[:255]
-                    # Per-item outcome for this exact pin - see the matching comment
-                    # in import_pins_streaming above for why this is needed alongside
-                    # the running totals.
-                    outcome = "skipped"
-                    lat = pin_dict.get("lat")
-                    lng = pin_dict.get("lng")
-                    description = pin_dict.get("description") or ""
                     cid = pin_dict.get("cid")
-                    pin_label_ids = pin_dict.get("label_ids") or []
 
-                    image_urls = extract_image_urls(description)
-                    link_urls = extract_link_urls(description)
-                    description = strip_html(description)[:MAX_PIN_DESCRIPTION_LENGTH]
+                    location = Location.objects.by_cid(cid).first() if cid else None
+                    cached_coords = GoogleGeocodingGateway.get_cached_coordinates_by_cid(cid) if cid and not location else None
 
-                    try:
-                        location = Location.objects.by_cid(cid).first() if cid else None
-
-                        pin_defaults: dict[str, Any] = {
-                            "name": pin_name,
-                            "description": description,
-                        }
-
-                        if location:
-                            pin_defaults["location"] = location
-                            lookup_lat = location.latitude
-                            lookup_lon = location.longitude
-                        else:
-                            pin_defaults["latitude"] = lat
-                            pin_defaults["longitude"] = lng
-                            lookup_lat = lat
-                            lookup_lon = lng
-
-                        pin, created = Pin.objects.get_nearby_or_create(
-                            latitude=lookup_lat,
-                            longitude=lookup_lon,
-                            profile=user_profile,
-                            defaults=pin_defaults,
+                    if cid and not location and cached_coords is None:
+                        # Needs a live lookup - queue it rather than trusting
+                        # the preview's own (unverified) lat/lng.
+                        list_deferred_pins.append(pin_dict)
+                        deferred_count += 1
+                        percent = min(100, int(current / total * 100)) if total > 0 else 100
+                        yield sse(
+                            {
+                                "type": "progress",
+                                "current": current,
+                                "total": total,
+                                "percent": percent,
+                                "created": created_count,
+                                "exists": exists_count,
+                                "skipped": skipped_count,
+                                "outcome": "deferred",
+                                "name": pin_name,
+                            },
                         )
+                        continue
 
-                        if pin:
-                            if created:
-                                created_count += 1
-                                outcome = "created"
-                                if image_urls or link_urls:
-                                    _attach_description_extras(pin, image_urls, link_urls, user_profile)
-                                if auto_tag:
-                                    from urbanlens.dashboard.services.celery import safely_enqueue_task
-                                    from urbanlens.dashboard.tasks import suggest_pin_category
+                    latitude = cached_coords[0] if cached_coords else pin_dict.get("lat")
+                    longitude = cached_coords[1] if cached_coords else pin_dict.get("lng")
 
-                                    safely_enqueue_task(suggest_pin_category, pin.pk)
-                            else:
-                                exists_count += 1
-                                outcome = "exists"
-                                # Fill in a still-blank, non-user-provided name from
-                                # this later import (UL-207: pins imported without
-                                # names, then re-imported from a source - e.g.
-                                # Google Takeout's Labelled Places - that does have
-                                # them). get_nearby_or_create's `defaults` are only
-                                # ever applied when creating a new row, never to an
-                                # existing one it merges into, so without this the
-                                # name stays blank forever. Matches
-                                # name_is_user_provided's documented contract:
-                                # "external API naming refreshes may replace
-                                # placeholder/auto-generated labels only while this
-                                # is False."
-                                if pin_name and not pin.name and not pin.name_is_user_provided:
-                                    pin.name = pin_name
-                                    pin.save(update_fields=["name"])
+                    pin, created = _create_pin_from_confirmed(
+                        pin_dict,
+                        location=location,
+                        latitude=latitude,
+                        longitude=longitude,
+                        user_profile=user_profile,
+                        list_labels=list_labels,
+                        category_label=category_label,
+                        auto_tag=auto_tag,
+                    )
 
-                            if list_labels:
-                                pin.labels.add(*list_labels)
-                            if category_label:
-                                pin.labels.add(category_label)
-                            if pin_label_ids:
-                                extra = list(Label.objects.filter(id__in=pin_label_ids))
-                                if extra:
-                                    pin.labels.add(*extra)
-
-                            if cid and not location and pin.location_id and not pin.location.cid:
-                                # fetch_if_missing=False: never block the import loop
-                                # on a live Places call per pin.
-                                GooglePlaceService().set_cid_for_entity(pin.location, cid, fetch_if_missing=False)
+                    if pin:
+                        if created:
+                            created_count += 1
+                            outcome = "created"
                         else:
-                            skipped_count += 1
-
-                    except (DatabaseError, ValueError, OSError) as exc:
-                        logger.warning("Failed to import pin '%s': %s", pin_name, exc)
+                            exists_count += 1
+                            outcome = "exists"
+                    else:
                         skipped_count += 1
+                        outcome = "skipped"
 
                     percent = min(100, int(current / total * 100)) if total > 0 else 100
                     yield sse(
@@ -957,6 +1045,16 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                         },
                     )
 
+                if list_deferred_pins:
+                    deferred_lists.append(
+                        {
+                            "stem": stem,
+                            "create_category": create_category,
+                            "label_ids": list_label_ids,
+                            "pins": list_deferred_pins,
+                        },
+                    )
+
         except (DatabaseError, OSError, ValueError, RuntimeError) as exc:
             logger.exception("Unexpected error during preview import: %s", exc)
             yield sse({"type": "error", "message": "Import failed unexpectedly."})
@@ -969,8 +1067,16 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                 "created": created_count,
                 "exists": exists_count,
                 "skipped": skipped_count,
+                "deferred": deferred_count,
             },
         )
+
+        if deferred_lists:
+            from urbanlens.dashboard.services.celery import safely_enqueue_task
+            from urbanlens.dashboard.tasks import resolve_deferred_pin_locations
+
+            safely_enqueue_task(resolve_deferred_pin_locations, user_profile.pk, deferred_lists, auto_tag)
+            yield sse({"type": "deferred", "count": deferred_count})
 
     @staticmethod
     def _iter_kml_placemarks(features: Iterable[Any]) -> Iterator[Any]:

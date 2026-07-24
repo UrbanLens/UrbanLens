@@ -1107,6 +1107,146 @@ def sweep_immich_library_locations(self, profile_id: int) -> dict[str, int]:
     return result
 
 
+@shared_task(bind=True, max_retries=None)
+def resolve_deferred_pin_locations(
+    self,
+    profile_id: int,
+    deferred_lists: list[dict],
+    auto_tag: bool = True,
+    original_total: int | None = None,
+) -> dict[str, int]:
+    """Place pins whose Google Maps CID needed a live lookup to be accurate.
+
+    Queued by ``GoogleMapsGateway.import_preview_streaming`` for any
+    confirmed pin whose cid had neither an existing Location nor a cached
+    Places lookup - see that method's docstring for why the preview's own
+    lat/lng can't be trusted for these. Resolves every cid in one batch via
+    ``services.apis.locations.cid_resolution.resolve_cids`` (REData if
+    configured, else Google Places directly), places whatever resolves now,
+    and retries later - with the resolved subset already placed and pruned
+    from the retry args, so a retry never redoes finished work - if anything
+    is still pending on a rate limit or a REData outage. Reports a summary via
+    NotificationLog once every cid is either placed or confirmed unresolvable.
+
+    Args:
+        profile_id: PK of the importing profile.
+        deferred_lists: Same shape as import_preview_streaming's
+            confirmed_lists, restricted to pins needing a live cid lookup -
+            shrinks on each retry to just what's still unresolved.
+        auto_tag: Whether to enqueue AI category suggestion for newly-created pins.
+        original_total: Total pin count across the *first* call, before any
+            retry narrowed deferred_lists - carried through retries purely so
+            progress reporting stays relative to the whole job, not just
+            whatever's left. Defaults to this call's own pin count when unset
+            (i.e. on the first, non-retry invocation).
+
+    Returns:
+        Summary counts (created/exists/skipped).
+    """
+    from django.urls import reverse
+
+    from urbanlens.dashboard.models.labels.model import Label
+    from urbanlens.dashboard.models.location import Location
+    from urbanlens.dashboard.models.notifications.meta import Importance, NotificationType, Status
+    from urbanlens.dashboard.models.notifications.model import NotificationLog
+    from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.services.apis.locations.cid_resolution import resolve_cids
+    from urbanlens.dashboard.services.apis.locations.google.maps import _create_pin_from_confirmed
+
+    empty = {"created": 0, "exists": 0, "skipped": 0}
+    profile = Profile.objects.filter(pk=profile_id).first()
+    if profile is None:
+        logger.info("resolve_deferred_pin_locations: profile %s no longer exists", profile_id)
+        return empty
+
+    all_cids = [pin["cid"] for lst in deferred_lists for pin in lst.get("pins", [])]
+    if not all_cids:
+        return empty
+    total = original_total if original_total is not None else len(all_cids)
+
+    update_task_progress(self, current=total - len(all_cids), total=total, message=f"Fetching precise locations for {len(all_cids)} pin(s)...")
+
+    result = resolve_cids(all_cids)
+
+    if result.pending:
+        pending_set = set(result.pending)
+        remaining_lists = []
+        for lst in deferred_lists:
+            remaining_pins = [p for p in lst.get("pins", []) if p["cid"] in pending_set]
+            if remaining_pins:
+                remaining_lists.append({**lst, "pins": remaining_pins})
+
+        if result.provider == "google_places":
+            countdown, message = 65, "Waiting on Google's rate limit - resuming shortly..."
+        else:
+            countdown, message = 120, "Having trouble reaching REData - retrying shortly..."
+
+        update_task_progress(self, current=total - len(result.pending), total=total, message=message)
+        raise self.retry(args=[profile_id, remaining_lists, auto_tag, total], countdown=countdown, max_retries=None)
+
+    created_count = exists_count = skipped_count = 0
+    for lst in deferred_lists:
+        stem = lst.get("stem", "")
+        list_label_ids = lst.get("label_ids") or []
+        create_category = bool(lst.get("create_category", False))
+        list_labels = list(Label.objects.filter(id__in=list_label_ids)) if list_label_ids else []
+
+        category_label = None
+        if create_category and stem:
+            category_label, _ = Label.objects.get_or_create(
+                profile=profile,
+                name__iexact=stem,
+                defaults={"name": stem, "kind": "category"},
+            )
+
+        for pin_dict in lst.get("pins", []):
+            cid = pin_dict["cid"]
+            coords = result.resolved.get(cid)
+            if coords is None:
+                skipped_count += 1
+                continue
+
+            # Re-check now, not just at defer time: an earlier pin in this
+            # same batch referencing the same cid (saved to two lists) may
+            # have just linked/created its Location.
+            location = Location.objects.by_cid(cid).first()
+            pin, created = _create_pin_from_confirmed(
+                pin_dict,
+                location=location,
+                latitude=coords[0],
+                longitude=coords[1],
+                user_profile=profile,
+                list_labels=list_labels,
+                category_label=category_label,
+                auto_tag=auto_tag,
+            )
+            if pin:
+                if created:
+                    created_count += 1
+                else:
+                    exists_count += 1
+            else:
+                skipped_count += 1
+
+    unresolved = len(result.unresolvable)
+    provider_label = "REData" if result.provider == "redata" else "Google Places"
+    NotificationLog.objects.create(
+        profile=profile,
+        status=Status.UNREAD,
+        importance=Importance.MEDIUM,
+        notification_type=NotificationType.PIN_IMPORT_COMPLETE,
+        title=f"Finished placing {created_count + exists_count} pin(s)",
+        message=(
+            f"{created_count} created · {exists_count} existed · {skipped_count} skipped"
+            + (f" ({unresolved} could not be located)" if unresolved else "")
+            + f" — resolved via {provider_label}."
+        ),
+        url=reverse("map.view"),
+    )
+    update_task_progress(self, current=total, total=total, message="Done.")
+    return {"created": created_count, "exists": exists_count, "skipped": skipped_count}
+
+
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def import_flickr_photos(self, pin_id: int, profile_id: int, photo_ids: list[str]) -> dict[str, int]:
     """Download selected Flickr photos and import them onto a pin.

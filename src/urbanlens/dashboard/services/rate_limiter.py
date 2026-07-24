@@ -53,10 +53,25 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         display_name="Google Geocoding API",
         calls_per_minute=20,
         calls_per_day=500,
-        notes="Free tier: $200/month credit (~40,000 calls/month).",
+        # Places Details (used for CID lookups - see get_coordinates_by_cid) is
+        # billed under the Essentials SKU: 10,000 free calls/month. Capped one
+        # short of that so a full month of free-tier installs never crosses
+        # into billing purely from float/rounding in the 30-day rolling window.
+        calls_per_30_days=9999,
+        notes="Free tier: 10,000 calls/month (Places Details Essentials SKU).",
         # Google's published rate is $5/1000 requests, consistent with this
         # entry's own $200-credit/~40,000-calls note (200/40000 = 0.005).
         cost_per_call=Decimal("0.005"),
+    ),
+    "redata_cid_lookup": ServiceDefaults(
+        display_name="REData CID Resolution",
+        # Our own outbound throttle on top of whatever REData enforces
+        # server-side (unknown until their endpoint exists) - deliberately
+        # generous since each call is a batch of many CIDs, not one lookup.
+        calls_per_minute=10,
+        calls_per_day=None,
+        calls_per_30_days=None,
+        notes="Batch CID->coordinate resolution. Not yet live - see docs/redata-cid-resolution.md.",
     ),
     "google_search": ServiceDefaults(
         display_name="Google Custom Search",

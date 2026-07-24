@@ -295,6 +295,41 @@ class GoogleGeocodingGateway(Gateway):
 
         return latitude, longitude
 
+    @staticmethod
+    def get_cached_coordinates_by_cid(cid: int) -> tuple[float, float] | None:
+        """Read a previously-resolved CID's coordinates from the cache, without ever calling the API.
+
+        Safe to call from a synchronous request/response path (e.g. the pin
+        import preview/confirm flow) where a live Places Details call would be
+        too slow - a cid with no cache entry yet needs
+        :meth:`get_coordinates_by_cid` (or an equivalent live lookup) instead,
+        run from background work.
+
+        Args:
+            cid: Decimal CID value derived from the hex identifier in a Google
+                Maps place URL.
+
+        Returns:
+            ``(latitude, longitude)`` on a cache hit, else ``None``.
+        """
+        cache_key = f"cid:{cid}"
+        cached = GeocodedLocation.objects.filter(place_name=cache_key).first()
+        if not cached:
+            return None
+        try:
+            body = json.loads(cached.json_response or "null")
+        except (json.JSONDecodeError, TypeError):
+            cached.delete()
+            return None
+        if not body:
+            return None
+        loc = body.get("result", {}).get("geometry", {}).get("location", {})
+        lat = loc.get("lat")
+        lng = loc.get("lng")
+        if lat is None or lng is None:
+            return None
+        return float(lat), float(lng)
+
     def get_coordinates_by_cid(self, cid: int) -> tuple[float | None, float | None]:
         """Look up coordinates by Google Maps CID via the Places Details API.
 
@@ -307,20 +342,11 @@ class GoogleGeocodingGateway(Gateway):
         Returns:
             Tuple of (latitude, longitude), or (None, None) if the lookup fails.
         """
-        cache_key = f"cid:{cid}"
-        cached = GeocodedLocation.objects.filter(place_name=cache_key).first()
+        cached = self.get_cached_coordinates_by_cid(cid)
         if cached:
-            try:
-                body = json.loads(cached.json_response or "null")
-                if body:
-                    loc = body.get("result", {}).get("geometry", {}).get("location", {})
-                    lat = loc.get("lat")
-                    lng = loc.get("lng")
-                    if lat is not None and lng is not None:
-                        return float(lat), float(lng)
-            except (json.JSONDecodeError, TypeError):
-                cached.delete()
+            return cached
 
+        cache_key = f"cid:{cid}"
         if not self.api_key:
             logger.debug("Skipping Places Details lookup for CID %d - no API key configured.", cid)
             return None, None
