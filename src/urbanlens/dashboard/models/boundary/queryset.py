@@ -49,11 +49,18 @@ class BoundaryQuerySet(abstract.DashboardQuerySet):
         return self.filter(boundary_type=boundary_type)
 
     def location_defaults(self) -> Self:
-        """Location-default boundaries (no pin, no wiki, no profile).
+        """Location-default boundaries (no pin, no wiki, no profile, no source).
 
         These are the shared, API-generated rows used for point matching.
+        Per-provider source-candidate rows (``source`` set) are excluded: they
+        exist only for boundary voting, and the winning candidate's geometry
+        is materialized onto these canonical rows instead.
         """
-        return self.filter(pin__isnull=True, wiki__isnull=True, profile__isnull=True, location__isnull=False)
+        return self.filter(pin__isnull=True, wiki__isnull=True, profile__isnull=True, location__isnull=False, source="")
+
+    def source_candidates_for_location(self, location) -> Self:
+        """Per-provider candidate boundaries for a location (see boundary voting)."""
+        return self.filter(pin__isnull=True, wiki__isnull=True, profile__isnull=True, location=location).exclude(source="")
 
     def for_profile(self, profile) -> Self:
         """Pin-scoped boundaries belonging to a given profile."""
@@ -101,6 +108,7 @@ class BoundaryManager(abstract.DashboardManager.from_queryset(BoundaryQuerySet))
             pin=None,
             wiki=None,
             profile=None,
+            source="",
             defaults=dict(defaults or {}),
         )
 

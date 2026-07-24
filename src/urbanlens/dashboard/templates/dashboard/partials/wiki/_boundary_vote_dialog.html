@@ -1,0 +1,157 @@
+{% comment %}
+Boundary-vote dialog: side-by-side mini maps of every candidate official
+boundary (REData county parcel vs. Overpass/OSM perimeter, ...) with a
+"This one" button under each. Renders nothing unless boundary_vote context
+exists (two or more candidates - see services.boundary_voting).
+
+Auto-opens only while nobody has voted yet AND the viewer hasn't dismissed
+it before (localStorage). Once any vote exists, it stays behind the map
+card's "Vote on boundary" button, which calls window.openBoundaryVoteDialog().
+
+Usage:
+  {% include "dashboard/partials/wiki/_boundary_vote_dialog.html" with location=location boundary_vote=boundary_vote %}
+{% endcomment %}
+{% if boundary_vote %}
+<dialog id="boundary-vote-dialog" class="ul-dialog boundary-vote-dialog">
+    {% include "dashboard/partials/ui/_dialog_header.html" with title="Which boundary looks right?" %}
+    <p class="boundary-vote-intro">
+        More than one official data source has a boundary for this place.
+        Pick whichever matches the real property best - the community's
+        choice becomes the boundary used to match pins to this wiki.
+    </p>
+    <div class="boundary-vote-options" id="boundary-vote-options">
+        {% for option in boundary_vote.options %}
+        <div class="boundary-vote-option{% if option.is_my_choice %} is-selected{% endif %}" data-boundary-id="{{ option.id }}">
+            <div class="boundary-vote-map" id="boundary-vote-map-{{ option.id }}"></div>
+            <div class="boundary-vote-meta">
+                <span class="boundary-vote-label">{{ option.label }}</span>
+                <button type="button" class="btn btn--primary btn--sm boundary-vote-choose-btn"
+                        data-boundary-id="{{ option.id }}">
+                    <i class="material-symbols-outlined">check_circle</i>
+                    <span class="boundary-vote-choose-text">{% if option.is_my_choice %}Your choice{% else %}This one{% endif %}</span>
+                </button>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    <div class="form-actions">
+        <button type="button" class="btn btn--ghost" id="boundary-vote-not-now">Not now</button>
+    </div>
+</dialog>
+{{ boundary_vote.options|json_script:"boundary-vote-options-data" }}
+<style>
+    .boundary-vote-dialog { max-width: 760px; width: min(760px, 94vw); }
+    .boundary-vote-intro { margin: 0 0 0.75rem; opacity: 0.85; }
+    .boundary-vote-options { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+    .boundary-vote-option {
+        flex: 1 1 280px; min-width: 240px; border: 2px solid transparent;
+        border-radius: 8px; overflow: hidden; background: rgba(127, 127, 127, 0.08);
+    }
+    .boundary-vote-option.is-selected { border-color: var(--color-primary, #4caf50); }
+    .boundary-vote-map { height: 220px; width: 100%; }
+    .boundary-vote-meta {
+        display: flex; align-items: center; justify-content: space-between;
+        gap: 0.5rem; padding: 0.5rem 0.75rem;
+    }
+    .boundary-vote-option.is-selected .boundary-vote-choose-text::after { content: ""; }
+</style>
+<script>
+(function initBoundaryVoteDialog() {
+    var dialog = document.getElementById('boundary-vote-dialog');
+    if (!dialog || typeof L === 'undefined') return;
+    var options = JSON.parse(document.getElementById('boundary-vote-options-data').textContent || '[]');
+    var VOTE_URL = "{% url 'location.wiki.boundary_vote' location.slug %}";
+    // Per-viewer, per-place "stop auto-opening this" flag. Cleared never -
+    // the manual "Vote on boundary" button remains available regardless.
+    var DISMISS_KEY = 'ul_boundary_vote_dismissed_{{ location.slug|escapejs }}';
+    var mapsInitialized = false;
+
+    // Same tile source as the page's own map layers (see map-annotations.js
+    // TILE_DEFS.satellite) - imagery makes "which outline hugs the real
+    // property?" answerable at a glance in a way street tiles don't.
+    function makeMiniMap(option) {
+        var el = document.getElementById('boundary-vote-map-' + option.id);
+        if (!el || !option.polygon) return;
+        var map = L.map(el, {
+            zoomControl: false, attributionControl: false, dragging: false,
+            scrollWheelZoom: false, doubleClickZoom: false, boxZoom: false,
+            keyboard: false, touchZoom: false,
+        });
+        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+            maxNativeZoom: 19, maxZoom: 21,
+        }).addTo(map);
+        var layer = L.geoJSON(option.polygon, {
+            style: { color: '#ffd54f', weight: 3, fillColor: '#ffd54f', fillOpacity: 0.18 },
+        }).addTo(map);
+        map.fitBounds(layer.getBounds().pad(0.35));
+    }
+
+    function initMaps() {
+        if (mapsInitialized) return;
+        mapsInitialized = true;
+        options.forEach(makeMiniMap);
+    }
+
+    function openDialog() {
+        if (dialog.open) return;
+        dialog.showModal();
+        // Leaflet needs the container to be laid out before sizing tiles -
+        // init (or refresh) only once the dialog is actually visible.
+        setTimeout(initMaps, 50);
+    }
+    window.openBoundaryVoteDialog = openDialog;
+
+    function markSelected(boundaryId) {
+        dialog.querySelectorAll('.boundary-vote-option').forEach(function (card) {
+            var selected = card.dataset.boundaryId === String(boundaryId);
+            card.classList.toggle('is-selected', selected);
+            var text = card.querySelector('.boundary-vote-choose-text');
+            if (text) text.textContent = selected ? 'Your choice' : 'This one';
+        });
+    }
+
+    dialog.querySelectorAll('.boundary-vote-choose-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var boundaryId = btn.dataset.boundaryId;
+            fetch(VOTE_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRFToken': csrftoken },
+                body: new URLSearchParams({ boundary_id: boundaryId }),
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (resp) {
+                if (!resp.ok) {
+                    if (window.toastr) toastr.error(resp.error || 'Failed to save your vote.');
+                    return;
+                }
+                markSelected(resp.my_vote_id);
+                if (window.toastr) toastr.success('Thanks - your boundary vote was counted.');
+                try { localStorage.setItem(DISMISS_KEY, '1'); } catch (e) {}
+                setTimeout(function () { if (dialog.open) dialog.close(); }, 600);
+            })
+            .catch(function () { if (window.toastr) toastr.error('Network error saving your vote.'); });
+        });
+    });
+
+    function dismiss() {
+        try { localStorage.setItem(DISMISS_KEY, '1'); } catch (e) {}
+        if (dialog.open) dialog.close();
+    }
+    var notNow = document.getElementById('boundary-vote-not-now');
+    if (notNow) notNow.addEventListener('click', dismiss);
+    // Closing by any means (Esc, the header's X) also counts as a dismissal.
+    dialog.addEventListener('close', function () {
+        try { localStorage.setItem(DISMISS_KEY, '1'); } catch (e) {}
+    });
+
+    {% if boundary_vote.auto_open %}
+    // Nobody has voted yet - ask this viewer, unless they've dismissed the
+    // dialog here before. Once votes exist, the server stops setting
+    // auto_open and the dialog stays behind the map card's button.
+    var dismissed = false;
+    try { dismissed = localStorage.getItem(DISMISS_KEY) === '1'; } catch (e) {}
+    if (!dismissed) setTimeout(openDialog, 800);
+    {% endif %}
+}());
+</script>
+{% endif %}

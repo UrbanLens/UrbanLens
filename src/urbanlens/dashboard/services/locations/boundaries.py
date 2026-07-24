@@ -42,12 +42,29 @@ def _as_multipolygon(geom: Polygon | MultiPolygon | None) -> MultiPolygon | None
     return geom
 
 
+#: Provider ``service_key`` → :class:`BoundarySource` value for the providers
+#: whose property geometry may serve as an official-boundary voting candidate.
+#: Building-footprint providers (Overture, Microsoft, Google) are absent on
+#: purpose: they never produce property boundaries, and the vote is over which
+#: *property* boundary should officially represent the location.
+PROVIDER_BOUNDARY_SOURCES: dict[str, str] = {
+    "redata_boundary": "redata",
+    "overpass": "overpass",
+}
+
+
 @dataclass(slots=True)
 class ResolvedBoundaries:
     """Typed result of one provider-chain run for a coordinate."""
 
     property_polygon: MultiPolygon | None = None
     building_polygon: MultiPolygon | None = None
+    #: Every property polygon any queried provider returned, as
+    #: (service_key, polygon) pairs in chain order - including polygons that
+    #: lost the ``property_polygon`` slot to an earlier provider. Feeds the
+    #: per-source candidate rows boundary voting chooses between; costs no
+    #: extra API calls since only providers the chain already queried appear.
+    property_candidates: list[tuple[str, MultiPolygon]] = field(default_factory=list)
 
     def polygon_for(self, boundary_type: str) -> MultiPolygon | None:
         """The resolved polygon for a :class:`BoundaryType` value, or None."""
@@ -124,8 +141,11 @@ class BoundaryProviderChain:
                 # TODO: Catch specific exception
                 logger.exception("Boundary provider %s failed for %s,%s", provider.service_key, redact_coordinate(latitude), redact_coordinate(longitude))
                 continue
+            property_polygon = _as_multipolygon(typed.get("property"))
+            if property_polygon is not None and provider.service_key:
+                resolved.property_candidates.append((provider.service_key, property_polygon))
             if resolved.property_polygon is None:
-                resolved.property_polygon = _as_multipolygon(typed.get("property"))
+                resolved.property_polygon = property_polygon
             if resolved.building_polygon is None:
                 resolved.building_polygon = _as_multipolygon(typed.get("building"))
         return resolved
@@ -199,7 +219,11 @@ def generate_location_boundaries(location: Location, *, name: str | None = None)
     stamping ``generated_at`` even when nothing was found so the chain is not
     re-run on every page view. ``generated_polygon`` is only ever written when
     currently empty, via a queryset ``update()``, so this can never clobber
-    geometry landed concurrently.
+    geometry landed concurrently. The one deliberate exception is boundary
+    voting: when votes exist, ``apply_winning_boundary`` overwrites the
+    canonical property polygon with the winning candidate's - both are
+    externally-sourced geometry, so the "never let user drawings into
+    matching" invariant holds either way.
 
     The chain's heavy steps (downloading and gunzipping building-footprint
     shards, shapely geometry work) mean this belongs in a Celery worker, never
@@ -225,6 +249,32 @@ def generate_location_boundaries(location: Location, *, name: str | None = None)
         if polygon is not None and row.generated_polygon is None:
             updates["generated_polygon"] = polygon
         Boundary.objects.filter(pk=row.pk).update(**updates)
+
+    # Persist one candidate row per property-capable provider that answered,
+    # so users can vote on which official boundary is most accurate. Unlike
+    # the canonical rows above, candidate geometry refreshes freely - it is
+    # never user-drawn, so a newer provider answer can only be better data.
+    for service_key, polygon in resolved.property_candidates:
+        source = PROVIDER_BOUNDARY_SOURCES.get(service_key)
+        if source is None:
+            continue
+        candidate, _created = Boundary.objects.get_or_create(
+            location=location,
+            boundary_type=BoundaryType.PROPERTY,
+            source=source,
+            pin=None,
+            wiki=None,
+            profile=None,
+            defaults={"generated_polygon": polygon, "generated_at": now},
+        )
+        Boundary.objects.filter(pk=candidate.pk).update(generated_polygon=polygon, generated_at=now, updated=now)
+
+    # Re-apply the community's boundary vote (if any) now that candidates may
+    # have changed - the winning candidate's polygon is materialized onto the
+    # canonical property row so every matching path respects the vote.
+    from urbanlens.dashboard.services.boundary_voting import apply_winning_boundary
+
+    apply_winning_boundary(location)
 
     # A wiki's property polygon can only newly exist or change right here -
     # this is the single choke point every boundary-generation call site
