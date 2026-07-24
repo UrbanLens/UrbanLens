@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from itertools import count
+from unittest import mock
 
 from model_bakery import baker
 
@@ -45,10 +46,23 @@ class CandidateNameForLocationTests(TestCase):
         self.assertEqual(candidate_name_for_location(location, use_aliases=False), "Old Mill House")
 
     def test_use_aliases_true_prefers_a_meaningful_alias(self) -> None:
+        """Wiki.save() auto-ensures an alias matching its own (meaningful)
+        name (see models/wiki/model.py), so this wiki genuinely has two
+        meaningful aliases once "The Mill" is added - "Old Mill House" (auto)
+        and "The Mill" (this test's). random.choice's own selection between
+        two valid candidates isn't what this test is verifying; it's
+        verifying that use_aliases=True reaches the alias-selection branch
+        at all (returning whatever random.choice picked) rather than falling
+        straight through to the bare wiki name - so random.choice is pinned
+        here rather than left to flip a real coin every run."""
         location = _make_location()
         wiki = baker.make(Wiki, location=location, name="Old Mill House")
         baker.make(WikiAlias, wiki=wiki, name="The Mill", kind=AliasType.NICKNAME)
-        self.assertEqual(candidate_name_for_location(location, use_aliases=True), "The Mill")
+        with mock.patch("urbanlens.dashboard.services.spotguessr.named_place.random.choice", return_value="The Mill") as mock_choice:
+            result = candidate_name_for_location(location, use_aliases=True)
+        mock_choice.assert_called_once()
+        self.assertCountEqual(mock_choice.call_args.args[0], ["Old Mill House", "The Mill"])
+        self.assertEqual(result, "The Mill")
 
     def test_meaningless_aliases_are_skipped_in_favor_of_the_wiki_name(self) -> None:
         location = _make_location()
