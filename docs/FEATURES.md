@@ -376,27 +376,40 @@ for the boundary rationale:
 ## Games: SpotGuessr
 
 A GeoGuessr-style game built on the user's own pin/wiki/photo data. Full design and phase
-mapping: `docs/designs/spotguessr.md`. **Built so far (UL-391): solo Photos-mode play only** —
-everything below the line is not yet built.
+mapping: `docs/designs/spotguessr.md`. **Built (UL-391..UL-393): solo and multiplayer play,
+all three guess modes.** Everything below the line is not yet built.
 
-- Photos mode: a photo from one of the player's own pinned locations is shown; guess by
-  clicking a Leaflet map or searching the player's own pins (`/spotguessr/`)
-- Eligibility engine: a location is only ever offered if it's pinned by every participant
-  (trivially, just the solo player right now) — no exceptions, no caching across sessions
-- Scoring: geodesic point distance when a photo carries its own coordinates, geodesic distance
-  to the location's effective property boundary (0 inside it) when it doesn't — real PostGIS
-  `ST_Distance`, not an approximation
+- Three modes: **Photos** (a photo from a pinned location; guess by clicking a Leaflet map or
+  searching your own pins), **Named Place** (a meaningful place name or, by default, a random
+  alias/nickname - togglable off; map-click only, no pin search - the point is recognizing the
+  name without being able to look it up), and **Street View** (imagery from the existing
+  Street View integration, point-scored; map-click or pin search)
+- Eligibility engine: a location is only ever offered if it's pinned by every *joined*
+  participant (an invited-but-not-yet-accepted player never gates this) — no exceptions, no
+  caching across sessions
+- Scoring: geodesic point distance when a photo/Street View shot has its own coordinates,
+  geodesic distance to the location's effective property boundary (0 inside it) otherwise
+  (always the boundary rule for Named Place) — real PostGIS `ST_Distance`, not an approximation
 - Glicko-2 ratings, tracked per mode: player skill (`PlayerModeRating`) and location difficulty
   (`LocationModeRating`), updated after every round
 - Difficulty slider (weights location selection toward a target difficulty band), a
   geographic-boundary restriction (draw a rectangle to confine rounds to an area), and
   anti-clustering location selection (never repeats a location in a session, avoids picking
   somewhere near the immediately preceding round)
-- Optional date-guessing bonus (guess the photo's capture date for extra points, default off)
+- Optional date-guessing bonus (guess the photo's capture date for extra points, default off,
+  Photos mode only)
 - Own Glicko-2 rating + friends' ratings on the overview page, with a per-profile opt-out
   (`SpotGuessrPreference.show_ratings_to_friends`, default on)
+- **Multiplayer**: a friends-only invite/join lobby (invite notification deep-links straight
+  into the lobby) with a host-controlled start that locks the roster, a live scoreboard, and
+  WebSocket-driven round sync (`GameSessionConsumer`, one group per session) so every
+  participant sees rounds/reveals/results together in real time
+- **Live text chat** scoped to a session (WebSocket-only, no E2EE - unlike DMs, session banter
+  between people already visible to each other on the scoreboard has no privacy surface to
+  protect)
 
-Not yet built: multiplayer sessions/live scoreboard (UL-392), Named Place and Street View
-modes (UL-393), the community photo submission/moderation pipeline and photo report/thumbs
+Not yet built: the community photo submission/moderation pipeline and photo report/thumbs
 voting (UL-394), voice chat (UL-395), and engagement polish like reveal animations and
-leaderboards (UL-396).
+leaderboards (UL-396). Also not built (deliberate scope cuts within UL-392, not oversights):
+join-by-link invites, mid-game joining, and automatic cleanup of stuck lobbies/AFK
+participants — see the design doc's "Multiplayer sessions" section.
