@@ -48,17 +48,30 @@ def serialize_round(round_: GameRound) -> dict[str, Any]:
 
 
 def serialize_reveal(round_: GameRound, guess: Guess) -> dict[str, Any]:
-    """The answer + one guess's own score - the HTTP response to whoever just guessed."""
-    location = round_.location
-    return {
+    """One guess's own score - the HTTP response to whoever just guessed.
+
+    The answer is only included once ``round_`` is actually revealed
+    (``revealed_at`` set - every joined participant has guessed). Solo
+    sessions complete the round on this very guess, so they always see it
+    immediately; in multiplayer, an early guesser must not learn the
+    answer before their teammates have guessed too - the session's live
+    chat would otherwise let them relay it and defeat the round entirely.
+    Withheld rounds are completed for the guesser by the ``round.revealed``
+    broadcast (``serialize_round_reveal``) once everyone else catches up.
+    """
+    data: dict[str, Any] = {
         "round_id": round_.pk,
         "distance_meters": guess.distance_meters,
         "points": guess.points,
         "date_points": guess.date_points,
-        "actual_latitude": float(location.latitude),
-        "actual_longitude": float(location.longitude),
-        "location_name": location.official_name,
+        "revealed": round_.revealed_at is not None,
     }
+    if round_.revealed_at is not None:
+        location = round_.location
+        data["actual_latitude"] = float(location.latitude)
+        data["actual_longitude"] = float(location.longitude)
+        data["location_name"] = location.official_name
+    return data
 
 
 def serialize_round_reveal(round_: GameRound) -> dict[str, Any]:

@@ -47,12 +47,14 @@ interface RoundPayload {
 
 interface RevealPayload {
     round_id: number;
+    revealed: boolean;
     distance_meters: number;
     points: number;
     date_points: number;
-    actual_latitude: number;
-    actual_longitude: number;
-    location_name: string;
+    // Only present when `revealed` is true - see showReveal().
+    actual_latitude?: number;
+    actual_longitude?: number;
+    location_name?: string;
     error?: string;
 }
 
@@ -290,6 +292,11 @@ function renderFriendCheckboxes(container: HTMLElement, friends: FriendOption[],
         const checkbox = document.createElement("input");
         checkbox.type = "checkbox";
         checkbox.value = String(friend.profile_id);
+        // Preserve prior selections across re-renders (e.g. toggling
+        // "play with friends" off then on) - selectedInviteIds is the
+        // source of truth read at submit time, so the checkboxes must
+        // reflect it rather than always starting unchecked.
+        checkbox.checked = selectedInviteIds.has(friend.profile_id);
         checkbox.addEventListener("change", () => {
             if (checkbox.checked) selectedInviteIds.add(friend.profile_id);
             else selectedInviteIds.delete(friend.profile_id);
@@ -501,9 +508,30 @@ function renderScoreboard(): void {
 }
 
 function showReveal(reveal: RevealPayload): void {
+    el<HTMLButtonElement>("sg-submit-guess-btn").disabled = true;
+    sessionScore += reveal.points + reveal.date_points;
+    el("sg-score-status").textContent = isMultiplayer ? "" : `Score: ${sessionScore}`;
+
+    const distanceKm = (reveal.distance_meters / 1000).toFixed(2);
+    if (!reveal.revealed) {
+        // Multiplayer: not everyone has guessed yet - the answer is withheld
+        // so this player can't relay it via chat before their teammates
+        // guess too. showBroadcastReveal() completes this once round.revealed
+        // arrives (lastRevealedRoundId is left untouched so that handler
+        // knows it still needs to draw the actual marker/line itself).
+        el("sg-reveal-panel").hidden = false;
+        el("sg-reveal-title").textContent = "Guess submitted!";
+        let detail = `${reveal.points} points – ${distanceKm} km away. Waiting for other players…`;
+        if (reveal.date_points) detail = `${reveal.points} points (+${reveal.date_points} for the date guess) – ${distanceKm} km away. Waiting for other players…`;
+        el("sg-reveal-detail").textContent = detail;
+        el("sg-reveal-results").hidden = true;
+        el<HTMLButtonElement>("sg-next-round-btn").hidden = true;
+        return;
+    }
+
     lastRevealedRoundId = reveal.round_id;
     const map = ensureGuessMap();
-    const actualLatLng = L.latLng(reveal.actual_latitude, reveal.actual_longitude);
+    const actualLatLng = L.latLng(reveal.actual_latitude as number, reveal.actual_longitude as number);
     actualMarker = L.marker(actualLatLng).addTo(map);
 
     if (guessMarker) {
@@ -514,18 +542,13 @@ function showReveal(reveal: RevealPayload): void {
         map.setView(actualLatLng, 14);
     }
 
-    el<HTMLButtonElement>("sg-submit-guess-btn").disabled = true;
     el("sg-reveal-panel").hidden = false;
     el("sg-reveal-title").textContent = reveal.location_name || "Revealed!";
-    const distanceKm = (reveal.distance_meters / 1000).toFixed(2);
     let detail = `${reveal.points} points – ${distanceKm} km away`;
     if (reveal.date_points) detail += ` (+${reveal.date_points} for the date guess)`;
     el("sg-reveal-detail").textContent = detail;
     el("sg-reveal-results").hidden = true; // filled in by the round.revealed broadcast, for multiplayer
     el<HTMLButtonElement>("sg-next-round-btn").hidden = isMultiplayer; // multiplayer advances automatically
-
-    sessionScore += reveal.points + reveal.date_points;
-    el("sg-score-status").textContent = isMultiplayer ? "" : `Score: ${sessionScore}`;
 }
 
 function showBroadcastReveal(data: RoundRevealBroadcast): void {

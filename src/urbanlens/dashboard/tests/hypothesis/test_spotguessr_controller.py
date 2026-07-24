@@ -10,11 +10,13 @@ from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.images.model import Image, MediaKind
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.models.spotguessr.model import GameSession, SpotGuessrPreference
+from urbanlens.dashboard.models.spotguessr.model import GameSession, SpotGuessrMode, SpotGuessrPreference
+from urbanlens.dashboard.services.spotguessr.session import GameConfig, begin_session, join_session, start_multiplayer_session
 
 _coordinate_counter = count()
 
@@ -149,3 +151,61 @@ class SpotGuessrSettingsViewTests(TestCase):
         response = self.client.post(reverse("spotguessr.settings"), {"show_ratings_to_friends": "off"})
         self.assertEqual(response.status_code, 200)
         self.assertFalse(SpotGuessrPreference.objects.get(profile=profile).show_ratings_to_friends)
+
+
+class SpotGuessrMultiplayerGuessRevealTests(TestCase):
+    """The answer must stay hidden from an early guesser until every joined participant has guessed.
+
+    Per "Real-time sync" in docs/designs/spotguessr.md: guess.submitted carries
+    no coordinates or score, and the answer only goes out with round.revealed.
+    Without this, the first guesser could read it off their own HTTP response
+    and relay it to teammates over session chat before they'd guessed too.
+    """
+
+    def setUp(self) -> None:
+        self.host = _make_profile()
+        self.guest = _make_profile()
+        friendship = Friendship.request(self.host, self.guest)
+        assert friendship is not None
+        friendship.accept()
+
+        self.location = _make_location()
+        baker.make(Pin, profile=self.host, location=self.location)
+        baker.make(Pin, profile=self.guest, location=self.location)
+        baker.make(Image, location=self.location, media_type=MediaKind.PHOTO, latitude=None, longitude=None)
+
+        session = start_multiplayer_session(self.host, SpotGuessrMode.PHOTOS, GameConfig(), [self.guest])
+        join_session(session, self.guest)
+        round_ = begin_session(session, self.host)
+        assert round_ is not None
+        self.guess_url = reverse("spotguessr.guess", args=[session.pk, round_.pk])
+
+    def test_the_first_guesser_does_not_receive_the_answer_yet(self) -> None:
+        self.client.force_login(self.host.user)
+        response = self.client.post(
+            self.guess_url,
+            {"latitude": str(self.location.latitude), "longitude": str(self.location.longitude)},
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertFalse(data["revealed"])
+        self.assertNotIn("actual_latitude", data)
+        self.assertNotIn("actual_longitude", data)
+        self.assertNotIn("location_name", data)
+        self.assertEqual(data["points"], 5000)  # the guesser's own score is still reported immediately
+
+    def test_the_last_guesser_receives_the_answer(self) -> None:
+        self.client.force_login(self.host.user)
+        self.client.post(
+            self.guess_url,
+            {"latitude": str(self.location.latitude), "longitude": str(self.location.longitude)},
+        )
+        self.client.force_login(self.guest.user)
+        response = self.client.post(
+            self.guess_url,
+            {"latitude": str(self.location.latitude), "longitude": str(self.location.longitude)},
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data["revealed"])
+        self.assertAlmostEqual(data["actual_latitude"], float(self.location.latitude), places=4)

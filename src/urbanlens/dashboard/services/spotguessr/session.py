@@ -14,6 +14,7 @@ import json
 from typing import TYPE_CHECKING
 
 from django.contrib.gis.geos import GEOSGeometry
+from django.db import IntegrityError, transaction
 from django.db.models import F
 from django.utils import timezone
 
@@ -324,9 +325,6 @@ def submit_guess(round_: GameRound, profile: Profile, guess_point: Point, guesse
     Raises:
         SpotGuessrError: if ``profile`` already guessed this round.
     """
-    if Guess.objects.filter(round=round_, profile=profile).exists():
-        raise SpotGuessrError("This profile has already guessed this round.")
-
     distance = scoring.distance_for_guess(
         round_.location,
         guess_point,
@@ -341,23 +339,43 @@ def submit_guess(round_: GameRound, profile: Profile, guess_point: Point, guesse
     if config.date_guessing_enabled and guessed_date is not None and round_.image is not None and round_.image.taken_at is not None:
         date_points = scoring.points_for_date_guess(guessed_date, round_.image.taken_at.date())
 
-    guess = Guess.objects.create(
-        round=round_,
-        profile=profile,
-        guess_point=guess_point,
-        distance_meters=distance,
-        points=points,
-        guessed_date=guessed_date,
-        date_points=date_points,
-    )
+    # Two participants can submit their round-completing guess at nearly
+    # the same instant - without a lock, both inserts commit and both would
+    # independently observe "everyone has guessed", double-applying ratings
+    # and racing on the next round's (session, sequence_index) uniqueness.
+    # select_for_update() serializes the whole read-count-decide critical
+    # section per round; the duplicate-guess guard becomes an IntegrityError
+    # catch (the unique constraint), now race-proof under the lock; and
+    # revealed_at is checked *inside* the lock so only the submission that
+    # actually completes the round proceeds to rating/broadcast/next-round.
+    round_completed_now = False
+    with transaction.atomic():
+        locked_round = GameRound.objects.select_for_update().get(pk=round_.pk)
+        try:
+            guess = Guess.objects.create(
+                round=locked_round,
+                profile=profile,
+                guess_point=guess_point,
+                distance_meters=distance,
+                points=points,
+                guessed_date=guessed_date,
+                date_points=date_points,
+            )
+        except IntegrityError:
+            raise SpotGuessrError("This profile has already guessed this round.") from None
 
-    GameSessionParticipant.objects.filter(session=session, profile=profile).update(total_points=F("total_points") + points + date_points)
+        GameSessionParticipant.objects.filter(session=session, profile=profile).update(total_points=F("total_points") + points + date_points)
+
+        joined_count = session.participants.joined().count()
+        if locked_round.revealed_at is None and Guess.objects.for_round(locked_round).count() >= joined_count:
+            locked_round.revealed_at = timezone.now()
+            locked_round.save(update_fields=["revealed_at", "updated"])
+            round_completed_now = True
+
     realtime.broadcast(session.pk, "guess.submitted", {"profile_id": profile.pk})
 
-    joined_count = session.participants.joined().count()
-    if Guess.objects.for_round(round_).count() >= joined_count:
-        round_.revealed_at = timezone.now()
-        round_.save(update_fields=["revealed_at", "updated"])
+    if round_completed_now:
+        round_.refresh_from_db()
         apply_round_ratings(round_, list(Guess.objects.for_round(round_).select_related("profile")))
         realtime.broadcast(session.pk, "round.revealed", serializers.serialize_round_reveal(round_))
 
