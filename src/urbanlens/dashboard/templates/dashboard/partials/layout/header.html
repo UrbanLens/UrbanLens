@@ -123,6 +123,10 @@
                         <i class="material-symbols-outlined">build</i>
                         <span>Tools</span>
                     </a>
+                    <a href="{% url 'assistant' %}" class="nav-dropdown-item" role="menuitem">
+                        <i class="material-symbols-outlined">smart_toy</i>
+                        <span>Assistant</span>
+                    </a>
                     {% if user.is_superuser or perms.dashboard.view_site_admin %}
                     <a href="{% url 'site_admin_home' %}" class="nav-dropdown-item" role="menuitem">
                         <i class="material-symbols-outlined">admin_panel_settings</i>

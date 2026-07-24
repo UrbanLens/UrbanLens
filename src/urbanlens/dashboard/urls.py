@@ -16,6 +16,7 @@ from urbanlens.dashboard.controllers import (
     aliases,
     api_keys,
     article,
+    assistant,
     boundary,
     calendar_sync,
     comments,
@@ -135,6 +136,9 @@ urlpatterns = [
     ),
     path("thanks/", thanks.ThanksView.as_view(), name="thanks"),
     path("costs/", costs.CostsView.as_view(), name="costs"),
+    path("assistant/", assistant.AssistantView.as_view(), name="assistant"),
+    path("assistant/message/", assistant.AssistantMessageView.as_view(), name="assistant.message"),
+    path("assistant/reset/", assistant.AssistantResetView.as_view(), name="assistant.reset"),
     path(
         "help/import-pins/",
         TemplateView.as_view(

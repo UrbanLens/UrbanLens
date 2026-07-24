@@ -1,0 +1,119 @@
+// Assistant chat page (UL-293).
+
+.assistant-page {
+    max-width: 760px;
+    margin: 1.25rem auto;
+    padding: 0 1rem;
+}
+
+.assistant-card {
+    display: flex;
+    flex-direction: column;
+    min-height: 60vh;
+}
+
+.assistant-messages {
+    flex: 1;
+    overflow-y: auto;
+    max-height: 62vh;
+    display: flex;
+    flex-direction: column;
+    gap: .75rem;
+    padding: 1rem;
+}
+
+.assistant-empty {
+    margin: auto;
+    text-align: center;
+    opacity: .7;
+
+    .material-symbols-outlined {
+        font-size: 2.2rem;
+    }
+}
+
+.assistant-empty-hint {
+    font-size: .85rem;
+    opacity: .8;
+}
+
+.assistant-msg {
+    display: flex;
+    flex-direction: column;
+    max-width: 85%;
+
+    &--user {
+        align-self: flex-end;
+        align-items: flex-end;
+
+        .assistant-msg-bubble {
+            background: var(--ul-accent, #3567b1);
+            color: #fff;
+        }
+    }
+
+    &--assistant {
+        align-self: flex-start;
+        align-items: flex-start;
+    }
+}
+
+.assistant-msg-bubble {
+    padding: .6rem .85rem;
+    border-radius: .85rem;
+    background: var(--ul-surface-raised, rgba(127, 127, 127, .12));
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+}
+
+.assistant-msg-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .35rem;
+    margin-top: .3rem;
+
+    .badge .material-symbols-outlined {
+        font-size: .85rem;
+        vertical-align: -2px;
+        margin-right: .15rem;
+    }
+}
+
+.assistant-input-row {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    padding: .75rem 1rem;
+    border-top: 1px solid var(--ul-surface-border);
+
+    input[type="text"] {
+        flex: 1;
+        min-width: 0;
+    }
+}
+
+.assistant-typing {
+    font-size: .8rem;
+    opacity: .7;
+}
+
+.assistant-footnote {
+    padding: 0 1rem .85rem;
+    font-size: .78rem;
+    opacity: .65;
+}
+
+.assistant-disabled {
+    margin: auto;
+    padding: 2rem 1rem;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: .6rem;
+
+    .material-symbols-outlined {
+        font-size: 2.4rem;
+        opacity: .5;
+    }
+}
