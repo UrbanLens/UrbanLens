@@ -628,6 +628,22 @@ def _activities_panel_html(request: HttpRequest, trip: Trip, profile: Profile, *
         }
         for act in activities
     ]
+    # Driving legs between consecutive non-completed stops whose coordinates
+    # this viewer may see (hidden locations must not leak even as a distance).
+    from urbanlens.dashboard.services.trip_legs import compute_legs
+
+    leg_stops = []
+    for item in activities_with_index:
+        act = item["activity"]
+        if act.status == TripActivity.STATUS_COMPLETED or item["effective_location_hidden"]:
+            continue
+        coords = _activity_coords(act)
+        if coords is not None:
+            leg_stops.append((act.id, coords))
+    legs = compute_legs(leg_stops) if profile.external_apis_enabled and len(leg_stops) >= 2 else {}
+    for item in activities_with_index:
+        item["leg"] = legs.get(item["activity"].id)
+
     all_activities_completed = bool(activities) and all(act.status == TripActivity.STATUS_COMPLETED for act in activities)
     # Empty-tab greying - the Upcoming tab always has something to say (even
     # "no upcoming activities"), so only these 3 status-filtered tabs need it.
@@ -814,9 +830,10 @@ class TripCreateView(LoginRequiredMixin, View):
 
         source = body.get("source") or "list"
 
-        name = (body.get("name") or "").strip()
-        if not name:
-            return HttpResponse("Trip name is required.", status=400)
+        # Name is optional (UL-360): a blank submission gets a generated one.
+        from urbanlens.dashboard.services.trip_names import random_trip_name
+
+        name = (body.get("name") or "").strip() or random_trip_name()
 
         description = body.get("description") or None
         length_error = text_length_error(description, MAX_TRIP_DESCRIPTION_LENGTH, "Description")

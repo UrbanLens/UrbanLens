@@ -1679,6 +1679,12 @@ window.tripSetTab = function (tab) {
             li.style.display = visible ? '' : 'none';
         });
 
+        // Drive-time legs only make sense on the full itinerary - the
+        // status-filtered tabs hide stops, which would orphan the legs.
+        panel.querySelectorAll('.trip-activity-leg').forEach(function (li) {
+            li.style.display = (tab === 'upcoming') ? '' : 'none';
+        });
+
         _updateActivitiesEmptyState(panel, tab);
 
         // Re-render calendar so the filtered set is reflected there too
