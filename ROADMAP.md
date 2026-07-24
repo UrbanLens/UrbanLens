@@ -5,8 +5,8 @@ Features planned for this release.
 * Include screenshots of the app in About page, and in the README.md file. [UL-16]
 * UI: Edit category dialog [UL-146]
 * UI: Bulk edit category dialog (buttons are awful) [UL-147]
-* Add descriptions to badges that are pre-populated. [UL-245]
-* Remove work account from github project. [UL-247]
+* Add descriptions to labels that are pre-populated. [UL-245]
+* ~~Remove work account from github project. [UL-247]~~
 * Pull additional google place info from some supported google takeout files (Reviews.json, and others?) [UL-262]
 * Consider: handle temporary markers when a user pin exists on that exact point. [UL-263]
 * Ensure proper attribution in the smaller maps we're showing around the site (main map should be correct already. Others may or may not need work, though.) [UL-264]
@@ -14,6 +14,7 @@ Features planned for this release.
 * Main map > Edit pin dialog should have link to view full pin details. [UL-266]
 * On the pin details page, and on the wiki page, sections named "Media" should be named "Photos and Media" instead.
 * Sometimes multiple guidance tips come up on the same page. The user clicks "don't show this again" and another one pops up immediately after. That should never happen.
+* On main map, when right clicking and then clicking the coordinates, more specific coordinates should be copied to clipboard.
 
 ## Medium Features
 * Audit the import process for security (unzip, etc) [UL-268]
@@ -90,7 +91,7 @@ Features planned for future releases.
 * Integrate gotify (?) for notifications to site admin. [UL-57]
 * ~~Allow users to vote on making a location "public"...~~ RESOLVED 2026-07-24 (`113851ed`): highly selective eligibility engine (`services/public_pins.py`, hourly beat task) - region exclusivity (one public location per ~15km), vulnerability composite <2 avg w/ 3+ votes, wiki completeness (name/alias/photos/links/article/markup), per-state top-10 popularity rank, and a community-size-scaled pinner floor. Eligible locations get an anonymous yes/no vote in the wiki rating section (1-week minimum, 75% consensus to pass, 75% no-consensus at 10+ votes to permanently reject). Public locations fan out via the existing PinSuggestion queue, opt-out via a new "Suggest Public Locations" setting. FAQ entry added; the rules themselves are deliberately never explained in the UI. [UL-58]
 * "Get directions" button to send directions to their phone (or show on screen). [UL-59]
-* PARTIALLY RESOLVED 2026-07-24 (`a1f38557`): the drive-time slice - cached OSRM driving legs (distance + duration) rendered between consecutive itinerary stops on the trip activities panel, budgeted live-lookup calls per render, hidden-location safe. AI-driven scheduling suggestions and AI-suggested relevant pins are not built (the new AI assistant, UL-293, can add specific pins to a trip on request, which covers the "AI suggestions of pins to add" case in a chat-driven form rather than inline on the trip page). AI suggestions on the trip planning page for when to schedule activities, taking into account drive time and user voting. AI suggestions of pins to add that are relevant to the trip. Etc. [UL-60]
+* ~~AI suggestions on the trip planning page for when to schedule activities, taking into account drive time and user voting. AI suggestions of pins to add that are relevant to the trip. Etc.~~ RESOLVED 2026-07-24 (`a1f38557` drive-time legs; `3cd09d74` the AI suggestions themselves; `cde702e9` fixed pre-existing tests after the refactor): drive-time legs (cached OSRM, distance+duration between consecutive itinerary stops) landed first; a follow-up request then asked for full privacy-hardened AI suggestions specifically, delivered as an inline "AI Suggestions" panel on the trip page (`services/trip_ai_suggestions.py`) - pins worth adding and a drive/weather/vote-aware reorder of the existing itinerary. Privacy is structural rather than a policy filter: a location is only ever suggested when EVERY joined member already has it pinned (set intersection computed before anything reaches the model, unconditional even for members with sharing off), and only sharing-enabled members' visited/priority/vulnerability/danger ratings are shown to the model at all, anonymized as "Member 1"/"Member 2" with no identity ever sent. Hidden-activity visibility reuses the trip page's own per-viewer rule (extracted into `services/trip_visibility.py` so this feature can't accidentally see more than the page itself would show). Every model-suggested pin index and reorder permutation is validated against the real data before being offered - a hallucinated suggestion is silently dropped, never rendered. New site-wide `ai_trip_suggestions_enabled` toggle; cached per (trip, viewer) with a cooldown-limited manual refresh. [UL-60]
 * Trip planning page should have some ability to go to the pin details page (or location wiki) for each activity. [UL-61]
 * Better UI form fields (sliders, date pickers, etc). [UL-63]
 * Gallery photos can have additional metadata, including: an angle of view, floor, room, etc. [UL-65]
@@ -222,6 +223,15 @@ Features planned for future releases.
 * Add additional connection tests to the setup Integrations page (searxng, etc)
 * For text document upload, use claude haiku.
 * During pin import (main map page, pin import dialog), the user is given an opportunity to select a label to apply to everything in a group. However, the selection is just a plain dropdown, which is hard to use. Use the label picker ui we use in other areas of the application, which allows for searching, and multi-selection. That label picker should allow the user to create a new label directly from the picker if they wish.
+
+## SpotGuessr (GeoGuessr-style location-guessing game)
+Full design: `docs/designs/spotguessr.md`.
+* IN PROGRESS: Core engine - Glicko-2 player skill + per-mode location difficulty ratings, "only locations every participant has pinned" eligibility, point-vs-boundary distance scoring (boundary distance for a place/photo with no specific coordinates, point distance when one exists), optional date-guessing bonus, difficulty slider, geographic boundary filter, anti-clustering location selection, solo-only Photos mode end to end, own rating + friends' ratings (opt-out setting) on the overview page. [UL-391]
+* Multiplayer sessions: invite/join, real-time round sync and scoreboard, live text chat. [UL-392]
+* Named Place mode (guess from a name/alias, boundary-distance scored, no map search) and Street View mode. [UL-393]
+* Community photo submission pipeline: upload-to-wiki with submit-to-game opt-in, "submit to game" button in the photo lightbox, report/flag buttons, thumbs up/down, and a moderation classifier (Cloudflare Workers AI) that silently excludes disqualified photos. [UL-394]
+* Voice chat: peer-to-peer WebRTC mesh signaled over Django Channels (no new server infra). [UL-395]
+* Engagement polish: reveal animations, leaderboards/streaks, competitive and non-competitive play framing. [UL-396]
 
 ## Really Big Ideas / Features
 * Native android / ios apps (allowing expansion into additional features). [UL-72]

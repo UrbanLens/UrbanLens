@@ -74,7 +74,9 @@ from urbanlens.dashboard.models.social_link import SocialLink
 from urbanlens.dashboard.models.spotguessr import (
     GameRound,
     GameSession,
+    GameSessionChatMessage,
     GameSessionParticipant,
+    GameSessionParticipantStatus,
     GameSessionStatus,
     Guess,
     LocationModeRating,

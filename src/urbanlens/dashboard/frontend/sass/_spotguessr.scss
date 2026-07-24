@@ -1,0 +1,170 @@
+// SpotGuessr solo Photos-mode gameplay (UL-391).
+
+.spotguessr-page {
+    max-width: 960px;
+    margin: 1.25rem auto;
+    padding: 0 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.spotguessr-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem 1.25rem;
+}
+
+.spotguessr-header-title {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    font-size: 1.25rem;
+    font-weight: 600;
+}
+
+.spotguessr-ratings {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem;
+    flex: 1;
+}
+
+.spotguessr-rating-chip {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: .35rem .75rem;
+    border-radius: .5rem;
+    background: var(--surface-2, rgba(127, 127, 127, .12));
+    min-width: 4.5rem;
+
+    &--self {
+        font-weight: 600;
+    }
+}
+
+.spotguessr-rating-label {
+    font-size: .7rem;
+    opacity: .75;
+}
+
+.spotguessr-rating-value {
+    font-size: 1.1rem;
+}
+
+.spotguessr-friends-toggle {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    font-size: .85rem;
+    white-space: nowrap;
+}
+
+.spotguessr-panel {
+    padding: 1.25rem;
+}
+
+.spotguessr-panel-hint {
+    opacity: .75;
+    font-size: .9rem;
+}
+
+.spotguessr-settings-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    margin-top: .75rem;
+}
+
+.spotguessr-field {
+    display: flex;
+    flex-direction: column;
+    gap: .35rem;
+
+    &--checkbox {
+        flex-direction: row;
+        align-items: center;
+
+        label {
+            display: flex;
+            align-items: center;
+            gap: .5rem;
+        }
+    }
+}
+
+.spotguessr-area-map-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: .35rem;
+}
+
+.spotguessr-area-map,
+.spotguessr-guess-map {
+    height: 260px;
+    border-radius: .5rem;
+    overflow: hidden;
+}
+
+.spotguessr-game-status {
+    display: flex;
+    justify-content: space-between;
+    font-weight: 600;
+    margin-bottom: .75rem;
+}
+
+.spotguessr-game-layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.25rem;
+
+    @media (max-width: 720px) {
+        grid-template-columns: 1fr;
+    }
+}
+
+.spotguessr-round-photo {
+    width: 100%;
+    max-height: 480px;
+    object-fit: contain;
+    border-radius: .5rem;
+    background: var(--surface-2, rgba(127, 127, 127, .08));
+    animation: spotguessr-fade-in .3s ease-out;
+}
+
+.spotguessr-guess-col {
+    display: flex;
+    flex-direction: column;
+    gap: .75rem;
+}
+
+.spotguessr-pin-search input {
+    width: 100%;
+}
+
+.spotguessr-guess-map {
+    height: 320px;
+}
+
+.spotguessr-reveal-panel {
+    margin-top: 1.25rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--border, rgba(127, 127, 127, .25));
+    text-align: center;
+    animation: spotguessr-fade-in .3s ease-out;
+}
+
+@keyframes spotguessr-fade-in {
+    from {
+        opacity: 0;
+        transform: translateY(6px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
