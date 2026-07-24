@@ -1,0 +1,51 @@
+.games-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.games-card {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: .75rem;
+    padding: 1.25rem;
+    text-decoration: none;
+    color: inherit;
+    transition: transform .15s ease, box-shadow .15s ease;
+
+    &:hover {
+        transform: translateY(-2px);
+    }
+}
+
+.games-card-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 3rem;
+    height: 3rem;
+    border-radius: 50%;
+    background: var(--surface-2, rgba(127, 127, 127, .08));
+
+    .material-symbols-outlined {
+        font-size: 1.75rem;
+    }
+}
+
+.games-card-title {
+    margin: 0;
+    font-size: 1.15rem;
+}
+
+.games-card-description {
+    margin: 0;
+    opacity: .8;
+    font-size: .92rem;
+}
+
+.games-card-play {
+    margin-top: auto;
+    align-self: flex-start;
+}

@@ -1,0 +1,24 @@
+{% extends 'dashboard/themes/base.html' %}
+
+{% block title %}Games{% endblock %}
+
+{% block hero %}
+{% include "dashboard/partials/ui/_page_hero.html" with icon="stadia_controller" title="Games" subtitle="Play games built on your own map data." modifier="top" %}
+{% endblock %}
+
+{% block content %}
+<div class="page-inner">
+    <div class="games-grid">
+        {% for game in games %}
+        <a class="card games-card" href="{{ game.url }}">
+            <div class="games-card-icon"><i class="material-symbols-outlined">{{ game.icon }}</i></div>
+            <div class="games-card-body">
+                <h2 class="games-card-title">{{ game.name }}</h2>
+                <p class="games-card-description">{{ game.description }}</p>
+            </div>
+            <span class="games-card-play btn btn--primary">Play</span>
+        </a>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

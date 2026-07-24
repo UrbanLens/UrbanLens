@@ -28,6 +28,7 @@ from urbanlens.dashboard.controllers import (
     e2ee,
     flickr,
     friendship,
+    games,
     google_photos,
     group_chats,
     image_gallery,
@@ -140,6 +141,7 @@ urlpatterns = [
     path("assistant/", assistant.AssistantView.as_view(), name="assistant"),
     path("assistant/message/", assistant.AssistantMessageView.as_view(), name="assistant.message"),
     path("assistant/reset/", assistant.AssistantResetView.as_view(), name="assistant.reset"),
+    path("games/", games.GamesOverviewView.as_view(), name="games.overview"),
     path(
         "spotguessr/",
         include(
