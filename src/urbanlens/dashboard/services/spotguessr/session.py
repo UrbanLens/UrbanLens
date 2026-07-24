@@ -174,7 +174,9 @@ def _notify_invite(host: Profile, invitee: Profile, session: GameSession) -> Non
         notification_type=NotificationType.SPOTGUESSR_INVITE,
         title="SpotGuessr invitation",
         message=f"{host_name} invited you to play SpotGuessr.",
-        url=reverse("spotguessr.lobby", kwargs={"session_id": session.pk}),
+        # "spotguessr.lobby" is a JSON API endpoint, not a page - link to the
+        # game page itself with a query param it knows to pick up on load.
+        url=f"{reverse('spotguessr')}?session={session.pk}",
     )
 
 

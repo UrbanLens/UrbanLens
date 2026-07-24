@@ -10,7 +10,7 @@
 {% endblock %}
 
 {% block content %}
-<div class="spotguessr-page page-content">
+<div class="spotguessr-page page-content" data-my-profile-id="{{ my_profile_id }}" data-initial-session-id="{{ initial_session_id|default:'' }}">
     <div class="spotguessr-header card">
         <div class="spotguessr-header-title">
             <i class="material-symbols-outlined">travel_explore</i>

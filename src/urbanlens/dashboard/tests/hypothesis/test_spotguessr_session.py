@@ -42,10 +42,11 @@ def _make_profile() -> Profile:
 
 
 class StartSoloSessionTests(TestCase):
-    def test_only_photos_mode_is_implemented(self) -> None:
+    def test_all_three_modes_can_be_started_solo(self) -> None:
         profile = _make_profile()
-        with pytest.raises(SpotGuessrError):
-            start_solo_session(profile, SpotGuessrMode.NAMED_PLACE, GameConfig())
+        for mode in (SpotGuessrMode.PHOTOS, SpotGuessrMode.NAMED_PLACE, SpotGuessrMode.STREET_VIEW):
+            session = start_solo_session(profile, mode, GameConfig())
+            self.assertEqual(session.mode, mode)
 
     def test_creates_a_single_participant_session(self) -> None:
         profile = _make_profile()
@@ -82,7 +83,7 @@ class GetOrCreateRoundTests(TestCase):
         session = start_solo_session(self.profile, SpotGuessrMode.PHOTOS, GameConfig())
         round_ = get_or_create_round(session)
 
-        self.assertIsNotNone(round_)
+        assert round_ is not None
         self.assertEqual(round_.location_id, location.pk)
         self.assertEqual(round_.sequence_index, 0)
 
@@ -94,6 +95,8 @@ class GetOrCreateRoundTests(TestCase):
         session = start_solo_session(self.profile, SpotGuessrMode.PHOTOS, GameConfig())
         first = get_or_create_round(session)
         second = get_or_create_round(session)
+        assert first is not None
+        assert second is not None
         self.assertEqual(first.pk, second.pk)
 
 
@@ -104,7 +107,9 @@ class SubmitGuessTests(TestCase):
         baker.make(Pin, profile=self.profile, location=self.location)
         baker.make(Image, location=self.location, media_type=MediaKind.PHOTO, latitude=None, longitude=None)
         self.session = start_solo_session(self.profile, SpotGuessrMode.PHOTOS, GameConfig(), total_rounds=1)
-        self.round_ = get_or_create_round(self.session)
+        round_ = get_or_create_round(self.session)
+        assert round_ is not None
+        self.round_ = round_
 
     def test_guessing_inside_the_boundary_scores_full_points(self) -> None:
         guess_point = Point(float(self.location.longitude), float(self.location.latitude), srid=4326)
@@ -147,6 +152,7 @@ class SessionSummaryTests(TestCase):
 
         session = start_solo_session(profile, SpotGuessrMode.PHOTOS, GameConfig(), total_rounds=1)
         round_ = get_or_create_round(session)
+        assert round_ is not None
         guess_point = Point(float(location.longitude), float(location.latitude), srid=4326)
         submit_guess(round_, profile, guess_point)
 
