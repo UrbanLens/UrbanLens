@@ -14,7 +14,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.contrib.gis.geos import Point
+from django.contrib.gis.geos import GEOSException, Point
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
@@ -137,13 +137,26 @@ class SpotGuessrStartView(LoginRequiredMixin, View):
         except (TypeError, ValueError):
             return JsonResponse({"error": "Invalid geo_bounds - must be GeoJSON."}, status=400)
 
+        try:
+            difficulty = float(request.POST.get("difficulty", 0.5))
+        except (TypeError, ValueError):
+            return JsonResponse({"error": "difficulty must be a number between 0 and 1."}, status=400)
+
         config = spotguessr_session.GameConfig(
-            difficulty=float(request.POST.get("difficulty", 0.5)),
+            difficulty=difficulty,
             external_media_only=request.POST.get("external_media_only") == "on",
             require_visited_all=request.POST.get("require_visited_all") == "on",
             date_guessing_enabled=request.POST.get("date_guessing_enabled") == "on",
             geo_bounds_geojson=geo_bounds_geojson,
         )
+        try:
+            # GameConfig.geo_bounds only parses the GeoJSON lazily on access -
+            # force it now so a malformed-but-valid-JSON payload 400s here,
+            # rather than surfacing as a 500 later inside round generation.
+            _ = config.geo_bounds
+        except (GEOSException, ValueError, TypeError):
+            return JsonResponse({"error": "Invalid geo_bounds - must be a valid GeoJSON polygon."}, status=400)
+
         try:
             total_rounds = int(request.POST.get("total_rounds", spotguessr_session.DEFAULT_ROUNDS_PER_SESSION))
         except (TypeError, ValueError):

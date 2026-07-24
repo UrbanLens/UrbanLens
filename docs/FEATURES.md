@@ -372,3 +372,31 @@ for the boundary rationale:
   reaction updates for DMs and group chats (with an HTTP fallback for sending)
 - `ws/safety/checkin/<uuid>/chat/` and `ws/safety/contact/<token>/chat/` — safety check-in chat,
   shared between the check-in owner and emergency contacts
+
+## Games: SpotGuessr
+
+A GeoGuessr-style game built on the user's own pin/wiki/photo data. Full design and phase
+mapping: `docs/designs/spotguessr.md`. **Built so far (UL-391): solo Photos-mode play only** —
+everything below the line is not yet built.
+
+- Photos mode: a photo from one of the player's own pinned locations is shown; guess by
+  clicking a Leaflet map or searching the player's own pins (`/spotguessr/`)
+- Eligibility engine: a location is only ever offered if it's pinned by every participant
+  (trivially, just the solo player right now) — no exceptions, no caching across sessions
+- Scoring: geodesic point distance when a photo carries its own coordinates, geodesic distance
+  to the location's effective property boundary (0 inside it) when it doesn't — real PostGIS
+  `ST_Distance`, not an approximation
+- Glicko-2 ratings, tracked per mode: player skill (`PlayerModeRating`) and location difficulty
+  (`LocationModeRating`), updated after every round
+- Difficulty slider (weights location selection toward a target difficulty band), a
+  geographic-boundary restriction (draw a rectangle to confine rounds to an area), and
+  anti-clustering location selection (never repeats a location in a session, avoids picking
+  somewhere near the immediately preceding round)
+- Optional date-guessing bonus (guess the photo's capture date for extra points, default off)
+- Own Glicko-2 rating + friends' ratings on the overview page, with a per-profile opt-out
+  (`SpotGuessrPreference.show_ratings_to_friends`, default on)
+
+Not yet built: multiplayer sessions/live scoreboard (UL-392), Named Place and Street View
+modes (UL-393), the community photo submission/moderation pipeline and photo report/thumbs
+voting (UL-394), voice chat (UL-395), and engagement polish like reveal animations and
+leaderboards (UL-396).

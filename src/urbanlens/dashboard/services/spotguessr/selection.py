@@ -68,8 +68,8 @@ def pick_next_location(
     ratings_by_location_id = {rating.location_id: rating for rating in LocationModeRating.objects.filter(location__in=pool, mode=mode)}
     weights = [_difficulty_weight(ratings_by_location_id.get(location.pk), target_rating) for location in pool]
     if sum(weights) <= 0:
-        return random.choice(pool)  # noqa: S311 - game content selection, not security-sensitive
-    return random.choices(pool, weights=weights, k=1)[0]  # noqa: S311
+        return random.choice(pool)  # noqa: S311 # nosec: B311 - game content selection, not security-sensitive
+    return random.choices(pool, weights=weights, k=1)[0]  # noqa: S311 # nosec: B311 - game content selection, not security-sensitive
 
 
 def _difficulty_weight(rating: LocationModeRating | None, target_rating: float) -> float:

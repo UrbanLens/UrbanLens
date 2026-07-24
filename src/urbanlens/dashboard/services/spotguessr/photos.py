@@ -32,4 +32,4 @@ def candidate_image_for_location(location: Location, *, external_media_only: boo
     candidates = list(images)
     if not candidates:
         return None
-    return random.choice(candidates)  # noqa: S311 - game content selection, not security-sensitive
+    return random.choice(candidates)  # noqa: S311 # nosec: B311 - game content selection, not security-sensitive
