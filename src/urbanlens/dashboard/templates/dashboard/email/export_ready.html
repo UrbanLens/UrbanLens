@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background:#f0f4ff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f0f4ff;padding:40px 16px">
+<tr><td align="center">
+<table width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.1)">
+
+  <!-- Header -->
+  <tr>
+    <td style="background:linear-gradient(135deg,#312e81,#4338ca,#6366f1);padding:32px 32px 24px;text-align:center">
+      <p style="margin:0;color:#a5b4fc;font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase">UrbanLens</p>
+      <h1 style="margin:8px 0 0;color:#fff;font-size:24px;font-weight:800;letter-spacing:-.02em">Your export is ready</h1>
+    </td>
+  </tr>
+
+  <!-- Body -->
+  <tr>
+    <td style="padding:32px">
+      {% if attached %}
+      <p style="margin:0 0 16px;color:#374151;font-size:15px;line-height:1.6">
+        Your UrbanLens data export is attached to this email as <strong>{{ filename }}</strong>.
+      </p>
+      <p style="margin:0 0 24px;color:#6b7280;font-size:14px;line-height:1.65">
+        You can also download it from the site for about an hour, if you prefer.
+      </p>
+      {% else %}
+      <p style="margin:0 0 16px;color:#374151;font-size:15px;line-height:1.6">
+        Your UrbanLens data export finished building.
+      </p>
+      <p style="margin:0 0 24px;color:#6b7280;font-size:14px;line-height:1.65">
+        The archive was too large to attach to an email, so use the button below to
+        download it. The download stays available for about an hour.
+      </p>
+      {% endif %}
+
+      <div style="text-align:center;margin:28px 0">
+        <a href="{{ download_url }}"
+           style="display:inline-block;background:#4f46e5;color:#fff;text-decoration:none;
+                  font-size:15px;font-weight:700;padding:14px 32px;border-radius:10px;
+                  letter-spacing:.01em">
+          Download export
+        </a>
+      </div>
+
+      <p style="margin:0 0 8px;color:#9ca3af;font-size:12px;line-height:1.5">
+        Or copy and paste this link into your browser:
+      </p>
+      <p style="margin:0 0 24px;word-break:break-all;font-size:12px;color:#6b7280">
+        {{ download_url }}
+      </p>
+
+      <p style="margin:0;color:#9ca3af;font-size:12px;line-height:1.5;border-top:1px solid #e5e7eb;padding-top:20px">
+        You received this email because you requested a data export from the Tools page
+        and asked for it to be emailed to you. If that wasn't you, consider changing your password.
+      </p>
+    </td>
+  </tr>
+
+</table>
+</td></tr>
+</table>
+</body>
+</html>

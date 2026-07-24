@@ -1503,6 +1503,7 @@ urlpatterns = [
                 path("export/start/", tools.ExportStartView.as_view(), name="tools.export.start"),
                 path("export/status/<str:job_id>/", tools.ExportStatusView.as_view(), name="tools.export.status"),
                 path("export/download/<str:job_id>/", tools.ExportDownloadView.as_view(), name="tools.export.download"),
+                path("export/format/<str:fmt>/", tools.ExportFormatDownloadView.as_view(), name="tools.export.format"),
                 path("import/start/", tools.ImportStartView.as_view(), name="tools.import.start"),
                 path("import/status/<str:job_id>/", tools.ImportStatusView.as_view(), name="tools.import.status"),
                 path("backup/start/", tools.BackupStartView.as_view(), name="tools.backup.start"),
