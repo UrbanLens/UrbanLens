@@ -54,7 +54,7 @@ class TripLeg:
     def distance_display(self) -> str:
         """Human distance in miles: ``"18.3 mi"`` / ``"142 mi"``."""
         miles = self.distance_meters * 0.000621371
-        if miles >= 10:
+        if miles >= 100:
             return f"{round(miles)} mi"
         return f"{miles:.1f} mi"
 

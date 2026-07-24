@@ -60,7 +60,7 @@ class AssistantToolTests(TestCase):
     def test_find_unvisited_excludes_visited(self) -> None:
         second_location = baker.make(Location, latitude="42.600000", longitude="-73.600000", administrative_area_level_1="NY")
         visited_pin = baker.make(Pin, profile=self.profile, location=second_location, name="Visited Works", name_is_user_provided=True)
-        baker.make(PinVisit, pin=visited_pin, profile=self.profile)
+        baker.make(PinVisit, pin=visited_pin)
         result = _tool_find_unvisited_pins(self.profile, {})
         names = [row["name"] for row in result["pins"]]
         self.assertIn("Steel Mill", names)
