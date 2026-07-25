@@ -15,6 +15,12 @@
         {% endif %}
     </div>
     <p class="safety-checkin-meta" title="{{ checkin.checkin_by|date:'N j, Y g:i A' }}">Check in {{ checkin.checkin_by|naturaltime }}</p>
+    {% if checkin.trip %}
+    <p class="safety-checkin-trip-link">
+        <i class="material-symbols-outlined">map</i>
+        <a href="{% url 'trips.detail' checkin.trip.slug %}">{{ checkin.trip.name }}</a>
+    </p>
+    {% endif %}
     {% with contacts=checkin.contacts.all %}
     {% if contacts %}
     <p class="safety-checkin-contacts">

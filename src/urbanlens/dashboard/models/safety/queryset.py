@@ -110,6 +110,19 @@ class SafetyCheckinQuerySet(abstract.PublicDashboardQuerySet):
             .filter(delete_at__lte=timezone.now())
         )
 
+    def due_for_archival(self) -> Self:
+        """Return resolved check-ins whose post-resolution encryption grace window has elapsed.
+
+        Excludes check-ins already archived (``archive`` one-to-one exists) -
+        this is what makes ``services.safety.archive_checkin`` idempotent
+        across the eta-scheduled task and the periodic sweep both picking up
+        the same row.
+
+        Returns:
+            Filtered queryset.
+        """
+        return self.filter(archive_scheduled_at__isnull=False, archive_scheduled_at__lte=timezone.now(), archive__isnull=True)
+
     def active(self) -> Self:
         """Return check-ins that have not yet reached a terminal status.
 

@@ -28,6 +28,8 @@ _RESTORABLE_FIELDS = (
     "live_longitude",
     "live_location_accuracy",
     "live_location_updated_at",
+    "archive_scheduled_at",
+    "resolved_by_label",
 )
 
 _CONTACT_FIELDS = ("email", "name", "notified_at", "found_safe_at")
@@ -46,6 +48,15 @@ class SafetyCheckinUndoHandler(UndoHandler):
     ``markup_map``/``markup_maps`` survive independently of the check-in
     (deleting a SafetyCheckin does not cascade to its maps), so those are
     simply relinked by id.
+
+    ``SafetyCheckinArchive`` (the encrypted post-resolution remnant) is
+    deliberately not restored as its own row: a check-in that reached
+    archival already has its plaintext PII scrubbed on the very row being
+    serialized here, so restoring that row naturally reproduces the
+    already-scrubbed state. If ``archive_scheduled_at`` is still in the past
+    on a restored row, the periodic archival sweep
+    (``tasks.sweep_due_safety_checkin_archival``) picks it up within 5
+    minutes on its own - no explicit re-scheduling needed here.
     """
 
     model_label = "safety_checkin"

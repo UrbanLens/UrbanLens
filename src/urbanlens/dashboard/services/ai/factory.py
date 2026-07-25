@@ -23,6 +23,7 @@ _FEATURE_FIELDS: dict[str, str] = {
     "trivia_moderation": "ai_trivia_moderation_enabled",
     "trivia_generation": "ai_trivia_generation_enabled",
     "trivia_answer_check": "ai_trivia_answer_check_enabled",
+    "trivia_wiki_incorporation": "ai_trivia_wiki_incorporation_enabled",
 }
 
 

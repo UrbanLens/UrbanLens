@@ -210,6 +210,11 @@ class SiteSettings(abstract.FrontendDashboardModel):
         help_text="Allow AI to judge a Trivia answer that doesn't exact-match as possibly correct but differently phrased. Only ever consulted on a normalized-string mismatch; users without the AI subscription feature always fall back to exact match only.",
         verbose_name="Trivia AI answer checking",
     )
+    ai_trivia_wiki_incorporation_enabled = BooleanField(
+        default=True,
+        help_text="Allow AI to draft a plain-text paragraph folding a well-upvoted user-submitted Trivia question into its location's wiki article. Every draft still passes through the same article safety moderation as link-based article expansion before it is appended; when off, well-upvoted questions are simply never considered (moderation is never bypassed).",
+        verbose_name="Trivia wiki incorporation",
+    )
 
     # --- Storage quotas & upload processing ---
 

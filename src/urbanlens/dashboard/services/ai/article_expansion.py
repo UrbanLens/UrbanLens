@@ -132,15 +132,22 @@ def _result_row(*, key: str, label: str, value: str, applied: bool, note: str) -
     return {"key": key, "label": label, "value": value, "applied": applied, "note": note}
 
 
-def _append_to_article(
+def append_to_article(
     *,
     editor,
     existing: str,
     new_text: str,
     pin: Pin | None = None,
     wiki: Wiki | None = None,
+    edit_summary: str = EDIT_SUMMARY_EXPANDED_FROM_LINK,
 ) -> tuple[bool, str]:
     """Append sanitized text to a host article when room remains.
+
+    Shared by every caller that appends AI-drafted plain text to a pin/wiki
+    article (this module's own link-based expansion, and
+    ``services.trivia.wiki_incorporation``'s upvoted-question incorporation)
+    so the dedupe/length-budget/persistence rules stay identical regardless
+    of where the text came from.
 
     Args:
         editor: Profile credited on the revision.
@@ -148,6 +155,7 @@ def _append_to_article(
         new_text: Sanitized plain text to append.
         pin: Pin host (mutually exclusive with ``wiki``).
         wiki: Wiki host.
+        edit_summary: One-line revision summary.
 
     Returns:
         ``(applied, note)`` describing the outcome.
@@ -176,7 +184,7 @@ def _append_to_article(
     _article, revision = save_article(
         editor=editor,
         content=combined,
-        edit_summary=EDIT_SUMMARY_EXPANDED_FROM_LINK,
+        edit_summary=edit_summary,
         pin=pin,
         wiki=wiki,
     )
@@ -332,8 +340,8 @@ def expand_articles_from_page(extraction: LinkExtraction, page_text: str) -> lis
                 )
             return rows
 
-        rows: list[dict[str, Any]] = []
-        applied, note = _append_to_article(
+        rows = []
+        applied, note = append_to_article(
             editor=extraction.profile,
             existing=pin_existing,
             new_text=new_text,
@@ -342,7 +350,7 @@ def expand_articles_from_page(extraction: LinkExtraction, page_text: str) -> lis
         rows.append(_result_row(key="article_pin", label="Pin article", value=preview, applied=applied, note=note))
 
         if wiki is not None:
-            applied_w, note_w = _append_to_article(
+            applied_w, note_w = append_to_article(
                 editor=extraction.profile,
                 existing=wiki_existing or "",
                 new_text=new_text,

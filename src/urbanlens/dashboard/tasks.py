@@ -1626,7 +1626,7 @@ def refresh_pin_web_search(self, pin_id: int) -> int:
     return len(results)
 
 
-# These three safety check-in beat tasks share the RUN_LOCK_CACHE_KEY-style guard already
+# These safety check-in beat tasks share the RUN_LOCK_CACHE_KEY-style guard already
 # used by run_scheduled_enrichment: they run every 5 minutes (see CELERY_BEAT_SCHEDULE), and
 # without a lock, an overrunning execution (many due checkins, slow SMTP) racing the next
 # scheduled tick could process the same rows twice - most seriously for escalation, which
@@ -1634,6 +1634,7 @@ def refresh_pin_web_search(self, pin_id: int) -> int:
 _CHECKIN_REMINDER_LOCK_CACHE_KEY = "urbanlens:safety:reminder-lock"
 _CHECKIN_FINAL_WARNING_LOCK_CACHE_KEY = "urbanlens:safety:final-warning-lock"
 _CHECKIN_ESCALATION_LOCK_CACHE_KEY = "urbanlens:safety:escalation-lock"
+_CHECKIN_ARCHIVAL_SWEEP_LOCK_CACHE_KEY = "urbanlens:safety:archival-sweep-lock"
 _CHECKIN_LOCK_TIMEOUT_SECONDS = 270  # just under the 5-minute beat interval
 
 
@@ -1704,6 +1705,53 @@ def escalate_overdue_checkins() -> int:
         return count
     finally:
         cache.delete(_CHECKIN_ESCALATION_LOCK_CACHE_KEY)
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def archive_safety_checkin(checkin_id: int) -> None:
+    """Encrypt-and-scrub one resolved check-in, dispatched with a countdown= at resolution
+    time (``services.safety.schedule_checkin_archival``) for responsiveness.
+
+    Idempotent - ``services.safety.archive_checkin`` no-ops if the check-in already has
+    an archive, so a duplicate dispatch (or this task racing the sweep below) is harmless.
+    """
+    from urbanlens.dashboard.models.safety.model import SafetyCheckin
+    from urbanlens.dashboard.services.safety import archive_checkin
+
+    checkin = SafetyCheckin.objects.filter(pk=checkin_id).first()
+    if checkin is not None:
+        archive_checkin(checkin)
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def sweep_due_safety_checkin_archival() -> int:
+    """Backstop for ``archive_safety_checkin``'s countdown-scheduled dispatch.
+
+    A broker/worker restart can drop a countdown-scheduled task outright; a bare
+    5-minute poll alone would also make the "no other viewers - archive immediately"
+    case visibly wait up to 5 minutes, which isn't "immediately". Running both gives
+    responsiveness on the common path and durability against the scheduled task
+    getting lost - the same trade-off the other checkin beat tasks above already make
+    for their own timing precision vs. this file's 5-minute cadence.
+    """
+    from django.core.cache import cache
+
+    from urbanlens.dashboard.models.safety.model import SafetyCheckin
+    from urbanlens.dashboard.services.safety import archive_checkin
+
+    if not cache.add(_CHECKIN_ARCHIVAL_SWEEP_LOCK_CACHE_KEY, value=True, timeout=_CHECKIN_LOCK_TIMEOUT_SECONDS):
+        logger.info("sweep_due_safety_checkin_archival: a previous run is still in flight; skipping")
+        return 0
+    try:
+        count = 0
+        for checkin in SafetyCheckin.objects.due_for_archival():
+            archive_checkin(checkin)
+            count += 1
+        if count:
+            logger.info("Archived %s overdue safety check-in(s)", count)
+        return count
+    finally:
+        cache.delete(_CHECKIN_ARCHIVAL_SWEEP_LOCK_CACHE_KEY)
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
@@ -2048,6 +2096,35 @@ def run_scheduled_trivia_generation() -> dict:
         return {"skipped": "already_running"}
     try:
         return sweep_wikis_for_generation()
+    finally:
+        cache.delete(lock_key)
+
+
+@shared_task
+def run_scheduled_trivia_wiki_incorporation() -> dict:
+    """Fold well-upvoted user-submitted Trivia questions into their location wikis.
+
+    Fired hourly by Celery beat, mirroring run_scheduled_trivia_generation's
+    single-flight lock (a run still going when the next hour ticks over is
+    left alone rather than started twice). No autoretry: each candidate
+    question considered spends AI tokens on writing and safety review, so an
+    automatic retry would silently multiply cost; a skipped question is
+    simply picked up on the next scheduled run.
+
+    Returns:
+        The sweep summary dict, or a skip marker when another run holds the
+        single-flight lock.
+    """
+    from django.core.cache import cache
+
+    from urbanlens.dashboard.services.trivia.wiki_incorporation import sweep_questions_for_wiki_incorporation
+
+    lock_key = "trivia_wiki_incorporation_sweep_lock"
+    if not cache.add(lock_key, 1, 3300):
+        logger.info("run_scheduled_trivia_wiki_incorporation: another sweep is still running; skipping")
+        return {"skipped": "already_running"}
+    try:
+        return sweep_questions_for_wiki_incorporation()
     finally:
         cache.delete(lock_key)
 

@@ -85,6 +85,30 @@
     }
 }
 
+// "Check-in for trip: X" banner on the creation form, shown when arriving via
+// a trip card's "Start a check-in" action (?trip=<slug>).
+.safety-checkin-trip-notice {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    margin: 0 0 1rem;
+    padding: .6rem .85rem;
+    border-radius: 10px;
+    background: var(--ul-surface-raised);
+    border: 1px solid var(--ul-surface-raised-border);
+    font-size: .88rem;
+    color: var(--ul-grey-7);
+
+    .material-symbols-outlined {
+        color: $color-blue-500;
+        flex-shrink: 0;
+    }
+
+    a {
+        font-weight: 600;
+    }
+}
+
 // Notice card on the community-facing check-in status page.
 .safety-community-notice p {
     display: flex;
@@ -225,6 +249,26 @@
     padding: 1rem 1.25rem;
     font-size: .85rem;
     color: var(--ul-grey-7);
+}
+
+.safety-checkin-trip-link {
+    margin: 0;
+    padding: 0 1.25rem 1rem;
+    font-size: .85rem;
+    color: var(--ul-grey-7);
+    display: flex;
+    align-items: center;
+    gap: .3rem;
+
+    .material-symbols-outlined {
+        font-size: 1rem;
+        color: $color-blue-500;
+    }
+
+    a {
+        font-weight: 600;
+        color: inherit;
+    }
 }
 
 .safety-checkin-status-badge {

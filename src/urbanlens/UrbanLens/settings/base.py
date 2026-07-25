@@ -263,6 +263,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "urbanlens.dashboard.tasks.run_scheduled_trivia_generation",
         "schedule": 60 * 60,
     },
+    "scheduled-trivia-wiki-incorporation": {
+        "task": "urbanlens.dashboard.tasks.run_scheduled_trivia_wiki_incorporation",
+        "schedule": 60 * 60,
+    },
     "safety-checkin-due-reminders": {
         "task": "urbanlens.dashboard.tasks.send_due_checkin_reminders",
         "schedule": 5 * 60,
@@ -273,6 +277,10 @@ CELERY_BEAT_SCHEDULE = {
     },
     "safety-checkin-escalation": {
         "task": "urbanlens.dashboard.tasks.escalate_overdue_checkins",
+        "schedule": 5 * 60,
+    },
+    "safety-checkin-archival-sweep": {
+        "task": "urbanlens.dashboard.tasks.sweep_due_safety_checkin_archival",
         "schedule": 5 * 60,
     },
     "account-deletion-reminders": {

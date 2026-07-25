@@ -22,6 +22,7 @@ from django.db.models import (
     Manager as DjangoManager,
     ManyToManyField,
     OneToOneField,
+    PositiveIntegerField,
     Q,
     TextField,
     UUIDField,
@@ -214,6 +215,11 @@ class SafetyCheckin(abstract.PublicDashboardModel):
 
     Attributes:
         profile: The profile who created and owns this check-in.
+        trip: The Trip this check-in was started for, if any - a profile may
+            have at most one active check-in per (profile, trip) scope (see
+            ``services.safety.get_active_checkin``), so a general (``trip``
+            is ``None``) check-in and a trip-scoped one, or check-ins for two
+            different trips, can be active at the same time.
         title: Short display label (e.g. "Weekend hike - Eagle Ridge").
         plan_details: Free-form trip plan description.
         contact_message: Custom message shown to emergency contacts.
@@ -241,6 +247,13 @@ class SafetyCheckin(abstract.PublicDashboardModel):
         live_longitude: The owner's most recently shared position, if sharing is/was enabled.
         live_location_accuracy: Accuracy (meters) reported alongside ``live_latitude``/``live_longitude``.
         live_location_updated_at: When the live position was last updated, if ever.
+        archive_scheduled_at: When ``services.safety.archive_checkin`` should encrypt and scrub
+            this check-in's PII, if it has resolved - immediately on resolution if no one but the
+            owner could ever see it, or after a 1-hour grace window otherwise (see
+            ``services.safety.schedule_checkin_archival``). ``None`` until resolved.
+        resolved_by_label: Display label of whoever concluded this check-in ("you", a partner's
+            username, or a contact's display name) - captured for the archive payload, then
+            scrubbed at archival like every other PII field on this model.
     """
 
     title = CharField(max_length=200)
@@ -274,7 +287,19 @@ class SafetyCheckin(abstract.PublicDashboardModel):
     live_location_accuracy = FloatField(null=True, blank=True)
     live_location_updated_at = DateTimeField(null=True, blank=True)
 
+    # Post-resolution encryption/archival - see SafetyCheckinArchive and
+    # services.safety.schedule_checkin_archival/archive_checkin.
+    archive_scheduled_at = DateTimeField(null=True, blank=True)
+    resolved_by_label = CharField(max_length=150, blank=True, default="")
+
     profile = ForeignKey("dashboard.Profile", on_delete=CASCADE, related_name="safety_checkins")
+    trip = ForeignKey(
+        "dashboard.Trip",
+        on_delete=SET_NULL,
+        null=True,
+        blank=True,
+        related_name="safety_checkins",
+    )
     destination_location = ForeignKey(
         "dashboard.Location",
         on_delete=SET_NULL,
@@ -300,11 +325,13 @@ class SafetyCheckin(abstract.PublicDashboardModel):
 
     if TYPE_CHECKING:
         profile_id: int
+        trip_id: int | None
         destination_location_id: int | None
         markup_map_id: int | None
         contacts: DjangoManager[SafetyCheckinContact]
         messages: DjangoManager[SafetyCheckinMessage]
         partners: DjangoManager[SafetyCheckinPartner]
+        archive: SafetyCheckinArchive | None
 
     objects = SafetyCheckinManager()
 
@@ -373,7 +400,7 @@ class SafetyCheckin(abstract.PublicDashboardModel):
         ordering = ["-checkin_by"]
         indexes = [
             Index(fields=["uuid"], name="idxdb_sc_uuid"),
-            Index(fields=["profile", "status"], name="idxdb_sc_profile_status"),
+            Index(fields=["profile", "trip", "status"], name="idxdb_sc_profile_trip_status"),
             Index(fields=["status", "checkin_by"], name="idxdb_sc_status_by"),
         ]
 
@@ -556,6 +583,47 @@ class SafetyCheckinPartner(abstract.DashboardModel):
             Index(fields=["checkin", "status"], name="idxdb_scp_checkin_status"),
             Index(fields=["profile", "status"], name="idxdb_scp_profile_status"),
         ]
+
+
+class SafetyCheckinArchive(abstract.DashboardModel):
+    """The encrypted, owner-only remnant of a concluded check-in.
+
+    Created by ``services.safety.archive_checkin`` once a resolved check-in's
+    grace window elapses: the check-in's PII (plan, contacts, chat, resolution
+    details) is serialized to JSON, encrypted with a fresh random key
+    (``crypto_secretbox``), and that key is sealed (``crypto_box_seal``) to
+    only the owner's ``MessagingKeyBundle.public_key`` - after which the
+    plaintext columns on ``SafetyCheckin``/``SafetyCheckinContact``/
+    ``SafetyCheckinMessage`` are scrubbed. Sealing needs only the owner's
+    *public* key, so this can happen entirely server-side, with the owner
+    offline, exactly like ``ConversationKey``/``GroupKeyEnvelope`` already do
+    for direct messages - the server can never decrypt this row itself.
+
+    ``hasattr(checkin, "archive")`` is the sole "has this check-in been
+    archived" signal - no separate boolean flag exists on ``SafetyCheckin`` to
+    risk drifting from it.
+    """
+
+    checkin = OneToOneField(SafetyCheckin, on_delete=CASCADE, related_name="archive")
+    ciphertext = TextField()
+    nonce = CharField(max_length=64)
+    sealed_key = TextField()
+    key_bundle_version = PositiveIntegerField()
+    encrypted_at = DateTimeField(auto_now_add=True)
+
+    if TYPE_CHECKING:
+        checkin_id: int
+
+    def __str__(self) -> str:
+        """Return a human-readable description of this archive row.
+
+        Returns:
+            String like "Archive for checkin <id> (sealed v3)".
+        """
+        return f"Archive for checkin {self.checkin_id} (sealed v{self.key_bundle_version})"
+
+    class Meta(abstract.DashboardModel.Meta):
+        db_table = "dashboard_safety_checkin_archives"
 
 
 class SafetyCheckinMessage(abstract.DashboardModel):

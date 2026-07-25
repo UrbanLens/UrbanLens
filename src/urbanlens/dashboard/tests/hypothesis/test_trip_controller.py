@@ -78,6 +78,118 @@ class TripListPartialTests(TestCase):
         self.assertIn("Jul 4, 2026 - Jul 6, 2026", html)
         self.assertIn("3 days", html)
 
+    def test_ongoing_multi_day_trip_shows_day_indicator(self):
+        today = timezone.now().date()
+        trip = _make_trip(self.profile, start_date=today - datetime.timedelta(days=2), end_date=today + datetime.timedelta(days=5))
+
+        html = render_to_string("dashboard/partials/trips/trip_list_partial.html", {"trips": [trip], "profile": self.profile})
+
+        self.assertIn("Day 3 of 8", html)
+        self.assertIn("trip-card-status--ongoing", html)
+
+    def test_single_day_active_trip_does_not_show_day_indicator(self):
+        today = timezone.now().date()
+        trip = _make_trip(self.profile, start_date=today, end_date=today)
+
+        html = render_to_string("dashboard/partials/trips/trip_list_partial.html", {"trips": [trip], "profile": self.profile})
+
+        self.assertNotIn("trip-card-status--ongoing", html)
+        self.assertIn("In progress", html)
+
+    def test_upcoming_multi_day_trip_does_not_show_day_indicator(self):
+        today = timezone.now().date()
+        trip = _make_trip(self.profile, start_date=today + datetime.timedelta(days=3), end_date=today + datetime.timedelta(days=10))
+
+        html = render_to_string("dashboard/partials/trips/trip_list_partial.html", {"trips": [trip], "profile": self.profile})
+
+        self.assertNotIn("trip-card-status--ongoing", html)
+        self.assertIn("Upcoming", html)
+
+    def test_rsvp_list_shows_member_chip(self):
+        trip = _make_trip(self.profile)  # creator membership defaults to rsvp="yes"
+
+        html = render_to_string("dashboard/partials/trips/trip_list_partial.html", {"trips": [trip], "profile": self.profile})
+
+        self.assertIn("trip-card-rsvp-row", html)
+        self.assertIn("trip-member-rsvp--yes", html)
+        self.assertIn("Going", html)
+
+    def test_pin_count_stat_renders_when_annotated(self):
+        trip = _make_trip(self.profile)
+        trip.pin_count = 3
+
+        html = render_to_string("dashboard/partials/trips/trip_list_partial.html", {"trips": [trip], "profile": self.profile})
+
+        self.assertIn("3 pins", html)
+
+    def test_pin_count_stat_hidden_when_zero(self):
+        trip = _make_trip(self.profile)
+        trip.pin_count = 0
+
+        html = render_to_string("dashboard/partials/trips/trip_list_partial.html", {"trips": [trip], "profile": self.profile})
+
+        self.assertNotIn(" pin", html)
+
+    def test_start_checkin_button_shown_for_joined_members(self):
+        trip = _make_trip(self.profile)
+        trip.viewer_membership = TripMembership.objects.get(trip=trip, profile=self.profile)
+
+        html = render_to_string("dashboard/partials/trips/trip_list_partial.html", {"trips": [trip], "profile": self.profile})
+
+        self.assertIn("Start a check-in", html)
+        self.assertIn(f"{reverse('safety.checkin.create')}?trip={trip.slug}", html)
+
+    def test_start_checkin_button_hidden_without_membership(self):
+        trip = _make_trip(self.profile)
+        # trip.viewer_membership deliberately left unset, as it would be for
+        # a viewer whose membership row doesn't exist (shouldn't happen on
+        # the real list page, which only shows the viewer's own trips, but
+        # covers the template's gating logic in isolation).
+
+        html = render_to_string("dashboard/partials/trips/trip_list_partial.html", {"trips": [trip], "profile": self.profile})
+
+        self.assertNotIn("Start a check-in", html)
+
+    def test_open_itinerary_button_always_present(self):
+        trip = _make_trip(self.profile)
+
+        html = render_to_string("dashboard/partials/trips/trip_list_partial.html", {"trips": [trip], "profile": self.profile})
+
+        self.assertIn("Open itinerary", html)
+
+
+class TripListViewTests(TestCase):
+    """GET /trips/list/ - end-to-end wiring of pin_count/viewer_membership through the real view."""
+
+    def setUp(self):
+        super().setUp()
+        self.user = baker.make("auth.User")
+        self.client = Client()
+        self.client.force_login(self.user)
+        self.profile = self.user.profile
+
+    def test_start_checkin_button_appears_for_a_joined_trip(self):
+        trip = _make_trip(self.profile)
+
+        response = self.client.get(reverse("trips.list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Start a check-in")
+        self.assertContains(response, f"{reverse('safety.checkin.create')}?trip={trip.slug}")
+
+    def test_pin_count_reflects_activity_pins(self):
+        trip = _make_trip(self.profile)
+        pin = baker.make("dashboard.Pin", profile=self.profile)
+        other_pin = baker.make("dashboard.Pin", profile=self.profile)
+        TripActivity.objects.create(trip=trip, added_by=self.profile, title="Stop 1", pin=pin)
+        TripActivity.objects.create(trip=trip, added_by=self.profile, title="Stop 2", pin=other_pin)
+        TripActivity.objects.create(trip=trip, added_by=self.profile, title="Stop 3", pin=pin)
+        TripActivity.objects.create(trip=trip, added_by=self.profile, title="No pin")
+
+        response = self.client.get(reverse("trips.list"))
+
+        self.assertContains(response, "2 pins")
+
 
 class TripCreateViewTests(TestCase):
     """POST /trips/create/ - creates a trip and returns the list partial."""

@@ -203,6 +203,12 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         calls_per_day=2000,
         notes="Judges a non-exact-match Trivia answer as possibly correct but differently phrased. Only called on a normalized-string mismatch.",
     ),
+    "trivia_wiki_incorporation": ServiceDefaults(
+        display_name="Trivia Wiki Incorporation (AI)",
+        calls_per_minute=5,
+        calls_per_day=200,
+        notes="Drafts a plain-text paragraph folding a well-upvoted user-submitted Trivia question into its location's wiki article. Runs from a scheduled background sweep, not per-request.",
+    ),
 }
 
 

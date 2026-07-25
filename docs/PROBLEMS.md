@@ -523,3 +523,20 @@ requiring the player to discover and toggle it? should thumbs-down carry less we
 currently does for small pools specifically?) that's bigger than a UX pass should decide
 unprompted. Not investigated further here; worth a dedicated look before it's reported again as
 "the game stopped working."
+
+## ~~SiteSettings.ai_article_expansion_enabled / ai_article_safety_enabled have no migration~~ (found and fixed 2026-07-25)
+
+While generating a migration for an unrelated new `SiteSettings` field
+(`ai_trivia_wiki_incorporation_enabled`, Trivia Phase 4), `manage.py makemigrations` reported
+these two fields as pending additions even though both are already defined on the model and have
+been in use since the "Implement AI article expansion and safety review features" commit. The
+migration squash ("squash into single migration for release") apparently ran before that commit's
+own migration was authored, or that migration was never committed - every test that creates a
+`SiteSettings` row (effectively the whole suite, via `promote_first_user_if_needed`'s
+`SiteSettings.objects.get_or_create`) failed with `ProgrammingError: column
+dashboard_site_settings.ai_article_expansion_enabled does not exist` on a freshly migrated DB.
+Initially left out of Trivia Phase 4's own migration as out-of-scope, but ended up blocking that
+same phase's dev-pod verification (wiki incorporation directly reuses the article-expansion
+pipeline), so it was folded into
+`0011_trivia_wiki_incorporation_setting.py` alongside the Trivia field rather than filed away
+again - see that migration's own comment.

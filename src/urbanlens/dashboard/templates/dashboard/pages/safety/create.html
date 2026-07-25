@@ -24,11 +24,19 @@
 
     {% if error %}<p class="form-error">{{ error }}</p>{% endif %}
 
+    {% if trip %}
+    <p class="safety-checkin-trip-notice">
+        <i class="material-symbols-outlined">map</i>
+        Check-in for trip: <a href="{% url 'trips.detail' trip.slug %}">{{ trip.name }}</a>
+    </p>
+    {% endif %}
+
     <form method="post" action="{% url 'safety.checkin.create' %}" class="safety-checkin-form" id="safety-create-form">
         {% csrf_token %}
+        {% if trip %}<input type="hidden" name="trip" value="{{ trip.slug }}">{% endif %}
         <div class="form-row form-row--title">
             <label for="title">Title <span class="form-hint-inline">(optional)</span></label>
-            <input type="text" name="title" id="title" placeholder="e.g. Solo hike - Eagle Ridge">
+            <input type="text" name="title" id="title" placeholder="e.g. Solo hike - Eagle Ridge" value="{{ title_prefill }}">
         </div>
         <div class="form-row form-row--two-col form-row--time">
             <div>
@@ -44,7 +52,7 @@
         </div>
         <div class="form-row form-row--plan">
             <label for="plan_details">Trip plan</label>
-            <textarea name="plan_details" id="plan_details" rows="4" class="safety-autoexpand" placeholder="Route, gear, who you're with..."></textarea>
+            <textarea name="plan_details" id="plan_details" rows="4" class="safety-autoexpand" placeholder="Route, gear, who you're with...">{{ plan_details_prefill }}</textarea>
         </div>
         <div class="form-row form-row--map">
             <label>Destination &amp; route</label>

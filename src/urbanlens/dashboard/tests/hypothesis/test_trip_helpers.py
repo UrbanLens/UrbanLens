@@ -202,6 +202,56 @@ class ExpandTripDatesTests(TestCase):
 
 
 # ---------------------------------------------------------------------------
+# Trip.elapsed_day (pure - unsaved instances, no DB needed once dates are set)
+# ---------------------------------------------------------------------------
+
+class TripElapsedDayTests(SimpleTestCase):
+    """Trip.elapsed_day - 1-indexed day-of-trip while active, else None."""
+
+    def _trip(self, start, end):
+        return Trip(start_date=start, end_date=end)
+
+    def test_none_when_upcoming(self):
+        today = timezone.now().date()
+        trip = self._trip(today + datetime.timedelta(days=3), today + datetime.timedelta(days=5))
+        self.assertIsNone(trip.elapsed_day)
+
+    def test_none_when_past(self):
+        today = timezone.now().date()
+        trip = self._trip(today - datetime.timedelta(days=10), today - datetime.timedelta(days=5))
+        self.assertIsNone(trip.elapsed_day)
+
+    def test_none_when_undated(self):
+        trip = Trip()
+        self.assertIsNone(trip.elapsed_day)
+
+    def test_single_day_trip_is_day_one_of_one(self):
+        today = timezone.now().date()
+        trip = self._trip(today, today)
+        self.assertEqual(trip.elapsed_day, 1)
+        self.assertEqual(trip.duration_days, 1)
+
+    def test_first_day_of_multi_day_trip(self):
+        today = timezone.now().date()
+        trip = self._trip(today, today + datetime.timedelta(days=6))
+        self.assertEqual(trip.elapsed_day, 1)
+
+    def test_last_day_of_multi_day_trip(self):
+        today = timezone.now().date()
+        trip = self._trip(today - datetime.timedelta(days=6), today)
+        self.assertEqual(trip.elapsed_day, 7)
+        self.assertEqual(trip.duration_days, 7)
+
+    @given(elapsed_offset=st.integers(min_value=0, max_value=30), remaining=st.integers(min_value=0, max_value=30))
+    @_hyp
+    def test_mid_trip_day_matches_offset_from_start(self, elapsed_offset, remaining):
+        today = timezone.now().date()
+        trip = self._trip(today - datetime.timedelta(days=elapsed_offset), today + datetime.timedelta(days=remaining))
+        self.assertEqual(trip.elapsed_day, elapsed_offset + 1)
+        self.assertEqual(trip.duration_days, elapsed_offset + remaining + 1)
+
+
+# ---------------------------------------------------------------------------
 # _is_organizer (DB-backed)
 # ---------------------------------------------------------------------------
 

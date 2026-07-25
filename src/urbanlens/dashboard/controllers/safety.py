@@ -22,6 +22,7 @@ from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.markup.model import MarkupMap
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinContact, SafetyCheckinPartner, SafetyCheckinPartnerStatus, SafetyCheckinStatus, SafetyContactOptOutScope
+from urbanlens.dashboard.models.trips.model import Trip, TripMembership
 from urbanlens.dashboard.services.connections import get_connections
 from urbanlens.dashboard.services.images import image_to_gallery_json, parse_reposition_payload
 from urbanlens.dashboard.services.map_snapshot import default_markup_map_title
@@ -37,6 +38,7 @@ from urbanlens.dashboard.services.safety import (
     default_contacts_as_input,
     find_community_wiki,
     get_active_checkin,
+    get_active_checkins,
     get_or_create_preference,
     invite_checkin_partner,
     is_contact_opted_out,
@@ -69,6 +71,48 @@ _GALLERY_PAGE_SIZE = 12
 # rendered as static text in the page footer covering all of them, matching
 # the main map's "attributionControl: false" + footer-attribution convention.
 _MAP_ATTRIBUTION = "© OpenStreetMap contributors · Tiles © Esri · © OpenTopoMap (CC-BY-SA) · Leaflet"
+
+
+def _resolve_checkin_trip(profile: Profile, trip_slug: str | None) -> Trip | None:
+    """Resolve a check-in's trip scope from a slug, requiring the viewer to have joined it.
+
+    Args:
+        profile: The viewer creating (or looking up) the check-in.
+        trip_slug: The trip's slug from the request, or empty/None for the general scope.
+
+    Returns:
+        The Trip, or None if no ``trip_slug`` was given.
+
+    Raises:
+        Http404: If the slug doesn't match a trip the viewer has joined.
+    """
+    if not trip_slug:
+        return None
+    trip = get_object_or_404(Trip, slug=trip_slug)
+    is_member = trip.creator_id == profile.id or TripMembership.objects.for_trip_and_profile(trip, profile).filter(status=TripMembership.STATUS_JOINED).exists()
+    if not is_member:
+        raise Http404("Trip not found.")
+    return trip
+
+
+def _trip_checkin_prefill(trip: Trip) -> tuple[str, str]:
+    """Return (title, plan_details) defaults for a check-in started from a trip.
+
+    Args:
+        trip: The trip the check-in is scoped to.
+
+    Returns:
+        A short title referencing the trip, and a plan-details blurb
+        summarizing it - the user can still edit both before submitting.
+    """
+    title = f"{trip.name} check-in"
+    plan_details = f'Part of the trip "{trip.name}".'
+    if trip.effective_start_date:
+        date_range = trip.effective_start_date.strftime("%b %d, %Y")
+        if trip.effective_end_date and trip.effective_end_date != trip.effective_start_date:
+            date_range += f" - {trip.effective_end_date.strftime('%b %d, %Y')}"
+        plan_details += f" {date_range}."
+    return title, plan_details
 
 
 def _markup_style_context(profile: Profile) -> dict:
@@ -319,11 +363,11 @@ def _parse_auto_delete_days(request: HttpRequest) -> int | None:
 
 
 class SafetyActiveCheckinBannerView(LoginRequiredMixin, View):
-    """Navbar banner for the profile's currently active (unresolved) check-in, if any.
+    """Navbar banner for the profile's currently active (unresolved) check-ins, if any.
 
     Loaded via HTMX from the site-wide navbar (see partials/layout/header.html)
     on every page, so it stays in sync without every page's view needing to
-    fetch and pass the active check-in itself.
+    fetch and pass the active check-ins itself.
 
     GET /safety/nav-banner/
     """
@@ -335,10 +379,12 @@ class SafetyActiveCheckinBannerView(LoginRequiredMixin, View):
             request: Incoming HTTP request.
 
         Returns:
-            Rendered banner partial - empty when the profile has no active check-in.
+            Rendered banner partial - empty when the profile has no active
+            check-ins. A profile may have several at once (general plus one
+            per trip - see ``get_active_checkins``), so every one renders.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        return render(request, "dashboard/partials/safety/_active_checkin_banner.html", {"checkin": get_active_checkin(profile)})
+        return render(request, "dashboard/partials/safety/_active_checkin_banner.html", {"checkins": get_active_checkins(profile)})
 
 
 class SafetyHomeView(LoginRequiredMixin, View):
@@ -357,13 +403,17 @@ class SafetyHomeView(LoginRequiredMixin, View):
             Rendered page.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        checkins = SafetyCheckin.objects.filter(profile=profile).prefetch_related("contacts")
+        checkins = SafetyCheckin.objects.filter(profile=profile).select_related("trip").prefetch_related("contacts")
         return render(
             request,
             "dashboard/pages/safety/home.html",
             {
                 "checkins": checkins,
-                "active_checkin": get_active_checkin(profile),
+                # Scoped to the general (non-trip) check-in - this toolbar's
+                # "New Check-in"/"View active check-in" choice is about
+                # starting a general one; trip-scoped check-ins are started
+                # from their trip's card and don't block this.
+                "active_checkin": get_active_checkin(profile, trip=None),
                 "stats": _overview_stats(checkins),
                 "shared_checkins": SafetyCheckin.objects.shared_with(profile).select_related("profile"),
                 "partnered_checkins": SafetyCheckin.objects.partnered_with(profile).select_related("profile"),
@@ -455,15 +505,17 @@ class SafetyCheckinCreateView(LoginRequiredMixin, View):
             request: Incoming HTTP request.
 
         Returns:
-            Rendered page, or a redirect to the profile's already-active
-            check-in - only one may be active at a time.
+            Rendered page, or a redirect to the already-active check-in for
+            this scope - only one may be active per (profile, trip) at a time.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        active_checkin = get_active_checkin(profile)
+        trip = _resolve_checkin_trip(profile, request.GET.get("trip"))
+        active_checkin = get_active_checkin(profile, trip=trip)
         if active_checkin is not None:
             messages.info(request, "You already have an active check-in - check in or cancel it before starting a new one.")
             return redirect("safety.checkin.detail", checkin_slug=active_checkin.slug or active_checkin.uuid)
         preference = get_or_create_preference(profile)
+        title_prefill, plan_details_prefill = _trip_checkin_prefill(trip) if trip else ("", "")
         return render(
             request,
             "dashboard/pages/safety/create.html",
@@ -472,6 +524,9 @@ class SafetyCheckinCreateView(LoginRequiredMixin, View):
                 "default_contacts": default_contacts_as_input(profile),
                 "connections": get_connections(profile),
                 "checkin": None,
+                "trip": trip,
+                "title_prefill": title_prefill,
+                "plan_details_prefill": plan_details_prefill,
                 "map_attribution": _MAP_ATTRIBUTION,
                 **_markup_style_context(profile),
             },
@@ -487,11 +542,13 @@ class SafetyCheckinCreateView(LoginRequiredMixin, View):
             Redirect to the new check-in's detail page, or a 400 on bad input.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
+        trip = _resolve_checkin_trip(profile, request.POST.get("trip"))
         error_context = {
             "preference": get_or_create_preference(profile),
             "default_contacts": default_contacts_as_input(profile),
             "connections": get_connections(profile),
             "checkin": None,
+            "trip": trip,
             "map_attribution": _MAP_ATTRIBUTION,
             **_markup_style_context(profile),
         }
@@ -524,6 +581,7 @@ class SafetyCheckinCreateView(LoginRequiredMixin, View):
                 grace_period=_parse_grace_period(request),
                 plan_details=request.POST.get("plan_details", "").strip(),
                 contact_message=request.POST.get("contact_message", "").strip(),
+                trip=trip,
                 destination_latitude=float(lat) if lat else None,
                 destination_longitude=float(lng) if lng else None,
                 contacts=allowed_contacts,
@@ -1570,7 +1628,7 @@ class SafetyCheckinMessageView(View):
                 # creating a message; this no-JS/socket-down fallback must too, or a message
                 # sent this way is invisible in real time to every other participant with an
                 # open socket (they'd only see it on their next manual reload).
-                _broadcast_chat_message(checkin, message)
+                broadcast_chat_message(checkin, message)
             except ValueError as exc:
                 # create_chat_message only raises ValueError with a fixed, developer-authored
                 # message (blank/too-long body) - never a stack trace or sensitive data.

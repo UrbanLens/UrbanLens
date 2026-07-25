@@ -100,6 +100,21 @@ def _apply_trip_list_identity_masking(viewer: Profile, trips: Iterable[Trip]) ->
     mask_profile_references(viewer, all_refs)
 
 
+def _annotate_viewer_membership(viewer: Profile, trips: Iterable[Trip]) -> None:
+    """Attach ``trip.viewer_membership`` (or ``None``) to each listed trip.
+
+    Reuses the ``memberships`` prefetch ``for_list_page`` already loads, so
+    ``trip_list_partial.html`` can gate viewer-only actions (e.g. "Start a
+    check-in") on join status without an extra query per card.
+
+    Args:
+        viewer: The profile viewing the list.
+        trips: Trips about to be rendered via ``trip_list_partial.html``.
+    """
+    for trip in trips:
+        trip.viewer_membership = next((m for m in trip.memberships.all() if m.profile_id == viewer.id), None)
+
+
 def _trip_list_sort_params(request: HttpRequest) -> tuple[str, str]:
     """Read and validate the `sort`/`dir` query params for the trips list page.
 
@@ -727,6 +742,7 @@ class TripListView(LoginRequiredMixin, View):
         sort, direction = _trip_list_sort_params(request)
         trips = list(_trips_for_list(profile, sort=sort, direction=direction))
         _apply_trip_list_identity_masking(profile, trips)
+        _annotate_viewer_membership(profile, trips)
         friends = get_connections(profile)
         calendar_account = GoogleCalendarAccount.objects.get_for_profile(profile)
         return render(
@@ -829,6 +845,7 @@ class TripCreateView(LoginRequiredMixin, View):
         sort, direction = _trip_list_sort_params(request)
         trips = list(_trips_for_list(profile, sort=sort, direction=direction))
         _apply_trip_list_identity_masking(profile, trips)
+        _annotate_viewer_membership(profile, trips)
         return render(
             request,
             "dashboard/partials/trips/trip_list_partial.html",

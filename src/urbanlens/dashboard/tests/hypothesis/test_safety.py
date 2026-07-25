@@ -25,6 +25,7 @@ from urbanlens.dashboard.services.safety import (
     create_checkin,
     escalate_checkin,
     get_active_checkin,
+    get_active_checkins,
     is_contact_opted_out,
     mark_found_safe,
 )
@@ -262,6 +263,49 @@ class OneActiveCheckinAtATimeTests(TestCase):
         self.assertEqual(get_active_checkin(self.profile), second)
         self.assertEqual(SafetyCheckin.objects.filter(profile=self.profile).count(), 2)
         self.assertNotEqual(first.pk, second.pk)
+
+
+class TripScopedActiveCheckinTests(TestCase):
+    """A profile may have one active check-in per (profile, trip) scope - not just one, period."""
+
+    def setUp(self):
+        self.profile = baker.make("auth.User").profile
+        self.trip = baker.make("dashboard.Trip", creator=self.profile)
+        self.other_trip = baker.make("dashboard.Trip", creator=self.profile)
+
+    def test_general_and_trip_scoped_checkins_can_both_be_active(self):
+        general = create_checkin(profile=self.profile, title="General", checkin_by=timezone.now() + datetime.timedelta(hours=2), grace_period=datetime.timedelta(hours=1))
+        trip_checkin = create_checkin(profile=self.profile, title="Trip", checkin_by=timezone.now() + datetime.timedelta(hours=2), grace_period=datetime.timedelta(hours=1), trip=self.trip)
+
+        self.assertEqual(get_active_checkin(self.profile, trip=None), general)
+        self.assertEqual(get_active_checkin(self.profile, trip=self.trip), trip_checkin)
+
+    def test_two_different_trips_can_both_have_active_checkins(self):
+        first = create_checkin(profile=self.profile, title="Trip A", checkin_by=timezone.now() + datetime.timedelta(hours=2), grace_period=datetime.timedelta(hours=1), trip=self.trip)
+        second = create_checkin(profile=self.profile, title="Trip B", checkin_by=timezone.now() + datetime.timedelta(hours=2), grace_period=datetime.timedelta(hours=1), trip=self.other_trip)
+
+        self.assertEqual(get_active_checkin(self.profile, trip=self.trip), first)
+        self.assertEqual(get_active_checkin(self.profile, trip=self.other_trip), second)
+
+    def test_create_checkin_rejects_a_second_active_checkin_for_the_same_trip(self):
+        create_checkin(profile=self.profile, title="First", checkin_by=timezone.now() + datetime.timedelta(hours=2), grace_period=datetime.timedelta(hours=1), trip=self.trip)
+
+        with pytest.raises(ValueError):
+            create_checkin(profile=self.profile, title="Second", checkin_by=timezone.now() + datetime.timedelta(hours=3), grace_period=datetime.timedelta(hours=1), trip=self.trip)
+
+        self.assertEqual(SafetyCheckin.objects.filter(profile=self.profile, trip=self.trip).count(), 1)
+
+    def test_get_active_checkins_returns_every_scope(self):
+        general = create_checkin(profile=self.profile, title="General", checkin_by=timezone.now() + datetime.timedelta(hours=3), grace_period=datetime.timedelta(hours=1))
+        trip_checkin = create_checkin(profile=self.profile, title="Trip", checkin_by=timezone.now() + datetime.timedelta(hours=1), grace_period=datetime.timedelta(hours=1), trip=self.trip)
+
+        self.assertEqual(list(get_active_checkins(self.profile)), [trip_checkin, general])
+
+    def test_get_active_checkins_excludes_resolved(self):
+        checkin = create_checkin(profile=self.profile, title="Trip", checkin_by=timezone.now() + datetime.timedelta(hours=2), grace_period=datetime.timedelta(hours=1), trip=self.trip)
+        cancel_checkin(checkin)
+
+        self.assertEqual(list(get_active_checkins(self.profile)), [])
 
 
 class EmergencyContactDefaultQuerySetTests(TestCase):

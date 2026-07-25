@@ -46,6 +46,28 @@ function escHtml(value: unknown): string {
     return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
+/**
+ * True when `groups` fit the simple 2-column include/exclude UI exactly - i.e.
+ * rendering them as flat Include (AND or OR) + Exclude chips is 100% faithful
+ * to the filter that's actually applied server-side (`apply_label_groups`).
+ * Any number of "and" groups (equivalent to one flat AND) or "not" groups
+ * (equivalent to one flat exclude set) collapse losslessly; a single "or"
+ * group does too. Anything else - AND mixed with OR, or more than one OR
+ * group - has structure the 2-column UI cannot represent, so it must fall
+ * back to the read-only formula pill display instead of silently showing an
+ * inaccurate simplification.
+ */
+export function isSimpleGroups(groups: LabelGroup[] | null): boolean {
+    if (!groups) return true;
+    const inclGroups = groups.filter((g) => g.op !== "not");
+    if (inclGroups.length === 0) return true;
+    const hasOr = inclGroups.some((g) => g.op === "or");
+    const hasAnd = inclGroups.some((g) => g.op === "and");
+    if (hasOr && hasAnd) return false;
+    if (hasOr && inclGroups.length > 1) return false;
+    return true;
+}
+
 // ---------------------------------------------------------------------------
 // Rich include/exclude filter picker
 // ---------------------------------------------------------------------------
@@ -242,19 +264,6 @@ export function createFilterPicker(options: FilterPickerOptions): FilterPickerAp
             exclIds.forEach((id) => parts.push(`-${quoteLabelName(labelTextForId(id))}`));
             bar.value = parts.join(" ");
         }
-    }
-
-    // True when groups fit the simple 2-column UI: include groups all share one
-    // op (all-AND, or a single OR group), plus any number of NOT groups.
-    function isSimpleGroups(groups: LabelGroup[] | null): boolean {
-        if (!groups) return true;
-        const inclGroups = groups.filter((g) => g.op !== "not");
-        if (inclGroups.length === 0) return true;
-        const hasOr = inclGroups.some((g) => g.op === "or");
-        const hasAnd = inclGroups.some((g) => g.op === "and");
-        if (hasOr && hasAnd) return false;
-        if (hasOr && inclGroups.length > 1) return false;
-        return true;
     }
 
     // -- Rebuild selected chips UI --------------------------------------------

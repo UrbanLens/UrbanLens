@@ -112,6 +112,10 @@ class Trip(abstract.PublicDashboardModel):
     if TYPE_CHECKING:
         creator_id: int | None
         activities: DjangoManager[TripActivity]
+        # Set by controllers.trip._annotate_viewer_membership on trips list
+        # page results - not a real field/annotation, just a per-request
+        # shortcut to the viewing profile's own membership row (or None).
+        viewer_membership: TripMembership | None
 
     objects = TripManager()
 
@@ -163,6 +167,22 @@ class Trip(abstract.PublicDashboardModel):
         if start and end:
             return (end - start).days + 1
         return None
+
+    @property
+    def elapsed_day(self) -> int | None:
+        """1-indexed day number within the trip while it's active, else ``None``.
+
+        Clamped to ``duration_days`` so activities scheduled past a declared
+        ``end_date`` can't push this above the trip's own day count.
+        """
+        if self.timeline_status != "active":
+            return None
+        start = self.effective_start_date
+        duration = self.duration_days
+        if start is None or duration is None:
+            return None
+        day = (timezone.now().date() - start).days + 1
+        return max(1, min(day, duration))
 
     def _slugify_base(self) -> str:
         return self.name or str(self.uuid)

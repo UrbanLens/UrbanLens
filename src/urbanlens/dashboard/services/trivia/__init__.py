@@ -25,6 +25,7 @@ from urbanlens.dashboard.services.trivia.classifier import ClassifierVerdict, cl
 from urbanlens.dashboard.services.trivia.submission import classify_and_update, submit_user_question
 from urbanlens.dashboard.services.trivia.generation import generate_questions_for_wiki, sweep_wikis_for_generation
 from urbanlens.dashboard.services.trivia.answer_check import is_answer_equivalent
+from urbanlens.dashboard.services.trivia.wiki_incorporation import incorporate_question_into_wiki, sweep_questions_for_wiki_incorporation
 
 # session must be imported last - it imports several of its own sibling
 # submodules (eligibility, selection, voting, realtime, serializers) from

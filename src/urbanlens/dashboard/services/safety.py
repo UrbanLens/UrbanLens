@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 import logging
 import smtplib
 from typing import TYPE_CHECKING
@@ -19,6 +20,7 @@ from urbanlens.dashboard.models.safety.model import (
     PLAN_UPDATE_NOTIFICATION_COOLDOWN,
     EmergencyContactDefault,
     SafetyCheckin,
+    SafetyCheckinArchive,
     SafetyCheckinContact,
     SafetyCheckinMessage,
     SafetyCheckinPartner,
@@ -40,6 +42,8 @@ if TYPE_CHECKING:
     from django.contrib.auth.models import AnonymousUser, User
 
     from urbanlens.dashboard.models.location.model import Location
+    from urbanlens.dashboard.models.safety.queryset import SafetyCheckinQuerySet
+    from urbanlens.dashboard.models.trips.model import Trip
     from urbanlens.dashboard.models.wiki.model import Wiki
 
 logger = logging.getLogger(__name__)
@@ -51,6 +55,12 @@ ContactInput = tuple["Profile | None", "str | None", str]
 # pastes at the application layer. The client mirrors this via maxlength on the input,
 # but that's trivially bypassed, so it's re-checked here.
 MAX_CHAT_MESSAGE_LENGTH = 4000
+
+# How long a resolved check-in's page stays readable, once resolved, for anyone besides
+# the owner who was able to see it (accepted partners, contacts of either kind) - long
+# enough to read/post a final comment, short enough that the PII isn't sitting around
+# unencrypted for long. See schedule_checkin_archival.
+ARCHIVE_VIEWER_GRACE_PERIOD = timedelta(hours=1)
 
 
 def safety_checkin_group_name(checkin_pk: int) -> str:
@@ -222,20 +232,43 @@ def default_contacts_as_input(profile: Profile) -> list[ContactInput]:
     return [(default.contact_profile, default.email, default.label) for default in EmergencyContactDefault.objects.for_owner(profile)]
 
 
-def get_active_checkin(profile: Profile) -> SafetyCheckin | None:
-    """Return the profile's current active (unresolved) check-in, if any.
+def get_active_checkin(profile: Profile, trip: Trip | None = None) -> SafetyCheckin | None:
+    """Return the profile's current active (unresolved) check-in for one scope, if any.
 
-    A profile may only have one active check-in at a time - ``create_checkin``
-    enforces this - so the earliest-due active check-in is also the only one,
-    in practice.
+    A profile may have at most one active check-in per (profile, trip) scope -
+    ``create_checkin`` enforces this - so the earliest-due active check-in in
+    that scope is also the only one, in practice. ``trip=None`` (the default)
+    means the general, non-trip scope; pass a ``Trip`` to look up that trip's
+    own active check-in instead. A profile can have a general check-in and one
+    or more trip-scoped check-ins active simultaneously - see
+    ``get_active_checkins`` to fetch all of them regardless of scope.
+
+    Args:
+        profile: Profile to look up.
+        trip: Scope to check - ``None`` for the general check-in, or a
+            specific ``Trip`` for that trip's check-in.
+
+    Returns:
+        The active SafetyCheckin for that scope, or None if there isn't one.
+    """
+    return SafetyCheckin.objects.active().filter(profile=profile, trip=trip).order_by("checkin_by").first()
+
+
+def get_active_checkins(profile: Profile) -> SafetyCheckinQuerySet:
+    """Return every active (unresolved) check-in for a profile, across all scopes.
+
+    Unlike ``get_active_checkin``, this isn't scoped to a single trip/general
+    slot - a profile can have several active check-ins at once (general plus
+    one per trip). Used by the nav banner, which must never hide an active
+    check-in just because a different scope's slot is occupied.
 
     Args:
         profile: Profile to look up.
 
     Returns:
-        The active SafetyCheckin, or None if the profile has none.
+        Queryset of the profile's active check-ins, soonest-due first.
     """
-    return SafetyCheckin.objects.active().filter(profile=profile).order_by("checkin_by").first()
+    return SafetyCheckin.objects.active().filter(profile=profile).select_related("trip").order_by("checkin_by")
 
 
 def set_checkin_contacts(checkin: SafetyCheckin, contacts: Iterable[ContactInput]) -> None:
@@ -657,6 +690,179 @@ def _broadcast_live_location(checkin: SafetyCheckin) -> None:
         logger.exception("Failed to broadcast live location for checkin %s", checkin.pk)
 
 
+def schedule_checkin_archival(checkin: SafetyCheckin) -> None:
+    """Schedule post-resolution encryption/archival for a just-resolved check-in.
+
+    Called at the end of every resolution path (``check_in``, ``mark_found_safe``,
+    ``mark_found_safe_by_partner``, ``cancel_checkin`` - cancellation is included,
+    since a cancelled check-in still contains a plan and destination, exactly the
+    PII this feature protects). If no one but the owner could ever have seen this
+    check-in (no accepted partners, no contacts of either kind), there's no one who
+    needs a final look before archival, so it happens immediately; otherwise a
+    1-hour grace window is left open for final updates/comments.
+
+    Args:
+        checkin: The just-resolved check-in. ``checkin.resolved_at`` must already be set.
+
+    Raises:
+        ValueError: If ``checkin.resolved_at`` is unset - every caller sets it
+            immediately before calling this, so reaching here without it set is
+            a bug in the caller, not a normal "not resolved yet" state to handle quietly.
+    """
+    resolved_at = checkin.resolved_at
+    if resolved_at is None:
+        raise ValueError(f"Cannot schedule archival for checkin {checkin.pk}: resolved_at is not set.")
+
+    other_viewers_exist = checkin.partners.filter(status=SafetyCheckinPartnerStatus.ACCEPTED).exists() or checkin.contacts.exists()
+    archive_at = resolved_at + ARCHIVE_VIEWER_GRACE_PERIOD if other_viewers_exist else resolved_at
+    checkin.archive_scheduled_at = archive_at
+    checkin.save(update_fields=["archive_scheduled_at", "updated"])
+
+    from urbanlens.dashboard.services.celery import safely_enqueue_task
+    from urbanlens.dashboard.tasks import archive_safety_checkin
+
+    countdown = max(0, int((archive_at - timezone.now()).total_seconds()))
+    safely_enqueue_task(archive_safety_checkin, checkin.pk, countdown=countdown)
+
+
+def archive_checkin(checkin: SafetyCheckin) -> None:
+    """Encrypt a resolved check-in's PII, sealed to only the owner's E2EE key, and scrub the plaintext.
+
+    Idempotent - a no-op if ``checkin`` already has an archive. If the owner has
+    no ``MessagingKeyBundle`` yet (rare - enrollment is automatic at every login/
+    authenticated page load, see ``docs/e2ee.md``), logs a warning and returns
+    without archiving or scrubbing anything; the periodic sweep
+    (``tasks.sweep_due_safety_checkin_archival``) retries every 5 minutes until
+    a bundle appears.
+
+    Args:
+        checkin: The check-in due for archival.
+    """
+    if hasattr(checkin, "archive"):
+        return
+
+    from urbanlens.dashboard.models.e2ee.key_bundle import MessagingKeyBundle
+
+    bundle = MessagingKeyBundle.objects.for_profile(checkin.profile).first()
+    if bundle is None:
+        logger.warning("Safety checkin %s is due for archival, but owner %s has no E2EE key bundle yet - will retry", checkin.uuid, checkin.profile_id)
+        return
+
+    ciphertext, nonce, sealed_key = _seal_archive_payload(_build_archive_payload(checkin), bundle.public_key)
+    SafetyCheckinArchive.objects.create(
+        checkin=checkin,
+        ciphertext=ciphertext,
+        nonce=nonce,
+        sealed_key=sealed_key,
+        key_bundle_version=bundle.version,
+    )
+    _scrub_checkin_pii(checkin)
+
+
+def _build_archive_payload(checkin: SafetyCheckin) -> dict:
+    """Collect a resolved check-in's PII into the JSON structure that gets encrypted.
+
+    Args:
+        checkin: The check-in being archived.
+
+    Returns:
+        A JSON-serializable dict of everything scrubbed by ``_scrub_checkin_pii``,
+        plus enough context (contacts, partners, chat) to be a meaningful record.
+    """
+    return {
+        "title": checkin.title,
+        "plan_details": checkin.plan_details,
+        "contact_message": checkin.contact_message,
+        "destination_latitude": float(checkin.destination_latitude) if checkin.destination_latitude is not None else None,
+        "destination_longitude": float(checkin.destination_longitude) if checkin.destination_longitude is not None else None,
+        "resolved_by_label": checkin.resolved_by_label,
+        "resolved_at": checkin.resolved_at.isoformat() if checkin.resolved_at else None,
+        "contacts": [{"display_name": contact.display_name, "email": contact.email} for contact in checkin.contacts.all()],
+        "partners": [partner.profile.username for partner in checkin.partners.select_related("profile").all()],
+        "messages": [
+            {"sender_name": message.sender_name, "body": message.body, "created": message.created.isoformat()}
+            for message in checkin.messages.select_related("sender_profile", "sender_contact").all()
+        ],
+    }
+
+
+def _seal_archive_payload(payload: dict, owner_public_key_b64: str) -> tuple[str, str, str]:
+    """Encrypt a payload under a fresh random key, then seal that key to a public key.
+
+    Mirrors the exact primitives ``ConversationKey``/direct messages already use
+    (see ``docs/e2ee.md`` and ``tests/hypothesis/test_e2ee_interop.py``), just run
+    server-side instead of in the browser - sealing only ever needs the
+    recipient's *public* key, so the owner doesn't need to be online for this.
+
+    Args:
+        payload: JSON-serializable dict to encrypt.
+        owner_public_key_b64: The owner's ``MessagingKeyBundle.public_key`` (base64 X25519 key).
+
+    Returns:
+        (ciphertext_b64, nonce_b64, sealed_key_b64).
+    """
+    import base64
+    import json
+
+    import nacl.public
+    import nacl.secret
+    import nacl.utils
+
+    symmetric_key = nacl.utils.random(nacl.secret.SecretBox.KEY_SIZE)
+    nonce = nacl.utils.random(nacl.secret.SecretBox.NONCE_SIZE)
+    ciphertext = nacl.secret.SecretBox(symmetric_key).encrypt(json.dumps(payload).encode(), nonce).ciphertext
+
+    public_key = nacl.public.PublicKey(base64.b64decode(owner_public_key_b64))
+    sealed_key = nacl.public.SealedBox(public_key).encrypt(symmetric_key)
+
+    return (
+        base64.b64encode(ciphertext).decode(),
+        base64.b64encode(nonce).decode(),
+        base64.b64encode(sealed_key).decode(),
+    )
+
+
+def _scrub_checkin_pii(checkin: SafetyCheckin) -> None:
+    """Null/blank every PII field an archive now covers, leaving structure intact.
+
+    Status enums, timestamps, FKs, and ``uuid``/``token`` all stay - the undo
+    framework and ``SafetyContactOptOut`` FK resolution both depend on the rows
+    (and, for contacts, the ``contact_profile`` FK) continuing to exist.
+
+    Args:
+        checkin: The check-in whose plaintext PII should be scrubbed.
+    """
+    checkin.title = ""
+    checkin.plan_details = ""
+    checkin.contact_message = ""
+    checkin.destination_latitude = None
+    checkin.destination_longitude = None
+    checkin.live_latitude = None
+    checkin.live_longitude = None
+    checkin.resolved_by_label = ""
+    checkin.save(
+        update_fields=[
+            "title",
+            "plan_details",
+            "contact_message",
+            "destination_latitude",
+            "destination_longitude",
+            "live_latitude",
+            "live_longitude",
+            "resolved_by_label",
+            "updated",
+        ],
+    )
+    # A contact_profile-linked contact already has email=None (the model's own
+    # exactly-one-of CheckConstraint enforces that at creation) - blanking name is
+    # all that's needed. An email-only contact (no account) can't have its email
+    # nulled without violating that same constraint (both sides would be null), so
+    # it's replaced with a non-PII sentinel instead of cleared outright.
+    checkin.contacts.filter(contact_profile__isnull=False).update(name="")
+    checkin.contacts.filter(contact_profile__isnull=True).update(email="scrubbed@archived.invalid", name="")
+    checkin.messages.update(body="")
+
+
 def notify_contacts_of_update(checkin: SafetyCheckin, summary: str) -> None:
     """Re-notify already-notified contacts that the owner changed something after escalation.
 
@@ -843,6 +1049,7 @@ def create_checkin(
     grace_period: datetime.timedelta,
     plan_details: str = "",
     contact_message: str = "",
+    trip: Trip | None = None,
     destination_location: Location | None = None,
     destination_latitude: float | Decimal | None = None,
     destination_longitude: float | Decimal | None = None,
@@ -858,6 +1065,9 @@ def create_checkin(
         grace_period: How long after checkin_by before contacts are notified.
         plan_details: Free-form trip plan description.
         contact_message: Custom message shown to emergency contacts.
+        trip: The Trip this check-in is for, if started from one - scopes the
+            active-check-in exclusivity check (see ``get_active_checkin``) so
+            a general check-in and one per trip can be active simultaneously.
         destination_location: Shared Location for the destination, if known.
         destination_latitude: Destination latitude, for the concluding VisitSuggestion.
         destination_longitude: Destination longitude, for the concluding VisitSuggestion.
@@ -869,10 +1079,11 @@ def create_checkin(
         The newly created SafetyCheckin.
 
     Raises:
-        ValueError: If the profile already has an active check-in - only one
-            may be active at a time (see ``get_active_checkin``).
+        ValueError: If the profile already has an active check-in in this
+            scope - only one may be active per (profile, trip) at a time
+            (see ``get_active_checkin``).
     """
-    if get_active_checkin(profile) is not None:
+    if get_active_checkin(profile, trip=trip) is not None:
         raise ValueError("You already have an active check-in. Check in or cancel it before starting a new one.")
 
     checkin = SafetyCheckin.objects.create(
@@ -882,6 +1093,7 @@ def create_checkin(
         grace_period=grace_period,
         plan_details=plan_details,
         contact_message=contact_message,
+        trip=trip,
         destination_location=destination_location,
         destination_latitude=destination_latitude,
         destination_longitude=destination_longitude,
@@ -900,8 +1112,10 @@ def cancel_checkin(checkin: SafetyCheckin) -> None:
     """
     checkin.status = SafetyCheckinStatus.CANCELLED
     checkin.resolved_at = timezone.now()
-    checkin.save(update_fields=["status", "resolved_at", "updated"])
+    checkin.resolved_by_label = "cancelled by owner"
+    checkin.save(update_fields=["status", "resolved_at", "resolved_by_label", "updated"])
     _broadcast_status_update(checkin)
+    schedule_checkin_archival(checkin)
 
 
 def send_checkin_reminder(checkin: SafetyCheckin) -> None:
@@ -969,9 +1183,11 @@ def check_in(checkin: SafetyCheckin, profile: Profile) -> None:
     """
     checkin.status = SafetyCheckinStatus.CHECKED_IN
     checkin.resolved_at = timezone.now()
-    checkin.save(update_fields=["status", "resolved_at", "updated"])
+    checkin.resolved_by_label = "you"
+    checkin.save(update_fields=["status", "resolved_at", "resolved_by_label", "updated"])
     _broadcast_status_update(checkin)
     _conclude_checkin(checkin)
+    schedule_checkin_archival(checkin)
 
 
 def escalate_checkin(checkin: SafetyCheckin) -> None:
@@ -1083,7 +1299,8 @@ def _resolve_as_found_safe(checkin: SafetyCheckin, *, resolved_by_label: str, ex
 
     checkin.status = SafetyCheckinStatus.FOUND_SAFE
     checkin.resolved_at = timezone.now()
-    checkin.save(update_fields=["status", "resolved_at", "updated"])
+    checkin.resolved_by_label = resolved_by_label
+    checkin.save(update_fields=["status", "resolved_at", "resolved_by_label", "updated"])
     _broadcast_status_update(checkin)
 
     checkin_path = reverse("safety.checkin.detail", kwargs={"checkin_slug": _checkin_url_slug(checkin)})
@@ -1133,6 +1350,7 @@ def _resolve_as_found_safe(checkin: SafetyCheckin, *, resolved_by_label: str, ex
         )
 
     _conclude_checkin(checkin)
+    schedule_checkin_archival(checkin)
 
 
 def _conclude_checkin(checkin: SafetyCheckin) -> None:

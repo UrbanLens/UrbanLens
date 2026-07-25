@@ -108,6 +108,59 @@ class SafetyCheckinCreateViewValidationTests(TestCase):
         self.assertIn(active.slug, response.url)
 
 
+class SafetyCheckinCreateViewTripScopingTests(TestCase):
+    """SafetyCheckinCreateView with ``?trip=<slug>``/a posted ``trip`` field."""
+
+    def setUp(self) -> None:
+        self.profile = baker.make(User).profile
+        self.user = self.profile.user
+        self.trip = baker.make("dashboard.Trip", name="Dolomites hut-to-hut", creator=self.profile)
+        baker.make("dashboard.TripMembership", trip=self.trip, profile=self.profile, status="joined")
+        self.client = Client()
+        self.client.force_login(self.user)
+
+    def test_get_prefills_title_from_the_trip(self) -> None:
+        response = self.client.get(reverse("safety.checkin.create"), {"trip": self.trip.slug})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Dolomites hut-to-hut check-in")
+
+    def test_get_404s_for_a_trip_the_viewer_has_not_joined(self) -> None:
+        other_profile = baker.make(User).profile
+        other_trip = baker.make("dashboard.Trip", creator=other_profile)
+
+        response = self.client.get(reverse("safety.checkin.create"), {"trip": other_trip.slug})
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_general_active_checkin_does_not_block_a_trip_scoped_one(self) -> None:
+        create_checkin(profile=self.profile, title="General trip", checkin_by=_future(), grace_period=datetime.timedelta(hours=1))
+
+        response = self.client.get(reverse("safety.checkin.create"), {"trip": self.trip.slug})
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_post_creates_a_trip_scoped_checkin(self) -> None:
+        response = self.client.post(
+            reverse("safety.checkin.create"),
+            {"checkin_by": _future().isoformat(), "grace_period_hours": "1", "trip": self.trip.slug},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        checkin = SafetyCheckin.objects.get(profile=self.profile)
+        self.assertEqual(checkin.trip_id, self.trip.id)
+
+    def test_post_rejects_a_second_active_checkin_for_the_same_trip(self) -> None:
+        create_checkin(profile=self.profile, title="Existing", checkin_by=_future(), grace_period=datetime.timedelta(hours=1), trip=self.trip)
+
+        response = self.client.post(
+            reverse("safety.checkin.create"),
+            {"checkin_by": _future().isoformat(), "grace_period_hours": "1", "trip": self.trip.slug},
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(SafetyCheckin.objects.filter(profile=self.profile, trip=self.trip).count(), 1)
+
+
 class MarkFoundSafeChatMessageTests(TestCase):
     """mark_found_safe() posts a chat message recording the action."""
 
