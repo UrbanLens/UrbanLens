@@ -296,16 +296,19 @@ def remove_group_member(group: GroupChat, actor: Profile, target: Profile) -> No
 # ---------------------------------------------------------------------------
 
 
-def serialize_group_message(message: GroupMessage) -> dict[str, Any]:
+def serialize_group_message(message: GroupMessage, *, viewer: Profile | None = None) -> dict[str, Any]:
     """Serialize a group message into the JSON payload pushed over the WebSocket.
 
     Args:
         message: The message to serialize.
+        viewer: Recipient of this payload. When supplied, sender identity is
+            masked according to the sender's profile visibility toward them.
 
     Returns:
         A JSON-serializable dict; ``group_uuid`` lets the frontend route the
         payload to the right open conversation.
     """
+    sender_identity = resolve_visible_identity(viewer, message.sender) if viewer is not None else {"display_name": message.sender.username, "is_masked": False}
     return {
         "type": "group_message",
         "id": message.pk,
@@ -316,8 +319,8 @@ def serialize_group_message(message: GroupMessage) -> dict[str, Any]:
         "nonce": message.nonce,
         "key_version": message.key_version,
         "created": message.created.isoformat(),
-        "sender_slug": message.sender.slug or "",
-        "sender_name": message.sender.username,
+        "sender_slug": "" if sender_identity["is_masked"] else (message.sender.slug or ""),
+        "sender_name": sender_identity["display_name"],
         # Shares need the full server-rendered card - the client re-fetches
         # the thread partial when this is set (same contract as 1:1 has_share).
         "has_share": message.shares.exists(),
@@ -515,7 +518,21 @@ def broadcast_group_message(message: GroupMessage) -> None:
     Args:
         message: The message to broadcast.
     """
-    _broadcast_group_event(message.group, serialize_group_message(message))
+    memberships = list(message.group.active_memberships().select_related("profile", "profile__user"))
+
+    def _send() -> None:
+        layer = get_channel_layer()
+        if layer is None:
+            return
+        for membership in memberships:
+            channel_group = direct_message_group_name(membership.profile_id)
+            payload = serialize_group_message(message, viewer=membership.profile)
+            try:
+                async_to_sync(layer.group_send)(channel_group, {"type": "dm.message", "message": payload})
+            except Exception:
+                logger.warning("Live push of group message %s to %s failed; it will appear on refresh", message.pk, channel_group, exc_info=True)
+
+    transaction.on_commit(_send)
 
 
 def delete_group_message(message: GroupMessage, actor: Profile) -> GroupMessage:

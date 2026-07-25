@@ -21,6 +21,7 @@ from __future__ import annotations
 import base64
 import json
 import uuid as uuid_module
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from django.urls import reverse
 from model_bakery import baker
@@ -44,6 +45,7 @@ from urbanlens.dashboard.services.group_chats import (
     group_thread_page,
     remove_group_member,
     rename_group_chat,
+    serialize_group_message,
     share_pin_in_group_message,
     unread_group_conversation_count,
 )
@@ -263,6 +265,45 @@ class CreateGroupMessageTests(TestCase):
         self.assertIsNotNone(message.deleted_at)
         self.assertEqual(message.tombstone_text_for(self.member.pk), "Message deleted")
         self.assertIsNone(message.tombstone_text_for(self.creator.pk))
+
+
+class GroupMessageLiveIdentityPrivacyTests(TestCase):
+    """Live group-message payloads must honor the same sender masking as thread renders."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.viewer = _profile()
+        self.hidden_sender = _profile()
+        Profile.objects.filter(pk=self.hidden_sender.pk).update(profile_visibility=VisibilityChoice.NO_ONE)
+        self.hidden_sender.refresh_from_db()
+        self.group = create_group_chat(self.viewer, "Crew", [self.hidden_sender])
+
+    def test_serializer_masks_hidden_sender_for_viewer(self) -> None:
+        message = create_group_message(self.hidden_sender, self.group, "Found something")
+
+        payload = serialize_group_message(message, viewer=self.viewer)
+
+        self.assertEqual(payload["sender_name"], "Member")
+        self.assertEqual(payload["sender_slug"], "")
+        self.assertNotEqual(payload["sender_name"], self.hidden_sender.username)
+
+    def test_broadcast_sends_viewer_specific_sender_identity(self) -> None:
+        layer = MagicMock()
+        layer.group_send = AsyncMock()
+
+        with patch("urbanlens.dashboard.services.group_chats.get_channel_layer", return_value=layer):
+            with self.captureOnCommitCallbacks(execute=True):
+                create_group_message(self.hidden_sender, self.group, "Found something")
+
+        events = {call.args[0]: call.args[1]["message"] for call in layer.group_send.await_args_list}
+        viewer_payload = events[f"profile_direct_messages_{self.viewer.pk}"]
+        sender_payload = events[f"profile_direct_messages_{self.hidden_sender.pk}"]
+
+        self.assertEqual(viewer_payload["sender_name"], "Member")
+        self.assertEqual(viewer_payload["sender_slug"], "")
+        self.assertNotIn(self.hidden_sender.username, json.dumps(viewer_payload))
+        self.assertEqual(sender_payload["sender_name"], self.hidden_sender.username)
+        self.assertEqual(sender_payload["sender_slug"], self.hidden_sender.slug)
 
 
 class GroupPinShareTests(TestCase):
