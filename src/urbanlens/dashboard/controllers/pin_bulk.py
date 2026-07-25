@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User as AuthUser
 from django.core.exceptions import ValidationError
+from django.db import transaction
 from django.db.models import Q
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
@@ -79,8 +80,13 @@ class PinBulkDeleteView(LoginRequiredMixin, View):
 
         subtree = list(Pin.objects.filter(pk__in=[p.pk for p in pins]).with_descendants())
         undo_action = stash_for_undo("pin", subtree, profile)
-        for pin in subtree:
-            pin.delete()
+        with transaction.atomic():
+            # Pin.parent_pin is on_delete=CASCADE, so deleting just the originally-selected
+            # pins already cascades to every descendant captured in `subtree` above in one
+            # bulk operation - no need to delete each subtree member individually. Wrapping
+            # in transaction.atomic() also ensures a mid-delete failure can't leave the
+            # just-created UndoAction claiming a full deletion that only partially happened.
+            Pin.objects.filter(pk__in=[p.pk for p in pins]).delete()
 
         descendant_count = len(subtree) - len(pins)
         return JsonResponse({"ok": True, "undo_token": str(undo_action.uuid), "count": len(pins), "descendant_count": descendant_count, "total_count": len(subtree)})
@@ -141,7 +147,7 @@ class PinBulkMergeView(LoginRequiredMixin, View):
             if conflict:
                 return HttpResponse("You already have a top-level pin at this exact location. Choose a different pin as the merge target.", status=400)
             target.parent_pin = None
-            target.save(update_fields=["parent_pin"])
+            target.save(update_fields=["parent_pin", "updated"])
         sources = list(_owned_pins(profile, source_uuids).exclude(pk=target.pk))
         if not sources:
             return HttpResponse("No valid source pins.", status=400)
@@ -155,7 +161,7 @@ class PinBulkMergeView(LoginRequiredMixin, View):
             if source.would_create_cycle(target):
                 continue
             source.parent_pin = target
-            source.save(update_fields=["parent_pin"])
+            source.save(update_fields=["parent_pin", "updated"])
             merged += 1
 
         if not merged:
@@ -189,7 +195,7 @@ class PinBulkEditView(LoginRequiredMixin, View):
                 return HttpResponse(length_error, status=400)
             for pin in pins:
                 pin.description = description
-                pin.save(update_fields=["description"])
+                pin.save(update_fields=["description", "updated"])
 
         # rating lives on Review (one per profile/pin pair, see PinEditView.post
         # for the single-pin equivalent) - 0 explicitly clears every selected
@@ -228,7 +234,7 @@ class PinBulkEditView(LoginRequiredMixin, View):
                 if pin.pk == parent.pk or pin.would_create_cycle(parent):
                     continue
                 pin.parent_pin = parent
-                pin.save(update_fields=["parent_pin"])
+                pin.save(update_fields=["parent_pin", "updated"])
                 reparented += 1
 
         return JsonResponse({"ok": True, "count": len(pins), "reparented": reparented})

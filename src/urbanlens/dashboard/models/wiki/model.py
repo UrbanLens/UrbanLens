@@ -218,7 +218,7 @@ class Wiki(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addre
                 # that row instead of racing the DB constraint.
                 WikiAlias.objects.get_or_create(wiki=self, name__iexact=new_name, defaults={"name": new_name})
             except DatabaseError:
-                logger.debug("Could not ensure alias for wiki %s name %r", self.pk, self.name, exc_info=True)
+                logger.exception("Could not ensure alias for wiki %s name %r", self.pk, self.name)
         self._loaded_name = self.name
 
     # ------------------------------------------------------------------

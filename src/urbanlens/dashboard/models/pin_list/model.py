@@ -77,8 +77,17 @@ class PinList(abstract.PublicDashboardModel):
 
     @property
     def pin_count(self) -> int:
-        """Number of pins currently on this list."""
-        return self.items.count()
+        """Number of pins currently on this list.
+
+        ``len(self.items.all())`` rather than ``self.items.count()`` - when a
+        caller has already run ``prefetch_related("items")`` (or
+        ``"items__pin"``) on the queryset this instance came from (see
+        ``PinListsIndexView.get``), ``.all()`` reuses that cached result set
+        instead of issuing a fresh ``COUNT(*)`` query per list on every
+        list-index render. Falls back to one query, same as ``.count()``
+        would have, when nothing was prefetched.
+        """
+        return len(self.items.all())
 
     def _slugify_base(self) -> str:
         return self.name or "list"

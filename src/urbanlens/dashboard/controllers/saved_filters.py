@@ -18,7 +18,7 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.saved_filter.model import SavedFilter
 from urbanlens.dashboard.services.filter_criteria import deserialize_criteria, serialize_form_criteria
 from urbanlens.dashboard.services.geo import dissolve_polygons
-from urbanlens.dashboard.services.pin_list_membership import resync_smart_list
+from urbanlens.dashboard.services.pin_list_membership import filter_matching_ids, resync_smart_list
 from urbanlens.dashboard.services.saved_filter_cache import get_or_compute_matching_uuids
 from urbanlens.dashboard.services.undo.service import stash_for_undo
 
@@ -209,10 +209,18 @@ class SavedFilterEditView(LoginRequiredMixin, View):
         saved_filter.criteria = criteria
         saved_filter.save(update_fields=["name", "icon", "criteria", "updated"])
 
+        # Every derived list shares this SavedFilter's profile (PinListEditView
+        # only ever sets source_saved_filter from a profile-scoped lookup) and,
+        # as of the assignment above, now the identical freshly-saved criteria
+        # too - resolve the matching pin ids once instead of every derived
+        # list independently re-resolving the same Label/CustomField criteria.
+        shared_filter_ids: set[int] | None = None
         for pin_list in saved_filter.derived_pin_lists.all():
             pin_list.smart_filter = criteria
             pin_list.save(update_fields=["smart_filter", "updated"])
-            resync_smart_list(pin_list)
+            if shared_filter_ids is None:
+                shared_filter_ids = filter_matching_ids(pin_list)
+            resync_smart_list(pin_list, filter_ids=shared_filter_ids)
 
         return JsonResponse({"ok": True, "uuid": str(saved_filter.uuid)})
 
@@ -288,18 +296,28 @@ class SavedFilterMatchCountsView(LoginRequiredMixin, View):
             criteria["exclude_regions"] = search_form.parse_region_geojson("exclude_regions")
             base_query = base_query.filter_by_criteria(criteria)
 
+        base_uuids = {str(u) for u in base_query.values_list("uuid", flat=True)}
+
         active_ids = {v for v in request.GET.get("toolbar_filter_ids", "").split(",") if v.strip()}
         active_filters = [f for f in saved_filters if str(f.uuid) in active_ids]
 
+        # Resolve each filter's matching-uuid set exactly once up front (this
+        # is already backend-cached per filter, but was still being re-fetched
+        # and re-queried against the DB via chained .filter(uuid__in=...) for
+        # every (candidate, active) pair below - O(F^2) query construction for
+        # F saved filters). Set intersections in Python are cheap in
+        # comparison, so every pair is now just an in-memory set op.
+        matching_uuids: dict[str, set[str]] = {str(f.uuid): set(get_or_compute_matching_uuids(profile, f)) for f in saved_filters}
+
         counts: dict[str, int] = {}
         for candidate in saved_filters:
-            query = base_query
+            candidate_key = str(candidate.uuid)
+            matches = base_uuids & matching_uuids[candidate_key]
             for other in active_filters:
                 if other.uuid == candidate.uuid:
                     continue
-                query = query.filter(uuid__in=get_or_compute_matching_uuids(profile, other))
-            query = query.filter(uuid__in=get_or_compute_matching_uuids(profile, candidate))
-            counts[str(candidate.uuid)] = query.count()
+                matches &= matching_uuids[str(other.uuid)]
+            counts[candidate_key] = len(matches)
 
         return JsonResponse({"counts": counts})
 

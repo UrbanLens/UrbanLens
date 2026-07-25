@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 import logging
 from typing import TYPE_CHECKING
 
-from urbanlens.dashboard.services.global_search.parser import ParsedQuery, parse_query
+from urbanlens.dashboard.services.global_search.parser import ParsedQuery, extract_fallback_terms, parse_query
 from urbanlens.dashboard.services.global_search.providers import SearchProvider, default_providers
 from urbanlens.dashboard.services.global_search.results import RESULT_TYPES, ResultTypeMeta, SearchResult
 
@@ -92,7 +92,11 @@ class GlobalSearchEngine:
         response = self._run(profile, parsed)
         if response.total == 0 and parsed.has_structure and parsed.raw.strip():
             fallback = ParsedQuery(raw=parsed.raw)
-            fallback.terms = [token.lower() for token in parsed.raw.split()]
+            # Strip the same type-keyword/stopword/date noise the primary
+            # parse stripped, so e.g. "photos from last summer" retries on
+            # "summer" alone instead of requiring "photos" verbatim in the
+            # target's own text (which defeats the point of the fallback).
+            fallback.terms = extract_fallback_terms(parsed.raw)
             fallback.text = " ".join(fallback.terms)
             fallback_response = self._run(profile, fallback)
             if fallback_response.total > 0:

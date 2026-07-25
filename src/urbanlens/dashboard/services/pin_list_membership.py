@@ -19,8 +19,10 @@ rule.
 
 from __future__ import annotations
 
+import contextlib
 from typing import TYPE_CHECKING
 
+from django.db import IntegrityError
 from django.db.models import Q
 
 if TYPE_CHECKING:
@@ -41,18 +43,24 @@ def sync_pin_against_smart_lists(pin: Pin) -> None:
         matches = _pin_matches_smart_list(pin, pin_list)
         existing = PinListItem.objects.membership(pin_list, pin)
         if matches and existing is None:
-            PinListItem.objects.create(
-                pin_list=pin_list,
-                pin=pin,
-                order=pin_list.items.count(),
-                added_via=_provenance(pin, pin_list),
-            )
+            # Overlapping Pin.save() transactions can both see "no existing
+            # membership" and race to create one - the table has a
+            # UniqueConstraint(pin_list, pin), so the loser here just means
+            # the concurrent path already added it; treat that as a no-op
+            # rather than letting IntegrityError bubble up as a 500.
+            with contextlib.suppress(IntegrityError):
+                PinListItem.objects.create(
+                    pin_list=pin_list,
+                    pin=pin,
+                    order=pin_list.items.count(),
+                    added_via=_provenance(pin, pin_list),
+                )
         elif not matches and existing is not None and existing.added_via != PinListItem.ADDED_MANUAL:
             existing.delete()
         # matches + manual, or not-matches + manual: no-op either way - manual always wins.
 
 
-def resync_smart_list(pin_list: PinList) -> None:
+def resync_smart_list(pin_list: PinList, *, filter_ids: set[int] | None = None) -> None:
     """Fully recompute one list's membership against its current smart_filter/smart_boundary rules.
 
     Callable regardless of ``is_smart`` - picking a filter/boundary should show
@@ -61,22 +69,45 @@ def resync_smart_list(pin_list: PinList) -> None:
     re-triggering this (see ``sync_pin_against_smart_lists``, wired to Pin's
     post_save/labels-m2m signals).
 
+    Newly-added items never push the list past ``SiteSettings.get_current().
+    max_pins_per_list`` (0 = unlimited) - matches already on the list are kept
+    even if the cap is already met/exceeded (e.g. the cap was lowered after
+    the fact), but no *new* items are added beyond it. When more candidates
+    need adding than remain under the cap, which ones get kept is an
+    arbitrary-but-deterministic choice (lowest pin id first), so re-running a
+    resync against the same rules is reproducible.
+
     Args:
         pin_list: The list whose ``smart_filter``/``smart_boundary`` just changed.
+        filter_ids: Precomputed result of ``filter_matching_ids(pin_list)``,
+            for callers that already resolved it (e.g. resyncing several
+            lists that share the exact same freshly-saved ``smart_filter``
+            criteria) and want to skip re-resolving the same Label/CustomField
+            criteria into a Pin queryset for every list. Resolved internally
+            when omitted.
     """
     from urbanlens.dashboard.models.pin_list.model import PinListItem
+    from urbanlens.dashboard.models.site_settings.model import SiteSettings
 
-    filter_ids = _filter_matching_ids(pin_list)
+    resolved_filter_ids = filter_matching_ids(pin_list) if filter_ids is None else filter_ids
     boundary_ids = _boundary_matching_ids(pin_list)
-    candidate_ids = filter_ids | boundary_ids
+    candidate_ids = resolved_filter_ids | boundary_ids
 
     current = {item.pin_id: item for item in pin_list.items.all()}
     to_remove = [pk for pk, item in current.items() if pk not in candidate_ids and item.added_via != PinListItem.ADDED_MANUAL]
     if to_remove:
         PinListItem.objects.for_list(pin_list).filter(pin_id__in=to_remove).delete()
 
-    base_order = pin_list.items.count()
-    to_add = candidate_ids - current.keys()
+    base_order = len(current) - len(to_remove)
+    to_add = sorted(candidate_ids - current.keys())
+    if not to_add:
+        return
+
+    max_pins = SiteSettings.get_current().max_pins_per_list
+    if max_pins > 0:
+        remaining = max(0, max_pins - base_order)
+        if remaining < len(to_add):
+            to_add = to_add[:remaining]
     if not to_add:
         return
 
@@ -86,7 +117,7 @@ def resync_smart_list(pin_list: PinList) -> None:
                 pin_list=pin_list,
                 pin_id=pk,
                 order=base_order + i,
-                added_via=PinListItem.ADDED_SMART_FILTER if pk in filter_ids else PinListItem.ADDED_BOUNDARY,
+                added_via=PinListItem.ADDED_SMART_FILTER if pk in resolved_filter_ids else PinListItem.ADDED_BOUNDARY,
             )
             for i, pk in enumerate(to_add)
         ],
@@ -126,7 +157,23 @@ def _pin_in_boundary(pin: Pin, pin_list: PinList) -> bool:
     return Location.objects.filter(pk=pin.location_id, point__within=pin_list.smart_boundary).exists()
 
 
-def _filter_matching_ids(pin_list: PinList) -> set[int]:
+def filter_matching_ids(pin_list: PinList) -> set[int]:
+    """Resolve ``pin_list.smart_filter`` into the set of currently-matching pin ids.
+
+    Exposed publicly (not just an internal helper of ``resync_smart_list``) so
+    callers resyncing several lists that share the exact same freshly-saved
+    ``smart_filter`` criteria and profile (e.g. every ``PinList`` derived from
+    one edited ``SavedFilter``) can resolve it once and pass the result to
+    each list's ``resync_smart_list(pin_list, filter_ids=...)`` call, instead
+    of every list independently re-resolving the same Label/CustomField
+    criteria into a Pin queryset.
+
+    Args:
+        pin_list: The list whose ``smart_filter`` to resolve.
+
+    Returns:
+        Set of matching pin ids, or an empty set when there's no smart_filter.
+    """
     if not pin_list.smart_filter:
         return set()
     from urbanlens.dashboard.models.pin.model import Pin

@@ -663,7 +663,11 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
         if existing_user:
             to_profile = existing_user.profile
             # Respect visibility settings silently - no error, no distinguishable response.
-            if to_profile != inviter and to_profile.friend_request_visibility != VisibilityChoice.NO_ONE:
+            # Same evaluator request_friend uses (Profile.visibility_permits already
+            # rejects NO_ONE) - a bare "!= NO_ONE" check here previously let any
+            # stranger who knew the email bypass a restricted FRIENDS/COMMON_PIN/
+            # COMMON_FRIEND/COMMON_TRIP/ANYTHING_IN_COMMON visibility setting entirely.
+            if to_profile != inviter and Profile.visibility_permits(to_profile.friend_request_visibility, to_profile, inviter):
                 friendship = request_or_accept_friendship(inviter, to_profile, message or None)
                 if friendship and subscription_role is not None:
                     from urbanlens.dashboard.controllers.site_admin import _parse_duration_months

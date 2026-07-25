@@ -18,7 +18,14 @@ logger = logging.getLogger(__name__)
 class Friendship(DashboardModel):
     status = CharField(max_length=10, choices=FriendshipStatus.choices)
     relationship_type = CharField(max_length=12, choices=FriendshipType.choices)
-    permissions = CharField(max_length=16, choices=Permission.choices)
+    # No production code path ever set this explicitly, so every row used to
+    # persist "" (not a valid Permission choice) and has_permission() was
+    # effectively dead against real data. VIEW_PROFILE is the value every
+    # test fixture/baker recipe already uses as the baseline permission for a
+    # friendship (see baker_recipes.friendship/accepted_friendship) - the
+    # weakest capability, matching how has_permission() behaved in practice
+    # (no real permission was ever actually granted, just invalidly stored).
+    permissions = CharField(max_length=16, choices=Permission.choices, default=Permission.VIEW_PROFILE)
     # Optional note the requester attached when the request was first sent.
     # Only ever set on creation - never touched by accept()/decline()/etc.
     request_message = TextField(

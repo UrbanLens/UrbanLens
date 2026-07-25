@@ -4,6 +4,14 @@ Provides ``check_rate_limit`` and ``log_api_call`` helpers used by the
 ``_RateLimitedSession`` inside every ``Gateway`` subclass that declares a
 ``service_key``.  Configuration is persisted in ``ApiRateLimit`` rows, which
 are auto-created on first access using the defaults in ``SERVICE_REGISTRY``.
+
+``check_rate_limit`` (a COUNT query) and ``log_api_call`` (an INSERT) are
+individually cheap but, called back-to-back with no locking, let concurrent
+callers race: several requests can all see the count under the limit before
+any of them has logged a call, producing a real burst above the configured
+limit. ``_RateLimitedSession`` closes this by going through
+``_reserve_call``/``_finalize_call`` instead of calling ``check_rate_limit``
+and ``log_api_call`` directly - see their docstrings.
 """
 
 from __future__ import annotations
@@ -14,6 +22,8 @@ from decimal import Decimal
 import logging
 import time
 from typing import Any
+
+from django.db import transaction
 
 from urbanlens.dashboard.exceptions import DashboardError
 
@@ -382,6 +392,91 @@ def log_api_call(
         logger.exception("Failed to log API call for service %s", service)
 
 
+def _reserve_call(service: str, *, endpoint: str = "") -> int:
+    """Atomically check ``service``'s rate limit and reserve a logged call slot.
+
+    ``check_rate_limit`` (COUNT) and ``log_api_call`` (INSERT), called as two
+    separate steps with no locking, let concurrent callers race: several
+    requests can all pass the COUNT check before any of them has inserted a
+    log row, letting a burst of calls through above the configured limit -
+    this matters most for a hard per-request-per-second ToS limit like
+    Nominatim's. This function closes that gap by locking the service's
+    ``ApiRateLimit`` row (the natural one-row-per-service counter for this
+    domain) for the duration of the count check and the reservation insert,
+    via ``select_for_update()`` inside ``transaction.atomic()`` - so a second
+    concurrent caller for the same service blocks until the first has
+    committed its reservation, and then sees it in its own count.
+
+    The lock is held only for the check-and-insert - it is released as soon
+    as this function returns, well before the actual outbound network
+    request happens, so concurrent calls to *different* services (or calls
+    that are ultimately blocked) are never serialized by it.
+
+    Args:
+        service: The service key.
+        endpoint: URL or endpoint path being requested, recorded on the
+            reservation row (truncated to 500 chars).
+
+    Returns:
+        The pk of the reserved ``ApiCallLog`` row. Callers must update it via
+        ``_finalize_call`` once the request completes.
+
+    Raises:
+        RateLimitExceededError: If the call would exceed the configured rate
+            limit. The blocked attempt is logged before raising.
+        ServiceDisabledError: If the service is administratively disabled.
+            The skipped attempt is logged before raising.
+    """
+    from urbanlens.dashboard.models.api_call_log import ApiCallLog
+    from urbanlens.dashboard.models.api_rate_limit import ApiRateLimit
+
+    truncated_endpoint = endpoint[:500] if endpoint else ""
+
+    # Ensure the row exists (auto-created from defaults) before locking it -
+    # get_or_create is safe to call outside the lock since it already handles
+    # its own creation race.
+    get_limit_config(service)
+
+    with transaction.atomic():
+        ApiRateLimit.objects.select_for_update().get(service=service)
+
+        if not check_rate_limit(service):
+            ApiCallLog.objects.create(service=service, endpoint=truncated_endpoint, success=False, was_rate_limited=True)
+            raise RateLimitExceededError(service)
+
+        if not service_is_enabled(service):
+            ApiCallLog.objects.create(service=service, endpoint=truncated_endpoint, success=False, was_service_disabled=True)
+            raise ServiceDisabledError(service)
+
+        entry = ApiCallLog.objects.create(service=service, endpoint=truncated_endpoint, success=True)
+        return entry.pk
+
+
+def _finalize_call(entry_pk: int, *, success: bool, response_ms: int | None = None, cost_estimate: Decimal | None = None) -> None:
+    """Update a reservation row created by ``_reserve_call`` with the request's outcome.
+
+    Updates the existing row in place rather than inserting a new one, so a
+    reserved-but-not-yet-finalized call still counts toward
+    ``check_rate_limit``'s window queries (which count rows regardless of
+    ``success``) without double-counting once finalized.
+
+    Failures are swallowed so that logging problems never break callers.
+
+    Args:
+        entry_pk: pk of the ``ApiCallLog`` row returned by ``_reserve_call``.
+        success: Whether the call succeeded (HTTP 2xx, no exception).
+        response_ms: Round-trip time in milliseconds.
+        cost_estimate: Estimated USD cost of this call, if known - see
+            ``ServiceDefaults.cost_per_call``.
+    """
+    from urbanlens.dashboard.models.api_call_log import ApiCallLog
+
+    try:
+        ApiCallLog.objects.filter(pk=entry_pk).update(success=success, response_ms=response_ms, cost_estimate=cost_estimate)
+    except Exception:
+        logger.exception("Failed to finalize API call log entry %s", entry_pk)
+
+
 # ---------------------------------------------------------------------------
 # Session wrapper
 # ---------------------------------------------------------------------------
@@ -429,24 +524,14 @@ class _RateLimitedSession:
         return self._do_request(method, url, **kwargs)
 
     def _do_request(self, method: str, url: str, **kwargs):
-        """Check rate limit, make the request, log the result."""
-        if not check_rate_limit(self._service_key):
-            log_api_call(
-                self._service_key,
-                success=False,
-                endpoint=str(url),
-                was_rate_limited=True,
-            )
-            raise RateLimitExceededError(self._service_key)
+        """Reserve a rate-limit slot, make the request, finalize the logged result.
 
-        if not service_is_enabled(self._service_key):
-            log_api_call(
-                self._service_key,
-                success=False,
-                endpoint=str(url),
-                was_service_disabled=True,
-            )
-            raise ServiceDisabledError(self._service_key)
+        The reservation (see ``_reserve_call``) atomically checks the rate
+        limit and logs the attempt in one locked transaction, so this
+        no longer has a check-then-log gap for concurrent callers to race
+        through.
+        """
+        entry_pk = _reserve_call(self._service_key, endpoint=str(url))
 
         # requests has no default timeout at all: a gateway call that forgets
         # timeout= would otherwise block its caller (and, when running under a
@@ -464,30 +549,11 @@ class _RateLimitedSession:
             # and a failed response wasn't necessarily charged either way, so
             # estimating a cost for it would overstate real spend.
             cost_estimate = all_service_defaults().get(self._service_key, ServiceDefaults(display_name="")).cost_per_call if resp.ok else None
-            log_api_call(
-                self._service_key,
-                success=resp.ok,
-                response_ms=elapsed_ms,
-                endpoint=str(url),
-                cost_estimate=cost_estimate,
-            )
+            _finalize_call(entry_pk, success=resp.ok, response_ms=elapsed_ms, cost_estimate=cost_estimate)
             return resp
-        except RateLimitExceededError:
-            log_api_call(
-                self._service_key,
-                success=False,
-                endpoint=str(url),
-                was_rate_limited=True,
-            )
-            raise
         except Exception:
             elapsed_ms = int((time.monotonic() - t0) * 1000)
-            log_api_call(
-                self._service_key,
-                success=False,
-                response_ms=elapsed_ms,
-                endpoint=str(url),
-            )
+            _finalize_call(entry_pk, success=False, response_ms=elapsed_ms)
             raise
 
 

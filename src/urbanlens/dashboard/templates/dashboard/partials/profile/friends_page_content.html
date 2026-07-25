@@ -91,7 +91,7 @@
     <section class="friends-section card">
         <div class="card-header">
             <i class="material-symbols-outlined">people</i>
-            <span>{% if is_own_profile %}Your Friends{% else %}Friends{% endif %}</span>
+            <span>Your Friends</span>
         </div>
         <ul class="friend-grid friend-grid--page">
             {% for friend in friends %}
@@ -129,10 +129,8 @@
     {% else %}
     <div class="friends-empty card">
         <i class="material-symbols-outlined">people_outline</i>
-        <p>{% if is_own_profile %}You haven't added any friends yet.{% else %}No friends to show.{% endif %}</p>
-        {% if is_own_profile %}
+        <p>You haven't added any friends yet.</p>
         <p class="friends-empty-hint">Visit someone's profile and click "Add Friend" to get started.</p>
-        {% endif %}
     </div>
     {% endif %}
 

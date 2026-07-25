@@ -53,6 +53,36 @@ ContactInput = tuple["Profile | None", "str | None", str]
 MAX_CHAT_MESSAGE_LENGTH = 4000
 
 
+def safety_checkin_group_name(checkin_pk: int) -> str:
+    """Return the channel-layer group name for a check-in's shared chat.
+
+    Every real-time surface elsewhere in this codebase (``notification_group_name``,
+    ``direct_message_group_name``, ``session_group_name``) centralizes its group-name
+    format behind one function so a rename can never silently break delivery in only
+    some of the places that construct it - this is the safety check-in equivalent.
+
+    Args:
+        checkin_pk: Primary key of the ``SafetyCheckin``.
+
+    Returns:
+        The group name joined by the check-in's chat consumer and used for chat/status broadcasts.
+    """
+    return f"safety_checkin_{checkin_pk}"
+
+
+def safety_checkin_location_group_name(checkin_pk: int) -> str:
+    """Return the channel-layer group name for a check-in's live-location broadcasts.
+
+    Args:
+        checkin_pk: Primary key of the ``SafetyCheckin``.
+
+    Returns:
+        The group name joined only by the session route (owner/accepted partner) -
+        contacts never join this group, matching the live-location visibility rule.
+    """
+    return f"safety_checkin_location_{checkin_pk}"
+
+
 def _find_profile_by_email(email: str) -> Profile | None:
     """Return the Profile for an existing active user with this email, if any.
 
@@ -603,7 +633,7 @@ def _broadcast_live_location(checkin: SafetyCheckin) -> None:
         if channel_layer is None:
             return
         async_to_sync(channel_layer.group_send)(
-            f"safety_checkin_location_{checkin.pk}",
+            safety_checkin_location_group_name(checkin.pk),
             {
                 "type": "location.update",
                 "payload": {
@@ -950,7 +980,13 @@ def escalate_checkin(checkin: SafetyCheckin) -> None:
     if checkin.notify_community_wiki:
         post_checkin_to_community_wiki(checkin)
 
-    for contact in checkin.contacts.all():
+    # Only contacts not yet notified THIS escalation cycle: escalate_overdue_checkins()
+    # re-selects any checkin still in SCHEDULED/AWAITING_CHECKIN on its next 5-minute tick,
+    # which includes this one if anything below raises before the status update at the end
+    # of this function runs. Filtering on notified_at makes a retry idempotent - it only
+    # reaches the contacts a prior, partially-failed attempt never got to - instead of
+    # re-emailing every contact already notified, including real emergency contacts.
+    for contact in checkin.contacts.filter(notified_at__isnull=True):
         if is_contact_opted_out(contact.contact_profile, contact.email, owner=checkin.profile, checkin=checkin):
             continue
         portal_path = reverse("safety.contact.portal", kwargs={"token": contact.token})
@@ -1205,7 +1241,7 @@ def _broadcast_chat_message(checkin: SafetyCheckin, message: SafetyCheckinMessag
         if channel_layer is None:
             return
         async_to_sync(channel_layer.group_send)(
-            f"safety_checkin_{checkin.pk}",
+            safety_checkin_group_name(checkin.pk),
             {
                 "type": "chat.message",
                 "message": {
@@ -1243,7 +1279,7 @@ def _broadcast_status_update(checkin: SafetyCheckin) -> None:
         if channel_layer is None:
             return
         async_to_sync(channel_layer.group_send)(
-            f"safety_checkin_{checkin.pk}",
+            safety_checkin_group_name(checkin.pk),
             {
                 "type": "status.update",
                 "payload": {

@@ -190,46 +190,6 @@ class BoundaryController(LoginRequiredMixin, GenericViewSet):
         payload["status"] = "ok"
         return JsonResponse(payload)
 
-    def list_boundaries(self, request: HttpRequest):
-        """Return all boundaries visible to the current user for the main map overlay.
-
-        Returns the user's own pin boundaries, plus location-default rows for
-        locations not already covered by one of those pin boundaries.
-        """
-        if not request.user.is_authenticated:
-            return JsonResponse({"error": "Authentication required."}, status=401)
-        try:
-            profile: Profile | None = request.user.profile
-        except Profile.DoesNotExist:
-            profile = None
-
-        if profile:
-            pin_rows = list(Boundary.objects.for_profile(profile).with_coordinate_location())
-            covered = {(row.pin.location_id, row.boundary_type) for row in pin_rows if row.pin and row.pin.location_id}
-            defaults = [row for row in Boundary.objects.location_defaults().with_coordinate_location() if (row.location_id, row.boundary_type) not in covered]
-            rows = pin_rows + defaults
-        else:
-            rows = list(Boundary.objects.location_defaults().with_coordinate_location())
-
-        result = []
-        for row in rows:
-            location = row.coordinate_location
-            if location is None or location.latitude is None or location.longitude is None:
-                continue
-            polygon = row.effective_polygon
-            result.append(
-                {
-                    "id": row.id,
-                    "boundary_type": row.boundary_type,
-                    "location_id": location.id,
-                    "latitude": float(location.latitude),
-                    "longitude": float(location.longitude),
-                    "polygon": _geojson(polygon),
-                    "default_radius_meters": row.default_radius_meters,
-                },
-            )
-        return JsonResponse({"boundaries": result})
-
 
 class WikiBoundaryView(LoginRequiredMixin, View):
     """Community boundary editor endpoints for the wiki page.

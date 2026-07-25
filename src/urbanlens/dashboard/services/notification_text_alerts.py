@@ -76,14 +76,23 @@ def _debounce_key(profile_id: int, notification_type: str) -> str:
 def is_text_alert_debounced(profile_id: int, notification_type: str) -> bool:
     """Whether a recent same-type text already went to this recipient.
 
+    Checks and claims the debounce marker in one atomic ``cache.add`` - two
+    Celery workers racing on the same (recipient, type) within the window
+    can't both pass: only the first caller's ``cache.add`` succeeds (winning
+    the right to send), and it sets the marker in that same step so every
+    other racing caller sees it immediately rather than in a later, separate
+    ``cache.set``.
+
     Args:
         profile_id: The recipient profile's pk.
         notification_type: The NotificationType value.
 
     Returns:
-        True when a text for this (recipient, type) fired within the window.
+        True when a text for this (recipient, type) already fired within the
+        window (or just got claimed by a concurrent caller); False when this
+        call just claimed the marker and should proceed to send.
     """
-    return bool(cache.get(_debounce_key(profile_id, notification_type)))
+    return not cache.add(_debounce_key(profile_id, notification_type), value=True, timeout=DEBOUNCE_TTL_SECONDS)
 
 
 def _enabled_channels(notification: NotificationLog) -> tuple[bool, bool]:
@@ -129,11 +138,13 @@ def schedule_notification_text_alerts(notification: NotificationLog) -> None:
 
 
 def send_notification_text_alerts_now(notification: NotificationLog) -> None:
-    """Send the WhatsApp/SMS alert(s) for a notification and set the debounce marker.
+    """Send the WhatsApp/SMS alert(s) for a notification.
 
     Called by the Celery task once the delay has elapsed - the notification
-    must still be unread and not debounced (both checked by the caller). The
-    body is the notification title only; details stay on-site rather than
+    must still be unread and not debounced (both checked by the caller via
+    ``is_text_alert_debounced``, which also claims the debounce marker
+    atomically at that point - there is nothing left to mark here). The body
+    is the notification title only; details stay on-site rather than
     traveling through a third-party carrier.
 
     Args:
@@ -145,8 +156,6 @@ def send_notification_text_alerts_now(notification: NotificationLog) -> None:
     wants_whatsapp, wants_sms = _enabled_channels(notification)
     if profile is None or not (wants_whatsapp or wants_sms):
         return
-
-    cache.set(_debounce_key(profile.pk, notification.notification_type), 1, timeout=DEBOUNCE_TTL_SECONDS)
 
     body = f"UrbanLens: {notification.title}. Open the site for details."
     if wants_whatsapp:

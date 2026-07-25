@@ -22,7 +22,6 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.saved_filter.model import SavedFilter
 from urbanlens.dashboard.models.site_settings.model import SiteSettings
 from urbanlens.dashboard.models.trips.model import Trip, TripMembership
-from urbanlens.dashboard.services.filter_criteria import serialize_form_criteria
 from urbanlens.dashboard.services.map_snapshot import materialize_markup_map
 from urbanlens.dashboard.services.pin_list_markup import build_list_markup_snapshot
 from urbanlens.dashboard.services.pin_list_membership import resync_smart_list
@@ -389,6 +388,12 @@ class PinListAddPinsView(LoginRequiredMixin, View):
         pin_list = _get_pin_list_or_404(list_slug, profile)
 
         pin_id_values = request.POST.getlist("pin_ids")
+        # Coerce to ints up front and silently drop anything non-numeric
+        # (matches PinListReorderView's isdigit()-filtered id parsing below) -
+        # Q(pk__in=...) against raw, unvalidated POST strings raises an
+        # uncaught ValueError (500) at query-execution time on a non-numeric
+        # entry, since pk is an integer field.
+        pin_ids = [int(value) for value in pin_id_values if str(value).isdigit()]
         # The shared location-search engine identifies pins by slug, falling back to
         # the uuid when a pin has no slug (see AutocompleteResult.pin_slug) - split
         # out anything that parses as a uuid so Pin.uuid (also a valid identifier
@@ -403,7 +408,7 @@ class PinListAddPinsView(LoginRequiredMixin, View):
             except (ValueError, AttributeError, TypeError):
                 slug_values.append(value)
         if pin_id_values or slug_values or uuid_values:
-            pins = list(Pin.objects.filter(profile=profile).filter(Q(pk__in=pin_id_values) | Q(slug__in=slug_values) | Q(uuid__in=uuid_values)))
+            pins = list(Pin.objects.filter(profile=profile).filter(Q(pk__in=pin_ids) | Q(slug__in=slug_values) | Q(uuid__in=uuid_values)))
         else:
             search_form = SearchForm(request.POST, profile=profile)
             if not search_form.is_valid():

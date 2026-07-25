@@ -6,8 +6,6 @@ from datetime import UTC, datetime
 import logging
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
-from django.db import DatabaseError
-
 from urbanlens.dashboard.services.locations.naming import is_meaningful_name
 
 if TYPE_CHECKING:
@@ -97,7 +95,7 @@ def get_search_gateway() -> SearchGateway:
 
     try:
         provider = SiteSettings.get_current().search_provider
-    except (ImportError, DatabaseError, Exception):
+    except Exception:
         provider = SearchProviderChoice.BRAVE
 
     return _build_gateway(provider)
@@ -119,7 +117,7 @@ def get_search_gateways() -> list[SearchGateway]:
 
     try:
         preferred = SiteSettings.get_current().search_provider
-    except (ImportError, DatabaseError, Exception):
+    except Exception:
         preferred = None
 
     order = _default_provider_order()

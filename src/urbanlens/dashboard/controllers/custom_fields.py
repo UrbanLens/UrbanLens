@@ -296,6 +296,15 @@ class CustomFieldUpdateView(LoginRequiredMixin, View):
             error = "This field already has values - clear them before changing its type."
         if error is None and field.field_type == CustomFieldType.REFERENCE and definition["field_type"] == CustomFieldType.REFERENCE and definition["config"].get("ref_type") != field.reference_kind and field.values.exists():
             error = "This field already has values - clear them before changing what it references."
+        if error is None and field.field_type == CustomFieldType.SELECT and definition["field_type"] == CustomFieldType.SELECT:
+            new_options = set(definition["config"].get("choices", []))
+            if new_options != set(field.select_choices):
+                orphaned = sorted(field.values.exclude(value_text__in=new_options).values_list("value_text", flat=True).distinct())
+                if orphaned:
+                    preview = ", ".join(f"“{value}”" for value in orphaned[:5])
+                    if len(orphaned) > 5:
+                        preview += f", and {len(orphaned) - 5} more"
+                    error = f"Can't remove option(s) still in use: {preview}. Update or clear those values first."
         if error is None and name.lower() != field.name.lower() and CustomField.objects.filter(profile=profile, entity_type=field.entity_type, name__iexact=name).exclude(pk=field.pk).exists():
             error = f"You already have a “{name}” field there."
         if error is None:

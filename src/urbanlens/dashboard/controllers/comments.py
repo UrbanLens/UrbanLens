@@ -15,7 +15,7 @@ from django.urls import NoReverseMatch, reverse
 from django.views import View
 
 from urbanlens.dashboard.models.comments.model import Comment
-from urbanlens.dashboard.models.notifications.meta import NotificationType
+from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, NotificationType
 from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.reactions.model import Reaction
@@ -189,6 +189,11 @@ def _build_context(comments_qs, profile: Profile, request: HttpRequest, **extra)
         all_commenters.update(r.profile for r in c.replies.all())
     # Set of profile IDs whose images should be blurred for this viewer.
     blurred_profiles: set[int] = {p.pk for p in all_commenters if p != profile and not profile.can_view_photos_from(p)}
+    # Cache can_view_comments_from per unique commenter (mirrors blurred_profiles
+    # above) rather than recomputing it once per comment/reply below - each call
+    # runs up to 3 extra query pairs, redundant when the same author appears
+    # across multiple comments/replies in the same thread.
+    comment_visibility_cache: dict[int, bool] = {p.pk: profile.can_view_comments_from(p) for p in all_commenters}
 
     # A comment's content is already all-or-nothing gated below by
     # can_view_comments_from (comment_visibility) - but once it passes that
@@ -208,7 +213,7 @@ def _build_context(comments_qs, profile: Profile, request: HttpRequest, **extra)
 
     rendered = []
     for c in top_level:
-        if not profile.can_view_comments_from(c.profile):
+        if not comment_visibility_cache[c.profile_id]:
             continue
         # A newly-uploaded image is scanned asynchronously (tasks.scan_comment_image) -
         # until that clears pending_scan, the comment stays visible only to
@@ -221,7 +226,7 @@ def _build_context(comments_qs, profile: Profile, request: HttpRequest, **extra)
             continue
         replies_rendered = []
         for r in c.replies.all():
-            if not profile.can_view_comments_from(r.profile):
+            if not comment_visibility_cache[r.profile_id]:
                 continue
             if r.pending_scan and r.profile != profile:
                 continue
@@ -593,6 +598,12 @@ def _notify_reply(actor: Profile, parent_comment, reply=None) -> None:
     recipient = parent_comment.profile if hasattr(parent_comment, "profile") else parent_comment.author
     if recipient is None or recipient == actor:
         return
+    try:
+        pref = recipient.notification_preferences.comment_reply
+    except AttributeError:
+        pref = DeliveryPreference.SITE
+    if pref == DeliveryPreference.NONE:
+        return
     url = _comment_url(reply or parent_comment)
     NotificationLog.objects.create(
         profile=recipient,
@@ -606,6 +617,12 @@ def _notify_reply(actor: Profile, parent_comment, reply=None) -> None:
 def _notify_reaction(actor: Profile, comment) -> None:
     recipient = comment.profile if hasattr(comment, "profile") else comment.author
     if recipient is None or recipient == actor:
+        return
+    try:
+        pref = recipient.notification_preferences.comment_liked
+    except AttributeError:
+        pref = DeliveryPreference.SITE
+    if pref == DeliveryPreference.NONE:
         return
     url = _comment_url(comment)
     NotificationLog.objects.create(

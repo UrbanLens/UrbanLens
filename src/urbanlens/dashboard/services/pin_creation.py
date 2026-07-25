@@ -2,7 +2,7 @@
 
 This is the single code path behind every way a Pin gets created on a user's
 behalf: the map UI's "Add pin" flow (``controllers.maps.MapController.post_add_pin``)
-and the external API's pin-creation endpoint (``external_api.views.PinCreateView``).
+and the external API's pin-creation endpoint (``external_api.views.PinsView``).
 Keeping it in one place means a validation rule, sanitization step, or piece of
 enrichment added for one caller automatically applies to the other - there is
 no second, slightly-different pin-creation path for a third-party app to slip
@@ -153,7 +153,10 @@ def create_pin_for_profile(
     lat_f = float(latitude)
     lon_f = float(longitude)
 
-    location, _ = Location.objects.get_or_create(latitude=lat_f, longitude=lon_f, defaults={"official_name": place_canonical_name})
+    # Fuzzy 50m-radius dedup (not exact-coordinate get_or_create): GPS jitter between two
+    # drops at the same real place must consolidate onto the same Location, matching every
+    # other Location-resolution path in the app (viewset.py, detail_pins.py, import_data.py).
+    location, _ = Location.objects.get_nearby_or_create(lat_f, lon_f, defaults={"official_name": place_canonical_name})
 
     # Locations whose bounding box also covers this point - when more than one
     # matches, the caller offers the user a choice (see below).

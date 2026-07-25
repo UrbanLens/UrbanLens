@@ -11,7 +11,6 @@ from urbanlens.dashboard.models.boundary import Boundary, BoundarySource, Bounda
 from urbanlens.dashboard.models.boundary_vote import BoundaryVote
 from urbanlens.dashboard.models.cache import GeocodedLocation
 from urbanlens.dashboard.models.calendar_sync import CalendarSyncDirection, GoogleCalendarAccount, TripCalendarLink
-from urbanlens.dashboard.models.categories import Category
 from urbanlens.dashboard.models.comments import Comment
 from urbanlens.dashboard.models.custom_fields import CustomField, CustomFieldEntity, CustomFieldType, CustomFieldValue
 from urbanlens.dashboard.models.direct_messages import (
@@ -110,6 +109,6 @@ from urbanlens.dashboard.models.trivia import (
 from urbanlens.dashboard.models.undo import UndoAction
 from urbanlens.dashboard.models.visit_suggestions import VisitSuggestion, VisitSuggestionStatus
 from urbanlens.dashboard.models.visits import ExternalVisitParticipant, PinVisit, VisitSource
-from urbanlens.dashboard.models.wiki import Wiki, WikiSerializer
+from urbanlens.dashboard.models.wiki import Wiki
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
 from urbanlens.dashboard.models.wiki_stat_vote import WikiStatField, WikiStatVote

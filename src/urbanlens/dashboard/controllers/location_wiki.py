@@ -13,6 +13,7 @@ import logging
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.gis.geos import GEOSGeometry, MultiPolygon, Polygon
+from django.db import transaction
 from django.http import Http404, HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.template.loader import render_to_string
@@ -300,8 +301,13 @@ class LocationWikiDeleteView(LoginRequiredMixin, View):
 
         subtree = with_wiki_descendants([wiki])
         stash_for_undo("wiki", subtree, profile)
-        for descendant in subtree:
-            descendant.delete()
+        with transaction.atomic():
+            # Wiki.parent_wiki is on_delete=CASCADE, so deleting just the originally-selected
+            # wiki already cascades to every descendant captured in `subtree` above in one
+            # bulk operation - no need to delete each subtree member individually. Wrapping
+            # in transaction.atomic() also ensures a mid-delete failure can't leave the
+            # just-created UndoAction claiming a full deletion that only partially happened.
+            Wiki.objects.filter(pk=wiki.pk).delete()
 
         redirect_url = reverse("pin.details", kwargs={"pin_slug": user_pin.slug}) if user_pin else reverse("map.view")
         response = HttpResponse("", status=200)
@@ -399,20 +405,33 @@ def _render_history(request, location: Location, wiki: Wiki):
     )
 
 
-def _revert_edit_fields(location: Location, wiki: Wiki, target_edit: WikiEdit) -> dict[str, dict]:
+def _revert_edit_fields(location: Location, wiki: Wiki, target_edit: WikiEdit) -> tuple[dict[str, dict], list[str]]:
     """Restore the fields captured in ``target_edit.changes`` to their prior ("from") values.
 
     Mutates ``wiki`` (and any associated Boundary rows) in place - the caller
     is responsible for calling ``wiki.save()`` afterwards.
 
+    Before restoring each field, checks whether the wiki's *current* value for
+    that field still matches ``target_edit``'s stored "to" value. If someone
+    else changed the field again after this edit (so the current value no
+    longer matches), restoring the edit's "from" value would silently clobber
+    that later change - so the field is left untouched and its name is
+    collected in the returned skip list instead.
+
     Returns:
-        A diff dict in the same ``{"field": {"from": ..., "to": ...}}`` shape
-        used by ``WikiEdit.changes``, computed against the values as they
-        stood right before this call.
+        A tuple of:
+        - A diff dict in the same ``{"field": {"from": ..., "to": ...}}``
+          shape used by ``WikiEdit.changes``, computed against the values as
+          they stood right before this call - only for fields actually
+          reverted.
+        - A list of field names skipped because their current value no
+          longer matched this edit's "to" value (a conflicting later edit).
     """
     revert_changes: dict[str, dict] = {}
+    skipped_fields: list[str] = []
     for field, diff in target_edit.changes.items():
         old_val = diff.get("from")
+        to_val = diff.get("to")
         if field == "bounding_box" or field.startswith("boundary_"):
             # "bounding_box" is the legacy audit key from the single-boundary
             # era; treat it as the property boundary.
@@ -421,6 +440,9 @@ def _revert_edit_fields(location: Location, wiki: Wiki, target_edit: WikiEdit) -
                 continue
             row = Boundary.objects.row_for_wiki(wiki, boundary_type)
             current_val = row.polygon.wkt if row and row.polygon else None
+            if current_val != to_val:
+                skipped_fields.append(field)
+                continue
             revert_changes[field] = {"from": current_val, "to": old_val}
             if old_val:
                 restored = GEOSGeometry(old_val, srid=4326)
@@ -439,9 +461,12 @@ def _revert_edit_fields(location: Location, wiki: Wiki, target_edit: WikiEdit) -
             continue
         else:
             current_val = getattr(wiki, field, None)
+            if str(current_val) != to_val:
+                skipped_fields.append(field)
+                continue
             revert_changes[field] = {"from": current_val, "to": old_val}
             setattr(wiki, field, old_val)
-    return revert_changes
+    return revert_changes, skipped_fields
 
 
 class LocationWikiHistoryView(LoginRequiredMixin, View):
@@ -470,7 +495,18 @@ class LocationWikiRevertView(LoginRequiredMixin, View):
         if target_edit.reverted:
             return JsonResponse({"error": "This edit has already been reverted."}, status=400)
 
-        revert_changes = _revert_edit_fields(location, wiki, target_edit)
+        revert_changes, skipped_fields = _revert_edit_fields(location, wiki, target_edit)
+
+        if not revert_changes:
+            # Every field this edit touched was changed again by someone else
+            # since - nothing left to revert. Don't record a no-op WikiEdit or
+            # mark the original as reverted.
+            response = _render_history(request, location, wiki)
+            response["HX-Trigger"] = json.dumps(
+                {"showToast": {"level": "warning", "message": f"Could not revert - every field was changed again since this edit: {', '.join(skipped_fields)}."}},
+            )
+            return response
+
         wiki.save()
 
         revert_edit = WikiEdit.objects.create(
@@ -482,7 +518,12 @@ class LocationWikiRevertView(LoginRequiredMixin, View):
         target_edit.reverted_by = revert_edit
         target_edit.save(update_fields=["reverted", "reverted_by", "updated"])
 
-        return _render_history(request, location, wiki)
+        response = _render_history(request, location, wiki)
+        if skipped_fields:
+            response["HX-Trigger"] = json.dumps(
+                {"showToast": {"level": "warning", "message": f"Reverted, but some fields were left unchanged because they were edited again since: {', '.join(skipped_fields)}."}},
+            )
+        return response
 
 
 class LocationWikiEditDeleteView(LoginRequiredMixin, View):
@@ -507,8 +548,9 @@ class LocationWikiEditDeleteView(LoginRequiredMixin, View):
         if target_edit.editor_id != profile.id:
             return JsonResponse({"error": "You can only permanently delete your own edits."}, status=403)
 
+        skipped_fields: list[str] = []
         if not target_edit.reverted:
-            _revert_edit_fields(location, wiki, target_edit)
+            _revert_changes, skipped_fields = _revert_edit_fields(location, wiki, target_edit)
             wiki.save()
 
         revert_record = target_edit.reverted_by
@@ -516,7 +558,12 @@ class LocationWikiEditDeleteView(LoginRequiredMixin, View):
             revert_record.delete()
         target_edit.delete()
 
-        return _render_history(request, location, wiki)
+        response = _render_history(request, location, wiki)
+        if skipped_fields:
+            response["HX-Trigger"] = json.dumps(
+                {"showToast": {"level": "warning", "message": f"Deleted, but some fields were left unchanged because they were edited again since: {', '.join(skipped_fields)}."}},
+            )
+        return response
 
 
 class PublicPinVoteView(LoginRequiredMixin, View):

@@ -158,18 +158,34 @@ def first_pin_directions_url(map_data: Any) -> str | None:
 
 @register.filter
 def tag_total_pins(tag: Label) -> int:
-    """Return direct pin count plus all direct children's pin counts.
+    """Return this label's pin count plus every descendant's pin count (full subtree).
 
-    Uses annotated pin_count when available (set by LabelQuerySet.with_pin_counts()).
-    Falls back to DB queries only when annotations are absent.
+    Walks the full multi-level hierarchy via ``Label.get_label_and_descendants``
+    (BFS, cycle-safe) rather than only direct children, matching how map/pin
+    filtering actually expands a parent label to its whole subtree.
+
+    Uses the annotated ``pin_count`` for this label when available (set by
+    ``LabelQuerySet.with_pin_counts()``); falls back to a DB query otherwise.
+    Descendant counts beyond the prefetched direct children are always summed
+    via a single aggregate query, since only the direct-children prefetch
+    carries its own annotation.
     """
+    from django.db.models import Count
+
+    from urbanlens.dashboard.models.labels.model import Label as _Label
+
     total = getattr(tag, "pin_count", None)
     if total is None:
         total = tag.pins.count()
-    for child in tag.children.all():
-        child_count = getattr(child, "pin_count", None)
-        total += child_count if child_count is not None else child.pins.count()
-    return total
+    if tag.pk is None:
+        return total
+
+    descendant_ids = _Label.get_label_and_descendants(tag.pk) - {tag.pk}
+    if not descendant_ids:
+        return total
+
+    descendant_total = _Label.objects.filter(id__in=descendant_ids).aggregate(total=Count("pins"))["total"] or 0
+    return total + descendant_total
 
 
 @register.filter
@@ -235,7 +251,7 @@ def filter_criteria_summary(criteria: dict[str, Any] | None) -> str:
         parts.append("visited" if has_visits == "yes" else "not visited")
     if criteria.get("min_priority") is not None or criteria.get("max_priority") is not None:
         parts.append("priority range")
-    if criteria.get("min_danger") or criteria.get("max_danger"):
+    if criteria.get("min_danger") is not None or criteria.get("max_danger") is not None:
         parts.append("danger range")
     if criteria.get("min_vulnerability") is not None or criteria.get("max_vulnerability") is not None:
         parts.append("vulnerability range")
@@ -320,13 +336,15 @@ def human_timesince(value: datetime.datetime | datetime.date) -> str:
 
 @register.filter
 def is_material_icon(value: str | None) -> bool:
-    """Return True if value is a Material Icons name (ASCII letters/underscores only).
+    """Return True if value is a Material Icons name (ASCII letters/digits/underscores only).
 
     Returns False for emoji or other Unicode characters, which are rendered as-is.
+    Digits are allowed because several Material Symbols names include them
+    (e.g. ``filter_1``, ``3d_rotation``, ``9mp``).
 
     Usage: {% if tag.icon|is_material_icon %}
     """
-    return bool(value and re.match(r"^[a-z_]+$", str(value)))
+    return bool(value and re.match(r"^[a-z0-9_]+$", str(value)))
 
 
 @register.filter

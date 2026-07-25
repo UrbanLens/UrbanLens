@@ -10,9 +10,9 @@ logger = logging.getLogger(__name__)
 
 
 class _MessagePrefixMixin:
-    '''
+    """
     Shared message-prefixing behavior for our custom TestCase/SimpleTestCase variants.
-    '''
+    """
     # Deprecated, in favor of fn
     target: type | None = None
     # Deprecated, in favor of fn
@@ -80,24 +80,24 @@ class _MessagePrefixMixin:
         """
         parts = []
         if self.class_name is not None:
-            parts.append(f'{self.module_path}:{self.class_name}')
+            parts.append(f"{self.module_path}:{self.class_name}")
         if self.method_name is not None:
-            parts.append(f'{self.method_name}()')
+            parts.append(f"{self.method_name}()")
 
         if not parts:
             return ""
 
-        return ".".join(parts) + '\n'
+        return ".".join(parts) + "\n"
 
     def append_to_failure(self) -> str:
         """
         Append the data to the failure message. Individual tests will override this.
         """
-        return ''
+        return ""
 
 
 class TestCase(_MessagePrefixMixin, _HypothesisMixin, test.TestCase):
-    '''
+    """
     Provides additional functionality to the django unittest TestCase.
 
     - Adds a default message to all assertions.
@@ -105,11 +105,11 @@ class TestCase(_MessagePrefixMixin, _HypothesisMixin, test.TestCase):
     Use this for tests that need database access (model creation, ORM
     queries, the Django test client, etc). Each test runs in its own
     transaction that is rolled back afterwards.
-    '''
+    """
 
 
 class SimpleTestCase(_MessagePrefixMixin, _HypothesisMixin, test.SimpleTestCase):
-    '''
+    """
     Provides additional functionality to the django unittest SimpleTestCase.
 
     - Adds a default message to all assertions.
@@ -119,4 +119,4 @@ class SimpleTestCase(_MessagePrefixMixin, _HypothesisMixin, test.SimpleTestCase)
     the per-test transaction wrapping that TestCase pays for, so prefer it
     whenever a test doesn't need the database. Django raises
     ``DatabaseOperationForbidden`` if a test accidentally performs a query.
-    '''
+    """

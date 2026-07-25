@@ -154,8 +154,13 @@ class ViewProfileView(LoginRequiredMixin, View):
         )
         shared_visited_ids = their_visited_ids & my_visited_ids
 
-        context["common_pin_count"] = len(common_ids)
-        context["can_view_common_pins"] = bool(common_ids) and profile.can_view_common_pins_with(my_profile)
+        # common_pin_count itself must be gated the same as the detail-page link -
+        # otherwise a profile that opted out of sharing common-pin data (or a
+        # viewer who hasn't opted in themselves) still had the count rendered on
+        # the stats row, just without a clickable link to the detail page.
+        common_pins_permitted = profile.can_view_common_pins_with(my_profile)
+        context["common_pin_count"] = len(common_ids) if common_pins_permitted else None
+        context["can_view_common_pins"] = bool(common_ids) and common_pins_permitted
         context["shared_visited"] = Location.objects.filter(id__in=shared_visited_ids).select_related("wiki").order_by("wiki__name", "official_name") if shared_visited_ids else Location.objects.none()
 
         # Friendship relationship

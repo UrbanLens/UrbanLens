@@ -647,7 +647,10 @@ class MarkupMapSearchProvider(SearchProvider):
         # markup maps, pin maps, or wiki maps.
         label_q = term_filter(parsed.terms, ["label"])
         markup_qs = PinMarkup.objects.for_profile(profile).exclude(label="").filter(label_q).select_related("parent_map", "parent_pin", "parent_wiki__location")
-        seen_map_ids = {result.url for result in results}
+        # Dedupes within this second loop only (by url+label) - map results
+        # from the first loop use a different URL/key shape (bare map URL,
+        # no label) and can't collide with an annotation's "url:label" key.
+        seen_map_ids: set[str] = set()
         for markup in markup_qs[: limit * 2]:
             if markup.parent_pin is not None:
                 url = reverse("pin.details", kwargs={"pin_slug": markup.parent_pin.slug or str(markup.parent_pin.uuid)})

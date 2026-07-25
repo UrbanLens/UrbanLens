@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from functools import partial
 import json
 from typing import TYPE_CHECKING
 
@@ -8,6 +9,7 @@ from django import forms
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.custom_fields.model import CustomField, CustomFieldEntity, CustomFieldType
 from urbanlens.dashboard.models.labels.model import Label
+from urbanlens.dashboard.services.custom_field_references import resolve_reference
 
 if TYPE_CHECKING:
     from django.contrib.gis.geos import MultiPolygon
@@ -111,6 +113,7 @@ class SearchForm(forms.Form):
             **kwargs: Standard form kwargs.
         """
         super().__init__(*args, **kwargs)
+        self.profile = profile
         self.custom_fields: list[CustomField] = []
         visible_labels = Label.objects.visible_to(profile).ordered() if profile else Label.objects.global_only().ordered()
         tags_field = self.fields["tags"]
@@ -137,9 +140,43 @@ class SearchForm(forms.Form):
             elif cf.field_type == CustomFieldType.CHECKBOX:
                 self.fields[f"cf_{cf.pk}"] = forms.ChoiceField(required=False, choices=[("", "Any"), ("checked", "Checked"), ("unchecked", "Unchecked")])
             elif cf.field_type == CustomFieldType.REFERENCE:
-                self.fields[f"cf_{cf.pk}"] = forms.ChoiceField(required=False, choices=[("", "Any"), *[(str(pk), label) for pk, label in cf.reference_choices()]])
+                # The rendered <select> (``_filter_input.html``) calls
+                # ``field.reference_choices()`` directly and doesn't use this form
+                # field's widget at all, so there's no need to eagerly compute all
+                # (up to 500) choices here just to construct the form - a plain
+                # CharField plus the access-scoped single-value clean_ method below
+                # is enough to validate whatever was actually submitted.
+                self.fields[f"cf_{cf.pk}"] = forms.CharField(required=False)
+                setattr(self, f"clean_cf_{cf.pk}", partial(self._clean_reference_field, cf))
             else:  # text and url fields filter as free-text "contains"
                 self.fields[f"cf_{cf.pk}"] = forms.CharField(required=False)
+
+    def _clean_reference_field(self, cf: CustomField) -> int | None:
+        """Resolve and access-check one submitted ``cf_<id>`` reference value.
+
+        Bound per-field as ``clean_cf_<id>`` from ``__init__`` so Django's normal
+        ``full_clean()`` machinery invokes it. Only the single submitted pk is
+        resolved (via :func:`resolve_reference`) instead of computing the full
+        (up to 500-row) :meth:`CustomField.reference_choices` list just to
+        validate one value.
+
+        Args:
+            cf: The reference-type custom field this value belongs to.
+
+        Returns:
+            The resolved target's pk, or None when nothing was submitted.
+
+        Raises:
+            forms.ValidationError: When a non-empty value doesn't resolve to a
+                target the requesting profile may reference.
+        """
+        raw = (self.cleaned_data.get(f"cf_{cf.pk}") or "").strip()
+        if not raw:
+            return None
+        target = resolve_reference(cf.reference_kind, raw, self.profile)
+        if target is None:
+            raise forms.ValidationError("Invalid selection.")
+        return target.pk
 
     def parse_custom_field_criteria(self) -> list[dict] | None:
         """Collect active custom-field filters from cleaned_data.
@@ -182,9 +219,11 @@ class SearchForm(forms.Form):
                 if state in ("checked", "unchecked"):
                     criteria.append({"field": cf, "checked": state == "checked"})
             elif cf.field_type == CustomFieldType.REFERENCE:
-                chosen = (self.cleaned_data.get(f"cf_{cf.pk}") or "").strip()
-                if chosen:
-                    criteria.append({"field": cf, "ref_id": int(chosen)})
+                # Already resolved to an access-checked pk (or None) by
+                # _clean_reference_field/clean_cf_<id> during full_clean().
+                ref_id = self.cleaned_data.get(f"cf_{cf.pk}")
+                if ref_id is not None:
+                    criteria.append({"field": cf, "ref_id": ref_id})
             else:
                 text = (self.cleaned_data.get(f"cf_{cf.pk}") or "").strip()
                 if text:

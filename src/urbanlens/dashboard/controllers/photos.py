@@ -260,13 +260,14 @@ class PhotoUploadView(LoginRequiredMixin, View):
         if Image.objects.filter(profile=profile, checksum=checksum).exists():
             return JsonResponse({"error": "You already uploaded this file."}, status=409)
 
-        from urbanlens.dashboard.services.storage import quota_error_for_upload
+        from urbanlens.dashboard.services.storage import per_profile_upload_lock, quota_error_for_upload
 
-        quota_error = quota_error_for_upload(profile, image_file.size)
-        if quota_error:
-            return JsonResponse({"error": quota_error}, status=413)
+        with per_profile_upload_lock(profile):
+            quota_error = quota_error_for_upload(profile, image_file.size)
+            if quota_error:
+                return JsonResponse({"error": quota_error}, status=413)
 
-        img = Image.objects.create(image=image_file, profile=profile, checksum=checksum, file_size=image_file.size, media_type=media_type)
+            img = Image.objects.create(image=image_file, profile=profile, checksum=checksum, file_size=image_file.size, media_type=media_type)
 
         from urbanlens.dashboard.services.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import process_image_upload

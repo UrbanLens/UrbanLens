@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 
 from django.urls import reverse
 
-from urbanlens.dashboard.models.notifications.meta import Importance, NotificationType, Status
+from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, Importance, NotificationType, Status
 from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.pin_share import PinShare, PinShareStatus
 from urbanlens.dashboard.services.connections import are_connections
@@ -70,19 +70,25 @@ def create_pin_share(sender: Profile, recipient: Profile, pin: Pin, *, message: 
         shared_name=shared_name,
     )
     record_share_exposure(share)
-    base_message = f"{sender.username} shared {pin.display_label} with you."
-    if already_pinned:
-        base_message += " You already have this location pinned."
-    notification = NotificationLog.objects.create(
-        profile=recipient,
-        source_profile=sender,
-        status=Status.UNREAD,
-        importance=Importance.MEDIUM,
-        notification_type=NotificationType.PIN_SHARED,
-        title="Pin shared with you",
-        message=base_message,
-        url=reverse("pin.share.detail", kwargs={"share_id": share.pk}),
-    )
-    share.notification = notification
-    share.save(update_fields=["notification", "updated"])
+    try:
+        pref = recipient.notification_preferences.pin_shared
+    except AttributeError:
+        pref = DeliveryPreference.SITE
+
+    if pref != DeliveryPreference.NONE:
+        base_message = f"{sender.username} shared {pin.display_label} with you."
+        if already_pinned:
+            base_message += " You already have this location pinned."
+        notification = NotificationLog.objects.create(
+            profile=recipient,
+            source_profile=sender,
+            status=Status.UNREAD,
+            importance=Importance.MEDIUM,
+            notification_type=NotificationType.PIN_SHARED,
+            title="Pin shared with you",
+            message=base_message,
+            url=reverse("pin.share.detail", kwargs={"share_id": share.pk}),
+        )
+        share.notification = notification
+        share.save(update_fields=["notification", "updated"])
     return share

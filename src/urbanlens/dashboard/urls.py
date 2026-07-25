@@ -232,11 +232,6 @@ urlpatterns = [
                 path("pins/bulk-export/", pin_bulk.PinBulkExportView.as_view(), name="pin.bulk_export"),
                 path("pins/<slug:pin_slug>/", maps.MapController.as_view({"get": "map_pin_json"}), name="map.pin.json"),
                 path(
-                    "boundaries/",
-                    boundary.BoundaryController.as_view({"get": "list_boundaries"}),
-                    name="boundary.list",
-                ),
-                path(
                     "add/",
                     maps.MapController.as_view({"post": "post_add_pin"}),
                     name="pin.add",

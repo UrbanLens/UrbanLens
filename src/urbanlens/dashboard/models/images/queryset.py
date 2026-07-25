@@ -57,13 +57,12 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet):
         """
         from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 
-        # Fetch all uploaders who have at least one image (excluding the viewer themselves).
+        # Scope candidate uploaders to those who actually have an image in
+        # *this* queryset (the gallery being rendered), not every uploader on
+        # the whole site - keeps the cost proportional to the gallery size.
         uploaders = (
-            Profile.objects.exclude(pk=viewer_profile.pk)
-            .filter(
-                uploaded_images__isnull=False,
-            )
-            .distinct()
+            Profile.objects.filter(pk__in=self.values_list("profile_id", flat=True).distinct())
+            .exclude(pk=viewer_profile.pk)
             .values_list("pk", "photo_upload_visibility")
         )
 

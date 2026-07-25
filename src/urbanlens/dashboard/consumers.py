@@ -41,6 +41,14 @@ class UserNotificationConsumer(AsyncWebsocketConsumer):
             await self.accept()
         except Exception:
             logger.exception("Notification socket connect failed for user %s", getattr(user, "pk", None))
+            # Leave the group again if group_add succeeded but a later step (accept()) then
+            # failed - Channels only reliably fires disconnect() for a connection that reached
+            # accept(), so without this the group membership would otherwise leak.
+            if hasattr(self, "group_name"):
+                try:
+                    await self.channel_layer.group_discard(self.group_name, self.channel_name)
+                except Exception:
+                    logger.exception("Notification socket failed to leave group %s during connect-failure cleanup", self.group_name)
             await self.close(code=4500)
 
     async def disconnect(self, close_code):
@@ -51,8 +59,13 @@ class UserNotificationConsumer(AsyncWebsocketConsumer):
             except Exception:
                 logger.exception("Notification socket failed to leave group %s cleanly", self.group_name)
 
-    async def receive(self, text_data):
-        """Ignore client frames - this socket is server → client only."""
+    async def receive(self, text_data=None, bytes_data=None):
+        """Ignore client frames - this socket is server → client only.
+
+        Channels' base consumer calls ``receive(bytes_data=...)`` for a binary WS frame;
+        accepting both keyword arguments (rather than only ``text_data``) keeps a stray binary
+        frame from raising an uncaught ``TypeError`` that would otherwise kill the connection.
+        """
 
     async def notification_new(self, event):
         """Deliver one broadcasted notification to this connection.
@@ -113,6 +126,14 @@ class DirectMessageConsumer(AsyncWebsocketConsumer):
             await database_sync_to_async(mark_profile_online)(self.profile_id)
         except Exception:
             logger.exception("Direct message socket connect failed for user %s", getattr(user, "pk", None))
+            # Leave the group again if group_add succeeded but a later step then failed -
+            # Channels only reliably fires disconnect() for a connection that reached accept(),
+            # so without this the group membership would otherwise leak.
+            if hasattr(self, "group_name"):
+                try:
+                    await self.channel_layer.group_discard(self.group_name, self.channel_name)
+                except Exception:
+                    logger.exception("Direct message socket failed to leave group %s during connect-failure cleanup", self.group_name)
             await self.close(code=4500)
 
     async def disconnect(self, close_code):
@@ -130,7 +151,7 @@ class DirectMessageConsumer(AsyncWebsocketConsumer):
             except Exception:
                 logger.exception("Direct message socket failed to mark profile %s offline", self.profile_id)
 
-    async def receive(self, text_data):
+    async def receive(self, text_data=None, bytes_data=None):
         """Persist an incoming message; the service broadcasts it to both parties.
 
         Args:
@@ -141,7 +162,13 @@ class DirectMessageConsumer(AsyncWebsocketConsumer):
                 fails validation or privacy checks gets an explicit
                 ``{"type": "error", ...}`` reply so the sender always learns
                 their message didn't go through.
+            bytes_data: Unused - this socket is JSON-text-only. Channels' base
+                consumer calls ``receive(bytes_data=...)`` for a binary WS frame,
+                so accepting (and ignoring) it here keeps a stray binary frame
+                from raising an uncaught ``TypeError`` that would kill the connection.
         """
+        if text_data is None:
+            return
         try:
             data = json.loads(text_data)
         except (json.JSONDecodeError, TypeError):
@@ -376,19 +403,32 @@ class SafetyCheckinChatConsumer(AsyncWebsocketConsumer):
             await self.close(code=4500)
             return
 
-        self.group_name = f"safety_checkin_{self.checkin.pk}"
+        from urbanlens.dashboard.services.safety import safety_checkin_group_name, safety_checkin_location_group_name
+
+        self.group_name = safety_checkin_group_name(self.checkin.pk)
         # Live location is never shared with token-route contacts (see the model's
         # own docstring on live_location_sharing_enabled) - only the session route
         # (owner or an accepted partner, both already verified by _resolve()) joins
         # the location group.
-        self.location_group_name = f"safety_checkin_location_{self.checkin.pk}" if self.contact is None else None
+        self.location_group_name = safety_checkin_location_group_name(self.checkin.pk) if self.contact is None else None
+        joined_groups = []
         try:
             await self.channel_layer.group_add(self.group_name, self.channel_name)
+            joined_groups.append(self.group_name)
             if self.location_group_name:
                 await self.channel_layer.group_add(self.location_group_name, self.channel_name)
+                joined_groups.append(self.location_group_name)
             await self.accept()
         except Exception:
             logger.exception("Safety chat failed to join group for checkin %s", self.checkin.pk)
+            # Leave any group(s) already joined before accept() failed - Channels only
+            # reliably fires disconnect() for a connection that reached accept(), so without
+            # this the group membership would otherwise leak.
+            for name in joined_groups:
+                try:
+                    await self.channel_layer.group_discard(name, self.channel_name)
+                except Exception:
+                    logger.exception("Safety chat failed to leave group %s during connect-failure cleanup", name)
             await self.close(code=4500)
             return
         logger.info("Safety chat connected: checkin=%s contact=%s", self.checkin.pk, getattr(self.contact, "pk", None))
@@ -406,7 +446,7 @@ class SafetyCheckinChatConsumer(AsyncWebsocketConsumer):
             except Exception:
                 logger.exception("Safety chat failed to leave group %s cleanly", self.location_group_name)
 
-    async def receive(self, text_data):
+    async def receive(self, text_data=None, bytes_data=None):
         """Persist an incoming chat message and broadcast it to the check-in's group.
 
         Args:
@@ -415,7 +455,12 @@ class SafetyCheckinChatConsumer(AsyncWebsocketConsumer):
                 report failure for. A frame that fails validation or fails
                 to save gets an explicit ``{"type": "error", ...}`` reply
                 instead.
+            bytes_data: Unused - this socket is JSON-text-only. Accepting (and
+                ignoring) it keeps a stray binary frame from raising an uncaught
+                ``TypeError`` that would kill the connection.
         """
+        if text_data is None:
+            return
         try:
             data = json.loads(text_data)
         except (json.JSONDecodeError, TypeError):
@@ -586,6 +631,13 @@ class GameSessionConsumer(AsyncWebsocketConsumer):
             await self.accept()
         except Exception:
             logger.exception("SpotGuessr socket failed to join group for session %s", session_id)
+            # Leave the group again if group_add succeeded but accept() then failed -
+            # Channels only reliably fires disconnect() for a connection that reached
+            # accept(), so without this the group membership would otherwise leak.
+            try:
+                await self.channel_layer.group_discard(self.group_name, self.channel_name)
+            except Exception:
+                logger.exception("SpotGuessr socket failed to leave group %s during connect-failure cleanup", self.group_name)
             await self.close(code=4500)
 
     async def disconnect(self, close_code):
@@ -596,14 +648,19 @@ class GameSessionConsumer(AsyncWebsocketConsumer):
             except Exception:
                 logger.exception("SpotGuessr socket failed to leave group %s cleanly", self.group_name)
 
-    async def receive(self, text_data):
+    async def receive(self, text_data=None, bytes_data=None):
         """Persist an incoming chat message and broadcast it - the only client-to-server frame this socket accepts.
 
         Args:
             text_data: JSON string with a ``body`` field. Unparseable or
                 blank frames are silently ignored - there's no message to
                 report failure for.
+            bytes_data: Unused - this socket is JSON-text-only. Accepting (and
+                ignoring) it keeps a stray binary frame from raising an uncaught
+                ``TypeError`` that would kill the connection.
         """
+        if text_data is None:
+            return
         try:
             data = json.loads(text_data)
         except (json.JSONDecodeError, TypeError):
@@ -720,6 +777,13 @@ class TriviaSessionConsumer(AsyncWebsocketConsumer):
             await self.accept()
         except Exception:
             logger.exception("Trivia socket failed to join group for session %s", session_id)
+            # Leave the group again if group_add succeeded but accept() then failed -
+            # Channels only reliably fires disconnect() for a connection that reached
+            # accept(), so without this the group membership would otherwise leak.
+            try:
+                await self.channel_layer.group_discard(self.group_name, self.channel_name)
+            except Exception:
+                logger.exception("Trivia socket failed to leave group %s during connect-failure cleanup", self.group_name)
             await self.close(code=4500)
 
     async def disconnect(self, close_code):
@@ -730,14 +794,19 @@ class TriviaSessionConsumer(AsyncWebsocketConsumer):
             except Exception:
                 logger.exception("Trivia socket failed to leave group %s cleanly", self.group_name)
 
-    async def receive(self, text_data):
+    async def receive(self, text_data=None, bytes_data=None):
         """Persist an incoming chat message and broadcast it - the only client-to-server frame this socket accepts.
 
         Args:
             text_data: JSON string with a ``body`` field. Unparseable or
                 blank frames are silently ignored - there's no message to
                 report failure for.
+            bytes_data: Unused - this socket is JSON-text-only. Accepting (and
+                ignoring) it keeps a stray binary frame from raising an uncaught
+                ``TypeError`` that would kill the connection.
         """
+        if text_data is None:
+            return
         try:
             data = json.loads(text_data)
         except (json.JSONDecodeError, TypeError):

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import suppress
 from datetime import UTC, datetime
 import logging
 import os
@@ -154,10 +155,8 @@ class DatabaseBackup:
             subprocess.run(pg_dump_command, check=True, env=env)  # nosec B603
         except subprocess.CalledProcessError as e:
             logger.exception("Error occurred while performing database backup: %s", e)
-            try:
+            with suppress(OSError):
                 os.remove(temp_path)
-            except OSError:
-                pass
             return False
 
         # A single filesystem rename is effectively atomic, so backup_files()/
@@ -186,6 +185,6 @@ class DatabaseBackup:
         # processes, unlike a threading.Lock) stops a burst of near-simultaneous callers right
         # at the due-threshold from each enqueuing their own redundant backup task before the
         # first one finishes.
-        if not cache.add(_SCHEDULE_LOCK_CACHE_KEY, True, timeout=_SCHEDULE_LOCK_TIMEOUT_SECONDS):
+        if not cache.add(_SCHEDULE_LOCK_CACHE_KEY, value=True, timeout=_SCHEDULE_LOCK_TIMEOUT_SECONDS):
             return False
         return safely_enqueue_task(run_scheduled_database_backup) is not None

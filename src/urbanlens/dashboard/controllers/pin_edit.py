@@ -398,7 +398,6 @@ class PinEditView(LoginRequiredMixin, View):
 
         # Reload from DB so all properties reflect saved state
         pin.refresh_from_db()
-        pin.labels.filter(kind="category")  # prime M2M cache
 
         # Quick-edit widgets (star ratings) submit exactly one field at a time. When the
         # client's last-known version still matches what was in the DB before this save,
@@ -493,7 +492,7 @@ class PinDetachChildView(LoginRequiredMixin, View):
             return HttpResponse("You already have a top-level pin at this exact location. Move this child pin slightly before detaching it.", status=400)
         logger.info("User %s detached child pin %s from parent %s", request.user.id, pin.id, pin.parent_pin_id)
         pin.parent_pin = None
-        pin.save(update_fields=["parent_pin"])
+        pin.save(update_fields=["parent_pin", "updated"])
         response = HttpResponse("", status=200)
         response["HX-Refresh"] = "true"
         return response
@@ -615,7 +614,7 @@ class PinRelinkView(LoginRequiredMixin, View):
             if existing is not None:
                 if not pin.would_create_cycle(existing):
                     pin.parent_pin = existing
-                    pin.save(update_fields=["parent_pin"])
+                    pin.save(update_fields=["parent_pin", "updated"])
                     pin.refresh_from_db()
                 if is_xhr:
                     from django.urls import reverse
@@ -650,7 +649,7 @@ class PinRelinkView(LoginRequiredMixin, View):
         # exists, otherwise leave the pin wiki-less until someone creates one.
         pin.location = location
         pin.wiki = Wiki.objects.get_for_location(location)
-        pin.save(update_fields=["location", "wiki"])
+        pin.save(update_fields=["location", "wiki", "updated"])
         pin.refresh_from_db()
 
         if is_xhr:

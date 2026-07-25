@@ -13,7 +13,7 @@ from django.views import View
 from urbanlens.dashboard.models.aliases.model import PinAlias
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.markup.model import MarkupMap
-from urbanlens.dashboard.models.notifications.meta import Importance, NotificationType, Status
+from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, Importance, NotificationType, Status
 from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_share import PinShare, PinShareStatus
@@ -125,8 +125,8 @@ def _create_pin_from_share(share: PinShare, parent_pin: Pin | None = None) -> Pi
         locked=source.locked,
     )
     new_pin.labels.set(source.labels.all())
-    for image in share.images.all():
-        Image.objects.create(
+    Image.objects.bulk_create(
+        Image(
             image=image.image.name,
             pin=new_pin,
             location=new_pin.location,
@@ -143,6 +143,8 @@ def _create_pin_from_share(share: PinShare, parent_pin: Pin | None = None) -> Pi
             file_size=image.file_size,
             exif_data=image.exif_data,
         )
+        for image in share.images.all()
+    )
     return new_pin
 
 
@@ -265,23 +267,29 @@ class PinShareCreateView(LoginRequiredMixin, View):
         else:
             bundled_count = 0
 
-        base_message = f"{sender.username} shared {pin.display_label} with you."
-        if bundled_count:
-            base_message += f" It comes with {bundled_count} child pin{'s' if bundled_count != 1 else ''}."
-        if already_pinned:
-            base_message += " You already have this location pinned."
-        notification = NotificationLog.objects.create(
-            profile=recipient,
-            source_profile=sender,
-            status=Status.UNREAD,
-            importance=Importance.MEDIUM,
-            notification_type=NotificationType.PIN_SHARED,
-            title="Pin shared with you",
-            message=base_message,
-            url=reverse("pin.share.detail", kwargs={"share_id": share.id}),
-        )
-        share.notification = notification
-        share.save(update_fields=["notification", "updated"])
+        try:
+            pref = recipient.notification_preferences.pin_shared
+        except AttributeError:
+            pref = DeliveryPreference.SITE
+
+        if pref != DeliveryPreference.NONE:
+            base_message = f"{sender.username} shared {pin.display_label} with you."
+            if bundled_count:
+                base_message += f" It comes with {bundled_count} child pin{'s' if bundled_count != 1 else ''}."
+            if already_pinned:
+                base_message += " You already have this location pinned."
+            notification = NotificationLog.objects.create(
+                profile=recipient,
+                source_profile=sender,
+                status=Status.UNREAD,
+                importance=Importance.MEDIUM,
+                notification_type=NotificationType.PIN_SHARED,
+                title="Pin shared with you",
+                message=base_message,
+                url=reverse("pin.share.detail", kwargs={"share_id": share.id}),
+            )
+            share.notification = notification
+            share.save(update_fields=["notification", "updated"])
         return render(request, "dashboard/partials/pins/pin_share_dialog.html", {"pin": pin, "friends": get_connections(sender), "shared_to": recipient})
 
 

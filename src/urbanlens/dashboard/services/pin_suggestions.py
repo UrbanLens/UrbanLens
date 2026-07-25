@@ -142,7 +142,8 @@ def _dates_from_hits(hits: list[LocationHit]) -> list[str]:
     visit_hits = [hit for hit in hits if hit.implies_visit]
     dates = {hit.taken_at.date().isoformat() for hit in visit_hits}
     dates.update(*(hit.extra_dates for hit in visit_hits))
-    return sorted(dates)[:MAX_STORED_VISIT_DATES]
+    # Keep the most recent N, not the earliest N - same rationale as _merge_dates.
+    return sorted(dates)[-MAX_STORED_VISIT_DATES:]
 
 
 def _weight_of(hits: list[LocationHit]) -> int:
@@ -151,8 +152,14 @@ def _weight_of(hits: list[LocationHit]) -> int:
 
 
 def _merge_dates(existing: list[str], new: list[str]) -> list[str]:
-    """Return the union of two date-string lists, sorted and capped."""
-    return sorted(set(existing) | set(new))[:MAX_STORED_VISIT_DATES]
+    """Return the union of two date-string lists, sorted ascending and capped to the most recent N.
+
+    Once a suggestion accumulates more than ``MAX_STORED_VISIT_DATES`` distinct
+    dates (e.g. a place visited monthly for years via repeated Immich sweeps),
+    the recent visits are the more useful ones to keep - so the cap trims from
+    the front of the ascending-sorted list, not the back.
+    """
+    return sorted(set(existing) | set(new))[-MAX_STORED_VISIT_DATES:]
 
 
 def _centroid(hits: list[LocationHit]) -> tuple[float, float]:
@@ -244,14 +251,25 @@ def _merge_links(existing: list[dict[str, str]], hits: list[LocationHit]) -> lis
     return merged
 
 
+#: Prefilter radius for _match_hits_to_pins - same value and rationale as
+#: services.visits.record_geolocation_pin_visits's near_point prefilter: a
+#: deliberately generous upper bound on any real property boundary's size, so
+#: it can only ever exclude pins that couldn't possibly contain a hit anyway.
+_BOUNDARY_PREFILTER_RADIUS_KM = 5
+
+
 def _match_hits_to_pins(profile: Profile, hits: list[LocationHit]) -> tuple[dict[Pin, list[LocationHit]], list[LocationHit]]:
     """Split hits into ones that fall inside an existing pin's boundary and ones that don't.
 
-    Precomputes each of the profile's root pins' effective property boundary
-    once (the same polygon-then-circle-fallback resolution ``find_pin_containing_point``
-    uses for a single point), then tests every hit against those polygons in memory -
-    this keeps a full-library sweep from re-resolving the same boundary via extra
-    DB queries once per hit.
+    For each hit, prefilters candidate pins with an indexed PostGIS
+    ``near_point`` distance query before resolving any boundary polygon -
+    without this, a profile with many pins (e.g. after a bulk import) forces
+    an unbounded, unbatched boundary-resolution chain over every single root
+    pin for every hit, the exact O(hits x pins) class of bug that made
+    ``services.visits.record_geolocation_pin_visits`` blow past nginx's 60s
+    upstream timeout in production before it got the same fix. Resolved
+    boundary polygons are cached per-pin across the whole call, since the
+    same nearby pin is typically re-examined by many hits.
 
     Args:
         profile: Owner whose pins are being matched against.
@@ -264,15 +282,26 @@ def _match_hits_to_pins(profile: Profile, hits: list[LocationHit]) -> tuple[dict
 
     from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
 
-    pins = list(Pin.objects.filter(profile=profile).root_pins().select_related("location"))
-    pin_polygons = [(pin, Boundary.objects.effective_polygon_for_pin(pin, BoundaryType.PROPERTY)) for pin in pins]
+    polygon_cache: dict[int, object] = {}
+    nearby_cache: dict[tuple[float, float], list[Pin]] = {}
+
+    def _polygon_for(pin: Pin):
+        if pin.pk not in polygon_cache:
+            polygon_cache[pin.pk] = Boundary.objects.effective_polygon_for_pin(pin, BoundaryType.PROPERTY)
+        return polygon_cache[pin.pk]
+
+    def _nearby_pins(point: Point, key: tuple[float, float]) -> list[Pin]:
+        if key not in nearby_cache:
+            nearby_cache[key] = list(Pin.objects.filter(profile=profile).near_point(point, radius_km=_BOUNDARY_PREFILTER_RADIUS_KM).select_related("location"))
+        return nearby_cache[key]
 
     matched: dict[Pin, list[LocationHit]] = {}
     unmatched: list[LocationHit] = []
     for hit in hits:
         point = Point(hit.longitude, hit.latitude, srid=4326)
         matched_pin: Pin | None = None
-        for pin, polygon in pin_polygons:
+        for pin in _nearby_pins(point, (hit.latitude, hit.longitude)):
+            polygon = _polygon_for(pin)
             if polygon is not None:
                 if polygon.contains(point):
                     matched_pin = pin
@@ -293,6 +322,18 @@ def _match_hits_to_pins(profile: Profile, hits: list[LocationHit]) -> tuple[dict
 def _cluster_hits(hits: list[LocationHit], radius_m: float) -> list[list[LocationHit]]:
     """Greedily group hits into clusters no farther than radius_m from a running centroid.
 
+    The running centroid used here to decide whether a new hit merges into an
+    existing cluster is weight-aware (tracks a running weighted sum and
+    weighted total, exactly like ``_centroid()``'s formula), so it stays
+    consistent with the final stored suggestion centroid computed by
+    ``_centroid()`` once the cluster is complete. A hit's ``weight`` can run
+    into the hundreds for a heavy local-scan cluster (see
+    ``LocationHit.weight``) - without weighting this running comparison
+    point, a hit sitting near ``radius_m`` from a heavy cluster could be
+    merged/rejected based on a centroid that doesn't reflect where the
+    cluster's mass actually is, disagreeing with where ``_centroid()`` would
+    ultimately place it.
+
     Args:
         hits: Unmatched hits to cluster.
         radius_m: Merge distance in metres.
@@ -302,23 +343,40 @@ def _cluster_hits(hits: list[LocationHit], radius_m: float) -> list[list[Locatio
     """
     clusters: list[list[LocationHit]] = []
     centroids: list[tuple[float, float]] = []
+    weights: list[int] = []
     for hit in hits:
         for index, centroid in enumerate(centroids):
             if _haversine_km(centroid, (hit.latitude, hit.longitude)) * 1000 <= radius_m:
                 clusters[index].append(hit)
                 clat, clon = centroid
-                n = len(clusters[index])
-                centroids[index] = (clat + (hit.latitude - clat) / n, clon + (hit.longitude - clon) / n)
+                total_weight = weights[index] + hit.weight
+                centroids[index] = (
+                    clat + (hit.latitude - clat) * hit.weight / total_weight,
+                    clon + (hit.longitude - clon) * hit.weight / total_weight,
+                )
+                weights[index] = total_weight
                 break
         else:
             clusters.append([hit])
             centroids.append((hit.latitude, hit.longitude))
+            weights.append(hit.weight)
     return clusters
 
 
-def _find_nearby_pending_new_pin_suggestion(profile: Profile, latitude: float, longitude: float) -> PinSuggestion | None:
-    """Return a pending, not-yet-matched-to-a-pin suggestion within cluster range of a point, if any."""
-    candidates = PinSuggestion.objects.filter(profile=profile, pin__isnull=True, status=PinSuggestionStatus.PENDING)
+def _find_nearby_pending_new_pin_suggestion(candidates: list[PinSuggestion], latitude: float, longitude: float) -> PinSuggestion | None:
+    """Return a pending, not-yet-matched-to-a-pin suggestion within cluster range of a point, if any.
+
+    Args:
+        candidates: The profile's pending pin-less suggestions - fetched once
+            by the caller before its ingest loop starts and kept/updated in
+            memory across every cluster in that run, rather than re-queried
+            per cluster (see ``ingest_location_hits``).
+        latitude: Cluster centroid latitude to match against.
+        longitude: Cluster centroid longitude to match against.
+
+    Returns:
+        The first candidate within ``CLUSTER_RADIUS_M`` metres, or None.
+    """
     for candidate in candidates:
         point = (float(candidate.latitude), float(candidate.longitude))
         if _haversine_km(point, (latitude, longitude)) * 1000 <= CLUSTER_RADIUS_M:
@@ -369,11 +427,25 @@ def _upsert_matched_suggestion(profile: Profile, pin: Pin, hits: list[LocationHi
     )
 
 
-def _upsert_new_pin_suggestion(profile: Profile, cluster: list[LocationHit], origin: PinSuggestionOrigin) -> PinSuggestion:
-    """Create or extend the pending suggestion to create a new pin for a cluster of hits."""
+def _upsert_new_pin_suggestion(profile: Profile, cluster: list[LocationHit], origin: PinSuggestionOrigin, pending_candidates: list[PinSuggestion]) -> PinSuggestion:
+    """Create or extend the pending suggestion to create a new pin for a cluster of hits.
+
+    Args:
+        profile: Owner the cluster belongs to.
+        cluster: Hits grouped into one new-pin candidate by ``_cluster_hits``.
+        origin: Which batch scan produced these hits.
+        pending_candidates: The profile's pending pin-less suggestions -
+            fetched once before the ingest loop begins and appended to here
+            whenever a brand-new suggestion is created, so later clusters in
+            the same ingest run see it without a fresh database query (see
+            ``ingest_location_hits``).
+
+    Returns:
+        The created or extended ``PinSuggestion``.
+    """
     latitude, longitude = _centroid(cluster)
     dates = _dates_from_hits(cluster)
-    existing = _find_nearby_pending_new_pin_suggestion(profile, latitude, longitude)
+    existing = _find_nearby_pending_new_pin_suggestion(pending_candidates, latitude, longitude)
     if existing is not None:
         existing.visit_dates = _merge_dates(existing.visit_dates, dates)
         existing.hit_count += _weight_of(cluster)
@@ -400,7 +472,7 @@ def _upsert_new_pin_suggestion(profile: Profile, cluster: list[LocationHit], ori
             ]
         )
         return existing
-    return PinSuggestion.objects.create(
+    created = PinSuggestion.objects.create(
         profile=profile,
         pin=None,
         latitude=latitude,
@@ -415,6 +487,8 @@ def _upsert_new_pin_suggestion(profile: Profile, cluster: list[LocationHit], ori
         suggested_aliases=_merge_aliases([], cluster),
         suggested_links=_merge_links([], cluster),
     )
+    pending_candidates.append(created)
+    return created
 
 
 def ingest_location_hits(profile: Profile, hits: Iterable[LocationHit], origin: PinSuggestionOrigin) -> IngestSummary:
@@ -447,8 +521,13 @@ def ingest_location_hits(profile: Profile, hits: Iterable[LocationHit], origin: 
                 suggestion_ids_by_key[hit.source_key] = suggestion.pk
 
     clusters = _cluster_hits(unmatched, CLUSTER_RADIUS_M)
+    # Fetched once here rather than inside _find_nearby_pending_new_pin_suggestion
+    # per cluster - _upsert_new_pin_suggestion appends newly-created suggestions
+    # to this same list, so later clusters in this loop still see them without
+    # any further database queries.
+    pending_new_pin_suggestions = list(PinSuggestion.objects.filter(profile=profile, pin__isnull=True, status=PinSuggestionStatus.PENDING))
     for cluster in clusters:
-        suggestion = _upsert_new_pin_suggestion(profile, cluster, origin)
+        suggestion = _upsert_new_pin_suggestion(profile, cluster, origin, pending_new_pin_suggestions)
         for hit in cluster:
             if hit.source_key:
                 suggestion_ids_by_key[hit.source_key] = suggestion.pk
@@ -620,9 +699,17 @@ def _apply_suggested_enrichment(pin: Pin, suggestion: PinSuggestion) -> None:
         pin.save(update_fields=[*update_fields, "updated"])
 
     if suggestion.suggested_aliases:
+        from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, PinAutoRemoval
+
         existing_alias_names = {alias.name.casefold() for alias in pin.aliases.all()}
         for alias_name in suggestion.suggested_aliases:
             if not alias_name or alias_name.casefold() in existing_alias_names:
+                continue
+            # A user who deleted this exact alias before must not have it silently
+            # recreated the next time a suggestion for the same pin is accepted -
+            # matches every other auto-creation path (services.ai.link_extraction,
+            # services.locations.naming).
+            if PinAutoRemoval.objects.was_removed(pin=pin, kind=AutoRemovalKind.ALIAS, value=alias_name):
                 continue
             try:
                 PinAlias.objects.create(pin=pin, name=alias_name, kind=AliasType.ALTERNATE, source="external_api")
@@ -632,10 +719,14 @@ def _apply_suggested_enrichment(pin: Pin, suggestion: PinSuggestion) -> None:
                 existing_alias_names.add(alias_name.casefold())
 
     if suggestion.suggested_links:
+        from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, PinAutoRemoval
+
         existing_urls = set(pin.links.values_list("url", flat=True))
         for link in suggestion.suggested_links:
             url = link.get("url")
             if not url or url in existing_urls:
+                continue
+            if PinAutoRemoval.objects.was_removed(pin=pin, kind=AutoRemovalKind.LINK, value=url):
                 continue
             PinLink.objects.create(pin=pin, name=link.get("name", ""), url=url)
             existing_urls.add(url)

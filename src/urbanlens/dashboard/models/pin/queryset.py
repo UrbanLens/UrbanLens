@@ -4,11 +4,11 @@ from __future__ import annotations
 import contextlib
 import logging
 import math
-from math import atan2, cos, radians, sin, sqrt
 from typing import TYPE_CHECKING, Self
 
 from django.contrib.gis.db.models.functions import Distance
 from django.contrib.gis.measure import D
+from django.db import IntegrityError
 from django.db.models import Count, Exists, F, OuterRef, Q
 from django.utils import timezone
 
@@ -201,20 +201,6 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
         bbox = Polygon.from_bbox((west, south, east, north))
         bbox.srid = 4326
         return self.filter(location__point__within=bbox)
-
-    def nearby_pins(self, latitude, longitude, radius):
-
-        R = 6371  # radius of the Earth in km
-        lat1 = radians(latitude)
-        lon1 = radians(longitude)
-        lat2 = radians(F("location__latitude"))
-        lon2 = radians(F("location__longitude"))
-        dlon = lon2 - lon1
-        dlat = lat2 - lat1
-        a = sin(dlat / 2) ** 2 + cos(lat1) * cos(lat2) * sin(dlon / 2) ** 2
-        c = 2 * atan2(sqrt(a), sqrt(1 - a))
-        distance = R * c
-        return self.filter(distance__lte=distance)
 
     def by_tag(self, tag_id: int) -> Self:
         """Filter pins that have this tag or any of its descendant tags."""
@@ -577,7 +563,16 @@ class PinManager(abstract.PublicDashboardManager.from_queryset(PinQuerySet)):
         if existing_pin is not None:
             return existing_pin, False
 
-        pin = self.create(location=location, profile=profile, **defaults)
+        try:
+            pin = self.create(location=location, profile=profile, **defaults)
+        except IntegrityError:
+            # A concurrent request created this profile's pin at this Location between
+            # the existence check above and this insert (db_pin_unique_location_per_profile)
+            # - return that row instead of letting the race surface as an unhandled 500.
+            existing_pin = self.filter(location=location, profile=profile).order_by(F("parent_pin_id").asc(nulls_first=True)).first()
+            if existing_pin is not None:
+                return existing_pin, False
+            raise
 
         # Return the new pin and True for 'created'
         return pin, True

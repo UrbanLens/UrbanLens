@@ -157,9 +157,9 @@ def geometry_to_geos(geometry: dict | None) -> GEOSGeometry | None:
     the ``line``/``arrow``/``text``/``square``/``polygon``/``pin`` markup
     types) convert directly. The non-standard ``Circle`` type (
     ``{"type": "Circle", "coordinates": [lng, lat], "radius": meters}``) has
-    no GeoJSON equivalent and is synthesized as a buffered point, using the
-    same degrees-per-metre approximation as
-    ``models.boundary.queryset.circle_for_coordinates``.
+    no GeoJSON equivalent and is synthesized as a buffered point via
+    ``models.boundary.queryset.buffer_point_by_meters``, the same
+    latitude-corrected helper ``circle_for_coordinates`` uses.
 
     Args:
         geometry: The raw geometry dict from a PinMarkup row.
@@ -177,10 +177,12 @@ def geometry_to_geos(geometry: dict | None) -> GEOSGeometry | None:
             return None
         try:
             lng, lat = float(coords[0]), float(coords[1])
-            radius_deg = float(radius) / 111_000
+            radius_meters = float(radius)
         except (TypeError, ValueError):
             return None
-        return Point(lng, lat, srid=4326).buffer(radius_deg)
+        from urbanlens.dashboard.models.boundary.queryset import buffer_point_by_meters
+
+        return buffer_point_by_meters(Point(lng, lat, srid=4326), radius_meters, latitude=lat)
     try:
         geom = GEOSGeometry(json.dumps(geometry))
     except Exception:
@@ -265,7 +267,13 @@ def _item_matches_pin(item: PinMarkup, boundary: GEOSGeometry) -> bool:
 
 
 def _candidate_pins(sender: Profile, bounds: MapBounds):
-    """Sender's own root pins within a bounding box, prefiltered on plain numeric fields."""
+    """Sender's own root pins within a bounding box, prefiltered on plain numeric fields.
+
+    ``select_related`` covers every relation :func:`_boundaries_for_pins`
+    dereferences per pin (``location``, the pin's own ``wiki``, and its
+    location's ``wiki`` fallback) so resolving boundaries for the whole
+    candidate set costs a handful of bulk queries rather than several per pin.
+    """
     from urbanlens.dashboard.models.pin.model import Pin
 
     return Pin.objects.filter(
@@ -274,7 +282,86 @@ def _candidate_pins(sender: Profile, bounds: MapBounds):
         location__isnull=False,
         location__latitude__range=(bounds.south, bounds.north),
         location__longitude__range=(bounds.west, bounds.east),
-    ).select_related("location")
+    ).select_related("location", "location__wiki", "wiki")
+
+
+def _boundaries_for_pins(pins: list[Pin], boundary_type: str) -> dict[int, GEOSGeometry]:
+    """Batch-resolve each pin's effective boundary polygon, keyed by pin id.
+
+    A batched counterpart to ``Boundary.objects.effective_polygon_for_pin``
+    for callers that need it for many pins at once - calling that per pin
+    (as ``detect_shared_pins`` used to) is an N+1: each call issues its own
+    "own row" / "wiki row" / "location-default row" queries. This instead
+    fetches each of those in one bulk query for the whole batch and resolves
+    every pin's polygon from the resulting dicts.
+
+    This mirrors ``BoundaryManager.resolve_for_pin``'s property-boundary
+    order (own row -> wiki row -> location-default row -> circle fallback)
+    but *without* the parent-pin inheritance branch, which is safe here only
+    because every candidate pin is guaranteed to be a root pin
+    (``_candidate_pins`` filters ``parent_pin__isnull=True``) - a detail pin
+    would need that branch and should not use this helper.
+
+    Args:
+        pins: Candidate pins to resolve (already ``select_related`` for
+            ``location``, ``location__wiki``, and ``wiki`` - see
+            :func:`_candidate_pins`).
+        boundary_type: A ``BoundaryType`` value.
+
+    Returns:
+        Dict mapping pin id to its effective boundary polygon; pins with no
+        applicable boundary (including no fallback circle) are omitted.
+    """
+    from urbanlens.dashboard.models.boundary.model import Boundary
+    from urbanlens.dashboard.models.boundary.queryset import circle_for_coordinates
+    from urbanlens.dashboard.models.wiki.model import Wiki
+
+    if not pins:
+        return {}
+
+    own_by_pin_id = Boundary.objects.rows_by_pin_id((pin.pk for pin in pins), boundary_type)
+
+    wiki_by_pin_id: dict[int, Wiki] = {}
+    for pin in pins:
+        if pin.pk in own_by_pin_id and (own_by_pin_id[pin.pk].polygon or own_by_pin_id[pin.pk].generated_polygon):
+            continue
+        wiki = pin.wiki if pin.wiki_id else (Wiki.objects.get_for_location(pin.location) if pin.location_id else None)
+        if wiki is not None:
+            wiki_by_pin_id[pin.pk] = wiki
+
+    wiki_boundary_by_wiki_id = Boundary.objects.rows_by_wiki_id((wiki.pk for wiki in wiki_by_pin_id.values()), boundary_type)
+    location_boundary_by_location_id = Boundary.objects.rows_by_location_id(
+        (pin.location_id for pin in pins if pin.location_id),
+        boundary_type,
+    )
+
+    result: dict[int, GEOSGeometry] = {}
+    for pin in pins:
+        own_row = own_by_pin_id.get(pin.pk)
+        if own_row is not None:
+            if own_row.polygon:
+                result[pin.pk] = own_row.polygon
+                continue
+            if own_row.generated_polygon:
+                result[pin.pk] = own_row.generated_polygon
+                continue
+
+        wiki = wiki_by_pin_id.get(pin.pk)
+        wiki_row = wiki_boundary_by_wiki_id.get(wiki.pk) if wiki is not None else None
+        if wiki_row is not None and wiki_row.drawn_or_generated_polygon:
+            result[pin.pk] = wiki_row.drawn_or_generated_polygon
+            continue
+
+        if pin.location_id:
+            location_row = location_boundary_by_location_id.get(pin.location_id)
+            if location_row is not None and location_row.generated_polygon:
+                result[pin.pk] = location_row.generated_polygon
+                continue
+            if boundary_type == _DETECTION_BOUNDARY_TYPE:
+                circle = circle_for_coordinates(pin.location.latitude, pin.location.longitude)
+                if circle is not None:
+                    result[pin.pk] = circle
+    return result
 
 
 def detect_shared_pins(markup_map: MarkupMap, sender: Profile) -> list[Pin]:
@@ -303,12 +390,13 @@ def detect_shared_pins(markup_map: MarkupMap, sender: Profile) -> list[Pin]:
     if not items:
         return []
 
-    from urbanlens.dashboard.models.boundary.model import Boundary
-
     wide_bounds = bounds.expanded(CANDIDATE_RADIUS_MULTIPLIER)
+    candidates = list(_candidate_pins(sender, wide_bounds))
+    boundaries_by_pin_id = _boundaries_for_pins(candidates, _DETECTION_BOUNDARY_TYPE)
+
     matches: list[Pin] = []
-    for pin in _candidate_pins(sender, wide_bounds):
-        boundary = Boundary.objects.effective_polygon_for_pin(pin, _DETECTION_BOUNDARY_TYPE)
+    for pin in candidates:
+        boundary = boundaries_by_pin_id.get(pin.pk)
         if boundary is None:
             continue
         if any(_item_matches_pin(item, boundary) for item in items):

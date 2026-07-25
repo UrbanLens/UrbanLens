@@ -18,6 +18,7 @@ from django.views import View
 from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, PinAutoRemoval, WikiAutoRemoval
 from urbanlens.dashboard.models.links.model import MAX_LINK_URL_LENGTH, PinLink, WikiLink
 from urbanlens.dashboard.models.pin.model import Pin
+from urbanlens.dashboard.models.wiki_edit import WikiEdit
 from urbanlens.dashboard.services.wiki_access import resolve_visible_wiki
 
 logger = logging.getLogger(__name__)
@@ -120,15 +121,26 @@ class LocationLinksView(LoginRequiredMixin, View):
             return cleaned
         name, url = cleaned
         WikiLink.objects.create(wiki=wiki, name=name, url=url, created_by=profile)
+        WikiEdit.objects.create(
+            wiki=wiki,
+            editor=profile,
+            changes={"link_added": {"from": None, "to": url}},
+        )
         return _render_wiki_links(request, wiki)
 
 
 class LocationLinkDeleteView(LoginRequiredMixin, View):
     def delete(self, request, location_slug, link_id):
-        _location, wiki, _profile = resolve_visible_wiki(request, location_slug)
+        _location, wiki, profile = resolve_visible_wiki(request, location_slug)
         link = get_object_or_404(WikiLink, id=link_id, wiki=wiki)
+        link_url = link.url
         # Tombstone first: a plugin panel (Nominatim, EPA) can otherwise
         # recreate this exact link the next time its cache goes stale.
-        WikiAutoRemoval.objects.record(wiki=wiki, kind=AutoRemovalKind.LINK, value=link.url)
+        WikiAutoRemoval.objects.record(wiki=wiki, kind=AutoRemovalKind.LINK, value=link_url)
         link.delete()
+        WikiEdit.objects.create(
+            wiki=wiki,
+            editor=profile,
+            changes={"link_removed": {"from": link_url, "to": None}},
+        )
         return _render_wiki_links(request, wiki)
