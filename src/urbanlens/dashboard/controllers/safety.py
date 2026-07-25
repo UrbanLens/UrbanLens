@@ -673,6 +673,22 @@ class SafetyCheckinDetailView(LoginRequiredMixin, View):
             Rendered page.
         """
         owner = checkin.profile
+        is_archived = hasattr(checkin, "archive")
+        can_unlock = is_archived and not viewer_is_partner
+        if is_archived:
+            return render(
+                request,
+                "dashboard/pages/safety/detail.html",
+                {
+                    "checkin": checkin,
+                    "viewer_is_partner": viewer_is_partner,
+                    "is_archived": True,
+                    "can_unlock": can_unlock,
+                    "archive": checkin.archive if can_unlock else None,
+                    "map_attribution": _MAP_ATTRIBUTION,
+                },
+            )
+
         checkin.ensure_slug()
         _ensure_markup_map(checkin, owner)
         contacts = list(checkin.contacts.all())
@@ -684,6 +700,7 @@ class SafetyCheckinDetailView(LoginRequiredMixin, View):
             {
                 "checkin": checkin,
                 "viewer_is_partner": viewer_is_partner,
+                "is_archived": False,
                 "contacts": contacts,
                 "contacts_input": [(c.contact_profile, c.email, c.name) for c in contacts],
                 "contact_status": _contact_status_map(checkin, contacts),
@@ -695,6 +712,7 @@ class SafetyCheckinDetailView(LoginRequiredMixin, View):
                 "wiki_editor_count": wiki_editor_count,
                 "attached_maps": checkin.markup_maps.all(),
                 "partners": checkin.partners.select_related("profile", "invited_by").all(),
+                "archive_at": checkin.archive_scheduled_at,
                 "map_attribution": _MAP_ATTRIBUTION,
                 **_markup_style_context(owner),
             },
@@ -738,14 +756,18 @@ class SafetyCheckinDetailView(LoginRequiredMixin, View):
         is_contact = checkin.contacts.filter(contact_profile=profile).exists()
         if checkin.wiki_notified_at is None and not is_contact:
             raise Http404
+        is_archived = hasattr(checkin, "archive")
         return render(
             request,
             "dashboard/pages/safety/community_status.html",
             {
                 "checkin": checkin,
-                "wiki": find_community_wiki(checkin.destination_latitude, checkin.destination_longitude) if checkin.wiki_notified_at else None,
+                "wiki": find_community_wiki(checkin.destination_latitude, checkin.destination_longitude) if checkin.wiki_notified_at and not is_archived else None,
                 "map_attribution": _MAP_ATTRIBUTION,
                 "viewer_is_contact": is_contact,
+                "is_archived": is_archived,
+                "can_unlock": False,
+                "archive_at": checkin.archive_scheduled_at,
             },
         )
 
@@ -1505,6 +1527,7 @@ class SafetyContactPortalView(View):
         """
         contact = get_object_or_404(SafetyCheckinContact.objects.select_related("checkin", "checkin__profile").by_token(token))
         checkin = contact.checkin
+        is_archived = hasattr(checkin, "archive")
         return render(
             request,
             "dashboard/pages/safety/contact_portal.html",
@@ -1514,6 +1537,9 @@ class SafetyContactPortalView(View):
                 "other_contacts": checkin.contacts.exclude(pk=contact.pk),
                 "messages": checkin.messages.select_related("sender_profile", "sender_contact").all(),
                 "map_attribution": _MAP_ATTRIBUTION,
+                "is_archived": is_archived,
+                "can_unlock": False,
+                "archive_at": checkin.archive_scheduled_at,
             },
         )
 

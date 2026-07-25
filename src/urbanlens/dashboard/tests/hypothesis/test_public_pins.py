@@ -324,6 +324,9 @@ class SuggestionSyncTests(TestCase):
         no_community = Profile.objects.get(user=baker.make("auth.User"))
         no_community.community_enabled = False
         no_community.save(update_fields=["community_enabled"])
+        suggestions_disabled = Profile.objects.get(user=baker.make("auth.User"))
+        suggestions_disabled.pin_suggestions_enabled = False
+        suggestions_disabled.save(update_fields=["pin_suggestions_enabled"])
 
         created = sync_public_pin_suggestions()
         suggestions = PinSuggestion.objects.filter(origin=PinSuggestionOrigin.COMMUNITY)
@@ -332,6 +335,7 @@ class SuggestionSyncTests(TestCase):
         self.assertIn(recipient.pk, recipient_ids)
         self.assertNotIn(opted_out.pk, recipient_ids)
         self.assertNotIn(no_community.pk, recipient_ids)
+        self.assertNotIn(suggestions_disabled.pk, recipient_ids)
         for pinner in self.pinners:
             self.assertNotIn(pinner.pk, recipient_ids)
         self.assertEqual(created, suggestions.count())
@@ -355,4 +359,17 @@ class SuggestionSyncTests(TestCase):
         # Hidden, not deleted: toggling back on restores it.
         recipient.suggest_public_pins = True
         recipient.save(update_fields=["suggest_public_pins"])
+        self.assertEqual(_pending_suggestions(recipient).count(), 1)
+
+    def test_queue_hides_everything_when_master_toggle_is_off(self) -> None:
+        recipient = Profile.objects.get(user=baker.make("auth.User"))
+        sync_public_pin_suggestions()
+        self.assertEqual(_pending_suggestions(recipient).count(), 1)
+
+        recipient.pin_suggestions_enabled = False
+        recipient.save(update_fields=["pin_suggestions_enabled"])
+        self.assertEqual(_pending_suggestions(recipient).count(), 0)
+
+        recipient.pin_suggestions_enabled = True
+        recipient.save(update_fields=["pin_suggestions_enabled"])
         self.assertEqual(_pending_suggestions(recipient).count(), 1)

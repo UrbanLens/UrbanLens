@@ -22,7 +22,13 @@
 
 {% block content %}
 <div class="safety-page page-content">
+{% if is_archived %}
+    {% include "dashboard/partials/safety/_archived_notice.html" %}
+{% else %}
 
+    {% if checkin.is_resolved and archive_at %}
+    {% include "dashboard/partials/safety/_archive_countdown.html" %}
+    {% endif %}
 
     <div class="safety-toolbar">
         {% if viewer_is_partner %}
@@ -178,7 +184,6 @@
 
     {% include "dashboard/partials/safety/_chat_panel.html" with contact=None %}
 
-</div>
 {% include "dashboard/partials/safety/_autoexpand_textareas.html" %}
 <script>
 (function () {
@@ -492,4 +497,7 @@
     }));
 }());
 </script>
+{% endif %}
+</div>
+{% include "dashboard/partials/safety/_dissolve_animation.html" %}
 {% endblock %}

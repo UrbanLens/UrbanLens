@@ -1395,6 +1395,50 @@ export async function decryptFromPartner(partnerSlug: string, ciphertext: string
 }
 
 /**
+ * Decrypt a safety check-in's archived record (services.safety.archive_checkin).
+ *
+ * Unlike a conversation key, the per-checkin symmetric key was sealed once,
+ * server-side, to only the owner's own public key - there is no partner/group
+ * to resolve, so this just unseals it with the caller's own identity, then
+ * opens the payload with the two primitives every other decrypt path here
+ * already uses. Prompts to unlock the device first if the identity isn't
+ * cached yet - the archive may be opened long after the check-in itself.
+ *
+ * @param sealedKeyB64 - The archive's sealed per-checkin key (SafetyCheckinArchive.sealed_key).
+ * @param ciphertextB64 - The encrypted JSON payload (SafetyCheckinArchive.ciphertext).
+ * @param nonceB64 - The nonce for `ciphertextB64` (SafetyCheckinArchive.nonce).
+ * @returns The decrypted payload (title, plan_details, resolved_by_label, etc.), or
+ *   null if this device can't unlock or the blobs don't match this identity.
+ */
+export async function decryptSafetyArchive(sealedKeyB64: string, ciphertextB64: string, nonceB64: string): Promise<Record<string, unknown> | null> {
+    await cryptoReady();
+    let identity = await requireIdentity();
+    if (identity === null) {
+        const unlocked = await showUnlockDialog();
+        if (!unlocked) {
+            return null;
+        }
+        identity = await requireIdentity();
+    }
+    if (identity === null) {
+        return null;
+    }
+    const symmetricKey = unseal(sealedKeyB64, identity.publicKey, identity.privateKey);
+    if (symmetricKey === null) {
+        return null;
+    }
+    const json = decryptMessage(ciphertextB64, nonceB64, symmetricKey);
+    if (json === null) {
+        return null;
+    }
+    try {
+        return JSON.parse(json) as Record<string, unknown>;
+    } catch {
+        return null;
+    }
+}
+
+/**
  * Decrypt every pending [data-e2ee-ct] element under a root, in place.
  *
  * Elements carry data-e2ee-ct / data-e2ee-nonce / data-e2ee-kv and either

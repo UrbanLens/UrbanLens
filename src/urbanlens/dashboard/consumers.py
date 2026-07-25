@@ -518,6 +518,28 @@ class SafetyCheckinChatConsumer(AsyncWebsocketConsumer):
         """
         await self.send(text_data=json.dumps(event["payload"]))
 
+    async def archive_scheduled(self, event):
+        """Deliver a check-in's archival countdown to this connection.
+
+        Delivered on the main ``safety_checkin_{pk}`` group - shared by the
+        owner, its accepted partners, and its contacts, all of whom "were able
+        to see" the check-in and so all get the same countdown.
+
+        Args:
+            event: The group-send event, with a ``payload`` dict (see
+                ``services.safety._broadcast_archive_scheduled``).
+        """
+        await self.send(text_data=json.dumps(event["payload"]))
+
+    async def checkin_archived(self, event):
+        """Deliver the "this check-in is now archived" event to this connection.
+
+        Args:
+            event: The group-send event, with a ``payload`` dict (see
+                ``services.safety._broadcast_checkin_archived``).
+        """
+        await self.send(text_data=json.dumps(event["payload"]))
+
     @database_sync_to_async
     def _resolve(self, checkin_uuid, token):
         """Resolve the check-in and, for the contact route, the authorizing contact.

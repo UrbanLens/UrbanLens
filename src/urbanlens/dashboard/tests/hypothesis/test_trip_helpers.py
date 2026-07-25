@@ -205,8 +205,14 @@ class ExpandTripDatesTests(TestCase):
 # Trip.elapsed_day (pure - unsaved instances, no DB needed once dates are set)
 # ---------------------------------------------------------------------------
 
-class TripElapsedDayTests(SimpleTestCase):
-    """Trip.elapsed_day - 1-indexed day-of-trip while active, else None."""
+class TripElapsedDayTests(TestCase):
+    """Trip.elapsed_day - 1-indexed day-of-trip while active, else None.
+
+    Uses unsaved instances where possible (elapsed_day never touches the DB
+    once both dates are set - effective_start_date/effective_end_date
+    short-circuit before falling back to querying activities), except for
+    the undated case below, which needs a real pk for that fallback query.
+    """
 
     def _trip(self, start, end):
         return Trip(start_date=start, end_date=end)
@@ -222,7 +228,7 @@ class TripElapsedDayTests(SimpleTestCase):
         self.assertIsNone(trip.elapsed_day)
 
     def test_none_when_undated(self):
-        trip = Trip()
+        trip = Trip.objects.create()
         self.assertIsNone(trip.elapsed_day)
 
     def test_single_day_trip_is_day_one_of_one(self):

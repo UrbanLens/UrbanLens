@@ -540,3 +540,15 @@ same phase's dev-pod verification (wiki incorporation directly reuses the articl
 pipeline), so it was folded into
 `0011_trivia_wiki_incorporation_setting.py` alongside the Trivia field rather than filed away
 again - see that migration's own comment.
+
+## `test_post_without_name_returns_400` is stale against UL-360's optional-name behavior
+
+`test_trip_controller.py::TripCreateViewTests::test_post_without_name_returns_400` (line ~224)
+posts `{"name": ""}` to `TripCreateView` and asserts a 400. Found failing during the pod
+verification of an unrelated trips-list-page/safety-checkin feature (2026-07-25) - not touched by
+that work. `TripCreateView.post` (`controllers/trip.py`) already has: `name = (body.get("name")
+or "").strip() or random_trip_name()` - per its own "Name is optional (UL-360)" comment, a blank
+submission has deliberately generated a random name instead of rejecting the request since UL-360
+shipped (2026-07-24, see the Feature build entry above). The test predates that change and was
+never updated; it should either assert `200` + a non-empty generated `trip.name`, or be deleted
+if UL-360's own test coverage (`test_trip_names.py`?) already covers the generated-name path.

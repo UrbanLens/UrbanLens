@@ -27,6 +27,7 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
+from urbanlens.dashboard.models.pin_suggestions.model import PinSuggestion, PinSuggestionOrigin
 from urbanlens.dashboard.models.profile.model import MapCenterMode, Profile
 from urbanlens.UrbanLens.settings.app import settings as app_settings
 
@@ -299,3 +300,50 @@ class MapPinsMetaTests(TestCase):
         self.client.logout()
         resp = self.client.get(_MAP_META_URL)
         self.assertIn(resp.status_code, (301, 302))
+
+
+class PinSuggestionsIntroDialogTests(TestCase):
+    """The new-user "suggested pins near you" dialog shows at most once, and only
+    once there's actually a pending suggestion to point at - see
+    Profile.map_pin_suggestions_intro_seen and MapController.view_map."""
+
+    def setUp(self) -> None:
+        self.user: User = baker.make(User)
+        self.profile = self.user.profile
+        self.client.force_login(self.user)
+
+    def _add_pending_suggestion(self) -> None:
+        location = baker.make(Location, latitude=40.0, longitude=-74.0)
+        PinSuggestion.objects.create(
+            profile=self.profile,
+            pin=None,
+            latitude=40.0,
+            longitude=-74.0,
+            origin=PinSuggestionOrigin.COMMUNITY,
+            suggested_name=location.display_name or "Test Place",
+        )
+
+    def test_hidden_for_a_new_user_with_no_pending_suggestions(self) -> None:
+        resp = self.client.get(_MAP_URL)
+        self.assertFalse(resp.context["show_pin_suggestions_intro"])
+        self.profile.refresh_from_db()
+        self.assertFalse(self.profile.map_pin_suggestions_intro_seen)
+
+    def test_shown_once_for_a_new_user_with_a_pending_suggestion(self) -> None:
+        self._add_pending_suggestion()
+
+        first_resp = self.client.get(_MAP_URL)
+        self.assertTrue(first_resp.context["show_pin_suggestions_intro"])
+        self.profile.refresh_from_db()
+        self.assertTrue(self.profile.map_pin_suggestions_intro_seen)
+
+        second_resp = self.client.get(_MAP_URL)
+        self.assertFalse(second_resp.context["show_pin_suggestions_intro"])
+
+    def test_never_shown_for_a_profile_already_marked_seen(self) -> None:
+        self._add_pending_suggestion()
+        self.profile.map_pin_suggestions_intro_seen = True
+        self.profile.save(update_fields=["map_pin_suggestions_intro_seen"])
+
+        resp = self.client.get(_MAP_URL)
+        self.assertFalse(resp.context["show_pin_suggestions_intro"])

@@ -1,0 +1,45 @@
+{% comment %}
+Live countdown to when a resolved safety check-in will be encrypted and its PII scrubbed
+(services.safety.schedule_checkin_archival/archive_checkin). Only rendered when at least one
+other viewer (an accepted partner or a contact) exists - a check-in with no other possible
+viewer archives immediately, with nothing to count down to.
+
+Re-synced whenever a `safetyArchiveScheduled` event arrives over the check-in's existing chat
+websocket (see _chat_panel.html), so every open tab's clock agrees without polling.
+
+Expects: archive_at (a datetime - checkin.archive_scheduled_at).
+{% endcomment %}
+<div class="card safety-archive-countdown" id="safety-archive-countdown" data-archive-at="{{ archive_at|date:'c' }}">
+    <i class="material-symbols-outlined">lock_clock</i>
+    <span>This check-in's details will be encrypted <span id="safety-archive-countdown-text">soon</span> - anyone who could see it can still leave a final comment until then.</span>
+</div>
+<script>
+(function () {
+    var el = document.getElementById('safety-archive-countdown');
+    if (!el || el.dataset.countdownInit) return;
+    el.dataset.countdownInit = '1';
+    var textEl = document.getElementById('safety-archive-countdown-text');
+
+    function tick() {
+        var archiveAt = new Date(el.dataset.archiveAt).getTime();
+        var remaining = archiveAt - Date.now();
+        if (isNaN(archiveAt) || remaining <= 0) {
+            textEl.textContent = 'shortly';
+            return;
+        }
+        var minutes = Math.floor(remaining / 60000);
+        var seconds = Math.floor((remaining % 60000) / 1000);
+        textEl.textContent = 'in ' + (minutes > 0 ? (minutes + 'm ' + seconds + 's') : (seconds + 's'));
+    }
+
+    document.body.addEventListener('safetyArchiveScheduled', function (e) {
+        if (e.detail.archive_at) {
+            el.dataset.archiveAt = e.detail.archive_at;
+            tick();
+        }
+    });
+
+    tick();
+    setInterval(tick, 1000);
+}());
+</script>

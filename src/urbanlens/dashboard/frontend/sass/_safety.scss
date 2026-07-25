@@ -847,6 +847,59 @@
     }
 }
 
+// -- Post-resolution archival countdown/notice ------------------------------
+
+.safety-archive-countdown {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    padding: .9rem 1.1rem;
+    color: var(--ul-grey-7);
+}
+
+.safety-archived-notice {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: .6rem;
+    padding: 2.5rem 1.5rem;
+    text-align: center;
+    color: var(--ul-grey-7);
+
+    .material-symbols-outlined {
+        font-size: 2rem;
+    }
+
+    h3 {
+        margin: 0;
+        font-size: 1.05rem;
+    }
+}
+
+.safety-archive-unlocked-fields {
+    text-align: left;
+    max-width: 28rem;
+
+    dt {
+        font-weight: 700;
+        margin-top: .6rem;
+    }
+
+    dd {
+        margin: 0;
+        white-space: pre-wrap;
+    }
+}
+
+// Plays once, right before the page reloads to its now-archived state (see
+// _dissolve_animation.html) - the reload itself is what actually hides the
+// content; this transition is purely the visible "dissolving" cue leading up to it.
+.safety-dissolving {
+    transition: opacity .8s ease, filter .8s ease;
+    opacity: 0;
+    filter: blur(6px);
+}
+
 .safety-auto-delete-never {
     display: flex;
     align-items: center;

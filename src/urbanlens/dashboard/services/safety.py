@@ -717,6 +717,7 @@ def schedule_checkin_archival(checkin: SafetyCheckin) -> None:
     archive_at = resolved_at + ARCHIVE_VIEWER_GRACE_PERIOD if other_viewers_exist else resolved_at
     checkin.archive_scheduled_at = archive_at
     checkin.save(update_fields=["archive_scheduled_at", "updated"])
+    _broadcast_archive_scheduled(checkin)
 
     from urbanlens.dashboard.services.celery import safely_enqueue_task
     from urbanlens.dashboard.tasks import archive_safety_checkin
@@ -757,6 +758,7 @@ def archive_checkin(checkin: SafetyCheckin) -> None:
         key_bundle_version=bundle.version,
     )
     _scrub_checkin_pii(checkin)
+    _broadcast_checkin_archived(checkin)
 
 
 def _build_archive_payload(checkin: SafetyCheckin) -> dict:
@@ -861,6 +863,65 @@ def _scrub_checkin_pii(checkin: SafetyCheckin) -> None:
     checkin.contacts.filter(contact_profile__isnull=False).update(name="")
     checkin.contacts.filter(contact_profile__isnull=True).update(email="scrubbed@archived.invalid", name="")
     checkin.messages.update(body="")
+
+
+def _broadcast_archive_scheduled(checkin: SafetyCheckin) -> None:
+    """Push a check-in's archival countdown to its connected group.
+
+    Lets every open tab's countdown display agree without polling - see
+    ``_archive_countdown.html``. Best-effort, same as the other broadcast
+    helpers in this module: the schedule is already durably saved regardless
+    of whether anyone is connected right now.
+
+    Args:
+        checkin: The check-in whose group should receive the countdown.
+    """
+    try:
+        from asgiref.sync import async_to_sync
+        from channels.layers import get_channel_layer
+
+        channel_layer = get_channel_layer()
+        if channel_layer is None:
+            return
+        async_to_sync(channel_layer.group_send)(
+            safety_checkin_group_name(checkin.pk),
+            {
+                "type": "archive.scheduled",
+                "payload": {
+                    "type": "archive_scheduled",
+                    "archive_at": checkin.archive_scheduled_at.isoformat() if checkin.archive_scheduled_at else None,
+                },
+            },
+        )
+    except Exception:
+        logger.exception("Failed to broadcast archive schedule for checkin %s", checkin.pk)
+
+
+def _broadcast_checkin_archived(checkin: SafetyCheckin) -> None:
+    """Push the "this check-in is now archived" event to its connected group.
+
+    Drives the dissolve animation on any page that has this check-in open
+    (see ``_dissolve_animation.html``) - purely a live UX cue, since a plain
+    page refresh already renders the archived state directly from
+    ``hasattr(checkin, "archive")`` regardless of whether this broadcast
+    is ever received.
+
+    Args:
+        checkin: The just-archived check-in.
+    """
+    try:
+        from asgiref.sync import async_to_sync
+        from channels.layers import get_channel_layer
+
+        channel_layer = get_channel_layer()
+        if channel_layer is None:
+            return
+        async_to_sync(channel_layer.group_send)(
+            safety_checkin_group_name(checkin.pk),
+            {"type": "checkin.archived", "payload": {"type": "checkin_archived"}},
+        )
+    except Exception:
+        logger.exception("Failed to broadcast archival for checkin %s", checkin.pk)
 
 
 def notify_contacts_of_update(checkin: SafetyCheckin, summary: str) -> None:

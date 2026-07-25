@@ -214,6 +214,43 @@ class IngestLocationHitsTrackingDisabledTests(TestCase):
         self.assertEqual(PinSuggestion.objects.count(), 0)
 
 
+class IngestLocationHitsSourceToggleTests(TestCase):
+    """ingest_location_hits respects the master and per-source suggestion toggles."""
+
+    def setUp(self) -> None:
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+
+    def test_master_toggle_off_blocks_every_origin(self) -> None:
+        self.profile.pin_suggestions_enabled = False
+        self.profile.save(update_fields=["pin_suggestions_enabled"])
+        for origin in (PinSuggestionOrigin.IMMICH, PinSuggestionOrigin.LOCAL_SCAN, PinSuggestionOrigin.EXTERNAL_API):
+            summary = ingest_location_hits(self.profile, [_hit(41.0, -76.0, "2024-02-01")], origin=origin)
+            self.assertEqual(summary.new_pin_suggestions, 0)
+        self.assertEqual(PinSuggestion.objects.count(), 0)
+
+    def test_photos_toggle_off_blocks_immich_and_local_scan_only(self) -> None:
+        self.profile.suggest_pins_from_photos = False
+        self.profile.save(update_fields=["suggest_pins_from_photos"])
+
+        ingest_location_hits(self.profile, [_hit(41.0, -76.0, "2024-02-01")], origin=PinSuggestionOrigin.IMMICH)
+        ingest_location_hits(self.profile, [_hit(42.0, -77.0, "2024-02-02")], origin=PinSuggestionOrigin.LOCAL_SCAN)
+        self.assertEqual(PinSuggestion.objects.count(), 0)
+
+        ingest_location_hits(self.profile, [_hit(43.0, -78.0, "2024-02-03")], origin=PinSuggestionOrigin.EXTERNAL_API)
+        self.assertEqual(PinSuggestion.objects.count(), 1)
+
+    def test_external_apis_toggle_off_blocks_only_external_api(self) -> None:
+        self.profile.suggest_pins_from_external_apis = False
+        self.profile.save(update_fields=["suggest_pins_from_external_apis"])
+
+        ingest_location_hits(self.profile, [_hit(41.0, -76.0, "2024-02-01")], origin=PinSuggestionOrigin.EXTERNAL_API)
+        self.assertEqual(PinSuggestion.objects.count(), 0)
+
+        ingest_location_hits(self.profile, [_hit(42.0, -77.0, "2024-02-02")], origin=PinSuggestionOrigin.IMMICH)
+        self.assertEqual(PinSuggestion.objects.count(), 1)
+
+
 class SampleAssetsAndSuggestionKeysTests(TestCase):
     """sample_assets capping/dedup and suggestion_ids_by_key reporting."""
 
@@ -825,6 +862,86 @@ class PinSuggestionBulkActionViewTests(TestCase):
             reverse("memories.locations.bulk", args=["explode"]), data=json.dumps({"suggestion_ids": [suggestion.pk]}), content_type="application/json",
         )
         self.assertEqual(response.status_code, 404)
+
+
+class PinSuggestionAcceptAllViewTests(TestCase):
+    """Accept-all: operates on the full pending, settings-visible set with no ids from the caller."""
+
+    def setUp(self) -> None:
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+        self.client.force_login(self.user)
+        self.location = baker.make_recipe("dashboard.location", latitude=_PIN_LAT, longitude=_PIN_LON)
+        self.pin = baker.make_recipe("dashboard.pin", profile=self.profile, location=self.location)
+
+    def _suggestion(self, **kwargs) -> PinSuggestion:
+        defaults = {"profile": self.profile, "pin": self.pin, "latitude": _PIN_LAT, "longitude": _PIN_LON, "origin": PinSuggestionOrigin.IMMICH, "visit_dates": ["2024-01-01"], "hit_count": 1}
+        defaults.update(kwargs)
+        return PinSuggestion.objects.create(**defaults)
+
+    def test_accepts_every_pending_suggestion(self) -> None:
+        first = self._suggestion()
+        second = self._suggestion(visit_dates=["2024-02-01"])
+        response = self.client.post(reverse("memories.locations.accept_all"))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["processed"], 2)
+        first.refresh_from_db()
+        second.refresh_from_db()
+        self.assertEqual(first.status, PinSuggestionStatus.ACCEPTED)
+        self.assertEqual(second.status, PinSuggestionStatus.ACCEPTED)
+
+    def test_ignores_another_profiles_suggestions(self) -> None:
+        other = baker.make(User)
+        foreign = self._suggestion(profile=other.profile, pin=None)
+        response = self.client.post(reverse("memories.locations.accept_all"))
+        self.assertEqual(response.json()["processed"], 0)
+        foreign.refresh_from_db()
+        self.assertEqual(foreign.status, PinSuggestionStatus.PENDING)
+
+    def test_respects_source_toggles(self) -> None:
+        community = self._suggestion(pin=None, origin=PinSuggestionOrigin.COMMUNITY)
+        photo = self._suggestion(visit_dates=["2024-03-01"])
+        self.profile.suggest_public_pins = False
+        self.profile.save(update_fields=["suggest_public_pins"])
+
+        response = self.client.post(reverse("memories.locations.accept_all"))
+
+        self.assertEqual(response.json()["processed"], 1)
+        community.refresh_from_db()
+        photo.refresh_from_db()
+        self.assertEqual(community.status, PinSuggestionStatus.PENDING)
+        self.assertEqual(photo.status, PinSuggestionStatus.ACCEPTED)
+
+    def test_no_pending_suggestions_processes_zero(self) -> None:
+        response = self.client.post(reverse("memories.locations.accept_all"))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["processed"], 0)
+
+
+class PinSuggestionQueueViewOnboardingFlowTests(TestCase):
+    """?onboarding=1 (from the map's new-user dialog) highlights "Accept all suggestions"
+    and shows the one-time explainer banner - a normal visit shows neither."""
+
+    def setUp(self) -> None:
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+        self.client.force_login(self.user)
+        location = baker.make_recipe("dashboard.location", latitude=_PIN_LAT, longitude=_PIN_LON)
+        pin = baker.make_recipe("dashboard.pin", profile=self.profile, location=location)
+        PinSuggestion.objects.create(profile=self.profile, pin=pin, latitude=_PIN_LAT, longitude=_PIN_LON, origin=PinSuggestionOrigin.IMMICH, visit_dates=["2024-01-01"], hit_count=1)
+
+    def test_onboarding_param_pulses_the_accept_all_button_and_shows_the_banner(self) -> None:
+        response = self.client.get(reverse("memories.locations"), {"onboarding": "1"})
+        self.assertTrue(response.context["onboarding_flow"])
+        self.assertContains(response, "is-pulsing")
+        self.assertContains(response, "pin-suggestions-onboarding-banner")
+        self.assertContains(response, 'data-onboarding="1"')
+
+    def test_normal_visit_has_no_onboarding_chrome(self) -> None:
+        response = self.client.get(reverse("memories.locations"))
+        self.assertFalse(response.context["onboarding_flow"])
+        self.assertNotContains(response, "is-pulsing")
+        self.assertNotContains(response, "pin-suggestions-onboarding-banner")
 
 
 class PinSuggestionQueueViewSelectMapTests(TestCase):

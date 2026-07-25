@@ -50,6 +50,20 @@
   function escHtml(value) {
     return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   }
+  function isSimpleGroups(groups) {
+    if (!groups)
+      return true;
+    const inclGroups = groups.filter((g) => g.op !== "not");
+    if (inclGroups.length === 0)
+      return true;
+    const hasOr = inclGroups.some((g) => g.op === "or");
+    const hasAnd = inclGroups.some((g) => g.op === "and");
+    if (hasOr && hasAnd)
+      return false;
+    if (hasOr && inclGroups.length > 1)
+      return false;
+    return true;
+  }
   function createFilterPicker(options) {
     const els = options.els;
     const onChange = options.onChange || (() => {});
@@ -175,20 +189,6 @@
         exclIds.forEach((id) => parts.push(`-${quoteLabelName(labelTextForId(id))}`));
         bar.value = parts.join(" ");
       }
-    }
-    function isSimpleGroups(groups) {
-      if (!groups)
-        return true;
-      const inclGroups = groups.filter((g) => g.op !== "not");
-      if (inclGroups.length === 0)
-        return true;
-      const hasOr = inclGroups.some((g) => g.op === "or");
-      const hasAnd = inclGroups.some((g) => g.op === "and");
-      if (hasOr && hasAnd)
-        return false;
-      if (hasOr && inclGroups.length > 1)
-        return false;
-      return true;
     }
     function rebuild() {
       const isComplex = formulaGroups !== null && !isSimpleGroups(formulaGroups);

@@ -1630,6 +1630,7 @@ urlpatterns = [
                 path("locations/queue/", pin_suggestions.PinSuggestionQueuePartialView.as_view(), name="memories.locations.queue"),
                 path("locations/map-data/", pin_suggestions.PinSuggestionMapDataView.as_view(), name="memories.locations.map_data"),
                 path("locations/bulk/<str:action>/", pin_suggestions.PinSuggestionBulkActionView.as_view(), name="memories.locations.bulk"),
+                path("locations/accept-all/", pin_suggestions.PinSuggestionAcceptAllView.as_view(), name="memories.locations.accept_all"),
                 path(
                     "locations/<int:suggestion_id>/immich/thumbnail/<str:asset_id>/",
                     pin_suggestions.PinSuggestionImmichThumbnailView.as_view(),

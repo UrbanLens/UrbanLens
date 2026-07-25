@@ -356,7 +356,7 @@ def sync_public_pin_suggestions() -> int:
         already_suggested = set(PinSuggestion.objects.filter(location=location).values_list("profile_id", flat=True))
         has_pin = set(Pin.objects.filter(location=location, parent_pin__isnull=True).values_list("profile_id", flat=True))
         recipients = (
-            Profile.objects.filter(community_enabled=True, suggest_public_pins=True)
+            Profile.objects.filter(community_enabled=True, pin_suggestions_enabled=True, suggest_public_pins=True)
             .exclude(id__in=already_suggested | has_pin)
             .values_list("id", flat=True)
         )

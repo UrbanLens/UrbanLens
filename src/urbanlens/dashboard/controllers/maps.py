@@ -199,6 +199,19 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         show_filtered_pin_count = user_has_feature(request.user, SiteFeature.AI)
         show_places_layer = user_has_feature(request.user, SiteFeature.PLACES)
 
+        # New-user onboarding: offer a one-time dialog pointing at any pending
+        # pin suggestions (most commonly community/public-location ones, since
+        # a brand-new profile has no photos to scan yet). Marked seen the
+        # moment it's shown - regardless of which button the user clicks - so
+        # it never appears again; see Profile.map_pin_suggestions_intro_seen.
+        show_pin_suggestions_intro = False
+        if not profile.map_pin_suggestions_intro_seen:
+            from urbanlens.dashboard.services.pin_suggestions import pending_suggestions_for_profile
+
+            if pending_suggestions_for_profile(profile).exists():
+                show_pin_suggestions_intro = True
+                Profile.objects.filter(pk=profile.pk).update(map_pin_suggestions_intro_seen=True)
+
         return render(
             request,
             "dashboard/pages/map/index.html",
@@ -231,6 +244,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 # Live-updated by JS as the user switches layers - see the shared
                 # footer partial's `show_map_footer` doc comment.
                 "show_map_footer": True,
+                "show_pin_suggestions_intro": show_pin_suggestions_intro,
             },
         )
 

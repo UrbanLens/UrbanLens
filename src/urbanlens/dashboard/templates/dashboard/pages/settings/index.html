@@ -218,20 +218,78 @@
                     <p class="settings-error">{{ community_form.auto_create_pin_article_from_wikipedia.errors|join:", " }}</p>
                     {% endif %}
                 </div>
-                <div class="settings-field">
-                    <label class="settings-toggle-row">
-                        {{ community_form.suggest_public_pins }}
-                        <span class="settings-toggle-label">
-                            <strong>{{ community_form.suggest_public_pins.label }}</strong>
-                            <span class="settings-help">{{ community_form.suggest_public_pins.help_text }}</span>
-                        </span>
-                    </label>
-                    {% if community_form.suggest_public_pins.errors %}
-                    <p class="settings-error">{{ community_form.suggest_public_pins.errors|join:", " }}</p>
-                    {% endif %}
-                </div>
                 {% if not community_form.instance.community_enabled %}
                 <p class="settings-help">All of your pins are private and your privacy settings above are locked to the most restrictive option while this is off.</p>
+                {% endif %}
+
+                <div class="settings-actions">
+                    <button type="submit" class="settings-save-btn">Save</button>
+                </div>
+            </form>
+        </div>
+
+        {# -- Pin Suggestions (subsection) --------------------------------------- #}
+        <div class="settings-subsection" id="pin-suggestions-settings-section">
+            <h3 class="settings-subsection-title">
+                <i class="material-symbols-outlined">add_location_alt</i>
+                Pin Suggestions
+            </h3>
+            <p class="settings-section-desc">Places found in your photos, shared by the community, or submitted by connected apps wait for your review on the <a href="{% url 'memories.locations' %}">Locations</a> page. Turn suggestions off entirely, or just from specific sources.</p>
+
+            <form method="post" class="settings-form" id="pin-suggestions-form">
+                {% csrf_token %}
+                <input type="hidden" name="section" value="pin_suggestions">
+
+                <div class="settings-field">
+                    <label class="settings-toggle-row">
+                        {{ pin_suggestions_form.pin_suggestions_enabled }}
+                        <span class="settings-toggle-label">
+                            <strong>{{ pin_suggestions_form.pin_suggestions_enabled.label }}</strong>
+                            <span class="settings-help">{{ pin_suggestions_form.pin_suggestions_enabled.help_text }}</span>
+                        </span>
+                    </label>
+                    {% if pin_suggestions_form.pin_suggestions_enabled.errors %}
+                    <p class="settings-error">{{ pin_suggestions_form.pin_suggestions_enabled.errors|join:", " }}</p>
+                    {% endif %}
+                </div>
+                <div class="settings-field">
+                    <label class="settings-toggle-row">
+                        {{ pin_suggestions_form.suggest_public_pins }}
+                        <span class="settings-toggle-label">
+                            <strong>{{ pin_suggestions_form.suggest_public_pins.label }}</strong>
+                            <span class="settings-help">{{ pin_suggestions_form.suggest_public_pins.help_text }}</span>
+                        </span>
+                    </label>
+                    {% if pin_suggestions_form.suggest_public_pins.errors %}
+                    <p class="settings-error">{{ pin_suggestions_form.suggest_public_pins.errors|join:", " }}</p>
+                    {% endif %}
+                </div>
+                <div class="settings-field">
+                    <label class="settings-toggle-row">
+                        {{ pin_suggestions_form.suggest_pins_from_photos }}
+                        <span class="settings-toggle-label">
+                            <strong>{{ pin_suggestions_form.suggest_pins_from_photos.label }}</strong>
+                            <span class="settings-help">{{ pin_suggestions_form.suggest_pins_from_photos.help_text }}</span>
+                        </span>
+                    </label>
+                    {% if pin_suggestions_form.suggest_pins_from_photos.errors %}
+                    <p class="settings-error">{{ pin_suggestions_form.suggest_pins_from_photos.errors|join:", " }}</p>
+                    {% endif %}
+                </div>
+                <div class="settings-field">
+                    <label class="settings-toggle-row">
+                        {{ pin_suggestions_form.suggest_pins_from_external_apis }}
+                        <span class="settings-toggle-label">
+                            <strong>{{ pin_suggestions_form.suggest_pins_from_external_apis.label }}</strong>
+                            <span class="settings-help">{{ pin_suggestions_form.suggest_pins_from_external_apis.help_text }}</span>
+                        </span>
+                    </label>
+                    {% if pin_suggestions_form.suggest_pins_from_external_apis.errors %}
+                    <p class="settings-error">{{ pin_suggestions_form.suggest_pins_from_external_apis.errors|join:", " }}</p>
+                    {% endif %}
+                </div>
+                {% if not pin_suggestions_form.instance.pin_suggestions_enabled %}
+                <p class="settings-help">All sources below are off while Pin Suggestions (above) is off.</p>
                 {% endif %}
 
                 <div class="settings-actions">

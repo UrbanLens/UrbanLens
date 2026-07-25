@@ -24,6 +24,7 @@ from urbanlens.dashboard.forms.settings_form import (
     MapCenterForm,
     MapDisplayForm,
     MarkupDefaultsForm,
+    PinSuggestionSettingsForm,
     PlacesLayerForm,
     PrivacySettingsForm,
     StyleSettingsForm,
@@ -141,6 +142,7 @@ class SettingsView(LoginRequiredMixin, View):
             "keyword_tagging_form": KeywordTaggingSettingsForm(instance=profile),
             "history_form": HistorySettingsForm(instance=profile),
             "community_form": CommunitySettingsForm(instance=profile),
+            "pin_suggestions_form": PinSuggestionSettingsForm(instance=profile),
             "wiki_sync_form": WikiSyncSettingsForm(instance=profile),
             "external_api_form": ExternalApiSettingsForm(instance=profile),
             "direct_message_form": DirectMessageSettingsForm(instance=profile),
@@ -178,6 +180,7 @@ class SettingsView(LoginRequiredMixin, View):
         keyword_tagging_form = KeywordTaggingSettingsForm(instance=profile)
         history_form = HistorySettingsForm(instance=profile)
         community_form = CommunitySettingsForm(instance=profile)
+        pin_suggestions_form = PinSuggestionSettingsForm(instance=profile)
         wiki_sync_form = WikiSyncSettingsForm(instance=profile)
         external_api_form = ExternalApiSettingsForm(instance=profile)
         direct_message_form = DirectMessageSettingsForm(instance=profile)
@@ -292,6 +295,13 @@ class SettingsView(LoginRequiredMixin, View):
                 messages.success(request, "Community settings saved.")
                 return _settings_redirect("community-settings-section")
 
+        elif section == "pin_suggestions":
+            pin_suggestions_form = PinSuggestionSettingsForm(request.POST, instance=profile)
+            if pin_suggestions_form.is_valid():
+                pin_suggestions_form.save()
+                messages.success(request, "Pin suggestion settings saved.")
+                return _settings_redirect("pin-suggestions-settings-section")
+
         elif section == "wiki_sync":
             wiki_sync_form = WikiSyncSettingsForm(request.POST, instance=profile)
             if wiki_sync_form.is_valid():
@@ -326,6 +336,7 @@ class SettingsView(LoginRequiredMixin, View):
             "keyword_tagging_form": keyword_tagging_form,
             "history_form": history_form,
             "community_form": community_form,
+            "pin_suggestions_form": pin_suggestions_form,
             "wiki_sync_form": wiki_sync_form,
             "external_api_form": external_api_form,
             "direct_message_form": direct_message_form,
@@ -350,6 +361,7 @@ class SettingsView(LoginRequiredMixin, View):
                 keyword_tagging_form,
                 history_form,
                 community_form,
+                pin_suggestions_form,
                 wiki_sync_form,
                 external_api_form,
                 direct_message_form,

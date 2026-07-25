@@ -164,7 +164,7 @@ class DirectMessageSettingsForm(forms.ModelForm):
         choices=MessageRetentionChoice.choices,
         widget=forms.Select(attrs={"class": "settings-select browser-default"}),
         label="Delete My Messages After",
-        help_text="Messages you send disappear from the recipient's view this long after they've read them. You can always see your own messages.",
+        help_text="Messages you send disappear this long after the recipient has read them. They are permanently deleted, and cannot be recovered.",
     )
     allow_friend_recommendations = forms.BooleanField(
         required=False,
@@ -583,16 +583,43 @@ class CommunitySettingsForm(forms.ModelForm):
         label="Auto-Start Pin Articles from Wikipedia",
         help_text="When a Wikipedia article is matched to one of your pins, automatically start that pin's article from it (only if it doesn't already have one).",
     )
+
+    class Meta:
+        model = Profile
+        fields = ["community_enabled", "show_wiki_cover_photos", "auto_create_pin_article_from_wikipedia"]
+
+
+class PinSuggestionSettingsForm(forms.ModelForm):
+    """Master switch plus per-source toggles for the pin-suggestions surface (Memories -> Locations)."""
+
+    pin_suggestions_enabled = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
+        label="Pin Suggestions",
+        help_text="Suggest pins based on your photos, public locations, and connected apps. Turning this off overrides every source below.",
+    )
     suggest_public_pins = forms.BooleanField(
         required=False,
         widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
-        label="Suggest Public Locations",
+        label="Public Locations",
         help_text="Occasionally suggest well-documented locations the community has voted to share with everyone. These are rare, and never include anything vulnerable.",
+    )
+    suggest_pins_from_photos = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
+        label="Photo Uploads",
+        help_text="Suggest pins found by scanning your Immich library or local photo folders.",
+    )
+    suggest_pins_from_external_apis = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
+        label="Connected Apps",
+        help_text="Suggest pins submitted by external apps you've connected via an API key.",
     )
 
     class Meta:
         model = Profile
-        fields = ["community_enabled", "show_wiki_cover_photos", "auto_create_pin_article_from_wikipedia", "suggest_public_pins"]
+        fields = ["pin_suggestions_enabled", "suggest_public_pins", "suggest_pins_from_photos", "suggest_pins_from_external_apis"]
 
 
 class WikiSyncSettingsForm(forms.ModelForm):

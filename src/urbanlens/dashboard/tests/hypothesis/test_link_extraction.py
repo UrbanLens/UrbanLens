@@ -327,9 +327,16 @@ class AvailabilityAndLimitTests(TestCase):
 class _FakeGateway:
     def __init__(self, answer: str | None):
         self._answer = answer
+        self.model = "fake-model"
 
     def send_prompt(self, prompt: str, **kwargs) -> str | None:
         return self._answer
+
+    @property
+    def cost(self):
+        from decimal import Decimal
+
+        return Decimal("0.001")
 
 
 class RunExtractionPipelineTests(TestCase):
@@ -396,7 +403,12 @@ class RunExtractionPipelineTests(TestCase):
         self.assertEqual(self.pin.name, "Old Mill")
         self.assertEqual(self.pin.date_abandoned, date(1998, 1, 1))
         recorded_keys = {row["key"] for row in extraction.results_rows}
-        self.assertEqual(recorded_keys, {"date_abandoned"})
+        # Only the field-extraction registry's own allowlisted keys are relevant here -
+        # article expansion (also enabled by _grant_ai_to_everyone) may incidentally add
+        # its own "article_pin" row from the same fake gateway, which isn't this test's concern.
+        self.assertIn("date_abandoned", recorded_keys)
+        self.assertNotIn("name", recorded_keys)
+        self.assertNotIn("profile", recorded_keys)
 
 
 class RecentlyRequestedUrlsTests(TestCase):

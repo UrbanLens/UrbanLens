@@ -587,6 +587,43 @@
         }
     });
 </script>
+
+{# -- New-user pin-suggestions intro dialog ------------------------------- #}
+{# Shown at most once per profile - see Profile.map_pin_suggestions_intro_seen
+   and controllers.maps.MapController.view_map, which marks it seen the
+   moment show_pin_suggestions_intro is computed True (whichever button the
+   user clicks below). #}
+<dialog id="pin-suggestions-intro-dialog" class="ul-dialog">
+    {% include "dashboard/partials/ui/_dialog_header.html" with title="Suggested pins near you" %}
+    <div class="ul-dialog-body">
+        <p>We've found public locations other explorers have shared that you haven't pinned yet.</p>
+        <p>Want to take a look?</p>
+        <div class="form-actions">
+            <button type="button" class="btn btn--primary" id="pin-suggestions-intro-accept">View suggestions</button>
+            <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Not now</button>
+        </div>
+    </div>
+</dialog>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        if ({{ show_pin_suggestions_intro|yesno:"true,false" }}) {
+            var introDialog = document.getElementById('pin-suggestions-intro-dialog');
+            if (introDialog) introDialog.showModal();
+        }
+        var introAcceptBtn = document.getElementById('pin-suggestions-intro-accept');
+        if (introAcceptBtn) {
+            introAcceptBtn.addEventListener('click', function () {
+                window.location.href = '{% url "memories.locations" %}?onboarding=1';
+            });
+        }
+
+        // Returning from the "Accept all suggestions" onboarding redirect
+        // (see locations.html) - confirm the new pins landed on the map.
+        if (new URLSearchParams(window.location.search).get('suggestions_imported') === '1' && window.toastr) {
+            toastr.success('Your accepted pin suggestions are now on the map.');
+        }
+    });
+</script>
 {% endblock %}
 
 {% block scripts %}

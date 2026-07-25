@@ -11,6 +11,7 @@ import {
     decryptDom,
     decryptFromGroup,
     decryptFromPartner,
+    decryptSafetyArchive,
     encryptForGroup,
     encryptForPartner,
     enroll,
@@ -54,6 +55,7 @@ const api = {
     encryptForGroup,
     decryptFromGroup,
     decryptDom,
+    decryptSafetyArchive,
     showRecoveryDialog,
     showResetDialog,
 };

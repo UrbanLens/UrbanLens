@@ -22,14 +22,14 @@ from django.views import View
 from urbanlens.dashboard.models.immich.model import ImmichAccount
 from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_STATUS, KIND_TAG
 from urbanlens.dashboard.models.labels.model import Label
-from urbanlens.dashboard.models.pin_suggestions.model import PinSuggestion, PinSuggestionOrigin, PinSuggestionStatus
+from urbanlens.dashboard.models.pin_suggestions.model import PinSuggestion, PinSuggestionStatus
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.apis.immich import ImmichGateway
 from urbanlens.dashboard.services.celery import safely_enqueue_task
 from urbanlens.dashboard.services.gateway import GatewayRequestError
 from urbanlens.dashboard.services.memories.unlogged import unlogged_visited_pins
 from urbanlens.dashboard.services.pagination import get_page
-from urbanlens.dashboard.services.pin_suggestions import accept_pin_suggestion, reject_pin_suggestion
+from urbanlens.dashboard.services.pin_suggestions import accept_pin_suggestion, pending_suggestions_for_profile, reject_pin_suggestion
 
 _ORGANIZE_LABEL_KINDS = (KIND_TAG, KIND_CATEGORY, KIND_STATUS)
 
@@ -57,16 +57,13 @@ _BULK_ACTIONS = [
 
 
 def _pending_suggestions(profile: Profile) -> QuerySet[PinSuggestion]:
-    """Return the profile's pending suggestions, newest first.
+    """Return the profile's pending, settings-visible suggestions, newest first.
 
-    Community public-location suggestions are hidden (not deleted) while the
-    profile's ``suggest_public_pins`` toggle is off, so flipping it back on
-    restores whatever was already pending.
+    Suggestions from a source the profile has turned off (or all of them, if
+    ``pin_suggestions_enabled`` is off) are hidden, not deleted - see
+    ``services.pin_suggestions.pending_suggestions_for_profile``.
     """
-    qs = PinSuggestion.objects.for_profile(profile).pending().select_related("pin", "pin__location").prefetch_related("candidate_images").order_by("-created")
-    if not profile.suggest_public_pins:
-        qs = qs.exclude(origin=PinSuggestionOrigin.COMMUNITY)
-    return qs
+    return pending_suggestions_for_profile(profile).select_related("pin", "pin__location").prefetch_related("candidate_images").order_by("-created")
 
 
 def _toast(message: str, level: str = "success", *, status: int = 200, refresh_queue: bool = False, view_pin_url: str | None = None) -> HttpResponse:
@@ -122,6 +119,12 @@ class PinSuggestionQueueView(LoginRequiredMixin, View):
                 # control for every map it creates, so whichever page embeds
                 # it must enable the footer's live attribution slot instead.
                 "show_map_footer": bool(page_obj.paginator.count),
+                # Set when this page was reached via the map's new-user "suggested
+                # pins near you" dialog (?onboarding=1) - highlights the "Accept
+                # all suggestions" button and, once clicked, redirects back to the
+                # map instead of just refreshing the queue in place. Does not
+                # apply to normal visits to this page - see locations.html.
+                "onboarding_flow": request.GET.get("onboarding") == "1",
             },
         )
 
@@ -254,6 +257,42 @@ class PinSuggestionBulkActionView(LoginRequiredMixin, View):
             except Exception:
                 logger.exception("Bulk pin suggestion action '%s' failed for suggestion %s", action, suggestion.pk)
         return JsonResponse({"ok": True, "processed": processed, "requested": len(suggestion_ids)})
+
+
+class PinSuggestionAcceptAllView(LoginRequiredMixin, View):
+    """Accept every one of the profile's pending, settings-visible suggestions.
+
+    POST /memories/locations/accept-all/
+
+    Unlike ``PinSuggestionBulkActionView``, the caller supplies no ids - this
+    always operates on the full pending set (``_pending_suggestions``), which
+    is what both the "Accept all suggestions" button on this page and the
+    map's new-user "suggested pins near you" onboarding flow need. Capped at
+    ``_MAX_BULK_SUGGESTIONS`` for the same reason as the bulk view - a hard
+    backstop against pathological queue sizes, not an expected real limit.
+    """
+
+    def post(self, request: HttpRequest) -> JsonResponse:
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        suggestions = list(_pending_suggestions(profile)[:_MAX_BULK_SUGGESTIONS])
+        processed = 0
+        for suggestion in suggestions:
+            try:
+                result = accept_pin_suggestion(suggestion, profile)
+                if result.immich_import_visits:
+                    from urbanlens.dashboard.tasks import import_immich_photos
+
+                    safely_enqueue_task(
+                        import_immich_photos,
+                        result.pin.pk,
+                        profile.pk,
+                        list(result.immich_import_visits),
+                        result.immich_import_visits,
+                    )
+                processed += 1
+            except Exception:
+                logger.exception("Accept-all pin suggestions failed for suggestion %s", suggestion.pk)
+        return JsonResponse({"ok": True, "processed": processed, "requested": len(suggestions)})
 
 
 class PinSuggestionActionView(LoginRequiredMixin, View):

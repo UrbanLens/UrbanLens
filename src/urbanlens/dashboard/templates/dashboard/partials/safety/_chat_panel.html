@@ -136,6 +136,16 @@ JavaScript is unavailable.
                 document.body.dispatchEvent(new CustomEvent('safetyLocationUpdate', { detail: msg }));
                 return;
             }
+            if (msg.type === 'archive_scheduled') {
+                // The countdown display lives on the detail/community/portal pages, not this panel.
+                document.body.dispatchEvent(new CustomEvent('safetyArchiveScheduled', { detail: msg }));
+                return;
+            }
+            if (msg.type === 'checkin_archived') {
+                // The dissolve animation lives on the detail/community/portal pages, not this panel.
+                document.body.dispatchEvent(new CustomEvent('safetyCheckinArchived', { detail: msg }));
+                return;
+            }
             appendMessage(msg);
         };
     }

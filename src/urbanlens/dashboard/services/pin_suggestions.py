@@ -32,7 +32,7 @@ from urbanlens.dashboard.models.boundary.queryset import DEFAULT_RADIUS_METERS
 from urbanlens.dashboard.models.images.model import Image, ImageSource
 from urbanlens.dashboard.models.links.model import PinLink
 from urbanlens.dashboard.models.pin.model import Pin
-from urbanlens.dashboard.models.pin_suggestions.model import MAX_STORED_VISIT_DATES, MAX_SUGGESTION_ALIASES, MAX_SUGGESTION_LINKS, MAX_SUGGESTION_PHOTOS, PinSuggestion, PinSuggestionStatus
+from urbanlens.dashboard.models.pin_suggestions.model import MAX_STORED_VISIT_DATES, MAX_SUGGESTION_ALIASES, MAX_SUGGESTION_LINKS, MAX_SUGGESTION_PHOTOS, PinSuggestion, PinSuggestionOrigin, PinSuggestionStatus
 from urbanlens.dashboard.models.profile.model import _haversine_km
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
 from urbanlens.dashboard.services.images import compute_checksum
@@ -43,7 +43,8 @@ from urbanlens.dashboard.services.visits import add_visited_status, find_pin_con
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
-    from urbanlens.dashboard.models.pin_suggestions.model import PinSuggestionOrigin
+    from django.db.models import QuerySet
+
     from urbanlens.dashboard.models.profile.model import Profile
 
 logger = logging.getLogger(__name__)
@@ -491,6 +492,52 @@ def _upsert_new_pin_suggestion(profile: Profile, cluster: list[LocationHit], ori
     return created
 
 
+def excluded_suggestion_origins(profile: Profile) -> list[PinSuggestionOrigin]:
+    """Which ``PinSuggestionOrigin`` values this profile has turned off.
+
+    Callers that want the "everything off" case too (``pin_suggestions_enabled``
+    is False) should check that flag separately - see ``pending_suggestions_for_profile``,
+    which is the one place both concerns are combined.
+
+    Args:
+        profile: Profile whose suggestion-source settings to read.
+
+    Returns:
+        Origins this profile no longer wants suggestions for.
+    """
+    excluded: list[PinSuggestionOrigin] = []
+    if not profile.suggest_public_pins:
+        excluded.append(PinSuggestionOrigin.COMMUNITY)
+    if not profile.suggest_pins_from_photos:
+        excluded.extend((PinSuggestionOrigin.IMMICH, PinSuggestionOrigin.LOCAL_SCAN))
+    if not profile.suggest_pins_from_external_apis:
+        excluded.append(PinSuggestionOrigin.EXTERNAL_API)
+    return excluded
+
+
+def pending_suggestions_for_profile(profile: Profile) -> QuerySet[PinSuggestion]:
+    """Pending suggestions this profile currently wants to see.
+
+    Respects both the master ``pin_suggestions_enabled`` switch and the
+    per-source toggles (``suggest_public_pins``, ``suggest_pins_from_photos``,
+    ``suggest_pins_from_external_apis``) - suggestions excluded this way are
+    hidden, not deleted, so flipping a toggle back on restores them.
+
+    Args:
+        profile: Owner whose pending suggestions to fetch.
+
+    Returns:
+        Unordered, unfetched queryset of matching ``PinSuggestion`` rows.
+    """
+    qs = PinSuggestion.objects.for_profile(profile).pending()
+    if not profile.pin_suggestions_enabled:
+        return qs.none()
+    excluded = excluded_suggestion_origins(profile)
+    if excluded:
+        qs = qs.exclude(origin__in=excluded)
+    return qs
+
+
 def ingest_location_hits(profile: Profile, hits: Iterable[LocationHit], origin: PinSuggestionOrigin) -> IngestSummary:
     """Match/cluster a batch of location hits into PinSuggestion rows.
 
@@ -505,10 +552,14 @@ def ingest_location_hits(profile: Profile, hits: Iterable[LocationHit], origin: 
 
     Returns:
         Summary counts for the calling task/view to report - all zero when
-        the profile has turned off visit-history tracking, since a
-        PinSuggestion is itself a location-history trail.
+        the profile has turned off visit-history tracking (a PinSuggestion is
+        itself a location-history trail) or has turned off pin suggestions
+        entirely or for this particular ``origin`` - see
+        ``excluded_suggestion_origins``.
     """
     if not visit_logging_allowed(profile):
+        return IngestSummary(matched_suggestions=0, new_pin_suggestions=0, hits_processed=0)
+    if not profile.pin_suggestions_enabled or origin in excluded_suggestion_origins(profile):
         return IngestSummary(matched_suggestions=0, new_pin_suggestions=0, hits_processed=0)
 
     hit_list = list(hits)

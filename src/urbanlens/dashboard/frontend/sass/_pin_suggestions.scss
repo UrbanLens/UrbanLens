@@ -5,6 +5,64 @@
 
 @use 'variables' as *;
 
+// -- Actions bar & new-user onboarding ----------------------------------------
+// "Accept all suggestions" is reachable normally (this page) and via the
+// map's one-time new-user dialog (map/index.html), which links here with
+// ?onboarding=1 - the pulse + banner only render for that flow, see
+// controllers.pin_suggestions.PinSuggestionQueueView.
+
+.pin-suggestions-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: $space-sm;
+}
+
+@keyframes ul-pin-suggestions-pulse {
+    0%, 100% {
+        box-shadow: 0 0 0 0 rgba(33, 150, 243, .45);
+    }
+
+    50% {
+        box-shadow: 0 0 0 8px rgba(33, 150, 243, 0);
+    }
+}
+
+.pin-suggestions-accept-all-btn.is-pulsing {
+    animation: ul-pin-suggestions-pulse 1.6s ease-out infinite;
+}
+
+.pin-suggestions-onboarding-banner {
+    display: flex;
+    align-items: center;
+    gap: $space-sm;
+    margin-bottom: $space-md;
+    padding: $space-sm $space-md;
+    border-radius: $radius-sm;
+    background: rgba(33, 150, 243, .1);
+    border: 1px solid rgba(33, 150, 243, .3);
+    font-size: .85rem;
+    color: var(--ul-grey-8);
+
+    span {
+        flex: 1;
+    }
+
+    .pin-suggestions-onboarding-banner__close {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: none;
+        border: none;
+        cursor: pointer;
+        color: var(--ul-grey-6);
+        padding: 0;
+
+        &:hover {
+            color: var(--ul-grey-8);
+        }
+    }
+}
+
 // -- Grid & cards ------------------------------------------------------------
 
 .pin-suggestions-grid {

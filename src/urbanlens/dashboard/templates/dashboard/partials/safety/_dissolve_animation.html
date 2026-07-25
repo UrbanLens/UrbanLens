@@ -1,0 +1,27 @@
+{% comment %}
+Plays a fade/blur transition on a safety check-in page's content when the check-in gets
+encrypted and scrubbed while the page is open (services.safety.archive_checkin broadcasts
+`checkin_archived` over the check-in's existing chat websocket - see _chat_panel.html), then
+reloads so the page re-renders from the server's now-authoritative archived state.
+
+The reload - not the animation - is what actually makes the content disappear: a page that
+misses this event entirely (tab was closed, or the socket happened to be reconnecting) still
+renders the locked state directly from `hasattr(checkin, "archive")` the next time it's opened.
+This is purely a live UX cue layered on top of that.
+
+Shared by detail.html, community_status.html, and contact_portal.html - anyone with the page
+open when archival fires sees the same dissolve, regardless of their role.
+{% endcomment %}
+<script>
+(function () {
+    if (window._safetyDissolveInit) return;
+    window._safetyDissolveInit = true;
+    document.body.addEventListener('safetyCheckinArchived', function () {
+        document.querySelectorAll('.safety-page .card').forEach(function (card) {
+            card.classList.add('safety-dissolving');
+        });
+        window._safetySkipLeaveWarning = true;
+        setTimeout(function () { window.location.reload(); }, 900);
+    });
+}());
+</script>

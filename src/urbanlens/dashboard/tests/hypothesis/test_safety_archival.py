@@ -12,6 +12,7 @@ import json
 import os
 from typing import TYPE_CHECKING
 
+from django.urls import reverse
 from django.utils import timezone
 from hypothesis import given, settings, strategies as st
 from model_bakery import baker
@@ -198,3 +199,65 @@ class ScheduleCheckinArchivalTests(TestCase):
 
         checkin.refresh_from_db()
         self.assertEqual(checkin.archive_scheduled_at, checkin.resolved_at)
+
+
+class ArchivedCheckinDetailViewTests(TestCase):
+    """The detail view's rendered HTML after archival: shows the locked notice, never the
+    pre-scrub plaintext, and offers an unlock affordance only to the true owner - never a
+    partner, even one who could see everything while the check-in was still active.
+    """
+
+    def setUp(self):
+        self.owner = _profile()
+        _enroll(self.owner)
+        self.checkin = _checkin(self.owner, plan_details="Secret plan: go to the old mill")
+        archive_checkin(self.checkin)
+        self.checkin.refresh_from_db()
+
+    def test_owner_sees_locked_notice_with_unlock_button_and_no_plaintext(self):
+        self.client.force_login(self.owner.user)
+
+        response = self.client.get(reverse("safety.checkin.detail", kwargs={"checkin_slug": str(self.checkin.uuid)}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "This check-in has concluded and its details are now private.")
+        self.assertContains(response, 'id="safety-archive-unlock-btn"')
+        self.assertNotContains(response, "Secret plan: go to the old mill")
+
+    def test_accepted_partner_sees_locked_notice_without_unlock_button(self):
+        partner_profile = _profile()
+        SafetyCheckinPartner.objects.create(
+            checkin=self.checkin,
+            profile=partner_profile,
+            invited_by=self.owner,
+            status=SafetyCheckinPartnerStatus.ACCEPTED,
+        )
+        self.client.force_login(partner_profile.user)
+
+        response = self.client.get(reverse("safety.checkin.detail", kwargs={"checkin_slug": str(self.checkin.uuid)}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "This check-in has concluded and its details are now private.")
+        self.assertNotContains(response, 'id="safety-archive-unlock-btn"')
+        self.assertNotContains(response, "Secret plan: go to the old mill")
+
+
+class ArchiveCountdownRenderingTests(TestCase):
+    """The detail page shows a countdown once resolved-with-viewers, and switches to the
+    locked notice only once actually archived - never both, never neither.
+    """
+
+    def test_countdown_shown_when_other_viewers_exist_and_not_yet_archived(self):
+        owner = _profile()
+        checkin = _checkin(owner)
+        partner_profile = _profile()
+        SafetyCheckinPartner.objects.create(checkin=checkin, profile=partner_profile, invited_by=owner, status=SafetyCheckinPartnerStatus.ACCEPTED)
+        schedule_checkin_archival(checkin)
+        checkin.refresh_from_db()
+
+        self.client.force_login(owner.user)
+        response = self.client.get(reverse("safety.checkin.detail", kwargs={"checkin_slug": str(checkin.uuid)}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "will be encrypted")
+        self.assertNotContains(response, "This check-in has concluded and its details are now private.")
