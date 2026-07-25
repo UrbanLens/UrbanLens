@@ -352,6 +352,62 @@ class TripMembership(abstract.DashboardModel):
         ]
 
 
+class TripActivityRSVP(abstract.DashboardModel):
+    """A member's explicit RSVP override for one trip activity.
+
+    The absence of a row means the activity inherits the member's
+    :class:`TripMembership` RSVP. Keeping only overrides makes a later change
+    to the trip RSVP flow through automatically without overwriting deliberate
+    per-activity choices.
+    """
+
+    rsvp = CharField(max_length=20, choices=TripMembership.RSVP_CHOICES)
+    activity = ForeignKey(
+        TripActivity,
+        on_delete=CASCADE,
+        related_name="rsvps",
+    )
+    membership = ForeignKey(
+        TripMembership,
+        on_delete=CASCADE,
+        related_name="activity_rsvp_overrides",
+    )
+
+    if TYPE_CHECKING:
+        activity_id: int
+        membership_id: int
+
+    @classmethod
+    def effective_for(cls, activity: TripActivity, profile: Profile) -> str | None:
+        """Return the activity override, falling back to the trip RSVP.
+
+        Args:
+            activity: Activity whose effective response is needed.
+            profile: Trip participant whose response is needed.
+
+        Returns:
+            ``"yes"``, ``"no"``, ``"maybe"``, or ``None`` when the member
+            has responded at neither level.
+        """
+        membership = TripMembership.objects.filter(trip=activity.trip, profile=profile).first()
+        if membership is None:
+            return None
+        override = cls.objects.filter(activity=activity, membership=membership).values_list("rsvp", flat=True).first()
+        if override is not None:
+            return override
+        return membership.rsvp
+
+    def __str__(self) -> str:
+        return f"{self.membership.profile} is {self.rsvp} for {self.activity}"
+
+    class Meta(abstract.DashboardModel.Meta):
+        db_table = "dashboard_trip_activity_rsvps"
+        unique_together = [("activity", "membership")]
+        indexes = [
+            Index(fields=["activity"], name="idxdb_taar_activity"),
+        ]
+
+
 class TripComment(abstract.DashboardModel):
     """A comment left on a trip by one of its members."""
 

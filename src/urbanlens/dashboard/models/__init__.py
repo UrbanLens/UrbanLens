@@ -87,7 +87,7 @@ from urbanlens.dashboard.models.spotguessr import (
     SpotGuessrPreference,
 )
 from urbanlens.dashboard.models.subscriptions import PendingSubscriptionGrant, SiteFeature, SubscriptionRole, UserSubscription
-from urbanlens.dashboard.models.trips import Trip, TripActivity, TripComment
+from urbanlens.dashboard.models.trips import Trip, TripActivity, TripActivityRSVP, TripComment
 from urbanlens.dashboard.models.trivia import (
     PlayerTriviaRating,
     TriviaAnswer,

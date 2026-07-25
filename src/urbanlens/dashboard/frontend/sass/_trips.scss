@@ -1320,6 +1320,46 @@ a.trip-activity-name {
     color: var(--ul-grey-6);
 }
 
+.activity-rsvp-row {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    flex-wrap: wrap;
+    margin-top: .35rem;
+}
+
+.activity-rsvp-label {
+    font-size: .75rem;
+    font-weight: 700;
+    color: var(--ul-grey-7);
+}
+
+.activity-rsvp-options {
+    gap: .2rem;
+
+    .rsvp-pill-btn {
+        padding: .18rem .5rem;
+        font-size: .72rem;
+    }
+}
+
+.activity-rsvp-source {
+    font-size: .7rem;
+    color: var(--ul-grey-6);
+}
+
+.activity-rsvp-inherit {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--ul-primary-color);
+    font: inherit;
+    font-size: .7rem;
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
 .trip-attr-link {
     color: inherit;
     text-decoration: none;

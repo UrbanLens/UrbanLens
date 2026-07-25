@@ -201,7 +201,7 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
 ## Trips
 
 - Multi-stop trip planning shared among friends: activities, scheduling, map view
-- RSVP per member, per-activity thumbs up/down voting on proposed activities
+- RSVP per member with trip-wide defaults and per-activity overrides; per-activity thumbs up/down voting on proposed activities
 - Trip comments with emoji reactions
 - List and calendar views of trips, sortable
 - Two-way Google Calendar sync — connect an account, import calendar events as trips

@@ -23,6 +23,7 @@ from urbanlens.dashboard.models.site_settings import SiteSettings
 from urbanlens.dashboard.models.trips.model import (
     Trip,
     TripActivity,
+    TripActivityRSVP,
     TripComment,
     TripMembership,
 )
@@ -216,11 +217,13 @@ def _activity_qs(trip: Trip) -> QuerySet:
 
 
 def _create_visit_entries_for_completed_activity(trip: Trip, activity: TripActivity, completer: Profile) -> None:
-    """Log the completer's own visit and suggest visits to other rsvp=yes trip members.
+    """Log the completer's visit and suggest visits to effective yes RSVPs.
 
     The completer's visit is logged immediately since completing the activity IS
-    their confirmation. Every other member who RSVP'd yes gets a suggestion to
-    accept or reject instead, since the system can't be sure they actually went.
+    their confirmation. Every other member whose effective activity RSVP is
+    yes gets a suggestion to accept or reject instead, since the system can't
+    be sure they actually went. An activity override takes precedence over the
+    member's trip-wide RSVP.
 
     Args:
         trip: The trip the activity belongs to.
@@ -239,7 +242,18 @@ def _create_visit_entries_for_completed_activity(trip: Trip, activity: TripActiv
         add_visited_status(pin)
 
     if activity.scheduled_at is not None:
-        other_yes = list(TripMembership.objects.rsvp_yes(trip).exclude(profile=completer).select_related("profile"))
+        other_memberships = list(TripMembership.objects.filter(trip=trip).exclude(profile=completer).select_related("profile"))
+        overrides = dict(
+            TripActivityRSVP.objects.filter(
+                activity=activity,
+                membership_id__in=[membership.id for membership in other_memberships],
+            ).values_list("membership_id", "rsvp"),
+        )
+        other_yes = [
+            membership
+            for membership in other_memberships
+            if overrides.get(membership.id, membership.rsvp) == TripMembership.RSVP_YES
+        ]
         for membership in other_yes:
             create_visit_suggestion(
                 suggested_to=membership.profile,
@@ -526,6 +540,19 @@ def _activities_panel_html(request: HttpRequest, trip: Trip, profile: Profile, *
         if v["profile_id"] == profile.id:
             user_votes[aid] = v["vote"]
 
+    viewer_membership = TripMembership.objects.filter(trip=trip, profile=profile).first()
+    activity_rsvp_overrides = (
+        dict(
+            TripActivityRSVP.objects.filter(
+                activity_id__in=activity_ids,
+                membership=viewer_membership,
+            ).values_list("activity_id", "rsvp"),
+        )
+        if viewer_membership
+        else {}
+    )
+    trip_rsvp = viewer_membership.rsvp if viewer_membership else None
+
     # Determine which activities have their location hidden from this viewer
     # based on the adder's trip_pin_location_visibility privacy setting.
     viewer_hidden = viewer_hidden_activity_ids(activities, profile)
@@ -539,6 +566,9 @@ def _activities_panel_html(request: HttpRequest, trip: Trip, profile: Profile, *
             "vote_up": up_counts.get(act.id, 0),
             "vote_down": down_counts.get(act.id, 0),
             "user_vote": user_votes.get(act.id),
+            "rsvp": activity_rsvp_overrides.get(act.id, trip_rsvp),
+            "rsvp_is_override": act.id in activity_rsvp_overrides,
+            "trip_rsvp": trip_rsvp,
             "can_manage": viewer_has_joined and (act.added_by_id == profile.id or viewer_is_organizer),
             "effective_location_hidden": act.location_hidden or (act.id in viewer_hidden),
             "pin_slug": act.pin.slug if (act.pin_id and act.pin.profile_id == profile.id) else None,
@@ -1791,7 +1821,61 @@ class TripMemberRSVPView(LoginRequiredMixin, View):
         membership.rsvp = rsvp or None
         membership.save(update_fields=["rsvp", "updated"])
 
-        return _render_members_panel(request, trip, profile)
+        members_response = _render_members_panel(request, trip, profile)
+        return HttpResponse(members_response.content + _activities_panel_html(request, trip, profile, oob=True).encode())
+
+
+class TripActivityRSVPView(LoginRequiredMixin, View):
+    """Set or clear the current user's RSVP override for one activity.
+
+    POST /trips/<slug>/activities/<id>/rsvp/
+    Body: {rsvp: "yes"|"no"|"maybe"|""}
+
+    An empty value deletes the override so the activity immediately inherits
+    the current trip RSVP again.
+    """
+
+    def post(self, request, trip_slug, activity_id):
+        """Persist the activity RSVP override.
+
+        Args:
+            request: The incoming HTTP request.
+            trip_slug: Slug of the containing trip.
+            activity_id: Primary key of the activity being answered.
+
+        Returns:
+            Refreshed activities-panel HTML, or an error response.
+        """
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        result = _trip_or_403(request, trip_slug, profile)
+        if isinstance(result, HttpResponse):
+            return result
+        trip = result
+        if not _viewer_has_joined(profile, trip):
+            return HttpResponse("Join this trip before responding to activities.", status=403)
+
+        activity = get_object_or_404(TripActivity, id=activity_id, trip=trip)
+        membership = get_object_or_404(TripMembership, trip=trip, profile=profile)
+        try:
+            body = json.loads(request.body) if request.body else {}
+        except (json.JSONDecodeError, ValueError):
+            body = request.POST.dict()
+
+        rsvp = (body.get("rsvp") or "").strip()
+        valid_rsvps = {choice[0] for choice in TripMembership.RSVP_CHOICES}
+        if rsvp and rsvp not in valid_rsvps:
+            return HttpResponse("Invalid RSVP value.", status=400)
+
+        if rsvp:
+            TripActivityRSVP.objects.update_or_create(
+                activity=activity,
+                membership=membership,
+                defaults={"rsvp": rsvp},
+            )
+        else:
+            TripActivityRSVP.objects.filter(activity=activity, membership=membership).delete()
+
+        return HttpResponse(_activities_panel_html(request, trip, profile))
 
 
 class TripLeaveView(LoginRequiredMixin, View):

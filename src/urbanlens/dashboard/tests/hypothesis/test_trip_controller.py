@@ -29,7 +29,7 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripActivityVote, TripMembership
+from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripActivityRSVP, TripActivityVote, TripMembership
 
 
 def _make_trip(creator_profile: Profile, **kwargs) -> Trip:
@@ -839,6 +839,76 @@ class TripMemberRSVPViewTests(TestCase):
         self.assertIsNone(m.rsvp)
 
 
+class TripActivityRSVPViewTests(TestCase):
+    """POST an activity RSVP override and fall back to the trip RSVP by default."""
+
+    def setUp(self):
+        super().setUp()
+        self.user = baker.make("auth.User")
+        self.profile = self.user.profile
+        self.trip = _make_trip(self.profile)
+        self.activity = TripActivity.objects.create(trip=self.trip, added_by=self.profile, title="First stop")
+        self.client = Client()
+        self.client.force_login(self.user)
+
+    def _url(self):
+        return reverse(
+            "trips.activity.rsvp",
+            kwargs={"trip_slug": self.trip.slug, "activity_id": self.activity.id},
+        )
+
+    def test_activity_inherits_trip_rsvp_without_an_override(self):
+        self.assertEqual(TripActivityRSVP.effective_for(self.activity, self.profile), TripMembership.RSVP_YES)
+
+    def test_set_activity_override(self):
+        response = self.client.post(self._url(), {"rsvp": "no"})
+
+        self.assertEqual(response.status_code, 200)
+        override = TripActivityRSVP.objects.get(activity=self.activity, membership__profile=self.profile)
+        self.assertEqual(override.rsvp, TripMembership.RSVP_NO)
+        self.assertEqual(TripActivityRSVP.effective_for(self.activity, self.profile), TripMembership.RSVP_NO)
+        self.assertContains(response, "Not coming")
+        self.assertContains(response, "Overrides trip RSVP")
+
+    def test_clear_activity_override_restores_inheritance(self):
+        TripActivityRSVP.objects.create(
+            activity=self.activity,
+            membership=TripMembership.objects.get(trip=self.trip, profile=self.profile),
+            rsvp=TripMembership.RSVP_NO,
+        )
+
+        response = self.client.post(self._url(), {"rsvp": ""})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(TripActivityRSVP.objects.filter(activity=self.activity, membership__profile=self.profile).exists())
+        self.assertEqual(TripActivityRSVP.effective_for(self.activity, self.profile), TripMembership.RSVP_YES)
+        self.assertContains(response, "From trip RSVP")
+
+    def test_trip_rsvp_changes_inherited_activities_but_preserves_overrides(self):
+        other_activity = TripActivity.objects.create(trip=self.trip, added_by=self.profile, title="Second stop")
+        TripActivityRSVP.objects.create(
+            activity=self.activity,
+            membership=TripMembership.objects.get(trip=self.trip, profile=self.profile),
+            rsvp=TripMembership.RSVP_NO,
+        )
+
+        response = self.client.post(
+            reverse("trips.rsvp", kwargs={"trip_slug": self.trip.slug}),
+            {"rsvp": "maybe"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(TripActivityRSVP.effective_for(self.activity, self.profile), TripMembership.RSVP_NO)
+        self.assertEqual(TripActivityRSVP.effective_for(other_activity, self.profile), TripMembership.RSVP_MAYBE)
+        self.assertContains(response, 'id="trip-activities-panel"')
+
+    def test_invalid_activity_rsvp_is_rejected(self):
+        response = self.client.post(self._url(), {"rsvp": "absolutely"})
+
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(TripActivityRSVP.objects.filter(activity=self.activity, membership__profile=self.profile).exists())
+
+
 class TripLeaveViewTests(TestCase):
     """DELETE /trips/<slug>/leave/ - member exits trip."""
 
@@ -856,6 +926,9 @@ class TripLeaveViewTests(TestCase):
         return reverse("trips.leave", kwargs={"trip_slug": self.trip.slug})
 
     def test_member_can_leave(self):
+        activity = TripActivity.objects.create(trip=self.trip, added_by=self.creator, title="Stop")
+        membership = TripMembership.objects.get(trip=self.trip, profile=self.member)
+        TripActivityRSVP.objects.create(activity=activity, membership=membership, rsvp=TripMembership.RSVP_YES)
         client = Client()
         client.force_login(self.member_user)
         resp = client.delete(self._url())
@@ -863,6 +936,7 @@ class TripLeaveViewTests(TestCase):
         self.assertFalse(
             TripMembership.objects.filter(trip=self.trip, profile=self.member).exists(),
         )
+        self.assertFalse(TripActivityRSVP.objects.filter(activity=activity).exists())
 
     def test_creator_cannot_leave(self):
         client = Client()

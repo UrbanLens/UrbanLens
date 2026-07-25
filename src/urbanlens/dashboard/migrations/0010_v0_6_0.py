@@ -808,4 +808,55 @@ class Migration(migrations.Migration):
             name='permissions',
             field=models.CharField(choices=[('Send Message', 'Send Message'), ('Invite to Events', 'Invite to Events'), ('Share Pins', 'Share Pins'), ('View Profile', 'View Profile'), ('View Friends', 'View Friends'), ('View Trips', 'View Trips')], default='View Profile', max_length=16),
         ),
+        migrations.CreateModel(
+            name="TripActivityRSVP",
+            fields=[
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("created", models.DateTimeField(auto_now_add=True)),
+                ("updated", models.DateTimeField(auto_now=True)),
+                (
+                    "rsvp",
+                    models.CharField(
+                        choices=[
+                            ("yes", "Going"),
+                            ("no", "Not Coming"),
+                            ("maybe", "Maybe"),
+                        ],
+                        max_length=20,
+                    ),
+                ),
+                (
+                    "activity",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="rsvps",
+                        to="dashboard.tripactivity",
+                    ),
+                ),
+                (
+                    "membership",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="activity_rsvp_overrides",
+                        to="dashboard.tripmembership",
+                    ),
+                ),
+            ],
+            options={
+                "db_table": "dashboard_trip_activity_rsvps",
+                "abstract": False,
+                "indexes": [
+                    models.Index(fields=["activity"], name="idxdb_taar_activity")
+                ],
+                "unique_together": {("activity", "membership")},
+            },
+        ),
     ]

@@ -1349,6 +1349,11 @@ urlpatterns = [
                     name="trips.activity.vote",
                 ),
                 path(
+                    "<slug:trip_slug>/activities/<int:activity_id>/rsvp/",
+                    trip.TripActivityRSVPView.as_view(),
+                    name="trips.activity.rsvp",
+                ),
+                path(
                     "<slug:trip_slug>/activities/<int:activity_id>/complete/",
                     trip.TripActivityCompleteView.as_view(),
                     name="trips.activity.complete",
