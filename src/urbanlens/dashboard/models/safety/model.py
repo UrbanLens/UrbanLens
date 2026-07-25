@@ -32,6 +32,7 @@ from urbanlens.dashboard.models.safety.queryset import (
     EmergencyContactDefaultManager,
     SafetyCheckinContactManager,
     SafetyCheckinManager,
+    SafetyCheckinPartnerManager,
     SafetyContactOptOutManager,
 )
 
@@ -284,6 +285,7 @@ class SafetyCheckin(abstract.PublicDashboardModel):
         markup_map_id: int | None
         contacts: DjangoManager[SafetyCheckinContact]
         messages: DjangoManager[SafetyCheckinMessage]
+        partners: DjangoManager[SafetyCheckinPartner]
 
     objects = SafetyCheckinManager()
 
@@ -478,6 +480,62 @@ class SafetyContactOptOut(abstract.DashboardModel):
                 ),
                 name="db_safety_contact_optout_scope_fields_match",
             ),
+        ]
+
+
+class SafetyCheckinPartnerStatus(abstract.TextChoices):
+    """Lifecycle status of a SafetyCheckinPartner invite."""
+
+    INVITED = "invited", "Invited"
+    ACCEPTED = "accepted", "Accepted"
+
+
+class SafetyCheckinPartner(abstract.DashboardModel):
+    """A trusted account granted early, full visibility into one check-in, plus the
+    ability to conclude it.
+
+    Unlike a ``SafetyCheckinContact`` (notified without opting in, only once
+    overdue/escalated), a partner sees the full check-in - plan, contacts, chat,
+    and any shared live location - from the moment they accept, well before
+    anything goes wrong. Access requires ``status == ACCEPTED``: this is a real
+    safety responsibility, not a passive share, so an invite must be actively
+    accepted before any view/act access is granted (see
+    ``services.safety.is_owner_or_accepted_partner``).
+
+    Only the check-in's owner may invite a partner - unlike Trip's
+    ``allow_add_members`` permission matrix, a check-in has exactly one
+    accountable owner, so a delegated invite-permission matrix would only
+    diffuse accountability for a safety-critical role.
+    """
+
+    status = CharField(max_length=10, choices=SafetyCheckinPartnerStatus.choices, default=SafetyCheckinPartnerStatus.INVITED)
+    accepted_at = DateTimeField(null=True, blank=True)
+
+    checkin = ForeignKey(SafetyCheckin, on_delete=CASCADE, related_name="partners")
+    profile = ForeignKey("dashboard.Profile", on_delete=CASCADE, related_name="safety_checkin_partner_roles")
+    invited_by = ForeignKey("dashboard.Profile", on_delete=CASCADE, related_name="+")
+
+    if TYPE_CHECKING:
+        checkin_id: int
+        profile_id: int
+        invited_by_id: int
+
+    objects = SafetyCheckinPartnerManager()
+
+    def __str__(self) -> str:
+        """Return a human-readable description of this partner assignment.
+
+        Returns:
+            String like "<username> partner on checkin <id> (<status>)".
+        """
+        return f"{self.profile.username} partner on checkin {self.checkin_id} ({self.status})"
+
+    class Meta(abstract.DashboardModel.Meta):
+        db_table = "dashboard_safety_checkin_partners"
+        unique_together = [("checkin", "profile")]
+        indexes = [
+            Index(fields=["checkin", "status"], name="idxdb_scp_checkin_status"),
+            Index(fields=["profile", "status"], name="idxdb_scp_profile_status"),
         ]
 
 

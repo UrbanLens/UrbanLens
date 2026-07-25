@@ -89,6 +89,13 @@ class SiteSettings(abstract.FrontendDashboardModel):
         validators=[MinValueValidator(0), MaxValueValidator(1_000)],
     )
 
+    max_safety_checkin_partners = IntegerField(
+        default=5,
+        help_text="Maximum number of partners a user may add to one safety check-in. Set to 0 for unlimited.",
+        verbose_name="Max partners per safety check-in",
+        validators=[MinValueValidator(0), MaxValueValidator(20)],
+    )
+
     # Chernobyl Exclusion Zone ≈ 2,600 km².  Used as a sanity cap on how large
     # a user-drawn bounding box for a location can be.
     max_bbox_area_km2 = FloatField(
@@ -605,4 +612,5 @@ class SiteSettings(abstract.FrontendDashboardModel):
             CheckConstraint(condition=Q(max_friends_per_user__gte=0), name="max_friends_per_user_gte_0"),
             CheckConstraint(condition=Q(max_group_chat_members__gte=0), name="max_group_chat_members_gte_0"),
             CheckConstraint(condition=Q(max_safety_checkin_contacts__gte=0), name="max_safety_checkin_contacts_gte_0"),
+            CheckConstraint(condition=Q(max_safety_checkin_partners__gte=0), name="max_safety_checkin_partners_gte_0"),
         ]

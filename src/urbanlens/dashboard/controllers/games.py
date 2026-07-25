@@ -62,6 +62,6 @@ class GamesOverviewView(LoginRequiredMixin, View):
     """
 
     def get(self, request: HttpRequest) -> HttpResponse:
-        if not user_has_feature(request.user, SiteFeature.BETA_FEATURES):
+        if not user_has_feature(request.user, SiteFeature.ALPHA_FEATURES):
             raise PermissionDenied
         return render(request, "dashboard/pages/games/index.html", {"page_name": "games", "games": GAMES})

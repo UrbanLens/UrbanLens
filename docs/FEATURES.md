@@ -120,7 +120,7 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   coverage varies by jurisdiction), then OSM/Overpass, Overture Maps, Microsoft Building
   Footprints, and Google Open Buildings; editable
   by the user
-- Standalone reusable **MarkupMaps** with freehand drawing/annotation tools (point, line, arrow, text, box, circle, polygon), attachable to pins, wikis, safety check-ins, or kept independent; also embedded in the **safety check-in creation form** for drawing routes and destinations
+- Standalone reusable **MarkupMaps** with freehand drawing/annotation tools (point, line, freehand, arrow, text, box, circle, polygon), attachable to pins, wikis, safety check-ins, or kept independent; also embedded in the **safety check-in creation form** for drawing routes and destinations
 - Detail pins — sub-markers placed inside a pin/wiki's bounding box for finer-grained mapping
   (rooms, entrances, hazards, etc.)
 

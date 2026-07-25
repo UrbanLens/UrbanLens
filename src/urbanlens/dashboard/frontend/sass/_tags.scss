@@ -277,6 +277,14 @@ dialog.tag-create-card.ul-dialog {
     font-size: 0.8rem;
     color: $text-muted;
     align-items: center;
+    flex-wrap: wrap;
+}
+
+.tag-card-meta-cols {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
 }
 
 .tag-pin-count {
@@ -331,6 +339,12 @@ dialog.tag-create-card.ul-dialog {
     border-radius: 50%;
     display: inline-block;
     border: 1px solid rgba(0, 0, 0, .15);
+
+    &--empty {
+        background: none !important;
+        border-style: dashed;
+        border-color: var(--ul-surface-2-border);
+    }
 }
 
 .tag-parents-summary {
@@ -339,6 +353,109 @@ dialog.tag-create-card.ul-dialog {
     gap: 2px;
     font-size: 0.78rem;
     color: $text-muted;
+}
+
+// -- Pins / Children / Total / Color table columns ------------------------------
+// Mobile-first: on narrow screens this data lives in the .tag-card-meta-cols
+// badges above (inline with the name). From $breakpoint-sm up, plain list/tree
+// rows switch to these fixed-width aligned columns instead - the header labels
+// live in .organize-label-columns-header, sharing the same column widths so
+// values line up underneath their captions.
+$org-stat-col-pins-w: 3rem;
+$org-stat-col-children-w: 4.25rem;
+$org-stat-col-total-w: 3rem;
+$org-stat-col-color-w: 2.75rem;
+
+.tag-card-stats {
+    display: none;
+}
+
+.tag-card-stat-col {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+
+    &--pins { width: $org-stat-col-pins-w; }
+    &--children { width: $org-stat-col-children-w; }
+    &--total { width: $org-stat-col-total-w; }
+    &--color { width: $org-stat-col-color-w; }
+}
+
+.tag-card-stat-value {
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--ul-grey-8);
+    font-variant-numeric: tabular-nums;
+
+    &--empty {
+        font-weight: 400;
+        color: var(--ul-grey-4);
+    }
+}
+
+// Swap the inline badges for real columns once there's room, but only for
+// plain rows - gallery cards stay narrow and keep the inline badges instead.
+.organize-label-rows.tag-view--list,
+.organize-label-rows.tag-view--tree {
+    @include up($breakpoint-sm) {
+        .tag-card-meta-cols {
+            display: none;
+        }
+
+        .tag-card-stats {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            flex-shrink: 0;
+        }
+    }
+}
+
+.organize-label-columns-header {
+    display: none;
+    padding: 0 1rem;
+    margin-bottom: 0.4rem;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--ul-grey-5);
+
+    @include up($breakpoint-sm) {
+        display: flex;
+        align-items: center;
+        // Mirror the row layout: icon width + gap, then the flexible body column,
+        // pushing the four stat-column labels to line up with their values below.
+        gap: 1rem;
+
+        &::before {
+            content: '';
+            width: 44px;
+            flex-shrink: 0;
+        }
+    }
+}
+
+.organize-label-columns-header-spacer {
+    flex: 1;
+}
+
+.organize-label-columns-header-col {
+    flex-shrink: 0;
+    text-align: center;
+
+    &--pins { width: $org-stat-col-pins-w; }
+    &--children { width: $org-stat-col-children-w; }
+    &--total { width: $org-stat-col-total-w; }
+    &--color { width: $org-stat-col-color-w; }
+}
+
+// Hide the column header whenever the rows are in gallery view (card grid) -
+// there are no aligned columns to label there, only the inline badges.
+.organize-panel:has(.organize-label-rows.tag-view--gallery) .organize-label-columns-header {
+    display: none;
 }
 
 // Global and readonly labels
@@ -385,6 +502,7 @@ dialog.tag-create-card.ul-dialog {
 }
 
 .tag-card-view {
+    position: relative;
     display: flex;
     align-items: center;
     gap: 1rem;
@@ -396,12 +514,40 @@ dialog.tag-create-card.ul-dialog {
         gap: 4px;
         flex-shrink: 0;
         align-items: center;
-        opacity: 0.25;
     }
+}
 
-    &:hover {
+// Desktop / mouse, plain (list/tree) rows only - gallery cards keep their
+// actions in-flow and centered, per the gallery-view overrides below. Here,
+// action buttons start tucked out of sight below the row and slide up into a
+// second row on hover, growing the card downward. Because only the bottom
+// padding grows, the icon/name/stat-column content stays pinned to the top
+// edge - visually it gets "pushed up" as the row gains height beneath it.
+@media (hover: hover) and (pointer: fine) {
+    .organize-label-rows.tag-view--list .tag-card-view,
+    .organize-label-rows.tag-view--tree .tag-card-view {
+        overflow: hidden;
+        transition: padding-bottom 0.24s cubic-bezier(0.4, 0, 0.2, 1);
+
         .tag-card-actions {
-            opacity: 1;
+            position: absolute;
+            right: 1rem;
+            bottom: 0.55rem;
+            opacity: 0;
+            transform: translateY(6px);
+            pointer-events: none;
+            transition: opacity 0.18s ease, transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        &:hover,
+        &:focus-within {
+            padding-bottom: 3.1rem;
+
+            .tag-card-actions {
+                opacity: 1;
+                transform: translateY(0);
+                pointer-events: auto;
+            }
         }
     }
 }

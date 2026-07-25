@@ -327,20 +327,21 @@ class DirectMessageConsumer(AsyncWebsocketConsumer):
 
 
 class SafetyCheckinChatConsumer(AsyncWebsocketConsumer):
-    """Real-time chat for a safety check-in, shared by the owner and every emergency contact.
+    """Real-time chat for a safety check-in, shared by the owner, every accepted partner, and every emergency contact.
 
     Mounted under two routes (see ``dashboard/routing.py``):
 
-    - ``ws/safety/checkin/<uuid:checkin_uuid>/chat/`` - owner route, requires
-      an authenticated session that owns the check-in (populated by
-      Channels' ``AuthMiddlewareStack`` from the session cookie).
+    - ``ws/safety/checkin/<uuid:checkin_uuid>/chat/`` - session route, requires
+      an authenticated session belonging to the check-in's owner or an accepted
+      ``SafetyCheckinPartner`` (populated by Channels' ``AuthMiddlewareStack``
+      from the session cookie; see ``services.safety.is_owner_or_accepted_partner``).
     - ``ws/safety/contact/<uuid:token>/chat/`` - contact route, authorized by
       the token alone (mirrors ``SafetyCheckinMessageView._resolve`` - a
       contact identified only by email has no account to log into).
 
-    Everyone connected for a given check-in - the owner and all of its
-    contacts - joins the same channel group, so a message from any one of
-    them is broadcast to all the others immediately.
+    Everyone connected for a given check-in - the owner, its accepted
+    partners, and all of its contacts - joins the same channel group, so a
+    message from any one of them is broadcast to all the others immediately.
 
     Close codes used on ``connect()`` failure (the frontend branches on these
     to decide whether to keep retrying):
@@ -449,18 +450,21 @@ class SafetyCheckinChatConsumer(AsyncWebsocketConsumer):
         """Resolve the check-in and, for the contact route, the authorizing contact.
 
         Args:
-            checkin_uuid: UUID of the check-in (owner route).
+            checkin_uuid: UUID of the check-in (session route).
             token: Contact's magic-link token (contact route).
 
         Returns:
-            (checkin, contact) - contact is None on the owner route.
+            (checkin, contact) - contact is None on the session route.
 
         Raises:
-            ObjectDoesNotExist: If the check-in/contact/token doesn't resolve.
-            PermissionError: If the owner route is used while unauthenticated.
+            ObjectDoesNotExist: If the check-in/contact/token doesn't resolve, or the
+                session route is used by someone who is neither the owner nor an
+                accepted partner.
+            PermissionError: If the session route is used while unauthenticated.
         """
         from urbanlens.dashboard.models.profile.model import Profile
         from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinContact
+        from urbanlens.dashboard.services.safety import is_owner_or_accepted_partner
 
         if token is not None:
             contact = SafetyCheckinContact.objects.select_related("checkin").get(token=token)
@@ -470,7 +474,9 @@ class SafetyCheckinChatConsumer(AsyncWebsocketConsumer):
         if user is None or not user.is_authenticated:
             raise PermissionError
         profile, _ = Profile.objects.get_or_create(user=user)
-        checkin = SafetyCheckin.objects.get(uuid=checkin_uuid, profile=profile)
+        checkin = SafetyCheckin.objects.get(uuid=checkin_uuid)
+        if not is_owner_or_accepted_partner(checkin, profile):
+            raise SafetyCheckin.DoesNotExist
         return checkin, None
 
     @database_sync_to_async

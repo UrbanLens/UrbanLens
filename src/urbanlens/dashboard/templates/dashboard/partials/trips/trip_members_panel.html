@@ -52,17 +52,17 @@
                         title="Change your RSVP"
                         onclick="var p=document.getElementById('rsvp-popup-{{ member.id }}');p.hidden=!p.hidden;event.stopPropagation()">
                     {% if membership.rsvp %}<span class="trip-member-rsvp-label">RSVP:</span>{% endif %}
-                    {% if membership.rsvp == 'yes' %}Yes
-                    {% elif membership.rsvp == 'no' %}No
+                    {% if membership.rsvp == 'yes' %}Going
+                    {% elif membership.rsvp == 'no' %}Not Coming
                     {% elif membership.rsvp == 'maybe' %}Maybe
                     {% else %}RSVP{% endif %}
                     <i class="material-icons" style="font-size:.75rem;vertical-align:middle;margin-left:1px">expand_more</i>
                 </button>
                 <div class="rsvp-popup" id="rsvp-popup-{{ member.id }}" hidden>
                     <button type="button" class="rsvp-popup-opt rsvp-popup-opt--yes"
-                            hx-post="{% url 'trips.rsvp' trip.slug %}" hx-target="#trip-members-panel" hx-swap="outerHTML" hx-vals='{"rsvp": "yes"}'>Yes</button>
+                            hx-post="{% url 'trips.rsvp' trip.slug %}" hx-target="#trip-members-panel" hx-swap="outerHTML" hx-vals='{"rsvp": "yes"}'>Going</button>
                     <button type="button" class="rsvp-popup-opt rsvp-popup-opt--no"
-                            hx-post="{% url 'trips.rsvp' trip.slug %}" hx-target="#trip-members-panel" hx-swap="outerHTML" hx-vals='{"rsvp": "no"}'>No</button>
+                            hx-post="{% url 'trips.rsvp' trip.slug %}" hx-target="#trip-members-panel" hx-swap="outerHTML" hx-vals='{"rsvp": "no"}'>Not Coming</button>
                     <button type="button" class="rsvp-popup-opt rsvp-popup-opt--maybe"
                             hx-post="{% url 'trips.rsvp' trip.slug %}" hx-target="#trip-members-panel" hx-swap="outerHTML" hx-vals='{"rsvp": "maybe"}'>Maybe</button>
                     <button type="button" class="rsvp-popup-opt rsvp-popup-opt--clear"
@@ -72,8 +72,8 @@
             {% else %}
             <span class="trip-member-rsvp trip-member-rsvp--{{ membership.rsvp|default:'none' }}" title="RSVP status">
                 {% if membership.rsvp %}<span class="trip-member-rsvp-label">RSVP:</span>{% endif %}
-                {% if membership.rsvp == 'yes' %}Yes
-                {% elif membership.rsvp == 'no' %}No
+                {% if membership.rsvp == 'yes' %}Going
+                {% elif membership.rsvp == 'no' %}Not Coming
                 {% elif membership.rsvp == 'maybe' %}Maybe
                 {% else %}-{% endif %}
             </span>

@@ -14,16 +14,16 @@ class GamesOverviewViewTests(TestCase):
     def setUp(self) -> None:
         self.user = baker.make(User)
         self.games_url = reverse("games.overview")
-        role = baker.make(SubscriptionRole, features=SiteFeature.BETA_FEATURES)
+        role = baker.make(SubscriptionRole, features=SiteFeature.ALPHA_FEATURES)
         grant_subscription(self.user, role, self.user, None)
 
     def test_requires_login(self) -> None:
         response = self.client.get(self.games_url)
         self.assertEqual(response.status_code, 302)
 
-    def test_requires_beta_features(self) -> None:
-        non_beta_user = baker.make(User)
-        self.client.force_login(non_beta_user)
+    def test_requires_alpha_features(self) -> None:
+        non_alpha_user = baker.make(User)
+        self.client.force_login(non_alpha_user)
         response = self.client.get(self.games_url)
         self.assertEqual(response.status_code, 403)
 

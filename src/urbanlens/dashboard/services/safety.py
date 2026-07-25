@@ -21,6 +21,8 @@ from urbanlens.dashboard.models.safety.model import (
     SafetyCheckin,
     SafetyCheckinContact,
     SafetyCheckinMessage,
+    SafetyCheckinPartner,
+    SafetyCheckinPartnerStatus,
     SafetyCheckinStatus,
     SafetyContactOptOut,
     SafetyContactOptOutScope,
@@ -341,6 +343,198 @@ def _optout_urls(contact: SafetyCheckinContact) -> dict[str, str]:
         Dict of ``optout_checkin_url``/``optout_owner_url``/``optout_global_url`` absolute URLs.
     """
     return {f"optout_{scope.value}_url": _absolute_url(reverse("safety.contact.optout", kwargs={"token": contact.token, "scope": scope.value})) for scope in SafetyContactOptOutScope}
+
+
+def is_owner_or_accepted_partner(checkin: SafetyCheckin, profile: Profile) -> bool:
+    """Whether ``profile`` may view the full check-in and act as its owner would.
+
+    Args:
+        checkin: The check-in being accessed.
+        profile: The requesting profile.
+
+    Returns:
+        True if ``profile`` owns the check-in, or is an ACCEPTED SafetyCheckinPartner on it.
+    """
+    if checkin.profile_id == profile.pk:
+        return True
+    return checkin.partners.filter(profile=profile, status=SafetyCheckinPartnerStatus.ACCEPTED).exists()
+
+
+def invite_checkin_partner(checkin: SafetyCheckin, *, inviter: Profile, username: str) -> SafetyCheckinPartner:
+    """Invite an existing account as a safety check-in partner.
+
+    Mirrors ``TripMembersView.post``'s add-by-username flow: no friendship is
+    required, but a block still vetoes it (see ``Profile.are_blocked``) since
+    a forced partner invite is an unsolicited-contact vector like any other.
+
+    Args:
+        checkin: The check-in gaining a partner.
+        inviter: The profile sending the invite - must be the check-in's owner.
+        username: The invitee's username, matched case-insensitively.
+
+    Returns:
+        The newly created (INVITED) SafetyCheckinPartner row.
+
+    Raises:
+        ValueError: Unknown username, inviting yourself, inviting a blocked
+            profile, an existing invite/acceptance for that profile, or the
+            site's ``max_safety_checkin_partners`` cap already reached.
+    """
+    from django.contrib.auth.models import User
+
+    from urbanlens.dashboard.models.site_settings.model import SiteSettings
+
+    try:
+        user = User.objects.get(username__iexact=username)
+    except User.DoesNotExist:
+        raise ValueError(f'No user found with username "{username}".') from None
+    invitee, _ = Profile.objects.get_or_create(user=user)
+
+    if invitee.pk == checkin.profile_id:
+        raise ValueError("You can't add yourself as a partner on your own check-in.")
+    if Profile.are_blocked(inviter, invitee):
+        raise ValueError("This user isn't accepting invitations from you.")
+    if checkin.partners.filter(profile=invitee).exists():
+        raise ValueError(f"{invitee.username} has already been invited.")
+
+    max_partners = SiteSettings.get_current().max_safety_checkin_partners
+    if max_partners > 0 and checkin.partners.count() >= max_partners:
+        raise ValueError(f"A check-in can have at most {max_partners} partners.")
+
+    partner = SafetyCheckinPartner.objects.create(checkin=checkin, profile=invitee, invited_by=inviter)
+    _notify_checkin_partner_invite(partner)
+    return partner
+
+
+def accept_checkin_partner_invite(partner: SafetyCheckinPartner) -> None:
+    """Accept a pending partner invite, granting full check-in visibility and act rights.
+
+    Idempotent - a repeat accept on an already-accepted row is a no-op.
+
+    Args:
+        partner: The invite being accepted.
+    """
+    if partner.status == SafetyCheckinPartnerStatus.ACCEPTED:
+        return
+    partner.status = SafetyCheckinPartnerStatus.ACCEPTED
+    partner.accepted_at = timezone.now()
+    partner.save(update_fields=["status", "accepted_at", "updated"])
+
+    checkin = partner.checkin
+    system_message = SafetyCheckinMessage.objects.create(
+        checkin=checkin,
+        sender_profile=partner.profile,
+        body=f"{partner.profile.username} is now a partner on this check-in.",
+    )
+    _broadcast_chat_message(checkin, system_message)
+    _notify_checkin_partner_accepted(partner)
+
+
+def decline_checkin_partner_invite(partner: SafetyCheckinPartner) -> None:
+    """Decline a pending partner invite.
+
+    Args:
+        partner: The invite being declined.
+    """
+    partner.delete()
+
+
+def remove_checkin_partner(partner: SafetyCheckinPartner) -> None:
+    """Remove a partner (invited or already accepted) from a check-in - owner-initiated.
+
+    Args:
+        partner: The partner row to remove.
+    """
+    partner.delete()
+
+
+def _notify_checkin_partner_invite(partner: SafetyCheckinPartner) -> None:
+    """Notify the invitee that they've been asked to be a safety check-in partner.
+
+    Args:
+        partner: The freshly created (INVITED) partner row.
+    """
+    from urbanlens.dashboard.services.identity_visibility import resolve_visible_identity
+
+    try:
+        pref = partner.profile.notification_preferences.safety_checkin_partner_invite
+    except AttributeError:
+        pref = DeliveryPreference.BOTH
+    if pref == DeliveryPreference.NONE:
+        return
+
+    checkin = partner.checkin
+    # Resolved (and masked if needed) toward the specific recipient before formatting -
+    # the message string is stored as plain text, so it must be masked here, not at
+    # render time (see identity_visibility.py's docstring).
+    inviter_name = resolve_visible_identity(partner.profile, partner.invited_by)["display_name"]
+    # A partner has no slug of their own - the check-in is always reached by uuid
+    # (see SafetyCheckinDetailView._get_checkin_as_partner).
+    checkin_path = reverse("safety.checkin.detail", kwargs={"checkin_slug": str(checkin.uuid)})
+
+    if pref in (DeliveryPreference.SITE, DeliveryPreference.BOTH):
+        NotificationLog.objects.create(
+            profile=partner.profile,
+            source_profile=partner.invited_by,
+            status=Status.UNREAD,
+            importance=Importance.HIGH,
+            notification_type=NotificationType.SAFETY_CHECKIN_PARTNER_INVITE,
+            title="Safety check-in partner request",
+            message=f'{inviter_name} wants you to be a safety partner for "{checkin.title}".',
+            url=checkin_path,
+        )
+
+    invitee_email = partner.profile.user.email if partner.profile.user else None
+    if pref in (DeliveryPreference.EMAIL, DeliveryPreference.BOTH) and invitee_email:
+        _send_email(
+            to=invitee_email,
+            subject=f"{inviter_name} wants you as a safety check-in partner",
+            template="dashboard/email/safety_checkin_partner_invite.html",
+            context={"checkin": checkin, "partner": partner, "inviter_name": inviter_name, "checkin_url": _absolute_url(checkin_path)},
+        )
+
+    message_text = f'{inviter_name} wants you to be a safety partner for "{checkin.title}": {_absolute_url(checkin_path)}'
+    try:
+        prefs = partner.profile.notification_preferences
+    except AttributeError:
+        prefs = None
+    if prefs and prefs.safety_checkin_partner_invite_whatsapp:
+        send_whatsapp(partner.profile, message_text)
+    if prefs and prefs.safety_checkin_partner_invite_sms:
+        send_sms(partner.profile, message_text)
+
+
+def _notify_checkin_partner_accepted(partner: SafetyCheckinPartner) -> None:
+    """Notify the check-in owner that an invited partner accepted.
+
+    Not gated by a delivery preference, matching the rest of this module's
+    owner-facing resolution/administrative notifications (e.g. the
+    SAFETY_CHECKIN_RESOLVED notice created in ``_resolve_as_found_safe``) -
+    these are about the owner's own check-in, not a third party's activity
+    they might want to mute.
+
+    Args:
+        partner: The now-ACCEPTED partner row.
+    """
+    checkin = partner.checkin
+    checkin_path = reverse("safety.checkin.detail", kwargs={"checkin_slug": _checkin_url_slug(checkin)})
+    NotificationLog.objects.create(
+        profile=checkin.profile,
+        source_profile=partner.profile,
+        status=Status.UNREAD,
+        importance=Importance.MEDIUM,
+        notification_type=NotificationType.SAFETY_CHECKIN_PARTNER_ACCEPTED,
+        title="Safety check-in partner accepted",
+        message=f'{partner.profile.username} accepted your invite to be a safety partner for "{checkin.title}".',
+        url=checkin_path,
+    )
+    if checkin.profile.user and checkin.profile.user.email:
+        _send_email(
+            to=checkin.profile.user.email,
+            subject=f"{partner.profile.username} accepted your safety check-in partner invite",
+            template="dashboard/email/safety_checkin_partner_accepted.html",
+            context={"checkin": checkin, "partner": partner, "checkin_url": _absolute_url(checkin_path)},
+        )
 
 
 def notify_contacts_of_update(checkin: SafetyCheckin, summary: str) -> None:
@@ -720,7 +914,44 @@ def mark_found_safe(contact: SafetyCheckinContact) -> None:
         body=f"Marked {checkin.profile.username} as safe.",
     )
     _broadcast_chat_message(checkin, system_message)
+    _resolve_as_found_safe(checkin, resolved_by_label=contact.display_name, exclude_contact=contact)
 
+
+def mark_found_safe_by_partner(checkin: SafetyCheckin, partner: Profile) -> None:
+    """Record that an accepted partner found the profile safe, and notify everyone else.
+
+    Mirrors ``mark_found_safe``, but a partner has no ``SafetyCheckinContact``
+    row of their own to stamp ``found_safe_at`` on - the resolution and every
+    owner/contact notification path is otherwise identical.
+
+    Args:
+        checkin: The check-in being resolved.
+        partner: The accepted partner's profile reporting the owner as safe.
+    """
+    system_message = SafetyCheckinMessage.objects.create(
+        checkin=checkin,
+        sender_profile=partner,
+        body=f"Marked {checkin.profile.username} as safe.",
+    )
+    _broadcast_chat_message(checkin, system_message)
+    _resolve_as_found_safe(checkin, resolved_by_label=partner.username)
+
+
+def _resolve_as_found_safe(checkin: SafetyCheckin, *, resolved_by_label: str, exclude_contact: SafetyCheckinContact | None = None) -> None:
+    """Shared resolution logic for ``mark_found_safe``/``mark_found_safe_by_partner``.
+
+    No-ops if the check-in is already resolved - a contact and a partner (or
+    two contacts) racing to mark the same check-in safe must not double-notify
+    everyone or re-raise the concluding VisitSuggestion.
+
+    Args:
+        checkin: The check-in being resolved.
+        resolved_by_label: Display name of whoever reported the profile safe,
+            for the owner/other-contact notification text.
+        exclude_contact: The contact who just reported this, if any - excluded
+            from the "everyone else" notification pass so they don't get told
+            about their own report.
+    """
     if checkin.is_resolved:
         return
 
@@ -735,8 +966,8 @@ def mark_found_safe(contact: SafetyCheckinContact) -> None:
         status=Status.UNREAD,
         importance=Importance.HIGH,
         notification_type=NotificationType.SAFETY_CHECKIN_RESOLVED,
-        title=f"{contact.display_name} found you",
-        message=f'{contact.display_name} marked you safe for "{checkin.title}".',
+        title=f"{resolved_by_label} found you",
+        message=f'{resolved_by_label} marked you safe for "{checkin.title}".',
         url=checkin_path,
     )
     if checkin.profile.user and checkin.profile.user.email:
@@ -744,10 +975,13 @@ def mark_found_safe(contact: SafetyCheckinContact) -> None:
             to=checkin.profile.user.email,
             subject=f'You were marked safe for "{checkin.title}"',
             template="dashboard/email/safety_checkin_resolved.html",
-            context={"checkin": checkin, "contact": contact, "checkin_url": _absolute_url(checkin_path)},
+            context={"checkin": checkin, "resolved_by_label": resolved_by_label, "checkin_url": _absolute_url(checkin_path)},
         )
 
-    for other in checkin.contacts.exclude(pk=contact.pk):
+    other_contacts = checkin.contacts.all()
+    if exclude_contact is not None:
+        other_contacts = other_contacts.exclude(pk=exclude_contact.pk)
+    for other in other_contacts:
         if is_contact_opted_out(other.contact_profile, other.email, owner=checkin.profile, checkin=checkin):
             continue
         portal_path = reverse("safety.contact.portal", kwargs={"token": other.token})
@@ -758,7 +992,7 @@ def mark_found_safe(contact: SafetyCheckinContact) -> None:
                 importance=Importance.MEDIUM,
                 notification_type=NotificationType.SAFETY_CHECKIN_RESOLVED,
                 title=f"{checkin.profile.username} has been found",
-                message=f"{contact.display_name} marked {checkin.profile.username} safe.",
+                message=f"{resolved_by_label} marked {checkin.profile.username} safe.",
                 url=portal_path,
             )
             other_email = other.contact_profile.user.email if other.contact_profile and other.contact_profile.user else other.email
@@ -769,7 +1003,7 @@ def mark_found_safe(contact: SafetyCheckinContact) -> None:
             to=other_email or "",
             subject=f"{checkin.profile.username} has been found",
             template="dashboard/email/safety_checkin_resolved.html",
-            context={"checkin": checkin, "contact": contact, "checkin_url": _absolute_url(portal_path), **_optout_urls(other)},
+            context={"checkin": checkin, "resolved_by_label": resolved_by_label, "checkin_url": _absolute_url(portal_path), **_optout_urls(other)},
         )
 
     _conclude_checkin(checkin)

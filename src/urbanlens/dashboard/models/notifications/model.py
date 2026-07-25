@@ -174,6 +174,13 @@ class NotificationPreference(abstract.DashboardModel):
     wiki_safety_checkin_whatsapp = models.BooleanField(default=False)
     wiki_safety_checkin_sms = models.BooleanField(default=False)
 
+    # Defaults to BOTH for the same reason as wiki_safety_checkin above - a partner invite
+    # is a request to take on real safety responsibility for someone else, so it shouldn't
+    # depend on the invitee happening to be logged in to notice it.
+    safety_checkin_partner_invite = models.CharField(max_length=10, choices=DeliveryPreference.choices, default=DeliveryPreference.BOTH)
+    safety_checkin_partner_invite_whatsapp = models.BooleanField(default=False)
+    safety_checkin_partner_invite_sms = models.BooleanField(default=False)
+
     profile = models.OneToOneField(
         "dashboard.Profile",
         on_delete=models.CASCADE,

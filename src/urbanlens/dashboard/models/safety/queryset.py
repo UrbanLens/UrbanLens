@@ -141,9 +141,36 @@ class SafetyCheckinQuerySet(abstract.PublicDashboardQuerySet):
         """
         return self.filter(contacts__contact_profile=profile).exclude(profile=profile).distinct()
 
+    def partnered_with(self, profile: Profile) -> Self:
+        """Return other profiles' check-ins where ``profile`` is an accepted safety check-in partner.
+
+        Mirrors ``shared_with`` - powers the safety overview's "Check-ins you
+        partner on" section. Unlike ``shared_with``, an INVITED-but-not-yet-
+        accepted partner row doesn't count here (see
+        ``SafetyHomeView.get``'s separate ``pending_partner_invites``).
+
+        Args:
+            profile: The viewing profile.
+
+        Returns:
+            Filtered queryset, most recent ``checkin_by`` first, excluding the
+            viewer's own check-ins.
+        """
+        from urbanlens.dashboard.models.safety.model import SafetyCheckinPartnerStatus
+
+        return self.filter(partners__profile=profile, partners__status=SafetyCheckinPartnerStatus.ACCEPTED).exclude(profile=profile).distinct()
+
 
 class SafetyCheckinManager(abstract.PublicDashboardManager.from_queryset(SafetyCheckinQuerySet)):
     """Manager for SafetyCheckin."""
+
+
+class SafetyCheckinPartnerQuerySet(abstract.DashboardQuerySet):
+    """QuerySet for SafetyCheckinPartner records."""
+
+
+class SafetyCheckinPartnerManager(abstract.DashboardManager.from_queryset(SafetyCheckinPartnerQuerySet)):
+    """Manager for SafetyCheckinPartner."""
 
 
 class SafetyCheckinContactQuerySet(abstract.DashboardQuerySet):

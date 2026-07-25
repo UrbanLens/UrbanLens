@@ -26,7 +26,7 @@ from django.db.models.fields import BooleanField, CharField, DateField, DateTime
 from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract
-from urbanlens.dashboard.models.abstract.choices import TextChoices
+from urbanlens.dashboard.models.abstract.choices import IndoorOutdoor, TextChoices
 from urbanlens.dashboard.models.pin.queryset import PinManager
 from urbanlens.dashboard.services.locations.naming import is_meaningful_name, sanitize_name
 from urbanlens.dashboard.services.text_limits import MAX_PIN_DESCRIPTION_LENGTH
@@ -112,6 +112,17 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
     pin_type_is_user_provided = BooleanField(
         default=False,
         help_text="Prevents automatic building/parcel classification from overwriting a user-chosen pin type.",
+    )
+    # Whether this pin is indoors, outdoors, or both (e.g. a building with an
+    # outdoor courtyard). Left unset (None) until something actually
+    # classifies it - groundwork for a future feature, not yet surfaced in
+    # any UI.
+    indoor_outdoor = CharField(
+        max_length=10,
+        choices=IndoorOutdoor.choices,
+        null=True,
+        blank=True,
+        help_text="Whether this pin's location is inside, outside, or both; unset when not yet classified.",
     )
     # Set when the owner declines this pin's restructure suggestion (create
     # child pins for the buildings here / nest the top-level pins that fall

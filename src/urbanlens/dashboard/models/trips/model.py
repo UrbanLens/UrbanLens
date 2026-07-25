@@ -295,8 +295,8 @@ class TripMembership(abstract.DashboardModel):
     RSVP_NO = "no"
     RSVP_MAYBE = "maybe"
     RSVP_CHOICES = [
-        ("yes", "Yes"),
-        ("no", "No"),
+        ("yes", "Going"),
+        ("no", "Not Coming"),
         ("maybe", "Maybe"),
     ]
 

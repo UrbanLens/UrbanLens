@@ -1426,6 +1426,11 @@ urlpatterns = [
                 path("<uuid:checkin_uuid>/cancel/", safety.SafetyCheckinCancelView.as_view(), name="safety.checkin.cancel"),
                 path("<slug:checkin_slug>/checkin/", safety.SafetyCheckinCheckInView.as_view(), name="safety.checkin.checkin"),
                 path("<uuid:checkin_uuid>/messages/", safety.SafetyCheckinMessageView.as_view(), name="safety.checkin.messages"),
+                path("<slug:checkin_slug>/partners/", safety.SafetyCheckinPartnersView.as_view(), name="safety.checkin.partners"),
+                path("<slug:checkin_slug>/partners/<int:partner_id>/remove/", safety.SafetyCheckinPartnerRemoveView.as_view(), name="safety.checkin.partners.remove"),
+                path("<uuid:checkin_uuid>/partners/accept/", safety.SafetyCheckinPartnerInviteAcceptView.as_view(), name="safety.partner.accept"),
+                path("<uuid:checkin_uuid>/partners/decline/", safety.SafetyCheckinPartnerInviteDeclineView.as_view(), name="safety.partner.decline"),
+                path("<uuid:checkin_uuid>/partners/mark-safe/", safety.SafetyCheckinPartnerMarkSafeView.as_view(), name="safety.partner.mark_safe"),
                 path("<slug:checkin_slug>/gallery/", safety.SafetyGalleryView.as_view(), name="safety.checkin.gallery"),
                 path("<slug:checkin_slug>/gallery/<int:image_id>/", safety.SafetyImageView.as_view(), name="safety.checkin.gallery.image"),
                 # No-trailing-slash variant so DELETE/POST fetch calls work even

@@ -1,6 +1,6 @@
 # Abstract Base Classes
 from urbanlens.dashboard.models.abstract import DashboardManager, DashboardModel, DashboardQuerySet, PublicDashboardManager, PublicDashboardQuerySet, Serializer
-from urbanlens.dashboard.models.abstract.choices import SecurityLevel
+from urbanlens.dashboard.models.abstract.choices import IndoorOutdoor, SecurityLevel
 from urbanlens.dashboard.models.account import AccountKdf, EmailVerification
 from urbanlens.dashboard.models.aliases import PinAlias, WikiAlias
 from urbanlens.dashboard.models.api_call_log import ApiCallLog

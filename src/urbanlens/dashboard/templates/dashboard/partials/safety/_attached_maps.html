@@ -4,7 +4,9 @@ Reference maps attached to a safety check-in beyond the primary route map
 "comment map" preview/expand JS (see themes/base.html, _initThumbs/_expandCommentMap)
 keyed by "mm-<uuid>" - the same convention Memories > Maps uses for its own cards.
 
-Expects: checkin, attached_maps (queryset/list of MarkupMap).
+Expects: checkin, attached_maps (queryset/list of MarkupMap), and optionally
+viewer_is_partner (hides the attach/detach/new-map controls - a partner is
+read-only here, matching detail.html's other owner-only edit controls).
 
 Swapped in whole (hx-swap="outerHTML") by the attach/detach views, so its own
 id must stay stable across re-renders.
@@ -16,6 +18,7 @@ id must stay stable across re-renders.
         {% include "dashboard/partials/map/_map_view_preview.html" with map_id="mm-"|add:uuid_str %}
         <div class="safety-attached-map-body">
             <span class="safety-attached-map-title">{{ map.title|default:"Untitled map" }}</span>
+            {% if not viewer_is_partner %}
             <button type="button" class="safety-attached-map-remove"
                     hx-post="{% url 'safety.checkin.maps.detach' checkin.slug|default:checkin.uuid map.uuid %}"
                     hx-target="#safety-attached-maps" hx-swap="outerHTML"
@@ -23,6 +26,7 @@ id must stay stable across re-renders.
                     title="Detach map">
                 <i class="material-symbols-outlined">close</i>
             </button>
+            {% endif %}
         </div>
     </div>
     {% include "dashboard/partials/map/_map_view_dialog.html" with map_id="mm-"|add:uuid_str map_data=map.to_snapshot title=map.title|default:"Map" %}
@@ -31,6 +35,7 @@ id must stay stable across re-renders.
     {% if not attached_maps %}
     <p class="safety-attached-maps-empty form-hint">No additional maps attached yet.</p>
     {% endif %}
+    {% if not viewer_is_partner %}
     <div class="safety-attached-map-actions">
         <button type="button" class="btn btn--ghost btn--sm"
                 hx-get="{% url 'safety.checkin.maps.picker' checkin.slug|default:checkin.uuid %}"
@@ -46,6 +51,7 @@ id must stay stable across re-renders.
             <i class="material-symbols-outlined">add</i> New map
         </button>
     </div>
+    {% endif %}
 </div>
 <script>
 (function () {

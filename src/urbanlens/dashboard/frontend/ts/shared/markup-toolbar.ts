@@ -474,6 +474,7 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
     // two modes, so the user only ever learns a single set of controls.
     const MARKUP_TOOL_TITLES: Record<string, string> = {
         line: "Draw Line",
+        freehand: "Draw Freehand",
         arrow: "Draw Arrow",
         text: "Add Text Label",
         rect: "Draw Square",

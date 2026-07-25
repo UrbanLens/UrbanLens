@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinContact
+from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinContact, SafetyCheckinPartner
 from urbanlens.dashboard.services.undo.base import UndoHandler, describe_batch, register
 
 _RESTORABLE_FIELDS = (
@@ -27,16 +27,20 @@ _RESTORABLE_FIELDS = (
 
 _CONTACT_FIELDS = ("email", "name", "notified_at", "found_safe_at")
 
+_PARTNER_FIELDS = ("status", "accepted_at")
+
 
 @register
 class SafetyCheckinUndoHandler(UndoHandler):
-    """Restores a check-in's own fields and its emergency-contact snapshots.
+    """Restores a check-in's own fields, its emergency-contact snapshots, and its partners.
 
     Chat messages and per-contact opt-outs are conversational/audit history,
-    not state needed to resume the check-in, and are not restored. The
-    attached ``markup_map``/``markup_maps`` survive independently of the
-    check-in (deleting a SafetyCheckin does not cascade to its maps), so
-    those are simply relinked by id.
+    not state needed to resume the check-in, and are not restored. A partner
+    assignment, unlike chat history, *is* state needed to resume the
+    check-in - so it's restored the same way contacts are. The attached
+    ``markup_map``/``markup_maps`` survive independently of the check-in
+    (deleting a SafetyCheckin does not cascade to its maps), so those are
+    simply relinked by id.
     """
 
     model_label = "safety_checkin"
@@ -61,6 +65,14 @@ class SafetyCheckinUndoHandler(UndoHandler):
                 }
                 for contact in checkin.contacts.all()
             ],
+            "partners": [
+                {
+                    **{name: getattr(partner, name) for name in _PARTNER_FIELDS},
+                    "profile_id": partner.profile_id,
+                    "invited_by_id": partner.invited_by_id,
+                }
+                for partner in checkin.partners.all()
+            ],
         }
 
     @classmethod
@@ -81,5 +93,8 @@ class SafetyCheckinUndoHandler(UndoHandler):
                 checkin.markup_maps.set(entry["markup_map_ids"])
             for contact_entry in entry["contacts"]:
                 SafetyCheckinContact.objects.create(checkin=checkin, **contact_entry)
+            # .get(): payloads stashed before partners existed have no "partners" key.
+            for partner_entry in entry.get("partners", []):
+                SafetyCheckinPartner.objects.create(checkin=checkin, **partner_entry)
             restored.append(checkin)
         return restored

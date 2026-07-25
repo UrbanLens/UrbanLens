@@ -468,8 +468,10 @@
 .iw-log-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--ul-grey-0); }
 .iw-log-status { font-size: .72rem; color: #9aa0a6; flex-shrink: 0; }
 
-/* Background-continuation note (shown when some pins need a live CID lookup) */
-.iw-deferred-note {
+/* Background-continuation note (shown when some pins need a live CID lookup).
+   Use :not([hidden]) so this display:flex never fights the hidden attribute -
+   otherwise the empty note div renders even while [hidden] is set. */
+.iw-deferred-note:not([hidden]) {
     display: flex;
     align-items: flex-start;
     gap: 10px;

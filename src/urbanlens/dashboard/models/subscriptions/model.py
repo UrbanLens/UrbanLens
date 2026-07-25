@@ -38,11 +38,17 @@ class SiteFeature(TextChoices):
     # nearby-regulated-facilities list) - separate from each plugin's own
     # unconditional "data about this exact pin" card, which everyone gets.
     NEARBY_RESEARCH = "nearby_research", "Nearby research data"
-    # Gates access to features still under active development (e.g. Games) -
-    # a single flag reused across every in-progress feature, rather than one
-    # SiteFeature per beta, so a feature can graduate out of beta by just
-    # removing its gate instead of touching this enum.
+    # Gates access to features still under active development, but stable enough
+    # for general (VIP) use - a single flag reused across every in-progress
+    # feature, rather than one SiteFeature per beta, so a feature can graduate
+    # out of beta by just removing its gate instead of touching this enum.
     BETA_FEATURES = "beta_features", "Beta features"
+    # Earlier-stage than BETA_FEATURES: features not yet ready for general use.
+    # Deliberately excluded from _VIP_CANONICAL_FEATURES and from any default
+    # SiteSettings.default_features, so user_has_feature() only grants this to
+    # site admins (via its own admin check) unless a site admin explicitly
+    # grants it to a role or as a site-wide default.
+    ALPHA_FEATURES = "alpha_features", "Alpha features"
 
 
 class SubscriptionRole(abstract.DashboardModel):

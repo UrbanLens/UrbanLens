@@ -53,3 +53,19 @@ class SecurityLevel(TextChoices):
     NO = "no", "No"
     SOME = "some", "Some"
     EVERYWHERE = "everywhere", "Everywhere"
+
+
+class IndoorOutdoor(TextChoices):
+    """Whether a location is enclosed, open-air, or a mix of both.
+
+    Shared between :class:`~urbanlens.dashboard.models.pin.model.Pin` and
+    :class:`~urbanlens.dashboard.models.wiki.model.Wiki` - each stores its own
+    value rather than deferring to Location, mirroring how ``pin_type`` is
+    independently classified on both. Groundwork for a future indoor/outdoor
+    aware feature; left unset (``None``) until something actually classifies
+    it, rather than defaulting to a guess.
+    """
+
+    INSIDE = "inside", "Inside"
+    OUTSIDE = "outside", "Outside"
+    BOTH = "both", "Both"

@@ -23,6 +23,8 @@ class NotificationType(TextChoices):
     SAFETY_CHECKIN_RESOLVED = "safety_ci_resolved", "Safety Check-in Resolved"
     SAFETY_CHECKIN_PLAN_UPDATED = "safety_ci_plan_updated", "Safety Check-in Plan Updated"
     WIKI_SAFETY_CHECKIN = "wiki_safety_checkin", "Community Wiki Safety Check-in"
+    SAFETY_CHECKIN_PARTNER_INVITE = "safety_ci_partner_invite", "Safety Check-in Partner Request"
+    SAFETY_CHECKIN_PARTNER_ACCEPTED = "safety_ci_partner_accepted", "Safety Check-in Partner Accepted"
     ACCOUNT_DELETION_REQUESTED = "account_deletion_requested", "Account Deletion Requested"
     ACCOUNT_DELETION_REMINDER = "account_deletion_reminder", "Account Deletion Reminder"
     AI_EXTRACTION = "ai_extraction", "AI Link Analysis Complete"

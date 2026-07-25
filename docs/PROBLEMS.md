@@ -41,6 +41,15 @@ doesn't close that ticket. The boundary-voting dialog auto-opens only while zero
 (not, as the spec's prose could be read, until consensus forms) - a deliberate simplification
 worth knowing about if the UX is revisited.
 
+**RESOLVED 2026-07-25**: the `TripMembership.rsvp` choices drift noted above is now migrated -
+`0029_alter_tripmembership_rsvp.py` carries the `AlterField` for the `"Going"`/`"Not Coming"`/
+`"Maybe"` labels. This checkout briefly had two different, unrelated `0027_*` migrations as
+sibling leaves off `0025` (the indoor_outdoor/rsvp work here, and `0027_safety_checkin_partners.py`
+from a separate concurrent session); since nothing had been pushed anywhere migration state is
+persisted, this was resolved by resequencing instead of a merge migration - the indoor_outdoor
+migration was renumbered to `0028` and now depends on `0027_safety_checkin_partners`, with the
+rsvp `AlterField` as `0029` after it. Single linear chain, no merge migration needed.
+
 ---
 
 ## ~~Verification debt~~ RESOLVED 2026-07-23 (pod ran; all session-added tests pass) → 17 PRE-EXISTING full-suite failures triaged below

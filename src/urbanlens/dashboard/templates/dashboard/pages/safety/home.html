@@ -103,6 +103,54 @@
     </div>
     {% endif %}
 
+    {# -- Pending safety check-in partner invites -------------------------- #}
+    {% if pending_partner_invites %}
+    <div class="card safety-shared-with-you">
+        <div class="card-header">
+            <i class="material-symbols-outlined">shield_person</i>
+            <h3>Pending partner invites</h3>
+        </div>
+        <ul class="safety-shared-list">
+            {% for invite in pending_partner_invites %}
+            <li class="safety-shared-item safety-partner-invite-item">
+                <span class="safety-shared-title">{{ invite.invited_by.username }} wants you to partner on "{{ invite.checkin.title }}"</span>
+                <div class="safety-partner-invite-actions">
+                    <form method="post" action="{% url 'safety.partner.accept' invite.checkin.uuid %}" style="display:inline">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn--primary btn--sm">Accept</button>
+                    </form>
+                    <form method="post" action="{% url 'safety.partner.decline' invite.checkin.uuid %}" style="display:inline">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn--ghost btn--sm">Decline</button>
+                    </form>
+                </div>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    {# -- Check-ins you partner on (accepted) ------------------------------- #}
+    {% if partnered_checkins %}
+    <div class="card safety-shared-with-you">
+        <div class="card-header">
+            <i class="material-symbols-outlined">shield_person</i>
+            <h3>Check-ins you partner on</h3>
+        </div>
+        <ul class="safety-shared-list">
+            {% for partnered in partnered_checkins %}
+            <li class="safety-shared-item">
+                <a href="{% url 'safety.checkin.detail' partnered.uuid %}" class="safety-shared-link">
+                    <span class="safety-checkin-status-badge safety-checkin-status-badge--{{ partnered.status }}">{{ partnered.get_status_display }}</span>
+                    <span class="safety-shared-title">{{ partnered.title }}</span>
+                    <span class="safety-shared-owner">{{ partnered.profile.username }} · expected {{ partnered.checkin_by|date:"N j, g:i A" }}</span>
+                </a>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
 </div>
 
 <script>
